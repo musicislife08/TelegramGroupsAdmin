@@ -202,16 +202,38 @@ invites: token(UUID), created_by, created_at, expires_at, used_by, used_at
 
 ---
 
-### 📋 Step 5: SignalR Integration (Post-Merge)
+### ✅ Step 5: SignalR Integration (SKIPPED - Not Needed)
 
-**Hub:** `/hubs/messages`
-**Events:**
-- `NewMessage(MessageRecord)` - Broadcast to all clients
-- `MessageEdited(long messageId, MessageEditRecord)` - Broadcast edit
-- `SpamCheckResult(SpamCheckRecord)` - Real-time spam updates
+**Decision:** Blazor Server already uses SignalR for component communication. No need for separate hub.
 
-**HistoryBot Integration:**
-- After inserting message → Hub.Clients.All.SendAsync("NewMessage", record)
+**Confirmed Approach (per Microsoft docs):**
+- HistoryBotService exposes C# events: `event Action<MessageRecord>? OnNewMessage;`
+- Blazor pages subscribe: `historyBot.OnNewMessage += HandleNewMessage;`
+- **CRITICAL:** Must use `InvokeAsync(StateHasChanged)` because HistoryBot runs on background thread
+- Blazor's built-in SignalR connection handles real-time UI updates automatically
+
+**Example Pattern:**
+```csharp
+// In Blazor component
+protected override void OnInitialized()
+{
+    historyBotService.OnNewMessage += HandleNewMessage;
+}
+
+private async void HandleNewMessage(MessageRecord msg)
+{
+    await InvokeAsync(StateHasChanged); // Required for background service thread safety
+}
+```
+
+**Why InvokeAsync is Required:**
+- HistoryBotService runs outside Blazor's synchronization context
+- Without InvokeAsync: `InvalidOperationException` - "current thread not associated with Dispatcher"
+- InvokeAsync marshals execution to renderer's synchronization context (like UI thread in WPF)
+
+**Implementation:**
+- Events will be added to HistoryBotService during Step 10 (Message History Page)
+- Much simpler than separate hub, idiomatic for Blazor Server
 
 ---
 
