@@ -1,11 +1,71 @@
 # Blazor UI Implementation - AI Reference
 
-## Stack
-- Blazor Server (.NET 10.0) + MudBlazor 8.13.0
-- SQLite: message_history.db (30-day retention), identity.db
-- Dapper + FluentMigrator 7.1.0
-- Auth: ASP.NET Core Identity + TOTP 2FA
-- SignalR, ImageSharp, CsvHelper, DiffPlex, PWA
+## 🔄 MAJOR ARCHITECTURE CHANGE (2025-10-06)
+
+**Decision 1: Merge Web UI and API into single project**
+**Decision 2: Rename project to TelegramGroupsAdmin**
+
+### Rationale for Merge
+- **Target audience**: Homelab users managing Telegram spam (not enterprise/cloud)
+- **Deployment simplicity**: One container > two tightly-coupled containers
+- **No real separation**: Both projects share databases, volumes, and Data Protection keys
+- **Common pattern**: Blazor Server apps hosting API endpoints is standard practice
+- **Easier maintenance**: Single codebase for integrated features
+
+### Rationale for Rename
+- **Descriptive naming**: "TelegramGroupsAdmin" is instantly clear, SEO-friendly
+- **Plural "Groups"**: Emphasizes multi-group admin capabilities
+- **No abbreviations**: Professional, self-documenting (PowerShell naming style)
+- **Future scope**: Not limited to spam - can grow into full admin suite
+- **Availability**: Name not taken on GitHub
+
+### New Architecture (Post-Merge + Rename)
+```
+TelegramGroupsAdmin/  (single unified project)
+├── Pages/              Blazor UI pages (Dashboard, Messages, Login, Profile, etc.)
+├── Components/         Blazor components (chat bubbles, filters, etc.)
+├── Endpoints/          Minimal API endpoints (/check, /health)
+├── Services/           All services (HistoryBot, SpamCheck, Auth, Invite, etc.)
+└── Program.cs          Unified service registration
+
+TelegramGroupsAdmin.Data/  (shared library - KEEP)
+├── Models/             Database models
+├── Repositories/       Dapper repositories (User, Invite, MessageHistory)
+├── Migrations/         FluentMigrator migrations (identity.db + message_history.db)
+├── Services/           TOTP protection, data services
+└── ServiceCollectionExtensions.cs  (unified extension method)
+```
+
+### Migration Plan
+1. ✅ Keep Data project structure (already well-structured)
+2. Rename `TgSpam-PreFilterApi.Data` → `TelegramGroupsAdmin.Data`
+3. Rename `TgSpam-PreFilterApi` → `TelegramGroupsAdmin`
+4. Copy Blazor UI code from `TgSpam-PreFilterApi.Web` → `TelegramGroupsAdmin`
+5. Merge `Program.cs` files (API endpoints + Blazor UI + Background services)
+6. Update all namespaces: `TgSpam_PreFilterApi` → `TelegramGroupsAdmin`
+7. Delete `TgSpam-PreFilterApi.Web` project
+8. Update solution file, docker-compose
+9. Single port, single container, single deployment
+
+---
+
+## Stack (Post-Merge)
+- **Single ASP.NET Core 10 app** with Blazor Server + Minimal APIs
+- **MudBlazor 8.13.0** for UI
+- **SQLite**: message_history.db (30-day retention), identity.db
+- **Dapper + FluentMigrator 7.1.0**
+- **Auth**: Cookie-based auth + Otp.NET for TOTP 2FA + Data Protection API
+- **SignalR** for real-time updates, **ImageSharp**, **CsvHelper**, **DiffPlex**, **PWA**
+
+## Database Architecture
+- **Two SQLite databases**, both in `/data` volume:
+  - `identity.db` - Users, invites, recovery codes (FluentMigrator migrations)
+  - `message_history.db` - Telegram messages, spam checks, edits (FluentMigrator migrations)
+- **Single app manages both databases**:
+  - Identity DB for authentication
+  - Message History DB for spam checking + UI display
+- **Background services** (HistoryBot, Cleanup) run in same process
+- **Data Protection keys** in `/data/keys` (chmod 700)
 
 ## Features
 - Multi-chat monitoring, real-time updates, spam indicators
@@ -28,8 +88,9 @@
 
 ## Implementation Status
 
-### ✅ Step 1: Blazor Project Setup (COMPLETE)
-**Created:** `TgSpam-PreFilterApi.Web`
+### ✅ Step 1: Blazor Project Setup (COMPLETE - MERGED)
+**Originally created:** `TgSpam-PreFilterApi.Web`
+**Now merged into:** `TelegramGroupsAdmin`
 - MudBlazor 8.13.0 integrated
 - Dark mode theme configured
 - Navigation: Dashboard/Messages/Audit/Users/Invite/Profile
@@ -37,11 +98,11 @@
 - Build: PASSING
 
 ### ✅ Step 2: Shared Database Library (COMPLETE)
-**Created:** `TgSpam-PreFilterApi.Data`
+**Created:** `TelegramGroupsAdmin.Data`
 
 **Structure:**
 ```
-TgSpam-PreFilterApi.Data/
+TelegramGroupsAdmin.Data/
 ├── Models/
 │   └── MessageRecord.cs (MessageRecord, PhotoMessageRecord, HistoryStats)
 ├── Repositories/
@@ -91,12 +152,12 @@ Indexes: idx_user_chat_timestamp, idx_expires_at, idx_user_chat_photo
 
 ---
 
-### 🔄 Step 4: Authentication System (IN PROGRESS)
+### ✅ Step 4: Authentication System (COMPLETE - Pre-Merge)
 
 **Approach:** Cookie Authentication (without ASP.NET Core Identity)
 - Dapper + FluentMigrator (consistent with existing stack)
 - Custom user store, full control over schema
-- OtpNet for TOTP 2FA
+- Otp.NET 1.4.0 for TOTP 2FA
 
 **Schema (202510063_IdentitySchema.cs):**
 ```
@@ -112,17 +173,36 @@ invites: token(UUID), created_by, created_at, expires_at, used_by, used_at
 - ✅ Repositories: UserRepository, InviteRepository (Dapper)
 - ✅ Cookie auth config in Web/Program.cs
 - ✅ FluentMigrator runner for identity.db
+- ✅ Otp.NET package added
+- ✅ AuthService (login/register/2FA/recovery codes)
+- ✅ InviteService (create/list invites)
+- ✅ Login page UI
+- ✅ 2FA verification page UI (TOTP + recovery codes)
+- ✅ Register page UI (with invite validation)
+- ✅ HttpContextAccessor for cookie management
 - ✅ Build: PASSING
-
-**TODO:**
-- [ ] Add OtpNet package
-- [ ] AuthService (login/register/2FA)
-- [ ] InviteService
-- [ ] Auth UI
 
 ---
 
-### 📋 Step 5: SignalR Integration
+## 🚀 Step 4.5: Project Consolidation (NEXT)
+
+**Merge TgSpam-PreFilterApi.Web → TgSpam-PreFilterApi**
+
+### Tasks
+- [x] Update ServiceCollectionExtensions to single unified method
+- [x] Copy Components/, Pages/, Services/ from Web → API
+- [x] Merge Program.cs (Blazor + API endpoints + Background services)
+- [x] Add MudBlazor + Otp.NET packages to API project
+- [x] Update all namespaces from `TgSpam_PreFilterApi.Web` → `TelegramGroupsAdmin`
+- [x] Test build
+- [x] Delete TgSpam-PreFilterApi.Web project
+- [x] Update solution file
+- [x] Rename projects to TelegramGroupsAdmin
+- [ ] Update Dockerfile (if exists)
+
+---
+
+### 📋 Step 5: SignalR Integration (Post-Merge)
 
 **Hub:** `/hubs/messages`
 **Events:**

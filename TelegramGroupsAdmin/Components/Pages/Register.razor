@@ -1,0 +1,259 @@
+@page "/register"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using TelegramGroupsAdmin.Services
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+@inject IHttpContextAccessor HttpContextAccessor
+
+<PageTitle>Register - TgSpam PreFilter</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Elevation="4" Class="pa-8">
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">
+            @(_isFirstRun ? "Setup Owner Account" : "Create Account")
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">
+            @(_isFirstRun ? "Create the initial administrator account" : "Register with your invite code")
+        </MudText>
+
+        @if (_isFirstRun)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4">
+                No users exist. The first account will be created with Owner permissions.
+            </MudAlert>
+        }
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">@_errorMessage</MudAlert>
+        }
+
+        @if (_registrationSuccess)
+        {
+            <MudAlert Severity="Severity.Success" Class="mb-4">
+                Account created successfully! Signing you in...
+            </MudAlert>
+        }
+
+        <MudForm @ref="_form" @bind-IsValid="@_isValid">
+            @if (!_isFirstRun)
+            {
+                <MudTextField T="string"
+                              Label="Invite Code"
+                              @bind-Value="_inviteToken"
+                              Required="true"
+                              RequiredError="Invite code is required"
+                              Variant="Variant.Outlined"
+                              Class="mb-4"
+                              Disabled="@(_isLoading || _registrationSuccess)" />
+            }
+
+            <MudTextField T="string"
+                          Label="Email"
+                          @bind-Value="_email"
+                          Required="true"
+                          RequiredError="Email is required"
+                          Validation="@(new Func<string, string?>(ValidateEmail))"
+                          Variant="Variant.Outlined"
+                          Class="mb-4"
+                          InputType="InputType.Email"
+                          Disabled="@(_isLoading || _registrationSuccess)" />
+
+            <MudTextField T="string"
+                          Label="Password"
+                          @bind-Value="_password"
+                          Required="true"
+                          RequiredError="Password is required"
+                          Validation="@(new Func<string, string?>(ValidatePassword))"
+                          Variant="Variant.Outlined"
+                          Class="mb-4"
+                          InputType="InputType.Password"
+                          Disabled="@(_isLoading || _registrationSuccess)"
+                          HelperText="Minimum 8 characters" />
+
+            <MudTextField T="string"
+                          Label="Confirm Password"
+                          @bind-Value="_confirmPassword"
+                          Required="true"
+                          RequiredError="Please confirm your password"
+                          Validation="@(new Func<string, string?>(ValidateConfirmPassword))"
+                          Variant="Variant.Outlined"
+                          Class="mb-6"
+                          InputType="InputType.Password"
+                          Disabled="@(_isLoading || _registrationSuccess)" />
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       OnClick="HandleRegisterAsync"
+                       Disabled="@(!_isValid || _isLoading || _registrationSuccess)">
+                @if (_isLoading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    <MudText Class="ml-2">Creating Account...</MudText>
+                }
+                else
+                {
+                    <span>Create Account</span>
+                }
+            </MudButton>
+        </MudForm>
+
+        <MudDivider Class="my-6" />
+
+        <MudText Typo="Typo.body2" Align="Align.Center">
+            Already have an account?
+            <MudLink Href="/login" Color="Color.Primary">Sign In</MudLink>
+        </MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? _form;
+    private bool _isValid;
+    private bool _isLoading;
+    private bool _registrationSuccess;
+    private bool _isFirstRun;
+    private string _inviteToken = string.Empty;
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private string _confirmPassword = string.Empty;
+    private string? _errorMessage;
+
+    [SupplyParameterFromQuery(Name = "invite")]
+    private string? InviteQueryParam { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isFirstRun = await AuthService.IsFirstRunAsync();
+
+        if (!string.IsNullOrEmpty(InviteQueryParam))
+        {
+            _inviteToken = InviteQueryParam;
+        }
+    }
+
+    private string? ValidateEmail(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return "Email is required";
+
+        if (!email.Contains("@"))
+            return "Invalid email format";
+
+        return null;
+    }
+
+    private string? ValidatePassword(string password)
+    {
+        if (string.IsNullOrWhiteSpace(password))
+            return "Password is required";
+
+        if (password.Length < 8)
+            return "Password must be at least 8 characters";
+
+        return null;
+    }
+
+    private string? ValidateConfirmPassword(string confirmPassword)
+    {
+        if (string.IsNullOrWhiteSpace(confirmPassword))
+            return "Please confirm your password";
+
+        if (confirmPassword != _password)
+            return "Passwords do not match";
+
+        return null;
+    }
+
+    private async Task HandleRegisterAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await AuthService.RegisterAsync(_email, _password, _inviteToken);
+
+            if (!result.Success)
+            {
+                _errorMessage = result.ErrorMessage;
+                return;
+            }
+
+            _registrationSuccess = true;
+            StateHasChanged();
+
+            // Wait a moment to show success message
+            await Task.Delay(1000);
+
+            // Auto-login after successful registration
+            var loginResult = await AuthService.LoginAsync(_email, _password);
+
+            if (loginResult.Success && !loginResult.RequiresTotp)
+            {
+                // Create authentication cookie
+                await SignInUserAsync(loginResult.UserId!, loginResult.Email!, loginResult.PermissionLevel!.Value);
+
+                // Redirect to dashboard
+                Navigation.NavigateTo("/", forceLoad: true);
+            }
+            else
+            {
+                // Redirect to login page if something went wrong
+                Navigation.NavigateTo("/login");
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "An error occurred during registration. Please try again.";
+            Console.Error.WriteLine($"Registration error: {ex}");
+            _registrationSuccess = false;
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SignInUserAsync(string userId, string email, int permissionLevel)
+    {
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.NameIdentifier, userId),
+            new Claim(ClaimTypes.Email, email),
+            new Claim(ClaimTypes.Role, GetRoleName(permissionLevel)),
+            new Claim("PermissionLevel", permissionLevel.ToString())
+        };
+
+        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+
+        var authProperties = new AuthenticationProperties
+        {
+            IsPersistent = true,
+            ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+        };
+
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext != null)
+        {
+            await httpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                claimsPrincipal,
+                authProperties);
+        }
+    }
+
+    private string GetRoleName(int permissionLevel) => permissionLevel switch
+    {
+        0 => "ReadOnly",
+        1 => "Admin",
+        2 => "Owner",
+        _ => "ReadOnly"
+    };
+}

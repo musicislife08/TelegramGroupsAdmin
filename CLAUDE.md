@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TgSpam-PreFilterApi is an ASP.NET Core 10.0 minimal API that checks Telegram messages for spam/malicious content. The service performs multi-layered threat detection:
+TelegramGroupsAdmin is an ASP.NET Core 10.0 application combining a Blazor Server UI with minimal API endpoints for checking Telegram messages for spam/malicious content. The service performs multi-layered threat detection:
 
 **Text Spam Detection:**
 1. **Blocklist checking** against The Block List Project (abuse, fraud, malware, phishing, ransomware, redirect, scam)
@@ -75,19 +75,19 @@ Two-pronged approach:
 
 ### Build
 ```bash
-dotnet build TgSpamProxy.sln
+dotnet build TelegramGroupsAdmin.sln
 ```
 
 ### Run locally
 ```bash
-cd TgSpam-PreFilterApi
+cd TelegramGroupsAdmin
 dotnet run
 ```
 
 ### Run with Docker
 ```bash
-docker build -t tgspam-prefilter .
-docker run -p 8080:8080 -e VIRUSTOTAL_API_KEY=<your-key> tgspam-prefilter
+docker build -t telegram-groups-admin .
+docker run -p 8080:8080 -e VIRUSTOTAL_API_KEY=<your-key> telegram-groups-admin
 ```
 
 ## Environment Variables

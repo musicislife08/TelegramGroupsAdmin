@@ -1,0 +1,38 @@
+﻿@page "/"
+@using TelegramGroupsAdmin.Services
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Dashboard - TgSpam PreFilter</PageTitle>
+
+@if (_isLoading)
+{
+    <MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+        <MudProgressCircular Indeterminate="true" />
+        <MudText>Loading...</MudText>
+    </MudContainer>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+        <MudText Typo="Typo.h3" GutterBottom="true">Dashboard</MudText>
+        <MudText Typo="Typo.body1">Welcome to TgSpam PreFilter</MudText>
+    </MudContainer>
+}
+
+@code {
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var isFirstRun = await AuthService.IsFirstRunAsync();
+
+        if (isFirstRun)
+        {
+            Navigation.NavigateTo("/register", replace: true);
+            return;
+        }
+
+        _isLoading = false;
+    }
+}

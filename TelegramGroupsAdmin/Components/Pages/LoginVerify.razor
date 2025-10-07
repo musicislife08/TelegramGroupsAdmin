@@ -1,0 +1,248 @@
+@page "/login/verify"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using TelegramGroupsAdmin.Services
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+@inject IHttpContextAccessor HttpContextAccessor
+
+<PageTitle>Two-Factor Authentication - TgSpam PreFilter</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Elevation="4" Class="pa-8">
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">
+            Two-Factor Authentication
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">
+            Enter the 6-digit code from your authenticator app
+        </MudText>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">@_errorMessage</MudAlert>
+        }
+
+        <MudForm @ref="_form" @bind-IsValid="@_isValid">
+            <MudTextField T="string"
+                          Label="Verification Code"
+                          @bind-Value="_code"
+                          Required="true"
+                          RequiredError="Code is required"
+                          Variant="Variant.Outlined"
+                          Class="mb-4"
+                          InputType="InputType.Text"
+                          Disabled="@_isLoading"
+                          MaxLength="6"
+                          Pattern="[0-9]*"
+                          Immediate="true"
+                          HelperText="Enter the 6-digit code" />
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       OnClick="HandleVerifyAsync"
+                       Disabled="@(!_isValid || _isLoading || _code.Length != 6)"
+                       Class="mb-4">
+                @if (_isLoading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    <MudText Class="ml-2">Verifying...</MudText>
+                }
+                else
+                {
+                    <span>Verify</span>
+                }
+            </MudButton>
+
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.body2" Align="Align.Center" Class="mb-2">
+                Lost access to your authenticator?
+            </MudText>
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       OnClick="ShowRecoveryCodeInput">
+                Use Recovery Code
+            </MudButton>
+
+            @if (_showRecoveryCode)
+            {
+                <MudTextField T="string"
+                              Label="Recovery Code"
+                              @bind-Value="_recoveryCode"
+                              Variant="Variant.Outlined"
+                              Class="mt-4 mb-4"
+                              InputType="InputType.Text"
+                              Disabled="@_isLoading"
+                              HelperText="Enter one of your backup recovery codes" />
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           FullWidth="true"
+                           OnClick="HandleRecoveryCodeAsync"
+                           Disabled="@(_isLoading || string.IsNullOrWhiteSpace(_recoveryCode))">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        <MudText Class="ml-2">Verifying...</MudText>
+                    }
+                    else
+                    {
+                        <span>Verify Recovery Code</span>
+                    }
+                </MudButton>
+            }
+        </MudForm>
+
+        <MudDivider Class="my-6" />
+
+        <MudButton Variant="Variant.Text"
+                   Color="Color.Default"
+                   FullWidth="true"
+                   OnClick="@(() => Navigation.NavigateTo("/login"))">
+            Back to Login
+        </MudButton>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? _form;
+    private bool _isValid;
+    private bool _isLoading;
+    private bool _showRecoveryCode;
+    private string _code = string.Empty;
+    private string _recoveryCode = string.Empty;
+    private string? _errorMessage;
+
+    [SupplyParameterFromQuery(Name = "userId")]
+    private string? UserId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    private string? ReturnUrl { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (string.IsNullOrEmpty(UserId))
+        {
+            Navigation.NavigateTo("/login");
+        }
+    }
+
+    private void ShowRecoveryCodeInput()
+    {
+        _showRecoveryCode = !_showRecoveryCode;
+    }
+
+    private async Task HandleVerifyAsync()
+    {
+        if (string.IsNullOrEmpty(UserId)) return;
+
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await AuthService.VerifyTotpAsync(UserId, _code);
+
+            if (!result.Success)
+            {
+                _errorMessage = result.ErrorMessage;
+                _code = string.Empty;
+                return;
+            }
+
+            // Create authentication cookie
+            await SignInUserAsync(result.UserId!, result.Email!, result.PermissionLevel!.Value);
+
+            // Redirect to return URL or dashboard
+            Navigation.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "An error occurred during verification. Please try again.";
+            Console.Error.WriteLine($"TOTP verification error: {ex}");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleRecoveryCodeAsync()
+    {
+        if (string.IsNullOrEmpty(UserId)) return;
+
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await AuthService.UseRecoveryCodeAsync(UserId, _recoveryCode);
+
+            if (!result.Success)
+            {
+                _errorMessage = result.ErrorMessage;
+                _recoveryCode = string.Empty;
+                return;
+            }
+
+            // Create authentication cookie
+            await SignInUserAsync(result.UserId!, result.Email!, result.PermissionLevel!.Value);
+
+            // Redirect to return URL or dashboard
+            Navigation.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "An error occurred during verification. Please try again.";
+            Console.Error.WriteLine($"Recovery code verification error: {ex}");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SignInUserAsync(string userId, string email, int permissionLevel)
+    {
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.NameIdentifier, userId),
+            new Claim(ClaimTypes.Email, email),
+            new Claim(ClaimTypes.Role, GetRoleName(permissionLevel)),
+            new Claim("PermissionLevel", permissionLevel.ToString())
+        };
+
+        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+
+        var authProperties = new AuthenticationProperties
+        {
+            IsPersistent = true,
+            ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+        };
+
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext != null)
+        {
+            await httpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                claimsPrincipal,
+                authProperties);
+        }
+    }
+
+    private string GetRoleName(int permissionLevel) => permissionLevel switch
+    {
+        0 => "ReadOnly",
+        1 => "Admin",
+        2 => "Owner",
+        _ => "ReadOnly"
+    };
+}

@@ -1,0 +1,160 @@
+@page "/login"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using TelegramGroupsAdmin.Services
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+@inject IHttpContextAccessor HttpContextAccessor
+
+<PageTitle>Login - TgSpam PreFilter</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    <MudPaper Elevation="4" Class="pa-8">
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">
+            TgSpam PreFilter
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">
+            Sign in to your account
+        </MudText>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">@_errorMessage</MudAlert>
+        }
+
+        <MudForm @ref="_form" @bind-IsValid="@_isValid">
+            <MudTextField T="string"
+                          Label="Email"
+                          @bind-Value="_email"
+                          Required="true"
+                          RequiredError="Email is required"
+                          Variant="Variant.Outlined"
+                          Class="mb-4"
+                          InputType="InputType.Email"
+                          Disabled="@_isLoading" />
+
+            <MudTextField T="string"
+                          Label="Password"
+                          @bind-Value="_password"
+                          Required="true"
+                          RequiredError="Password is required"
+                          Variant="Variant.Outlined"
+                          Class="mb-6"
+                          InputType="InputType.Password"
+                          Disabled="@_isLoading" />
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       OnClick="HandleLoginAsync"
+                       Disabled="@(!_isValid || _isLoading)">
+                @if (_isLoading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    <MudText Class="ml-2">Signing in...</MudText>
+                }
+                else
+                {
+                    <span>Sign In</span>
+                }
+            </MudButton>
+        </MudForm>
+
+        <MudDivider Class="my-6" />
+
+        <MudText Typo="Typo.body2" Align="Align.Center">
+            Need an invite? Contact your administrator.
+        </MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? _form;
+    private bool _isValid;
+    private bool _isLoading;
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private string? _errorMessage;
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    private string? ReturnUrl { get; set; }
+
+    private async Task HandleLoginAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await AuthService.LoginAsync(_email, _password);
+
+            if (!result.Success)
+            {
+                _errorMessage = result.ErrorMessage;
+                return;
+            }
+
+            // If TOTP is required, redirect to verification page
+            if (result.RequiresTotp)
+            {
+                Navigation.NavigateTo($"/login/verify?userId={result.UserId}&returnUrl={Uri.EscapeDataString(ReturnUrl ?? "/")}");
+                return;
+            }
+
+            // Create authentication cookie
+            await SignInUserAsync(result.UserId!, result.Email!, result.PermissionLevel!.Value);
+
+            // Redirect to return URL or dashboard
+            Navigation.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "An error occurred during login. Please try again.";
+            Console.Error.WriteLine($"Login error: {ex}");
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SignInUserAsync(string userId, string email, int permissionLevel)
+    {
+        var claims = new List<Claim>
+        {
+            new Claim(ClaimTypes.NameIdentifier, userId),
+            new Claim(ClaimTypes.Email, email),
+            new Claim(ClaimTypes.Role, GetRoleName(permissionLevel)),
+            new Claim("PermissionLevel", permissionLevel.ToString())
+        };
+
+        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+
+        var authProperties = new AuthenticationProperties
+        {
+            IsPersistent = true,
+            ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+        };
+
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext != null)
+        {
+            await httpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                claimsPrincipal,
+                authProperties);
+        }
+    }
+
+    private string GetRoleName(int permissionLevel) => permissionLevel switch
+    {
+        0 => "ReadOnly",
+        1 => "Admin",
+        2 => "Owner",
+        _ => "ReadOnly"
+    };
+}

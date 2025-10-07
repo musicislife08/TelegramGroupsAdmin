@@ -1,0 +1,68 @@
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.DependencyInjection;
+using TelegramGroupsAdmin.Data.Repositories;
+using TelegramGroupsAdmin.Data.Services;
+
+namespace TelegramGroupsAdmin.Data;
+
+public static class ServiceCollectionExtensions
+{
+    /// <summary>
+    /// Adds Web UI data services (Identity repositories + TOTP protection + Data Protection API)
+    /// </summary>
+    public static IServiceCollection AddTgSpamWebDataServices(
+        this IServiceCollection services,
+        string dataProtectionKeysPath)
+    {
+        ConfigureDataProtection(services, dataProtectionKeysPath);
+
+        // Identity-related repositories and services
+        services.AddSingleton<ITotpProtectionService, TotpProtectionService>();
+        services.AddSingleton<UserRepository>();
+        services.AddSingleton<InviteRepository>();
+
+        // Message history repository (read-only for Web UI)
+        services.AddSingleton<MessageHistoryRepository>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Adds API data services (Message history repository only - no identity)
+    /// </summary>
+    public static IServiceCollection AddTgSpamApiDataServices(
+        this IServiceCollection services)
+    {
+        // Message history repository (read-write for API)
+        services.AddSingleton<MessageHistoryRepository>();
+
+        return services;
+    }
+
+    private static void ConfigureDataProtection(IServiceCollection services, string dataProtectionKeysPath)
+    {
+        // Create keys directory
+        Directory.CreateDirectory(dataProtectionKeysPath);
+
+        // Set restrictive permissions on keys directory (Linux/macOS only)
+        if (!OperatingSystem.IsWindows())
+        {
+            try
+            {
+                // chmod 700 - only owner can read/write/execute
+                File.SetUnixFileMode(dataProtectionKeysPath,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                Console.WriteLine($"Set permissions on {dataProtectionKeysPath} to 700");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: Failed to set Unix permissions on {dataProtectionKeysPath}: {ex.Message}");
+            }
+        }
+
+        // Configure Data Protection API
+        services.AddDataProtection()
+            .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
+            .SetApplicationName("TgSpamPreFilter");
+    }
+}
