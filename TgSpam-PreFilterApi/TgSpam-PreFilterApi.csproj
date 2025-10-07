@@ -25,4 +25,8 @@
       </Content>
     </ItemGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\TgSpam-PreFilterApi.Data\TgSpam-PreFilterApi.Data.csproj" />
+    </ItemGroup>
+
 </Project>

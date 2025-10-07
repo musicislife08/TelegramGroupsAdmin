@@ -6,38 +6,28 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TgSpam_PreFilterApi.Configuration;
-using TgSpam_PreFilterApi.Data;
+using TgSpam_PreFilterApi.Data.Models;
+using TgSpam_PreFilterApi.Data.Repositories;
 using TgSpam_PreFilterApi.Services.Telegram;
 
 namespace TgSpam_PreFilterApi.Services.BackgroundServices;
 
-public partial class HistoryBotService : BackgroundService
+public partial class HistoryBotService(
+    TelegramBotClientFactory botFactory,
+    MessageHistoryRepository repository,
+    IOptions<TelegramOptions> options,
+    IOptions<MessageHistoryOptions> historyOptions,
+    ILogger<HistoryBotService> logger)
+    : BackgroundService
 {
-    private readonly TelegramBotClientFactory _botFactory;
-    private readonly MessageHistoryRepository _repository;
-    private readonly TelegramOptions _options;
-    private readonly MessageHistoryOptions _historyOptions;
-    private readonly ILogger<HistoryBotService> _logger;
-
-    public HistoryBotService(
-        TelegramBotClientFactory botFactory,
-        MessageHistoryRepository repository,
-        IOptions<TelegramOptions> options,
-        IOptions<MessageHistoryOptions> historyOptions,
-        ILogger<HistoryBotService> logger)
-    {
-        _botFactory = botFactory;
-        _repository = repository;
-        _options = options.Value;
-        _historyOptions = historyOptions.Value;
-        _logger = logger;
-    }
+    private readonly TelegramOptions _options = options.Value;
+    private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var botClient = _botFactory.GetOrCreate(_options.HistoryBotToken);
+        var botClient = botFactory.GetOrCreate(_options.HistoryBotToken);
 
-        _logger.LogInformation("HistoryBot started listening for messages in all chats");
+        logger.LogInformation("HistoryBot started listening for messages in all chats");
 
         var receiverOptions = new ReceiverOptions
         {
@@ -55,11 +45,11 @@ public partial class HistoryBotService : BackgroundService
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("HistoryBot stopped");
+            logger.LogInformation("HistoryBot stopped");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "HistoryBot encountered fatal error");
+            logger.LogError(ex, "HistoryBot encountered fatal error");
         }
     }
 
@@ -102,12 +92,17 @@ public partial class HistoryBotService : BackgroundService
                 text,
                 photoFileId,
                 photoFileSize,
-                urls != null ? JsonSerializer.Serialize(urls) : null
+                urls != null ? JsonSerializer.Serialize(urls) : null,
+                EditDate: message.EditDate.HasValue ? new DateTimeOffset(message.EditDate.Value, TimeSpan.Zero).ToUnixTimeSeconds() : null,
+                ContentHash: null, // Will be calculated when needed
+                ChatName: message.Chat.Title ?? message.Chat.Username,
+                PhotoLocalPath: null, // Will be set when image is downloaded
+                PhotoThumbnailPath: null // Will be set when thumbnail is generated
             );
 
-            await _repository.InsertMessageAsync(messageRecord);
+            await repository.InsertMessageAsync(messageRecord);
 
-            _logger.LogDebug(
+            logger.LogDebug(
                 "Cached message {MessageId} from user {UserId} in chat {ChatId} (photo: {HasPhoto}, text: {HasText})",
                 message.MessageId,
                 message.From.Id,
@@ -117,7 +112,7 @@ public partial class HistoryBotService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex,
+            logger.LogError(ex,
                 "Error caching message {MessageId} from user {UserId} in chat {ChatId}",
                 message.MessageId,
                 message.From?.Id,
@@ -130,7 +125,7 @@ public partial class HistoryBotService : BackgroundService
         Exception exception,
         CancellationToken cancellationToken)
     {
-        _logger.LogError(exception, "HistoryBot polling error");
+        logger.LogError(exception, "HistoryBot polling error");
         return Task.CompletedTask;
     }
 

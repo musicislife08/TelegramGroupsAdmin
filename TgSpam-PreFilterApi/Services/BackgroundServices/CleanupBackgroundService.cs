@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 using TgSpam_PreFilterApi.Configuration;
-using TgSpam_PreFilterApi.Data;
+using TgSpam_PreFilterApi.Data.Repositories;
 
 namespace TgSpam_PreFilterApi.Services.BackgroundServices;
 

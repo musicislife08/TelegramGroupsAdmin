@@ -1,0 +1,49 @@
+@TgSpam_PreFilterApi_HostAddress = http://172.26.1.3:5161
+
+### Health check
+GET {{TgSpam_PreFilterApi_HostAddress}}/health
+Accept: application/json
+
+###
+
+### Check text message with URL
+POST {{TgSpam_PreFilterApi_HostAddress}}/check
+Content-Type: application/json
+
+{
+  "message": "Check out this great investment opportunity! https://example.com/scam",
+  "user_id": "123456789",
+  "user_name": "testuser",
+  "chat_id": "-1001234567890",
+  "image_count": 0
+}
+
+###
+
+### Check image spam (real test data)
+POST {{TgSpam_PreFilterApi_HostAddress}}/check
+Content-Type: application/json
+
+{
+  "message": null,
+  "user_id": "1987987757",
+  "user_name": "JedFroggy",
+  "chat_id": "-1001329174109",
+  "image_count": 1
+}
+
+###
+
+### Check empty message
+POST {{TgSpam_PreFilterApi_HostAddress}}/check
+Content-Type: application/json
+
+{
+  "message": null,
+  "user_id": "123456789",
+  "user_name": "testuser",
+  "chat_id": "-1001234567890",
+  "image_count": 0
+}
+
+###

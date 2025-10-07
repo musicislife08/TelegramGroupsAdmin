@@ -1,7 +1,10 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using TgSpam_PreFilterApi.Data.Models;
 
-namespace TgSpam_PreFilterApi.Data;
+namespace TgSpam_PreFilterApi.Data.Repositories;
 
 public class MessageHistoryRepository
 {
@@ -15,35 +18,6 @@ public class MessageHistoryRepository
         _logger = logger;
     }
 
-    public async Task InitializeDatabaseAsync()
-    {
-        await using var connection = new SqliteConnection(_connectionString);
-        await connection.OpenAsync();
-
-        const string createTableSql = """
-            CREATE TABLE IF NOT EXISTS messages (
-                message_id INTEGER PRIMARY KEY,
-                user_id INTEGER NOT NULL,
-                user_name TEXT,
-                chat_id INTEGER NOT NULL,
-                timestamp INTEGER NOT NULL,
-                expires_at INTEGER NOT NULL,
-                message_text TEXT,
-                photo_file_id TEXT,
-                photo_file_size INTEGER,
-                urls TEXT
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_user_chat_timestamp ON messages(user_id, chat_id, timestamp DESC);
-            CREATE INDEX IF NOT EXISTS idx_expires_at ON messages(expires_at);
-            CREATE INDEX IF NOT EXISTS idx_user_chat_photo ON messages(user_id, chat_id, photo_file_id)
-                WHERE photo_file_id IS NOT NULL;
-            """;
-
-        await connection.ExecuteAsync(createTableSql);
-        _logger.LogInformation("SQLite database initialized at {ConnectionString}", _connectionString);
-    }
-
     public async Task InsertMessageAsync(MessageRecord message)
     {
         await using var connection = new SqliteConnection(_connectionString);
@@ -51,10 +25,12 @@ public class MessageHistoryRepository
         const string sql = """
             INSERT INTO messages (
                 message_id, user_id, user_name, chat_id, timestamp, expires_at,
-                message_text, photo_file_id, photo_file_size, urls
+                message_text, photo_file_id, photo_file_size, urls,
+                edit_date, content_hash, chat_name, photo_local_path, photo_thumbnail_path
             ) VALUES (
                 @MessageId, @UserId, @UserName, @ChatId, @Timestamp, @ExpiresAt,
-                @MessageText, @PhotoFileId, @PhotoFileSize, @Urls
+                @MessageText, @PhotoFileId, @PhotoFileSize, @Urls,
+                @EditDate, @ContentHash, @ChatName, @PhotoLocalPath, @PhotoThumbnailPath
             );
             """;
 
@@ -145,30 +121,3 @@ public class MessageHistoryRepository
         };
     }
 }
-
-public record MessageRecord(
-    long MessageId,
-    long UserId,
-    string? UserName,
-    long ChatId,
-    long Timestamp,
-    long ExpiresAt,
-    string? MessageText,
-    string? PhotoFileId,
-    int? PhotoFileSize,
-    string? Urls
-);
-
-public record PhotoMessageRecord(
-    string FileId,
-    string? MessageText,
-    long Timestamp
-);
-
-public record HistoryStats(
-    long TotalMessages,
-    long UniqueUsers,
-    long PhotoCount,
-    long? OldestTimestamp,
-    long? NewestTimestamp
-);

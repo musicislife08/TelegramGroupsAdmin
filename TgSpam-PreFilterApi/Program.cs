@@ -1,10 +1,11 @@
 using System.Threading.RateLimiting;
+using FluentMigrator.Runner;
 using Microsoft.Extensions.Options;
 using Polly;
 using Polly.RateLimiting;
 using TgSpam_PreFilterApi;
 using TgSpam_PreFilterApi.Configuration;
-using TgSpam_PreFilterApi.Data;
+using TgSpam_PreFilterApi.Data.Repositories;
 using TgSpam_PreFilterApi.Services.BackgroundServices;
 using TgSpam_PreFilterApi.Services.Telegram;
 using TgSpam_PreFilterApi.Services.Vision;
@@ -105,6 +106,16 @@ builder.Services.Configure<SpamDetectionOptions>(options =>
 // Database
 builder.Services.AddSingleton<MessageHistoryRepository>();
 
+// FluentMigrator
+var dbPath = builder.Configuration["MessageHistory:DatabasePath"] ?? "/data/message_history.db";
+builder.Services
+    .AddFluentMigratorCore()
+    .ConfigureRunner(rb => rb
+        .AddSQLite()
+        .WithGlobalConnectionString($"Data Source={dbPath}")
+        .ScanIn(typeof(TgSpam_PreFilterApi.Data.Migrations.InitialSchema).Assembly).For.Migrations())
+    .AddLogging(lb => lb.AddFluentMigratorConsole());
+
 // Telegram services
 builder.Services.AddSingleton<TelegramBotClientFactory>();
 builder.Services.AddScoped<ITelegramImageService, TelegramImageService>();
@@ -121,9 +132,21 @@ builder.Services.AddScoped<SpamCheckService>();
 
 var app = builder.Build();
 
-// Initialize database
-var repository = app.Services.GetRequiredService<MessageHistoryRepository>();
-await repository.InitializeDatabaseAsync();
+// Run database migrations
+using (var scope = app.Services.CreateScope())
+{
+    var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+
+    if (runner.HasMigrationsToApplyUp())
+    {
+        app.Logger.LogInformation("Applying pending migrations...");
+        runner.MigrateUp();
+    }
+    else
+    {
+        app.Logger.LogInformation("Database schema is up to date");
+    }
+}
 
 app.MapPost("/check", async (
     SpamCheckRequest request,
