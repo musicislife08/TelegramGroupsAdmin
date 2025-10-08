@@ -6,6 +6,11 @@ using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Data.Repositories;
 
+// CRITICAL DAPPER/DTO CONVENTION:
+// All SQL SELECT statements MUST use raw snake_case column names without aliases.
+// DTOs use positional record constructors that are CASE-SENSITIVE.
+// See MessageRecord.cs for detailed explanation.
+
 public class InviteRepository
 {
     private readonly string _connectionString;
@@ -23,13 +28,14 @@ public class InviteRepository
         await using var connection = new SqliteConnection(_connectionString);
 
         const string sql = """
-            SELECT token AS Token, created_by AS CreatedBy, created_at AS CreatedAt,
-                   expires_at AS ExpiresAt, used_by AS UsedBy, used_at AS UsedAt
+            SELECT token, created_by, created_at, expires_at, used_by,
+                   permission_level, status, modified_at
             FROM invites
             WHERE token = @Token;
             """;
 
-        return await connection.QueryFirstOrDefaultAsync<InviteRecord>(sql, new { Token = token });
+        var dto = await connection.QueryFirstOrDefaultAsync<InviteRecordDto>(sql, new { Token = token });
+        return dto?.ToInviteRecord();
     }
 
     public async Task CreateAsync(InviteRecord invite, CancellationToken ct = default)
@@ -37,8 +43,8 @@ public class InviteRepository
         await using var connection = new SqliteConnection(_connectionString);
 
         const string sql = """
-            INSERT INTO invites (token, created_by, created_at, expires_at)
-            VALUES (@Token, @CreatedBy, @CreatedAt, @ExpiresAt);
+            INSERT INTO invites (token, created_by, created_at, expires_at, permission_level)
+            VALUES (@Token, @CreatedBy, @CreatedAt, @ExpiresAt, @PermissionLevel);
             """;
 
         await connection.ExecuteAsync(sql, new
@@ -46,14 +52,15 @@ public class InviteRepository
             invite.Token,
             invite.CreatedBy,
             invite.CreatedAt,
-            invite.ExpiresAt
+            invite.ExpiresAt,
+            invite.PermissionLevel
         });
 
-        _logger.LogInformation("Created invite {Token} by user {CreatedBy}, expires at {ExpiresAt}",
-            invite.Token, invite.CreatedBy, DateTimeOffset.FromUnixTimeSeconds(invite.ExpiresAt));
+        _logger.LogInformation("Created invite {Token} by user {CreatedBy}, expires at {ExpiresAt}, permission level {PermissionLevel}",
+            invite.Token, invite.CreatedBy, DateTimeOffset.FromUnixTimeSeconds(invite.ExpiresAt), invite.PermissionLevel);
     }
 
-    public async Task<string> CreateAsync(string createdBy, int validDays = 7, CancellationToken ct = default)
+    public async Task<string> CreateAsync(string createdBy, int validDays = 7, int permissionLevel = 0, CancellationToken ct = default)
     {
         await using var connection = new SqliteConnection(_connectionString);
 
@@ -62,8 +69,8 @@ public class InviteRepository
         var expiresAt = now + (validDays * 24 * 3600);
 
         const string sql = """
-            INSERT INTO invites (token, created_by, created_at, expires_at)
-            VALUES (@Token, @CreatedBy, @CreatedAt, @ExpiresAt);
+            INSERT INTO invites (token, created_by, created_at, expires_at, permission_level)
+            VALUES (@Token, @CreatedBy, @CreatedAt, @ExpiresAt, @PermissionLevel);
             """;
 
         await connection.ExecuteAsync(sql, new
@@ -71,11 +78,20 @@ public class InviteRepository
             Token = token,
             CreatedBy = createdBy,
             CreatedAt = now,
-            ExpiresAt = expiresAt
+            ExpiresAt = expiresAt,
+            PermissionLevel = permissionLevel
         });
 
-        _logger.LogInformation("Created invite {Token} by user {CreatedBy}, expires at {ExpiresAt}",
-            token, createdBy, DateTimeOffset.FromUnixTimeSeconds(expiresAt));
+        var permissionName = permissionLevel switch
+        {
+            0 => "ReadOnly",
+            1 => "Admin",
+            2 => "Owner",
+            _ => permissionLevel.ToString()
+        };
+
+        _logger.LogInformation("Created invite {Token} by user {CreatedBy}, expires at {ExpiresAt}, permission level {PermissionLevel}",
+            token, createdBy, DateTimeOffset.FromUnixTimeSeconds(expiresAt), permissionName);
 
         return token;
     }
@@ -86,7 +102,7 @@ public class InviteRepository
 
         const string sql = """
             UPDATE invites
-            SET used_by = @UsedBy, used_at = @Now
+            SET used_by = @UsedBy, status = 1, modified_at = @Now
             WHERE token = @Token;
             """;
 
@@ -101,15 +117,15 @@ public class InviteRepository
         await using var connection = new SqliteConnection(_connectionString);
 
         const string sql = """
-            SELECT token AS Token, created_by AS CreatedBy, created_at AS CreatedAt,
-                   expires_at AS ExpiresAt, used_by AS UsedBy, used_at AS UsedAt
+            SELECT token, created_by, created_at, expires_at, used_by,
+                   permission_level, status, modified_at
             FROM invites
             WHERE created_by = @CreatedBy
             ORDER BY created_at DESC;
             """;
 
-        var invites = await connection.QueryAsync<InviteRecord>(sql, new { CreatedBy = createdBy });
-        return invites.ToList();
+        var dtos = await connection.QueryAsync<InviteRecordDto>(sql, new { CreatedBy = createdBy });
+        return dtos.Select(dto => dto.ToInviteRecord()).ToList();
     }
 
     public async Task<int> CleanupExpiredAsync()
@@ -118,7 +134,7 @@ public class InviteRepository
 
         const string sql = """
             DELETE FROM invites
-            WHERE expires_at <= @Now AND used_by IS NULL;
+            WHERE expires_at <= @Now AND status = 0;
             """;
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -130,5 +146,79 @@ public class InviteRepository
         }
 
         return deleted;
+    }
+
+    public async Task<List<InviteRecord>> GetAllAsync(InviteFilter filter = InviteFilter.Pending, CancellationToken ct = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+
+        const string baseSql = """
+            SELECT token, created_by, created_at, expires_at, used_by,
+                   permission_level, status, modified_at
+            FROM invites
+            """;
+
+        const string allSql = baseSql + " ORDER BY created_at DESC;";
+        const string filteredSql = baseSql + " WHERE status = @Status ORDER BY created_at DESC;";
+
+        if (filter == InviteFilter.All)
+        {
+            var dtos = await connection.QueryAsync<InviteRecordDto>(allSql);
+            return dtos.Select(dto => dto.ToInviteRecord()).ToList();
+        }
+        else
+        {
+            var dtos = await connection.QueryAsync<InviteRecordDto>(filteredSql, new { Status = (int)filter });
+            return dtos.Select(dto => dto.ToInviteRecord()).ToList();
+        }
+    }
+
+    public async Task<List<InviteWithCreator>> GetAllWithCreatorEmailAsync(InviteFilter filter = InviteFilter.Pending, CancellationToken ct = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+
+        const string baseSql = """
+            SELECT i.token, i.created_by, i.created_at, i.expires_at, i.used_by,
+                   i.permission_level, i.status, i.modified_at,
+                   u.email as creator_email
+            FROM invites i
+            LEFT JOIN users u ON i.created_by = u.id
+            """;
+
+        const string allSql = baseSql + " ORDER BY i.created_at DESC;";
+        const string filteredSql = baseSql + " WHERE i.status = @Status ORDER BY i.created_at DESC;";
+
+        if (filter == InviteFilter.All)
+        {
+            var results = await connection.QueryAsync<InviteWithCreatorDto>(allSql);
+            return results.Select(dto => dto.ToInviteWithCreator()).ToList();
+        }
+        else
+        {
+            var results = await connection.QueryAsync<InviteWithCreatorDto>(filteredSql, new { Status = (int)filter });
+            return results.Select(dto => dto.ToInviteWithCreator()).ToList();
+        }
+    }
+
+    public async Task<bool> RevokeAsync(string token, CancellationToken ct = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+
+        const string sql = """
+            UPDATE invites
+            SET status = 2, modified_at = @ModifiedAt
+            WHERE token = @Token AND status = 0;
+            """;
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var updated = await connection.ExecuteAsync(sql, new { Token = token, ModifiedAt = now });
+
+        if (updated > 0)
+        {
+            _logger.LogInformation("Revoked invite {Token}", token);
+            return true;
+        }
+
+        return false;
     }
 }
