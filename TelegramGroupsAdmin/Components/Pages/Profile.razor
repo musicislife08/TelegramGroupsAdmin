@@ -1,0 +1,429 @@
+@page "/profile"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Data.Models
+@using TelegramGroupsAdmin.Data.Repositories
+@using TelegramGroupsAdmin.Services
+@using QRCoder
+@inject AuthenticationStateProvider AuthStateProvider
+@inject UserRepository UserRepository
+@inject IAuthService AuthService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@attribute [Authorize]
+
+<PageTitle>Profile - TelegramGroupsAdmin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Profile Settings</MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+    else if (_user != null)
+    {
+        <MudGrid>
+            <!-- Account Information -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-4 mb-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Account Information</MudText>
+                    <MudStack Spacing="2">
+                        <MudTextField Label="Email" Value="@_user.Email" ReadOnly="true" Variant="Variant.Outlined" />
+                        <MudTextField Label="Permission Level" Value="@GetPermissionName(_user.PermissionLevelInt)" ReadOnly="true" Variant="Variant.Outlined" />
+                        <MudTextField Label="Account Created" Value="@FormatDate(_user.CreatedAt)" ReadOnly="true" Variant="Variant.Outlined" />
+                        <MudTextField Label="Last Login" Value="@FormatDate(_user.LastLoginAt)" ReadOnly="true" Variant="Variant.Outlined" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Change Password -->
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Change Password</MudText>
+                    <MudForm @ref="_passwordForm">
+                        <MudStack Spacing="3">
+                            <MudTextField @bind-Value="_currentPassword"
+                                         Label="Current Password"
+                                         InputType="InputType.Password"
+                                         Variant="Variant.Outlined"
+                                         Required="true" />
+                            <MudTextField @bind-Value="_newPassword"
+                                         Label="New Password"
+                                         InputType="InputType.Password"
+                                         Variant="Variant.Outlined"
+                                         Required="true" />
+                            <MudTextField @bind-Value="_confirmPassword"
+                                         Label="Confirm New Password"
+                                         InputType="InputType.Password"
+                                         Variant="Variant.Outlined"
+                                         Required="true" />
+                            <MudButton Variant="Variant.Filled"
+                                      Color="Color.Primary"
+                                      FullWidth="true"
+                                      OnClick="ChangePassword"
+                                      Disabled="@_changingPassword">
+                                @if (_changingPassword)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>Changing Password...</span>
+                                }
+                                else
+                                {
+                                    <span>Change Password</span>
+                                }
+                            </MudButton>
+                        </MudStack>
+                    </MudForm>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Two-Factor Authentication -->
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Two-Factor Authentication (TOTP)</MudText>
+
+                    @if (_user.TotpEnabled)
+                    {
+                        <MudAlert Severity="Severity.Success" Class="mb-3">2FA is currently enabled</MudAlert>
+                        <MudStack Spacing="3">
+                            <MudTextField @bind-Value="_resetTotpPassword"
+                                         Label="Enter Password to Reset 2FA"
+                                         InputType="InputType.Password"
+                                         Variant="Variant.Outlined"
+                                         Required="true" />
+                            <MudButton Variant="Variant.Filled"
+                                      Color="Color.Warning"
+                                      FullWidth="true"
+                                      OnClick="ResetTotp"
+                                      Disabled="@_togglingTotp">
+                                @if (_togglingTotp)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>Resetting 2FA...</span>
+                                }
+                                else
+                                {
+                                    <span>Reset 2FA</span>
+                                }
+                            </MudButton>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Warning" Class="mb-3">2FA is not enabled. Enable it for enhanced security.</MudAlert>
+                        <MudButton Variant="Variant.Filled"
+                                  Color="Color.Success"
+                                  FullWidth="true"
+                                  OnClick="EnableTotp"
+                                  Disabled="@_togglingTotp">
+                            @if (_togglingTotp)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                <span>Setting up 2FA...</span>
+                            }
+                            else
+                            {
+                                <span>Enable 2FA</span>
+                            }
+                        </MudButton>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+<!-- TOTP Setup Dialog -->
+<MudDialog @bind-Visible="_showTotpSetup" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-3">Enable Two-Factor Authentication</MudText>
+
+        @if (_totpSetupResult != null)
+        {
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.body2">Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.):</MudText>
+
+                <div style="text-align: center;">
+                    <img src="@GetQrCodeDataUrl()" alt="QR Code" style="width: 200px; height: 200px;" />
+                </div>
+
+                <MudText Typo="Typo.body2">Or enter this code manually:</MudText>
+                <MudTextField Value="@_totpSetupResult.ManualEntryKey" ReadOnly="true" Variant="Variant.Outlined" />
+
+                <MudText Typo="Typo.body2" Class="mt-3">Enter the 6-digit code from your app to verify:</MudText>
+                <MudTextField @bind-Value="_totpVerificationCode"
+                             Label="Verification Code"
+                             Variant="Variant.Outlined"
+                             MaxLength="6" />
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CancelTotpSetup">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="VerifyAndEnableTotp" Disabled="@_verifyingTotp">
+            @if (_verifyingTotp)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Verifying...</span>
+            }
+            else
+            {
+                <span>Verify and Enable</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+
+@code {
+    private UserRecord? _user;
+    private bool _loading = true;
+    private string? _currentUserId;
+
+    // Password change
+    private MudForm? _passwordForm;
+    private string _currentPassword = "";
+    private string _newPassword = "";
+    private string _confirmPassword = "";
+    private bool _changingPassword = false;
+
+    // TOTP
+    private bool _togglingTotp = false;
+    private string _resetTotpPassword = "";
+    private bool _showTotpSetup = false;
+    private TotpSetupResult? _totpSetupResult;
+    private string _totpVerificationCode = "";
+    private bool _verifyingTotp = false;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            _currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            await LoadUserAsync();
+        }
+    }
+
+    private async Task LoadUserAsync()
+    {
+        if (string.IsNullOrEmpty(_currentUserId)) return;
+
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _user = await UserRepository.GetByIdAsync(_currentUserId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading profile: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ChangePassword()
+    {
+        if (string.IsNullOrEmpty(_currentUserId)) return;
+
+        if (string.IsNullOrWhiteSpace(_currentPassword) || string.IsNullOrWhiteSpace(_newPassword))
+        {
+            Snackbar.Add("Please fill in all fields", Severity.Warning);
+            return;
+        }
+
+        if (_newPassword != _confirmPassword)
+        {
+            Snackbar.Add("New passwords do not match", Severity.Error);
+            return;
+        }
+
+        if (_newPassword.Length < 8)
+        {
+            Snackbar.Add("New password must be at least 8 characters", Severity.Error);
+            return;
+        }
+
+        _changingPassword = true;
+        StateHasChanged();
+
+        try
+        {
+            var success = await AuthService.ChangePasswordAsync(_currentUserId, _currentPassword, _newPassword);
+
+            if (success)
+            {
+                Snackbar.Add("Password changed successfully", Severity.Success);
+
+                // Clear form
+                _currentPassword = "";
+                _newPassword = "";
+                _confirmPassword = "";
+            }
+            else
+            {
+                Snackbar.Add("Current password is incorrect", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error changing password: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _changingPassword = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task EnableTotp()
+    {
+        if (string.IsNullOrEmpty(_currentUserId)) return;
+
+        _togglingTotp = true;
+        StateHasChanged();
+
+        try
+        {
+            _totpSetupResult = await AuthService.EnableTotpAsync(_currentUserId);
+            _showTotpSetup = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error setting up 2FA: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _togglingTotp = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task VerifyAndEnableTotp()
+    {
+        if (string.IsNullOrEmpty(_currentUserId) || string.IsNullOrWhiteSpace(_totpVerificationCode))
+        {
+            Snackbar.Add("Please enter the verification code", Severity.Warning);
+            return;
+        }
+
+        _verifyingTotp = true;
+        StateHasChanged();
+
+        try
+        {
+            var success = await AuthService.VerifyAndEnableTotpAsync(_currentUserId, _totpVerificationCode);
+
+            if (success)
+            {
+                _showTotpSetup = false;
+                _totpVerificationCode = "";
+
+                await LoadUserAsync();
+                Snackbar.Add("2FA enabled successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Invalid verification code", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error verifying code: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _verifyingTotp = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CancelTotpSetup()
+    {
+        _showTotpSetup = false;
+        _totpSetupResult = null;
+        _totpVerificationCode = "";
+    }
+
+    private async Task ResetTotp()
+    {
+        if (string.IsNullOrEmpty(_currentUserId) || string.IsNullOrWhiteSpace(_resetTotpPassword))
+        {
+            Snackbar.Add("Please enter your password", Severity.Warning);
+            return;
+        }
+
+        _togglingTotp = true;
+        StateHasChanged();
+
+        try
+        {
+            // Verify password first
+            var loginResult = await AuthService.LoginAsync(_user!.Email, _resetTotpPassword);
+
+            if (!loginResult.Success)
+            {
+                Snackbar.Add("Invalid password", Severity.Error);
+                _togglingTotp = false;
+                StateHasChanged();
+                return;
+            }
+
+            // Generate new TOTP secret (this will replace the old one)
+            _totpSetupResult = await AuthService.EnableTotpAsync(_currentUserId);
+            _resetTotpPassword = "";
+            _showTotpSetup = true;
+
+            Snackbar.Add("Scan the new QR code with your authenticator app", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error resetting 2FA: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _togglingTotp = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetQrCodeDataUrl()
+    {
+        if (_totpSetupResult == null) return "";
+
+        // Generate QR code using QRCoder library
+        using var qrGenerator = new QRCodeGenerator();
+        using var qrCodeData = qrGenerator.CreateQrCode(_totpSetupResult.QrCodeUri, QRCodeGenerator.ECCLevel.Q);
+        using var qrCode = new PngByteQRCode(qrCodeData);
+        var qrCodeBytes = qrCode.GetGraphic(20);
+
+        // Convert to base64 data URL
+        var base64 = Convert.ToBase64String(qrCodeBytes);
+        return $"data:image/png;base64,{base64}";
+    }
+
+    private static string GetPermissionName(int level) => level switch
+    {
+        0 => "ReadOnly",
+        1 => "Admin",
+        2 => "Owner",
+        _ => "Unknown"
+    };
+
+    private static string FormatDate(long? timestamp)
+    {
+        if (!timestamp.HasValue) return "Never";
+        var date = DateTimeOffset.FromUnixTimeSeconds(timestamp.Value);
+        return date.ToString("yyyy-MM-dd HH:mm");
+    }
+}

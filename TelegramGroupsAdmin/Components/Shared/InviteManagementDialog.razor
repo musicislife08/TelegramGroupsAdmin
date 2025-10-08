@@ -1,0 +1,222 @@
+@using TelegramGroupsAdmin.Data.Models
+@using TelegramGroupsAdmin.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Auth
+@inject IInviteService InviteService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+
+<MudDialog DefaultFocus="DefaultFocus.Element">
+    <DialogContent>
+        <MudContainer MaxWidth="MaxWidth.Large" Class="pa-0">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+            <MudText Typo="Typo.h6">Manage Invites</MudText>
+            <div style="width: 200px;">
+                <MudSelect T="string" Value="_filter" ValueChanged="OnFilterChanged" Label="Filter" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem Value="@("pending")">Pending</MudSelectItem>
+                    <MudSelectItem Value="@("used")">Used</MudSelectItem>
+                    <MudSelectItem Value="@("revoked")">Revoked</MudSelectItem>
+                    <MudSelectItem Value="@("all")">All</MudSelectItem>
+                </MudSelect>
+            </div>
+        </MudStack>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+        }
+
+        @if (!_invites.Any() && !_loading)
+        {
+            <MudAlert Severity="Severity.Info">No invites found. Create an invite to get started.</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@_invites" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Created By</MudTh>
+                    <MudTh>Created</MudTh>
+                    <MudTh>Permission</MudTh>
+                    <MudTh>Expires</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Created By">
+                        <MudText Typo="Typo.body2">@GetCreatorEmail(context.CreatedBy)</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Created">@FormatDate(context.CreatedAt)</MudTd>
+                    <MudTd DataLabel="Permission">
+                        <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor(context.PermissionLevel)">
+                            @GetPermissionName(context.PermissionLevel)
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Expires">@FormatDate(context.ExpiresAt)</MudTd>
+                    <MudTd DataLabel="Status">
+                        @if (context.Status == InviteStatus.Used)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">Used</MudChip>
+                        }
+                        else if (context.Status == InviteStatus.Revoked)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Dark">Revoked</MudChip>
+                        }
+                        else if (context.ExpiresAt < DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error">Expired</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary">Active</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        @if (context.Status == InviteStatus.Pending)
+                        {
+                            <MudStack Row="true" Spacing="1">
+                                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy"
+                                              Size="Size.Small"
+                                              Color="Color.Primary"
+                                              OnClick="@(() => CopyInviteLink(context.Token))"
+                                              title="Copy Link" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                              Size="Size.Small"
+                                              Color="Color.Error"
+                                              OnClick="@(() => RevokeInvite(context.Token))"
+                                              title="Revoke" />
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Used by user
+                            </MudText>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+        </MudContainer>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    IMudDialogInstance? MudDialog { get; set; }
+
+    private List<InviteRecord> _invites = new();
+    private Dictionary<string, string> _userEmails = new();
+    private bool _loading = true;
+    private string _filter = "pending";
+    private string? _currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get current user ID
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            _currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        }
+
+        await LoadInvitesAsync();
+    }
+
+    private async Task OnFilterChanged(string newValue)
+    {
+        _filter = newValue;
+        await LoadInvitesAsync();
+    }
+
+    private async Task LoadInvitesAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var invitesWithCreators = await InviteService.GetAllInvitesAsync(_filter);
+            _invites = invitesWithCreators.Select(i => i.Invite).ToList();
+
+            // Use DistinctBy to handle multiple invites from same user
+            _userEmails = invitesWithCreators
+                .DistinctBy(i => i.Invite.CreatedBy)
+                .ToDictionary(i => i.Invite.CreatedBy, i => i.CreatorEmail);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading invites: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetCreatorEmail(string userId)
+    {
+        return _userEmails.TryGetValue(userId, out var email) ? email : "Unknown";
+    }
+
+    private void CopyInviteLink(string token)
+    {
+        var inviteLink = $"{Navigation.BaseUri}register?invite={token}";
+        // Note: Clipboard copy requires JS interop
+        // For now, just notify the user
+        Snackbar.Add("Invite link: " + inviteLink, Severity.Info);
+    }
+
+    private async Task RevokeInvite(string token)
+    {
+        try
+        {
+            var success = await InviteService.RevokeInviteAsync(token, _currentUserId!);
+            if (success)
+            {
+                Snackbar.Add("Invite revoked successfully", Severity.Success);
+                await LoadInvitesAsync();
+            }
+            else
+            {
+                Snackbar.Add("Failed to revoke invite (may already be used or revoked)", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error revoking invite: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void Close()
+    {
+        MudDialog?.Close(DialogResult.Ok(true));
+    }
+
+    private static string GetPermissionName(int level) => level switch
+    {
+        0 => "ReadOnly",
+        1 => "Admin",
+        2 => "Owner",
+        _ => "Unknown"
+    };
+
+    private static Color GetPermissionColor(int level) => level switch
+    {
+        0 => Color.Default,
+        1 => Color.Primary,
+        2 => Color.Secondary,
+        _ => Color.Error
+    };
+
+    private static string FormatDate(long timestamp)
+    {
+        var date = DateTimeOffset.FromUnixTimeSeconds(timestamp);
+        return date.ToString("yyyy-MM-dd HH:mm");
+    }
+}

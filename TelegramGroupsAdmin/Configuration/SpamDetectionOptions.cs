@@ -1,8 +1,9 @@
 namespace TelegramGroupsAdmin.Configuration;
 
-public class SpamDetectionOptions
+public sealed record SpamDetectionOptions
 {
-    public int TimeoutSeconds { get; set; } = 30;
-    public int ImageLookupRetryDelayMs { get; set; } = 100;
-    public int MinConfidenceThreshold { get; set; } = 85;
+    public int TimeoutSeconds { get; init; } = 30;
+    public int ImageLookupRetryDelayMs { get; init; } = 100;
+    public int MinConfidenceThreshold { get; init; } = 85;
+    public string? ApiKey { get; init; }
 }

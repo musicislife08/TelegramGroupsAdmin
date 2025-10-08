@@ -1,94 +1,115 @@
 @page "/login"
+@using System.ComponentModel.DataAnnotations
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Authentication.Cookies
+@using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Services.Auth
 @inject IAuthService AuthService
-@inject NavigationManager Navigation
+@inject IIntermediateAuthService IntermediateAuthService
 @inject IHttpContextAccessor HttpContextAccessor
+@inject ILogger<Login> Logger
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
 
-<PageTitle>Login - TgSpam PreFilter</PageTitle>
+<PageTitle>Login - Telegram Groups Admin</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
-    <MudPaper Elevation="4" Class="pa-8">
-        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">
-            TgSpam PreFilter
-        </MudText>
-        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">
-            Sign in to your account
-        </MudText>
+<div class="login-container">
+    <h1 class="login-title">Telegram Groups Admin</h1>
+    <p class="login-subtitle">Sign in to your account</p>
 
-        @if (!string.IsNullOrEmpty(_errorMessage))
-        {
-            <MudAlert Severity="Severity.Error" Class="mb-4">@_errorMessage</MudAlert>
-        }
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="alert-success">@_successMessage</div>
+    }
 
-        <MudForm @ref="_form" @bind-IsValid="@_isValid">
-            <MudTextField T="string"
-                          Label="Email"
-                          @bind-Value="_email"
-                          Required="true"
-                          RequiredError="Email is required"
-                          Variant="Variant.Outlined"
-                          Class="mb-4"
-                          InputType="InputType.Email"
-                          Disabled="@_isLoading" />
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert-error">@_errorMessage</div>
+    }
 
-            <MudTextField T="string"
-                          Label="Password"
-                          @bind-Value="_password"
-                          Required="true"
-                          RequiredError="Password is required"
-                          Variant="Variant.Outlined"
-                          Class="mb-6"
-                          InputType="InputType.Password"
-                          Disabled="@_isLoading" />
+    <EditForm Model="@_model" FormName="login-form" OnValidSubmit="HandleLoginAsync" method="post">
+        <DataAnnotationsValidator />
 
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       FullWidth="true"
-                       OnClick="HandleLoginAsync"
-                       Disabled="@(!_isValid || _isLoading)">
-                @if (_isLoading)
-                {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                    <MudText Class="ml-2">Signing in...</MudText>
-                }
-                else
-                {
-                    <span>Sign In</span>
-                }
-            </MudButton>
-        </MudForm>
+        <div class="form-group">
+            <label class="form-label" for="email">Email</label>
+            <input type="email"
+                   id="email"
+                   name="_model.Email"
+                   class="form-input"
+                   value="@_model!.Email"
+                   placeholder="your.email@example.com"
+                   required />
+            <ValidationMessage For="@(() => _model!.Email)" />
+        </div>
 
-        <MudDivider Class="my-6" />
+        <div class="form-group">
+            <label class="form-label" for="password">Password</label>
+            <input type="password"
+                   id="password"
+                   name="_model.Password"
+                   class="form-input"
+                   value="@_model!.Password"
+                   required />
+            <ValidationMessage For="@(() => _model!.Password)" />
+        </div>
 
-        <MudText Typo="Typo.body2" Align="Align.Center">
-            Need an invite? Contact your administrator.
-        </MudText>
-    </MudPaper>
-</MudContainer>
+        <button type="submit" class="btn-primary">Sign In</button>
+    </EditForm>
+
+    <div class="divider"></div>
+
+    <p class="text-center">
+        <a href="/forgot-password" style="color: #594ae2;">Forgot your password?</a><br />
+        Need to verify your email? <a href="/resend-verification" style="color: #594ae2;">Resend verification email</a><br />
+        Need an invite? Contact your administrator.
+    </p>
+</div>
 
 @code {
-    private MudForm? _form;
-    private bool _isValid;
-    private bool _isLoading;
-    private string _email = string.Empty;
-    private string _password = string.Empty;
-    private string? _errorMessage;
+    [SupplyParameterFromForm]
+    private LoginModel? _model { get; set; }
 
     [SupplyParameterFromQuery(Name = "returnUrl")]
     private string? ReturnUrl { get; set; }
 
+    [SupplyParameterFromQuery(Name = "verified")]
+    private string? Verified { get; set; }
+
+    private string? _errorMessage;
+    private string? _successMessage;
+
+    protected override void OnInitialized()
+    {
+        _model ??= new LoginModel();
+
+        // Handle email verification status messages
+        if (!string.IsNullOrEmpty(Verified))
+        {
+            _successMessage = Verified switch
+            {
+                "success" => "Email verified successfully! You can now log in.",
+                "already" => "Your email is already verified. Please log in.",
+                _ => null
+            };
+        }
+    }
+
     private async Task HandleLoginAsync()
     {
-        _isLoading = true;
         _errorMessage = null;
-        StateHasChanged();
+
+        if (_model == null)
+        {
+            _errorMessage = "Form data is missing.";
+            return;
+        }
 
         try
         {
-            var result = await AuthService.LoginAsync(_email, _password);
+            // Validate credentials server-side
+            var result = await AuthService.LoginAsync(_model.Email, _model.Password);
 
             if (!result.Success)
             {
@@ -96,65 +117,95 @@
                 return;
             }
 
-            // If TOTP is required, redirect to verification page
-            if (result.RequiresTotp)
+            // Check if user needs to set up TOTP (not enabled yet)
+            if (!result.TotpEnabled)
             {
-                Navigation.NavigateTo($"/login/verify?userId={result.UserId}&returnUrl={Uri.EscapeDataString(ReturnUrl ?? "/")}");
+                // SECURITY: Generate intermediate authentication token (valid for 5 minutes)
+                var intermediateToken = IntermediateAuthService.CreateToken(result.UserId!);
+
+                // Redirect to mandatory TOTP setup
+                var cleanReturnUrl = string.IsNullOrEmpty(ReturnUrl) || ReturnUrl.Contains("/login")
+                    ? "/"
+                    : ReturnUrl;
+
+                var setupUrl = $"/login/setup-2fa?userId={result.UserId}&token={Uri.EscapeDataString(intermediateToken)}&returnUrl={Uri.EscapeDataString(cleanReturnUrl)}";
+                HttpContextAccessor.HttpContext?.Response.Redirect(setupUrl);
                 return;
             }
 
-            // Create authentication cookie
-            await SignInUserAsync(result.UserId!, result.Email!, result.PermissionLevel!.Value);
+            // If TOTP is required, redirect to verification page
+            if (result.RequiresTotp)
+            {
+                // SECURITY: Generate intermediate authentication token (valid for 5 minutes)
+                // This prevents authentication bypass attacks where an attacker could directly
+                // access /login/verify?userId=VICTIM_ID and brute-force TOTP codes
+                var intermediateToken = IntermediateAuthService.CreateToken(result.UserId!);
 
-            // Redirect to return URL or dashboard
-            Navigation.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
-        }
-        catch (Exception ex)
-        {
-            _errorMessage = "An error occurred during login. Please try again.";
-            Console.Error.WriteLine($"Login error: {ex}");
-        }
-        finally
-        {
-            _isLoading = false;
-            StateHasChanged();
-        }
-    }
+                // Avoid nested returnUrl loops - only pass through if it's a real destination, not login/verify itself
+                var cleanReturnUrl = string.IsNullOrEmpty(ReturnUrl) || ReturnUrl.Contains("/login")
+                    ? "/"
+                    : ReturnUrl;
 
-    private async Task SignInUserAsync(string userId, string email, int permissionLevel)
-    {
-        var claims = new List<Claim>
-        {
-            new Claim(ClaimTypes.NameIdentifier, userId),
-            new Claim(ClaimTypes.Email, email),
-            new Claim(ClaimTypes.Role, GetRoleName(permissionLevel)),
-            new Claim("PermissionLevel", permissionLevel.ToString())
-        };
+                var verifyUrl = $"/login/verify?userId={result.UserId}&token={Uri.EscapeDataString(intermediateToken)}&returnUrl={Uri.EscapeDataString(cleanReturnUrl)}";
+                HttpContextAccessor.HttpContext?.Response.Redirect(verifyUrl);
+                return;
+            }
 
-        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+            // Sign in the user with cookie authentication (works in static SSR)
+            var httpContext = HttpContextAccessor.HttpContext;
+            if (httpContext == null)
+            {
+                _errorMessage = "Unable to complete authentication. Please try again.";
+                return;
+            }
 
-        var authProperties = new AuthenticationProperties
-        {
-            IsPersistent = true,
-            ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-        };
+            var claims = new List<Claim>
+            {
+                new(ClaimTypes.NameIdentifier, result.UserId!),
+                new(ClaimTypes.Email, result.Email!),
+                new(ClaimTypes.Role, GetRoleName(result.PermissionLevel!.Value)),
+                new(CustomClaimTypes.PermissionLevel, result.PermissionLevel.Value.ToString())
+            };
 
-        var httpContext = HttpContextAccessor.HttpContext;
-        if (httpContext != null)
-        {
+            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+
+            var authProperties = new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+            };
+
             await httpContext.SignInAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme,
                 claimsPrincipal,
                 authProperties);
+
+            // Redirect using HttpContext (works in Static SSR)
+            httpContext.Response.Redirect(ReturnUrl ?? "/");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "An error occurred during login. Please try again.";
+            Logger.LogError(ex, "Unexpected error during login for email {Email}", _model.Email);
         }
     }
 
-    private string GetRoleName(int permissionLevel) => permissionLevel switch
+    private static string GetRoleName(int permissionLevel) => permissionLevel switch
     {
         0 => "ReadOnly",
         1 => "Admin",
         2 => "Owner",
         _ => "ReadOnly"
     };
+
+    public class LoginModel
+    {
+        [Required(ErrorMessage = "Email is required")]
+        [EmailAddress(ErrorMessage = "Invalid email address")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Password is required")]
+        public string Password { get; set; } = string.Empty;
+    }
 }

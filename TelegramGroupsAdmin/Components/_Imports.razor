@@ -5,8 +5,11 @@
 @using Microsoft.AspNetCore.Components.Web
 @using static Microsoft.AspNetCore.Components.Web.RenderMode
 @using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.AspNetCore.Authorization
 @using Microsoft.JSInterop
 @using TelegramGroupsAdmin
 @using TelegramGroupsAdmin.Components
 @using TelegramGroupsAdmin.Components.Layout
 @using MudBlazor
+
+@attribute [Authorize]

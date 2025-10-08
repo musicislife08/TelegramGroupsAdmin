@@ -1,0 +1,169 @@
+@using TelegramGroupsAdmin.Data.Models
+
+<MudCard Class="@GetBubbleClass()" Elevation="1">
+    <MudCardContent Class="pa-3">
+        @* User Info Header *@
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                <MudAvatar Color="Color.Primary" Size="Size.Small">
+                    @GetUserInitials()
+                </MudAvatar>
+                <MudText Typo="Typo.body2" Style="font-weight: 600;">
+                    @(Message.UserName ?? $"User {Message.UserId}")
+                </MudText>
+                @if (Message.EditDate.HasValue)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit">
+                        Edited
+                    </MudChip>
+                }
+            </MudStack>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                @FormatTimestamp(Message.Timestamp)
+            </MudText>
+        </MudStack>
+
+        @* Image Thumbnail *@
+        @if (!string.IsNullOrEmpty(Message.PhotoThumbnailPath))
+        {
+            <MudImage Src="@GetImagePath(Message.PhotoThumbnailPath)"
+                      Alt="Message image"
+                      Class="rounded mb-2"
+                      ObjectFit="ObjectFit.Cover"
+                      Height="200"
+                      Style="cursor: pointer;"
+                      @onclick="() => OnImageClick.InvokeAsync(Message)" />
+        }
+
+        @* Message Text *@
+        @if (!string.IsNullOrEmpty(Message.MessageText))
+        {
+            <MudText Typo="Typo.body2" Class="message-text">
+                @Message.MessageText
+            </MudText>
+        }
+
+        @* URLs (non-clickable for security - prevents accidental clicks on spam URLs) *@
+        @if (!string.IsNullOrEmpty(Message.Urls))
+        {
+            <MudStack Class="mt-2" Spacing="1">
+                @foreach (var url in GetUrls())
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Primary" Class="url-display" title="@url">
+                        🔗 @TruncateUrl(url)
+                    </MudText>
+                }
+            </MudStack>
+        }
+
+        @* Spam Indicator *@
+        @if (SpamCheck != null)
+        {
+            <MudAlert Severity="@(SpamCheck.IsSpam ? Severity.Error : Severity.Success)"
+                      Dense="true"
+                      Class="mt-3"
+                      Icon="@(SpamCheck.IsSpam ? Icons.Material.Filled.Warning : Icons.Material.Filled.CheckCircle)">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.caption">
+                        @(SpamCheck.IsSpam ? "SPAM DETECTED" : "Clean") - @SpamCheck.CheckType
+                    </MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(SpamCheck.IsSpam ? Color.Error : Color.Success)">
+                        @SpamCheck.Confidence%
+                    </MudChip>
+                </MudStack>
+                @if (!string.IsNullOrEmpty(SpamCheck.Reason))
+                {
+                    <MudText Typo="Typo.caption" Class="mt-1">
+                        @SpamCheck.Reason
+                    </MudText>
+                }
+            </MudAlert>
+        }
+
+        @* Edit History Indicator *@
+        @if (EditCount > 0)
+        {
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Warning"
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.History"
+                       Class="mt-2"
+                       OnClick="() => OnViewEdits.InvokeAsync(Message)">
+                View @EditCount @(EditCount == 1 ? "Edit" : "Edits")
+            </MudButton>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public MessageRecord Message { get; set; } = default!;
+
+    [Parameter]
+    public SpamCheckRecord? SpamCheck { get; set; }
+
+    [Parameter]
+    public int EditCount { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnImageClick { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnViewEdits { get; set; }
+
+    private string GetBubbleClass()
+    {
+        var baseClass = "message-bubble mb-3";
+        if (SpamCheck?.IsSpam == true)
+            return $"{baseClass} spam-message";
+        return baseClass;
+    }
+
+    private string GetUserInitials()
+    {
+        var name = Message.UserName ?? $"U{Message.UserId}";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+        return name.Length >= 2 ? name.Substring(0, 2).ToUpper() : name.ToUpper();
+    }
+
+    private string FormatTimestamp(long timestamp)
+    {
+        var dt = DateTimeOffset.FromUnixTimeSeconds(timestamp).ToLocalTime();
+        var now = DateTimeOffset.Now;
+
+        if (dt.Date == now.Date)
+            return dt.ToString("HH:mm");
+        if (dt.Date == now.AddDays(-1).Date)
+            return $"Yesterday {dt:HH:mm}";
+        if (dt.Year == now.Year)
+            return dt.ToString("MMM dd HH:mm");
+        return dt.ToString("MMM dd yyyy HH:mm");
+    }
+
+    private string[] GetUrls()
+    {
+        if (string.IsNullOrEmpty(Message.Urls))
+            return Array.Empty<string>();
+        return Message.Urls.Split(',', StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    private string TruncateUrl(string url)
+    {
+        const int maxLength = 50;
+        if (url.Length <= maxLength)
+            return url;
+        return url.Substring(0, maxLength - 3) + "...";
+    }
+
+    private string GetImagePath(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return string.Empty;
+
+        // Convert file system path to web path
+        // Assuming images are served from /images endpoint
+        return $"/images/{Path.GetFileName(path)}";
+    }
+}

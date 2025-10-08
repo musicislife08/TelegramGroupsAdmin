@@ -1,248 +1,188 @@
 @page "/login/verify"
+@using System.ComponentModel.DataAnnotations
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Authentication.Cookies
+@using Microsoft.AspNetCore.Components.Forms
+@using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Services.Auth
 @inject IAuthService AuthService
-@inject NavigationManager Navigation
+@inject IIntermediateAuthService IntermediateAuthService
 @inject IHttpContextAccessor HttpContextAccessor
+@inject ILogger<LoginVerify> Logger
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
 
-<PageTitle>Two-Factor Authentication - TgSpam PreFilter</PageTitle>
+<PageTitle>Two-Factor Authentication - Telegram Groups Admin</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
-    <MudPaper Elevation="4" Class="pa-8">
-        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">
-            Two-Factor Authentication
-        </MudText>
-        <MudText Typo="Typo.body1" Align="Align.Center" Class="mb-6">
-            Enter the 6-digit code from your authenticator app
-        </MudText>
+<div class="verify-container">
+    <h1 class="verify-title">Two-Factor Authentication</h1>
+    <p class="verify-subtitle">Enter the 6-digit code from your authenticator app</p>
 
-        @if (!string.IsNullOrEmpty(_errorMessage))
-        {
-            <MudAlert Severity="Severity.Error" Class="mb-4">@_errorMessage</MudAlert>
-        }
+    @if (!string.IsNullOrEmpty(_successMessage))
+    {
+        <div class="alert-success">@_successMessage</div>
+    }
 
-        <MudForm @ref="_form" @bind-IsValid="@_isValid">
-            <MudTextField T="string"
-                          Label="Verification Code"
-                          @bind-Value="_code"
-                          Required="true"
-                          RequiredError="Code is required"
-                          Variant="Variant.Outlined"
-                          Class="mb-4"
-                          InputType="InputType.Text"
-                          Disabled="@_isLoading"
-                          MaxLength="6"
-                          Pattern="[0-9]*"
-                          Immediate="true"
-                          HelperText="Enter the 6-digit code" />
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert-error">@_errorMessage</div>
+    }
 
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       FullWidth="true"
-                       OnClick="HandleVerifyAsync"
-                       Disabled="@(!_isValid || _isLoading || _code.Length != 6)"
-                       Class="mb-4">
-                @if (_isLoading)
-                {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                    <MudText Class="ml-2">Verifying...</MudText>
-                }
-                else
-                {
-                    <span>Verify</span>
-                }
-            </MudButton>
+    <EditForm Model="@_model" FormName="verify-form" OnValidSubmit="HandleVerifyAsync" method="post">
+        <DataAnnotationsValidator />
 
-            <MudDivider Class="my-4" />
+        <div class="form-group">
+            <label class="form-label" for="code">Verification Code</label>
+            <input type="text"
+                   id="code"
+                   name="_model.Code"
+                   class="form-input"
+                   value="@_model!.Code"
+                   placeholder="000000"
+                   maxlength="6"
+                   pattern="[0-9]*"
+                   inputmode="numeric"
+                   required />
+            <ValidationMessage For="@(() => _model!.Code)" />
+        </div>
 
-            <MudText Typo="Typo.body2" Align="Align.Center" Class="mb-2">
-                Lost access to your authenticator?
-            </MudText>
-            <MudButton Variant="Variant.Text"
-                       Color="Color.Primary"
-                       FullWidth="true"
-                       OnClick="ShowRecoveryCodeInput">
-                Use Recovery Code
-            </MudButton>
+        <button type="submit" class="btn-primary">Verify</button>
+    </EditForm>
 
-            @if (_showRecoveryCode)
-            {
-                <MudTextField T="string"
-                              Label="Recovery Code"
-                              @bind-Value="_recoveryCode"
-                              Variant="Variant.Outlined"
-                              Class="mt-4 mb-4"
-                              InputType="InputType.Text"
-                              Disabled="@_isLoading"
-                              HelperText="Enter one of your backup recovery codes" />
+    <div class="divider"></div>
 
-                <MudButton Variant="Variant.Outlined"
-                           Color="Color.Primary"
-                           FullWidth="true"
-                           OnClick="HandleRecoveryCodeAsync"
-                           Disabled="@(_isLoading || string.IsNullOrWhiteSpace(_recoveryCode))">
-                    @if (_isLoading)
-                    {
-                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                        <MudText Class="ml-2">Verifying...</MudText>
-                    }
-                    else
-                    {
-                        <span>Verify Recovery Code</span>
-                    }
-                </MudButton>
-            }
-        </MudForm>
-
-        <MudDivider Class="my-6" />
-
-        <MudButton Variant="Variant.Text"
-                   Color="Color.Default"
-                   FullWidth="true"
-                   OnClick="@(() => Navigation.NavigateTo("/login"))">
-            Back to Login
-        </MudButton>
-    </MudPaper>
-</MudContainer>
+    <p class="text-center">
+        Lost access to your authenticator? Contact your administrator to reset 2FA.<br />
+        <a href="/login">Back to Login</a>
+    </p>
+</div>
 
 @code {
-    private MudForm? _form;
-    private bool _isValid;
-    private bool _isLoading;
-    private bool _showRecoveryCode;
-    private string _code = string.Empty;
-    private string _recoveryCode = string.Empty;
-    private string? _errorMessage;
+    [SupplyParameterFromForm]
+    private VerifyModel? _model { get; set; }
 
     [SupplyParameterFromQuery(Name = "userId")]
     private string? UserId { get; set; }
 
+    [SupplyParameterFromQuery(Name = "token")]
+    private string? IntermediateToken { get; set; }
+
     [SupplyParameterFromQuery(Name = "returnUrl")]
     private string? ReturnUrl { get; set; }
 
+    private string? _errorMessage;
+    private string? _successMessage;
+
     protected override void OnInitialized()
     {
-        if (string.IsNullOrEmpty(UserId))
-        {
-            Navigation.NavigateTo("/login");
-        }
-    }
+        _model ??= new VerifyModel();
 
-    private void ShowRecoveryCodeInput()
-    {
-        _showRecoveryCode = !_showRecoveryCode;
+        var httpContext = HttpContextAccessor.HttpContext;
+
+        // SECURITY: Validate that user has a valid intermediate authentication token
+        // This prevents attackers from directly accessing /login/verify?userId=VICTIM_ID
+        // and brute-forcing TOTP codes without knowing the password
+        if (string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(IntermediateToken))
+        {
+            _errorMessage = "Invalid authentication session. Please log in again.";
+            httpContext?.Response.Redirect("/login");
+            return;
+        }
+
+        // Validate token without consuming it yet (we'll consume it when they submit the form)
+        // We can't consume here because OnInitialized runs on every page load
     }
 
     private async Task HandleVerifyAsync()
     {
-        if (string.IsNullOrEmpty(UserId)) return;
-
-        _isLoading = true;
         _errorMessage = null;
-        StateHasChanged();
+        _successMessage = null;
+
+        if (_model == null || string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(IntermediateToken))
+        {
+            _errorMessage = "Form data is missing.";
+            return;
+        }
 
         try
         {
-            var result = await AuthService.VerifyTotpAsync(UserId, _code);
+            // SECURITY: Validate intermediate auth token (without consuming)
+            // This allows users to retry if they mistype the TOTP code
+            if (!IntermediateAuthService.ValidateToken(IntermediateToken, UserId))
+            {
+                _errorMessage = "Invalid or expired authentication session. Please log in again.";
+                HttpContextAccessor.HttpContext?.Response.Redirect("/login");
+                return;
+            }
+
+            // Verify TOTP code
+            var result = await AuthService.VerifyTotpAsync(UserId, _model.Code);
 
             if (!result.Success)
             {
                 _errorMessage = result.ErrorMessage;
-                _code = string.Empty;
+                _model = new VerifyModel();
                 return;
             }
 
-            // Create authentication cookie
-            await SignInUserAsync(result.UserId!, result.Email!, result.PermissionLevel!.Value);
+            // SECURITY: Consume token after successful authentication to prevent reuse
+            IntermediateAuthService.ConsumeToken(IntermediateToken);
 
-            // Redirect to return URL or dashboard
-            Navigation.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
-        }
-        catch (Exception ex)
-        {
-            _errorMessage = "An error occurred during verification. Please try again.";
-            Console.Error.WriteLine($"TOTP verification error: {ex}");
-        }
-        finally
-        {
-            _isLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task HandleRecoveryCodeAsync()
-    {
-        if (string.IsNullOrEmpty(UserId)) return;
-
-        _isLoading = true;
-        _errorMessage = null;
-        StateHasChanged();
-
-        try
-        {
-            var result = await AuthService.UseRecoveryCodeAsync(UserId, _recoveryCode);
-
-            if (!result.Success)
+            // Sign in the user with cookie authentication (works in static SSR)
+            var httpContext = HttpContextAccessor.HttpContext;
+            if (httpContext == null)
             {
-                _errorMessage = result.ErrorMessage;
-                _recoveryCode = string.Empty;
+                _errorMessage = "Unable to complete authentication. Please try again.";
                 return;
             }
 
-            // Create authentication cookie
-            await SignInUserAsync(result.UserId!, result.Email!, result.PermissionLevel!.Value);
+            var claims = new List<Claim>
+            {
+                new(ClaimTypes.NameIdentifier, result.UserId!),
+                new(ClaimTypes.Email, result.Email!),
+                new(ClaimTypes.Role, GetRoleName(result.PermissionLevel!.Value)),
+                new(CustomClaimTypes.PermissionLevel, result.PermissionLevel.Value.ToString())
+            };
 
-            // Redirect to return URL or dashboard
-            Navigation.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
-        }
-        catch (Exception ex)
-        {
-            _errorMessage = "An error occurred during verification. Please try again.";
-            Console.Error.WriteLine($"Recovery code verification error: {ex}");
-        }
-        finally
-        {
-            _isLoading = false;
-            StateHasChanged();
-        }
-    }
+            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
 
-    private async Task SignInUserAsync(string userId, string email, int permissionLevel)
-    {
-        var claims = new List<Claim>
-        {
-            new Claim(ClaimTypes.NameIdentifier, userId),
-            new Claim(ClaimTypes.Email, email),
-            new Claim(ClaimTypes.Role, GetRoleName(permissionLevel)),
-            new Claim("PermissionLevel", permissionLevel.ToString())
-        };
+            var authProperties = new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+            };
 
-        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-        var authProperties = new AuthenticationProperties
-        {
-            IsPersistent = true,
-            ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-        };
-
-        var httpContext = HttpContextAccessor.HttpContext;
-        if (httpContext != null)
-        {
             await httpContext.SignInAsync(
                 CookieAuthenticationDefaults.AuthenticationScheme,
                 claimsPrincipal,
                 authProperties);
+
+            // Redirect using HttpContext (works in Static SSR)
+            httpContext.Response.Redirect(ReturnUrl ?? "/");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "An error occurred. Please try again.";
+            Logger.LogError(ex, "Unexpected error during TOTP verification for user {UserId}", UserId);
         }
     }
 
-    private string GetRoleName(int permissionLevel) => permissionLevel switch
+    private static string GetRoleName(int permissionLevel) => permissionLevel switch
     {
         0 => "ReadOnly",
         1 => "Admin",
         2 => "Owner",
         _ => "ReadOnly"
     };
+
+    public class VerifyModel
+    {
+        [Required(ErrorMessage = "Verification code is required")]
+        [StringLength(6, MinimumLength = 6, ErrorMessage = "Code must be 6 digits")]
+        [RegularExpression("^[0-9]{6}$", ErrorMessage = "Code must be 6 digits")]
+        public string Code { get; set; } = string.Empty;
+    }
 }

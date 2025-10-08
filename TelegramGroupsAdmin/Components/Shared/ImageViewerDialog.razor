@@ -1,0 +1,120 @@
+@using TelegramGroupsAdmin.Data.Models
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @* Message Info *@
+            <MudPaper Class="pa-3" Elevation="0">
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                    <MudAvatar Color="Color.Primary" Size="Size.Small">
+                        @GetUserInitials()
+                    </MudAvatar>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2" Style="font-weight: 600;">
+                            @(Message.UserName ?? $"User {Message.UserId}")
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @FormatTimestamp(Message.Timestamp)
+                        </MudText>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+
+            @* Full-size Image *@
+            @if (!string.IsNullOrEmpty(Message.PhotoLocalPath))
+            {
+                <MudImage Src="@GetImagePath(Message.PhotoLocalPath)"
+                          Alt="Full size message image"
+                          Class="rounded"
+                          ObjectFit="ObjectFit.Contain"
+                          Elevation="2"
+                          Style="max-height: 70vh; width: auto;" />
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Warning">
+                    Image not available (not downloaded or expired)
+                </MudAlert>
+            }
+
+            @* Message Text *@
+            @if (!string.IsNullOrEmpty(Message.MessageText))
+            {
+                <MudPaper Class="pa-3" Elevation="1">
+                    <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">
+                        @Message.MessageText
+                    </MudText>
+                </MudPaper>
+            }
+
+            @* Image Info *@
+            <MudPaper Class="pa-3" Elevation="0">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        <b>Message ID:</b> @Message.MessageId
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        <b>Chat:</b> @(Message.ChatName ?? $"Chat {Message.ChatId}")
+                    </MudText>
+                    @if (Message.PhotoFileSize.HasValue)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            <b>File Size:</b> @FormatFileSize(Message.PhotoFileSize.Value)
+                        </MudText>
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public MessageRecord Message { get; set; } = default!;
+
+    private void Close() => MudDialog.Close();
+
+    private string GetUserInitials()
+    {
+        var name = Message.UserName ?? $"U{Message.UserId}";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[1][0]}".ToUpper();
+        return name.Length >= 2 ? name.Substring(0, 2).ToUpper() : name.ToUpper();
+    }
+
+    private string FormatTimestamp(long timestamp)
+    {
+        var dt = DateTimeOffset.FromUnixTimeSeconds(timestamp).ToLocalTime();
+        return dt.ToString("MMM dd, yyyy HH:mm:ss");
+    }
+
+    private string GetImagePath(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return string.Empty;
+
+        // Convert file system path to web path
+        return $"/images/{Path.GetFileName(path)}";
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+}

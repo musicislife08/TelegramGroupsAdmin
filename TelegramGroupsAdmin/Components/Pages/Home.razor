@@ -1,27 +1,91 @@
 ﻿@page "/"
+@using TelegramGroupsAdmin.Data.Models
+@using TelegramGroupsAdmin.Data.Repositories
 @using TelegramGroupsAdmin.Services
 @inject IAuthService AuthService
+@inject MessageHistoryRepository MessageRepository
 @inject NavigationManager Navigation
+@inject ILogger<Home> Logger
+@attribute [Authorize]
 
-<PageTitle>Dashboard - TgSpam PreFilter</PageTitle>
+<PageTitle>Dashboard - TelegramGroupsAdmin</PageTitle>
 
-@if (_isLoading)
-{
-    <MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
-        <MudProgressCircular Indeterminate="true" />
-        <MudText>Loading...</MudText>
-    </MudContainer>
-}
-else
-{
-    <MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
-        <MudText Typo="Typo.h3" GutterBottom="true">Dashboard</MudText>
-        <MudText Typo="Typo.body1">Welcome to TgSpam PreFilter</MudText>
-    </MudContainer>
-}
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    @* Stats Summary *@
+    @if (_stats != null)
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="2">
+            <MudGrid>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Message" Size="Size.Large" Color="Color.Primary" />
+                        <MudText Typo="Typo.h5">@_stats.TotalMessages</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Total Messages</MudText>
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Large" Color="Color.Secondary" />
+                        <MudText Typo="Typo.h5">@_stats.UniqueUsers</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Unique Users</MudText>
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Image" Size="Size.Large" Color="Color.Info" />
+                        <MudText Typo="Typo.h5">@_stats.PhotoCount</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Images</MudText>
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudStack AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Update" Size="Size.Large" Color="Color.Tertiary" />
+                        <MudText Typo="Typo.h5">@GetTimeRangeDisplay()</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Data Range</MudText>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+    }
+
+    @* Quick Actions *@
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudText Typo="Typo.h6" Class="mb-3">Quick Actions</MudText>
+        <MudStack Row="true" Spacing="3">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Message"
+                       Href="/messages">
+                View Messages
+            </MudButton>
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Secondary"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="LoadStatsAsync"
+                       Disabled="_loading">
+                Refresh Stats
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
+    @if (_stats != null && _stats.TotalMessages == 0)
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            HistoryBot hasn't cached any messages yet. Make sure the bot is running and connected to your Telegram chat.
+        </MudAlert>
+    }
+</MudContainer>
 
 @code {
-    private bool _isLoading = true;
+    private HistoryStats? _stats;
+    private bool _loading = true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -33,6 +97,43 @@ else
             return;
         }
 
-        _isLoading = false;
+        await LoadStatsAsync();
+    }
+
+    private async Task LoadStatsAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _stats = await MessageRepository.GetStatsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected error loading dashboard statistics");
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetTimeRangeDisplay()
+    {
+        if (_stats == null || !_stats.OldestTimestamp.HasValue || !_stats.NewestTimestamp.HasValue)
+            return "N/A";
+
+        var oldest = DateTimeOffset.FromUnixTimeSeconds(_stats.OldestTimestamp.Value);
+        var newest = DateTimeOffset.FromUnixTimeSeconds(_stats.NewestTimestamp.Value);
+        var span = newest - oldest;
+
+        if (span.TotalHours < 1)
+            return $"{(int)span.TotalMinutes}m";
+        else if (span.TotalDays < 1)
+            return $"{(int)span.TotalHours}h";
+        else
+            return $"{(int)span.TotalDays}d";
     }
 }

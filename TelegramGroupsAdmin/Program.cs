@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using Dapper;
 using FluentMigrator.Runner;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -10,12 +11,24 @@ using TelegramGroupsAdmin;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Infrastructure;
 using TelegramGroupsAdmin.Endpoints;
+using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.BackgroundServices;
 using TelegramGroupsAdmin.Services.Telegram;
 using TelegramGroupsAdmin.Services.Vision;
 
+// Register Dapper type handler for SQLite boolean conversion (must be done early, before any queries)
+SqlMapper.AddTypeHandler(new SqliteBooleanHandler());
+
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure logging - suppress most Microsoft logs in development
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddFilter("Microsoft", LogLevel.Warning); // Only warnings and errors from Microsoft namespaces
+builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Information); // Keep startup/shutdown messages
+builder.Logging.AddFilter("TelegramGroupsAdmin", LogLevel.Information); // Keep our app logs at Info level
 
 // Blazor Server services
 builder.Services.AddRazorComponents()
@@ -27,8 +40,23 @@ builder.Services.AddMudServices();
 // Add HttpContextAccessor for authentication
 builder.Services.AddHttpContextAccessor();
 
+// Add HttpClient for Blazor components (for calling our own API)
+builder.Services.AddScoped(sp =>
+{
+    var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
+    var httpContext = httpContextAccessor.HttpContext;
+
+    if (httpContext == null) return new HttpClient { BaseAddress = new Uri("http://localhost:5161") };
+    var host = httpContext.Request.Host;
+    // Replace 0.0.0.0 with localhost for loopback connections
+    var hostString = host.Host == "0.0.0.0" ? $"localhost:{host.Port}" : host.ToString();
+    var baseAddress = $"{httpContext.Request.Scheme}://{hostString}";
+    return new HttpClient { BaseAddress = new Uri(baseAddress) };
+
+});
+
 // Register data services (Identity repos, TOTP protection, Message history, Data Protection API)
-var dataProtectionKeysPath = Path.Combine("/data", "keys");
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"] ?? "/data/keys";
 builder.Services.AddTgSpamWebDataServices(dataProtectionKeysPath);
 
 // Cookie Authentication
@@ -37,8 +65,10 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     {
         options.Cookie.Name = "TgSpam.Auth";
         options.Cookie.HttpOnly = true;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.None
+            : CookieSecurePolicy.Always;
+        options.Cookie.SameSite = SameSiteMode.Lax; // Lax for cross-origin requests during development
         options.ExpireTimeSpan = TimeSpan.FromDays(30);
         options.SlidingExpiration = true;
         options.LoginPath = "/login";
@@ -46,13 +76,24 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.AccessDeniedPath = "/access-denied";
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorizationBuilder();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
 
 // Web-specific services
-builder.Services.AddScoped<TelegramGroupsAdmin.Services.IAuthService, TelegramGroupsAdmin.Services.AuthService>();
-builder.Services.AddScoped<TelegramGroupsAdmin.Services.IInviteService, TelegramGroupsAdmin.Services.InviteService>();
+builder.Services.AddScoped<TelegramGroupsAdmin.Services.Auth.IPasswordHasher, TelegramGroupsAdmin.Services.Auth.PasswordHasher>();
+builder.Services.AddScoped<TelegramGroupsAdmin.Services.Auth.ITotpService, TelegramGroupsAdmin.Services.Auth.TotpService>();
+builder.Services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IIntermediateAuthService, TelegramGroupsAdmin.Services.Auth.IntermediateAuthService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IInviteService, InviteService>();
+builder.Services.AddScoped<IMessageExportService, MessageExportService>();
+builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+
+// Email service (SendGrid)
+builder.Services.Configure<TelegramGroupsAdmin.Services.Email.SendGridOptions>(
+    builder.Configuration.GetSection("SendGrid"));
+builder.Services.AddScoped<TelegramGroupsAdmin.Services.Email.IEmailService, TelegramGroupsAdmin.Services.Email.SendGridEmailService>();
 
 // HybridCache for blocklists
 builder.Services.AddHybridCache(options =>
@@ -100,16 +141,21 @@ var limiterOptions = new RateLimiterStrategyOptions
 
     OnRejected = static _ =>
     {
-        Console.WriteLine("Rate limit hit for VirusTotal.");
+        // Polly's telemetry integration automatically emits metrics for rate limit rejections
+        // For explicit logging, implement within VirusTotalService where ILogger is available
         return ValueTask.CompletedTask;
     }
 };
 
-builder.Services.AddHttpClient<IThreatIntelService, VirusTotalService>(options =>
+builder.Services.AddHttpClient<IThreatIntelService, VirusTotalService>(client =>
     {
-        options.BaseAddress = new Uri("https://www.virustotal.com/api/v3/");
-        options.DefaultRequestHeaders.Add("x-apikey", Environment.GetEnvironmentVariable("VIRUSTOTAL_API_KEY")
-                                                      ?? throw new InvalidOperationException("VIRUSTOTAL_API_KEY not set"));
+        client.BaseAddress = new Uri("https://www.virustotal.com/api/v3/");
+
+        var apiKey = builder.Configuration["VirusTotal:ApiKey"];
+        if (!string.IsNullOrEmpty(apiKey))
+        {
+            client.DefaultRequestHeaders.Add("x-apikey", apiKey);
+        }
     })
     .AddResilienceHandler("virustotal", resiliencePipelineBuilder =>
     {
@@ -119,57 +165,28 @@ builder.Services.AddHttpClient<IThreatIntelService, VirusTotalService>(options =
 // HttpClient factory
 builder.Services.AddHttpClient();
 
-// Configuration from environment variables
-builder.Services.Configure<OpenAIOptions>(options =>
-{
-    options.ApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
-    options.Model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4o-mini";
-    options.MaxTokens = int.TryParse(Environment.GetEnvironmentVariable("OPENAI_MAX_TOKENS"), out var maxTokens) ? maxTokens : 500;
-});
+// Bind configuration options from environment variables
+// use the pattern: SectionName__PropertyName
+// Example: OPENAI__APIKEY maps to OpenAI:ApiKey
+builder.Services.Configure<AppOptions>(builder.Configuration.GetSection("App"));
+builder.Services.Configure<OpenAIOptions>(builder.Configuration.GetSection("OpenAI"));
+builder.Services.Configure<TelegramOptions>(builder.Configuration.GetSection("Telegram"));
+builder.Services.Configure<SpamDetectionOptions>(builder.Configuration.GetSection("SpamDetection"));
+builder.Services.Configure<MessageHistoryOptions>(builder.Configuration.GetSection("MessageHistory"));
 
-builder.Services.Configure<TelegramOptions>(options =>
-{
-    options.HistoryBotToken = Environment.GetEnvironmentVariable("TELEGRAM_HISTORY_BOT_TOKEN") ?? "";
-    options.ChatId = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID") ?? "";
-});
-
-builder.Services.Configure<MessageHistoryOptions>(options =>
-{
-    options.DatabasePath = Environment.GetEnvironmentVariable("MESSAGE_HISTORY_DATABASE_PATH") ?? "/data/message_history.db";
-    options.RetentionHours = int.TryParse(Environment.GetEnvironmentVariable("MESSAGE_HISTORY_RETENTION_HOURS"), out var hours) ? hours : 24;
-    options.CleanupIntervalMinutes = int.TryParse(Environment.GetEnvironmentVariable("MESSAGE_HISTORY_CLEANUP_INTERVAL_MINUTES"), out var minutes) ? minutes : 5;
-});
-
-builder.Services.Configure<SpamDetectionOptions>(options =>
-{
-    options.TimeoutSeconds = int.TryParse(Environment.GetEnvironmentVariable("SPAM_DETECTION_TIMEOUT_SECONDS"), out var timeout) ? timeout : 30;
-    options.ImageLookupRetryDelayMs = int.TryParse(Environment.GetEnvironmentVariable("SPAM_DETECTION_RETRY_DELAY_MS"), out var delay) ? delay : 100;
-    options.MinConfidenceThreshold = int.TryParse(Environment.GetEnvironmentVariable("SPAM_DETECTION_MIN_CONFIDENCE"), out var confidence) ? confidence : 85;
-});
-
-// Configure database paths
-builder.Configuration["Identity:DatabasePath"] = Environment.GetEnvironmentVariable("IDENTITY_DATABASE_PATH") ?? "/data/identity.db";
-builder.Configuration["MessageHistory:DatabasePath"] = Environment.GetEnvironmentVariable("MESSAGE_HISTORY_DATABASE_PATH") ?? "/data/message_history.db";
-
-// FluentMigrator for both databases
+// Database paths for FluentMigrator (pulled from configuration)
 var identityDbPath = builder.Configuration["Identity:DatabasePath"] ?? "/data/identity.db";
 var messageHistoryDbPath = builder.Configuration["MessageHistory:DatabasePath"] ?? "/data/message_history.db";
-
-// Identity database migrations
-builder.Services
-    .AddFluentMigratorCore()
-    .ConfigureRunner(rb => rb
-        .AddSQLite()
-        .WithGlobalConnectionString($"Data Source={identityDbPath}")
-        .ScanIn(typeof(TelegramGroupsAdmin.Data.Migrations.IdentitySchema).Assembly).For.Migrations())
-    .AddLogging(lb => lb.AddFluentMigratorConsole());
 
 // Telegram services
 builder.Services.AddSingleton<TelegramBotClientFactory>();
 builder.Services.AddScoped<ITelegramImageService, TelegramImageService>();
 
-// Background services
-builder.Services.AddHostedService<HistoryBotService>();
+// Background services (register as singleton first, then add as hosted service)
+// Also expose IMessageHistoryService interface for UI components
+builder.Services.AddSingleton<HistoryBotService>();
+builder.Services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<HistoryBotService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<HistoryBotService>());
 builder.Services.AddHostedService<CleanupBackgroundService>();
 
 // OpenAI Vision
@@ -180,21 +197,8 @@ builder.Services.AddScoped<SpamCheckService>();
 
 var app = builder.Build();
 
-// Run Identity database migrations
-using (var scope = app.Services.CreateScope())
-{
-    var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
-
-    if (runner.HasMigrationsToApplyUp())
-    {
-        app.Logger.LogInformation("Applying pending database migrations...");
-        runner.MigrateUp();
-    }
-    else
-    {
-        app.Logger.LogInformation("Database schema is up to date");
-    }
-}
+// Run database migrations
+await RunDatabaseMigrationsAsync(app, identityDbPath, messageHistoryDbPath);
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -204,6 +208,9 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Configure static file serving for images
+ConfigureImageStaticFiles(app);
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -215,10 +222,97 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 // Map API endpoints
+app.MapAuthEndpoints();
 app.MapSpamCheckEndpoints();
+app.MapEmailVerificationEndpoints();
 
 app.Run();
 
+return;
+
+// ============================================================================
+// Helper Methods
+// ============================================================================
+
+static async Task RunDatabaseMigrationsAsync(WebApplication app, string identityDbPath, string messageHistoryDbPath)
+{
+    var migrationAssembly = typeof(TelegramGroupsAdmin.Data.Migrations.IdentitySchema).Assembly;
+
+    // Migrate Identity database
+    await RunMigrationAsync(app, identityDbPath, migrationAssembly, "Identity");
+
+    // Migrate Message History database (with legacy database support)
+    await HandleLegacyMessageHistoryDatabaseAsync(app, messageHistoryDbPath);
+    await RunMigrationAsync(app, messageHistoryDbPath, migrationAssembly, "Message History");
+}
+
+static Task RunMigrationAsync(WebApplication app, string dbPath, System.Reflection.Assembly migrationAssembly, string dbName)
+{
+    app.Logger.LogInformation("Migrating {DbName} database: {Path}", dbName, dbPath);
+
+#pragma warning disable ASP0000 // BuildServiceProvider is acceptable for migration setup
+    var serviceProvider = new ServiceCollection()
+        .AddFluentMigratorCore()
+        .ConfigureRunner(rb => rb
+            .AddSQLite()
+            .WithGlobalConnectionString($"Data Source={dbPath}")
+            .ScanIn(migrationAssembly).For.Migrations())
+        .AddLogging(lb => lb.AddFluentMigratorConsole())
+        .BuildServiceProvider(validateScopes: false);
+#pragma warning restore ASP0000
+
+    using var scope = serviceProvider.CreateScope();
+    var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+    runner.MigrateUp();
+
+    app.Logger.LogInformation("{DbName} database migration complete", dbName);
+    return Task.CompletedTask;
+}
+
+static async Task HandleLegacyMessageHistoryDatabaseAsync(WebApplication app, string dbPath)
+{
+    // Handle legacy database: if VersionInfo is empty but messages table exists, mark InitialSchema as applied
+    await using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
+    await conn.OpenAsync();
+
+    // Check if VersionInfo table exists and is empty
+    var versionInfoExists = await conn.QueryFirstOrDefaultAsync<int>(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='VersionInfo'") > 0;
+
+    if (!versionInfoExists) return;
+
+    var versionCount = await conn.QueryFirstOrDefaultAsync<int>("SELECT COUNT(*) FROM VersionInfo");
+    var messagesTableExists = await conn.QueryFirstOrDefaultAsync<int>(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='messages'") > 0;
+
+    // Legacy database detected: VersionInfo empty but messages table exists
+    if (versionCount == 0 && messagesTableExists)
+    {
+        app.Logger.LogInformation("Legacy database detected. Marking InitialSchema (202510061) as applied.");
+        await conn.ExecuteAsync(
+            "INSERT INTO VersionInfo (Version, AppliedOn, Description) VALUES (202510061, @Now, 'InitialSchema')",
+            new { Now = DateTime.UtcNow });
+    }
+}
+
+static void ConfigureImageStaticFiles(WebApplication app)
+{
+    var imageStoragePath = app.Configuration["MessageHistory:ImageStoragePath"] ?? "/data/images";
+
+    // Convert to absolute path if relative
+    var absoluteImagePath = Path.IsPathRooted(imageStoragePath)
+        ? imageStoragePath
+        : Path.GetFullPath(imageStoragePath);
+
+    // Ensure image storage path exists (CreateDirectory is idempotent)
+    Directory.CreateDirectory(absoluteImagePath);
+
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(absoluteImagePath),
+        RequestPath = "/images"
+    });
+}
 
 file sealed class RejectedRateLimitLease : RateLimitLease
 {

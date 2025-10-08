@@ -1,8 +1,11 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
+using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
@@ -18,13 +21,24 @@ public partial class HistoryBotService(
     IOptions<TelegramOptions> options,
     IOptions<MessageHistoryOptions> historyOptions,
     ILogger<HistoryBotService> logger)
-    : BackgroundService
+    : BackgroundService, IMessageHistoryService
 {
     private readonly TelegramOptions _options = options.Value;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
 
+    // Events for real-time UI updates
+    public event Action<MessageRecord>? OnNewMessage;
+    public event Action<MessageEditRecord>? OnMessageEdited;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Check if HistoryBot is enabled
+        if (!_historyOptions.Enabled)
+        {
+            logger.LogInformation("HistoryBot is disabled (MESSAGEHISTORY__ENABLED=false). Service will not start.");
+            return;
+        }
+
         var botClient = botFactory.GetOrCreate(_options.HistoryBotToken);
 
         logger.LogInformation("HistoryBot started listening for messages in all chats");
@@ -58,9 +72,23 @@ public partial class HistoryBotService(
         Update update,
         CancellationToken cancellationToken)
     {
-        if (update.Message is not { } message)
+        // Handle new messages
+        if (update.Message is { } message)
+        {
+            await HandleNewMessageAsync(botClient, message);
             return;
+        }
 
+        // Handle edited messages
+        if (update.EditedMessage is { } editedMessage)
+        {
+            await HandleEditedMessageAsync(editedMessage);
+            return;
+        }
+    }
+
+    private async Task HandleNewMessageAsync(ITelegramBotClient botClient, Message message)
+    {
         // Process messages from all chats where bot is added
         try
         {
@@ -71,16 +99,29 @@ public partial class HistoryBotService(
             var text = message.Text ?? message.Caption;
             var urls = text != null ? ExtractUrls(text) : null;
 
-            // Get photo file ID if present
+            // Get photo file ID if present and download image
             string? photoFileId = null;
-            int? photoFileSize = null;
+            long? photoFileSize = null;
+            string? photoLocalPath = null;
+            string? photoThumbnailPath = null;
 
             if (message.Photo is { Length: > 0 } photos)
             {
                 var largestPhoto = photos.OrderByDescending(p => p.FileSize).First();
                 photoFileId = largestPhoto.FileId;
-                photoFileSize = largestPhoto.FileSize > 0 ? (int)largestPhoto.FileSize : null;
+                photoFileSize = largestPhoto.FileSize;
+
+                // Download and process image
+                (photoLocalPath, photoThumbnailPath) = await DownloadAndProcessImageAsync(
+                    botClient,
+                    photoFileId,
+                    message.Chat.Id,
+                    message.MessageId);
             }
+
+            // Calculate content hash for spam correlation
+            var urlsJson = urls != null ? JsonSerializer.Serialize(urls) : "";
+            var contentHash = ComputeContentHash(text ?? "", urlsJson);
 
             var messageRecord = new MessageRecord(
                 message.MessageId,
@@ -92,15 +133,18 @@ public partial class HistoryBotService(
                 text,
                 photoFileId,
                 photoFileSize,
-                urls != null ? JsonSerializer.Serialize(urls) : null,
+                urlsJson != "" ? urlsJson : null,
                 EditDate: message.EditDate.HasValue ? new DateTimeOffset(message.EditDate.Value, TimeSpan.Zero).ToUnixTimeSeconds() : null,
-                ContentHash: null, // Will be calculated when needed
+                ContentHash: contentHash,
                 ChatName: message.Chat.Title ?? message.Chat.Username,
-                PhotoLocalPath: null, // Will be set when image is downloaded
-                PhotoThumbnailPath: null // Will be set when thumbnail is generated
+                PhotoLocalPath: photoLocalPath,
+                PhotoThumbnailPath: photoThumbnailPath
             );
 
             await repository.InsertMessageAsync(messageRecord);
+
+            // Raise event for real-time UI updates
+            OnNewMessage?.Invoke(messageRecord);
 
             logger.LogDebug(
                 "Cached message {MessageId} from user {UserId} in chat {ChatId} (photo: {HasPhoto}, text: {HasText})",
@@ -139,4 +183,172 @@ public partial class HistoryBotService(
 
     [GeneratedRegex(@"https?://[^\s\]\)\>]+", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
     private static partial Regex UrlRegex();
+
+    private async Task<(string? fullPath, string? thumbPath)> DownloadAndProcessImageAsync(
+        ITelegramBotClient botClient,
+        string photoFileId,
+        long chatId,
+        long messageId)
+    {
+        try
+        {
+            // Create directory structure: {ImageStoragePath}/full/{chat_id}/ and thumbs/{chat_id}/
+            var basePath = _historyOptions.ImageStoragePath;
+            var fullDir = Path.Combine(basePath, "full", chatId.ToString());
+            var thumbDir = Path.Combine(basePath, "thumbs", chatId.ToString());
+
+            Directory.CreateDirectory(fullDir);
+            Directory.CreateDirectory(thumbDir);
+
+            var fileName = $"{messageId}.jpg";
+            var fullPath = Path.Combine(fullDir, fileName);
+            var thumbPath = Path.Combine(thumbDir, fileName);
+
+            // Download file from Telegram
+            var file = await botClient.GetFile(photoFileId);
+            if (file.FilePath == null)
+            {
+                logger.LogWarning("Unable to get file path for photo {FileId}", photoFileId);
+                return (null, null);
+            }
+
+            // Download to temp file first
+            var tempPath = Path.GetTempFileName();
+            try
+            {
+                await using (var fileStream = System.IO.File.Create(tempPath))
+                {
+                    await botClient.DownloadFile(file.FilePath, fileStream);
+                }
+
+                // Copy to full image location
+                System.IO.File.Copy(tempPath, fullPath, overwrite: true);
+
+                // Generate thumbnail using ImageSharp
+                using (var image = await Image.LoadAsync(tempPath))
+                {
+                    var thumbnailSize = _historyOptions.ThumbnailSize;
+                    image.Mutate(x => x.Resize(new ResizeOptions
+                    {
+                        Size = new Size(thumbnailSize, thumbnailSize),
+                        Mode = ResizeMode.Max // Maintain aspect ratio
+                    }));
+
+                    await image.SaveAsJpegAsync(thumbPath);
+                }
+
+                logger.LogDebug(
+                    "Downloaded and processed image for message {MessageId} in chat {ChatId}",
+                    messageId, chatId);
+
+                // Return relative paths for storage in database
+                return ($"full/{chatId}/{fileName}", $"thumbs/{chatId}/{fileName}");
+            }
+            finally
+            {
+                // Clean up temp file
+                if (System.IO.File.Exists(tempPath))
+                    System.IO.File.Delete(tempPath);
+            }
+        }
+        catch (IOException ioEx)
+        {
+            // Disk full or permissions error - fail open (don't block message, just skip image)
+            logger.LogWarning(ioEx,
+                "Filesystem error downloading image for message {MessageId} in chat {ChatId}. Message will be stored without image.",
+                messageId, chatId);
+            return (null, null);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Error downloading/processing image for message {MessageId} in chat {ChatId}",
+                messageId, chatId);
+            return (null, null);
+        }
+    }
+
+    private async Task HandleEditedMessageAsync(Message editedMessage)
+    {
+        try
+        {
+            // Get the old message from the database
+            var oldMessage = await repository.GetMessageAsync(editedMessage.MessageId);
+            if (oldMessage == null)
+            {
+                logger.LogWarning(
+                    "Received edit for unknown message {MessageId}",
+                    editedMessage.MessageId);
+                return;
+            }
+
+            var oldText = oldMessage.MessageText;
+            var newText = editedMessage.Text ?? editedMessage.Caption;
+
+            // Skip if text hasn't actually changed
+            if (oldText == newText)
+            {
+                logger.LogDebug(
+                    "Edit event for message {MessageId} but text unchanged, skipping",
+                    editedMessage.MessageId);
+                return;
+            }
+
+            var editDate = editedMessage.EditDate.HasValue
+                ? new DateTimeOffset(editedMessage.EditDate.Value, TimeSpan.Zero).ToUnixTimeSeconds()
+                : DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+            // Extract URLs and calculate content hashes
+            var oldUrls = oldText != null ? ExtractUrls(oldText) : null;
+            var newUrls = newText != null ? ExtractUrls(newText) : null;
+
+            var oldContentHash = ComputeContentHash(oldText ?? "", oldUrls != null ? JsonSerializer.Serialize(oldUrls) : "");
+            var newContentHash = ComputeContentHash(newText ?? "", newUrls != null ? JsonSerializer.Serialize(newUrls) : "");
+
+            // Create edit record
+            var editRecord = new MessageEditRecord(
+                Id: 0, // Will be set by INSERT
+                MessageId: editedMessage.MessageId,
+                EditDate: editDate,
+                OldText: oldText,
+                NewText: newText,
+                OldContentHash: oldContentHash,
+                NewContentHash: newContentHash
+            );
+
+            await repository.InsertMessageEditAsync(editRecord);
+
+            // Update the message in the messages table with new text and edit date
+            var updatedMessage = oldMessage with
+            {
+                MessageText = newText,
+                EditDate = editDate,
+                Urls = newUrls != null ? JsonSerializer.Serialize(newUrls) : null,
+                ContentHash = newContentHash
+            };
+            await repository.UpdateMessageAsync(updatedMessage);
+
+            // Raise event for real-time UI updates
+            OnMessageEdited?.Invoke(editRecord);
+
+            logger.LogInformation(
+                "Recorded edit for message {MessageId} in chat {ChatId}",
+                editedMessage.MessageId,
+                editedMessage.Chat.Id);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Error handling edit for message {MessageId}",
+                editedMessage.MessageId);
+        }
+    }
+
+    private static string ComputeContentHash(string messageText, string urls)
+    {
+        var normalized = $"{messageText.ToLowerInvariant().Trim()}{urls.ToLowerInvariant().Trim()}";
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(normalized));
+        return Convert.ToHexString(hashBytes);
+    }
 }

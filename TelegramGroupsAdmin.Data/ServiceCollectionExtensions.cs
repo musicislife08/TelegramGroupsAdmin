@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data.Repositories;
 using TelegramGroupsAdmin.Data.Services;
 
@@ -20,9 +21,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITotpProtectionService, TotpProtectionService>();
         services.AddSingleton<UserRepository>();
         services.AddSingleton<InviteRepository>();
+        services.AddSingleton<AuditLogRepository>();
+        services.AddSingleton<VerificationTokenRepository>();
 
         // Message history repository (read-only for Web UI)
         services.AddSingleton<MessageHistoryRepository>();
+        services.AddSingleton<SpamCheckRepository>();
 
         return services;
     }
@@ -47,16 +51,20 @@ public static class ServiceCollectionExtensions
         // Set restrictive permissions on keys directory (Linux/macOS only)
         if (!OperatingSystem.IsWindows())
         {
+            // Get logger from service provider (early in startup, before app is built)
+            var serviceProvider = services.BuildServiceProvider();
+            var logger = serviceProvider.GetService<ILogger<IServiceCollection>>();
+
             try
             {
                 // chmod 700 - only owner can read/write/execute
                 File.SetUnixFileMode(dataProtectionKeysPath,
                     UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-                Console.WriteLine($"Set permissions on {dataProtectionKeysPath} to 700");
+                logger?.LogInformation("Set permissions on {KeysPath} to 700", dataProtectionKeysPath);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Warning: Failed to set Unix permissions on {dataProtectionKeysPath}: {ex.Message}");
+                logger?.LogWarning(ex, "Failed to set Unix permissions on {KeysPath}", dataProtectionKeysPath);
             }
         }
 

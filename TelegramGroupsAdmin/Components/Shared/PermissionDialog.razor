@@ -1,0 +1,60 @@
+@using Microsoft.AspNetCore.Components
+
+<MudDialog>
+    <DialogContent>
+        <MudText Class="mb-4">Change permission level for @UserEmail</MudText>
+
+        <MudRadioGroup @bind-Value="_selectedLevel">
+            <MudRadio Value="0" Color="Color.Default">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.body1">ReadOnly</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Can view messages only</MudText>
+                </MudStack>
+            </MudRadio>
+            <MudRadio Value="1" Color="Color.Primary" Class="mt-2">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.body1">Admin</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Can view messages and export data</MudText>
+                </MudStack>
+            </MudRadio>
+            <MudRadio Value="2" Color="Color.Secondary" Class="mt-2">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.body1">Owner</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Full access including user management</MudText>
+                </MudStack>
+            </MudRadio>
+        </MudRadioGroup>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    IMudDialogInstance? MudDialog { get; set; }
+
+    [Parameter]
+    public int CurrentPermissionLevel { get; set; }
+
+    [Parameter]
+    public string UserEmail { get; set; } = string.Empty;
+
+    private int _selectedLevel;
+
+    protected override void OnInitialized()
+    {
+        _selectedLevel = CurrentPermissionLevel;
+    }
+
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+    }
+
+    private void Submit()
+    {
+        MudDialog?.Close(DialogResult.Ok(_selectedLevel));
+    }
+}

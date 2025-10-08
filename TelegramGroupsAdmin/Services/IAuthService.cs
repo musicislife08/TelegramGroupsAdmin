@@ -14,6 +14,10 @@ public interface IAuthService
     Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(string userId, CancellationToken ct = default);
     Task<AuthResult> UseRecoveryCodeAsync(string userId, string code, CancellationToken ct = default);
     Task LogoutAsync(string userId, CancellationToken ct = default);
+    Task<bool> ChangePasswordAsync(string userId, string currentPassword, string newPassword, CancellationToken ct = default);
+    Task<bool> ResendVerificationEmailAsync(string email, CancellationToken ct = default);
+    Task<bool> RequestPasswordResetAsync(string email, CancellationToken ct = default);
+    Task<bool> ResetPasswordAsync(string token, string newPassword, CancellationToken ct = default);
 }
 
 public record AuthResult(
@@ -21,6 +25,7 @@ public record AuthResult(
     string? UserId,
     string? Email,
     int? PermissionLevel,
+    bool TotpEnabled,
     bool RequiresTotp,
     string? ErrorMessage
 );

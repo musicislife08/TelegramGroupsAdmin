@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Data.Repositories;
 using TelegramGroupsAdmin.Services.Telegram;
 using TelegramGroupsAdmin.Services.Vision;
@@ -12,14 +13,31 @@ public static class SpamCheckEndpoints
     {
         // API endpoint: Spam check
         app.MapPost("/check", async (
+            HttpContext httpContext,
             SpamCheckRequest request,
             SpamCheckService textSpamService,
             MessageHistoryRepository historyRepo,
+            SpamCheckRepository spamCheckRepo,
             ITelegramImageService imageService,
             IVisionSpamDetectionService visionService,
             IOptions<SpamDetectionOptions> spamOptions,
             ILogger<Program> logger) =>
         {
+            // Validate API key (support both header and query string for different systems)
+            var apiKey = httpContext.Request.Headers["X-API-Key"].FirstOrDefault()
+                ?? httpContext.Request.Query["api_key"].FirstOrDefault();
+            var expectedKey = spamOptions.Value.ApiKey;
+
+            if (string.IsNullOrEmpty(expectedKey))
+            {
+                logger.LogWarning("SPAMDETECTION__APIKEY not configured. /check endpoint is unprotected!");
+            }
+            else if (apiKey != expectedKey)
+            {
+                logger.LogWarning("Unauthorized /check request with invalid API key from {RemoteIp}", httpContext.Connection.RemoteIpAddress);
+                return Results.Unauthorized();
+            }
+
             // Check for image spam
             if (request.ImageCount > 0)
             {
@@ -61,6 +79,41 @@ public static class SpamCheckEndpoints
                     result.Spam,
                     result.Confidence);
 
+                // Persist spam check result
+                var checkTimestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var contentHash = photoMessage.MessageText != null
+                    ? ComputeContentHash(photoMessage.MessageText, "")
+                    : null;
+
+                // Try to find matched message ID
+                long? matchedMessageId = null;
+                if (!string.IsNullOrEmpty(contentHash))
+                {
+                    matchedMessageId = await spamCheckRepo.FindMatchedMessageIdAsync(contentHash, checkTimestamp);
+                }
+
+                // Fallback: match by user and timestamp
+                if (!matchedMessageId.HasValue)
+                {
+                    matchedMessageId = await spamCheckRepo.FindMessageByUserAndTimeAsync(
+                        long.Parse(request.UserId),
+                        checkTimestamp);
+                }
+
+                var spamCheck = new SpamCheckRecord(
+                    Id: 0, // Will be set by INSERT
+                    CheckTimestamp: checkTimestamp,
+                    UserId: long.Parse(request.UserId),
+                    ContentHash: contentHash,
+                    IsSpam: result.Spam,
+                    Confidence: result.Confidence,
+                    Reason: result.Reason,
+                    CheckType: "vision",
+                    MatchedMessageId: matchedMessageId
+                );
+
+                await spamCheckRepo.InsertSpamCheckAsync(spamCheck);
+
                 return Results.Ok(result);
             }
 
@@ -69,12 +122,58 @@ public static class SpamCheckEndpoints
             {
                 logger.LogInformation("Processing text spam check");
                 var result = await textSpamService.CheckMessageAsync(request.Message);
+
+                // Persist spam check result
+                var checkTimestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var urls = ExtractUrls(request.Message);
+                var contentHash = ComputeContentHash(request.Message, urls);
+
+                // Try to find matched message ID
+                var matchedMessageId = await spamCheckRepo.FindMatchedMessageIdAsync(contentHash, checkTimestamp);
+
+                // Fallback: match by user and timestamp
+                if (!matchedMessageId.HasValue && !string.IsNullOrEmpty(request.UserId))
+                {
+                    matchedMessageId = await spamCheckRepo.FindMessageByUserAndTimeAsync(
+                        long.Parse(request.UserId),
+                        checkTimestamp);
+                }
+
+                var spamCheck = new SpamCheckRecord(
+                    Id: 0, // Will be set by INSERT
+                    CheckTimestamp: checkTimestamp,
+                    UserId: !string.IsNullOrEmpty(request.UserId) ? long.Parse(request.UserId) : 0,
+                    ContentHash: contentHash,
+                    IsSpam: result.Spam,
+                    Confidence: result.Confidence,
+                    Reason: result.Reason,
+                    CheckType: "text",
+                    MatchedMessageId: matchedMessageId
+                );
+
+                await spamCheckRepo.InsertSpamCheckAsync(spamCheck);
+
                 return Results.Ok(result);
             }
 
             // Empty message
             return Results.Ok(new CheckResult(false, "Empty message", 0));
         });
+
+        static string ComputeContentHash(string messageText, string urls)
+        {
+            var normalized = $"{messageText?.ToLowerInvariant().Trim() ?? ""}{urls?.ToLowerInvariant().Trim() ?? ""}";
+            using var sha256 = System.Security.Cryptography.SHA256.Create();
+            var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(normalized));
+            return Convert.ToHexString(hashBytes);
+        }
+
+        static string ExtractUrls(string message)
+        {
+            var urlPattern = @"https?://[^\s]+";
+            var matches = System.Text.RegularExpressions.Regex.Matches(message, urlPattern);
+            return string.Join(",", matches.Select(m => m.Value));
+        }
 
         // API endpoint: Health check
         app.MapGet("/health", async (MessageHistoryRepository historyRepo) =>

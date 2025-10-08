@@ -1,0 +1,315 @@
+@page "/audit"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Data.Models
+@using TelegramGroupsAdmin.Data.Repositories
+@using TelegramGroupsAdmin.Services
+@inject IAuditService AuditService
+@inject UserRepository UserRepository
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+@attribute [Authorize(Roles = "Admin,Owner")]
+
+<PageTitle>Audit Log - TelegramGroupsAdmin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Audit Log</MudText>
+        <MudChip T="string" Icon="@Icons.Material.Filled.Security" Color="Color.Primary">
+            @_events.Count events
+        </MudChip>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    <!-- Filters -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="AuditEventType?"
+                          Label="Event Type"
+                          @bind-Value="_filterEventType"
+                          Clearable="true"
+                          AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem T="AuditEventType?" Value="null">All Events</MudSelectItem>
+                    @foreach (AuditEventType eventType in Enum.GetValues(typeof(AuditEventType)))
+                    {
+                        <MudSelectItem T="AuditEventType?" Value="eventType">@GetEventTypeName(eventType)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string?"
+                          Label="Actor (Who)"
+                          @bind-Value="_filterActorUserId"
+                          Clearable="true"
+                          AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem T="string?" Value="null">All Actors</MudSelectItem>
+                    @foreach (var user in _users)
+                    {
+                        <MudSelectItem T="string?" Value="@user.Id">@user.Email</MudSelectItem>
+                    }
+                    <MudSelectItem T="string?" Value="@("SYSTEM")">SYSTEM</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudSelect T="string?"
+                          Label="Target User"
+                          @bind-Value="_filterTargetUserId"
+                          Clearable="true"
+                          AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem T="string?" Value="null">All Targets</MudSelectItem>
+                    @foreach (var user in _users)
+                    {
+                        <MudSelectItem T="string?" Value="@user.Id">@user.Email</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3" Class="d-flex align-end">
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          FullWidth="true"
+                          OnClick="ApplyFilters"
+                          StartIcon="@Icons.Material.Filled.FilterList">
+                    Apply Filters
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Audit Log Table -->
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudTable Items="@_filteredEvents"
+                 Hover="true"
+                 Breakpoint="Breakpoint.Sm"
+                 Loading="@_loading"
+                 LoadingProgressColor="Color.Info"
+                 Dense="true">
+            <HeaderContent>
+                <MudTh>Timestamp</MudTh>
+                <MudTh>Event Type</MudTh>
+                <MudTh>Actor</MudTh>
+                <MudTh>Target</MudTh>
+                <MudTh>Details</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Timestamp">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2">@FormatDate(context.Timestamp)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatTime(context.Timestamp)</MudText>
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Event Type">
+                    <MudChip T="string" Size="Size.Small" Color="@GetEventTypeColor(context.EventType)">
+                        @GetEventTypeName(context.EventType)
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Actor">
+                    @if (context.ActorUserId == null)
+                    {
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Computer" Color="Color.Default">
+                            SYSTEM
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                            <MudText Typo="Typo.body2">@GetUserEmail(context.ActorUserId)</MudText>
+                        </MudStack>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Target">
+                    @if (!string.IsNullOrEmpty(context.TargetUserId))
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.PersonOutline" Size="Size.Small" />
+                            <MudText Typo="Typo.body2">@GetUserEmail(context.TargetUserId)</MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">N/A</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Details">
+                    @if (!string.IsNullOrEmpty(context.Value))
+                    {
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; font-size: 0.85em;">
+                            @context.Value
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">-</MudText>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private List<AuditLogRecord> _events = new();
+    private List<AuditLogRecord> _filteredEvents = new();
+    private List<UserRecord> _users = new();
+    private bool _loading = true;
+
+    // Filters
+    private AuditEventType? _filterEventType;
+    private string? _filterActorUserId;
+    private string? _filterTargetUserId;
+
+    // User email cache
+    private Dictionary<string, string> _userEmailCache = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Load both audit events and users for filtering/display
+            // Use GetAllIncludingDeletedAsync to show emails for deleted users in audit log
+            var eventsTask = AuditService.GetRecentEventsAsync(limit: 500);
+            var usersTask = UserRepository.GetAllIncludingDeletedAsync();
+
+            await Task.WhenAll(eventsTask, usersTask);
+
+            _events = eventsTask.Result;
+            _users = usersTask.Result;
+
+            // Build email cache for fast lookups
+            _userEmailCache = _users.ToDictionary(u => u.Id, u => u.Email);
+
+            // Apply initial filters (no filters = show all)
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading audit log: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        var filtered = _events.AsEnumerable();
+
+        if (_filterEventType.HasValue)
+        {
+            filtered = filtered.Where(e => e.EventType == _filterEventType.Value);
+        }
+
+        if (!string.IsNullOrEmpty(_filterActorUserId))
+        {
+            if (_filterActorUserId == "SYSTEM")
+            {
+                filtered = filtered.Where(e => e.ActorUserId == null);
+            }
+            else
+            {
+                filtered = filtered.Where(e => e.ActorUserId == _filterActorUserId);
+            }
+        }
+
+        if (!string.IsNullOrEmpty(_filterTargetUserId))
+        {
+            filtered = filtered.Where(e => e.TargetUserId == _filterTargetUserId);
+        }
+
+        _filteredEvents = filtered.ToList();
+
+        StateHasChanged();
+    }
+
+    private string GetUserEmail(string userId)
+    {
+        return _userEmailCache.TryGetValue(userId, out var email) ? email : $"Unknown ({userId})";
+    }
+
+    private static string GetEventTypeName(AuditEventType eventType) => eventType switch
+    {
+        // User Lifecycle
+        AuditEventType.UserInviteCreated => "Invite Created",
+        AuditEventType.UserInviteRevoked => "Invite Revoked",
+        AuditEventType.UserRegistered => "User Registered",
+        AuditEventType.UserStatusChanged => "Status Changed",
+        AuditEventType.UserDeleted => "User Deleted",
+
+        // User Profile Changes
+        AuditEventType.UserPermissionChanged => "Permission Changed",
+        AuditEventType.UserEmailChanged => "Email Changed",
+        AuditEventType.UserPasswordChanged => "Password Changed",
+        AuditEventType.UserTotpEnabled => "TOTP Enabled",
+        AuditEventType.UserTotpDisabled => "TOTP Disabled",
+
+        // Authentication Events
+        AuditEventType.UserLogin => "Login",
+        AuditEventType.UserLoginFailed => "Login Failed",
+        AuditEventType.UserLogout => "Logout",
+        AuditEventType.UserPasswordReset => "Password Reset",
+
+        // Data Operations
+        AuditEventType.MessageExported => "Message Export",
+        AuditEventType.DataExported => "Data Export",
+
+        // System Events
+        AuditEventType.SystemConfigChanged => "Config Changed",
+
+        _ => eventType.ToString()
+    };
+
+    private static Color GetEventTypeColor(AuditEventType eventType) => eventType switch
+    {
+        // Success/Positive events
+        AuditEventType.UserRegistered => Color.Success,
+        AuditEventType.UserLogin => Color.Success,
+        AuditEventType.UserTotpEnabled => Color.Success,
+
+        // Warning/Changes
+        AuditEventType.UserPermissionChanged => Color.Warning,
+        AuditEventType.UserStatusChanged => Color.Warning,
+        AuditEventType.UserEmailChanged => Color.Warning,
+        AuditEventType.UserPasswordChanged => Color.Warning,
+
+        // Errors/Security events
+        AuditEventType.UserLoginFailed => Color.Error,
+        AuditEventType.UserDeleted => Color.Error,
+        AuditEventType.UserInviteRevoked => Color.Error,
+
+        // Neutral/Info events
+        AuditEventType.UserInviteCreated => Color.Info,
+        AuditEventType.UserLogout => Color.Default,
+        AuditEventType.MessageExported => Color.Info,
+        AuditEventType.DataExported => Color.Info,
+
+        _ => Color.Default
+    };
+
+    private static string FormatDate(long timestamp)
+    {
+        var date = DateTimeOffset.FromUnixTimeSeconds(timestamp);
+        return date.ToString("yyyy-MM-dd");
+    }
+
+    private static string FormatTime(long timestamp)
+    {
+        var date = DateTimeOffset.FromUnixTimeSeconds(timestamp);
+        return date.ToString("HH:mm:ss");
+    }
+}

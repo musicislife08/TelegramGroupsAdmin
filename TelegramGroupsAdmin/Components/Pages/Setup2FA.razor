@@ -1,0 +1,265 @@
+@page "/login/setup-2fa"
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using Microsoft.AspNetCore.Components.Forms
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Services.Auth
+@using TelegramGroupsAdmin.Data.Repositories
+@using QRCoder
+@inject IAuthService AuthService
+@inject IIntermediateAuthService IntermediateAuthService
+@inject IHttpContextAccessor HttpContextAccessor
+@inject UserRepository UserRepository
+@inject ILogger<Setup2FA> Logger
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+
+<PageTitle>Setup Two-Factor Authentication - TelegramGroupsAdmin</PageTitle>
+
+<div class="setup-container">
+    <h1 class="setup-title">Two-Factor Authentication Required</h1>
+    <p class="setup-subtitle">Protect your account with an extra layer of security</p>
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert-error">@_errorMessage</div>
+    }
+
+    @if (_totpSetupResult == null)
+    {
+        <div class="loading-container">
+            <div class="spinner"></div>
+            <p>Setting up 2FA...</p>
+        </div>
+    }
+    else
+    {
+        <div class="setup-steps">
+            <div class="step">
+                <h3>Step 1: Install an Authenticator App</h3>
+                <p>You'll need an authenticator app on your phone. We recommend these free, open-source options:</p>
+                <div class="app-recommendations">
+                    <div class="app-card">
+                        <strong>Aegis Authenticator</strong>
+                        <span class="app-platform">(Android)</span>
+                        <p>🔓 Open source, encrypted vault, offline backup</p>
+                    </div>
+                    <div class="app-card">
+                        <strong>Raivo OTP</strong>
+                        <span class="app-platform">(iOS)</span>
+                        <p>🔓 Open source, encrypted, iCloud sync</p>
+                    </div>
+                    <div class="app-card">
+                        <strong>2FAS</strong>
+                        <span class="app-platform">(Android, iOS)</span>
+                        <p>🔓 Open source, cloud backup, browser extension</p>
+                    </div>
+                    <div class="app-card">
+                        <strong>Google Authenticator</strong>
+                        <span class="app-platform">(Android, iOS)</span>
+                        <p>Simple, widely supported</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3>Step 2: Scan the QR Code</h3>
+                <p>Open your authenticator app and scan this code:</p>
+                <div class="qr-container">
+                    <img src="@GetQrCodeDataUrl()" alt="QR Code" class="qr-code" />
+                </div>
+                <div class="manual-entry">
+                    <p>Can't scan? Enter this code manually:</p>
+                    <div class="secret-code">@_totpSetupResult.ManualEntryKey</div>
+                </div>
+            </div>
+
+            <div class="step">
+                <h3>Step 3: Verify Your Code</h3>
+                <EditForm Model="@_model" FormName="verify-form" OnValidSubmit="HandleVerifyAsync" method="post">
+                    <DataAnnotationsValidator />
+                    <div class="form-group">
+                        <label class="form-label" for="code">Enter the 6-digit code from your app:</label>
+                        <input type="text"
+                               id="code"
+                               name="_model.Code"
+                               class="form-input code-input"
+                               value="@_model!.Code"
+                               placeholder="000000"
+                               maxlength="6"
+                               pattern="[0-9]*"
+                               inputmode="numeric"
+                               required
+                               autofocus />
+                        <ValidationMessage For="@(() => _model!.Code)" />
+                    </div>
+                    <button type="submit" class="btn-primary">Verify and Continue</button>
+                </EditForm>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private VerifyModel? _model { get; set; }
+
+    [SupplyParameterFromQuery(Name = "userId")]
+    private string? UserId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "token")]
+    private string? IntermediateToken { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    private string? ReturnUrl { get; set; }
+
+    private string? _errorMessage;
+    private TotpSetupResult? _totpSetupResult;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _model ??= new VerifyModel();
+
+        // SECURITY: Validate that user has a valid intermediate authentication token
+        // This prevents attackers from accessing /login/setup-2fa?userId=VICTIM_ID
+        // and enabling TOTP on someone else's account
+        if (string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(IntermediateToken))
+        {
+            _errorMessage = "Invalid authentication session. Please log in again.";
+            HttpContextAccessor.HttpContext?.Response.Redirect("/login");
+            return;
+        }
+
+        // Validate token (without consuming - we'll consume after successful setup)
+        if (!IntermediateAuthService.ValidateToken(IntermediateToken, UserId))
+        {
+            _errorMessage = "Invalid or expired authentication session. Please log in again.";
+            HttpContextAccessor.HttpContext?.Response.Redirect("/login");
+            return;
+        }
+
+        try
+        {
+            // Generate TOTP setup
+            _totpSetupResult = await AuthService.EnableTotpAsync(UserId);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error setting up 2FA: {ex.Message}";
+            Logger.LogError(ex, "Unexpected error during 2FA setup for user {UserId}", UserId);
+        }
+    }
+
+    private async Task HandleVerifyAsync()
+    {
+        _errorMessage = null;
+
+        if (_model == null || string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(IntermediateToken))
+        {
+            _errorMessage = "Form data is missing.";
+            return;
+        }
+
+        // SECURITY: Validate token before allowing TOTP verification
+        if (!IntermediateAuthService.ValidateToken(IntermediateToken, UserId))
+        {
+            _errorMessage = "Invalid or expired authentication session. Please log in again.";
+            var httpContext = HttpContextAccessor.HttpContext;
+            httpContext?.Response.Redirect("/login");
+            return;
+        }
+
+        try
+        {
+            var success = await AuthService.VerifyAndEnableTotpAsync(UserId, _model.Code);
+
+            if (!success)
+            {
+                _errorMessage = "Invalid verification code. Please try again.";
+                _model = new VerifyModel();
+                return;
+            }
+
+            // SECURITY: Consume token after successful authentication to prevent reuse
+            IntermediateAuthService.ConsumeToken(IntermediateToken);
+
+            // Get user data
+            var user = await UserRepository.GetByIdAsync(UserId);
+            if (user == null)
+            {
+                _errorMessage = "Unable to complete setup.";
+                return;
+            }
+
+            // Sign in the user
+            var httpContext = HttpContextAccessor.HttpContext;
+            if (httpContext == null)
+            {
+                _errorMessage = "Unable to complete authentication. Please try again.";
+                return;
+            }
+
+            var claims = new List<Claim>
+            {
+                new(ClaimTypes.NameIdentifier, user.Id),
+                new(ClaimTypes.Email, user.Email),
+                new(ClaimTypes.Role, GetRoleName(user.PermissionLevelInt)),
+                new(CustomClaimTypes.PermissionLevel, user.PermissionLevelInt.ToString())
+            };
+
+            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+
+            var authProperties = new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+            };
+
+            await httpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                claimsPrincipal,
+                authProperties);
+
+            // Redirect
+            httpContext.Response.Redirect(ReturnUrl ?? "/");
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "An error occurred. Please try again.";
+            Logger.LogError(ex, "Unexpected error during 2FA verification for user {UserId}", UserId);
+        }
+    }
+
+    private string GetQrCodeDataUrl()
+    {
+        if (_totpSetupResult == null) return "";
+
+        using var qrGenerator = new QRCodeGenerator();
+        using var qrCodeData = qrGenerator.CreateQrCode(_totpSetupResult.QrCodeUri, QRCodeGenerator.ECCLevel.Q);
+        using var qrCode = new PngByteQRCode(qrCodeData);
+        var qrCodeBytes = qrCode.GetGraphic(20);
+
+        var base64 = Convert.ToBase64String(qrCodeBytes);
+        return $"data:image/png;base64,{base64}";
+    }
+
+    private static string GetRoleName(int permissionLevel) => permissionLevel switch
+    {
+        0 => "ReadOnly",
+        1 => "Admin",
+        2 => "Owner",
+        _ => "ReadOnly"
+    };
+
+    public class VerifyModel
+    {
+        [Required(ErrorMessage = "Verification code is required")]
+        [StringLength(6, MinimumLength = 6, ErrorMessage = "Code must be 6 digits")]
+        [RegularExpression("^[0-9]{6}$", ErrorMessage = "Code must be 6 digits")]
+        public string Code { get; set; } = string.Empty;
+    }
+}

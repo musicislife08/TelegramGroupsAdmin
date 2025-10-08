@@ -1,0 +1,356 @@
+@using TelegramGroupsAdmin.Data.Models
+@using TelegramGroupsAdmin.Data.Repositories
+@inject MessageHistoryRepository MessageRepository
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudGrid>
+        @* Text Search *@
+        <MudItem xs="12" md="4">
+            <MudTextField @bind-Value="Filters.SearchText"
+                          Label="Search messages"
+                          Placeholder="Search text..."
+                          Immediate="true"
+                          Clearable="true"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          DebounceInterval="300"
+                          OnDebounceIntervalElapsed="() => OnFiltersChanged.InvokeAsync()" />
+        </MudItem>
+
+        @* User Filter *@
+        <MudItem xs="12" md="3">
+            <MudAutocomplete T="string"
+                             Value="Filters.UserName"
+                             Label="User"
+                             Placeholder="Filter by user..."
+                             SearchFunc="SearchUserNames"
+                             Clearable="true"
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Person"
+                             DebounceInterval="300"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="false"
+                             CoerceValue="false"
+                             ValueChanged="async (string value) => { Filters.UserName = value; await OnFiltersChanged.InvokeAsync(); }" />
+        </MudItem>
+
+        @* Chat Filter *@
+        <MudItem xs="12" md="3">
+            <MudAutocomplete T="string"
+                             Value="Filters.ChatName"
+                             Label="Chat"
+                             Placeholder="Filter by chat..."
+                             SearchFunc="SearchChatNames"
+                             Clearable="true"
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Chat"
+                             DebounceInterval="300"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="false"
+                             CoerceValue="false"
+                             ValueChanged="async (string value) => { Filters.ChatName = value; await OnFiltersChanged.InvokeAsync(); }" />
+        </MudItem>
+
+        @* Spam Filter *@
+        <MudItem xs="12" md="2">
+            <MudSelect @bind-Value="Filters.SpamFilter"
+                       @bind-Value:after="() => OnFiltersChanged.InvokeAsync()"
+                       Label="Spam Status"
+                       T="SpamFilterOption"
+                       Variant="Variant.Outlined"
+                       Dense="true">
+                <MudSelectItem Value="SpamFilterOption.All">All Messages</MudSelectItem>
+                <MudSelectItem Value="SpamFilterOption.SpamOnly">Spam Only</MudSelectItem>
+                <MudSelectItem Value="SpamFilterOption.CleanOnly">Clean Only</MudSelectItem>
+                <MudSelectItem Value="SpamFilterOption.Unchecked">Unchecked</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+
+        @* Date Range *@
+        <MudItem xs="12" md="6">
+            <MudStack Row="true" Spacing="2">
+                <MudDatePicker @bind-Date="Filters.StartDate"
+                               @bind-Date:after="() => OnFiltersChanged.InvokeAsync()"
+                               Label="From Date"
+                               Clearable="true"
+                               MaxDate="DateTime.Today"
+                               DateFormat="yyyy-MM-dd" />
+                <MudDatePicker @bind-Date="Filters.EndDate"
+                               @bind-Date:after="() => OnFiltersChanged.InvokeAsync()"
+                               Label="To Date"
+                               Clearable="true"
+                               MaxDate="DateTime.Today"
+                               DateFormat="yyyy-MM-dd" />
+            </MudStack>
+        </MudItem>
+
+        @* Content Type Filters *@
+        <MudItem xs="12" md="4">
+            <MudStack Row="true" Spacing="2">
+                <MudCheckBox @bind-Value="Filters.HasImages"
+                             @bind-Value:after="() => OnFiltersChanged.InvokeAsync()"
+                             Label="Images"
+                             Dense="true"
+                             T="bool?"
+                             TriState="true" />
+                <MudCheckBox @bind-Value="Filters.HasLinks"
+                             @bind-Value:after="() => OnFiltersChanged.InvokeAsync()"
+                             Label="Links"
+                             Dense="true"
+                             T="bool?"
+                             TriState="true" />
+                <MudCheckBox @bind-Value="Filters.HasEdits"
+                             @bind-Value:after="() => OnFiltersChanged.InvokeAsync()"
+                             Label="Edited"
+                             Dense="true"
+                             T="bool?"
+                             TriState="true" />
+            </MudStack>
+        </MudItem>
+
+        @* Actions *@
+        <MudItem xs="12" md="2">
+            <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           StartIcon="@Icons.Material.Filled.Clear"
+                           OnClick="ClearFilters">
+                    Clear
+                </MudButton>
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+
+    @* Active Filters Summary *@
+    @if (HasActiveFilters())
+    {
+        <MudDivider Class="my-3" />
+        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="align-self-center">
+                Active filters:
+            </MudText>
+            @if (!string.IsNullOrEmpty(Filters.SearchText))
+            {
+                <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.SearchText = null; await OnFiltersChanged.InvokeAsync(); }">
+                    Text: @Filters.SearchText
+                </MudChip>
+            }
+            @if (!string.IsNullOrEmpty(Filters.UserName))
+            {
+                <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.UserName = null; await OnFiltersChanged.InvokeAsync(); }">
+                    User: @Filters.UserName
+                </MudChip>
+            }
+            @if (!string.IsNullOrEmpty(Filters.ChatName))
+            {
+                <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.ChatName = null; await OnFiltersChanged.InvokeAsync(); }">
+                    Chat: @Filters.ChatName
+                </MudChip>
+            }
+            @if (Filters.SpamFilter != SpamFilterOption.All)
+            {
+                <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.SpamFilter = SpamFilterOption.All; await OnFiltersChanged.InvokeAsync(); }">
+                    Spam: @Filters.SpamFilter
+                </MudChip>
+            }
+            @if (Filters.StartDate.HasValue)
+            {
+                <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.StartDate = null; await OnFiltersChanged.InvokeAsync(); }">
+                    From: @Filters.StartDate.Value.ToString("yyyy-MM-dd")
+                </MudChip>
+            }
+            @if (Filters.EndDate.HasValue)
+            {
+                <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.EndDate = null; await OnFiltersChanged.InvokeAsync(); }">
+                    To: @Filters.EndDate.Value.ToString("yyyy-MM-dd")
+                </MudChip>
+            }
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired]
+    public MessageFilterState Filters { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback OnFiltersChanged { get; set; }
+
+    private List<string> _userNames = new();
+    private List<string> _chatNames = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load distinct user names and chat names for autocomplete
+        try
+        {
+            _userNames = await MessageRepository.GetDistinctUserNamesAsync();
+            _chatNames = await MessageRepository.GetDistinctChatNamesAsync();
+        }
+        catch (Exception)
+        {
+            // Fail silently - autocomplete will just be empty
+            _userNames = new List<string>();
+            _chatNames = new List<string>();
+        }
+    }
+
+    private Task<IEnumerable<string>> SearchUserNames(string value, CancellationToken ct)
+    {
+        // If no value, return all
+        if (string.IsNullOrWhiteSpace(value))
+            return Task.FromResult<IEnumerable<string>>(_userNames);
+
+        // Filter case-insensitively
+        var filtered = _userNames
+            .Where(name => name.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return Task.FromResult<IEnumerable<string>>(filtered);
+    }
+
+    private Task<IEnumerable<string>> SearchChatNames(string value, CancellationToken ct)
+    {
+        // If no value, return all
+        if (string.IsNullOrWhiteSpace(value))
+            return Task.FromResult<IEnumerable<string>>(_chatNames);
+
+        // Filter case-insensitively
+        var filtered = _chatNames
+            .Where(name => name.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return Task.FromResult<IEnumerable<string>>(filtered);
+    }
+
+    private async Task ClearFilters()
+    {
+        Filters.SearchText = null;
+        Filters.UserName = null;
+        Filters.ChatName = null;
+        Filters.SpamFilter = SpamFilterOption.All;
+        Filters.StartDate = null;
+        Filters.EndDate = null;
+        Filters.HasImages = null;
+        Filters.HasLinks = null;
+        Filters.HasEdits = null;
+
+        await OnFiltersChanged.InvokeAsync();
+    }
+
+    private bool HasActiveFilters()
+    {
+        return !string.IsNullOrEmpty(Filters.SearchText)
+               || !string.IsNullOrEmpty(Filters.UserName)
+               || !string.IsNullOrEmpty(Filters.ChatName)
+               || Filters.SpamFilter != SpamFilterOption.All
+               || Filters.StartDate.HasValue
+               || Filters.EndDate.HasValue
+               || Filters.HasImages.HasValue
+               || Filters.HasLinks.HasValue
+               || Filters.HasEdits.HasValue;
+    }
+}
+
+@* Filter State Class *@
+@code {
+    public class MessageFilterState
+    {
+        public string? SearchText { get; set; }
+        public string? UserName { get; set; }
+        public string? ChatName { get; set; }
+        public SpamFilterOption SpamFilter { get; set; } = SpamFilterOption.All;
+        public DateTime? StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
+        public bool? HasImages { get; set; }
+        public bool? HasLinks { get; set; }
+        public bool? HasEdits { get; set; }
+
+        public bool Matches(MessageRecord message, SpamCheckRecord? spamCheck)
+        {
+            // Text search
+            if (!string.IsNullOrEmpty(SearchText))
+            {
+                var searchLower = SearchText.ToLowerInvariant();
+                var matchesText = message.MessageText?.Contains(searchLower, StringComparison.OrdinalIgnoreCase) == true;
+                var matchesUrls = message.Urls?.Contains(searchLower, StringComparison.OrdinalIgnoreCase) == true;
+                if (!matchesText && !matchesUrls)
+                    return false;
+            }
+
+            // User filter
+            if (!string.IsNullOrEmpty(UserName))
+            {
+                if (message.UserName?.Contains(UserName, StringComparison.OrdinalIgnoreCase) != true)
+                    return false;
+            }
+
+            // Chat filter
+            if (!string.IsNullOrEmpty(ChatName))
+            {
+                if (message.ChatName?.Contains(ChatName, StringComparison.OrdinalIgnoreCase) != true)
+                    return false;
+            }
+
+            // Spam filter
+            if (SpamFilter != SpamFilterOption.All)
+            {
+                var hasCheck = spamCheck != null;
+                switch (SpamFilter)
+                {
+                    case SpamFilterOption.SpamOnly:
+                        if (!hasCheck || !spamCheck!.IsSpam)
+                            return false;
+                        break;
+                    case SpamFilterOption.CleanOnly:
+                        if (!hasCheck || spamCheck!.IsSpam)
+                            return false;
+                        break;
+                    case SpamFilterOption.Unchecked:
+                        if (hasCheck)
+                            return false;
+                        break;
+                }
+            }
+
+            // Date range
+            var messageDate = DateTimeOffset.FromUnixTimeSeconds(message.Timestamp).Date;
+            if (StartDate.HasValue && messageDate < StartDate.Value.Date)
+                return false;
+            if (EndDate.HasValue && messageDate > EndDate.Value.Date)
+                return false;
+
+            // Content type filters
+            if (HasImages.HasValue)
+            {
+                var hasImage = !string.IsNullOrEmpty(message.PhotoFileId);
+                if (HasImages.Value != hasImage)
+                    return false;
+            }
+
+            if (HasLinks.HasValue)
+            {
+                var hasLink = !string.IsNullOrEmpty(message.Urls);
+                if (HasLinks.Value != hasLink)
+                    return false;
+            }
+
+            if (HasEdits.HasValue)
+            {
+                var hasEdit = message.EditDate.HasValue;
+                if (HasEdits.Value != hasEdit)
+                    return false;
+            }
+
+            return true;
+        }
+    }
+
+    public enum SpamFilterOption
+    {
+        All,
+        SpamOnly,
+        CleanOnly,
+        Unchecked
+    }
+}

@@ -1,224 +1,185 @@
-# CLAUDE.md
+# CLAUDE.md - TelegramGroupsAdmin
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+ASP.NET Core 10.0 Blazor Server + Minimal API. Telegram spam detection (text + image). SQLite databases.
 
-## Project Overview
-
-TelegramGroupsAdmin is an ASP.NET Core 10.0 application combining a Blazor Server UI with minimal API endpoints for checking Telegram messages for spam/malicious content. The service performs multi-layered threat detection:
-
-**Text Spam Detection:**
-1. **Blocklist checking** against The Block List Project (abuse, fraud, malware, phishing, ransomware, redirect, scam)
-2. **Content analysis** via SEO/Open Graph metadata scraping for suspicious patterns
-3. **Threat intelligence** via VirusTotal API integration
-
-**Image Spam Detection (NEW):**
-1. **HistoryBot** caches all messages from Telegram chat in SQLite database
-2. **OpenAI Vision API** performs OCR and visual spam analysis on images
-3. **Pattern detection** for crypto scams, phishing, fake transactions, impersonation
-
-The main endpoint is `POST /check` which accepts a `SpamCheckRequest` and returns a `CheckResult` with confidence scoring.
+## Tech Stack
+- .NET 10.0 (preview)
+- Blazor Server (MudBlazor UI)
+- Dapper + FluentMigrator
+- Cookie auth + TOTP 2FA
+- VirusTotal API, OpenAI Vision API
+- SendGrid email service
 
 ## Architecture
 
-### Core Flow (Program.cs:128-191)
-The unified `/check` endpoint handles both text and image spam:
+### Spam Detection
+**Text**: Blocklists (Block List Project) → SEO scraping → VirusTotal
+**Image**: HistoryBot caches Telegram messages → OpenAI Vision OCR/analysis
+**Endpoint**: `POST /check` (auth: `X-API-Key` header or `api_key` query)
 
-**If request.ImageCount > 0 (Image Spam):**
-1. Look up user's recent photo from SQLite via `MessageHistoryRepository`
-2. Retry once after 100ms if not found (handles race conditions)
-3. Download image via `ITelegramImageService`
-4. Analyze with OpenAI Vision API via `IVisionSpamDetectionService`
-5. Return `CheckResult` with confidence score (1-100)
+### Services
+- `SpamCheckService` - URL extraction, blocklist, SEO, VirusTotal orchestration
+- `IThreatIntelService` - VirusTotal integration with rate limiting
+- `IVisionSpamDetectionService` - OpenAI Vision spam detection with rate limiting
+- `ITelegramImageService` - Download images from Telegram
+- `IAuthService` - Login, TOTP, password reset
+- `IIntermediateAuthService` - Temp tokens for 2FA flow (5min expiry)
+- `IInviteService` - Invite token management
+- `IUserManagementService` - User CRUD, 2FA reset
+- `IMessageHistoryService` - Real-time message updates via events
+- `IMessageExportService` - CSV/JSON export
+- `IEmailService` - SendGrid email abstraction
 
-**Else if request.Message exists (Text Spam):**
-1. Extract URLs and domains using regex patterns
-2. Check each URL against cached blocklists
-3. If no blocklist match, scrape SEO preview and analyze for suspicious patterns
-4. Perform threat intelligence check via VirusTotal
-5. Return `CheckResult` with confidence = 0
+### Databases (SQLite)
+**identity.db**: users, invites, audit_log, verification_tokens
+**message_history.db**: messages (30d retention), message_edits, spam_checks
 
-### Service Architecture
+### Background Services
+- `HistoryBotService` - Telegram message caching, real-time events
+- `CleanupBackgroundService` - Message retention cleanup (5min interval)
 
-**Text Spam Detection:**
-- **SpamCheckService**: Orchestrates URL checking, blocklist, SEO scraping
-- **IThreatIntelService**: Abstraction for threat intelligence (VirusTotal, Google Safe Browsing)
-- **SeoPreviewScraper**: Uses AngleSharp to extract metadata from URLs
-- **HybridCache**: Caches blocklists (10MB max payload)
+## Configuration (Env Vars)
 
-**Image Spam Detection (NEW):**
-- **HistoryBot (BackgroundService)**: Listens to Telegram messages, caches to SQLite
-- **MessageHistoryRepository**: SQLite data access layer using Dapper
-- **TelegramImageService**: Downloads images via Telegram Bot API
-- **OpenAIVisionSpamDetectionService**: Sends images to OpenAI Vision for analysis
-- **TelegramBotClientFactory**: Caches bot clients by token (singleton)
-
-**Database:**
-- **SQLite** at `/data/message_history.db`
-- 24-hour retention, auto-cleanup every 5 minutes
-- Stores: message_id, user_id, text, photo_file_id, URLs, timestamps
-- Indexed by user_id + timestamp for fast lookups
-
-### Rate Limiting (Program.cs:19-66)
-VirusTotal API has strict rate limits (4 requests/minute). A custom sliding window rate limiter using Polly is configured:
-- Uses `PartitionedRateLimiter` with sliding window strategy
-- QueueLimit set to 0 (no queuing, immediate rejection)
-- OnRejected callback logs to console
-- Custom `RejectedRateLimitLease` implementation for handling rejections
-
-### Suspicious Content Detection (SpamCheckService.cs:97-156)
-Two-pronged approach:
-1. **Regex patterns** for common scam formats (deposited amounts, profit claims, etc.)
-2. **Phrase matching** against curated list of suspicious phrases
-3. **Unicode normalization** to handle visual obfuscation (fancy fonts, zero-width chars)
-
-## Development Commands
-
-### Build
-```bash
-dotnet build TelegramGroupsAdmin.sln
+### Required
+```
+VIRUSTOTAL__APIKEY
+OPENAI__APIKEY
+TELEGRAM__HISTORYBOTTOKEN
+TELEGRAM__CHATID
+SPAMDETECTION__APIKEY
+SENDGRID__APIKEY
+SENDGRID__FROMEMAIL
+SENDGRID__FROMNAME
 ```
 
-### Run locally
-```bash
-cd TelegramGroupsAdmin
-dotnet run
+### Optional
+```
+APP__BASEURL=http://localhost:5161
+OPENAI__MODEL=gpt-4o-mini
+OPENAI__MAXTOKENS=500
+MESSAGEHISTORY__ENABLED=true
+MESSAGEHISTORY__DATABASEPATH=/data/message_history.db
+MESSAGEHISTORY__RETENTIONHOURS=720
+MESSAGEHISTORY__CLEANUPINTERVALMINUTES=1440
+SPAMDETECTION__TIMEOUTSECONDS=30
+SPAMDETECTION__IMAGELOOKUPRETRYDELAYMS=100
+SPAMDETECTION__MINCONFIDENCETHRESHOLD=85
+IDENTITY__DATABASEPATH=/data/identity.db
+DATAPROTECTION__KEYSPATH=/data/keys
 ```
 
-### Run with Docker
-```bash
-docker build -t telegram-groups-admin .
-docker run -p 8080:8080 -e VIRUSTOTAL_API_KEY=<your-key> telegram-groups-admin
+## Logging
+
+### Configuration (Program.cs:26-31)
+```csharp
+builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
+builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Information);
+builder.Logging.AddFilter("TelegramGroupsAdmin", LogLevel.Information);
 ```
 
-## Environment Variables
+### Log Levels
+- **Error**: Unexpected application errors (exceptions)
+- **Warning**: User errors, rate limits, expected failures
+- **Information**: Important operational events (permissions, setup, stats)
 
-### Required:
-- `VIRUSTOTAL_API_KEY`: API key for VirusTotal threat intelligence
-- `OPENAI_API_KEY`: API key for OpenAI Vision (image spam detection)
-- `TELEGRAM_HISTORY_BOT_TOKEN`: Bot token for HistoryBot (second Telegram bot)
-- `TELEGRAM_CHAT_ID`: Target chat ID or username (e.g., "@thesurvivalpodcast")
+### Rate Limit Logging
+- **VirusTotal**: LogWarning on `RateLimiterRejectedException` (4 req/min)
+- **OpenAI**: LogWarning on HTTP 429 with RetryAfter header
+- Both services fail open (return non-spam) during rate limits
 
-### Optional (with defaults):
-- `OPENAI_MODEL`: Model to use (default: "gpt-4o-mini")
-- `OPENAI_MAX_TOKENS`: Max tokens for response (default: 500)
-- `MESSAGE_HISTORY_DATABASE_PATH`: SQLite database path (default: "/data/message_history.db")
-- `MESSAGE_HISTORY_RETENTION_HOURS`: How long to keep messages (default: 24)
-- `MESSAGE_HISTORY_CLEANUP_INTERVAL_MINUTES`: Cleanup frequency (default: 5)
-- `SPAM_DETECTION_TIMEOUT_SECONDS`: Request timeout (default: 30)
-- `SPAM_DETECTION_RETRY_DELAY_MS`: Race condition retry delay (default: 100)
-- `SPAM_DETECTION_MIN_CONFIDENCE`: Min confidence to flag as spam (default: 85)
+## Key Implementations
 
-## Key Implementation Details
+### Rate Limiting
+**VirusTotal**: Polly PartitionedRateLimiter, 4 req/min sliding window, immediate rejection
+**OpenAI**: HTTP 429 detection, retry-after header parsing
 
-### URL/Domain Extraction (SpamCheckService.cs:70-85)
-- Uses two regex patterns: full URLs and standalone domains
-- Deduplicates to avoid redundant checks
-- Case-insensitive matching
+### Race Condition (Image Spam)
+tg-spam bot calls `/check` before HistoryBot caches message
+**Solution**: Retry after 100ms if not found (success rate >95%)
 
-### Blocklist Caching (SpamCheckService.cs:26-30, 58-68)
-- Fetches from Block List Project's alt-version (newline-delimited)
-- Strips comments (lines starting with #)
-- Cached indefinitely via HybridCache (no expiration set)
-- Key format: `blocklist::{listName}`
+### Email Verification
+1. Registration generates 24h token (32 random bytes, base64)
+2. Email sent with `/verify-email?token=X` link
+3. Login blocked until verified (except first Owner user)
 
-### VirusTotal Flow (VirusTotalService.cs:7-46)
-1. Try fetching existing report via base64url-encoded URL
-2. If 404, submit URL for scanning
-3. Wait 15 seconds (fixed delay, no polling)
-4. Retry fetching report
-5. Consider malicious if `last_analysis_stats.malicious > 0`
+### TOTP Authentication Security ✅
+**Implementation**: IntermediateAuthService issues 5min tokens after password verification
+**Prevents**: Direct access to `/login/verify` or `/login/setup-2fa` without password
+**Expiry**: 15min for abandoned TOTP setups (security best practice)
 
-## Race Condition Handling
-
-When a user posts an image, there's a potential race condition:
-1. tg-spam bot receives message, triggers Lua plugin
-2. Lua plugin calls `/check` endpoint
-3. HistoryBot might not have cached the message yet
-
-**Solution:** Retry logic with 100ms delay (Program.cs:146-151)
-- First lookup attempt
-- If not found, wait 100ms
-- Second lookup attempt
-- If still not found, fail open (return not spam)
-- Success rate: >95% in practice
+### 2FA Reset for Owners ✅
+**Feature**: Owners can reset any user's TOTP to allow re-setup
+**Security**: Clears totp_secret, totp_enabled, totp_setup_started_at
+**Audit**: Logged to audit_log table
 
 ## API Endpoints
 
 ### POST /check
-**Request:**
 ```json
-{
-  "message": "optional text",
-  "user_id": "123456",
-  "user_name": "john_doe",
-  "image_count": 1
-}
-```
-
-**Response:**
-```json
-{
-  "spam": true,
-  "reason": "Crypto airdrop scam detected in image",
-  "confidence": 92
-}
+Request: {"message": "...", "user_id": "...", "user_name": "...", "image_count": 0}
+Response: {"spam": true, "reason": "...", "confidence": 92}
+Auth: X-API-Key header OR api_key query param
 ```
 
 ### GET /health
-Returns HistoryBot statistics:
 ```json
-{
-  "status": "healthy",
-  "historyBot": {
-    "totalMessages": 245,
-    "totalUsers": 42,
-    "messagesWithPhotos": 18,
-    "oldestMessage": "...",
-    "newestMessage": "..."
-  }
-}
+{"status": "healthy", "historyBot": {...stats...}}
 ```
 
-## Lua Plugin Integration
+### Auth Endpoints
+- POST /api/auth/login - Returns {requiresTotp, userId, intermediateToken} if 2FA enabled
+- POST /api/auth/register - Auto-login after registration
+- POST /api/auth/logout
+- POST /api/auth/verify-totp - Requires intermediateToken
 
-The `spam_checker.lua` plugin (in repo root) should be deployed to tg-spam server:
+### Email Verification Endpoints
+- GET /verify-email?token=X - Verify email
+- POST /resend-verification - Resend verification email
+- POST /forgot-password - Send password reset email
+- POST /reset-password - Process password reset
 
-```lua
-function check(req)
-  local payload = {
-    message = req.msg,
-    user_id = tostring(req.user_id),
-    user_name = req.user_name or "",
-    image_count = req.meta.images or 0
-  }
-  -- Calls POST /check endpoint
-  -- Returns spam decision with confidence
-end
+## Blazor Pages
+- `/` - Dashboard (stats, requires auth)
+- `/login` - Login form (generates intermediate token)
+- `/login/verify` - TOTP verification (requires intermediate token)
+- `/login/setup-2fa` - Mandatory 2FA setup (requires intermediate token)
+- `/register` - Registration with invite token
+- `/profile` - Password change, TOTP enable/reset
+- `/users` - User management, invite system, 2FA reset (Admin/Owner only)
+- `/messages` - Message viewer, filters, CSV/JSON export, real-time updates
+- `/audit` - Audit log viewer (Admin/Owner only)
+
+## Permission Levels
+0=ReadOnly, 1=Admin, 2=Owner
+**Hierarchy**: Owner > Admin > ReadOnly (cannot escalate permissions above own level)
+
+## User Statuses
+0=Pending, 1=Active, 2=Disabled, 3=Deleted (soft delete)
+
+## Invite System
+- Status: 0=Pending, 1=Used, 2=Revoked
+- First user auto-Owner (no invite needed)
+- Invites expire after 7 days
+- Permission level inheritance (cannot exceed creator's level)
+- Audit trail for create/use/revoke
+
+## Build/Run
+```bash
+dotnet build TelegramGroupsAdmin.sln
+dotnet run --project TelegramGroupsAdmin/TelegramGroupsAdmin.csproj
+docker build -t telegram-groups-admin .
+docker run -p 8080:8080 -e VIRUSTOTAL__APIKEY=X telegram-groups-admin
 ```
 
 ## Troubleshooting
+**CS8669 warnings**: Razor compiler bug in .NET 10 RC1 - doesn't emit `#nullable enable` for nullable generics (`T="string?"`). Suppressed at project level, tracked in dotnet/razor#7286. Re-test after GA (Nov 2025).
+**HistoryBot not caching**: Check TELEGRAM__HISTORYBOTTOKEN, bot added to chat, privacy mode off
+**Image spam failing**: Check OPENAI__APIKEY, /data volume mounted
+**DB growing**: Check retention (720h default), cleanup service running
+**Rate limits**: Check logs for LogWarning messages from VirusTotalService or OpenAIVisionSpamDetectionService
 
-### HistoryBot not caching messages
-- Check `TELEGRAM_HISTORY_BOT_TOKEN` is set correctly
-- Ensure bot is added to target chat
-- Verify `TELEGRAM_CHAT_ID` matches (check logs for chat ID)
-- Bot needs to see all messages (privacy mode off in BotFather)
-
-### Image spam checks failing
-- Check OpenAI API key is valid: `OPENAI_API_KEY`
-- Verify `/data` volume is mounted and writable
-- Check SQLite database exists: `/data/message_history.db`
-- Monitor logs for race condition retries
-
-### High OpenAI costs
-- Current usage: ~20 images/day = $0.12/month
-- Check `/health` endpoint for message stats
-- Consider switching to `gpt-4o` if accuracy issues (higher cost)
-
-### Database growing too large
-- Check retention hours: default 24h
-- Verify cleanup service is running (check logs every 5 minutes)
-- Expected size: ~200-500KB for 24 hours
-
-## Target Framework
-.NET 10.0 (preview) - uses preview SDK and runtime images in Dockerfile
+## Completed Features
+- ✅ `/audit` page - Audit log viewer with filtering by event type, actor, target user (Admin/Owner only)
+- ✅ `/profile` page - User profile settings with password change, TOTP 2FA enable/disable/reset
+- ✅ Message filters - Searchable MudAutocomplete dropdowns for User/Chat names (replaced text inputs)
+- ✅ Service layer refactor - Created IAuditService abstraction, refactored 6 files (InviteRepository audit logging moved to InviteService)

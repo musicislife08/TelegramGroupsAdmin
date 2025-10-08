@@ -1,90 +1,131 @@
 using System.Security.Cryptography;
-using System.Text;
-using Microsoft.AspNetCore.Cryptography.KeyDerivation;
-using OtpNet;
+using Microsoft.Extensions.Options;
+using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Data.Repositories;
-using TelegramGroupsAdmin.Data.Services;
+using TelegramGroupsAdmin.Services.Auth;
+using TelegramGroupsAdmin.Services.Email;
 
 namespace TelegramGroupsAdmin.Services;
 
-public class AuthService : IAuthService
+public class AuthService(
+    UserRepository userRepository,
+    VerificationTokenRepository verificationTokenRepository,
+    IAuditService auditLog,
+    ITotpService totpService,
+    IPasswordHasher passwordHasher,
+    IEmailService emailService,
+    IOptions<AppOptions> appOptions,
+    ILogger<AuthService> logger)
+    : IAuthService
 {
-    private readonly UserRepository _userRepository;
-    private readonly ITotpProtectionService _totpProtection;
-    private readonly ILogger<AuthService> _logger;
-    private const int Pbkdf2IterationCount = 100000;
-    private const int Pbkdf2SubkeyLength = 32;
-    private const int SaltSize = 16;
-
-    public AuthService(
-        UserRepository userRepository,
-        ITotpProtectionService totpProtection,
-        ILogger<AuthService> logger)
-    {
-        _userRepository = userRepository;
-        _totpProtection = totpProtection;
-        _logger = logger;
-    }
+    private readonly AppOptions _appOptions = appOptions.Value;
 
     public async Task<AuthResult> LoginAsync(string email, string password, CancellationToken ct = default)
     {
-        var user = await _userRepository.GetByEmailAsync(email, ct);
+        var user = await userRepository.GetByEmailAsync(email, ct);
         if (user == null)
         {
-            _logger.LogWarning("Login attempt for non-existent email: {Email}", email);
-            return new AuthResult(false, null, null, null, false, "Invalid email or password");
+            logger.LogWarning("Login attempt for non-existent email: {Email}", email);
+
+            // Audit log - failed login (no user ID available)
+            await auditLog.LogEventAsync(
+                AuditEventType.UserLoginFailed,
+                actorUserId: null,
+                targetUserId: null,
+                value: $"Non-existent email: {email}",
+                ct: ct);
+
+            return new AuthResult(false, null, null, null, false, false, "Invalid email or password");
         }
 
         if (!user.IsActive)
         {
-            _logger.LogWarning("Login attempt for inactive user: {UserId}", user.Id);
-            return new AuthResult(false, null, null, null, false, "Account is inactive");
+            logger.LogWarning("Login attempt for inactive user: {UserId}", user.Id);
+
+            // Audit log - failed login (inactive account)
+            await auditLog.LogEventAsync(
+                AuditEventType.UserLoginFailed,
+                actorUserId: user.Id,
+                targetUserId: user.Id,
+                value: "Account inactive",
+                ct: ct);
+
+            return new AuthResult(false, null, null, null, false, false, "Account is inactive");
         }
 
-        if (!VerifyPassword(password, user.PasswordHash))
+        if (!passwordHasher.VerifyPassword(password, user.PasswordHash))
         {
-            _logger.LogWarning("Invalid password for user: {UserId}", user.Id);
-            return new AuthResult(false, null, null, null, false, "Invalid email or password");
+            logger.LogWarning("Invalid password for user: {UserId}", user.Id);
+
+            // Audit log - failed login (wrong password)
+            await auditLog.LogEventAsync(
+                AuditEventType.UserLoginFailed,
+                actorUserId: user.Id,
+                targetUserId: user.Id,
+                value: "Invalid password",
+                ct: ct);
+
+            return new AuthResult(false, null, null, null, false, false, "Invalid email or password");
+        }
+
+        // Check if email is verified
+        if (!user.EmailVerified)
+        {
+            logger.LogWarning("Login attempt for unverified email: {UserId}", user.Id);
+
+            // Audit log - failed login (email not verified)
+            await auditLog.LogEventAsync(
+                AuditEventType.UserLoginFailed,
+                actorUserId: user.Id,
+                targetUserId: user.Id,
+                value: "Email not verified",
+                ct: ct);
+
+            return new AuthResult(false, null, null, null, false, false, "Please verify your email before logging in. Check your inbox for the verification link.");
         }
 
         // Update last login timestamp
-        await _userRepository.UpdateLastLoginAsync(user.Id, ct);
+        await userRepository.UpdateLastLoginAsync(user.Id, ct);
+
+        // Audit log - successful login
+        await auditLog.LogEventAsync(
+            AuditEventType.UserLogin,
+            actorUserId: user.Id,
+            targetUserId: user.Id,
+            value: user.TotpEnabled ? "Login (requires TOTP)" : "Login successful",
+            ct: ct);
 
         // If TOTP is enabled, require verification
         if (user.TotpEnabled)
         {
-            return new AuthResult(true, user.Id, user.Email, user.PermissionLevel, true, null);
+            return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, true, null);
         }
 
-        return new AuthResult(true, user.Id, user.Email, user.PermissionLevel, false, null);
+        return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, false, false, null);
     }
 
     public async Task<AuthResult> VerifyTotpAsync(string userId, string code, CancellationToken ct = default)
     {
-        var user = await _userRepository.GetByIdAsync(userId, ct);
-        if (user == null || !user.TotpEnabled || string.IsNullOrEmpty(user.TotpSecret))
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is null)
         {
-            return new AuthResult(false, null, null, null, false, "TOTP not enabled");
+            return new AuthResult(false, null, null, null, false, false, "User not found");
         }
 
-        // Decrypt TOTP secret
-        var totpSecret = _totpProtection.Unprotect(user.TotpSecret);
-        var totp = new Totp(Base32Encoding.ToBytes(totpSecret));
-
-        if (!totp.VerifyTotp(code, out _, new VerificationWindow(2, 2)))
+        var isValid = await totpService.VerifyTotpCodeAsync(userId, code, ct);
+        if (!isValid)
         {
-            _logger.LogWarning("Invalid TOTP code for user: {UserId}", userId);
-            return new AuthResult(false, null, null, null, false, "Invalid verification code");
+            return new AuthResult(false, null, null, null, false, false, "Invalid verification code");
         }
 
-        await _userRepository.UpdateLastLoginAsync(userId, ct);
-        return new AuthResult(true, user.Id, user.Email, user.PermissionLevel, false, null);
+        await userRepository.UpdateLastLoginAsync(userId, ct);
+        return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, false, null);
     }
 
     public async Task<bool> IsFirstRunAsync(CancellationToken ct = default)
     {
-        return await _userRepository.GetUserCountAsync(ct) == 0;
+        return await userRepository.GetUserCountAsync(ct) == 0;
     }
 
     public async Task<RegisterResult> RegisterAsync(string email, string password, string? inviteToken, CancellationToken ct = default)
@@ -99,7 +140,7 @@ public class AuthService : IAuthService
         {
             // First user gets Owner permissions automatically
             permissionLevel = 2; // Owner
-            _logger.LogInformation("First run detected - creating owner account");
+            logger.LogInformation("First run detected - creating owner account");
         }
         else
         {
@@ -110,15 +151,22 @@ public class AuthService : IAuthService
             }
 
             // Validate invite token
-            var invite = await _userRepository.GetInviteByTokenAsync(inviteToken, ct);
+            var invite = await userRepository.GetInviteByTokenAsync(inviteToken, ct);
             if (invite == null)
             {
                 return new RegisterResult(false, null, "Invalid invite token");
             }
 
-            if (invite.UsedAt != null)
+            switch (invite.Status)
             {
-                return new RegisterResult(false, null, "Invite token already used");
+                case InviteStatus.Used:
+                    return new RegisterResult(false, null, "Invite token already used");
+                case InviteStatus.Revoked:
+                    return new RegisterResult(false, null, "Invite token has been revoked");
+                case InviteStatus.Pending:
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
 
             if (invite.ExpiresAt < DateTimeOffset.UtcNow.ToUnixTimeSeconds())
@@ -127,19 +175,115 @@ public class AuthService : IAuthService
             }
 
             invitedBy = invite.CreatedBy;
-            permissionLevel = 0; // ReadOnly by default
+            permissionLevel = invite.PermissionLevel; // Use permission level from invite
         }
 
-        // Check if email already exists
-        var existing = await _userRepository.GetByEmailAsync(email, ct);
+        // Check if email already exists (including deleted users for reactivation)
+        var existing = await userRepository.GetByEmailIncludingDeletedAsync(email, ct);
         if (existing != null)
         {
-            return new RegisterResult(false, null, "Email already registered");
+            // Only allow reactivation if user is deleted, otherwise block registration
+            if (existing.Status != UserStatus.Deleted)
+            {
+                logger.LogWarning("Registration attempt for existing active/disabled user: {Email}", email);
+                return new RegisterResult(false, null, "Email already registered");
+            }
+
+            // Reactivate deleted user with fresh credentials
+            var reactivatedUser = existing with
+            {
+                PasswordHash = passwordHasher.HashPassword(password),
+                SecurityStamp = Guid.NewGuid().ToString(),
+                PermissionLevel = permissionLevel,
+                InvitedBy = invitedBy,
+                Status = UserStatus.Active,
+                IsActive = true,
+                TotpSecret = null,
+                TotpEnabled = false,
+                ModifiedBy = existing.Id,
+                ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                EmailVerified = isFirstRun, // First user is auto-verified
+                EmailVerificationToken = null, // Deprecated - using verification_tokens table
+                EmailVerificationTokenExpiresAt = null
+            };
+
+            await userRepository.UpdateAsync(reactivatedUser, ct);
+            logger.LogInformation("Reactivated deleted user: {UserId}", existing.Id);
+
+            // Mark invite as used (if not first run)
+            if (!isFirstRun && !string.IsNullOrEmpty(inviteToken))
+            {
+                await userRepository.UseInviteAsync(inviteToken, existing.Id, ct);
+
+                // Audit log - user reactivation via invite
+                await auditLog.LogEventAsync(
+                    AuditEventType.UserRegistered,
+                    actorUserId: existing.Id,
+                    targetUserId: existing.Id,
+                    value: $"Reactivated via invite from {invitedBy}",
+                    ct: ct);
+
+                // Send verification email using verification_tokens table
+                try
+                {
+                    // Generate verification token
+                    var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+                    var verificationToken = new VerificationToken(
+                        Id: 0, // Will be set by database
+                        UserId: existing.Id,
+                        TokenType: TokenType.EmailVerification,
+                        Token: tokenString,
+                        Value: null,
+                        ExpiresAt: DateTimeOffset.UtcNow.AddHours(24).ToUnixTimeSeconds(),
+                        CreatedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                        UsedAt: null
+                    );
+
+                    await verificationTokenRepository.CreateAsync(verificationToken, ct);
+
+                    await emailService.SendTemplatedEmailAsync(
+                        email,
+                        EmailTemplate.EmailVerification,
+                        new Dictionary<string, string>
+                        {
+                            { "VerificationToken", tokenString },
+                            { "BaseUrl", _appOptions.BaseUrl }
+                        },
+                        ct);
+
+                    logger.LogInformation("Sent verification email to {Email}", email);
+
+                    // Audit log - email verification sent
+                    await auditLog.LogEventAsync(
+                        AuditEventType.UserEmailVerificationSent,
+                        actorUserId: null, // System event
+                        targetUserId: existing.Id,
+                        value: email,
+                        ct: ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to send verification email to {Email}", email);
+                    // Don't fail registration if email fails
+                }
+            }
+            else
+            {
+                // Audit log - user reactivation (first run - shouldn't happen but handle it)
+                await auditLog.LogEventAsync(
+                    AuditEventType.UserRegistered,
+                    actorUserId: existing.Id,
+                    targetUserId: existing.Id,
+                    value: "Reactivated (first run)",
+                    ct: ct);
+            }
+
+            return new RegisterResult(true, existing.Id, null);
         }
 
         // Create user
         var userId = Guid.NewGuid().ToString();
-        var passwordHash = HashPassword(password);
+        var passwordHash = passwordHasher.HashPassword(password);
         var securityStamp = Guid.NewGuid().ToString();
 
         var user = new UserRecord(
@@ -153,21 +297,90 @@ public class AuthService : IAuthService
             IsActive: true,
             TotpSecret: null,
             TotpEnabled: false,
+            TotpSetupStartedAt: null,
             CreatedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            LastLoginAt: null
+            LastLoginAt: null,
+            Status: UserStatus.Active,
+            ModifiedBy: null,
+            ModifiedAt: null,
+            EmailVerified: isFirstRun, // First user is auto-verified
+            EmailVerificationToken: null, // Deprecated - using verification_tokens table
+            EmailVerificationTokenExpiresAt: null,
+            PasswordResetToken: null,
+            PasswordResetTokenExpiresAt: null
         );
 
-        await _userRepository.CreateAsync(user, ct);
+        await userRepository.CreateAsync(user, ct);
 
         // Mark invite as used (if not first run)
         if (!isFirstRun && !string.IsNullOrEmpty(inviteToken))
         {
-            await _userRepository.UseInviteAsync(inviteToken, userId, ct);
-            _logger.LogInformation("New user registered: {UserId} via invite from {InviterId}", userId, invitedBy);
+            await userRepository.UseInviteAsync(inviteToken, userId, ct);
+            logger.LogInformation("New user registered: {UserId} via invite from {InviterId}", userId, invitedBy);
+
+            // Audit log - user registration via invite
+            await auditLog.LogEventAsync(
+                AuditEventType.UserRegistered,
+                actorUserId: userId,
+                targetUserId: userId,
+                value: $"Registered via invite from {invitedBy}",
+                ct: ct);
+
+            // Send verification email using verification_tokens table (unless first user)
+            try
+            {
+                // Generate verification token
+                var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+                var verificationToken = new VerificationToken(
+                    Id: 0, // Will be set by database
+                    UserId: userId,
+                    TokenType: TokenType.EmailVerification,
+                    Token: tokenString,
+                    Value: null,
+                    ExpiresAt: DateTimeOffset.UtcNow.AddHours(24).ToUnixTimeSeconds(),
+                    CreatedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    UsedAt: null
+                );
+
+                await verificationTokenRepository.CreateAsync(verificationToken, ct);
+
+                await emailService.SendTemplatedEmailAsync(
+                    email,
+                    EmailTemplate.EmailVerification,
+                    new Dictionary<string, string>
+                    {
+                        { "VerificationToken", tokenString },
+                        { "BaseUrl", _appOptions.BaseUrl }
+                    },
+                    ct);
+
+                logger.LogInformation("Sent verification email to {Email}", email);
+
+                // Audit log - email verification sent
+                await auditLog.LogEventAsync(
+                    AuditEventType.UserEmailVerificationSent,
+                    actorUserId: null, // System event
+                    targetUserId: userId,
+                    value: email,
+                    ct: ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to send verification email to {Email}", email);
+                // Don't fail registration if email fails
+            }
         }
         else
         {
-            _logger.LogInformation("Owner account created: {UserId} (first run)", userId);
+            logger.LogInformation("Owner account created: {UserId} (first run)", userId);
+
+            // Audit log - owner account creation (first run)
+            await auditLog.LogEventAsync(
+                AuditEventType.UserRegistered,
+                actorUserId: userId,
+                targetUserId: userId,
+                value: "First user (Owner)",
+                ct: ct);
         }
 
         return new RegisterResult(true, userId, null);
@@ -175,198 +388,270 @@ public class AuthService : IAuthService
 
     public async Task<TotpSetupResult> EnableTotpAsync(string userId, CancellationToken ct = default)
     {
-        var user = await _userRepository.GetByIdAsync(userId, ct);
-        if (user == null)
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is null)
         {
             throw new InvalidOperationException("User not found");
         }
 
-        // Generate new TOTP secret
-        var secret = Base32Encoding.ToString(KeyGeneration.GenerateRandomKey(20));
-
-        // Generate QR code URI
-        var qrCodeUri = $"otpauth://totp/TgSpam:{Uri.EscapeDataString(user.Email)}?secret={secret}&issuer=TgSpam";
-
-        // Encrypt and store secret (not enabled yet)
-        var protectedSecret = _totpProtection.Protect(secret);
-        await _userRepository.UpdateTotpSecretAsync(userId, protectedSecret, ct);
-
-        return new TotpSetupResult(secret, qrCodeUri, FormatSecretForManualEntry(secret));
+        return await totpService.SetupTotpAsync(userId, user.Email, ct);
     }
 
     public async Task<bool> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken ct = default)
     {
-        var user = await _userRepository.GetByIdAsync(userId, ct);
-        if (user == null || string.IsNullOrEmpty(user.TotpSecret))
-        {
-            return false;
-        }
-
-        // Decrypt TOTP secret for verification
-        var totpSecret = _totpProtection.Unprotect(user.TotpSecret);
-        var totp = new Totp(Base32Encoding.ToBytes(totpSecret));
-
-        if (!totp.VerifyTotp(code, out _, new VerificationWindow(2, 2)))
-        {
-            _logger.LogWarning("Invalid TOTP verification code during setup for user: {UserId}", userId);
-            return false;
-        }
-
-        // Enable TOTP
-        await _userRepository.EnableTotpAsync(userId, ct);
-
-        // Update security stamp
-        await _userRepository.UpdateSecurityStampAsync(userId, ct);
-
-        _logger.LogInformation("TOTP enabled for user: {UserId}", userId);
-        return true;
+        return await totpService.VerifyAndEnableTotpAsync(userId, code, ct);
     }
 
     public async Task<bool> DisableTotpAsync(string userId, string password, CancellationToken ct = default)
     {
-        var user = await _userRepository.GetByIdAsync(userId, ct);
-        if (user == null)
-        {
-            return false;
-        }
-
-        // Verify password before disabling TOTP
-        if (!VerifyPassword(password, user.PasswordHash))
-        {
-            _logger.LogWarning("Invalid password attempt when disabling TOTP for user: {UserId}", userId);
-            return false;
-        }
-
-        await _userRepository.DisableTotpAsync(userId, ct);
-        await _userRepository.UpdateSecurityStampAsync(userId, ct);
-
-        _logger.LogInformation("TOTP disabled for user: {UserId}", userId);
-        return true;
+        return await totpService.DisableTotpAsync(userId, password, ct);
     }
 
     public async Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(string userId, CancellationToken ct = default)
     {
-        var codes = new List<string>();
-
-        // Generate 8 recovery codes
-        for (int i = 0; i < 8; i++)
-        {
-            var code = GenerateRecoveryCode();
-            codes.Add(code);
-
-            var codeHash = HashRecoveryCode(code);
-            await _userRepository.CreateRecoveryCodeAsync(userId, codeHash, ct);
-        }
-
-        _logger.LogInformation("Generated {Count} recovery codes for user: {UserId}", codes.Count, userId);
-        return codes.AsReadOnly();
+        return await totpService.GenerateRecoveryCodesAsync(userId, ct);
     }
 
     public async Task<AuthResult> UseRecoveryCodeAsync(string userId, string code, CancellationToken ct = default)
     {
-        var user = await _userRepository.GetByIdAsync(userId, ct);
-        if (user == null)
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is null)
         {
-            return new AuthResult(false, null, null, null, false, "Invalid recovery code");
+            return new AuthResult(false, null, null, null, false, false, "Invalid recovery code");
         }
 
-        var codeHash = HashRecoveryCode(code);
-        var isValid = await _userRepository.UseRecoveryCodeAsync(userId, codeHash, ct);
+        var isValid = await totpService.UseRecoveryCodeAsync(userId, code, ct);
 
         if (!isValid)
         {
-            _logger.LogWarning("Invalid recovery code attempt for user: {UserId}", userId);
-            return new AuthResult(false, null, null, null, false, "Invalid recovery code");
+            return new AuthResult(false, null, null, null, false, false, "Invalid recovery code");
         }
 
-        await _userRepository.UpdateLastLoginAsync(userId, ct);
-        _logger.LogInformation("Recovery code used for user: {UserId}", userId);
+        await userRepository.UpdateLastLoginAsync(userId, ct);
 
-        return new AuthResult(true, user.Id, user.Email, user.PermissionLevel, false, null);
+        return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, false, null);
     }
 
-    public Task LogoutAsync(string userId, CancellationToken ct = default)
+    public async Task LogoutAsync(string userId, CancellationToken ct = default)
     {
-        _logger.LogInformation("User logged out: {UserId}", userId);
-        return Task.CompletedTask;
+        logger.LogInformation("User logged out: {UserId}", userId);
+
+        // Audit log
+        await auditLog.LogEventAsync(
+            AuditEventType.UserLogout,
+            actorUserId: userId,
+            targetUserId: userId,
+            value: "User logged out",
+            ct: ct);
     }
 
-    private static string HashPassword(string password)
+    public async Task<bool> ChangePasswordAsync(string userId, string currentPassword, string newPassword, CancellationToken ct = default)
     {
-        var salt = RandomNumberGenerator.GetBytes(SaltSize);
-        var subkey = KeyDerivation.Pbkdf2(
-            password: password,
-            salt: salt,
-            prf: KeyDerivationPrf.HMACSHA256,
-            iterationCount: Pbkdf2IterationCount,
-            numBytesRequested: Pbkdf2SubkeyLength
-        );
+        var user = await userRepository.GetByIdAsync(userId, ct);
+        if (user is null)
+        {
+            logger.LogWarning("Password change attempt for non-existent user: {UserId}", userId);
+            return false;
+        }
 
-        var outputBytes = new byte[1 + SaltSize + Pbkdf2SubkeyLength];
-        outputBytes[0] = 0x01; // Version marker
-        Buffer.BlockCopy(salt, 0, outputBytes, 1, SaltSize);
-        Buffer.BlockCopy(subkey, 0, outputBytes, 1 + SaltSize, Pbkdf2SubkeyLength);
+        // Verify current password
+        if (!passwordHasher.VerifyPassword(currentPassword, user.PasswordHash))
+        {
+            logger.LogWarning("Invalid current password during password change for user: {UserId}", userId);
+            return false;
+        }
 
-        return Convert.ToBase64String(outputBytes);
+        // Hash new password
+        var newPasswordHash = passwordHasher.HashPassword(newPassword);
+
+        // Update password
+        var updatedUser = user with
+        {
+            PasswordHash = newPasswordHash,
+            SecurityStamp = Guid.NewGuid().ToString(),
+            ModifiedBy = userId,
+            ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+        };
+
+        await userRepository.UpdateAsync(updatedUser, ct);
+
+        logger.LogInformation("Password changed for user: {UserId}", userId);
+
+        // Audit log
+        await auditLog.LogEventAsync(
+            AuditEventType.UserPasswordChanged,
+            actorUserId: userId,
+            targetUserId: userId,
+            value: "Password changed",
+            ct: ct);
+
+        return true;
     }
 
-    private static bool VerifyPassword(string password, string hashedPassword)
+    public async Task<bool> ResendVerificationEmailAsync(string email, CancellationToken ct = default)
     {
+        var user = await userRepository.GetByEmailAsync(email, ct);
+        if (user == null)
+        {
+            logger.LogWarning("Resend verification attempt for non-existent email: {Email}", email);
+            return false; // Don't reveal if email exists
+        }
+
+        // If already verified, no need to resend
+        if (user.EmailVerified)
+        {
+            logger.LogInformation("Resend verification attempt for already verified user: {UserId}", user.Id);
+            return false;
+        }
+
+        // Send verification email using verification_tokens table
         try
         {
-            var decodedHash = Convert.FromBase64String(hashedPassword);
-
-            if (decodedHash.Length != 1 + SaltSize + Pbkdf2SubkeyLength || decodedHash[0] != 0x01)
-            {
-                return false;
-            }
-
-            var salt = new byte[SaltSize];
-            Buffer.BlockCopy(decodedHash, 1, salt, 0, SaltSize);
-
-            var expectedSubkey = new byte[Pbkdf2SubkeyLength];
-            Buffer.BlockCopy(decodedHash, 1 + SaltSize, expectedSubkey, 0, Pbkdf2SubkeyLength);
-
-            var actualSubkey = KeyDerivation.Pbkdf2(
-                password: password,
-                salt: salt,
-                prf: KeyDerivationPrf.HMACSHA256,
-                iterationCount: Pbkdf2IterationCount,
-                numBytesRequested: Pbkdf2SubkeyLength
+            // Generate new verification token
+            var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+            var verificationToken = new VerificationToken(
+                Id: 0, // Will be set by database
+                UserId: user.Id,
+                TokenType: TokenType.EmailVerification,
+                Token: tokenString,
+                Value: null,
+                ExpiresAt: DateTimeOffset.UtcNow.AddHours(24).ToUnixTimeSeconds(),
+                CreatedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                UsedAt: null
             );
 
-            return CryptographicOperations.FixedTimeEquals(actualSubkey, expectedSubkey);
+            await verificationTokenRepository.CreateAsync(verificationToken, ct);
+
+            await emailService.SendTemplatedEmailAsync(
+                email,
+                EmailTemplate.EmailVerification,
+                new Dictionary<string, string>
+                {
+                    { "VerificationToken", tokenString },
+                    { "BaseUrl", _appOptions.BaseUrl }
+                },
+                ct);
+
+            logger.LogInformation("Resent verification email to {Email}", email);
+
+            // Audit log
+            await auditLog.LogEventAsync(
+                AuditEventType.UserEmailVerificationSent,
+                actorUserId: null, // System event
+                targetUserId: user.Id,
+                value: $"Resent to {email}",
+                ct: ct);
+
+            return true;
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogError(ex, "Failed to resend verification email to {Email}", email);
             return false;
         }
     }
 
-    private static string GenerateRecoveryCode()
+    public async Task<bool> RequestPasswordResetAsync(string email, CancellationToken ct = default)
     {
-        var bytes = RandomNumberGenerator.GetBytes(8);
-        return Convert.ToHexString(bytes).ToLowerInvariant();
-    }
-
-    private static string HashRecoveryCode(string code)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(code.ToLowerInvariant()));
-        return Convert.ToBase64String(bytes);
-    }
-
-    private static string FormatSecretForManualEntry(string secret)
-    {
-        // Format as groups of 4 characters for easier manual entry
-        var formatted = new StringBuilder();
-        for (int i = 0; i < secret.Length; i++)
+        var user = await userRepository.GetByEmailAsync(email, ct);
+        if (user is null)
         {
-            if (i > 0 && i % 4 == 0)
-            {
-                formatted.Append(' ');
-            }
-            formatted.Append(secret[i]);
+            logger.LogWarning("Password reset requested for non-existent email: {Email}", email);
+            return false; // Don't reveal if email exists
         }
-        return formatted.ToString();
+
+        // Generate password reset token
+        var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var resetToken = new VerificationToken(
+            Id: 0, // Will be set by database
+            UserId: user.Id,
+            TokenType: TokenType.PasswordReset,
+            Token: tokenString,
+            Value: null,
+            ExpiresAt: DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds(), // 1 hour expiry for password reset
+            CreatedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            UsedAt: null
+        );
+
+        await verificationTokenRepository.CreateAsync(resetToken, ct);
+
+        // Send password reset email
+        try
+        {
+            var resetLink = $"{_appOptions.BaseUrl}/reset-password?token={Uri.EscapeDataString(tokenString)}";
+
+            await emailService.SendTemplatedEmailAsync(
+                email,
+                EmailTemplate.PasswordReset,
+                new Dictionary<string, string>
+                {
+                    { "resetLink", resetLink },
+                    { "expiryMinutes", "60" }
+                },
+                ct);
+
+            logger.LogInformation("Password reset email sent to {Email}", email);
+
+            // Audit log
+            await auditLog.LogEventAsync(
+                AuditEventType.UserPasswordResetRequested,
+                actorUserId: null, // System event
+                targetUserId: user.Id,
+                value: email,
+                ct: ct);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to send password reset email to {Email}", email);
+            return false;
+        }
+    }
+
+    public async Task<bool> ResetPasswordAsync(string token, string newPassword, CancellationToken ct = default)
+    {
+        // Validate token
+        var resetToken = await verificationTokenRepository.GetValidTokenAsync(token, TokenType.PasswordReset, ct);
+        if (resetToken is null)
+        {
+            logger.LogWarning("Invalid or expired password reset token attempted");
+            return false;
+        }
+
+        // Get user
+        var user = await userRepository.GetByIdAsync(resetToken.UserId, ct);
+        if (user is null)
+        {
+            logger.LogWarning("Password reset token references non-existent user {UserId}", resetToken.UserId);
+            return false;
+        }
+
+        // Update password
+        var newPasswordHash = passwordHasher.HashPassword(newPassword);
+        var updatedUser = user with
+        {
+            PasswordHash = newPasswordHash,
+            SecurityStamp = Guid.NewGuid().ToString(),
+            ModifiedBy = user.Id,
+            ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+        };
+
+        await userRepository.UpdateAsync(updatedUser, ct);
+
+        // Mark token as used
+        await verificationTokenRepository.MarkAsUsedAsync(token, ct);
+
+        logger.LogInformation("Password reset for user {UserId}", user.Id);
+
+        // Audit log
+        await auditLog.LogEventAsync(
+            AuditEventType.UserPasswordChanged,
+            actorUserId: user.Id,
+            targetUserId: user.Id,
+            value: "Password reset via email",
+            ct: ct);
+
+        return true;
     }
 }

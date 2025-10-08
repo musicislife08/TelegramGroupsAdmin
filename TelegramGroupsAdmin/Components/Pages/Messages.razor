@@ -1,0 +1,310 @@
+@page "/messages"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.JSInterop
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Data.Models
+@using TelegramGroupsAdmin.Data.Repositories
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Services.BackgroundServices
+@using TelegramGroupsAdmin.Components.Shared
+@using static TelegramGroupsAdmin.Components.Shared.MessageFilters
+@inject MessageHistoryRepository MessageRepository
+@inject IMessageExportService ExportService
+@inject IJSRuntime JS
+@inject IDialogService DialogService
+@inject IMessageHistoryService MessageHistoryService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ILogger<Messages> Logger
+@attribute [Authorize]
+@implements IDisposable
+
+<PageTitle>Messages - TelegramGroupsAdmin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Message History</MudText>
+
+    @* Filters *@
+    <MessageFilters Filters="_filterState" OnFiltersChanged="ApplyFilters" />
+
+    @* Actions Bar *@
+    <MudPaper Class="pa-3 mb-4" Elevation="1">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadMessagesAsync"
+                           Disabled="_loading">
+                    Refresh
+                </MudButton>
+                @* Export buttons - Admin+ only (permission level >= 1) *@
+                @if (_userPermissionLevel >= 1)
+                {
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Secondary"
+                               StartIcon="@Icons.Material.Filled.Download"
+                               OnClick="ExportToCsvAsync"
+                               Disabled="_loading || _filteredMessages.Count == 0">
+                        Export CSV
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Secondary"
+                               StartIcon="@Icons.Material.Filled.DataObject"
+                               OnClick="ExportToJsonAsync"
+                               Disabled="_loading || _filteredMessages.Count == 0">
+                        Export JSON
+                    </MudButton>
+                }
+            </MudStack>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Last updated: @_lastUpdate.ToString("HH:mm:ss")
+            </MudText>
+        </MudStack>
+    </MudPaper>
+
+    @* Loading State *@
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    @* Message List *@
+    @if (_filteredMessages.Any())
+    {
+        <MudVirtualize Items="_filteredMessages" Context="message" OverscanCount="10">
+            <MessageBubble Message="message"
+                           SpamCheck="@GetSpamCheck(message.MessageId)"
+                           EditCount="@GetEditCount(message.MessageId)"
+                           OnImageClick="HandleImageClick"
+                           OnViewEdits="HandleViewEdits" />
+        </MudVirtualize>
+    }
+    else if (!_loading)
+    {
+        <MudPaper Class="pa-8" Elevation="0">
+            <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Secondary" />
+                <MudText Typo="Typo.h6" Color="Color.Secondary">No messages found</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    @if (HasActiveFilters())
+                    {
+                        <text>Try adjusting your filters or refresh the data.</text>
+                    }
+                    else
+                    {
+                        <text>HistoryBot hasn't cached any messages yet.</text>
+                    }
+                </MudText>
+            </MudStack>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private List<MessageRecord> _allMessages = new();
+    private List<MessageRecord> _filteredMessages = new();
+    private Dictionary<long, SpamCheckRecord> _spamChecks = new();
+    private Dictionary<long, int> _editCounts = new();
+    private MessageFilterState _filterState = new();
+    private bool _loading = true;
+    private DateTime _lastUpdate = DateTime.Now;
+    private int _userPermissionLevel = 0; // Default to ReadOnly
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get user permission level
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
+            if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
+            {
+                _userPermissionLevel = level;
+            }
+        }
+
+        // Subscribe to real-time updates
+        MessageHistoryService.OnNewMessage += HandleNewMessage;
+
+        await LoadMessagesAsync();
+    }
+
+    public void Dispose()
+    {
+        // Unsubscribe from events
+        MessageHistoryService.OnNewMessage -= HandleNewMessage;
+    }
+
+    private async void HandleNewMessage(MessageRecord message)
+    {
+        // CRITICAL: Must use InvokeAsync because HistoryBot runs on background thread
+        await InvokeAsync(async () =>
+        {
+            // Add to our list
+            _allMessages.Insert(0, message); // Add at beginning (most recent first)
+
+            // Load spam check for this new message if it exists
+            var messageIds = new[] { message.MessageId };
+            var newSpamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
+            foreach (var kvp in newSpamChecks)
+            {
+                _spamChecks[kvp.Key] = kvp.Value;
+            }
+
+            // Load edit count for this message
+            var newEditCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+            foreach (var kvp in newEditCounts)
+            {
+                _editCounts[kvp.Key] = kvp.Value;
+            }
+
+            // Reapply filters
+            ApplyFilters();
+        });
+    }
+
+    private async Task LoadMessagesAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Load recent messages (last 500)
+            _allMessages = await MessageRepository.GetRecentMessagesAsync(500);
+
+            // Load spam checks and edit counts for these messages
+            if (_allMessages.Any())
+            {
+                var messageIds = _allMessages.Select(m => m.MessageId);
+                _spamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
+                _editCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+            }
+
+            _lastUpdate = DateTime.Now;
+
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected error loading messages");
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        _filteredMessages = _allMessages
+            .Where(m => _filterState.Matches(m, GetSpamCheck(m.MessageId)))
+            .ToList();
+
+        StateHasChanged();
+    }
+
+    private SpamCheckRecord? GetSpamCheck(long messageId)
+    {
+        _spamChecks.TryGetValue(messageId, out var check);
+        return check;
+    }
+
+    private int GetEditCount(long messageId)
+    {
+        _editCounts.TryGetValue(messageId, out var count);
+        return count;
+    }
+
+    private async Task ExportToCsvAsync()
+    {
+        try
+        {
+            var spamChecks = new Dictionary<long, SpamCheckRecord?>();
+            var csvBytes = await ExportService.ExportToCsvAsync(_filteredMessages, spamChecks);
+
+            var fileName = $"messages_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            await DownloadFileAsync(fileName, csvBytes);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected error exporting messages to CSV");
+        }
+    }
+
+    private async Task ExportToJsonAsync()
+    {
+        try
+        {
+            var spamChecks = new Dictionary<long, SpamCheckRecord?>();
+            var jsonBytes = await ExportService.ExportToJsonAsync(_filteredMessages, spamChecks);
+
+            var fileName = $"messages_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            await DownloadFileAsync(fileName, jsonBytes);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected error exporting messages to JSON");
+        }
+    }
+
+    private async Task DownloadFileAsync(string fileName, byte[] data)
+    {
+        // Use native Blazor streaming - more efficient than base64 encoding
+        var fileStream = new MemoryStream(data);
+        using var streamRef = new DotNetStreamReference(stream: fileStream);
+        await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
+    }
+
+    private async Task HandleImageClick(MessageRecord message)
+    {
+        var parameters = new DialogParameters<ImageViewerDialog>
+        {
+            { x => x.Message, message }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseButton = true,
+            CloseOnEscapeKey = true
+        };
+
+        await DialogService.ShowAsync<ImageViewerDialog>("Image Viewer", parameters, options);
+    }
+
+    private async Task HandleViewEdits(MessageRecord message)
+    {
+        var parameters = new DialogParameters<EditHistoryDialog>
+        {
+            { x => x.Message, message }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseButton = true,
+            CloseOnEscapeKey = true
+        };
+
+        await DialogService.ShowAsync<EditHistoryDialog>("Edit History", parameters, options);
+    }
+
+    private bool HasActiveFilters()
+    {
+        return !string.IsNullOrEmpty(_filterState.SearchText)
+               || !string.IsNullOrEmpty(_filterState.UserName)
+               || !string.IsNullOrEmpty(_filterState.ChatName)
+               || _filterState.SpamFilter != SpamFilterOption.All
+               || _filterState.StartDate.HasValue
+               || _filterState.EndDate.HasValue
+               || _filterState.HasImages.HasValue
+               || _filterState.HasLinks.HasValue
+               || _filterState.HasEdits.HasValue;
+    }
+}

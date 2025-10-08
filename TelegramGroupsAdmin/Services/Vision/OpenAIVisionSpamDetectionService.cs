@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
@@ -69,6 +70,18 @@ public class OpenAIVisionSpamDetectionService : IVisionSpamDetectionService
                 "https://api.openai.com/v1/chat/completions",
                 request,
                 ct);
+
+            // Handle 429 Too Many Requests (rate limiting)
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                var retryAfter = response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 60;
+                _logger.LogWarning(
+                    "OpenAI rate limit hit. Retry after {RetryAfter} seconds",
+                    retryAfter);
+
+                // Return non-spam to fail open (don't block legitimate messages due to rate limits)
+                return new CheckResult(false, $"Rate limit exceeded, retry after {retryAfter}s", 0);
+            }
 
             if (!response.IsSuccessStatusCode)
             {

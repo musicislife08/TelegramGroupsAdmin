@@ -30,12 +30,34 @@ public class CleanupBackgroundService : BackgroundService
             {
                 await Task.Delay(TimeSpan.FromMinutes(_options.CleanupIntervalMinutes), stoppingToken);
 
-                var deleted = await _repository.CleanupExpiredAsync();
+                var (deleted, imagePaths) = await _repository.CleanupExpiredAsync();
+
+                // Delete image files from disk
+                var imageDeletedCount = 0;
+                var basePath = _options.ImageStoragePath;
+                foreach (var relativePath in imagePaths)
+                {
+                    try
+                    {
+                        var fullPath = Path.Combine(basePath, relativePath);
+                        if (File.Exists(fullPath))
+                        {
+                            File.Delete(fullPath);
+                            imageDeletedCount++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete image file: {Path}", relativePath);
+                    }
+                }
+
                 var stats = await _repository.GetStatsAsync();
 
                 _logger.LogInformation(
-                    "Cleanup complete: {Deleted} expired messages removed. Stats: {Messages} messages, {Users} users, {Photos} photos, oldest: {Oldest}",
+                    "Cleanup complete: {Deleted} expired messages removed, {ImagesDeleted} images deleted. Stats: {Messages} messages, {Users} users, {Photos} photos, oldest: {Oldest}",
                     deleted,
+                    imageDeletedCount,
                     stats.TotalMessages,
                     stats.UniqueUsers,
                     stats.PhotoCount,

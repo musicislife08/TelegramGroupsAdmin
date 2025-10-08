@@ -1,8 +1,11 @@
 namespace TelegramGroupsAdmin.Configuration;
 
-public class MessageHistoryOptions
+public sealed record MessageHistoryOptions
 {
-    public string DatabasePath { get; set; } = "/data/message_history.db";
-    public int RetentionHours { get; set; } = 24;
-    public int CleanupIntervalMinutes { get; set; } = 5;
+    public bool Enabled { get; init; } = true; // Enable/disable HistoryBot service
+    public string DatabasePath { get; init; } = "/data/message_history.db";
+    public int RetentionHours { get; init; } = 720; // 30 days
+    public int CleanupIntervalMinutes { get; init; } = 1440; // 24 hours (once per day)
+    public string ImageStoragePath { get; init; } = "/data/images";
+    public int ThumbnailSize { get; init; } = 200; // 200x200 pixels
 }

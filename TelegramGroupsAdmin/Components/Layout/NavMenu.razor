@@ -1,22 +1,47 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Auth
+@inject AuthenticationStateProvider AuthStateProvider
 
 <MudNavMenu>
-    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
-    <MudNavLink Href="/messages" Icon="@Icons.Material.Filled.Message">Messages</MudNavLink>
-    <MudNavLink Href="/audit" Icon="@Icons.Material.Filled.Security">Audit Log</MudNavLink>
-    <MudNavLink Href="/users" Icon="@Icons.Material.Filled.People">Users</MudNavLink>
-    <MudNavLink Href="/invite" Icon="@Icons.Material.Filled.PersonAdd">Invite</MudNavLink>
-    <MudDivider Class="my-2" />
-    <MudNavLink Href="/profile" Icon="@Icons.Material.Filled.AccountCircle">Profile</MudNavLink>
-    <AuthorizeView>
-        <Authorized>
-            <MudNavLink OnClick="LogoutAsync" Icon="@Icons.Material.Filled.Logout">Logout</MudNavLink>
-        </Authorized>
-    </AuthorizeView>
+    @if (_isAuthenticated)
+    {
+        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+        <MudNavLink Href="/messages" Icon="@Icons.Material.Filled.Message">Messages</MudNavLink>
+
+        @if (_isAdminOrOwner)
+        {
+            <MudNavLink Href="/audit" Icon="@Icons.Material.Filled.Security">Audit Log</MudNavLink>
+            <MudNavLink Href="/users" Icon="@Icons.Material.Filled.People">Users</MudNavLink>
+        }
+
+        <MudDivider Class="my-2" />
+        <MudNavLink Href="/profile" Icon="@Icons.Material.Filled.AccountCircle">Profile</MudNavLink>
+        <MudNavLink OnClick="LogoutAsync" Icon="@Icons.Material.Filled.Logout">Logout</MudNavLink>
+    }
 </MudNavMenu>
 
 @code {
     [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private bool _isAuthenticated;
+    private bool _isAdminOrOwner;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        _isAuthenticated = user.Identity?.IsAuthenticated ?? false;
+
+        if (_isAuthenticated)
+        {
+            var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
+            if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
+            {
+                _isAdminOrOwner = level >= 1; // Admin=1, Owner=2
+            }
+        }
+    }
 
     private void LogoutAsync()
     {

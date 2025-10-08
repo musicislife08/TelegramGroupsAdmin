@@ -6,6 +6,15 @@ using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Data.Repositories;
 
+// CRITICAL DAPPER/DTO CONVENTION:
+// All SQL SELECT statements MUST use raw snake_case column names without aliases.
+// DTOs use positional record constructors that are CASE-SENSITIVE.
+//
+// ✅ CORRECT:   SELECT user_id, email FROM users
+// ❌ INCORRECT: SELECT user_id AS UserId, email AS Email FROM users
+//
+// See MessageRecord.cs for detailed explanation.
+
 public class UserRepository
 {
     private readonly string _connectionString;
@@ -33,17 +42,38 @@ public class UserRepository
         var normalizedEmail = email.ToUpperInvariant();
 
         const string sql = """
-            SELECT id AS Id, email AS Email, normalized_email AS NormalizedEmail,
-                   password_hash AS PasswordHash, security_stamp AS SecurityStamp,
-                   permission_level AS PermissionLevel, invited_by AS InvitedBy,
-                   is_active AS IsActive, totp_secret AS TotpSecret,
-                   totp_enabled AS TotpEnabled, created_at AS CreatedAt,
-                   last_login_at AS LastLoginAt
+            SELECT id, email, normalized_email, password_hash, security_stamp,
+                   permission_level, invited_by, is_active, totp_secret,
+                   totp_enabled, created_at, last_login_at, status,
+                   modified_by, modified_at, email_verified, email_verification_token,
+                   email_verification_token_expires_at, password_reset_token,
+                   password_reset_token_expires_at, totp_setup_started_at
             FROM users
-            WHERE normalized_email = @NormalizedEmail AND is_active = 1;
+            WHERE normalized_email = @NormalizedEmail AND status = 1;
             """;
 
-        return await connection.QueryFirstOrDefaultAsync<UserRecord>(sql, new { NormalizedEmail = normalizedEmail });
+        var dto = await connection.QueryFirstOrDefaultAsync<UserRecordDto>(sql, new { NormalizedEmail = normalizedEmail });
+        return dto?.ToUserRecord();
+    }
+
+    public async Task<UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken ct = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+        var normalizedEmail = email.ToUpperInvariant();
+
+        const string sql = """
+            SELECT id, email, normalized_email, password_hash, security_stamp,
+                   permission_level, invited_by, is_active, totp_secret,
+                   totp_enabled, created_at, last_login_at, status,
+                   modified_by, modified_at, email_verified, email_verification_token,
+                   email_verification_token_expires_at, password_reset_token,
+                   password_reset_token_expires_at, totp_setup_started_at
+            FROM users
+            WHERE normalized_email = @NormalizedEmail;
+            """;
+
+        var dto = await connection.QueryFirstOrDefaultAsync<UserRecordDto>(sql, new { NormalizedEmail = normalizedEmail });
+        return dto?.ToUserRecord();
     }
 
     public async Task<UserRecord?> GetByIdAsync(string userId, CancellationToken ct = default)
@@ -51,17 +81,18 @@ public class UserRepository
         await using var connection = new SqliteConnection(_connectionString);
 
         const string sql = """
-            SELECT id AS Id, email AS Email, normalized_email AS NormalizedEmail,
-                   password_hash AS PasswordHash, security_stamp AS SecurityStamp,
-                   permission_level AS PermissionLevel, invited_by AS InvitedBy,
-                   is_active AS IsActive, totp_secret AS TotpSecret,
-                   totp_enabled AS TotpEnabled, created_at AS CreatedAt,
-                   last_login_at AS LastLoginAt
+            SELECT id, email, normalized_email, password_hash, security_stamp,
+                   permission_level, invited_by, is_active, totp_secret,
+                   totp_enabled, created_at, last_login_at, status,
+                   modified_by, modified_at, email_verified, email_verification_token,
+                   email_verification_token_expires_at, password_reset_token,
+                   password_reset_token_expires_at, totp_setup_started_at
             FROM users
             WHERE id = @UserId;
             """;
 
-        return await connection.QueryFirstOrDefaultAsync<UserRecord>(sql, new { UserId = userId });
+        var dto = await connection.QueryFirstOrDefaultAsync<UserRecordDto>(sql, new { UserId = userId });
+        return dto?.ToUserRecord();
     }
 
     public async Task<string> CreateAsync(UserRecord user, CancellationToken ct = default)
@@ -74,11 +105,15 @@ public class UserRepository
             INSERT INTO users (
                 id, email, normalized_email, password_hash, security_stamp,
                 permission_level, invited_by, is_active, totp_secret, totp_enabled,
-                created_at, last_login_at
+                created_at, last_login_at, email_verified, email_verification_token,
+                email_verification_token_expires_at, password_reset_token,
+                password_reset_token_expires_at
             ) VALUES (
                 @Id, @Email, @NormalizedEmail, @PasswordHash, @SecurityStamp,
                 @PermissionLevel, @InvitedBy, @IsActive, @TotpSecret, @TotpEnabled,
-                @CreatedAt, @LastLoginAt
+                @CreatedAt, @LastLoginAt, @EmailVerified, @EmailVerificationToken,
+                @EmailVerificationTokenExpiresAt, @PasswordResetToken,
+                @PasswordResetTokenExpiresAt
             );
             """;
 
@@ -95,7 +130,12 @@ public class UserRepository
             user.TotpSecret,
             user.TotpEnabled,
             user.CreatedAt,
-            user.LastLoginAt
+            user.LastLoginAt,
+            user.EmailVerified,
+            user.EmailVerificationToken,
+            user.EmailVerificationTokenExpiresAt,
+            user.PasswordResetToken,
+            user.PasswordResetTokenExpiresAt
         });
 
         _logger.LogInformation("Created user {Email} with ID {UserId}", user.Email, user.Id);
@@ -137,11 +177,17 @@ public class UserRepository
 
         const string sql = """
             UPDATE users
-            SET totp_secret = @TotpSecret
+            SET totp_secret = @TotpSecret,
+                totp_setup_started_at = @TotpSetupStartedAt
             WHERE id = @UserId;
             """;
 
-        await connection.ExecuteAsync(sql, new { UserId = userId, TotpSecret = totpSecret });
+        await connection.ExecuteAsync(sql, new
+        {
+            UserId = userId,
+            TotpSecret = totpSecret,
+            TotpSetupStartedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+        });
     }
 
     public async Task EnableTotpAsync(string userId, CancellationToken ct = default)
@@ -150,7 +196,8 @@ public class UserRepository
 
         const string sql = """
             UPDATE users
-            SET totp_enabled = 1
+            SET totp_enabled = 1,
+                totp_setup_started_at = NULL
             WHERE id = @UserId;
             """;
 
@@ -174,18 +221,50 @@ public class UserRepository
         _logger.LogInformation("Disabled TOTP for user {UserId}", userId);
     }
 
+    public async Task ResetTotpAsync(string userId, CancellationToken ct = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+
+        // Clear TOTP secret, disable TOTP, and clear setup timestamp
+        const string sql = """
+            UPDATE users
+            SET totp_secret = NULL,
+                totp_enabled = 0,
+                totp_setup_started_at = NULL
+            WHERE id = @UserId;
+            """;
+
+        await connection.ExecuteAsync(sql, new { UserId = userId });
+
+        _logger.LogInformation("Reset TOTP for user {UserId}", userId);
+    }
+
+    public async Task DeleteRecoveryCodesAsync(string userId, CancellationToken ct = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+
+        const string sql = """
+            DELETE FROM recovery_codes
+            WHERE user_id = @UserId;
+            """;
+
+        await connection.ExecuteAsync(sql, new { UserId = userId });
+
+        _logger.LogInformation("Deleted all recovery codes for user {UserId}", userId);
+    }
+
     public async Task<List<RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId)
     {
         await using var connection = new SqliteConnection(_connectionString);
 
         const string sql = """
-            SELECT id AS Id, user_id AS UserId, code_hash AS CodeHash, used_at AS UsedAt
+            SELECT id, user_id, code_hash, used_at
             FROM recovery_codes
             WHERE user_id = @UserId AND used_at IS NULL;
             """;
 
-        var codes = await connection.QueryAsync<RecoveryCodeRecord>(sql, new { UserId = userId });
-        return codes.ToList();
+        var dtos = await connection.QueryAsync<RecoveryCodeRecordDto>(sql, new { UserId = userId });
+        return dtos.Select(dto => dto.ToRecoveryCodeRecord()).ToList();
     }
 
     public async Task AddRecoveryCodesAsync(string userId, List<string> codeHashes)
@@ -238,13 +317,14 @@ public class UserRepository
         await using var connection = new SqliteConnection(_connectionString);
 
         const string sql = """
-            SELECT token AS Token, created_by AS CreatedBy, created_at AS CreatedAt,
-                   expires_at AS ExpiresAt, used_by AS UsedBy, used_at AS UsedAt
+            SELECT token, created_by, created_at, expires_at, used_by,
+                   permission_level, status, modified_at
             FROM invites
             WHERE token = @Token;
             """;
 
-        return await connection.QueryFirstOrDefaultAsync<InviteRecord>(sql, new { Token = token });
+        var dto = await connection.QueryFirstOrDefaultAsync<InviteRecordDto>(sql, new { Token = token });
+        return dto?.ToInviteRecord();
     }
 
     public async Task UseInviteAsync(string token, string userId, CancellationToken ct = default)
@@ -253,7 +333,7 @@ public class UserRepository
 
         const string sql = """
             UPDATE invites
-            SET used_by = @UserId, used_at = @Now
+            SET used_by = @UserId, status = 1, modified_at = @Now
             WHERE token = @Token;
             """;
 
@@ -262,4 +342,162 @@ public class UserRepository
 
         _logger.LogInformation("Invite {Token} used by user {UserId}", token, userId);
     }
+
+    public async Task<List<UserRecord>> GetAllAsync(CancellationToken ct = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+
+        const string sql = """
+            SELECT id, email, normalized_email, password_hash, security_stamp,
+                   permission_level, invited_by, is_active, totp_secret,
+                   totp_enabled, created_at, last_login_at, status,
+                   modified_by, modified_at, email_verified, email_verification_token,
+                   email_verification_token_expires_at, password_reset_token,
+                   password_reset_token_expires_at, totp_setup_started_at
+            FROM users
+            WHERE status != 3
+            ORDER BY created_at DESC;
+            """;
+
+        var dtos = await connection.QueryAsync<UserRecordDto>(sql);
+        return dtos.Select(dto => dto.ToUserRecord()).ToList();
+    }
+
+    public async Task<List<UserRecord>> GetAllIncludingDeletedAsync(CancellationToken ct = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+
+        const string sql = """
+            SELECT id, email, normalized_email, password_hash, security_stamp,
+                   permission_level, invited_by, is_active, totp_secret,
+                   totp_enabled, created_at, last_login_at, status,
+                   modified_by, modified_at, email_verified, email_verification_token,
+                   email_verification_token_expires_at, password_reset_token,
+                   password_reset_token_expires_at, totp_setup_started_at
+            FROM users
+            ORDER BY created_at DESC;
+            """;
+
+        var dtos = await connection.QueryAsync<UserRecordDto>(sql);
+        return dtos.Select(dto => dto.ToUserRecord()).ToList();
+    }
+
+    public async Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken ct = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+
+        const string sql = """
+            UPDATE users
+            SET permission_level = @PermissionLevel,
+                modified_by = @ModifiedBy,
+                modified_at = @ModifiedAt
+            WHERE id = @UserId;
+            """;
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await connection.ExecuteAsync(sql, new
+        {
+            UserId = userId,
+            PermissionLevel = permissionLevel,
+            ModifiedBy = modifiedBy,
+            ModifiedAt = now
+        });
+
+        _logger.LogInformation("Updated permission level for user {UserId} to {PermissionLevel} by {ModifiedBy}", userId, permissionLevel, modifiedBy);
+    }
+
+    public async Task SetActiveAsync(string userId, bool isActive, CancellationToken ct = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+
+        const string sql = """
+            UPDATE users
+            SET is_active = @IsActive
+            WHERE id = @UserId;
+            """;
+
+        await connection.ExecuteAsync(sql, new { UserId = userId, IsActive = isActive });
+
+        _logger.LogInformation("Set user {UserId} active status to {IsActive}", userId, isActive);
+    }
+
+    public async Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken ct = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+
+        const string sql = """
+            UPDATE users
+            SET status = @Status,
+                is_active = @IsActive,
+                modified_by = @ModifiedBy,
+                modified_at = @ModifiedAt
+            WHERE id = @UserId;
+            """;
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await connection.ExecuteAsync(sql, new
+        {
+            UserId = userId,
+            Status = (int)newStatus,
+            IsActive = newStatus == UserStatus.Active, // Keep is_active in sync for backward compatibility
+            ModifiedBy = modifiedBy,
+            ModifiedAt = now
+        });
+
+        _logger.LogInformation("Updated status for user {UserId} to {Status} by {ModifiedBy}", userId, newStatus, modifiedBy);
+    }
+
+    public async Task UpdateAsync(UserRecord user, CancellationToken ct = default)
+    {
+        await using var connection = new SqliteConnection(_connectionString);
+
+        const string sql = """
+            UPDATE users
+            SET email = @Email,
+                normalized_email = @NormalizedEmail,
+                password_hash = @PasswordHash,
+                security_stamp = @SecurityStamp,
+                permission_level = @PermissionLevel,
+                invited_by = @InvitedBy,
+                is_active = @IsActive,
+                totp_secret = @TotpSecret,
+                totp_enabled = @TotpEnabled,
+                last_login_at = @LastLoginAt,
+                status = @Status,
+                modified_by = @ModifiedBy,
+                modified_at = @ModifiedAt,
+                email_verified = @EmailVerified,
+                email_verification_token = @EmailVerificationToken,
+                email_verification_token_expires_at = @EmailVerificationTokenExpiresAt,
+                password_reset_token = @PasswordResetToken,
+                password_reset_token_expires_at = @PasswordResetTokenExpiresAt
+            WHERE id = @Id;
+            """;
+
+        await connection.ExecuteAsync(sql, new
+        {
+            user.Id,
+            user.Email,
+            user.NormalizedEmail,
+            user.PasswordHash,
+            user.SecurityStamp,
+            user.PermissionLevel,
+            user.InvitedBy,
+            IsActive = user.IsActive ? 1 : 0,
+            user.TotpSecret,
+            TotpEnabled = user.TotpEnabled ? 1 : 0,
+            user.LastLoginAt,
+            Status = (int)user.Status,
+            user.ModifiedBy,
+            user.ModifiedAt,
+            EmailVerified = user.EmailVerified ? 1 : 0,
+            user.EmailVerificationToken,
+            user.EmailVerificationTokenExpiresAt,
+            user.PasswordResetToken,
+            user.PasswordResetTokenExpiresAt
+        });
+
+        _logger.LogInformation("Updated user {UserId}", user.Id);
+    }
+
 }

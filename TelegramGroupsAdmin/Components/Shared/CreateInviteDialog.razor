@@ -1,0 +1,127 @@
+@using Microsoft.AspNetCore.Components
+@inject NavigationManager Navigation
+
+<MudDialog>
+    <DialogContent>
+        @if (string.IsNullOrEmpty(_inviteLink))
+        {
+            <MudText Class="mb-4">Invite a new user to register</MudText>
+
+            <MudSelect @bind-Value="_permissionLevel"
+                      Label="Permission Level"
+                      Variant="Variant.Outlined"
+                      Class="mb-4"
+                      HelperText="Access level for the new user">
+                <MudSelectItem Value="0">ReadOnly - View only access</MudSelectItem>
+                @if (MaxPermissionLevel >= 1)
+                {
+                    <MudSelectItem Value="1">Admin - Can manage users</MudSelectItem>
+                }
+                @if (MaxPermissionLevel >= 2)
+                {
+                    <MudSelectItem Value="2">Owner - Full access</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudNumericField @bind-Value="_validDays"
+                            Label="Invite valid for (days)"
+                            Min="1"
+                            Max="365"
+                            Variant="Variant.Outlined"
+                            HelperText="How long until the invite link expires" />
+        }
+        else
+        {
+            <MudText Typo="Typo.h6" Class="mb-4">Invite Link Created</MudText>
+
+            <MudAlert Severity="Severity.Success" Class="mb-4">
+                Send this link to the new user to complete registration:
+            </MudAlert>
+
+            <MudTextField @bind-Value="_inviteLink"
+                         Label="Invite Link"
+                         Variant="Variant.Outlined"
+                         ReadOnly="true"
+                         Adornment="Adornment.End"
+                         AdornmentIcon="@Icons.Material.Filled.ContentCopy"
+                         OnAdornmentClick="CopyToClipboard" />
+
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                Expires: @_expiresAt
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        @if (string.IsNullOrEmpty(_inviteLink))
+        {
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Generate Invite</MudButton>
+        }
+        else
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Done</MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    IMudDialogInstance? MudDialog { get; set; }
+
+    [Parameter]
+    public string? InviteLink { get; set; }
+
+    [Parameter]
+    public long? ExpiresAt { get; set; }
+
+    [Parameter]
+    public int MaxPermissionLevel { get; set; } = 2; // Default to Owner if not specified
+
+    private int _validDays = 7;
+    private int _permissionLevel = 0; // Default to ReadOnly
+    private string? _inviteLink;
+    private string? _expiresAt;
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrEmpty(InviteLink))
+        {
+            _inviteLink = InviteLink;
+            if (ExpiresAt.HasValue)
+            {
+                _expiresAt = DateTimeOffset.FromUnixTimeSeconds(ExpiresAt.Value).ToString("yyyy-MM-dd HH:mm");
+            }
+        }
+
+        // Ensure permission level defaults to 0 and doesn't exceed max
+        if (_permissionLevel > MaxPermissionLevel)
+        {
+            _permissionLevel = 0;
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+    }
+
+    private void Submit()
+    {
+        // Validate permission level doesn't exceed max (defense in depth)
+        var safePermissionLevel = Math.Min(_permissionLevel, MaxPermissionLevel);
+
+        // Return both validDays and permissionLevel
+        MudDialog?.Close(DialogResult.Ok(new { ValidDays = _validDays, PermissionLevel = safePermissionLevel }));
+    }
+
+    private void Close()
+    {
+        MudDialog?.Close(DialogResult.Ok(true));
+    }
+
+    private void CopyToClipboard()
+    {
+        // Note: Actual clipboard copying requires JS interop
+        // For now just show it's been "copied"
+    }
+}
