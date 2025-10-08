@@ -171,6 +171,28 @@ docker build -t telegram-groups-admin .
 docker run -p 8080:8080 -e VIRUSTOTAL__APIKEY=X telegram-groups-admin
 ```
 
+## Current Architecture Limitations
+
+**tg-spam (Go bot) is the primary bot**:
+- **Single group limitation** - can only manage ONE Telegram group
+- Has its own spam detection logic in Go
+- Calls TelegramGroupsAdmin `/check` endpoint for supplemental checks (VirusTotal, blocklists, SEO)
+- Uses OpenAI as final veto
+- Enforces actions (delete, ban, restrict)
+
+**TelegramGroupsAdmin (current role)**:
+- Provides `/check` endpoint as detection service TO tg-spam
+- Runs HistoryBot for message caching (already multi-group capable)
+- Blazor UI for viewing messages and managing users
+- Does NOT enforce spam actions - just provides detection services
+
+**Pain points**:
+1. tg-spam limited to single group (our app already supports multi-group)
+2. Split detection logic across two codebases (Go + C#)
+3. Two bots running (tg-spam primary + HistoryBot caching)
+4. Limited visibility into tg-spam's decisions in our UI
+5. Cannot customize enforcement actions without modifying Go code
+
 ## Troubleshooting
 **CS8669 warnings**: Razor compiler bug in .NET 10 RC1 - doesn't emit `#nullable enable` for nullable generics (`T="string?"`). Suppressed at project level, tracked in dotnet/razor#7286. Re-test after GA (Nov 2025).
 **HistoryBot not caching**: Check TELEGRAM__HISTORYBOTTOKEN, bot added to chat, privacy mode off
@@ -178,8 +200,76 @@ docker run -p 8080:8080 -e VIRUSTOTAL__APIKEY=X telegram-groups-admin
 **DB growing**: Check retention (720h default), cleanup service running
 **Rate limits**: Check logs for LogWarning messages from VirusTotalService or OpenAIVisionSpamDetectionService
 
-## Completed Features
-- ✅ `/audit` page - Audit log viewer with filtering by event type, actor, target user (Admin/Owner only)
-- ✅ `/profile` page - User profile settings with password change, TOTP 2FA enable/disable/reset
-- ✅ Message filters - Searchable MudAutocomplete dropdowns for User/Chat names (replaced text inputs)
-- ✅ Service layer refactor - Created IAuditService abstraction, refactored 6 files (InviteRepository audit logging moved to InviteService)
+## Roadmap
+
+### Phase 1: Foundation ✅ COMPLETE
+- [x] Blazor Server UI with MudBlazor
+- [x] Cookie authentication + TOTP 2FA
+- [x] User management with invite system
+- [x] Audit logging for security events
+- [x] Message history viewer with filters and export
+- [x] Email verification via SendGrid
+- [x] Image spam detection (OpenAI Vision)
+- [x] Text spam detection (blocklists, SEO, VirusTotal)
+
+### Phase 2: Native Telegram Bot (PLANNED)
+**Goal**: Merge HistoryBot + tg-spam functionality into single multi-group bot
+
+**Why**: TelegramGroupsAdmin already has multi-group message caching via HistoryBot. By adding tg-spam's detection algorithms and enforcement actions, we eliminate the single-group limitation and unify all logic in C#.
+
+**Step 1: Analyze tg-spam Source**
+- [ ] Clone tg-spam repository (https://github.com/mr-karan/tg-spam)
+- [ ] Document Go detection algorithms to port:
+  - Text pattern matching (spam keywords, regex)
+  - User behavior heuristics (new join spam, message frequency)
+  - Link analysis
+  - Media file patterns
+- [ ] Map tg-spam features to existing TelegramGroupsAdmin architecture
+- [ ] Identify improvements over tg-spam approach
+
+**Step 2: Port Detection Logic to C#**
+- [ ] Create unified spam scoring system (0-100 confidence)
+- [ ] Port tg-spam's text analysis algorithms from Go to C#
+- [ ] Integrate with existing detection pipeline:
+  - tg-spam ported logic → blocklists → SEO scraping → VirusTotal → OpenAI Vision (final veto)
+- [ ] Add user behavior tracking (join time, message count, patterns)
+- [ ] Create `ISpamScorer` abstraction for pluggable detectors
+
+**Step 3: Add Enforcement Actions**
+- [ ] Extend `HistoryBotService` with Telegram Bot API admin methods:
+  - `DeleteMessageAsync(chatId, messageId)` - remove spam message
+  - `BanUserAsync(chatId, userId, until)` - permanent or temporary ban
+  - `RestrictUserAsync(chatId, userId, permissions)` - mute/read-only
+  - `WarnUserAsync(userId, chatId, reason)` - track warnings in DB
+- [ ] Implement action decision logic based on spam score and history
+- [ ] Add spam action audit logging
+
+**Step 4: Configuration UI**
+- [ ] Per-group settings page in Blazor:
+  - Spam score thresholds (0-50 ignore, 50-75 warn, 75+ ban)
+  - Action policies (immediate ban vs 3-strike system)
+  - Detection toggles (enable/disable specific checks)
+  - Whitelist management (verified users, admins immune)
+- [ ] Database schema for group-specific configuration
+- [ ] Migration from global config to per-group config
+
+**Step 5: Parallel Testing & Migration**
+- [ ] Add "monitor mode" - log decisions without taking action
+- [ ] Run both bots side-by-side, compare decisions
+- [ ] Dashboard showing detection comparison and false positive rates
+- [ ] Tune thresholds to match or exceed tg-spam accuracy
+- [ ] Switch to enforcement mode when confident
+- [ ] Deprecate tg-spam, remove `/check` endpoint (or make optional)
+
+### Phase 3: Advanced Multi-Group Features (FUTURE)
+- [ ] Group owner delegation (non-platform admins can manage their groups)
+- [ ] Cross-group spam pattern detection (spammer detected in Group A → auto-ban in Groups B, C)
+- [ ] Shared/global blacklist across all managed groups
+- [ ] Group templates (apply settings from one group to others)
+- [ ] Bulk operations (ban user from all groups, global whitelist)
+
+### Phase 4: Advanced Features (FUTURE)
+- [ ] ML-based spam detection (train on historical data)
+- [ ] Sentiment analysis for toxicity detection
+- [ ] Automated report generation
+- [ ] API for third-party integrations
