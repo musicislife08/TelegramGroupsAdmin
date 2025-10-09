@@ -187,6 +187,11 @@ builder.Services.AddScoped<ITelegramImageService, TelegramImageService>();
 // Bot command system
 builder.Services.AddSingleton<IBotCommand, Commands.HelpCommand>();
 builder.Services.AddSingleton<IBotCommand, Commands.SpamCommand>();
+builder.Services.AddSingleton<IBotCommand, Commands.BanCommand>();
+builder.Services.AddSingleton<IBotCommand, Commands.TrustCommand>();
+builder.Services.AddSingleton<IBotCommand, Commands.UnbanCommand>();
+builder.Services.AddSingleton<IBotCommand, Commands.WarnCommand>();
+builder.Services.AddSingleton<IBotCommand, Commands.ReportCommand>();
 builder.Services.AddSingleton<CommandRouter>();
 
 // Background services (register as singleton first, then add as hosted service)

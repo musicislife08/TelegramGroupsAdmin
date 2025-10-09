@@ -566,9 +566,17 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [x] **Command routing infrastructure** - IBotCommand interface, CommandRouter service, singleton architecture
 - [x] **Bot command registration** - SetMyCommands API with scoped permissions (default/admin)
 - [x] **Command parsing** - Regex handles `/command` and `/command@botname` formats
-- [x] **Initial commands** - `/help` (list commands), `/spam` (mark spam - stub)
+- [x] **Command stubs complete** - All 7 essential commands implemented as stubs:
+  - `/help` - Show available commands (ReadOnly, reflection-based auto-discovery)
+  - `/report` - Report message for admin review (ReadOnly)
+  - `/spam` - Mark as spam and delete (Admin)
+  - `/ban` - Ban user from all managed chats (Admin)
+  - `/trust` - Whitelist user to bypass spam detection (Admin)
+  - `/unban` - Remove ban from user (Admin)
+  - `/warn` - Issue warning with auto-ban threshold (Admin)
 - [x] **Permission system foundation** - MinPermissionLevel checks (0=ReadOnly, 1=Admin, 2=Owner)
 - [x] **Console logging** - Timestamp format for debugging command execution timing
+- [x] **Reflection-based help** - Dynamic command discovery, auto-updates when new commands added
 - [ ] **Telegram user permissions** - Link Telegram users to web app users for permission checking
   - **Options to evaluate:**
     1. **User Profile Integration** - Add Telegram ID field to user profile page for manual linking
@@ -578,8 +586,7 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
   - **Preferred approach:** User profile + mapping table for flexibility
   - **Security:** Require authentication on web app, bot sends verification code, user enters on web
   - **Current state:** Temporary hardcode for testing (user 1312830442 = Owner)
-- [ ] **Implement /spam action** - Delete message, save to detection_results, optionally ban
-- [ ] **Complete bot commands** - `/ban`, `/trust`, `/unban`, `/warn`, `/report`
+- [ ] **Implement command actions** - Delete messages, save to detection_results, manage bans
 - [ ] **Cross-chat actions** - Bans/warns across all managed groups
 - [ ] **Edit monitoring** - Detect "post innocent, edit to spam" tactic
 

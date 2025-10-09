@@ -1,13 +1,38 @@
+using System.Reflection;
 using System.Text;
 using Telegram.Bot.Types;
 
 namespace TelegramGroupsAdmin.Services.BotCommands.Commands;
 
 /// <summary>
-/// /help - Display available commands
+/// /help - Display available commands (uses reflection to discover commands)
 /// </summary>
 public class HelpCommand : IBotCommand
 {
+    private static readonly Lazy<List<CommandMetadata>> _commandMetadata = new(() =>
+    {
+        // Use reflection to find all IBotCommand implementations and extract metadata
+        return Assembly.GetExecutingAssembly()
+            .GetTypes()
+            .Where(t => t.IsClass && !t.IsAbstract && typeof(IBotCommand).IsAssignableFrom(t))
+            .Where(t => t != typeof(HelpCommand)) // Exclude self to avoid circular reference
+            .Select(t =>
+            {
+                // Create instance with null logger (only reading properties, not executing)
+                var instance = (IBotCommand)Activator.CreateInstance(t, args: new object[] { null! })!;
+
+                return new CommandMetadata(
+                    instance.Name,
+                    instance.Description,
+                    instance.MinPermissionLevel);
+            })
+            .OrderBy(c => c.MinPermissionLevel)
+            .ThenBy(c => c.Name)
+            .ToList();
+    });
+
+    private record CommandMetadata(string Name, string Description, int MinPermissionLevel);
+
     public string Name => "help";
     public string Description => "Show available commands";
     public string Usage => "/help";
@@ -23,22 +48,50 @@ public class HelpCommand : IBotCommand
         var sb = new StringBuilder();
         sb.AppendLine("🤖 *TelegramGroupsAdmin Bot*\n");
 
-        // Hardcoded command list to avoid circular dependency
-        // TODO: Make this dynamic when we solve the DI pattern
-        if (userPermissionLevel >= 0)
+        var availableCommands = _commandMetadata.Value
+            .Where(c => c.MinPermissionLevel <= userPermissionLevel)
+            .ToList();
+
+        // Group by permission level
+        var readOnlyCommands = availableCommands.Where(c => c.MinPermissionLevel == 0).ToList();
+        var adminCommands = availableCommands.Where(c => c.MinPermissionLevel >= 1).ToList();
+
+        // Show ReadOnly commands (including self)
+        sb.AppendLine($"{GetCommandEmoji("help")} `/help` - {Description}");
+
+        foreach (var cmd in readOnlyCommands)
         {
-            sb.AppendLine("📋 `/help` - Show available commands");
+            var emoji = GetCommandEmoji(cmd.Name);
+            sb.AppendLine($"{emoji} `/{cmd.Name}` - {cmd.Description}");
         }
 
-        if (userPermissionLevel >= 1) // Admin
+        // Show Admin commands
+        if (adminCommands.Any() && userPermissionLevel >= 1)
         {
-            sb.AppendLine("🚫 `/spam` - Mark message as spam (reply to message)");
+            sb.AppendLine("\n*Admin Commands:*");
+            foreach (var cmd in adminCommands)
+            {
+                var emoji = GetCommandEmoji(cmd.Name);
+                sb.AppendLine($"{emoji} `/{cmd.Name}` - {cmd.Description}");
+            }
         }
 
         sb.AppendLine($"\n_Permission: {GetPermissionName(userPermissionLevel)}_");
 
         return Task.FromResult(sb.ToString());
     }
+
+    private static string GetCommandEmoji(string commandName) => commandName switch
+    {
+        "help" => "📋",
+        "report" => "📢",
+        "spam" => "🚫",
+        "ban" => "⛔",
+        "trust" => "✅",
+        "unban" => "🔓",
+        "warn" => "⚠️",
+        _ => "🔹"
+    };
 
     private static string GetPermissionName(int level) => level switch
     {
