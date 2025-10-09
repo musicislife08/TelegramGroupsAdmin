@@ -596,8 +596,23 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
   - ✅ **Repositories** - TelegramUserMappingRepository, TelegramLinkTokenRepository
   - ✅ **Security** - Cryptographic tokens, one-time use, automatic cleanup of old tokens
   - ✅ **Architecture** - One-to-many (user → Telegram accounts), one-to-one (Telegram → user)
+- [x] **Per-chat admin caching** ✅ **COMPLETE**:
+  - ✅ **Database schema** - chat_admins table with bidirectional indexes (Migration 202601089)
+  - ✅ **ChatAdminsRepository** - Cache lookup, upsert, deactivate, permission checking
+  - ✅ **RefreshAllChatAdminsAsync** - Startup cache refresh for all managed chats
+  - ✅ **RefreshChatAdminsAsync** - Per-chat admin list caching with detailed logging
+  - ✅ **MyChatMember event handling** - Real-time admin promotion/demotion tracking
+  - ✅ **Permission hierarchy** - Web app linking (global) → Telegram admin (per-chat) → No permission
+  - ✅ **Admin spam bypass** - Chat admins automatically skip spam detection (no explicit trust needed)
+  - ✅ **Performance** - Eliminates GetChatMember API calls on every command
+- [x] **DI architecture fixes** ✅ **COMPLETE**:
+  - ✅ **Service scoping pattern** - Singleton services use IServiceProvider to create scopes for repositories
+  - ✅ **Repository constructors** - Use IConfiguration instead of string connectionString parameters
+  - ✅ **CommandRouter, TelegramAdminBotService** - Inject IServiceProvider, create scopes on-demand
+  - ✅ **All IBotCommand implementations** - Use IServiceProvider pattern for repository access
+  - ✅ **Migration 202601090** - Convert user_actions.action_type from VARCHAR to INT (enum storage)
 - [ ] **Implement command actions** - Remaining commands:
-  - `/spam` - Delete message, insert to detection_results, ban if threshold exceeded
+  - `/spam` - Delete message, insert to detection_results, ban if threshold exceeded (TODO: prevent marking admins/trusted)
   - `/ban` - Insert to user_actions, call Telegram BanChatMember across all chats
   - `/unban` - Remove from user_actions, call Telegram UnbanChatMember
   - `/warn` - Insert to user_actions, auto-ban after threshold
