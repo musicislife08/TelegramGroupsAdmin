@@ -474,7 +474,7 @@ public class MessageHistoryRepository
             DetectionMethod = (string)r.detection_method ?? "Unknown",
             IsSpam = (bool)r.is_spam,
             Confidence = (int)(r.confidence ?? 0),
-            Details = r.reason as string,
+            Reason = r.reason as string,
             UserId = (long)r.user_id,
             MessageText = r.message_text as string
         }).ToList();

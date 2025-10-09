@@ -4,5 +4,6 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/.DS_Store
 tg-spam/
-compose/
+compose/*
+!compose/compose.yml
 *.DotSettings.user

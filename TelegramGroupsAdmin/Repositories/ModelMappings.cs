@@ -262,4 +262,85 @@ internal static class ModelMappings
         CreatedAt: ui.CreatedAt,
         UsedAt: ui.UsedAt
     );
+
+    // Detection Result mappings
+    public static UiModels.DetectionResultRecord ToUiModel(this DataModels.DetectionResultRecord data)
+    {
+        return new UiModels.DetectionResultRecord
+        {
+            Id = data.Id,
+            MessageId = data.MessageId,
+            DetectedAt = data.DetectedAt,
+            DetectionSource = data.DetectionSource,
+            DetectionMethod = data.DetectionMethod,
+            IsSpam = data.IsSpam,
+            Confidence = data.Confidence,
+            Reason = data.Reason,
+            AddedBy = data.AddedBy,
+            UserId = 0, // Will be populated by repository join
+            MessageText = null // Will be populated by repository join
+        };
+    }
+
+    public static DataModels.DetectionResultRecord ToDataModel(this UiModels.DetectionResultRecord ui) => new(
+        Id: ui.Id,
+        MessageId: ui.MessageId,
+        DetectedAt: ui.DetectedAt,
+        DetectionSource: ui.DetectionSource,
+        DetectionMethod: ui.DetectionMethod,
+        IsSpam: ui.IsSpam,
+        Confidence: ui.Confidence,
+        Reason: ui.Reason,
+        AddedBy: ui.AddedBy
+    );
+
+    // User Action mappings
+    public static UiModels.UserActionRecord ToUiModel(this DataModels.UserActionRecord data) => new(
+        Id: data.Id,
+        UserId: data.UserId,
+        ChatIds: data.ChatIds,
+        ActionType: (UiModels.UserActionType)data.ActionType,
+        MessageId: data.MessageId,
+        IssuedBy: data.IssuedBy,
+        IssuedAt: data.IssuedAt,
+        ExpiresAt: data.ExpiresAt,
+        Reason: data.Reason
+    );
+
+    public static DataModels.UserActionRecord ToDataModel(this UiModels.UserActionRecord ui) => new(
+        Id: ui.Id,
+        UserId: ui.UserId,
+        ChatIds: ui.ChatIds,
+        ActionType: (int)ui.ActionType,
+        MessageId: ui.MessageId,
+        IssuedBy: ui.IssuedBy,
+        IssuedAt: ui.IssuedAt,
+        ExpiresAt: ui.ExpiresAt,
+        Reason: ui.Reason
+    );
+
+    // Managed Chat mappings
+    public static UiModels.ManagedChatRecord ToUiModel(this DataModels.ManagedChatRecord data) => new(
+        ChatId: data.ChatId,
+        ChatName: data.ChatName,
+        ChatType: (UiModels.ManagedChatType)data.ChatType,
+        BotStatus: (UiModels.BotChatStatus)data.BotStatus,
+        IsAdmin: data.IsAdmin,
+        AddedAt: data.AddedAt,
+        IsActive: data.IsActive,
+        LastSeenAt: data.LastSeenAt,
+        SettingsJson: data.SettingsJson
+    );
+
+    public static DataModels.ManagedChatRecord ToDataModel(this UiModels.ManagedChatRecord ui) => new(
+        ChatId: ui.ChatId,
+        ChatName: ui.ChatName,
+        ChatType: (int)ui.ChatType,
+        BotStatus: (int)ui.BotStatus,
+        IsAdmin: ui.IsAdmin,
+        AddedAt: ui.AddedAt,
+        IsActive: ui.IsActive,
+        LastSeenAt: ui.LastSeenAt,
+        SettingsJson: ui.SettingsJson
+    );
 }

@@ -19,6 +19,7 @@ namespace TelegramGroupsAdmin.Services.BackgroundServices;
 public partial class TelegramAdminBotService(
     TelegramBotClientFactory botFactory,
     MessageHistoryRepository repository,
+    IManagedChatsRepository managedChatsRepository,
     IOptions<TelegramOptions> options,
     IOptions<MessageHistoryOptions> historyOptions,
     CommandRouter commandRouter,
@@ -50,7 +51,7 @@ public partial class TelegramAdminBotService(
 
         var receiverOptions = new ReceiverOptions
         {
-            AllowedUpdates = [UpdateType.Message],
+            AllowedUpdates = [UpdateType.Message, UpdateType.EditedMessage, UpdateType.MyChatMember],
             DropPendingUpdates = true
         };
 
@@ -77,6 +78,13 @@ public partial class TelegramAdminBotService(
         Update update,
         CancellationToken cancellationToken)
     {
+        // Handle bot's chat member status changes (added/removed from chats)
+        if (update.MyChatMember is { } myChatMember)
+        {
+            await HandleMyChatMemberUpdateAsync(myChatMember);
+            return;
+        }
+
         // Handle new messages
         if (update.Message is { } message)
         {
@@ -97,6 +105,11 @@ public partial class TelegramAdminBotService(
         // Process messages from all chats where bot is added
         try
         {
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+            // Update last_seen_at for this chat (fallback if MyChatMember event wasn't received)
+            await managedChatsRepository.UpdateLastSeenAsync(message.Chat.Id, now);
+
             // Check if message is a bot command
             if (commandRouter.IsCommand(message))
             {
@@ -111,8 +124,6 @@ public partial class TelegramAdminBotService(
                 }
                 return; // Don't save command messages to history
             }
-
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
             // Extract URLs from message text
             var text = message.Text ?? message.Caption;
@@ -359,6 +370,75 @@ public partial class TelegramAdminBotService(
             logger.LogError(ex,
                 "Error handling edit for message {MessageId}",
                 editedMessage.MessageId);
+        }
+    }
+
+    private async Task HandleMyChatMemberUpdateAsync(ChatMemberUpdated myChatMember)
+    {
+        try
+        {
+            var chat = myChatMember.Chat;
+            var newStatus = myChatMember.NewChatMember.Status;
+            var isAdmin = newStatus == ChatMemberStatus.Administrator;
+            var isActive = newStatus is ChatMemberStatus.Member or ChatMemberStatus.Administrator;
+
+            // Map Telegram ChatType to our ManagedChatType enum
+            var chatType = chat.Type switch
+            {
+                ChatType.Private => ManagedChatType.Private,
+                ChatType.Group => ManagedChatType.Group,
+                ChatType.Supergroup => ManagedChatType.Supergroup,
+                ChatType.Channel => ManagedChatType.Channel,
+                _ => ManagedChatType.Group
+            };
+
+            // Map Telegram ChatMemberStatus to our BotChatStatus enum
+            var botStatus = newStatus switch
+            {
+                ChatMemberStatus.Member => BotChatStatus.Member,
+                ChatMemberStatus.Administrator => BotChatStatus.Administrator,
+                ChatMemberStatus.Left => BotChatStatus.Left,
+                ChatMemberStatus.Kicked => BotChatStatus.Kicked,
+                _ => BotChatStatus.Member
+            };
+
+            var chatRecord = new ManagedChatRecord(
+                ChatId: chat.Id,
+                ChatName: chat.Title ?? chat.Username ?? $"Chat {chat.Id}",
+                ChatType: chatType,
+                BotStatus: botStatus,
+                IsAdmin: isAdmin,
+                AddedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                IsActive: isActive,
+                LastSeenAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                SettingsJson: null
+            );
+
+            await managedChatsRepository.UpsertAsync(chatRecord);
+
+            if (isActive)
+            {
+                logger.LogInformation(
+                    "✅ Bot added to {ChatType} {ChatId} ({ChatName}) as {Status}",
+                    chat.Type,
+                    chat.Id,
+                    chat.Title ?? chat.Username ?? "Unknown",
+                    newStatus);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "❌ Bot removed from {ChatId} ({ChatName}) - status: {Status}",
+                    chat.Id,
+                    chat.Title ?? chat.Username ?? "Unknown",
+                    newStatus);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Error handling MyChatMember update for chat {ChatId}",
+                myChatMember.Chat.Id);
         }
     }
 

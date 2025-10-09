@@ -577,12 +577,13 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [x] **Permission system foundation** - MinPermissionLevel checks (0=ReadOnly, 1=Admin, 2=Owner)
 - [x] **Console logging** - Timestamp format for debugging command execution timing
 - [x] **Reflection-based help** ✅ - Dynamic command discovery, auto-updates when new commands added
-- [ ] **Foundation for command actions** 🎯 **NEXT PRIORITY** - Need infrastructure before implementing actual command behavior:
-  1. **DetectionResultsRepository** - Insert method for manual spam/ham classifications
-  2. **UserActionsRepository** - Track bans/trusts/warns across chats
-  3. **Chat management tracking** - Which chats the bot manages
-  4. **Admin protection** - Prevent banning admins/owners
-  5. **Cross-chat ban coordination** - Ban from all managed chats, not just current chat
+- [x] **Foundation for command actions** ✅ **COMPLETE** - Infrastructure ready for command implementation:
+  1. ✅ **DetectionResultsRepository** - Insert method for manual spam/ham classifications
+  2. ✅ **UserActionsRepository** - Track bans/trusts/warns across chats
+  3. ✅ **ManagedChatsRepository** - Track which chats the bot manages
+  4. ✅ **MyChatMember event handling** - Real-time chat tracking when bot added/removed
+  5. ✅ **Enum standardization** - All enums stored as INT (consistent with permission_level, status patterns)
+  6. ✅ **Migration 202601087** - Converts user_actions.action_type TEXT→INT, creates managed_chats table
 - [ ] **Telegram user permissions** - Link Telegram users to web app users for permission checking
   - **Options to evaluate:**
     1. **User Profile Integration** - Add Telegram ID field to user profile page for manual linking

@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Endpoints;
+using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.BackgroundServices;
 using TelegramGroupsAdmin.Services.BotCommands;
@@ -212,6 +213,11 @@ builder.Services.AddNpgsqlDataSource(connectionString);
 builder.Services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.IStopWordsRepository, TelegramGroupsAdmin.SpamDetection.Repositories.StopWordsRepository>();
 builder.Services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.ITrainingSamplesRepository, TelegramGroupsAdmin.SpamDetection.Repositories.TrainingSamplesRepository>();
 builder.Services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.ISpamDetectionConfigRepository, TelegramGroupsAdmin.SpamDetection.Repositories.SpamDetectionConfigRepository>();
+
+// Register Detection Results and User Actions repositories
+builder.Services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>();
+builder.Services.AddScoped<IUserActionsRepository, UserActionsRepository>();
+builder.Services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
 
 var app = builder.Build();
 

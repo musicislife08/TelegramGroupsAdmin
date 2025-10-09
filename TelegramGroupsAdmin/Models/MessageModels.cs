@@ -94,7 +94,72 @@ public class DetectionResultRecord
     public string DetectionMethod { get; set; } = string.Empty;
     public bool IsSpam { get; set; }
     public int Confidence { get; set; }
-    public string? Details { get; set; }
+    public string? Reason { get; set; }
+    public string? AddedBy { get; set; }
     public long UserId { get; set; }
     public string? MessageText { get; set; }
 }
+
+/// <summary>
+/// User action record for UI display (bans, warns, mutes, trusts)
+/// </summary>
+public record UserActionRecord(
+    long Id,
+    long UserId,
+    long[]? ChatIds,
+    UserActionType ActionType,
+    long? MessageId,
+    string? IssuedBy,
+    long IssuedAt,
+    long? ExpiresAt,
+    string? Reason
+);
+
+/// <summary>
+/// Action types for user moderation
+/// </summary>
+public enum UserActionType
+{
+    Ban = 0,
+    Warn = 1,
+    Mute = 2,
+    Trust = 3,
+    Unban = 4
+}
+
+/// <summary>
+/// Bot status in a managed chat
+/// </summary>
+public enum BotChatStatus
+{
+    Member = 0,
+    Administrator = 1,
+    Left = 2,
+    Kicked = 3
+}
+
+/// <summary>
+/// Chat type categories
+/// </summary>
+public enum ManagedChatType
+{
+    Private = 0,
+    Group = 1,
+    Supergroup = 2,
+    Channel = 3
+}
+
+/// <summary>
+/// Managed chat record for UI display
+/// </summary>
+public record ManagedChatRecord(
+    long ChatId,
+    string? ChatName,
+    ManagedChatType ChatType,
+    BotChatStatus BotStatus,
+    bool IsAdmin,
+    long AddedAt,
+    bool IsActive,
+    long? LastSeenAt,
+    string? SettingsJson
+);

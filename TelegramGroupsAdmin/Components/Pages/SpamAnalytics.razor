@@ -394,7 +394,7 @@
                 ContentHash: null,
                 IsSpam: d.IsSpam,
                 Confidence: d.Confidence,
-                Reason: d.Details ?? $"{d.DetectionMethod} detection",
+                Reason: d.Reason ?? $"{d.DetectionMethod} detection",
                 CheckType: d.DetectionMethod,
                 MatchedMessageId: d.MessageId
             )).ToList();
