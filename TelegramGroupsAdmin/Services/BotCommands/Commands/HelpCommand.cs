@@ -1,37 +1,33 @@
-using System.Reflection;
 using System.Text;
 using Telegram.Bot.Types;
 
 namespace TelegramGroupsAdmin.Services.BotCommands.Commands;
 
 /// <summary>
-/// /help - Display available commands (uses reflection to discover commands)
+/// /help - Display available commands
 /// </summary>
 public class HelpCommand : IBotCommand
 {
-    private static readonly Lazy<List<CommandMetadata>> _commandMetadata = new(() =>
-    {
-        // Use reflection to find all IBotCommand implementations and extract metadata
-        return Assembly.GetExecutingAssembly()
-            .GetTypes()
-            .Where(t => t.IsClass && !t.IsAbstract && typeof(IBotCommand).IsAssignableFrom(t))
-            .Where(t => t != typeof(HelpCommand)) // Exclude self to avoid circular reference
-            .Select(t =>
-            {
-                // Create instance with null logger (only reading properties, not executing)
-                var instance = (IBotCommand)Activator.CreateInstance(t, args: new object[] { null! })!;
+    private readonly IServiceProvider _serviceProvider;
 
-                return new CommandMetadata(
-                    instance.Name,
-                    instance.Description,
-                    instance.MinPermissionLevel);
-            })
-            .OrderBy(c => c.MinPermissionLevel)
-            .ThenBy(c => c.Name)
-            .ToList();
-    });
+    // Static metadata for all commands (avoids reflection complexity with DI)
+    private static readonly List<CommandMetadata> _commandMetadata = new()
+    {
+        new("report", "Report message for admin review", 0),
+        new("link", "Link your Telegram account to web app", 0),
+        new("spam", "Mark message as spam and delete it", 1),
+        new("ban", "Ban user from all managed chats", 1),
+        new("trust", "Whitelist user (bypass spam detection)", 1),
+        new("unban", "Remove ban from user", 1),
+        new("warn", "Issue warning to user", 1)
+    };
 
     private record CommandMetadata(string Name, string Description, int MinPermissionLevel);
+
+    public HelpCommand(IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider;
+    }
 
     public string Name => "help";
     public string Description => "Show available commands";
@@ -48,7 +44,7 @@ public class HelpCommand : IBotCommand
         var sb = new StringBuilder();
         sb.AppendLine("🤖 *TelegramGroupsAdmin Bot*\n");
 
-        var availableCommands = _commandMetadata.Value
+        var availableCommands = _commandMetadata
             .Where(c => c.MinPermissionLevel <= userPermissionLevel)
             .ToList();
 
