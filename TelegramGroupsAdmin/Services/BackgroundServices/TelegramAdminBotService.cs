@@ -19,12 +19,10 @@ namespace TelegramGroupsAdmin.Services.BackgroundServices;
 public partial class TelegramAdminBotService(
     TelegramBotClientFactory botFactory,
     MessageHistoryRepository repository,
-    IManagedChatsRepository managedChatsRepository,
-    IChatAdminsRepository chatAdminsRepository,
-    IUserActionsRepository userActionsRepository,
     IOptions<TelegramOptions> options,
     IOptions<MessageHistoryOptions> historyOptions,
     CommandRouter commandRouter,
+    IServiceProvider serviceProvider,
     ILogger<TelegramAdminBotService> logger)
     : BackgroundService, IMessageHistoryService
 {
@@ -113,7 +111,11 @@ public partial class TelegramAdminBotService(
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
             // Update last_seen_at for this chat (fallback if MyChatMember event wasn't received)
-            await managedChatsRepository.UpdateLastSeenAsync(message.Chat.Id, now);
+            using (var scope = serviceProvider.CreateScope())
+            {
+                var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+                await managedChatsRepository.UpdateLastSeenAsync(message.Chat.Id, now);
+            }
 
             // Check if message is a bot command
             if (commandRouter.IsCommand(message))
@@ -189,9 +191,14 @@ public partial class TelegramAdminBotService(
                 text != null);
 
             // Check if user is trusted - if so, skip spam detection entirely
-            var isTrusted = await userActionsRepository.IsUserTrustedAsync(
-                message.From.Id,
-                message.Chat.Id);
+            bool isTrusted;
+            using (var scope = serviceProvider.CreateScope())
+            {
+                var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+                isTrusted = await userActionsRepository.IsUserTrustedAsync(
+                    message.From.Id,
+                    message.Chat.Id);
+            }
 
             if (isTrusted)
             {
@@ -437,7 +444,11 @@ public partial class TelegramAdminBotService(
                 SettingsJson: null
             );
 
-            await managedChatsRepository.UpsertAsync(chatRecord);
+            using (var scope = serviceProvider.CreateScope())
+            {
+                var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+                await managedChatsRepository.UpsertAsync(chatRecord);
+            }
 
             // If this is about ANOTHER user (not the bot), update admin cache
             var botUser = myChatMember.From;
@@ -450,6 +461,9 @@ public partial class TelegramAdminBotService(
 
                 if (wasAdmin != isNowAdmin)
                 {
+                    using var scope = serviceProvider.CreateScope();
+                    var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
+
                     if (isNowAdmin)
                     {
                         // User promoted to admin
@@ -561,7 +575,10 @@ public partial class TelegramAdminBotService(
     {
         try
         {
+            using var scope = serviceProvider.CreateScope();
+            var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
             var managedChats = await managedChatsRepository.GetActiveChatsAsync();
+
             logger.LogInformation("Refreshing admin cache for {Count} managed chats", managedChats.Count);
 
             var refreshedCount = 0;
@@ -595,6 +612,9 @@ public partial class TelegramAdminBotService(
         {
             // Get all administrators from Telegram
             var admins = await botClient.GetChatAdministrators(chatId, cancellationToken);
+
+            using var scope = serviceProvider.CreateScope();
+            var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
             foreach (var admin in admins)
             {

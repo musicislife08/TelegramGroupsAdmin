@@ -10,7 +10,7 @@ namespace TelegramGroupsAdmin.Services.BotCommands.Commands;
 public class TrustCommand : IBotCommand
 {
     private readonly ILogger<TrustCommand> _logger;
-    private readonly IUserActionsRepository _userActionsRepository;
+    private readonly IServiceProvider _serviceProvider;
 
     public string Name => "trust";
     public string Description => "Whitelist user (bypass spam detection)";
@@ -20,10 +20,10 @@ public class TrustCommand : IBotCommand
 
     public TrustCommand(
         ILogger<TrustCommand> logger,
-        IUserActionsRepository userActionsRepository)
+        IServiceProvider serviceProvider)
     {
         _logger = logger;
-        _userActionsRepository = userActionsRepository;
+        _serviceProvider = serviceProvider;
     }
 
     public async Task<string> ExecuteAsync(
@@ -60,8 +60,11 @@ public class TrustCommand : IBotCommand
             return "❌ Could not identify target user.";
         }
 
+        using var scope = _serviceProvider.CreateScope();
+        var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+
         // Check if user is already trusted
-        var isAlreadyTrusted = await _userActionsRepository.IsUserTrustedAsync(
+        var isAlreadyTrusted = await userActionsRepository.IsUserTrustedAsync(
             targetUser.Id,
             message.Chat.Id);
 
@@ -83,7 +86,7 @@ public class TrustCommand : IBotCommand
             Reason: $"Trusted by admin in chat {message.Chat.Title ?? message.Chat.Username ?? message.Chat.Id.ToString()}"
         );
 
-        await _userActionsRepository.InsertAsync(trustAction);
+        await userActionsRepository.InsertAsync(trustAction);
 
         _logger.LogInformation(
             "User {TargetId} (@{TargetUsername}) trusted by {ExecutorId} in chat {ChatId}",

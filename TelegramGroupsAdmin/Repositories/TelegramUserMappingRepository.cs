@@ -9,9 +9,10 @@ public class TelegramUserMappingRepository : ITelegramUserMappingRepository
 {
     private readonly string _connectionString;
 
-    public TelegramUserMappingRepository(string connectionString)
+    public TelegramUserMappingRepository(IConfiguration configuration)
     {
-        _connectionString = connectionString;
+        _connectionString = configuration.GetConnectionString("PostgreSQL")
+            ?? throw new InvalidOperationException("PostgreSQL connection string not found");
     }
 
     public async Task<IEnumerable<TelegramUserMappingRecord>> GetByUserIdAsync(string userId)

@@ -9,9 +9,10 @@ public class TelegramLinkTokenRepository : ITelegramLinkTokenRepository
 {
     private readonly string _connectionString;
 
-    public TelegramLinkTokenRepository(string connectionString)
+    public TelegramLinkTokenRepository(IConfiguration configuration)
     {
-        _connectionString = connectionString;
+        _connectionString = configuration.GetConnectionString("PostgreSQL")
+            ?? throw new InvalidOperationException("PostgreSQL connection string not found");
     }
 
     public async Task InsertAsync(TelegramLinkTokenRecord token)
