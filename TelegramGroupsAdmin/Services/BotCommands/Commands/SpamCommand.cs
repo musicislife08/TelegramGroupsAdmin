@@ -40,6 +40,7 @@ public class SpamCommand : IBotCommand
             message.From?.Id, spamMessage.MessageId, spamUserId, spamUserName);
 
         // TODO: Phase 2.3 Implementation
+        // 0. Check if target user is admin/trusted - if so, reject with error message
         // 1. Delete the spam message
         // 2. Add spam sample to detection_results table
         // 3. Optionally ban user based on spam threshold
