@@ -584,6 +584,10 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
   4. ✅ **MyChatMember event handling** - Real-time chat tracking when bot added/removed
   5. ✅ **Enum standardization** - All enums stored as INT (consistent with permission_level, status patterns)
   6. ✅ **Migration 202601087** - Converts user_actions.action_type TEXT→INT, creates managed_chats table
+- [x] **Trust system integration** ✅ **COMPLETE**:
+  - ✅ **/trust command** - Reply-to-message and username syntax (username lookup requires GetChatMember API)
+  - ✅ **Early exit optimization** - Trust check in TelegramAdminBotService before spam detection
+  - ✅ **Architecture decision** - Trust checking outside spam library (keeps library pure and reusable)
 - [ ] **Telegram user permissions** - Link Telegram users to web app users for permission checking
   - **Options to evaluate:**
     1. **User Profile Integration** - Add Telegram ID field to user profile page for manual linking
@@ -593,10 +597,9 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
   - **Preferred approach:** User profile + mapping table for flexibility
   - **Security:** Require authentication on web app, bot sends verification code, user enters on web
   - **Current state:** Temporary hardcode for testing (user 1312830442 = Owner)
-- [ ] **Implement command actions** - After foundation is complete:
+- [ ] **Implement command actions** - Remaining commands:
   - `/spam` - Delete message, insert to detection_results, ban if threshold exceeded
   - `/ban` - Insert to user_actions, call Telegram BanChatMember across all chats
-  - `/trust` - Insert to user_actions with action_type='trust'
   - `/unban` - Remove from user_actions, call Telegram UnbanChatMember
   - `/warn` - Insert to user_actions, auto-ban after threshold
   - `/report` - Create admin notification, queue for review

@@ -20,6 +20,7 @@ public partial class TelegramAdminBotService(
     TelegramBotClientFactory botFactory,
     MessageHistoryRepository repository,
     IManagedChatsRepository managedChatsRepository,
+    IUserActionsRepository userActionsRepository,
     IOptions<TelegramOptions> options,
     IOptions<MessageHistoryOptions> historyOptions,
     CommandRouter commandRouter,
@@ -182,6 +183,23 @@ public partial class TelegramAdminBotService(
                 message.Chat.Id,
                 photoFileId != null,
                 text != null);
+
+            // Check if user is trusted - if so, skip spam detection entirely
+            var isTrusted = await userActionsRepository.IsUserTrustedAsync(
+                message.From.Id,
+                message.Chat.Id);
+
+            if (isTrusted)
+            {
+                logger.LogDebug(
+                    "User {UserId} is trusted - skipping spam detection for message {MessageId}",
+                    message.From.Id,
+                    message.MessageId);
+                return; // Skip spam detection for trusted users
+            }
+
+            // TODO: Queue spam detection check here (Phase 2.5)
+            // For now, spam detection is only triggered manually via /spam command
         }
         catch (Exception ex)
         {
