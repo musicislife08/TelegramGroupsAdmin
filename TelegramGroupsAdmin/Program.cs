@@ -181,9 +181,9 @@ builder.Services.AddScoped<ITelegramImageService, TelegramImageService>();
 
 // Background services (register as singleton first, then add as hosted service)
 // Also expose IMessageHistoryService interface for UI components
-builder.Services.AddSingleton<HistoryBotService>();
-builder.Services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<HistoryBotService>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<HistoryBotService>());
+builder.Services.AddSingleton<TelegramAdminBotService>();
+builder.Services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TelegramAdminBotService>());
 builder.Services.AddHostedService<CleanupBackgroundService>();
 
 // OpenAI Vision

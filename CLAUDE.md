@@ -321,7 +321,9 @@ CREATE TABLE verification_tokens (
 5. **Audit trail** - Complete history of who did what, when
 
 ### Background Services
-- `TelegramAdminBot` (planned) - Unified bot for messages, commands, moderation
+- `TelegramAdminBotService` - Unified Telegram bot (renamed from HistoryBotService)
+  - Currently: Message history caching, real-time events
+  - Future: Bot commands, spam detection, moderation actions
 - `SpamCheckQueueWorker` (planned) - Async spam detection processing
 - `CleanupBackgroundService` - Message retention cleanup with smart retention (keeps spam/ham samples)
 
@@ -510,7 +512,7 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 6. **Telegram API Alignment** - Refactored all "group" terminology to "chat" for consistency with Telegram Bot API
 
 ## Troubleshooting
-**HistoryBot not caching**: Check TELEGRAM__HISTORYBOTTOKEN, bot added to chat, privacy mode off
+**Telegram bot not caching**: Check TELEGRAM__HISTORYBOTTOKEN, bot added to chat, privacy mode off
 **Image spam failing**: Check OPENAI__APIKEY, /data volume mounted
 **DB growing**: Check retention (720h default), cleanup service running
 **Rate limits**: Check logs for LogWarning messages from VirusTotalService or OpenAIVisionSpamDetectionService
@@ -560,7 +562,8 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [x] **Testing complete** - All pages working, 0 errors, 0 warnings
 
 **Phase 2.3: Unified Bot Implementation** 🔜 **NEXT**
-- [ ] **Single bot architecture** - Replace HistoryBotService with TelegramAdminBot
+- [x] **Service renamed** - HistoryBotService → TelegramAdminBotService (foundation ready)
+- [ ] **Command routing** - Add command handler infrastructure to TelegramAdminBotService
 - [ ] **Message processing** - Save to DB → Queue spam check → Take action
 - [ ] **Bot commands** - `/spam`, `/ban`, `/trust`, `/unban`, `/warn`, `/report`
 - [ ] **Cross-chat actions** - Bans/warns across all managed groups
@@ -617,7 +620,7 @@ Foundation work before building unified bot:
    - Message edit detection and re-scanning
 
 ### **Next Priority: Unified Bot Implementation (Phase 2.3)** 🔜
-Replace HistoryBotService + external tg-spam with single TelegramAdminBot:
+TelegramAdminBotService (unified bot - formerly HistoryBotService):
 
 1. **Bot Architecture**
    - Telegram.Bot integration

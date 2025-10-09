@@ -15,12 +15,12 @@ using TelegramGroupsAdmin.Services.Telegram;
 
 namespace TelegramGroupsAdmin.Services.BackgroundServices;
 
-public partial class HistoryBotService(
+public partial class TelegramAdminBotService(
     TelegramBotClientFactory botFactory,
     MessageHistoryRepository repository,
     IOptions<TelegramOptions> options,
     IOptions<MessageHistoryOptions> historyOptions,
-    ILogger<HistoryBotService> logger)
+    ILogger<TelegramAdminBotService> logger)
     : BackgroundService, IMessageHistoryService
 {
     private readonly TelegramOptions _options = options.Value;
@@ -32,16 +32,16 @@ public partial class HistoryBotService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Check if HistoryBot is enabled
+        // Check if Telegram admin bot is enabled
         if (!_historyOptions.Enabled)
         {
-            logger.LogInformation("HistoryBot is disabled (MESSAGEHISTORY__ENABLED=false). Service will not start.");
+            logger.LogInformation("Telegram admin bot is disabled (MESSAGEHISTORY__ENABLED=false). Service will not start.");
             return;
         }
 
         var botClient = botFactory.GetOrCreate(_options.HistoryBotToken);
 
-        logger.LogInformation("HistoryBot started listening for messages in all chats");
+        logger.LogInformation("Telegram admin bot started listening for messages in all chats");
 
         var receiverOptions = new ReceiverOptions
         {
