@@ -1,5 +1,5 @@
 @page "/analytics"
-@attribute [Authorize(Policy = "AdminOnly")]
+@attribute [Authorize(Roles = "Admin,Owner")]
 @using TelegramGroupsAdmin.Auth
 
 <PageTitle>Analytics</PageTitle>
