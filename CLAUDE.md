@@ -425,15 +425,39 @@ builder.Logging.AddFilter("TelegramGroupsAdmin", LogLevel.Information);
 - POST /reset-password - Process password reset
 
 ## Blazor Pages
-- `/` - Dashboard (stats, requires auth)
+
+### Public Pages
 - `/login` - Login form (generates intermediate token)
 - `/login/verify` - TOTP verification (requires intermediate token)
 - `/login/setup-2fa` - Mandatory 2FA setup (requires intermediate token)
 - `/register` - Registration with invite token
-- `/profile` - Password change, TOTP enable/reset
+
+### Authenticated Pages
+- `/` (Home) - Chat health dashboard with daily stats (all users)
+- `/analytics` - Deep-dive analytics with tabs (Admin/Owner only):
+  - `#spam` - Spam detection statistics and trends (SpamAnalytics component)
+  - `#trends` - Message volume trends (stub)
+  - `#performance` - Detection accuracy metrics (stub)
+- `/messages` - Message viewer, filters, CSV/JSON export, real-time updates (all users)
+- `/spam` - Spam management with tabs (Admin/Owner only):
+  - `#stopwords` - Stop words management (StopWords component)
+  - `#training` - Bayes training data management (TrainingData component)
 - `/users` - User management, invite system, 2FA reset (Admin/Owner only)
-- `/messages` - Message viewer, filters, CSV/JSON export, real-time updates
 - `/audit` - Audit log viewer (Admin/Owner only)
+- `/settings` - Application settings with tabs (Admin/Owner only):
+  - `#spam` - Spam detection configuration (SpamDetectionConfig component)
+  - `#general` - General settings (stub)
+  - `#telegram` - Telegram bot settings (stub)
+  - `#notifications` - Notification settings (stub)
+  - `#security` - Security settings (stub)
+  - `#integrations` - Third-party integrations (stub)
+- `/profile` - Password change, TOTP enable/reset, Telegram account linking (all users)
+
+### UI Features
+- **URL Fragment Navigation** - All tabbed pages support direct linking (e.g., `/spam#training`)
+- **Navigation Menu** - Logical grouping with user section at bottom (Profile/Logout)
+- **Top Bar** - Displays logged-in user email in top-right corner
+- **Component Reuse** - Spam pages converted to reusable components in `Components/Shared/SpamManagement/`
 
 ## Permission Levels
 0=ReadOnly, 1=Admin, 2=Owner
@@ -620,12 +644,16 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [ ] **Cross-chat actions** - Bans/warns across all managed groups
 - [ ] **Edit monitoring** - Detect "post innocent, edit to spam" tactic
 
-**Phase 2.4: Blazor Admin UI** ✅ **PARTIALLY COMPLETE**
-- [x] **Spam management pages** - Stop Words, Training Data (needs update for new schema)
-- [x] **Configuration UI** - Per-algorithm settings
-- [ ] **Analytics dashboard** - Stats, charts, detection trends
-- [ ] **User actions UI** - Review bans, warns, appeals
-- [ ] **Multi-chat management** - Configure per-chat settings
+**Phase 2.4: Blazor Admin UI** ✅ **COMPLETE**
+- [x] **UI reorganization** - Logical navigation structure with tabbed interfaces
+- [x] **Spam management** - Consolidated `/spam` page with Stop Words and Training Data tabs
+- [x] **Configuration UI** - `/settings` page with Spam Detection config + stubs for future settings
+- [x] **Analytics dashboard** - `/analytics` page with Spam Analytics + stubs for trends/performance
+- [x] **URL fragment navigation** - Direct linking to specific tabs (e.g., `/spam#training`)
+- [x] **User experience** - Profile/Logout at bottom of nav, username in top-right corner
+- [x] **Component architecture** - Reusable spam components in `Components/Shared/SpamManagement/`
+- [ ] **User actions UI** - Review bans, warns, appeals (future)
+- [ ] **Multi-chat management** - Configure per-chat settings (future)
 
 **Phase 2.5: Advanced Features** 🔮 **FUTURE**
 - [ ] **Ban appeal workflow** - UI + bot commands

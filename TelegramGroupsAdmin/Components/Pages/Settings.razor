@@ -1,6 +1,7 @@
 @page "/settings"
 @attribute [Authorize(Roles = "Admin,Owner")]
 @using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Components.Shared.SpamManagement
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -11,6 +12,10 @@
     <MudText Typo="Typo.body1" Class="mb-4">Configure system-wide settings and preferences</MudText>
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnTabChanged">
+        <MudTabPanel Text="Spam Detection" Icon="@Icons.Material.Filled.Shield">
+            <SpamDetectionConfig />
+        </MudTabPanel>
+
         <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Tune">
             <MudPaper Class="pa-4" Elevation="0">
                 <MudText Typo="Typo.h6" GutterBottom="true">General Settings</MudText>
@@ -67,11 +72,12 @@
         var fragment = new Uri(Navigation.Uri).Fragment.TrimStart('#');
         _activeTabIndex = fragment switch
         {
-            "general" => 0,
-            "telegram" => 1,
-            "notifications" => 2,
-            "security" => 3,
-            "integrations" => 4,
+            "spam" => 0,
+            "general" => 1,
+            "telegram" => 2,
+            "notifications" => 3,
+            "security" => 4,
+            "integrations" => 5,
             _ => 0
         };
 
@@ -83,11 +89,12 @@
         var fragment = new Uri(e.Location).Fragment.TrimStart('#');
         var newIndex = fragment switch
         {
-            "general" => 0,
-            "telegram" => 1,
-            "notifications" => 2,
-            "security" => 3,
-            "integrations" => 4,
+            "spam" => 0,
+            "general" => 1,
+            "telegram" => 2,
+            "notifications" => 3,
+            "security" => 4,
+            "integrations" => 5,
             _ => 0
         };
 
@@ -105,12 +112,13 @@
         // Update URL fragment without reload
         var fragment = index switch
         {
-            0 => "general",
-            1 => "telegram",
-            2 => "notifications",
-            3 => "security",
-            4 => "integrations",
-            _ => "general"
+            0 => "spam",
+            1 => "general",
+            2 => "telegram",
+            3 => "notifications",
+            4 => "security",
+            5 => "integrations",
+            _ => "spam"
         };
 
         Navigation.NavigateTo($"/settings#{fragment}", false);

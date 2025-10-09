@@ -1,6 +1,9 @@
 @page "/analytics"
 @attribute [Authorize(Roles = "Admin,Owner")]
 @using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Components.Shared.SpamManagement
+@inject NavigationManager Navigation
+@implements IDisposable
 
 <PageTitle>Analytics</PageTitle>
 
@@ -8,36 +11,83 @@
     <MudText Typo="Typo.h4" GutterBottom="true">Analytics</MudText>
     <MudText Typo="Typo.body1" Class="mb-4">Deep-dive statistics and trends across all managed chats</MudText>
 
-    <MudGrid>
-        <!-- Placeholder for future analytics -->
-        <MudItem xs="12">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.h6" GutterBottom="true">Coming Soon</MudText>
-                <MudText Typo="Typo.body1">
-                    Advanced analytics features including:
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnTabChanged">
+        <MudTabPanel Text="Spam Analytics" Icon="@Icons.Material.Filled.Shield">
+            <SpamAnalytics />
+        </MudTabPanel>
+
+        <MudTabPanel Text="Message Trends" Icon="@Icons.Material.Filled.TrendingUp">
+            <MudPaper Class="pa-4" Elevation="0">
+                <MudText Typo="Typo.h6" GutterBottom="true">Message Volume Trends</MudText>
+                <MudText Typo="Typo.body2" Class="mb-4">
+                    Coming soon: Message volume trends over time, activity patterns, user engagement metrics
                 </MudText>
-                <MudList T="string">
-                    <MudListItem T="string" Icon="@Icons.Material.Filled.TrendingUp">
-                        Message volume trends over time
-                    </MudListItem>
-                    <MudListItem T="string" Icon="@Icons.Material.Filled.PieChart">
-                        Spam detection breakdown by algorithm
-                    </MudListItem>
-                    <MudListItem T="string" Icon="@Icons.Material.Filled.BarChart">
-                        Per-chat performance metrics
-                    </MudListItem>
-                    <MudListItem T="string" Icon="@Icons.Material.Filled.Timeline">
-                        User activity patterns
-                    </MudListItem>
-                    <MudListItem T="string" Icon="@Icons.Material.Filled.BugReport">
-                        False positive/negative analysis
-                    </MudListItem>
-                </MudList>
             </MudPaper>
-        </MudItem>
-    </MudGrid>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Performance" Icon="@Icons.Material.Filled.Speed">
+            <MudPaper Class="pa-4" Elevation="0">
+                <MudText Typo="Typo.h6" GutterBottom="true">Performance Metrics</MudText>
+                <MudText Typo="Typo.body2" Class="mb-4">
+                    Coming soon: Detection accuracy, false positive/negative analysis, per-chat performance
+                </MudText>
+            </MudPaper>
+        </MudTabPanel>
+    </MudTabs>
 </MudContainer>
 
 @code {
+    private int _activeTabIndex = 0;
 
+    protected override void OnInitialized()
+    {
+        var fragment = new Uri(Navigation.Uri).Fragment.TrimStart('#');
+        _activeTabIndex = fragment switch
+        {
+            "spam" => 0,
+            "trends" => 1,
+            "performance" => 2,
+            _ => 0
+        };
+
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        var fragment = new Uri(e.Location).Fragment.TrimStart('#');
+        var newIndex = fragment switch
+        {
+            "spam" => 0,
+            "trends" => 1,
+            "performance" => 2,
+            _ => 0
+        };
+
+        if (newIndex != _activeTabIndex)
+        {
+            _activeTabIndex = newIndex;
+            StateHasChanged();
+        }
+    }
+
+    private void OnTabChanged(int index)
+    {
+        _activeTabIndex = index;
+
+        var fragment = index switch
+        {
+            0 => "spam",
+            1 => "trends",
+            2 => "performance",
+            _ => "spam"
+        };
+
+        Navigation.NavigateTo($"/analytics#{fragment}", false);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
 }
