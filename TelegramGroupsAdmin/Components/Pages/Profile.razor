@@ -1,6 +1,7 @@
 @page "/profile"
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.JSInterop
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Models
 @using TelegramGroupsAdmin.Repositories
@@ -9,8 +10,10 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject UserRepository UserRepository
 @inject IAuthService AuthService
+@inject ITelegramUserMappingRepository TelegramMappingRepository
+@inject ITelegramLinkTokenRepository TelegramLinkTokenRepository
 @inject ISnackbar Snackbar
-@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 @attribute [Authorize]
 
 <PageTitle>Profile - TelegramGroupsAdmin</PageTitle>
@@ -131,6 +134,81 @@
                     }
                 </MudPaper>
             </MudItem>
+
+            <!-- Linked Telegram Accounts -->
+            <MudItem xs="12">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Linked Telegram Accounts</MudText>
+
+                    @if (_linkedAccounts == null)
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                    }
+                    else if (_linkedAccounts.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mb-3">
+                            No Telegram accounts linked yet. Link your account to use bot commands.
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        <MudTable Items="@_linkedAccounts" Hover="true" Striped="true" Class="mb-3">
+                            <HeaderContent>
+                                <MudTh>Telegram Username</MudTh>
+                                <MudTh>Telegram ID</MudTh>
+                                <MudTh>Linked Date</MudTh>
+                                <MudTh>Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Username">@@@(context.TelegramUsername ?? "N/A")</MudTd>
+                                <MudTd DataLabel="ID">@context.TelegramId</MudTd>
+                                <MudTd DataLabel="Linked">@FormatDate(context.LinkedAt)</MudTd>
+                                <MudTd DataLabel="Actions">
+                                    <MudButton Color="Color.Error"
+                                              Size="Size.Small"
+                                              Variant="Variant.Text"
+                                              OnClick="@(() => UnlinkAccount(context.Id))"
+                                              Disabled="@_unlinkingAccount">
+                                        Unlink
+                                    </MudButton>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    }
+
+                    @if (_showLinkToken && _currentLinkToken != null)
+                    {
+                        <MudAlert Severity="Severity.Success" Class="mb-3">
+                            <MudText Typo="Typo.body1" Class="mb-2"><strong>Your Link Token (expires in 15 minutes):</strong></MudText>
+                            <MudTextField Value="@_currentLinkToken.Token"
+                                         ReadOnly="true"
+                                         Variant="Variant.Outlined"
+                                         Adornment="Adornment.End"
+                                         AdornmentIcon="@Icons.Material.Filled.ContentCopy"
+                                         OnAdornmentClick="@(() => CopyToClipboard(_currentLinkToken.Token))" />
+                            <MudText Typo="Typo.body2" Class="mt-2">
+                                Open Telegram and send this command to the bot:<br/>
+                                <code>/link @_currentLinkToken.Token</code>
+                            </MudText>
+                        </MudAlert>
+                    }
+
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Primary"
+                              OnClick="GenerateLinkToken"
+                              Disabled="@_generatingToken">
+                        @if (_generatingToken)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Generating Token...</span>
+                        }
+                        else
+                        {
+                            <span>Link New Telegram Account</span>
+                        }
+                    </MudButton>
+                </MudPaper>
+            </MudItem>
         </MudGrid>
     }
 </MudContainer>
@@ -197,6 +275,13 @@
     private string _totpVerificationCode = "";
     private bool _verifyingTotp = false;
 
+    // Telegram Linking
+    private List<TelegramUserMappingRecord>? _linkedAccounts;
+    private bool _generatingToken = false;
+    private bool _unlinkingAccount = false;
+    private bool _showLinkToken = false;
+    private TelegramLinkTokenRecord? _currentLinkToken;
+
 
     protected override async Task OnInitializedAsync()
     {
@@ -207,6 +292,7 @@
         {
             _currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             await LoadUserAsync();
+            await LoadLinkedAccountsAsync();
         }
     }
 
@@ -425,5 +511,115 @@
         if (!timestamp.HasValue) return "Never";
         var date = DateTimeOffset.FromUnixTimeSeconds(timestamp.Value);
         return date.ToString("yyyy-MM-dd HH:mm");
+    }
+
+    private async Task LoadLinkedAccountsAsync()
+    {
+        if (string.IsNullOrEmpty(_currentUserId)) return;
+
+        try
+        {
+            var accounts = await TelegramMappingRepository.GetByUserIdAsync(_currentUserId);
+            _linkedAccounts = accounts.ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading linked accounts: {ex.Message}", Severity.Error);
+            _linkedAccounts = new List<TelegramUserMappingRecord>();
+        }
+    }
+
+    private async Task GenerateLinkToken()
+    {
+        if (string.IsNullOrEmpty(_currentUserId)) return;
+
+        _generatingToken = true;
+        StateHasChanged();
+
+        try
+        {
+            // Revoke any existing unused tokens for this user
+            await TelegramLinkTokenRepository.RevokeUnusedTokensForUserAsync(_currentUserId);
+
+            // Generate new token (32 random bytes, base64 encoded)
+            var tokenBytes = new byte[32];
+            System.Security.Cryptography.RandomNumberGenerator.Fill(tokenBytes);
+            var token = Convert.ToBase64String(tokenBytes)
+                .Replace("+", "")
+                .Replace("/", "")
+                .Replace("=", "")
+                .Substring(0, 12); // 12 character token
+
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var expiresAt = now + (15 * 60); // 15 minutes
+
+            var tokenRecord = new TelegramLinkTokenRecord(
+                Token: token,
+                UserId: _currentUserId,
+                CreatedAt: now,
+                ExpiresAt: expiresAt,
+                UsedAt: null,
+                UsedByTelegramId: null
+            );
+
+            await TelegramLinkTokenRepository.InsertAsync(tokenRecord);
+
+            _currentLinkToken = tokenRecord;
+            _showLinkToken = true;
+
+            Snackbar.Add("Link token generated successfully! Use it within 15 minutes.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating token: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _generatingToken = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UnlinkAccount(long mappingId)
+    {
+        _unlinkingAccount = true;
+        StateHasChanged();
+
+        try
+        {
+            var success = await TelegramMappingRepository.DeactivateAsync(mappingId);
+
+            if (success)
+            {
+                Snackbar.Add("Telegram account unlinked successfully", Severity.Success);
+                await LoadLinkedAccountsAsync();
+            }
+            else
+            {
+                Snackbar.Add("Failed to unlink account", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error unlinking account: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _unlinkingAccount = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyToClipboard(string text)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            Snackbar.Add("Token copied to clipboard!", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Please copy the token manually", Severity.Warning);
+        }
     }
 }

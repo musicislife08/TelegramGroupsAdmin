@@ -1,0 +1,97 @@
+using Telegram.Bot;
+using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Repositories;
+
+namespace TelegramGroupsAdmin.Services.BotCommands.Commands;
+
+public class LinkCommand : IBotCommand
+{
+    private readonly ILogger<LinkCommand> _logger;
+    private readonly ITelegramLinkTokenRepository _tokenRepository;
+    private readonly ITelegramUserMappingRepository _mappingRepository;
+
+    public string Name => "link";
+    public string Description => "Link your Telegram account to web app";
+    public string Usage => "/link <token>";
+    public int MinPermissionLevel => 0; // Anyone can link
+    public bool RequiresReply => false;
+
+    public LinkCommand(
+        ILogger<LinkCommand> logger,
+        ITelegramLinkTokenRepository tokenRepository,
+        ITelegramUserMappingRepository mappingRepository)
+    {
+        _logger = logger;
+        _tokenRepository = tokenRepository;
+        _mappingRepository = mappingRepository;
+    }
+
+    public async Task<string> ExecuteAsync(
+        Message message,
+        string[] args,
+        int userPermissionLevel,
+        CancellationToken cancellationToken = default)
+    {
+        // Validate token argument
+        if (args.Length == 0 || string.IsNullOrWhiteSpace(args[0]))
+        {
+            return "❌ Please provide a link token: `/link <token>`\n\n" +
+                   "Generate a token at: Profile → Linked Telegram Accounts";
+        }
+
+        var token = args[0].Trim();
+        var telegramUser = message.From!;
+
+        // Check if Telegram account is already linked
+        var existingMapping = await _mappingRepository.GetByTelegramIdAsync(telegramUser.Id);
+        if (existingMapping != null)
+        {
+            return $"❌ Your Telegram account is already linked to a web app user.\n\n" +
+                   $"To link a different account, first unlink from the web app.";
+        }
+
+        // Validate token
+        var tokenRecord = await _tokenRepository.GetByTokenAsync(token);
+        if (tokenRecord == null)
+        {
+            return "❌ Invalid token. Please generate a new token from the web app.";
+        }
+
+        // Check if token is expired
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        if (tokenRecord.ExpiresAt < now)
+        {
+            return "❌ Token expired. Please generate a new token from the web app.";
+        }
+
+        // Check if token was already used
+        if (tokenRecord.UsedAt != null)
+        {
+            return "❌ Token already used. Please generate a new token from the web app.";
+        }
+
+        // Create mapping
+        var mapping = new Models.TelegramUserMappingRecord(
+            Id: 0, // Will be assigned by database
+            TelegramId: telegramUser.Id,
+            TelegramUsername: telegramUser.Username,
+            UserId: tokenRecord.UserId,
+            LinkedAt: now,
+            IsActive: true
+        );
+
+        await _mappingRepository.InsertAsync(mapping);
+
+        // Mark token as used
+        await _tokenRepository.MarkAsUsedAsync(token, telegramUser.Id);
+
+        _logger.LogInformation(
+            "Telegram user {TelegramId} (@{Username}) successfully linked to web user {UserId}",
+            telegramUser.Id,
+            telegramUser.Username ?? "none",
+            tokenRecord.UserId);
+
+        return $"✅ Successfully linked your Telegram account!\n\n" +
+               $"You can now use bot commands with your web app permissions.";
+    }
+}

@@ -343,4 +343,44 @@ internal static class ModelMappings
         LastSeenAt: ui.LastSeenAt,
         SettingsJson: ui.SettingsJson
     );
+
+    // TelegramUserMapping mappings
+    public static UiModels.TelegramUserMappingRecord ToUiModel(this DataModels.TelegramUserMappingRecord data) => new(
+        Id: data.id,
+        TelegramId: data.telegram_id,
+        TelegramUsername: data.telegram_username,
+        UserId: data.user_id,
+        LinkedAt: data.linked_at,
+        IsActive: data.is_active
+    );
+
+    public static DataModels.TelegramUserMappingRecord ToDataModel(this UiModels.TelegramUserMappingRecord ui) => new()
+    {
+        id = ui.Id,
+        telegram_id = ui.TelegramId,
+        telegram_username = ui.TelegramUsername,
+        user_id = ui.UserId,
+        linked_at = ui.LinkedAt,
+        is_active = ui.IsActive
+    };
+
+    // TelegramLinkToken mappings
+    public static UiModels.TelegramLinkTokenRecord ToUiModel(this DataModels.TelegramLinkTokenRecord data) => new(
+        Token: data.token,
+        UserId: data.user_id,
+        CreatedAt: data.created_at,
+        ExpiresAt: data.expires_at,
+        UsedAt: data.used_at,
+        UsedByTelegramId: data.used_by_telegram_id
+    );
+
+    public static DataModels.TelegramLinkTokenRecord ToDataModel(this UiModels.TelegramLinkTokenRecord ui) => new()
+    {
+        token = ui.Token,
+        user_id = ui.UserId,
+        created_at = ui.CreatedAt,
+        expires_at = ui.ExpiresAt,
+        used_at = ui.UsedAt,
+        used_by_telegram_id = ui.UsedByTelegramId
+    };
 }

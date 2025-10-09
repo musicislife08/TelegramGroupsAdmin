@@ -187,6 +187,7 @@ builder.Services.AddScoped<ITelegramImageService, TelegramImageService>();
 
 // Bot command system
 builder.Services.AddSingleton<IBotCommand, Commands.HelpCommand>();
+builder.Services.AddSingleton<IBotCommand, Commands.LinkCommand>();
 builder.Services.AddSingleton<IBotCommand, Commands.SpamCommand>();
 builder.Services.AddSingleton<IBotCommand, Commands.BanCommand>();
 builder.Services.AddSingleton<IBotCommand, Commands.TrustCommand>();
@@ -218,6 +219,8 @@ builder.Services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.ISpamD
 builder.Services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>();
 builder.Services.AddScoped<IUserActionsRepository, UserActionsRepository>();
 builder.Services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
+builder.Services.AddScoped<ITelegramUserMappingRepository, TelegramUserMappingRepository>();
+builder.Services.AddScoped<ITelegramLinkTokenRepository, TelegramLinkTokenRepository>();
 
 var app = builder.Build();
 

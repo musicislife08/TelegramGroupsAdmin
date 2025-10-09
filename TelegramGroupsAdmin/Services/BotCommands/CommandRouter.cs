@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Repositories;
 
 namespace TelegramGroupsAdmin.Services.BotCommands;
 
@@ -11,16 +12,22 @@ public partial class CommandRouter
 {
     private readonly ILogger<CommandRouter> _logger;
     private readonly Dictionary<string, IBotCommand> _commands;
+    private readonly ITelegramUserMappingRepository _mappingRepository;
+    private readonly IServiceProvider _serviceProvider;
 
     [GeneratedRegex(@"^/(\w+)(?:@\w+)?(?:\s+(.*))?$", RegexOptions.Compiled)]
     private static partial Regex CommandPattern();
 
     public CommandRouter(
         ILogger<CommandRouter> logger,
-        IEnumerable<IBotCommand> commands)
+        IEnumerable<IBotCommand> commands,
+        ITelegramUserMappingRepository mappingRepository,
+        IServiceProvider serviceProvider)
     {
         _logger = logger;
         _commands = commands.ToDictionary(c => c.Name.ToLowerInvariant(), c => c);
+        _mappingRepository = mappingRepository;
+        _serviceProvider = serviceProvider;
     }
 
     /// <summary>
@@ -65,21 +72,19 @@ public partial class CommandRouter
 
         try
         {
-            // TODO: Phase 2.3 - Link Telegram users to web app users
-            // For now, all Telegram users have ReadOnly (0) permissions
-            // Future: Add telegram_id column to users table or create telegram_users mapping table
-
-            // TEMPORARY: Hardcode user 1312830442 as Owner for testing
-            var permissionLevel = message.From.Id == 1312830442 ? 2 : 0;
+            // Special case: /link command is always accessible (doesn't require linking)
+            var permissionLevel = commandName == "link" ? 0 : await GetPermissionLevelAsync(message.From.Id);
 
             // Check permission
             if (permissionLevel < command.MinPermissionLevel)
             {
                 _logger.LogWarning(
-                    "User {UserId} ({Username}) attempted to use command /{Command} without sufficient permissions (has {UserLevel}, needs {RequiredLevel})",
-                    message.From.Id, message.From.Username, commandName, permissionLevel, command.MinPermissionLevel);
+                    "User {UserId} (@{Username}) attempted to use command /{Command} without sufficient permissions (has {UserLevel}, needs {RequiredLevel})",
+                    message.From.Id, message.From.Username ?? "none", commandName, permissionLevel, command.MinPermissionLevel);
 
-                return $"❌ Insufficient permissions. This command requires {GetPermissionName(command.MinPermissionLevel)} level.";
+                return permissionLevel == -1
+                    ? $"❌ Please link your Telegram account first. Use /link <token>\n\nGenerate a token at the web app: Profile → Linked Telegram Accounts"
+                    : $"❌ Insufficient permissions. This command requires {GetPermissionName(command.MinPermissionLevel)} level.";
             }
 
             // Check reply requirement
@@ -112,6 +117,28 @@ public partial class CommandRouter
         return _commands.Values
             .Where(c => c.MinPermissionLevel <= permissionLevel)
             .OrderBy(c => c.Name);
+    }
+
+    /// <summary>
+    /// Get permission level for a Telegram user
+    /// Returns -1 if not linked, otherwise returns the user's permission level from web app
+    /// </summary>
+    private async Task<int> GetPermissionLevelAsync(long telegramId)
+    {
+        // Special case: /link command should always be accessible (checked in LinkCommand itself)
+        // Get the user_id from telegram_user_mappings
+        var userId = await _mappingRepository.GetUserIdByTelegramIdAsync(telegramId);
+        if (userId == null)
+        {
+            return -1; // Not linked
+        }
+
+        // Get permission level from users table
+        using var scope = _serviceProvider.CreateScope();
+        var userRepository = scope.ServiceProvider.GetRequiredService<UserRepository>();
+        var user = await userRepository.GetByIdAsync(userId);
+
+        return user != null ? (int)user.PermissionLevel : -1;
     }
 
     private static string GetPermissionName(int level) => level switch
