@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using TelegramGroupsAdmin.Data.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
@@ -16,6 +18,7 @@ public class OpenAISpamCheck : ISpamCheck
 {
     private readonly ILogger<OpenAISpamCheck> _logger;
     private readonly SpamDetectionConfig _config;
+    private readonly OpenAIOptions _openAIOptions;
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
     private readonly IMessageHistoryService _messageHistoryService;
@@ -25,12 +28,14 @@ public class OpenAISpamCheck : ISpamCheck
     public OpenAISpamCheck(
         ILogger<OpenAISpamCheck> logger,
         SpamDetectionConfig config,
+        IOptions<OpenAIOptions> openAIOptions,
         IHttpClientFactory httpClientFactory,
         IMemoryCache cache,
         IMessageHistoryService messageHistoryService)
     {
         _logger = logger;
         _config = config;
+        _openAIOptions = openAIOptions.Value;
         _httpClient = httpClientFactory.CreateClient();
         _cache = cache;
         _messageHistoryService = messageHistoryService;
@@ -87,9 +92,8 @@ public class OpenAISpamCheck : ISpamCheck
                 return CreateResponse(cachedResponse, fromCache: true);
             }
 
-            // Get API key from environment
-            var apiKey = Environment.GetEnvironmentVariable("OPENAI__APIKEY");
-            if (string.IsNullOrEmpty(apiKey))
+            // Check API key
+            if (string.IsNullOrEmpty(_openAIOptions.ApiKey))
             {
                 _logger.LogWarning("OpenAI API key not configured");
                 return new SpamCheckResponse
@@ -114,7 +118,7 @@ public class OpenAISpamCheck : ISpamCheck
 
             // Make API call
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
-            httpRequest.Headers.Add("Authorization", $"Bearer {apiKey}");
+            httpRequest.Headers.Add("Authorization", $"Bearer {_openAIOptions.ApiKey}");
             httpRequest.Content = new StringContent(requestJson, System.Text.Encoding.UTF8, "application/json");
 
             using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
@@ -225,13 +229,13 @@ public class OpenAISpamCheck : ISpamCheck
 
         return new OpenAIRequest
         {
-            Model = Environment.GetEnvironmentVariable("OPENAI__MODEL") ?? "gpt-4o-mini",
+            Model = _openAIOptions.Model,
             Messages =
             [
                 new OpenAIMessage { Role = "system", Content = systemPrompt },
                 new OpenAIMessage { Role = "user", Content = userPrompt }
             ],
-            MaxTokens = int.Parse(Environment.GetEnvironmentVariable("OPENAI__MAXTOKENS") ?? "200"),
+            MaxTokens = _openAIOptions.MaxTokens,
             Temperature = 0.1,
             TopP = 1.0,
             ResponseFormat = new { type = "json_object" }

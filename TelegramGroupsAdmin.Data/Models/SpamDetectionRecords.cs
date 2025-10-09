@@ -113,24 +113,18 @@ public record StopWordDto
 {
     public long id { get; init; }
     public string word { get; init; } = string.Empty;
-    public int word_type { get; init; }
-    public long added_date { get; init; }
-    public string source { get; init; } = string.Empty;
     public bool enabled { get; init; }
+    public long added_date { get; init; }
     public string? added_by { get; init; }
-    public int detection_count { get; init; }
-    public long? last_detected_date { get; init; }
+    public string? notes { get; init; }
 
     public StopWord ToStopWord() => new StopWord(
         Id: id,
         Word: word,
-        WordType: (StopWordType)word_type,
-        AddedDate: added_date,
-        Source: source,
         Enabled: enabled,
+        AddedDate: added_date,
         AddedBy: added_by,
-        DetectionCount: detection_count,
-        LastDetectedDate: last_detected_date
+        Notes: notes
     );
 }
 
@@ -140,21 +134,8 @@ public record StopWordDto
 public record StopWord(
     long Id,
     string Word,
-    StopWordType WordType,
-    long AddedDate,
-    string Source,
     bool Enabled,
+    long AddedDate,
     string? AddedBy,
-    int DetectionCount,
-    long? LastDetectedDate
+    string? Notes
 );
-
-/// <summary>
-/// Types of stop words for different detection contexts
-/// </summary>
-public enum StopWordType
-{
-    Message = 0,
-    Username = 1,
-    UserId = 2
-}

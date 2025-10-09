@@ -2,6 +2,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using TelegramGroupsAdmin.Data.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
@@ -16,6 +18,7 @@ public class ImageSpamCheck : ISpamCheck
 {
     private readonly ILogger<ImageSpamCheck> _logger;
     private readonly SpamDetectionConfig _config;
+    private readonly OpenAIOptions _openAIOptions;
     private readonly HttpClient _httpClient;
 
     public string CheckName => "ImageSpam";
@@ -23,10 +26,12 @@ public class ImageSpamCheck : ISpamCheck
     public ImageSpamCheck(
         ILogger<ImageSpamCheck> logger,
         SpamDetectionConfig config,
+        IOptions<OpenAIOptions> openAIOptions,
         IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
         _config = config;
+        _openAIOptions = openAIOptions.Value;
         _httpClient = httpClientFactory.CreateClient();
 
         // Configure HTTP client
@@ -72,8 +77,7 @@ public class ImageSpamCheck : ISpamCheck
 
         try
         {
-            var apiKey = Environment.GetEnvironmentVariable("OPENAI__APIKEY");
-            if (string.IsNullOrEmpty(apiKey))
+            if (string.IsNullOrEmpty(_openAIOptions.ApiKey))
             {
                 _logger.LogWarning("OpenAI API key not configured for image spam detection");
                 return new SpamCheckResponse
@@ -95,7 +99,7 @@ public class ImageSpamCheck : ISpamCheck
 
             var apiRequest = new
             {
-                model = Environment.GetEnvironmentVariable("OPENAI__MODEL") ?? "gpt-4o-mini",
+                model = _openAIOptions.Model,
                 messages = new[]
                 {
                     new
@@ -116,12 +120,12 @@ public class ImageSpamCheck : ISpamCheck
                         }
                     }
                 },
-                max_tokens = int.Parse(Environment.GetEnvironmentVariable("OPENAI__MAXTOKENS") ?? "500"),
+                max_tokens = _openAIOptions.MaxTokens,
                 temperature = 0.1
             };
 
             _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_openAIOptions.ApiKey}");
 
             _logger.LogDebug("ImageSpam check for user {UserId}: Calling OpenAI Vision API",
                 request.UserId);

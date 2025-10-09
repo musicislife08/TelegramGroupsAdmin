@@ -308,10 +308,6 @@
                                                   Label="Use VirusTotal"
                                                   Color="Color.Primary" />
 
-                                        <MudSwitch T="bool" @bind-checked="_config.ThreatIntel.UseGoogleSafeBrowsing"
-                                                  Label="Use Google Safe Browsing"
-                                                  Color="Color.Primary" />
-
                                         <MudNumericField @bind-Value="_threatIntelTimeoutSeconds"
                                                         Label="Timeout (seconds)"
                                                         Min="5" Max="60"

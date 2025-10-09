@@ -9,14 +9,15 @@ using TelegramGroupsAdmin.SpamDetection.Models;
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
 /// <summary>
-/// Spam check that validates URLs against threat intelligence services (VirusTotal, Google Safe Browsing)
-/// Based on existing VirusTotalService and GoogleSafeBrowsingService implementations
+/// Spam check that validates URLs/files against threat intelligence services
+/// Currently supports VirusTotal (disabled by default for URLs due to 15s latency)
+/// TODO: Add ClamAV for local virus scanning (files/images)
 /// </summary>
 public partial class ThreatIntelSpamCheck : ISpamCheck
 {
     private readonly ILogger<ThreatIntelSpamCheck> _logger;
     private readonly SpamDetectionConfig _config;
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     private static readonly Regex UrlRegex = CompiledUrlRegex();
 
@@ -29,10 +30,7 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
     {
         _logger = logger;
         _config = config;
-        _httpClient = httpClientFactory.CreateClient();
-
-        // Configure HTTP client
-        _httpClient.Timeout = _config.ThreatIntel.Timeout;
+        _httpClientFactory = httpClientFactory;
     }
 
     /// <summary>
@@ -85,25 +83,6 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
                         };
                     }
                 }
-
-                // Check Google Safe Browsing if enabled
-                if (_config.ThreatIntel.UseGoogleSafeBrowsing)
-                {
-                    var safeBrowsingResult = await CheckGoogleSafeBrowsingAsync(url, cancellationToken);
-                    if (safeBrowsingResult.IsThreat)
-                    {
-                        _logger.LogDebug("ThreatIntel check for user {UserId}: Google Safe Browsing flagged {Url}",
-                            request.UserId, url);
-
-                        return new SpamCheckResponse
-                        {
-                            CheckName = CheckName,
-                            IsSpam = true,
-                            Details = $"Google Safe Browsing flagged URL as unsafe: {url}",
-                            Confidence = 85
-                        };
-                    }
-                }
             }
 
             _logger.LogDebug("ThreatIntel check for user {UserId}: No threats found for {UrlCount} URLs",
@@ -132,18 +111,14 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
     }
 
     /// <summary>
-    /// Check URL against VirusTotal
+    /// Check URL against VirusTotal using named HttpClient configured in Program.cs
     /// </summary>
     private async Task<ThreatResult> CheckVirusTotalAsync(string url, CancellationToken ct)
     {
         try
         {
-            var apiKey = Environment.GetEnvironmentVariable("VIRUSTOTAL__APIKEY");
-            if (string.IsNullOrEmpty(apiKey))
-            {
-                _logger.LogDebug("VirusTotal API key not configured, skipping check");
-                return new ThreatResult(false, "API key not configured");
-            }
+            // Use named client "VirusTotal" - API key already configured in headers via Program.cs
+            var client = _httpClientFactory.CreateClient("VirusTotal");
 
             // Base64 encode URL for VirusTotal API
             var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(url))
@@ -151,11 +126,8 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
                 .Replace('+', '-')
                 .Replace('/', '_');
 
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("x-apikey", apiKey);
-
             // Step 1: Try to fetch an existing report
-            var response = await _httpClient.GetAsync($"https://www.virustotal.com/api/v3/urls/{b64}", ct);
+            var response = await client.GetAsync($"urls/{b64}", ct);
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
@@ -169,7 +141,7 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
             }
 
             var submitContent = new FormUrlEncodedContent([new("url", url)]);
-            var submitResponse = await _httpClient.PostAsync("https://www.virustotal.com/api/v3/urls", submitContent, ct);
+            var submitResponse = await client.PostAsync("urls", submitContent, ct);
             if (!submitResponse.IsSuccessStatusCode)
             {
                 return new ThreatResult(false, $"Submit failed: {submitResponse.StatusCode}");
@@ -178,7 +150,7 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
             // Step 3: Wait and retry (simplified - no polling)
             await Task.Delay(TimeSpan.FromSeconds(15), ct);
 
-            var retryResponse = await _httpClient.GetAsync($"https://www.virustotal.com/api/v3/urls/{b64}", ct);
+            var retryResponse = await client.GetAsync($"urls/{b64}", ct);
             if (!retryResponse.IsSuccessStatusCode)
             {
                 return new ThreatResult(false, "Scan not ready");
@@ -190,54 +162,6 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
         catch (Exception ex)
         {
             _logger.LogError(ex, "VirusTotal check failed for URL: {Url}", url);
-            return new ThreatResult(false, $"Error: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Check URL against Google Safe Browsing
-    /// </summary>
-    private async Task<ThreatResult> CheckGoogleSafeBrowsingAsync(string url, CancellationToken ct)
-    {
-        try
-        {
-            var apiKey = Environment.GetEnvironmentVariable("GOOGLE_SAFE_BROWSING_API_KEY");
-            if (string.IsNullOrEmpty(apiKey))
-            {
-                _logger.LogDebug("Google Safe Browsing API key not configured, skipping check");
-                return new ThreatResult(false, "API key not configured");
-            }
-
-            var request = new
-            {
-                client = new { clientId = "TelegramGroupsAdmin", clientVersion = "1.0" },
-                threatInfo = new
-                {
-                    threatTypes = new[] { "MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION" },
-                    platformTypes = new[] { "ANY_PLATFORM" },
-                    threatEntryTypes = new[] { "URL" },
-                    threatEntries = new[] { new { url } }
-                }
-            };
-
-            var response = await _httpClient.PostAsJsonAsync(
-                $"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={apiKey}",
-                request,
-                ct);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return new ThreatResult(false, $"API error: {response.StatusCode}");
-            }
-
-            var body = await response.Content.ReadAsStringAsync(ct);
-            var isThreat = body.Contains("threatType", StringComparison.OrdinalIgnoreCase);
-
-            return new ThreatResult(isThreat, isThreat ? "Threat detected" : "No threat");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Google Safe Browsing check failed for URL: {Url}", url);
             return new ThreatResult(false, $"Error: {ex.Message}");
         }
     }

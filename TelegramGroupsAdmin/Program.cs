@@ -11,6 +11,7 @@ using TelegramGroupsAdmin;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Configuration;
 using TelegramGroupsAdmin.Endpoints;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services;
@@ -31,6 +32,7 @@ builder.Logging.AddSimpleConsole(options =>
 });
 builder.Logging.AddFilter("Microsoft", LogLevel.Warning); // Only warnings and errors from Microsoft namespaces
 builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Information); // Keep startup/shutdown messages
+builder.Logging.AddFilter("TelegramGroupsAdmin.SpamDetection", LogLevel.Debug); // Keep spam detection logs (more specific first)
 builder.Logging.AddFilter("TelegramGroupsAdmin", LogLevel.Information); // Keep our app logs at Info level
 builder.Logging.AddFilter("Npgsql", LogLevel.Warning); // Suppress verbose Npgsql command logging
 
@@ -146,12 +148,14 @@ var limiterOptions = new RateLimiterStrategyOptions
     OnRejected = static _ =>
     {
         // Polly's telemetry integration automatically emits metrics for rate limit rejections
-        // For explicit logging, implement within VirusTotalService where ILogger is available
+        // Explicit logging happens in ThreatIntelSpamCheck where ILogger is available
         return ValueTask.CompletedTask;
     }
 };
 
-builder.Services.AddHttpClient<IThreatIntelService, VirusTotalService>(client =>
+// Named HttpClient for VirusTotal (used by spam detection library)
+// Includes rate limiting (4 req/min) and automatic API key injection
+builder.Services.AddHttpClient("VirusTotal", client =>
     {
         client.BaseAddress = new Uri("https://www.virustotal.com/api/v3/");
 

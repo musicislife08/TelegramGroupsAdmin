@@ -35,18 +35,8 @@ public record TrainingStats(
 public record StopWord(
     long Id,
     string Word,
-    StopWordType WordType,
-    long AddedDate,
-    string Source,
     bool Enabled,
+    long AddedDate,
     string? AddedBy,
-    int DetectionCount,
-    long? LastDetectedDate
+    string? Notes
 );
-
-public enum StopWordType
-{
-    Message = 0,
-    Username = 1,
-    UserId = 2
-}

@@ -255,13 +255,10 @@ internal static class ModelMappings
     public static UiModels.StopWord ToUiModel(this DataModels.StopWord data) => new(
         Id: data.Id,
         Word: data.Word,
-        WordType: (UiModels.StopWordType)data.WordType,
-        AddedDate: data.AddedDate,
-        Source: data.Source,
         Enabled: data.Enabled,
+        AddedDate: data.AddedDate,
         AddedBy: data.AddedBy,
-        DetectionCount: data.DetectionCount,
-        LastDetectedDate: data.LastDetectedDate
+        Notes: data.Notes
     );
 
     // Verification Token mappings

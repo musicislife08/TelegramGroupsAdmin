@@ -18,7 +18,7 @@ public class SpamDetectionConfig
     /// <summary>
     /// Minimum message length to trigger expensive checks (similarity, Bayes)
     /// </summary>
-    public int MinMessageLength { get; set; } = 50;
+    public int MinMessageLength { get; set; } = 10;
 
     /// <summary>
     /// Auto-ban threshold (confidence >= this value)
@@ -260,14 +260,9 @@ public class ThreatIntelConfig
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Whether to use VirusTotal
+    /// Whether to use VirusTotal (disabled by default - slow for URL checks, better for file scanning)
     /// </summary>
-    public bool UseVirusTotal { get; set; } = true;
-
-    /// <summary>
-    /// Whether to use Google Safe Browsing
-    /// </summary>
-    public bool UseGoogleSafeBrowsing { get; set; } = true;
+    public bool UseVirusTotal { get; set; } = false;
 
     /// <summary>
     /// Timeout for threat intel API calls

@@ -74,11 +74,13 @@ public class SimilaritySpamCheck : ISpamCheck
 
             if (_cachedSamples == null || !_cachedSamples.Any() || _cachedVectors == null || _cachedVocabulary == null)
             {
+                _logger.LogWarning("Similarity check has no spam samples: Samples={HasSamples}, Count={Count}, Vectors={HasVectors}, Vocab={HasVocab}",
+                    _cachedSamples != null, _cachedSamples?.Count ?? 0, _cachedVectors != null, _cachedVocabulary != null);
                 return new SpamCheckResponse
                 {
                     CheckName = CheckName,
                     IsSpam = false,
-                    Details = "No spam samples available for comparison",
+                    Details = $"No spam samples available for comparison (loaded: {_cachedSamples?.Count ?? 0})",
                     Confidence = 0
                 };
             }
@@ -172,11 +174,15 @@ public class SimilaritySpamCheck : ISpamCheck
         {
             try
             {
+                _logger.LogInformation("Refreshing similarity cache for chat {ChatId}...", chatId ?? "global");
                 var samples = await _trainingSamplesRepository.GetSpamSamplesAsync(chatId, cancellationToken);
                 _cachedSamples = samples.ToList();
 
+                _logger.LogInformation("Loaded {Count} spam samples from repository", _cachedSamples.Count);
+
                 // Build vocabulary from all samples
                 _cachedVocabulary = BuildVocabulary(_cachedSamples.Select(s => s.MessageText).ToArray());
+                _logger.LogInformation("Built vocabulary with {VocabSize} unique words", _cachedVocabulary.Count);
 
                 // Pre-compute TF-IDF vectors for all samples
                 _cachedVectors = new Dictionary<long, double[]>();
@@ -186,7 +192,8 @@ public class SimilaritySpamCheck : ISpamCheck
                 }
 
                 _lastCacheUpdate = DateTime.UtcNow;
-                _logger.LogDebug("Refreshed similarity cache with {Count} samples for chat {ChatId}", _cachedSamples.Count, chatId ?? "global");
+                _logger.LogInformation("Refreshed similarity cache with {Count} samples, {VocabSize} vocab, {VectorCount} vectors for chat {ChatId}",
+                    _cachedSamples.Count, _cachedVocabulary.Count, _cachedVectors.Count, chatId ?? "global");
             }
             catch (Exception ex)
             {

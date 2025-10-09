@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using TelegramGroupsAdmin.Data.Configuration;
 
 namespace TelegramGroupsAdmin.SpamDetection.Services;
 
@@ -11,17 +13,21 @@ public class OpenAITranslationService : IOpenAITranslationService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<OpenAITranslationService> _logger;
+    private readonly OpenAIOptions _options;
 
-    public OpenAITranslationService(IHttpClientFactory httpClientFactory, ILogger<OpenAITranslationService> logger)
+    public OpenAITranslationService(
+        IHttpClientFactory httpClientFactory,
+        ILogger<OpenAITranslationService> logger,
+        IOptions<OpenAIOptions> options)
     {
         _httpClient = httpClientFactory.CreateClient();
         _logger = logger;
+        _options = options.Value;
 
         // Configure OpenAI client
-        var apiKey = Environment.GetEnvironmentVariable("OPENAI__APIKEY");
-        if (!string.IsNullOrEmpty(apiKey))
+        if (!string.IsNullOrEmpty(_options.ApiKey))
         {
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_options.ApiKey}");
         }
 
         _httpClient.Timeout = TimeSpan.FromSeconds(15);
@@ -37,8 +43,7 @@ public class OpenAITranslationService : IOpenAITranslationService
 
         try
         {
-            var apiKey = Environment.GetEnvironmentVariable("OPENAI__APIKEY");
-            if (string.IsNullOrEmpty(apiKey))
+            if (string.IsNullOrEmpty(_options.ApiKey))
             {
                 _logger.LogDebug("OpenAI API key not configured, skipping translation");
                 return null;
@@ -51,7 +56,7 @@ public class OpenAITranslationService : IOpenAITranslationService
 
 Text to analyze: ""{text}""
 
-Respond only with valid JSON, no other text.";
+IMPORTANT: Respond with ONLY the raw JSON object. Do NOT wrap it in markdown code blocks or backticks.";
 
             var request = new
             {
@@ -73,7 +78,10 @@ Respond only with valid JSON, no other text.";
             }
 
             var jsonContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            var openAiResponse = JsonSerializer.Deserialize<OpenAIResponse>(jsonContent);
+            var openAiResponse = JsonSerializer.Deserialize<OpenAIResponse>(jsonContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
 
             var firstChoice = openAiResponse?.Choices?.FirstOrDefault();
             if (firstChoice?.Message?.Content == null)
@@ -87,6 +95,13 @@ Respond only with valid JSON, no other text.";
             {
                 _logger.LogWarning("Empty OpenAI response content for translation");
                 return null;
+            }
+
+            // Remove markdown code blocks if present (e.g., ```json\n...\n```)
+            if (content.StartsWith("```"))
+            {
+                var lines = content.Split('\n');
+                content = string.Join('\n', lines.Skip(1).SkipLast(1)).Trim();
             }
 
             // Parse the JSON response

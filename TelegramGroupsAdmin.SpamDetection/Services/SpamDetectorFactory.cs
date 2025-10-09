@@ -223,23 +223,31 @@ public class SpamDetectorFactory : ISpamDetectorFactory
         // Translate foreign language to English if enabled
         if (_config.MultiLanguage.Enabled && !string.IsNullOrWhiteSpace(request.Message) && request.Message.Length >= 20)
         {
-            try
+            // Quick check: if message is mostly Latin script, likely English - skip expensive OpenAI translation
+            if (IsLikelyLatinScript(request.Message))
             {
-                var translationResult = await _translationService.TranslateToEnglishAsync(request.Message, cancellationToken);
-
-                if (translationResult?.WasTranslated == true)
-                {
-                    _logger.LogInformation("Translated {Language} message to English for user {UserId}",
-                        translationResult.DetectedLanguage, request.UserId);
-
-                    // Return request with translated text - all subsequent checks will use this
-                    return (request with { Message = translationResult.TranslatedText }, invisibleCharResult);
-                }
+                _logger.LogDebug("Message is primarily Latin script for user {UserId} - skipping translation", request.UserId);
             }
-            catch (Exception ex)
+            else
             {
-                _logger.LogWarning(ex, "Translation failed for user {UserId} - continuing with original text", request.UserId);
-                // Continue with original text on translation failure
+                try
+                {
+                    var translationResult = await _translationService.TranslateToEnglishAsync(request.Message, cancellationToken);
+
+                    if (translationResult?.WasTranslated == true)
+                    {
+                        _logger.LogInformation("Translated {Language} message to English for user {UserId}",
+                            translationResult.DetectedLanguage, request.UserId);
+
+                        // Return request with translated text - all subsequent checks will use this
+                        return (request with { Message = translationResult.TranslatedText }, invisibleCharResult);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Translation failed for user {UserId} - continuing with original text", request.UserId);
+                    // Continue with original text on translation failure
+                }
             }
         }
 
@@ -262,5 +270,41 @@ public class SpamDetectorFactory : ISpamDetectorFactory
         };
 
         return message.Count(c => invisibleChars.Contains(c));
+    }
+
+    /// <summary>
+    /// Check if message is primarily Latin/ASCII script (likely English) to avoid unnecessary OpenAI translation
+    /// </summary>
+    private static bool IsLikelyLatinScript(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return true;
+
+        // Count letter characters and check which script they belong to
+        var letterCount = 0;
+        var latinCount = 0;
+
+        foreach (var c in message)
+        {
+            if (char.IsLetter(c))
+            {
+                letterCount++;
+                // Latin, Latin Extended-A, Latin Extended-B ranges (covers Western European languages)
+                if ((c >= 0x0041 && c <= 0x007A) ||  // Basic Latin (A-Z, a-z)
+                    (c >= 0x00C0 && c <= 0x00FF) ||  // Latin-1 Supplement (À-ÿ)
+                    (c >= 0x0100 && c <= 0x017F) ||  // Latin Extended-A (Ā-ſ)
+                    (c >= 0x0180 && c <= 0x024F))    // Latin Extended-B (ƀ-ɏ)
+                {
+                    latinCount++;
+                }
+            }
+        }
+
+        // If no letters, assume it's symbols/numbers (safe to skip translation)
+        if (letterCount == 0)
+            return true;
+
+        // If >80% of letters are Latin script, likely English/Western European language
+        return (double)latinCount / letterCount > 0.8;
     }
 }
