@@ -74,12 +74,13 @@ public class TrustCommand : IBotCommand
         }
 
         // Create trust action (permanent, global for now - can be enhanced later for per-chat)
+        // Note: MessageId set to null since message may not be in our history DB (FK constraint)
         var trustAction = new UserActionRecord(
             Id: 0, // Will be assigned by database
             UserId: targetUser.Id,
             ChatIds: null, // NULL = global trust (all chats)
             ActionType: UserActionType.Trust,
-            MessageId: messageId,
+            MessageId: null, // Don't link to message (may not exist in our DB)
             IssuedBy: null, // TODO: Map Telegram user to web app user
             IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             ExpiresAt: null, // Permanent trust
