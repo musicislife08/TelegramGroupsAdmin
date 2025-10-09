@@ -1,4 +1,3 @@
-@page "/spam/config"
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Auth
@@ -7,9 +6,7 @@
 @inject ISpamDetectionConfigRepository ConfigRepository
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
-@attribute [Authorize(Roles = "Admin,Owner")]
 
-<PageTitle>Spam Detection Configuration - TelegramGroupsAdmin</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <MudStack Spacing="4">

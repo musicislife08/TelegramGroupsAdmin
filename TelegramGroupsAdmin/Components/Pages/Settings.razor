@@ -1,0 +1,123 @@
+@page "/settings"
+@attribute [Authorize(Policy = "AdminOnly")]
+@using TelegramGroupsAdmin.Auth
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Settings</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Settings</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">Configure system-wide settings and preferences</MudText>
+
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnTabChanged">
+        <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Tune">
+            <MudPaper Class="pa-4" Elevation="0">
+                <MudText Typo="Typo.h6" GutterBottom="true">General Settings</MudText>
+                <MudText Typo="Typo.body2" Class="mb-4">
+                    Coming soon: Application-wide configuration options
+                </MudText>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Telegram Bot" Icon="@Icons.Material.Filled.SmartToy">
+            <MudPaper Class="pa-4" Elevation="0">
+                <MudText Typo="Typo.h6" GutterBottom="true">Telegram Bot Configuration</MudText>
+                <MudText Typo="Typo.body2" Class="mb-4">
+                    Coming soon: Bot token management, command configuration, chat linking settings
+                </MudText>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Notifications" Icon="@Icons.Material.Filled.Notifications">
+            <MudPaper Class="pa-4" Elevation="0">
+                <MudText Typo="Typo.h6" GutterBottom="true">Notification Settings</MudText>
+                <MudText Typo="Typo.body2" Class="mb-4">
+                    Coming soon: Email notifications, Telegram alerts, webhook configuration
+                </MudText>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Security" Icon="@Icons.Material.Filled.Security">
+            <MudPaper Class="pa-4" Elevation="0">
+                <MudText Typo="Typo.h6" GutterBottom="true">Security Settings</MudText>
+                <MudText Typo="Typo.body2" Class="mb-4">
+                    Coming soon: Session management, API key rotation, audit log retention
+                </MudText>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Integrations" Icon="@Icons.Material.Filled.Extension">
+            <MudPaper Class="pa-4" Elevation="0">
+                <MudText Typo="Typo.h6" GutterBottom="true">External Integrations</MudText>
+                <MudText Typo="Typo.body2" Class="mb-4">
+                    Coming soon: OpenAI, VirusTotal, SendGrid, and other third-party service configuration
+                </MudText>
+            </MudPaper>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private int _activeTabIndex = 0;
+
+    protected override void OnInitialized()
+    {
+        // Parse URL fragment to set initial tab
+        var fragment = new Uri(Navigation.Uri).Fragment.TrimStart('#');
+        _activeTabIndex = fragment switch
+        {
+            "general" => 0,
+            "telegram" => 1,
+            "notifications" => 2,
+            "security" => 3,
+            "integrations" => 4,
+            _ => 0
+        };
+
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        var fragment = new Uri(e.Location).Fragment.TrimStart('#');
+        var newIndex = fragment switch
+        {
+            "general" => 0,
+            "telegram" => 1,
+            "notifications" => 2,
+            "security" => 3,
+            "integrations" => 4,
+            _ => 0
+        };
+
+        if (newIndex != _activeTabIndex)
+        {
+            _activeTabIndex = newIndex;
+            StateHasChanged();
+        }
+    }
+
+    private void OnTabChanged(int index)
+    {
+        _activeTabIndex = index;
+
+        // Update URL fragment without reload
+        var fragment = index switch
+        {
+            0 => "general",
+            1 => "telegram",
+            2 => "notifications",
+            3 => "security",
+            4 => "integrations",
+            _ => "general"
+        };
+
+        Navigation.NavigateTo($"/settings#{fragment}", false);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

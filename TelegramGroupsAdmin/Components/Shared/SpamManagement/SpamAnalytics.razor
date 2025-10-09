@@ -1,4 +1,3 @@
-@page "/spam/analytics"
 @using Microsoft.AspNetCore.Authorization
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.SpamDetection.Repositories
@@ -10,9 +9,7 @@
 @inject ITrainingSamplesRepository TrainingSamplesRepository
 @inject MessageHistoryRepository MessageHistoryRepository
 @inject ISnackbar Snackbar
-@attribute [Authorize(Roles = "Admin,Owner")]
 
-<PageTitle>Spam Detection Analytics - TelegramGroupsAdmin</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <MudStack Spacing="4">

@@ -5,22 +5,21 @@
 <MudNavMenu>
     @if (_isAuthenticated)
     {
-        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+        <!-- Main Navigation -->
+        <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Home</MudNavLink>
+        <MudNavLink Href="/analytics" Icon="@Icons.Material.Filled.Insights">Analytics</MudNavLink>
         <MudNavLink Href="/messages" Icon="@Icons.Material.Filled.Message">Messages</MudNavLink>
 
         @if (_isAdminOrOwner)
         {
-            <MudNavLink Href="/audit" Icon="@Icons.Material.Filled.Security">Audit Log</MudNavLink>
+            <MudNavLink Href="/spam" Icon="@Icons.Material.Filled.Shield">Spam Management</MudNavLink>
             <MudNavLink Href="/users" Icon="@Icons.Material.Filled.People">Users</MudNavLink>
-
-            <MudNavGroup Title="Spam Detection" Icon="@Icons.Material.Filled.Shield" Expanded="false">
-                <MudNavLink Href="/spam/stopwords" Icon="@Icons.Material.Filled.Block">Stop Words</MudNavLink>
-                <MudNavLink Href="/spam/training" Icon="@Icons.Material.Filled.School">Training Data</MudNavLink>
-                <MudNavLink Href="/spam/config" Icon="@Icons.Material.Filled.Settings">Configuration</MudNavLink>
-                <MudNavLink Href="/spam/analytics" Icon="@Icons.Material.Filled.Analytics">Analytics</MudNavLink>
-            </MudNavGroup>
+            <MudNavLink Href="/audit" Icon="@Icons.Material.Filled.Security">Audit Log</MudNavLink>
+            <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
         }
 
+        <!-- User Section (Bottom) -->
+        <MudSpacer />
         <MudDivider Class="my-2" />
         <MudNavLink Href="/profile" Icon="@Icons.Material.Filled.AccountCircle">Profile</MudNavLink>
         <MudNavLink OnClick="LogoutAsync" Icon="@Icons.Material.Filled.Logout">Logout</MudNavLink>

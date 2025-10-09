@@ -1,0 +1,43 @@
+@page "/analytics"
+@attribute [Authorize(Policy = "AdminOnly")]
+@using TelegramGroupsAdmin.Auth
+
+<PageTitle>Analytics</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Analytics</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">Deep-dive statistics and trends across all managed chats</MudText>
+
+    <MudGrid>
+        <!-- Placeholder for future analytics -->
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" GutterBottom="true">Coming Soon</MudText>
+                <MudText Typo="Typo.body1">
+                    Advanced analytics features including:
+                </MudText>
+                <MudList T="string">
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.TrendingUp">
+                        Message volume trends over time
+                    </MudListItem>
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.PieChart">
+                        Spam detection breakdown by algorithm
+                    </MudListItem>
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.BarChart">
+                        Per-chat performance metrics
+                    </MudListItem>
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.Timeline">
+                        User activity patterns
+                    </MudListItem>
+                    <MudListItem T="string" Icon="@Icons.Material.Filled.BugReport">
+                        False positive/negative analysis
+                    </MudListItem>
+                </MudList>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+
+}

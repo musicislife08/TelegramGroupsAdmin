@@ -1,0 +1,92 @@
+@page "/spam"
+@attribute [Authorize(Policy = "AdminOnly")]
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Components.Shared.SpamManagement
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Spam Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Spam Management</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">Configure and monitor spam detection across all managed chats</MudText>
+
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnTabChanged">
+        <MudTabPanel Text="Stop Words" Icon="@Icons.Material.Filled.Block">
+            <StopWords />
+        </MudTabPanel>
+
+        <MudTabPanel Text="Training Data" Icon="@Icons.Material.Filled.School">
+            <TrainingData />
+        </MudTabPanel>
+
+        <MudTabPanel Text="Analytics" Icon="@Icons.Material.Filled.Analytics">
+            <SpamAnalytics />
+        </MudTabPanel>
+
+        <MudTabPanel Text="Configuration" Icon="@Icons.Material.Filled.Settings">
+            <SpamDetectionConfig />
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private int _activeTabIndex = 0;
+
+    protected override void OnInitialized()
+    {
+        // Parse URL fragment to set initial tab
+        var fragment = new Uri(Navigation.Uri).Fragment.TrimStart('#');
+        _activeTabIndex = fragment switch
+        {
+            "stopwords" => 0,
+            "training" => 1,
+            "analytics" => 2,
+            "config" => 3,
+            _ => 0
+        };
+
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        var fragment = new Uri(e.Location).Fragment.TrimStart('#');
+        var newIndex = fragment switch
+        {
+            "stopwords" => 0,
+            "training" => 1,
+            "analytics" => 2,
+            "config" => 3,
+            _ => 0
+        };
+
+        if (newIndex != _activeTabIndex)
+        {
+            _activeTabIndex = newIndex;
+            StateHasChanged();
+        }
+    }
+
+    private void OnTabChanged(int index)
+    {
+        _activeTabIndex = index;
+
+        // Update URL fragment without reload
+        var fragment = index switch
+        {
+            0 => "stopwords",
+            1 => "training",
+            2 => "analytics",
+            3 => "config",
+            _ => "stopwords"
+        };
+
+        Navigation.NavigateTo($"/spam#{fragment}", false);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}
