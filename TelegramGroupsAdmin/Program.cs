@@ -14,14 +14,19 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Endpoints;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.BackgroundServices;
+using TelegramGroupsAdmin.Services.BotCommands;
 using TelegramGroupsAdmin.Services.Telegram;
 using TelegramGroupsAdmin.Services.Vision;
+using Commands = TelegramGroupsAdmin.Services.BotCommands.Commands;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure logging - suppress most Microsoft logs in development
 builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
+builder.Logging.AddSimpleConsole(options =>
+{
+    options.TimestampFormat = "[yyyy-MM-dd HH:mm:ss.fff] ";
+});
 builder.Logging.AddFilter("Microsoft", LogLevel.Warning); // Only warnings and errors from Microsoft namespaces
 builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Information); // Keep startup/shutdown messages
 builder.Logging.AddFilter("TelegramGroupsAdmin", LogLevel.Information); // Keep our app logs at Info level
@@ -178,6 +183,11 @@ var connectionString = builder.Configuration.GetConnectionString("PostgreSQL")
 // Telegram services
 builder.Services.AddSingleton<TelegramBotClientFactory>();
 builder.Services.AddScoped<ITelegramImageService, TelegramImageService>();
+
+// Bot command system
+builder.Services.AddSingleton<IBotCommand, Commands.HelpCommand>();
+builder.Services.AddSingleton<IBotCommand, Commands.SpamCommand>();
+builder.Services.AddSingleton<CommandRouter>();
 
 // Background services (register as singleton first, then add as hosted service)
 // Also expose IMessageHistoryService interface for UI components

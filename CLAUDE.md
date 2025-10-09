@@ -333,7 +333,7 @@ CREATE TABLE verification_tokens (
 ```
 VIRUSTOTAL__APIKEY
 OPENAI__APIKEY
-TELEGRAM__HISTORYBOTTOKEN
+TELEGRAM__BOTTOKEN
 TELEGRAM__CHATID
 SPAMDETECTION__APIKEY
 SENDGRID__APIKEY
@@ -512,7 +512,7 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 6. **Telegram API Alignment** - Refactored all "group" terminology to "chat" for consistency with Telegram Bot API
 
 ## Troubleshooting
-**Telegram bot not caching**: Check TELEGRAM__HISTORYBOTTOKEN, bot added to chat, privacy mode off
+**Telegram bot not caching**: Check TELEGRAM__BOTTOKEN, bot added to chat, privacy mode off
 **Image spam failing**: Check OPENAI__APIKEY, /data volume mounted
 **DB growing**: Check retention (720h default), cleanup service running
 **Rate limits**: Check logs for LogWarning messages from VirusTotalService or OpenAIVisionSpamDetectionService
@@ -561,11 +561,25 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [x] **Message retention** - 30-day default retention, messages with detection_results preserved
 - [x] **Testing complete** - All pages working, 0 errors, 0 warnings
 
-**Phase 2.3: Unified Bot Implementation** 🔜 **NEXT**
+**Phase 2.3: Unified Bot Implementation** 🔄 **IN PROGRESS**
 - [x] **Service renamed** - HistoryBotService → TelegramAdminBotService (foundation ready)
-- [ ] **Command routing** - Add command handler infrastructure to TelegramAdminBotService
-- [ ] **Message processing** - Save to DB → Queue spam check → Take action
-- [ ] **Bot commands** - `/spam`, `/ban`, `/trust`, `/unban`, `/warn`, `/report`
+- [x] **Command routing infrastructure** - IBotCommand interface, CommandRouter service, singleton architecture
+- [x] **Bot command registration** - SetMyCommands API with scoped permissions (default/admin)
+- [x] **Command parsing** - Regex handles `/command` and `/command@botname` formats
+- [x] **Initial commands** - `/help` (list commands), `/spam` (mark spam - stub)
+- [x] **Permission system foundation** - MinPermissionLevel checks (0=ReadOnly, 1=Admin, 2=Owner)
+- [x] **Console logging** - Timestamp format for debugging command execution timing
+- [ ] **Telegram user permissions** - Link Telegram users to web app users for permission checking
+  - **Options to evaluate:**
+    1. **User Profile Integration** - Add Telegram ID field to user profile page for manual linking
+    2. **Bot-initiated linking** - `/link <invite-code>` command to associate Telegram user with web app account
+    3. **Separate mapping table** - `telegram_users` table with `telegram_id`, `user_id`, `linked_at` columns
+    4. **Auto-detection** - Match by username (unreliable due to username changes)
+  - **Preferred approach:** User profile + mapping table for flexibility
+  - **Security:** Require authentication on web app, bot sends verification code, user enters on web
+  - **Current state:** Temporary hardcode for testing (user 1312830442 = Owner)
+- [ ] **Implement /spam action** - Delete message, save to detection_results, optionally ban
+- [ ] **Complete bot commands** - `/ban`, `/trust`, `/unban`, `/warn`, `/report`
 - [ ] **Cross-chat actions** - Bans/warns across all managed groups
 - [ ] **Edit monitoring** - Detect "post innocent, edit to spam" tactic
 

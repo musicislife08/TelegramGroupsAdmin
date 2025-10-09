@@ -34,11 +34,11 @@ public class MessageHistoryRepository
 
         const string sql = """
             INSERT INTO messages (
-                message_id, user_id, user_name, chat_id, timestamp, expires_at,
+                message_id, user_id, user_name, chat_id, timestamp,
                 message_text, photo_file_id, photo_file_size, urls,
                 edit_date, content_hash, chat_name, photo_local_path, photo_thumbnail_path
             ) VALUES (
-                @MessageId, @UserId, @UserName, @ChatId, @Timestamp, @ExpiresAt,
+                @MessageId, @UserId, @UserName, @ChatId, @Timestamp,
                 @MessageText, @PhotoFileId, @PhotoFileSize, @Urls,
                 @EditDate, @ContentHash, @ChatName, @PhotoLocalPath, @PhotoThumbnailPath
             );

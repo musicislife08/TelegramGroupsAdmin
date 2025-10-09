@@ -11,6 +11,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Models;
 using TelegramGroupsAdmin.Repositories;
+using TelegramGroupsAdmin.Services.BotCommands;
 using TelegramGroupsAdmin.Services.Telegram;
 
 namespace TelegramGroupsAdmin.Services.BackgroundServices;
@@ -20,6 +21,7 @@ public partial class TelegramAdminBotService(
     MessageHistoryRepository repository,
     IOptions<TelegramOptions> options,
     IOptions<MessageHistoryOptions> historyOptions,
+    CommandRouter commandRouter,
     ILogger<TelegramAdminBotService> logger)
     : BackgroundService, IMessageHistoryService
 {
@@ -39,7 +41,10 @@ public partial class TelegramAdminBotService(
             return;
         }
 
-        var botClient = botFactory.GetOrCreate(_options.HistoryBotToken);
+        var botClient = botFactory.GetOrCreate(_options.BotToken);
+
+        // Register bot commands in Telegram UI
+        await RegisterBotCommandsAsync(botClient, stoppingToken);
 
         logger.LogInformation("Telegram admin bot started listening for messages in all chats");
 
@@ -92,6 +97,21 @@ public partial class TelegramAdminBotService(
         // Process messages from all chats where bot is added
         try
         {
+            // Check if message is a bot command
+            if (commandRouter.IsCommand(message))
+            {
+                var response = await commandRouter.RouteCommandAsync(botClient, message);
+                if (response != null)
+                {
+                    await botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: response,
+                        parseMode: ParseMode.Markdown,
+                        replyParameters: new ReplyParameters { MessageId = message.MessageId });
+                }
+                return; // Don't save command messages to history
+            }
+
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
             // Extract URLs from message text
@@ -349,4 +369,57 @@ public partial class TelegramAdminBotService(
         var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(normalized));
         return Convert.ToHexString(hashBytes);
     }
+
+    private async Task RegisterBotCommandsAsync(ITelegramBotClient botClient, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Register commands with different scopes based on permission levels
+
+            // Default scope - commands for all users (ReadOnly level 0)
+            var defaultCommands = commandRouter.GetAvailableCommands(permissionLevel: 0)
+                .Select(cmd => new BotCommand
+                {
+                    Command = cmd.Name,
+                    Description = cmd.Description
+                })
+                .ToArray();
+
+            await botClient.SetMyCommands(
+                defaultCommands,
+                scope: new BotCommandScopeDefault(),
+                cancellationToken: cancellationToken);
+
+            // Admin scope - commands for group admins (Admin level 1+)
+            var adminCommands = commandRouter.GetAvailableCommands(permissionLevel: 1)
+                .Select(cmd => new BotCommand
+                {
+                    Command = cmd.Name,
+                    Description = cmd.Description
+                })
+                .ToArray();
+
+            await botClient.SetMyCommands(
+                adminCommands,
+                scope: new BotCommandScopeAllChatAdministrators(),
+                cancellationToken: cancellationToken);
+
+            logger.LogInformation(
+                "Registered bot commands - {DefaultCount} default, {AdminCount} admin",
+                defaultCommands.Length,
+                adminCommands.Length);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to register bot commands with Telegram");
+        }
+    }
+
+    private static string GetPermissionName(int level) => level switch
+    {
+        0 => "ReadOnly",
+        1 => "Admin",
+        2 => "Owner",
+        _ => "Unknown"
+    };
 }

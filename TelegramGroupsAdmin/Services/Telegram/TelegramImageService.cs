@@ -24,7 +24,7 @@ public class TelegramImageService : ITelegramImageService
     {
         try
         {
-            var botClient = _botFactory.GetOrCreate(_options.HistoryBotToken);
+            var botClient = _botFactory.GetOrCreate(_options.BotToken);
 
             _logger.LogDebug("Downloading photo {FileId}", fileId);
 
