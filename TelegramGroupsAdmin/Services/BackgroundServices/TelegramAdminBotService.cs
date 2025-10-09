@@ -20,6 +20,7 @@ public partial class TelegramAdminBotService(
     TelegramBotClientFactory botFactory,
     MessageHistoryRepository repository,
     IManagedChatsRepository managedChatsRepository,
+    IChatAdminsRepository chatAdminsRepository,
     IUserActionsRepository userActionsRepository,
     IOptions<TelegramOptions> options,
     IOptions<MessageHistoryOptions> historyOptions,
@@ -47,6 +48,9 @@ public partial class TelegramAdminBotService(
 
         // Register bot commands in Telegram UI
         await RegisterBotCommandsAsync(botClient, stoppingToken);
+
+        // Cache admin lists for all managed chats
+        await RefreshAllChatAdminsAsync(botClient, stoppingToken);
 
         logger.LogInformation("Telegram admin bot started listening for messages in all chats");
 
@@ -396,6 +400,7 @@ public partial class TelegramAdminBotService(
         try
         {
             var chat = myChatMember.Chat;
+            var oldStatus = myChatMember.OldChatMember.Status;
             var newStatus = myChatMember.NewChatMember.Status;
             var isAdmin = newStatus == ChatMemberStatus.Administrator;
             var isActive = newStatus is ChatMemberStatus.Member or ChatMemberStatus.Administrator;
@@ -433,6 +438,42 @@ public partial class TelegramAdminBotService(
             );
 
             await managedChatsRepository.UpsertAsync(chatRecord);
+
+            // If this is about ANOTHER user (not the bot), update admin cache
+            var botUser = myChatMember.From;
+            var affectedUser = myChatMember.NewChatMember.User;
+
+            if (affectedUser.IsBot == false) // Admin change for a real user
+            {
+                var wasAdmin = oldStatus is ChatMemberStatus.Creator or ChatMemberStatus.Administrator;
+                var isNowAdmin = newStatus is ChatMemberStatus.Creator or ChatMemberStatus.Administrator;
+
+                if (wasAdmin != isNowAdmin)
+                {
+                    if (isNowAdmin)
+                    {
+                        // User promoted to admin
+                        var isCreator = newStatus == ChatMemberStatus.Creator;
+                        await chatAdminsRepository.UpsertAsync(chat.Id, affectedUser.Id, isCreator);
+                        logger.LogInformation(
+                            "✅ User {UserId} (@{Username}) promoted to {Role} in chat {ChatId}",
+                            affectedUser.Id,
+                            affectedUser.Username ?? "unknown",
+                            isCreator ? "creator" : "admin",
+                            chat.Id);
+                    }
+                    else
+                    {
+                        // User demoted from admin
+                        await chatAdminsRepository.DeactivateAsync(chat.Id, affectedUser.Id);
+                        logger.LogInformation(
+                            "❌ User {UserId} (@{Username}) demoted from admin in chat {ChatId}",
+                            affectedUser.Id,
+                            affectedUser.Username ?? "unknown",
+                            chat.Id);
+                    }
+                }
+            }
 
             if (isActive)
             {
@@ -510,6 +551,63 @@ public partial class TelegramAdminBotService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to register bot commands with Telegram");
+        }
+    }
+
+    /// <summary>
+    /// Refresh admin cache for all active managed chats on startup
+    /// </summary>
+    private async Task RefreshAllChatAdminsAsync(ITelegramBotClient botClient, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var managedChats = await managedChatsRepository.GetActiveChatsAsync();
+            logger.LogInformation("Refreshing admin cache for {Count} managed chats", managedChats.Count);
+
+            var refreshedCount = 0;
+            foreach (var chat in managedChats)
+            {
+                try
+                {
+                    await RefreshChatAdminsAsync(botClient, chat.ChatId, cancellationToken);
+                    refreshedCount++;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to refresh admin cache for chat {ChatId}", chat.ChatId);
+                }
+            }
+
+            logger.LogInformation("✅ Admin cache refreshed for {Count}/{Total} chats", refreshedCount, managedChats.Count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to refresh admin cache on startup");
+        }
+    }
+
+    /// <summary>
+    /// Refresh admin list for a specific chat
+    /// </summary>
+    private async Task RefreshChatAdminsAsync(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Get all administrators from Telegram
+            var admins = await botClient.GetChatAdministrators(chatId, cancellationToken);
+
+            foreach (var admin in admins)
+            {
+                var isCreator = admin.Status == ChatMemberStatus.Creator;
+                await chatAdminsRepository.UpsertAsync(chatId, admin.User.Id, isCreator);
+            }
+
+            logger.LogDebug("Cached {Count} admins for chat {ChatId}", admins.Length, chatId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to refresh admins for chat {ChatId}", chatId);
+            throw; // Re-throw so caller can track failures
         }
     }
 

@@ -9,6 +9,30 @@ namespace TelegramGroupsAdmin.Repositories;
 /// </summary>
 internal static class ModelMappings
 {
+    // ChatAdmin mappings
+    public static UiModels.ChatAdmin ToUiModel(this DataModels.ChatAdminRecord data) => new()
+    {
+        Id = data.id,
+        ChatId = data.chat_id,
+        TelegramId = data.telegram_id,
+        IsCreator = data.is_creator,
+        PromotedAt = data.promoted_at,
+        LastVerifiedAt = data.last_verified_at,
+        IsActive = data.is_active
+    };
+
+    public static DataModels.ChatAdminRecord ToDataModel(this UiModels.ChatAdmin ui) => new()
+    {
+        id = ui.Id,
+        chat_id = ui.ChatId,
+        telegram_id = ui.TelegramId,
+        is_creator = ui.IsCreator,
+        promoted_at = ui.PromotedAt,
+        last_verified_at = ui.LastVerifiedAt,
+        is_active = ui.IsActive
+    };
+
+
     // User mappings
     public static UiModels.UserRecord ToUiModel(this DataModels.UserRecord data) => new(
         Id: data.Id,

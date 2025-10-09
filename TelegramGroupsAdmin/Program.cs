@@ -221,6 +221,7 @@ builder.Services.AddScoped<IUserActionsRepository, UserActionsRepository>();
 builder.Services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
 builder.Services.AddScoped<ITelegramUserMappingRepository, TelegramUserMappingRepository>();
 builder.Services.AddScoped<ITelegramLinkTokenRepository, TelegramLinkTokenRepository>();
+builder.Services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
 
 var app = builder.Build();
 
