@@ -588,15 +588,14 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
   - ✅ **/trust command** - Reply-to-message and username syntax (username lookup requires GetChatMember API)
   - ✅ **Early exit optimization** - Trust check in TelegramAdminBotService before spam detection
   - ✅ **Architecture decision** - Trust checking outside spam library (keeps library pure and reusable)
-- [ ] **Telegram user permissions** - Link Telegram users to web app users for permission checking
-  - **Options to evaluate:**
-    1. **User Profile Integration** - Add Telegram ID field to user profile page for manual linking
-    2. **Bot-initiated linking** - `/link <invite-code>` command to associate Telegram user with web app account
-    3. **Separate mapping table** - `telegram_users` table with `telegram_id`, `user_id`, `linked_at` columns
-    4. **Auto-detection** - Match by username (unreliable due to username changes)
-  - **Preferred approach:** User profile + mapping table for flexibility
-  - **Security:** Require authentication on web app, bot sends verification code, user enters on web
-  - **Current state:** Temporary hardcode for testing (user 1312830442 = Owner)
+- [x] **Telegram user account linking** ✅ **COMPLETE**:
+  - ✅ **Database schema** - telegram_user_mappings and telegram_link_tokens tables (Migration 202601088)
+  - ✅ **/link command** - Token verification with 15min expiry, duplicate prevention
+  - ✅ **Permission system** - CommandRouter uses mappings for real-time permission lookup
+  - ✅ **Profile page UI** - Generate tokens, view linked accounts, unlink functionality
+  - ✅ **Repositories** - TelegramUserMappingRepository, TelegramLinkTokenRepository
+  - ✅ **Security** - Cryptographic tokens, one-time use, automatic cleanup of old tokens
+  - ✅ **Architecture** - One-to-many (user → Telegram accounts), one-to-one (Telegram → user)
 - [ ] **Implement command actions** - Remaining commands:
   - `/spam` - Delete message, insert to detection_results, ban if threshold exceeded
   - `/ban` - Insert to user_actions, call Telegram BanChatMember across all chats
