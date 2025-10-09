@@ -124,7 +124,7 @@ public class UserActionsRepository : IUserActionsRepository
             SELECT id, user_id, chat_ids, action_type, message_id,
                    issued_by, issued_at, expires_at, reason
             FROM user_actions
-            WHERE action_type = 'ban'
+            WHERE action_type = @ActionType
               AND (expires_at IS NULL OR expires_at > @Now)
             ORDER BY issued_at DESC;
             """;
@@ -132,7 +132,7 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var dtos = await connection.QueryAsync<DataModels.UserActionRecordDto>(
             sql,
-            new { Now = now });
+            new { ActionType = (int)Models.UserActionType.Ban, Now = now });
 
         return dtos.Select(dto => dto.ToUserActionRecord().ToUiModel()).ToList();
     }
@@ -147,7 +147,7 @@ public class UserActionsRepository : IUserActionsRepository
             SELECT EXISTS (
                 SELECT 1 FROM user_actions
                 WHERE user_id = @UserId
-                  AND action_type = 'ban'
+                  AND action_type = @ActionType
                   AND (expires_at IS NULL OR expires_at > @Now)
                   AND (
                       chat_ids IS NULL
@@ -159,7 +159,7 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var isBanned = await connection.ExecuteScalarAsync<bool>(
             sql,
-            new { UserId = userId, ChatId = chatId, Now = now });
+            new { UserId = userId, ChatId = chatId, Now = now, ActionType = (int)Models.UserActionType.Ban });
 
         return isBanned;
     }
@@ -173,7 +173,7 @@ public class UserActionsRepository : IUserActionsRepository
             SELECT EXISTS (
                 SELECT 1 FROM user_actions
                 WHERE user_id = @UserId
-                  AND action_type = 'trust'
+                  AND action_type = @ActionType
                   AND (expires_at IS NULL OR expires_at > @Now)
                   AND (
                       chat_ids IS NULL
@@ -185,7 +185,7 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var isTrusted = await connection.ExecuteScalarAsync<bool>(
             sql,
-            new { UserId = userId, ChatId = chatId, Now = now });
+            new { UserId = userId, ChatId = chatId, Now = now, ActionType = (int)Models.UserActionType.Trust });
 
         return isTrusted;
     }
@@ -199,7 +199,7 @@ public class UserActionsRepository : IUserActionsRepository
             SELECT COUNT(*)
             FROM user_actions
             WHERE user_id = @UserId
-              AND action_type = 'warn'
+              AND action_type = @ActionType
               AND (expires_at IS NULL OR expires_at > @Now)
               AND (
                   chat_ids IS NULL
@@ -210,7 +210,7 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var count = await connection.ExecuteScalarAsync<int>(
             sql,
-            new { UserId = userId, ChatId = chatId, Now = now });
+            new { UserId = userId, ChatId = chatId, Now = now, ActionType = (int)Models.UserActionType.Warn });
 
         return count;
     }
@@ -240,7 +240,7 @@ public class UserActionsRepository : IUserActionsRepository
             UPDATE user_actions
             SET expires_at = @Now
             WHERE user_id = @UserId
-              AND action_type = 'ban'
+              AND action_type = @ActionType
               AND (expires_at IS NULL OR expires_at > @Now)
               AND (
                   @ChatId IS NULL
@@ -252,7 +252,7 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var count = await connection.ExecuteAsync(
             sql,
-            new { UserId = userId, ChatId = chatId, Now = now });
+            new { UserId = userId, ChatId = chatId, Now = now, ActionType = (int)Models.UserActionType.Ban });
 
         _logger.LogInformation(
             "Expired {Count} bans for user {UserId} (chat: {ChatId})",
@@ -269,7 +269,7 @@ public class UserActionsRepository : IUserActionsRepository
             UPDATE user_actions
             SET expires_at = @Now
             WHERE user_id = @UserId
-              AND action_type = 'trust'
+              AND action_type = @ActionType
               AND (expires_at IS NULL OR expires_at > @Now)
               AND (
                   @ChatId IS NULL
@@ -281,7 +281,7 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var count = await connection.ExecuteAsync(
             sql,
-            new { UserId = userId, ChatId = chatId, Now = now });
+            new { UserId = userId, ChatId = chatId, Now = now, ActionType = (int)Models.UserActionType.Trust });
 
         _logger.LogInformation(
             "Expired {Count} trusts for user {UserId} (chat: {ChatId})",
