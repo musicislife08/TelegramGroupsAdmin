@@ -28,18 +28,18 @@ public static class ServiceCollectionExtensions
         // Register core services
         services.AddScoped<ITokenizerService, TokenizerService>();
         services.AddScoped<IOpenAITranslationService, OpenAITranslationService>();
-        services.AddScoped<IMessageHistoryService, MessageHistoryService>();
+        // NOTE: IMessageHistoryService is registered by the main app (TelegramAdminBotService implements it)
 
         // Register repositories
         services.AddScoped<IStopWordsRepository, StopWordsRepository>();
         services.AddScoped<ITrainingSamplesRepository, TrainingSamplesRepository>();
 
         // Register individual spam checks
+        // NOTE: MultiLanguageSpamCheck is NOT registered - translation happens in SpamDetectorFactory preprocessing
         services.AddScoped<ISpamCheck, Checks.StopWordsSpamCheck>();
         services.AddScoped<ISpamCheck, Checks.CasSpamCheck>();
         services.AddScoped<ISpamCheck, Checks.SimilaritySpamCheck>();
         services.AddScoped<ISpamCheck, Checks.BayesSpamCheck>();
-        services.AddScoped<ISpamCheck, Checks.MultiLanguageSpamCheck>();
         services.AddScoped<ISpamCheck, Checks.SpacingSpamCheck>();
         services.AddScoped<ISpamCheck, Checks.OpenAISpamCheck>();
         services.AddScoped<ISpamCheck, Checks.UrlBlocklistSpamCheck>();

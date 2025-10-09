@@ -18,6 +18,7 @@ using TelegramGroupsAdmin.Services.BackgroundServices;
 using TelegramGroupsAdmin.Services.BotCommands;
 using TelegramGroupsAdmin.Services.Telegram;
 using TelegramGroupsAdmin.Services.Vision;
+using TelegramGroupsAdmin.SpamDetection.Extensions;
 using Commands = TelegramGroupsAdmin.Services.BotCommands.Commands;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -200,6 +201,13 @@ builder.Services.AddSingleton<CommandRouter>();
 // Also expose IMessageHistoryService interface for UI components
 builder.Services.AddSingleton<TelegramAdminBotService>();
 builder.Services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());
+// Also register spam library's IMessageHistoryService (currently unused, but needed for OpenAISpamCheck)
+// TODO: Implement adapter to convert between main app's IMessageHistoryService and spam library's version
+builder.Services.AddScoped<TelegramGroupsAdmin.SpamDetection.Services.IMessageHistoryService>(sp =>
+{
+    // For now, return a stub implementation since OpenAISpamCheck is optional
+    return new StubMessageHistoryService();
+});
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TelegramAdminBotService>());
 builder.Services.AddHostedService<CleanupBackgroundService>();
 
@@ -222,6 +230,12 @@ builder.Services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
 builder.Services.AddScoped<ITelegramUserMappingRepository, TelegramUserMappingRepository>();
 builder.Services.AddScoped<ITelegramLinkTokenRepository, TelegramLinkTokenRepository>();
 builder.Services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
+
+// Register Spam Detection library
+builder.Services.AddSpamDetection();
+
+// Register Spam Check Orchestrator (wraps trust/admin checks + spam detection)
+builder.Services.AddScoped<ISpamCheckOrchestrator, SpamCheckOrchestrator>();
 
 var app = builder.Build();
 

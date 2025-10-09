@@ -13,15 +13,18 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     private readonly ILogger<SpamDetectorFactory> _logger;
     private readonly SpamDetectionConfig _config;
     private readonly IEnumerable<ISpamCheck> _spamChecks;
+    private readonly IOpenAITranslationService _translationService;
 
     public SpamDetectorFactory(
         ILogger<SpamDetectorFactory> logger,
         SpamDetectionConfig config,
-        IEnumerable<ISpamCheck> spamChecks)
+        IEnumerable<ISpamCheck> spamChecks,
+        IOpenAITranslationService translationService)
     {
         _logger = logger;
         _config = config;
         _spamChecks = spamChecks;
+        _translationService = translationService;
     }
 
     /// <summary>
@@ -75,21 +78,30 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     {
         var checkResults = new List<SpamCheckResponse>();
 
-        // Run all checks except OpenAI
-        var checks = _spamChecks.Where(check => check.CheckName != "OpenAI").ToList();
+        // Preprocess: Check for invisible characters and translate if needed
+        var (processedRequest, invisibleCharResult) = await PreprocessMessageAsync(request, cancellationToken);
+
+        // Add invisible character check result if applicable
+        if (invisibleCharResult != null)
+        {
+            checkResults.Add(invisibleCharResult);
+        }
+
+        // Run all checks except OpenAI (MultiLanguage is already handled in preprocessing)
+        var checks = _spamChecks.Where(check => check.CheckName != "OpenAI" && check.CheckName != "MultiLanguage").ToList();
 
         foreach (var check in checks)
         {
-            if (!check.ShouldExecute(request))
+            if (!check.ShouldExecute(processedRequest))
             {
-                _logger.LogDebug("Skipping {CheckName} for user {UserId} - conditions not met", check.CheckName, request.UserId);
+                _logger.LogDebug("Skipping {CheckName} for user {UserId} - conditions not met", check.CheckName, processedRequest.UserId);
                 continue;
             }
 
             try
             {
-                _logger.LogDebug("Running {CheckName} for user {UserId}", check.CheckName, request.UserId);
-                var result = await check.CheckAsync(request, cancellationToken);
+                _logger.LogDebug("Running {CheckName} for user {UserId}", check.CheckName, processedRequest.UserId);
+                var result = await check.CheckAsync(processedRequest, cancellationToken);
                 checkResults.Add(result);
 
                 _logger.LogDebug("{CheckName} result: IsSpam={IsSpam}, Confidence={Confidence}",
@@ -178,5 +190,77 @@ public class SpamDetectorFactory : ISpamDetectorFactory
             return SpamAction.ReviewQueue;
         }
         return SpamAction.Allow;
+    }
+
+    /// <summary>
+    /// Preprocess message: check for invisible characters and translate if foreign language
+    /// </summary>
+    /// <returns>Tuple of (processed request with potentially translated text, invisible char check result if applicable)</returns>
+    private async Task<(SpamCheckRequest processedRequest, SpamCheckResponse? invisibleCharResult)> PreprocessMessageAsync(
+        SpamCheckRequest request,
+        CancellationToken cancellationToken)
+    {
+        SpamCheckResponse? invisibleCharResult = null;
+
+        // Check for invisible characters first (immediate spam indicator)
+        if (_config.MultiLanguage.Enabled && !string.IsNullOrWhiteSpace(request.Message))
+        {
+            var invisibleChars = CountInvisibleCharacters(request.Message);
+            if (invisibleChars > 0)
+            {
+                _logger.LogWarning("Detected {Count} invisible characters in message from user {UserId}", invisibleChars, request.UserId);
+                invisibleCharResult = new SpamCheckResponse
+                {
+                    CheckName = "InvisibleChars",
+                    IsSpam = true,
+                    Details = $"Contains {invisibleChars} invisible/hidden characters",
+                    Confidence = 90
+                };
+                // Still continue with translation in case there's legitimate foreign text + invisible chars
+            }
+        }
+
+        // Translate foreign language to English if enabled
+        if (_config.MultiLanguage.Enabled && !string.IsNullOrWhiteSpace(request.Message) && request.Message.Length >= 20)
+        {
+            try
+            {
+                var translationResult = await _translationService.TranslateToEnglishAsync(request.Message, cancellationToken);
+
+                if (translationResult?.WasTranslated == true)
+                {
+                    _logger.LogInformation("Translated {Language} message to English for user {UserId}",
+                        translationResult.DetectedLanguage, request.UserId);
+
+                    // Return request with translated text - all subsequent checks will use this
+                    return (request with { Message = translationResult.TranslatedText }, invisibleCharResult);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Translation failed for user {UserId} - continuing with original text", request.UserId);
+                // Continue with original text on translation failure
+            }
+        }
+
+        // No translation needed or failed - return original request
+        return (request, invisibleCharResult);
+    }
+
+    /// <summary>
+    /// Count invisible/zero-width characters that might be used to hide spam
+    /// </summary>
+    private static int CountInvisibleCharacters(string message)
+    {
+        var invisibleChars = new[]
+        {
+            '\u200B', // Zero Width Space
+            '\u200C', // Zero Width Non-Joiner
+            '\u200D', // Zero Width Joiner
+            '\u2060', // Word Joiner
+            '\uFEFF'  // Zero Width No-Break Space
+        };
+
+        return message.Count(c => invisibleChars.Contains(c));
     }
 }

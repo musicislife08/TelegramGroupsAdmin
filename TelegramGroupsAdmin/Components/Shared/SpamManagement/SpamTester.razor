@@ -1,0 +1,236 @@
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.SpamDetection.Models
+@inject ISpamCheckOrchestrator SpamCheckOrchestrator
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="0">
+    <MudText Typo="Typo.h6" GutterBottom="true">Test Spam Detection</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        Test how the spam detection engine would respond to a message. Optionally provide user ID/username to check trust status.
+    </MudText>
+
+    <MudGrid>
+        <MudItem xs="12">
+            <MudTextField
+                @bind-Value="_messageText"
+                Label="Message Text"
+                Variant="Variant.Outlined"
+                Lines="5"
+                Required="true"
+                HelperText="The message content to test for spam"
+                Immediate="true" />
+        </MudItem>
+
+        <MudItem xs="12" sm="6">
+            <MudTextField
+                @bind-Value="_userId"
+                Label="User ID (optional)"
+                Variant="Variant.Outlined"
+                HelperText="Telegram user ID (e.g., 123456789)"
+                Immediate="true" />
+        </MudItem>
+
+        <MudItem xs="12" sm="6">
+            <MudTextField
+                @bind-Value="_userName"
+                Label="Username (optional)"
+                Variant="Variant.Outlined"
+                HelperText="Telegram username (without at sign)"
+                Immediate="true" />
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudFileUpload T="IBrowserFile" Accept="image/*" @bind-Files="_selectedImage" MaximumFileCount="1">
+                <ActivatorContent>
+                    <MudButton HtmlTag="label"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.CloudUpload">
+                        Upload Image (optional)
+                    </MudButton>
+                </ActivatorContent>
+            </MudFileUpload>
+            @if (_selectedImage != null)
+            {
+                <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.Image" OnClose="ClearImage">
+                    @_selectedImage.Name (@FormatFileSize(_selectedImage.Size))
+                </MudChip>
+            }
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudButton
+                Variant="Variant.Filled"
+                Color="Color.Primary"
+                StartIcon="@Icons.Material.Filled.Security"
+                OnClick="RunSpamCheck"
+                Disabled="@(_isRunning || string.IsNullOrWhiteSpace(_messageText))">
+                @(_isRunning ? "Checking..." : "Run Spam Check")
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_result != null)
+    {
+        <MudDivider Class="my-4" />
+
+        <MudAlert Severity="@GetResultSeverity()" Variant="Variant.Filled" Class="mb-4">
+            <MudText Typo="Typo.h6">
+                @if (_result.SpamCheckSkipped)
+                {
+                    <text>✅ Spam Check Skipped</text>
+                }
+                else if (_result.IsSpam)
+                {
+                    <text>🚨 SPAM DETECTED</text>
+                }
+                else
+                {
+                    <text>✅ Not Spam</text>
+                }
+            </MudText>
+        </MudAlert>
+
+        @if (_result.SpamCheckSkipped)
+        {
+            <MudPaper Class="pa-3 mb-3" Outlined="true">
+                <MudText Typo="Typo.body1"><strong>Reason:</strong> @_result.SkipReason</MudText>
+                @if (_result.IsUserTrusted)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-2">User is explicitly trusted - bypasses all spam checks</MudText>
+                }
+                @if (_result.IsUserAdmin)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-2">User is a chat admin - bypasses all spam checks</MudText>
+                }
+            </MudPaper>
+        }
+        else if (_result.SpamResult != null)
+        {
+            <MudPaper Class="pa-3 mb-3" Outlined="true">
+                <MudText Typo="Typo.body1"><strong>Primary Reason:</strong> @_result.SpamResult.PrimaryReason</MudText>
+                <MudText Typo="Typo.body2" Class="mt-2">
+                    <strong>Confidence:</strong> Max @_result.SpamResult.MaxConfidence% | Avg @_result.SpamResult.AvgConfidence% | Flags @_result.SpamResult.SpamFlags
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mt-2">
+                    <strong>Recommended Action:</strong> @_result.SpamResult.RecommendedAction
+                </MudText>
+            </MudPaper>
+
+            <MudText Typo="Typo.h6" Class="mb-2">Individual Check Results</MudText>
+            <MudTable Items="_result.SpamResult.CheckResults" Hover="true" Dense="true" Striped="true">
+                <HeaderContent>
+                    <MudTh>Check Name</MudTh>
+                    <MudTh>Result</MudTh>
+                    <MudTh>Confidence</MudTh>
+                    <MudTh>Details</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.CheckName</MudTd>
+                    <MudTd>
+                        @if (context.IsSpam)
+                        {
+                            <MudChip T="string" Color="Color.Error" Size="Size.Small">SPAM</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small">OK</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd>@context.Confidence%</MudTd>
+                    <MudTd>@context.Details</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    }
+</MudPaper>
+
+@code {
+    private string _messageText = string.Empty;
+    private string? _userId;
+    private string? _userName;
+    private IBrowserFile? _selectedImage;
+    private bool _isRunning;
+    private SpamCheckOrchestratorResult? _result;
+
+    private async Task RunSpamCheck()
+    {
+        if (string.IsNullOrWhiteSpace(_messageText))
+        {
+            Snackbar.Add("Please enter a message to test", Severity.Warning);
+            return;
+        }
+
+        _isRunning = true;
+        _result = null;
+
+        try
+        {
+            Stream? imageStream = null;
+            string? imageFileName = null;
+
+            if (_selectedImage != null)
+            {
+                imageStream = _selectedImage.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024); // 10MB
+                imageFileName = _selectedImage.Name;
+            }
+
+            var request = new TelegramGroupsAdmin.SpamDetection.Models.SpamCheckRequest
+            {
+                Message = _messageText,
+                UserId = string.IsNullOrWhiteSpace(_userId) ? "0" : _userId, // Use "0" if no user provided
+                UserName = _userName,
+                ChatId = null, // No specific chat for manual testing
+                ImageData = imageStream,
+                ImageFileName = imageFileName
+            };
+
+            _result = await SpamCheckOrchestrator.CheckAsync(request);
+
+            if (_result.IsSpam)
+            {
+                Snackbar.Add("Spam detected!", Severity.Error);
+            }
+            else if (_result.SpamCheckSkipped)
+            {
+                Snackbar.Add("Spam check skipped - user is trusted/admin", Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add("Message is not spam", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error running spam check: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isRunning = false;
+        }
+    }
+
+    private void OnImageSelected(IBrowserFile? file)
+    {
+        _selectedImage = file;
+    }
+
+    private void ClearImage()
+    {
+        _selectedImage = null;
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
+    private Severity GetResultSeverity()
+    {
+        if (_result == null) return Severity.Normal;
+        if (_result.SpamCheckSkipped) return Severity.Info;
+        return _result.IsSpam ? Severity.Error : Severity.Success;
+    }
+}

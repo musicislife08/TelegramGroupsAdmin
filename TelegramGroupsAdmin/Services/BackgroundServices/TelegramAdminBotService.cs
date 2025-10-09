@@ -190,35 +190,24 @@ public partial class TelegramAdminBotService(
                 photoFileId != null,
                 text != null);
 
-            // Check if user is trusted OR is a chat admin - if so, skip spam detection entirely
-            bool isTrustedOrAdmin;
-            using (var scope = serviceProvider.CreateScope())
-            {
-                var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-                var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
+            // TODO: Queue spam detection check using orchestrator (Phase 2.5)
+            // The orchestrator handles trust/admin checks + spam detection in one place
+            // For now, spam detection is only triggered manually via /spam command or via the test UI
 
-                // Check if explicitly trusted
-                var isTrusted = await userActionsRepository.IsUserTrustedAsync(
-                    message.From.Id,
-                    message.Chat.Id);
-
-                // Check if chat admin (cached from Telegram)
-                var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, message.From.Id);
-
-                isTrustedOrAdmin = isTrusted || isAdmin;
-            }
-
-            if (isTrustedOrAdmin)
-            {
-                logger.LogDebug(
-                    "User {UserId} is trusted/admin - skipping spam detection for message {MessageId}",
-                    message.From.Id,
-                    message.MessageId);
-                return; // Skip spam detection for trusted users and admins
-            }
-
-            // TODO: Queue spam detection check here (Phase 2.5)
-            // For now, spam detection is only triggered manually via /spam command
+            // Example of how to use the orchestrator when we implement auto spam detection:
+            // using (var scope = serviceProvider.CreateScope())
+            // {
+            //     var orchestrator = scope.ServiceProvider.GetRequiredService<ISpamCheckOrchestrator>();
+            //     var request = new SpamCheckRequest
+            //     {
+            //         Message = text ?? "",
+            //         UserId = message.From.Id.ToString(),
+            //         UserName = message.From.Username,
+            //         ChatId = message.Chat.Id.ToString()
+            //     };
+            //     var result = await orchestrator.CheckAsync(request);
+            //     if (result.IsSpam) { /* take action */ }
+            // }
         }
         catch (Exception ex)
         {
