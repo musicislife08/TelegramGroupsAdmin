@@ -190,23 +190,31 @@ public partial class TelegramAdminBotService(
                 photoFileId != null,
                 text != null);
 
-            // Check if user is trusted - if so, skip spam detection entirely
-            bool isTrusted;
+            // Check if user is trusted OR is a chat admin - if so, skip spam detection entirely
+            bool isTrustedOrAdmin;
             using (var scope = serviceProvider.CreateScope())
             {
                 var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-                isTrusted = await userActionsRepository.IsUserTrustedAsync(
+                var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
+
+                // Check if explicitly trusted
+                var isTrusted = await userActionsRepository.IsUserTrustedAsync(
                     message.From.Id,
                     message.Chat.Id);
+
+                // Check if chat admin (cached from Telegram)
+                var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, message.From.Id);
+
+                isTrustedOrAdmin = isTrusted || isAdmin;
             }
 
-            if (isTrusted)
+            if (isTrustedOrAdmin)
             {
                 logger.LogDebug(
-                    "User {UserId} is trusted - skipping spam detection for message {MessageId}",
+                    "User {UserId} is trusted/admin - skipping spam detection for message {MessageId}",
                     message.From.Id,
                     message.MessageId);
-                return; // Skip spam detection for trusted users
+                return; // Skip spam detection for trusted users and admins
             }
 
             // TODO: Queue spam detection check here (Phase 2.5)
@@ -616,13 +624,21 @@ public partial class TelegramAdminBotService(
             using var scope = serviceProvider.CreateScope();
             var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
+            var adminNames = new List<string>();
             foreach (var admin in admins)
             {
                 var isCreator = admin.Status == ChatMemberStatus.Creator;
                 await chatAdminsRepository.UpsertAsync(chatId, admin.User.Id, isCreator);
+
+                var displayName = admin.User.Username ?? admin.User.FirstName ?? admin.User.Id.ToString();
+                adminNames.Add($"@{displayName}" + (isCreator ? " (creator)" : ""));
             }
 
-            logger.LogDebug("Cached {Count} admins for chat {ChatId}", admins.Length, chatId);
+            logger.LogInformation(
+                "Cached {Count} admins for chat {ChatId}: {Admins}",
+                admins.Length,
+                chatId,
+                string.Join(", ", adminNames));
         }
         catch (Exception ex)
         {
