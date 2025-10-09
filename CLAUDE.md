@@ -566,7 +566,7 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [x] **Command routing infrastructure** - IBotCommand interface, CommandRouter service, singleton architecture
 - [x] **Bot command registration** - SetMyCommands API with scoped permissions (default/admin)
 - [x] **Command parsing** - Regex handles `/command` and `/command@botname` formats
-- [x] **Command stubs complete** - All 7 essential commands implemented as stubs:
+- [x] **Command stubs complete** ✅ - All 7 essential commands implemented and tested:
   - `/help` - Show available commands (ReadOnly, reflection-based auto-discovery)
   - `/report` - Report message for admin review (ReadOnly)
   - `/spam` - Mark as spam and delete (Admin)
@@ -576,7 +576,13 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
   - `/warn` - Issue warning with auto-ban threshold (Admin)
 - [x] **Permission system foundation** - MinPermissionLevel checks (0=ReadOnly, 1=Admin, 2=Owner)
 - [x] **Console logging** - Timestamp format for debugging command execution timing
-- [x] **Reflection-based help** - Dynamic command discovery, auto-updates when new commands added
+- [x] **Reflection-based help** ✅ - Dynamic command discovery, auto-updates when new commands added
+- [ ] **Foundation for command actions** 🎯 **NEXT PRIORITY** - Need infrastructure before implementing actual command behavior:
+  1. **DetectionResultsRepository** - Insert method for manual spam/ham classifications
+  2. **UserActionsRepository** - Track bans/trusts/warns across chats
+  3. **Chat management tracking** - Which chats the bot manages
+  4. **Admin protection** - Prevent banning admins/owners
+  5. **Cross-chat ban coordination** - Ban from all managed chats, not just current chat
 - [ ] **Telegram user permissions** - Link Telegram users to web app users for permission checking
   - **Options to evaluate:**
     1. **User Profile Integration** - Add Telegram ID field to user profile page for manual linking
@@ -586,7 +592,13 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
   - **Preferred approach:** User profile + mapping table for flexibility
   - **Security:** Require authentication on web app, bot sends verification code, user enters on web
   - **Current state:** Temporary hardcode for testing (user 1312830442 = Owner)
-- [ ] **Implement command actions** - Delete messages, save to detection_results, manage bans
+- [ ] **Implement command actions** - After foundation is complete:
+  - `/spam` - Delete message, insert to detection_results, ban if threshold exceeded
+  - `/ban` - Insert to user_actions, call Telegram BanChatMember across all chats
+  - `/trust` - Insert to user_actions with action_type='trust'
+  - `/unban` - Remove from user_actions, call Telegram UnbanChatMember
+  - `/warn` - Insert to user_actions, auto-ban after threshold
+  - `/report` - Create admin notification, queue for review
 - [ ] **Cross-chat actions** - Bans/warns across all managed groups
 - [ ] **Edit monitoring** - Detect "post innocent, edit to spam" tactic
 
