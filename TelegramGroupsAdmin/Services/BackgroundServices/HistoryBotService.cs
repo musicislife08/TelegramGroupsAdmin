@@ -9,8 +9,8 @@ using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.Data.Repositories;
+using TelegramGroupsAdmin.Models;
+using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Telegram;
 
 namespace TelegramGroupsAdmin.Services.BackgroundServices;
@@ -93,7 +93,6 @@ public partial class HistoryBotService(
         try
         {
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var expiresAt = now + (_historyOptions.RetentionHours * 3600);
 
             // Extract URLs from message text
             var text = message.Text ?? message.Caption;
@@ -101,7 +100,7 @@ public partial class HistoryBotService(
 
             // Get photo file ID if present and download image
             string? photoFileId = null;
-            long? photoFileSize = null;
+            int? photoFileSize = null;
             string? photoLocalPath = null;
             string? photoThumbnailPath = null;
 
@@ -109,7 +108,7 @@ public partial class HistoryBotService(
             {
                 var largestPhoto = photos.OrderByDescending(p => p.FileSize).First();
                 photoFileId = largestPhoto.FileId;
-                photoFileSize = largestPhoto.FileSize;
+                photoFileSize = largestPhoto.FileSize.HasValue ? (int)largestPhoto.FileSize.Value : null;
 
                 // Download and process image
                 (photoLocalPath, photoThumbnailPath) = await DownloadAndProcessImageAsync(
@@ -129,7 +128,6 @@ public partial class HistoryBotService(
                 message.From.Username ?? message.From.FirstName,
                 message.Chat.Id,
                 now,
-                expiresAt,
                 text,
                 photoFileId,
                 photoFileSize,

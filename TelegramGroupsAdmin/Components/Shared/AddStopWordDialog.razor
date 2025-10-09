@@ -1,0 +1,111 @@
+@using TelegramGroupsAdmin.SpamDetection.Repositories
+@inject IStopWordsRepository StopWordsRepository
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_word"
+                         Label="Stop Word"
+                         Required="true"
+                         RequiredError="Stop word is required"
+                         Placeholder="Enter word or phrase"
+                         Variant="Variant.Outlined"
+                         HelperText="Words are case-insensitive and will be checked against message text, username, and user ID"
+                         OnKeyUp="OnWordChanged" />
+
+            @if (_wordExists)
+            {
+                <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.Warning">
+                    This stop word already exists in the database.
+                </MudAlert>
+            }
+
+            <MudTextField @bind-Value="_notes"
+                         Label="Notes (Optional)"
+                         Placeholder="Context about why this word was added"
+                         Variant="Variant.Outlined"
+                         Lines="3"
+                         HelperText="Helpful for understanding the purpose of this stop word" />
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                <strong>Examples:</strong> "bitcoin", "crypto", "airdrop", "guaranteed profit", "dm me"
+            </MudText>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                  Variant="Variant.Filled"
+                  OnClick="Submit"
+                  Disabled="@(_isSubmitting || string.IsNullOrWhiteSpace(_word) || _wordExists)">
+            @if (_isSubmitting)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                <MudText Class="ms-2">Adding...</MudText>
+            }
+            else
+            {
+                <MudText>Add Stop Word</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private string _word = string.Empty;
+    private string _notes = string.Empty;
+    private bool _wordExists = false;
+    private bool _isSubmitting = false;
+    private bool _checkingWord = false;
+
+    private async Task OnWordChanged()
+    {
+        if (string.IsNullOrWhiteSpace(_word) || _checkingWord)
+            return;
+
+        _checkingWord = true;
+        try
+        {
+            _wordExists = await StopWordsRepository.ExistsAsync(_word.Trim());
+        }
+        catch
+        {
+            // Ignore errors during existence check
+            _wordExists = false;
+        }
+        finally
+        {
+            _checkingWord = false;
+        }
+
+        StateHasChanged();
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_word) || _wordExists)
+            return Task.CompletedTask;
+
+        _isSubmitting = true;
+        try
+        {
+            var data = new AddStopWordData
+            {
+                Word = _word.Trim(),
+                Notes = string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim()
+            };
+
+            MudDialog.Close(DialogResult.Ok(data));
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+
+        return Task.CompletedTask;
+    }
+}

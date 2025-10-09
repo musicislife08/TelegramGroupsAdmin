@@ -11,15 +11,11 @@ using TelegramGroupsAdmin;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Data.Infrastructure;
 using TelegramGroupsAdmin.Endpoints;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.BackgroundServices;
 using TelegramGroupsAdmin.Services.Telegram;
 using TelegramGroupsAdmin.Services.Vision;
-
-// Register Dapper type handler for SQLite boolean conversion (must be done early, before any queries)
-SqlMapper.AddTypeHandler(new SqliteBooleanHandler());
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,6 +25,7 @@ builder.Logging.AddConsole();
 builder.Logging.AddFilter("Microsoft", LogLevel.Warning); // Only warnings and errors from Microsoft namespaces
 builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Information); // Keep startup/shutdown messages
 builder.Logging.AddFilter("TelegramGroupsAdmin", LogLevel.Information); // Keep our app logs at Info level
+builder.Logging.AddFilter("Npgsql", LogLevel.Warning); // Suppress verbose Npgsql command logging
 
 // Blazor Server services
 builder.Services.AddRazorComponents()
@@ -174,9 +171,9 @@ builder.Services.Configure<TelegramOptions>(builder.Configuration.GetSection("Te
 builder.Services.Configure<SpamDetectionOptions>(builder.Configuration.GetSection("SpamDetection"));
 builder.Services.Configure<MessageHistoryOptions>(builder.Configuration.GetSection("MessageHistory"));
 
-// Database paths for FluentMigrator (pulled from configuration)
-var identityDbPath = builder.Configuration["Identity:DatabasePath"] ?? "/data/identity.db";
-var messageHistoryDbPath = builder.Configuration["MessageHistory:DatabasePath"] ?? "/data/message_history.db";
+// Database connection string for PostgreSQL
+var connectionString = builder.Configuration.GetConnectionString("PostgreSQL")
+    ?? throw new InvalidOperationException("PostgreSQL connection string not configured");
 
 // Telegram services
 builder.Services.AddSingleton<TelegramBotClientFactory>();
@@ -192,13 +189,26 @@ builder.Services.AddHostedService<CleanupBackgroundService>();
 // OpenAI Vision
 builder.Services.AddHttpClient<IVisionSpamDetectionService, OpenAIVisionSpamDetectionService>();
 
-// Register spam check service
-builder.Services.AddScoped<SpamCheckService>();
+// Register NpgsqlDataSource as singleton factory for PostgreSQL connections
+// This provides proper connection pooling and thread-safe concurrent access
+builder.Services.AddNpgsqlDataSource(connectionString);
+
+// Register Spam Detection repositories
+builder.Services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.IStopWordsRepository, TelegramGroupsAdmin.SpamDetection.Repositories.StopWordsRepository>();
+builder.Services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.ITrainingSamplesRepository, TelegramGroupsAdmin.SpamDetection.Repositories.TrainingSamplesRepository>();
+builder.Services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.ISpamDetectionConfigRepository, TelegramGroupsAdmin.SpamDetection.Repositories.SpamDetectionConfigRepository>();
 
 var app = builder.Build();
 
 // Run database migrations
-await RunDatabaseMigrationsAsync(app, identityDbPath, messageHistoryDbPath);
+await RunDatabaseMigrationsAsync(app, connectionString);
+
+// Check for --migrate-only flag to run migrations and exit
+if (args.Contains("--migrate-only") || args.Contains("--migrate"))
+{
+    app.Logger.LogInformation("Migration complete. Exiting (--migrate-only flag).");
+    return;
+}
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -223,7 +233,6 @@ app.MapRazorComponents<App>()
 
 // Map API endpoints
 app.MapAuthEndpoints();
-app.MapSpamCheckEndpoints();
 app.MapEmailVerificationEndpoints();
 
 app.Run();
@@ -234,28 +243,18 @@ return;
 // Helper Methods
 // ============================================================================
 
-static async Task RunDatabaseMigrationsAsync(WebApplication app, string identityDbPath, string messageHistoryDbPath)
+static Task RunDatabaseMigrationsAsync(WebApplication app, string connectionString)
 {
     var migrationAssembly = typeof(TelegramGroupsAdmin.Data.Migrations.IdentitySchema).Assembly;
 
-    // Migrate Identity database
-    await RunMigrationAsync(app, identityDbPath, migrationAssembly, "Identity");
-
-    // Migrate Message History database (with legacy database support)
-    await HandleLegacyMessageHistoryDatabaseAsync(app, messageHistoryDbPath);
-    await RunMigrationAsync(app, messageHistoryDbPath, migrationAssembly, "Message History");
-}
-
-static Task RunMigrationAsync(WebApplication app, string dbPath, System.Reflection.Assembly migrationAssembly, string dbName)
-{
-    app.Logger.LogInformation("Migrating {DbName} database: {Path}", dbName, dbPath);
+    app.Logger.LogInformation("Running PostgreSQL database migrations");
 
 #pragma warning disable ASP0000 // BuildServiceProvider is acceptable for migration setup
     var serviceProvider = new ServiceCollection()
         .AddFluentMigratorCore()
         .ConfigureRunner(rb => rb
-            .AddSQLite()
-            .WithGlobalConnectionString($"Data Source={dbPath}")
+            .AddPostgres()
+            .WithGlobalConnectionString(connectionString)
             .ScanIn(migrationAssembly).For.Migrations())
         .AddLogging(lb => lb.AddFluentMigratorConsole())
         .BuildServiceProvider(validateScopes: false);
@@ -265,34 +264,8 @@ static Task RunMigrationAsync(WebApplication app, string dbPath, System.Reflecti
     var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
     runner.MigrateUp();
 
-    app.Logger.LogInformation("{DbName} database migration complete", dbName);
+    app.Logger.LogInformation("PostgreSQL database migration complete");
     return Task.CompletedTask;
-}
-
-static async Task HandleLegacyMessageHistoryDatabaseAsync(WebApplication app, string dbPath)
-{
-    // Handle legacy database: if VersionInfo is empty but messages table exists, mark InitialSchema as applied
-    await using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
-    await conn.OpenAsync();
-
-    // Check if VersionInfo table exists and is empty
-    var versionInfoExists = await conn.QueryFirstOrDefaultAsync<int>(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='VersionInfo'") > 0;
-
-    if (!versionInfoExists) return;
-
-    var versionCount = await conn.QueryFirstOrDefaultAsync<int>("SELECT COUNT(*) FROM VersionInfo");
-    var messagesTableExists = await conn.QueryFirstOrDefaultAsync<int>(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='messages'") > 0;
-
-    // Legacy database detected: VersionInfo empty but messages table exists
-    if (versionCount == 0 && messagesTableExists)
-    {
-        app.Logger.LogInformation("Legacy database detected. Marking InitialSchema (202510061) as applied.");
-        await conn.ExecuteAsync(
-            "INSERT INTO VersionInfo (Version, AppliedOn, Description) VALUES (202510061, @Now, 'InitialSchema')",
-            new { Now = DateTime.UtcNow });
-    }
 }
 
 static void ConfigureImageStaticFiles(WebApplication app)

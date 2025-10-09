@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using OtpNet;
-using TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.Data.Repositories;
+using TelegramGroupsAdmin.Models;
+using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Data.Services;
 
 namespace TelegramGroupsAdmin.Services.Auth;

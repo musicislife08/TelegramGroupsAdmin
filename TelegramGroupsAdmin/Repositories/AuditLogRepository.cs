@@ -1,10 +1,11 @@
 using Dapper;
-using Microsoft.Data.Sqlite;
+using Npgsql;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Data.Models;
+using DataModels = TelegramGroupsAdmin.Data.Models;
+using UiModels = TelegramGroupsAdmin.Models;
 
-namespace TelegramGroupsAdmin.Data.Repositories;
+namespace TelegramGroupsAdmin.Repositories;
 
 // CRITICAL DAPPER/DTO CONVENTION:
 // All SQL SELECT statements MUST use raw snake_case column names without aliases.
@@ -18,19 +19,19 @@ public class AuditLogRepository
 
     public AuditLogRepository(IConfiguration configuration, ILogger<AuditLogRepository> logger)
     {
-        var dbPath = configuration["Identity:DatabasePath"] ?? "/data/identity.db";
-        _connectionString = $"Data Source={dbPath}";
+        _connectionString = configuration.GetConnectionString("PostgreSQL")
+            ?? throw new InvalidOperationException("PostgreSQL connection string not found");
         _logger = logger;
     }
 
     public async Task LogEventAsync(
-        AuditEventType eventType,
+        DataModels.AuditEventType eventType,
         string? actorUserId,
         string? targetUserId = null,
         string? value = null,
         CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             INSERT INTO audit_log (
@@ -55,9 +56,9 @@ public class AuditLogRepository
             eventType, actorUserId ?? "SYSTEM", targetUserId ?? "N/A");
     }
 
-    public async Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = 100, CancellationToken ct = default)
+    public async Task<List<UiModels.AuditLogRecord>> GetRecentEventsAsync(int limit = 100, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             SELECT id, event_type, timestamp, actor_user_id, target_user_id, value
@@ -66,13 +67,13 @@ public class AuditLogRepository
             LIMIT @Limit;
             """;
 
-        var dtos = await connection.QueryAsync<AuditLogRecordDto>(sql, new { Limit = limit });
-        return dtos.Select(dto => dto.ToAuditLogRecord()).ToList();
+        var dtos = await connection.QueryAsync<DataModels.AuditLogRecordDto>(sql, new { Limit = limit });
+        return dtos.Select(dto => dto.ToAuditLogRecord().ToUiModel()).ToList();
     }
 
-    public async Task<List<AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = 100, CancellationToken ct = default)
+    public async Task<List<UiModels.AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = 100, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             SELECT id, event_type, timestamp, actor_user_id, target_user_id, value
@@ -82,13 +83,13 @@ public class AuditLogRepository
             LIMIT @Limit;
             """;
 
-        var dtos = await connection.QueryAsync<AuditLogRecordDto>(sql, new { UserId = userId, Limit = limit });
-        return dtos.Select(dto => dto.ToAuditLogRecord()).ToList();
+        var dtos = await connection.QueryAsync<DataModels.AuditLogRecordDto>(sql, new { UserId = userId, Limit = limit });
+        return dtos.Select(dto => dto.ToAuditLogRecord().ToUiModel()).ToList();
     }
 
-    public async Task<List<AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = 100, CancellationToken ct = default)
+    public async Task<List<UiModels.AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = 100, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             SELECT id, event_type, timestamp, actor_user_id, target_user_id, value
@@ -98,13 +99,13 @@ public class AuditLogRepository
             LIMIT @Limit;
             """;
 
-        var dtos = await connection.QueryAsync<AuditLogRecordDto>(sql, new { ActorUserId = actorUserId, Limit = limit });
-        return dtos.Select(dto => dto.ToAuditLogRecord()).ToList();
+        var dtos = await connection.QueryAsync<DataModels.AuditLogRecordDto>(sql, new { ActorUserId = actorUserId, Limit = limit });
+        return dtos.Select(dto => dto.ToAuditLogRecord().ToUiModel()).ToList();
     }
 
-    public async Task<List<AuditLogRecord>> GetEventsByTypeAsync(AuditEventType eventType, int limit = 100, CancellationToken ct = default)
+    public async Task<List<UiModels.AuditLogRecord>> GetEventsByTypeAsync(DataModels.AuditEventType eventType, int limit = 100, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             SELECT id, event_type, timestamp, actor_user_id, target_user_id, value
@@ -114,7 +115,7 @@ public class AuditLogRepository
             LIMIT @Limit;
             """;
 
-        var dtos = await connection.QueryAsync<AuditLogRecordDto>(sql, new { EventType = (int)eventType, Limit = limit });
-        return dtos.Select(dto => dto.ToAuditLogRecord()).ToList();
+        var dtos = await connection.QueryAsync<DataModels.AuditLogRecordDto>(sql, new { EventType = (int)eventType, Limit = limit });
+        return dtos.Select(dto => dto.ToAuditLogRecord().ToUiModel()).ToList();
     }
 }

@@ -24,7 +24,7 @@ public class ExtendIdentitySchema : Migration
             .AddColumn("status").AsInt32().NotNullable().WithDefaultValue(1) // Default to Active
             .AddColumn("modified_by").AsString(36).Nullable() // Who last modified this user
             .AddColumn("modified_at").AsInt64().Nullable() // When last modified
-            .AddColumn("email_verified").AsInt64().NotNullable().WithDefaultValue(0)
+            .AddColumn("email_verified").AsBoolean().NotNullable().WithDefaultValue(false)
             .AddColumn("email_verification_token").AsString().Nullable()
             .AddColumn("email_verification_token_expires_at").AsInt64().Nullable()
             .AddColumn("password_reset_token").AsString().Nullable()
@@ -41,13 +41,18 @@ public class ExtendIdentitySchema : Migration
         Execute.Sql(@"
             UPDATE users
             SET status = CASE
-                WHEN is_active = 1 THEN 1
+                WHEN is_active = true THEN 1
                 ELSE 2
             END,
-            modified_at = created_at,
-            email_verified = CASE
-                WHEN status = 1 THEN 1
-                ELSE 0
+            modified_at = created_at;
+        ");
+
+        // Set email_verified based on new status column (can't reference status in same UPDATE)
+        Execute.Sql(@"
+            UPDATE users
+            SET email_verified = CASE
+                WHEN status = 1 THEN true
+                ELSE false
             END;
         ");
 

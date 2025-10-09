@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.Data.Repositories;
+using TelegramGroupsAdmin.Models;
+using TelegramGroupsAdmin.Repositories;
+using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -37,7 +38,7 @@ public class InviteService : IInviteService
             ExpiresAt: expiresAt.ToUnixTimeSeconds(),
             UsedBy: null,
             PermissionLevel: 0, // Default to ReadOnly
-            Status: Data.Models.InviteStatus.Pending,
+            Status: InviteStatus.Pending,
             ModifiedAt: null
         );
 
@@ -67,11 +68,11 @@ public class InviteService : IInviteService
             CreatedAt: DateTimeOffset.FromUnixTimeSeconds(i.CreatedAt),
             ExpiresAt: DateTimeOffset.FromUnixTimeSeconds(i.ExpiresAt),
             UsedBy: i.UsedBy,
-            UsedAt: i.ModifiedAt.HasValue && i.Status == Data.Models.InviteStatus.Used
+            UsedAt: i.ModifiedAt.HasValue && i.Status == InviteStatus.Used
                 ? DateTimeOffset.FromUnixTimeSeconds(i.ModifiedAt.Value)
                 : null,
-            IsExpired: i.ExpiresAt < now && i.Status == Data.Models.InviteStatus.Pending,
-            IsUsed: i.Status == Data.Models.InviteStatus.Used
+            IsExpired: i.ExpiresAt < now && i.Status == InviteStatus.Pending,
+            IsUsed: i.Status == InviteStatus.Used
         )).ToList();
     }
 
@@ -110,7 +111,7 @@ public class InviteService : IInviteService
             _ => InviteFilter.Pending
         };
 
-        return await _inviteRepository.GetAllWithCreatorEmailAsync(enumFilter, ct);
+        return await _inviteRepository.GetAllWithCreatorEmailAsync((DataModels.InviteFilter)enumFilter, ct);
     }
 
     public async Task<bool> RevokeInviteAsync(string token, string revokedBy, CancellationToken ct = default)

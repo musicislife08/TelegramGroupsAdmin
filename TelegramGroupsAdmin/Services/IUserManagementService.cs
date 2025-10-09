@@ -1,4 +1,4 @@
-using TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Models;
 
 namespace TelegramGroupsAdmin.Services;
 

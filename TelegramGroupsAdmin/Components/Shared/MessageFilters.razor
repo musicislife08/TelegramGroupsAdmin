@@ -1,6 +1,8 @@
-@using TelegramGroupsAdmin.Data.Models
-@using TelegramGroupsAdmin.Data.Repositories
+@using TelegramGroupsAdmin.Models
+@using TelegramGroupsAdmin.Repositories
+@using Microsoft.Extensions.Logging
 @inject MessageHistoryRepository MessageRepository
+@inject ILogger<MessageFilters> Logger
 
 <MudPaper Class="pa-4 mb-4" Elevation="2">
     <MudGrid>
@@ -187,9 +189,9 @@
             _userNames = await MessageRepository.GetDistinctUserNamesAsync();
             _chatNames = await MessageRepository.GetDistinctChatNamesAsync();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Fail silently - autocomplete will just be empty
+            Logger.LogError(ex, "Failed to load autocomplete data for message filters");
             _userNames = new List<string>();
             _chatNames = new List<string>();
         }

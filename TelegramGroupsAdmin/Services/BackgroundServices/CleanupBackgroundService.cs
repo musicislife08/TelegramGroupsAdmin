@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Data.Repositories;
+using TelegramGroupsAdmin.Repositories;
 
 namespace TelegramGroupsAdmin.Services.BackgroundServices;
 

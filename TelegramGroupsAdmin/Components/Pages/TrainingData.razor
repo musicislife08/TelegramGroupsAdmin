@@ -1,0 +1,377 @@
+@page "/spam/training"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.SpamDetection.Repositories
+@using TelegramGroupsAdmin.Repositories
+@using DataModels = TelegramGroupsAdmin.Data.Models
+@using UiModels = TelegramGroupsAdmin.Models
+@inject ITrainingSamplesRepository TrainingSamplesRepository
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@attribute [Authorize(Roles = "Admin,Owner")]
+
+<PageTitle>Training Data Management - TelegramGroupsAdmin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h4">Training Data Management</MudText>
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Add"
+                      OnClick="AddTrainingSample">
+                Add Training Sample
+            </MudButton>
+        </MudStack>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+
+        <!-- Statistics Cards -->
+        @if (_stats != null)
+        {
+            <MudGrid>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Dataset" Size="Size.Large" Color="Color.Primary" />
+                            <MudText Typo="Typo.h6">@_stats.TotalSamples</MudText>
+                            <MudText Typo="Typo.body2" Align="Align.Center">Total Samples</MudText>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Error" />
+                            <MudText Typo="Typo.h6">@_stats.SpamSamples</MudText>
+                            <MudText Typo="Typo.body2" Align="Align.Center">Spam Samples</MudText>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Large" Color="Color.Success" />
+                            <MudText Typo="Typo.h6">@_stats.HamSamples</MudText>
+                            <MudText Typo="Typo.body2" Align="Align.Center">Ham Samples</MudText>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Percent" Size="Size.Large" Color="@(_stats.SpamPercentage > 60 ? Color.Warning : Color.Info)" />
+                            <MudText Typo="Typo.h6">@_stats.SpamPercentage.ToString("F1")%</MudText>
+                            <MudText Typo="Typo.body2" Align="Align.Center">Spam Ratio</MudText>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        }
+
+        <!-- Main Data Table -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                    <MudTextField @bind-Value="_searchText"
+                                 Placeholder="Search training samples..."
+                                 Adornment="Adornment.Start"
+                                 AdornmentIcon="@Icons.Material.Filled.Search"
+                                 Immediate="true"
+                                 OnKeyUp="OnSearchChanged"
+                                 Style="max-width: 300px;" />
+
+                    <MudSelect T="string" @bind-Value="_typeFilter" Label="Type Filter" Style="max-width: 150px;">
+                        <MudSelectItem Value="@("all")">All</MudSelectItem>
+                        <MudSelectItem Value="@("spam")">Spam Only</MudSelectItem>
+                        <MudSelectItem Value="@("ham")">Ham Only</MudSelectItem>
+                    </MudSelect>
+
+                    <MudSelect T="string" @bind-Value="_sourceFilter" Label="Source Filter" Style="max-width: 150px;">
+                        <MudSelectItem Value="@("all")">All Sources</MudSelectItem>
+                        @foreach (var source in _stats?.SamplesBySource?.Keys ?? Enumerable.Empty<string>())
+                        {
+                            <MudSelectItem Value="@source">@source</MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <MudText Typo="Typo.body2" Class="ml-auto">
+                        Showing @_filteredSamples.Count() of @_allSamples.Count() samples
+                    </MudText>
+                </MudStack>
+
+                <MudTable Items="@_filteredSamples"
+                         Hover="true"
+                         Breakpoint="Breakpoint.Sm"
+                         Loading="@_loading"
+                         LoadingProgressColor="Color.Info"
+                         Dense="true">
+                    <HeaderContent>
+                        <MudTh>Type</MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<TrainingSample, object>(x => x.MessageText)">Message Text</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<TrainingSample, object>(x => x.Source)">Source</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<TrainingSample, object>(x => x.DetectionCount)">Detections</MudTableSortLabel></MudTh>
+                        <MudTh>Last Detected</MudTh>
+                        <MudTh>Chats</MudTh>
+                        <MudTh>Confidence</MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<TrainingSample, object>(x => x.AddedDate)">Added Date</MudTableSortLabel></MudTh>
+                        <MudTh>Added By</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Type">
+                            <MudChip T="string" Size="Size.Small" Color="@(context.IsSpam ? Color.Error : Color.Success)">
+                                @(context.IsSpam ? "SPAM" : "HAM")
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Message Text">
+                            <MudTooltip Text="@context.MessageText">
+                                <MudText Typo="Typo.body2" Style="max-width: 400px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    @context.MessageText
+                                </MudText>
+                            </MudTooltip>
+                        </MudTd>
+                        <MudTd DataLabel="Source">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info">
+                                @context.Source
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Detections">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudText Typo="Typo.body2">@context.DetectionCount</MudText>
+                                @if (context.DetectionCount > 0)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" Color="@(context.IsSpam ? Color.Success : Color.Warning)" />
+                                }
+                            </MudStack>
+                        </MudTd>
+                        <MudTd DataLabel="Last Detected">
+                            @if (context.LastDetectedDate.HasValue)
+                            {
+                                <MudText Typo="Typo.body2">@DateTimeOffset.FromUnixTimeSeconds(context.LastDetectedDate.Value).ToString("MM/dd HH:mm")</MudText>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">Never</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Chats">
+                            @if (context.ChatIds?.Any() == true)
+                            {
+                                <MudTooltip Text="@string.Join(", ", context.ChatIds)">
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary">
+                                        @context.ChatIds.Length chat@(context.ChatIds.Length != 1 ? "s" : "")
+                                    </MudChip>
+                                </MudTooltip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">-</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Confidence">
+                            @if (context.ConfidenceWhenAdded.HasValue)
+                            {
+                                <MudText Typo="Typo.body2">@context.ConfidenceWhenAdded%</MudText>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">-</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Added Date">@DateTimeOffset.FromUnixTimeSeconds(context.AddedDate).ToString("yyyy-MM-dd HH:mm")</MudTd>
+                        <MudTd DataLabel="Added By">@(context.AddedBy ?? "System")</MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudStack Row="true" Spacing="1">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                             Color="Color.Primary"
+                                             Size="Size.Small"
+                                             OnClick="() => EditTrainingSample(context)"
+                                             title="Edit" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                             Color="Color.Error"
+                                             Size="Size.Small"
+                                             OnClick="() => DeleteTrainingSample(context)"
+                                             title="Delete" />
+                            </MudStack>
+                        </MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Typo="Typo.body1" Align="Align.Center" Class="py-8">
+                            @if (string.IsNullOrEmpty(_searchText) && _typeFilter == "all" && _sourceFilter == "all")
+                            {
+                                <span>No training samples found. Add some to get started!</span>
+                            }
+                            else
+                            {
+                                <span>No training samples match your search criteria.</span>
+                            }
+                        </MudText>
+                    </NoRecordsContent>
+                </MudTable>
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private List<TrainingSample> _allSamples = new();
+    private IEnumerable<TrainingSample> _filteredSamples = new List<TrainingSample>();
+    private TrainingStats? _stats;
+    private bool _loading = true;
+    private string _searchText = string.Empty;
+    private string _typeFilter = "all";
+    private string _sourceFilter = "all";
+    private string? _currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUserId = authState.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        try
+        {
+            var samplesTask = TrainingSamplesRepository.GetAllSamplesAsync();
+            var statsTask = TrainingSamplesRepository.GetStatsAsync();
+
+            await Task.WhenAll(samplesTask, statsTask);
+
+            _allSamples = (await samplesTask).Select(s => s.ToUiModel()).ToList();
+            _stats = (await statsTask).ToUiModel();
+            FilterSamples();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading training data: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void FilterSamples()
+    {
+        var filtered = _allSamples.AsEnumerable();
+
+        // Filter by search text
+        if (!string.IsNullOrEmpty(_searchText))
+        {
+            filtered = filtered.Where(s =>
+                s.MessageText.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                s.Source.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrEmpty(s.AddedBy) && s.AddedBy.Contains(_searchText, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        // Filter by type
+        filtered = _typeFilter switch
+        {
+            "spam" => filtered.Where(s => s.IsSpam),
+            "ham" => filtered.Where(s => !s.IsSpam),
+            _ => filtered
+        };
+
+        // Filter by source
+        if (_sourceFilter != "all")
+        {
+            filtered = filtered.Where(s => s.Source == _sourceFilter);
+        }
+
+        _filteredSamples = filtered;
+    }
+
+    private void OnSearchChanged()
+    {
+        FilterSamples();
+    }
+
+    private async Task AddTrainingSample()
+    {
+        var dialog = await DialogService.ShowAsync<AddTrainingSampleDialog>("Add Training Sample");
+        var result = await dialog.Result;
+
+        if (result is not null && !result.Canceled && result.Data is AddTrainingSampleData data)
+        {
+            try
+            {
+                await TrainingSamplesRepository.AddSampleAsync(
+                    data.MessageText,
+                    data.IsSpam,
+                    data.Source,
+                    data.Confidence,
+                    null,
+                    _currentUserId);
+
+                Snackbar.Add("Training sample added successfully", Severity.Success);
+                await LoadData();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error adding training sample: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task EditTrainingSample(TrainingSample sample)
+    {
+        var parameters = new DialogParameters<EditTrainingSampleDialog>
+        {
+            { x => x.Sample, sample }
+        };
+
+        var dialog = await DialogService.ShowAsync<EditTrainingSampleDialog>("Edit Training Sample", parameters);
+        var result = await dialog.Result;
+
+        if (result is not null && !result.Canceled && result.Data is EditTrainingSampleData data)
+        {
+            try
+            {
+                await TrainingSamplesRepository.UpdateSampleAsync(
+                    data.Id,
+                    data.MessageText,
+                    data.IsSpam,
+                    data.Source,
+                    data.Confidence);
+
+                Snackbar.Add("Training sample updated successfully", Severity.Success);
+                await LoadData();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error updating training sample: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteTrainingSample(TrainingSample sample)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Delete",
+            $"Are you sure you want to delete this {(sample.IsSpam ? "SPAM" : "HAM")} training sample?\n\n\"{sample.MessageText[..Math.Min(sample.MessageText.Length, 100)]}{(sample.MessageText.Length > 100 ? "..." : "")}\"",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await TrainingSamplesRepository.DeleteSampleAsync(sample.Id);
+                Snackbar.Add("Training sample deleted successfully", Severity.Success);
+                await LoadData();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting training sample: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}

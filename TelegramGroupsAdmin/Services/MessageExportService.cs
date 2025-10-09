@@ -5,7 +5,7 @@ using System.Text.Json;
 using CsvHelper;
 using Microsoft.AspNetCore.Components.Authorization;
 using TelegramGroupsAdmin.Auth;
-using TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Models;
 
 namespace TelegramGroupsAdmin.Services;
 

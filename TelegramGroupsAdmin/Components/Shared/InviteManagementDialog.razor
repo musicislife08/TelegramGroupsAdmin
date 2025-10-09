@@ -1,4 +1,4 @@
-@using TelegramGroupsAdmin.Data.Models
+@using TelegramGroupsAdmin.Models
 @using TelegramGroupsAdmin.Services
 @using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Auth
@@ -48,8 +48,8 @@
                     </MudTd>
                     <MudTd DataLabel="Created">@FormatDate(context.CreatedAt)</MudTd>
                     <MudTd DataLabel="Permission">
-                        <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor(context.PermissionLevel)">
-                            @GetPermissionName(context.PermissionLevel)
+                        <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor((int)context.PermissionLevel)">
+                            @GetPermissionName((int)context.PermissionLevel)
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Expires">@FormatDate(context.ExpiresAt)</MudTd>
@@ -141,12 +141,22 @@
         try
         {
             var invitesWithCreators = await InviteService.GetAllInvitesAsync(_filter);
-            _invites = invitesWithCreators.Select(i => i.Invite).ToList();
+            // UI model InviteWithCreator is flat, so we need to convert to InviteRecord
+            _invites = invitesWithCreators.Select(i => new InviteRecord(
+                Token: i.Token,
+                CreatedBy: i.CreatedBy,
+                CreatedAt: i.CreatedAt,
+                ExpiresAt: i.ExpiresAt,
+                UsedBy: i.UsedBy,
+                PermissionLevel: i.PermissionLevel,
+                Status: i.Status,
+                ModifiedAt: i.ModifiedAt
+            )).ToList();
 
             // Use DistinctBy to handle multiple invites from same user
             _userEmails = invitesWithCreators
-                .DistinctBy(i => i.Invite.CreatedBy)
-                .ToDictionary(i => i.Invite.CreatedBy, i => i.CreatorEmail);
+                .DistinctBy(i => i.CreatedBy)
+                .ToDictionary(i => i.CreatedBy, i => i.CreatedByEmail);
         }
         catch (Exception ex)
         {

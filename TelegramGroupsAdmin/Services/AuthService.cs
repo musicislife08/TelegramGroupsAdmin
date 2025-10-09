@@ -1,10 +1,11 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.Data.Repositories;
+using TelegramGroupsAdmin.Models;
+using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Auth;
 using TelegramGroupsAdmin.Services.Email;
+using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -134,12 +135,12 @@ public class AuthService(
         var isFirstRun = await IsFirstRunAsync(ct);
 
         string? invitedBy = null;
-        int permissionLevel;
+        PermissionLevel permissionLevel;
 
         if (isFirstRun)
         {
             // First user gets Owner permissions automatically
-            permissionLevel = 2; // Owner
+            permissionLevel = PermissionLevel.Owner;
             logger.LogInformation("First run detected - creating owner account");
         }
         else
@@ -239,7 +240,7 @@ public class AuthService(
                         UsedAt: null
                     );
 
-                    await verificationTokenRepository.CreateAsync(verificationToken, ct);
+                    await verificationTokenRepository.CreateAsync(verificationToken.ToDataModel(), ct);
 
                     await emailService.SendTemplatedEmailAsync(
                         email,
@@ -342,7 +343,7 @@ public class AuthService(
                     UsedAt: null
                 );
 
-                await verificationTokenRepository.CreateAsync(verificationToken, ct);
+                await verificationTokenRepository.CreateAsync(verificationToken.ToDataModel(), ct);
 
                 await emailService.SendTemplatedEmailAsync(
                     email,
@@ -520,7 +521,7 @@ public class AuthService(
                 UsedAt: null
             );
 
-            await verificationTokenRepository.CreateAsync(verificationToken, ct);
+            await verificationTokenRepository.CreateAsync(verificationToken.ToDataModel(), ct);
 
             await emailService.SendTemplatedEmailAsync(
                 email,
@@ -573,7 +574,7 @@ public class AuthService(
             UsedAt: null
         );
 
-        await verificationTokenRepository.CreateAsync(resetToken, ct);
+        await verificationTokenRepository.CreateAsync(resetToken.ToDataModel(), ct);
 
         // Send password reset email
         try
@@ -612,7 +613,7 @@ public class AuthService(
     public async Task<bool> ResetPasswordAsync(string token, string newPassword, CancellationToken ct = default)
     {
         // Validate token
-        var resetToken = await verificationTokenRepository.GetValidTokenAsync(token, TokenType.PasswordReset, ct);
+        var resetToken = await verificationTokenRepository.GetValidTokenAsync(token, (DataModels.TokenType)TokenType.PasswordReset, ct);
         if (resetToken is null)
         {
             logger.LogWarning("Invalid or expired password reset token attempted");

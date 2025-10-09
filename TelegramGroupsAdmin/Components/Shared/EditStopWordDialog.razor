@@ -1,0 +1,80 @@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField Value="@StopWord.Word"
+                         Label="Stop Word"
+                         Disabled="true"
+                         Variant="Variant.Outlined"
+                         HelperText="Stop word text cannot be changed" />
+
+            <MudTextField @bind-Value="_notes"
+                         Label="Notes"
+                         Placeholder="Context about why this word was added"
+                         Variant="Variant.Outlined"
+                         Lines="3"
+                         HelperText="Update the notes for this stop word" />
+
+            <MudStack Row="true" Spacing="2">
+                <MudText Typo="Typo.body2"><strong>Added:</strong> @StopWord.AddedDate.ToString("yyyy-MM-dd HH:mm")</MudText>
+                <MudText Typo="Typo.body2"><strong>By:</strong> @(StopWord.AddedBy ?? "System")</MudText>
+                <MudChip T="string" Size="Size.Small" Color="@(StopWord.Enabled ? Color.Success : Color.Error)">
+                    @(StopWord.Enabled ? "Enabled" : "Disabled")
+                </MudChip>
+            </MudStack>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                  Variant="Variant.Filled"
+                  OnClick="Submit"
+                  Disabled="@_isSubmitting">
+            @if (_isSubmitting)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                <MudText Class="ms-2">Updating...</MudText>
+            }
+            else
+            {
+                <MudText>Update</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public StopWordItem StopWord { get; set; } = default!;
+
+    private string _notes = string.Empty;
+    private bool _isSubmitting = false;
+
+    protected override void OnInitialized()
+    {
+        _notes = StopWord.Notes ?? string.Empty;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private Task Submit()
+    {
+        _isSubmitting = true;
+        try
+        {
+            var data = new EditStopWordData
+            {
+                Id = StopWord.Id,
+                Notes = string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim()
+            };
+
+            MudDialog.Close(DialogResult.Ok(data));
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+
+        return Task.CompletedTask;
+    }
+
+}

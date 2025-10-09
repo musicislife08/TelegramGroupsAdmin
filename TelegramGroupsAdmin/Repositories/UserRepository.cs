@@ -1,10 +1,11 @@
 using Dapper;
-using Microsoft.Data.Sqlite;
+using Npgsql;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Data.Models;
+using DataModels = TelegramGroupsAdmin.Data.Models;
+using UiModels = TelegramGroupsAdmin.Models;
 
-namespace TelegramGroupsAdmin.Data.Repositories;
+namespace TelegramGroupsAdmin.Repositories;
 
 // CRITICAL DAPPER/DTO CONVENTION:
 // All SQL SELECT statements MUST use raw snake_case column names without aliases.
@@ -22,23 +23,23 @@ public class UserRepository
 
     public UserRepository(IConfiguration configuration, ILogger<UserRepository> logger)
     {
-        var dbPath = configuration["Identity:DatabasePath"] ?? "/data/identity.db";
-        _connectionString = $"Data Source={dbPath}";
+        _connectionString = configuration.GetConnectionString("PostgreSQL")
+            ?? throw new InvalidOperationException("PostgreSQL connection string not found");
         _logger = logger;
     }
 
     public async Task<int> GetUserCountAsync(CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = "SELECT COUNT(*) FROM users;";
 
         return await connection.ExecuteScalarAsync<int>(sql);
     }
 
-    public async Task<UserRecord?> GetByEmailAsync(string email, CancellationToken ct = default)
+    public async Task<UiModels.UserRecord?> GetByEmailAsync(string email, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
         var normalizedEmail = email.ToUpperInvariant();
 
         const string sql = """
@@ -52,13 +53,13 @@ public class UserRepository
             WHERE normalized_email = @NormalizedEmail AND status = 1;
             """;
 
-        var dto = await connection.QueryFirstOrDefaultAsync<UserRecordDto>(sql, new { NormalizedEmail = normalizedEmail });
-        return dto?.ToUserRecord();
+        var dto = await connection.QueryFirstOrDefaultAsync<DataModels.UserRecordDto>(sql, new { NormalizedEmail = normalizedEmail });
+        return dto?.ToUserRecord().ToUiModel();
     }
 
-    public async Task<UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken ct = default)
+    public async Task<UiModels.UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
         var normalizedEmail = email.ToUpperInvariant();
 
         const string sql = """
@@ -72,13 +73,13 @@ public class UserRepository
             WHERE normalized_email = @NormalizedEmail;
             """;
 
-        var dto = await connection.QueryFirstOrDefaultAsync<UserRecordDto>(sql, new { NormalizedEmail = normalizedEmail });
-        return dto?.ToUserRecord();
+        var dto = await connection.QueryFirstOrDefaultAsync<DataModels.UserRecordDto>(sql, new { NormalizedEmail = normalizedEmail });
+        return dto?.ToUserRecord().ToUiModel();
     }
 
-    public async Task<UserRecord?> GetByIdAsync(string userId, CancellationToken ct = default)
+    public async Task<UiModels.UserRecord?> GetByIdAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             SELECT id, email, normalized_email, password_hash, security_stamp,
@@ -91,13 +92,13 @@ public class UserRepository
             WHERE id = @UserId;
             """;
 
-        var dto = await connection.QueryFirstOrDefaultAsync<UserRecordDto>(sql, new { UserId = userId });
-        return dto?.ToUserRecord();
+        var dto = await connection.QueryFirstOrDefaultAsync<DataModels.UserRecordDto>(sql, new { UserId = userId });
+        return dto?.ToUserRecord().ToUiModel();
     }
 
-    public async Task<string> CreateAsync(UserRecord user, CancellationToken ct = default)
+    public async Task<string> CreateAsync(UiModels.UserRecord user, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         var normalizedEmail = user.Email.ToUpperInvariant();
 
@@ -145,7 +146,7 @@ public class UserRepository
 
     public async Task UpdateLastLoginAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             UPDATE users
@@ -159,7 +160,7 @@ public class UserRepository
 
     public async Task UpdateSecurityStampAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             UPDATE users
@@ -173,7 +174,7 @@ public class UserRepository
 
     public async Task UpdateTotpSecretAsync(string userId, string totpSecret, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             UPDATE users
@@ -192,7 +193,7 @@ public class UserRepository
 
     public async Task EnableTotpAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             UPDATE users
@@ -208,7 +209,7 @@ public class UserRepository
 
     public async Task DisableTotpAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             UPDATE users
@@ -223,7 +224,7 @@ public class UserRepository
 
     public async Task ResetTotpAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         // Clear TOTP secret, disable TOTP, and clear setup timestamp
         const string sql = """
@@ -241,7 +242,7 @@ public class UserRepository
 
     public async Task DeleteRecoveryCodesAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             DELETE FROM recovery_codes
@@ -253,9 +254,9 @@ public class UserRepository
         _logger.LogInformation("Deleted all recovery codes for user {UserId}", userId);
     }
 
-    public async Task<List<RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId)
+    public async Task<List<UiModels.RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             SELECT id, user_id, code_hash, used_at
@@ -263,13 +264,13 @@ public class UserRepository
             WHERE user_id = @UserId AND used_at IS NULL;
             """;
 
-        var dtos = await connection.QueryAsync<RecoveryCodeRecordDto>(sql, new { UserId = userId });
-        return dtos.Select(dto => dto.ToRecoveryCodeRecord()).ToList();
+        var dtos = await connection.QueryAsync<DataModels.RecoveryCodeRecordDto>(sql, new { UserId = userId });
+        return dtos.Select(dto => dto.ToRecoveryCodeRecord().ToUiModel()).ToList();
     }
 
     public async Task AddRecoveryCodesAsync(string userId, List<string> codeHashes)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             INSERT INTO recovery_codes (user_id, code_hash)
@@ -286,7 +287,7 @@ public class UserRepository
 
     public async Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             INSERT INTO recovery_codes (user_id, code_hash)
@@ -298,7 +299,7 @@ public class UserRepository
 
     public async Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             UPDATE recovery_codes
@@ -312,9 +313,9 @@ public class UserRepository
         return affected > 0;
     }
 
-    public async Task<InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken ct = default)
+    public async Task<UiModels.InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             SELECT token, created_by, created_at, expires_at, used_by,
@@ -323,13 +324,13 @@ public class UserRepository
             WHERE token = @Token;
             """;
 
-        var dto = await connection.QueryFirstOrDefaultAsync<InviteRecordDto>(sql, new { Token = token });
-        return dto?.ToInviteRecord();
+        var dto = await connection.QueryFirstOrDefaultAsync<DataModels.InviteRecordDto>(sql, new { Token = token });
+        return dto?.ToInviteRecord().ToUiModel();
     }
 
     public async Task UseInviteAsync(string token, string userId, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             UPDATE invites
@@ -343,9 +344,9 @@ public class UserRepository
         _logger.LogInformation("Invite {Token} used by user {UserId}", token, userId);
     }
 
-    public async Task<List<UserRecord>> GetAllAsync(CancellationToken ct = default)
+    public async Task<List<UiModels.UserRecord>> GetAllAsync(CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             SELECT id, email, normalized_email, password_hash, security_stamp,
@@ -359,13 +360,13 @@ public class UserRepository
             ORDER BY created_at DESC;
             """;
 
-        var dtos = await connection.QueryAsync<UserRecordDto>(sql);
-        return dtos.Select(dto => dto.ToUserRecord()).ToList();
+        var dtos = await connection.QueryAsync<DataModels.UserRecordDto>(sql);
+        return dtos.Select(dto => dto.ToUserRecord().ToUiModel()).ToList();
     }
 
-    public async Task<List<UserRecord>> GetAllIncludingDeletedAsync(CancellationToken ct = default)
+    public async Task<List<UiModels.UserRecord>> GetAllIncludingDeletedAsync(CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             SELECT id, email, normalized_email, password_hash, security_stamp,
@@ -378,13 +379,13 @@ public class UserRepository
             ORDER BY created_at DESC;
             """;
 
-        var dtos = await connection.QueryAsync<UserRecordDto>(sql);
-        return dtos.Select(dto => dto.ToUserRecord()).ToList();
+        var dtos = await connection.QueryAsync<DataModels.UserRecordDto>(sql);
+        return dtos.Select(dto => dto.ToUserRecord().ToUiModel()).ToList();
     }
 
     public async Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             UPDATE users
@@ -408,7 +409,7 @@ public class UserRepository
 
     public async Task SetActiveAsync(string userId, bool isActive, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             UPDATE users
@@ -421,9 +422,9 @@ public class UserRepository
         _logger.LogInformation("Set user {UserId} active status to {IsActive}", userId, isActive);
     }
 
-    public async Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken ct = default)
+    public async Task UpdateStatusAsync(string userId, UiModels.UserStatus newStatus, string modifiedBy, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             UPDATE users
@@ -439,7 +440,7 @@ public class UserRepository
         {
             UserId = userId,
             Status = (int)newStatus,
-            IsActive = newStatus == UserStatus.Active, // Keep is_active in sync for backward compatibility
+            IsActive = newStatus == UiModels.UserStatus.Active, // Keep is_active in sync for backward compatibility
             ModifiedBy = modifiedBy,
             ModifiedAt = now
         });
@@ -447,9 +448,9 @@ public class UserRepository
         _logger.LogInformation("Updated status for user {UserId} to {Status} by {ModifiedBy}", userId, newStatus, modifiedBy);
     }
 
-    public async Task UpdateAsync(UserRecord user, CancellationToken ct = default)
+    public async Task UpdateAsync(UiModels.UserRecord user, CancellationToken ct = default)
     {
-        await using var connection = new SqliteConnection(_connectionString);
+        await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
             UPDATE users

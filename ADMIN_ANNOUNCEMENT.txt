@@ -1,0 +1,15 @@
+New Unified Spam Detection Bot - Replacing shildy & tg-spam
+
+Hey team! I'm consolidating our spam detection into a single native bot that will replace both shildy and tg-spam across all our groups.
+
+How It Works:
+- Topic-aware moderation - Each group gets custom AI detection tuned to its specific topic and culture. What's spam in firearms/tech ≠ spam in homes/food/shop. The bot understands context.
+- Three-tier enforcement - High confidence spam (80%+) gets auto-banned and deleted. Medium confidence (50-79%) gets flagged for admin review without deletion - we check it first since Telegram has no undo. Low confidence gets allowed and logged.
+- Continuous learning - Every admin decision (ban/allow/whitelist) feeds back into the system. Over time, it learns each group's specific spam patterns and gets more accurate.
+- Join verification - New members click a button to accept rules and enable moderation notifications. This blocks most spam bots automatically and lets us DM users about moderation actions (restriction, ban, or apology if we got it wrong).
+- Easy recovery - False positives? One-click unban with automatic apology message. The system learns from the mistake and won't make it again.
+- Admin dashboard - Web UI to configure each group, review flagged messages, manage whitelists, view stats, and tune detection thresholds. Everything in one place.
+
+Philosophy: Light-touch moderation that keeps our "don't be an asshole" culture intact. The goal is to catch obvious spam while staying hands-off for legitimate discussion.
+
+Questions welcome!

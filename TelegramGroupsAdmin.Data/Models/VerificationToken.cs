@@ -7,18 +7,18 @@ public enum TokenType
     EmailChange
 }
 
-// DTO for Dapper mapping from SQLite
-internal record VerificationTokenDto(
-    long id,
-    string user_id,
-    string token_type,
-    string token,
-    string? value,
-    long expires_at,
-    long created_at,
-    long? used_at
-)
+// DTO for Dapper mapping from PostgreSQL
+public record VerificationTokenDto
 {
+    public long id { get; init; }
+    public string user_id { get; init; } = string.Empty;
+    public string token_type { get; init; } = string.Empty;
+    public string token { get; init; } = string.Empty;
+    public string? value { get; init; }
+    public long expires_at { get; init; }
+    public long created_at { get; init; }
+    public long? used_at { get; init; }
+
     public VerificationToken ToVerificationToken() => new VerificationToken(
         Id: id,
         UserId: user_id,

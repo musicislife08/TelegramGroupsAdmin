@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Data.Repositories;
+using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Data.Services;
 
-namespace TelegramGroupsAdmin.Data;
+namespace TelegramGroupsAdmin;
 
 public static class ServiceCollectionExtensions
 {
@@ -26,7 +26,6 @@ public static class ServiceCollectionExtensions
 
         // Message history repository (read-only for Web UI)
         services.AddSingleton<MessageHistoryRepository>();
-        services.AddSingleton<SpamCheckRepository>();
 
         return services;
     }

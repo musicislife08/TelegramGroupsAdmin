@@ -1,0 +1,109 @@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_messageText"
+                         Label="Message Text"
+                         Required="true"
+                         RequiredError="Message text is required"
+                         Placeholder="Enter message text for training"
+                         Variant="Variant.Outlined"
+                         Lines="4"
+                         HelperText="The message text that will be used for training the Bayes classifier" />
+
+            <MudRadioGroup T="bool" @bind-Value="_isSpam" Required="true">
+                <MudText Typo="Typo.body1" Class="mb-2">Classification:</MudText>
+                <MudRadio T="bool" Value="true" Color="Color.Error">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
+                        <span>SPAM - This message is spam/unwanted</span>
+                    </MudStack>
+                </MudRadio>
+                <MudRadio T="bool" Value="false" Color="Color.Success">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                        <span>HAM - This message is legitimate/wanted</span>
+                    </MudStack>
+                </MudRadio>
+            </MudRadioGroup>
+
+            <MudSelect T="string" @bind-Value="_source" Label="Source" Required="true" RequiredError="Source is required">
+                <MudSelectItem Value="@("manual")">Manual Entry</MudSelectItem>
+                <MudSelectItem Value="@("detected")">Auto-Detected</MudSelectItem>
+                <MudSelectItem Value="@("review")">Human Review</MudSelectItem>
+                <MudSelectItem Value="@("import")">Data Import</MudSelectItem>
+                <MudSelectItem Value="@("correction")">False Positive Correction</MudSelectItem>
+            </MudSelect>
+
+            <MudNumericField @bind-Value="_confidence"
+                            Label="Confidence (optional)"
+                            Min="0" Max="100"
+                            Placeholder="0-100"
+                            HelperText="Confidence level when this sample was added (0-100%)" />
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                <strong>Training Tips:</strong>
+                <ul style="margin: 8px 0; padding-left: 20px;">
+                    <li><strong>SPAM examples:</strong> Promotional messages, scams, crypto ads, phishing attempts</li>
+                    <li><strong>HAM examples:</strong> Normal conversations, legitimate announcements, questions</li>
+                    <li><strong>Balance:</strong> Try to maintain roughly equal numbers of spam and ham samples</li>
+                    <li><strong>Variety:</strong> Include diverse examples to improve classifier accuracy</li>
+                </ul>
+            </MudText>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                  Variant="Variant.Filled"
+                  OnClick="Submit"
+                  Disabled="@(_isSubmitting || string.IsNullOrWhiteSpace(_messageText) || string.IsNullOrWhiteSpace(_source))">
+            @if (_isSubmitting)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                <MudText Class="ms-2">Adding...</MudText>
+            }
+            else
+            {
+                <MudText>Add Sample</MudText>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private string _messageText = string.Empty;
+    private bool _isSpam = true; // Default to spam for safety
+    private string _source = "manual";
+    private int? _confidence;
+    private bool _isSubmitting = false;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_messageText) || string.IsNullOrWhiteSpace(_source))
+            return Task.CompletedTask;
+
+        _isSubmitting = true;
+        try
+        {
+            var data = new AddTrainingSampleData
+            {
+                MessageText = _messageText.Trim(),
+                IsSpam = _isSpam,
+                Source = _source,
+                Confidence = _confidence
+            };
+
+            MudDialog.Close(DialogResult.Ok(data));
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+
+        return Task.CompletedTask;
+    }
+}

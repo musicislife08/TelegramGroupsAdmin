@@ -1,0 +1,450 @@
+@page "/spam/config"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.SpamDetection.Repositories
+@using TelegramGroupsAdmin.SpamDetection.Configuration
+@inject ISpamDetectionConfigRepository ConfigRepository
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ISnackbar Snackbar
+@attribute [Authorize(Roles = "Admin,Owner")]
+
+<PageTitle>Spam Detection Configuration - TelegramGroupsAdmin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h4">Spam Detection Configuration</MudText>
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Save"
+                      OnClick="SaveConfiguration"
+                      Disabled="@_saving">
+                @if (_saving)
+                {
+                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                    <MudText Class="ms-2">Saving...</MudText>
+                }
+                else
+                {
+                    <MudText>Save Configuration</MudText>
+                }
+            </MudButton>
+        </MudStack>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+
+        @if (_config != null)
+        {
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+                <!-- General Settings -->
+                <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Settings">
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-4" Elevation="1">
+                                <MudStack Spacing="3">
+                                    <MudText Typo="Typo.h6" Color="Color.Primary">Detection Scope</MudText>
+
+                                    <MudSwitch T="bool" @bind-checked="_config.FirstMessageOnly"
+                                              Label="Check First Messages Only"
+                                              Color="Color.Primary" />
+
+                                    @if (_config.FirstMessageOnly)
+                                    {
+                                        <MudNumericField @bind-Value="_config.FirstMessagesCount"
+                                                        Label="First Messages Count"
+                                                        Min="1" Max="10"
+                                                        helperText="Number of first messages to check from each user" />
+                                    }
+
+                                    <MudNumericField @bind-Value="_config.MinMessageLength"
+                                                    Label="Minimum Message Length"
+                                                    Min="10" Max="1000"
+                                                    helperText="Skip expensive checks for messages shorter than this" />
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-4" Elevation="1">
+                                <MudStack Spacing="3">
+                                    <MudText Typo="Typo.h6" Color="Color.Primary">Action Thresholds</MudText>
+
+                                    <MudNumericField @bind-Value="_config.AutoBanThreshold"
+                                                    Label="Auto-Ban Threshold"
+                                                    Min="50" Max="100"
+                                                    helperText="Confidence >= this value triggers automatic ban" />
+
+                                    <MudNumericField @bind-Value="_config.ReviewQueueThreshold"
+                                                    Label="Review Queue Threshold"
+                                                    Min="20" Max="80"
+                                                    helperText="Confidence >= this value but < auto-ban goes to review" />
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- Stop Words -->
+                <MudTabPanel Text="Stop Words" Icon="@Icons.Material.Filled.Block">
+                    <MudPaper Class="pa-4" Elevation="1">
+                        <MudStack Spacing="3">
+                            <MudText Typo="Typo.h6" Color="Color.Primary">Stop Words Detection</MudText>
+
+                            <MudSwitch T="bool" @bind-checked="_config.StopWords.Enabled"
+                                      Label="Enable Stop Words Check"
+                                      Color="Color.Primary" />
+
+                            @if (_config.StopWords.Enabled)
+                            {
+                                <MudNumericField @bind-Value="_config.StopWords.ConfidenceThreshold"
+                                                Label="Confidence Threshold"
+                                                Min="1" Max="100"
+                                                helperText="Confidence level when stop words are detected (0-100%)" />
+                            }
+                        </MudStack>
+                    </MudPaper>
+                </MudTabPanel>
+
+                <!-- Similarity -->
+                <MudTabPanel Text="Similarity" Icon="@Icons.Material.Filled.ContentCopy">
+                    <MudPaper Class="pa-4" Elevation="1">
+                        <MudStack Spacing="3">
+                            <MudText Typo="Typo.h6" Color="Color.Primary">Spam Similarity Detection</MudText>
+
+                            <MudSwitch T="bool" @bind-checked="_config.Similarity.Enabled"
+                                      Label="Enable Similarity Check"
+                                      Color="Color.Primary" />
+
+                            @if (_config.Similarity.Enabled)
+                            {
+                                <MudSlider @bind-Value="_config.Similarity.Threshold"
+                                          Min="0.1" Max="1.0" Step="0.05"
+                                          TickMarks="true" TickMarkLabels="@_similarityLabels">
+                                    <MudText>Similarity Threshold: @_config.Similarity.Threshold.ToString("F2")</MudText>
+                                </MudSlider>
+
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    Messages with similarity >= this threshold to known spam samples will be flagged
+                                </MudText>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                </MudTabPanel>
+
+                <!-- CAS -->
+                <MudTabPanel Text="CAS" Icon="@Icons.Material.Filled.Security">
+                    <MudPaper Class="pa-4" Elevation="1">
+                        <MudStack Spacing="3">
+                            <MudText Typo="Typo.h6" Color="Color.Primary">CAS (Combot Anti-Spam)</MudText>
+
+                            <MudSwitch T="bool" @bind-checked="_config.Cas.Enabled"
+                                      Label="Enable CAS Check"
+                                      Color="Color.Primary" />
+
+                            @if (_config.Cas.Enabled)
+                            {
+                                <MudTextField @bind-Value="_config.Cas.ApiUrl"
+                                             Label="CAS API URL"
+                                             helperText="API endpoint for CAS lookups" />
+
+                                <MudNumericField @bind-Value="_timeoutSeconds"
+                                                Label="Timeout (seconds)"
+                                                Min="1" Max="30"
+                                                helperText="Request timeout for CAS API calls" />
+
+                                <MudTextField @bind-Value="_config.Cas.UserAgent"
+                                             Label="User Agent (Optional)"
+                                             helperText="Custom User-Agent header for requests" />
+                            }
+                        </MudStack>
+                    </MudPaper>
+                </MudTabPanel>
+
+                <!-- Bayes -->
+                <MudTabPanel Text="Bayes" Icon="@Icons.Material.Filled.Psychology">
+                    <MudPaper Class="pa-4" Elevation="1">
+                        <MudStack Spacing="3">
+                            <MudText Typo="Typo.h6" Color="Color.Primary">Naive Bayes Classifier</MudText>
+
+                            <MudSwitch T="bool" @bind-checked="_config.Bayes.Enabled"
+                                      Label="Enable Bayes Classification"
+                                      Color="Color.Primary" />
+
+                            @if (_config.Bayes.Enabled)
+                            {
+                                <MudNumericField @bind-Value="_config.Bayes.MinSpamProbability"
+                                                Label="Minimum Spam Probability"
+                                                Min="1.0" Max="99.0" Step="0.1"
+                                                helperText="Minimum probability (%) to classify as spam" />
+                            }
+                        </MudStack>
+                    </MudPaper>
+                </MudTabPanel>
+
+                <!-- Advanced -->
+                <MudTabPanel Text="Advanced" Icon="@Icons.Material.Filled.Tune">
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-4" Elevation="1">
+                                <MudStack Spacing="3">
+                                    <MudText Typo="Typo.h6" Color="Color.Primary">Multi-Language Detection</MudText>
+
+                                    <MudSwitch T="bool" @bind-checked="_config.MultiLanguage.Enabled"
+                                              Label="Enable Multi-Language Check"
+                                              Color="Color.Primary" />
+
+                                    @if (_config.MultiLanguage.Enabled)
+                                    {
+                                        <MudSwitch T="bool" @bind-checked="_config.MultiLanguage.CheckTranslatedContent"
+                                                  Label="Check Translated Content"
+                                                  Color="Color.Primary" />
+                                    }
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-4" Elevation="1">
+                                <MudStack Spacing="3">
+                                    <MudText Typo="Typo.h6" Color="Color.Primary">Spacing Detection</MudText>
+
+                                    <MudSwitch T="bool" @bind-checked="_config.Spacing.Enabled"
+                                              Label="Enable Abnormal Spacing Check"
+                                              Color="Color.Primary" />
+
+                                    @if (_config.Spacing.Enabled)
+                                    {
+                                        <MudNumericField @bind-Value="_config.Spacing.MinWordsCount"
+                                                        Label="Minimum Words for Analysis"
+                                                        Min="3" Max="20"
+                                                        helperText="Minimum number of words required" />
+
+                                        <MudNumericField @bind-Value="_config.Spacing.ShortWordLength"
+                                                        Label="Short Word Length"
+                                                        Min="1" Max="5"
+                                                        helperText="Maximum length for 'short' words" />
+
+                                        <MudSlider @bind-Value="_config.Spacing.ShortWordRatioThreshold"
+                                                  Min="0.1" Max="1.0" Step="0.05">
+                                            <MudText>Short Word Ratio: @_config.Spacing.ShortWordRatioThreshold.ToString("F2")</MudText>
+                                        </MudSlider>
+
+                                        <MudSlider @bind-Value="_config.Spacing.SpaceRatioThreshold"
+                                                  Min="0.1" Max="1.0" Step="0.05">
+                                            <MudText>Space Ratio: @_config.Spacing.SpaceRatioThreshold.ToString("F2")</MudText>
+                                        </MudSlider>
+                                    }
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <MudPaper Class="pa-4" Elevation="1">
+                                <MudStack Spacing="3">
+                                    <MudText Typo="Typo.h6" Color="Color.Primary">OpenAI Integration</MudText>
+
+                                    <MudSwitch T="bool" @bind-checked="_config.OpenAI.Enabled"
+                                              Label="Enable OpenAI Check"
+                                              Color="Color.Primary" />
+
+                                    @if (_config.OpenAI.Enabled)
+                                    {
+                                        <MudSwitch T="bool" @bind-checked="_config.OpenAI.VetoMode"
+                                                  Label="Veto Mode (Confirm Spam)"
+                                                  Color="Color.Primary"
+                                                  helperText="If enabled, OpenAI confirms spam. If disabled, OpenAI finds spam." />
+
+                                        <MudSwitch T="bool" @bind-checked="_config.OpenAI.CheckShortMessages"
+                                                  Label="Check Short Messages"
+                                                  Color="Color.Primary" />
+
+                                        <MudTextField @bind-Value="_config.OpenAI.SystemPrompt"
+                                                     Label="Custom System Prompt (Optional)"
+                                                     Lines="3"
+                                                     helperText="Topic-specific instructions for this group" />
+                                    }
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+
+                <!-- External Services -->
+                <MudTabPanel Text="External Services" Icon="@Icons.Material.Filled.CloudSync">
+                    <MudGrid>
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-4" Elevation="1">
+                                <MudStack Spacing="3">
+                                    <MudText Typo="Typo.h6" Color="Color.Primary">URL Blocklist</MudText>
+
+                                    <MudSwitch T="bool" @bind-checked="_config.UrlBlocklist.Enabled"
+                                              Label="Enable URL Blocklist Check"
+                                              Color="Color.Primary" />
+
+                                    @if (_config.UrlBlocklist.Enabled)
+                                    {
+                                        <MudNumericField @bind-Value="_cacheHours"
+                                                        Label="Cache Duration (hours)"
+                                                        Min="1" Max="168"
+                                                        helperText="How long to cache blocklist entries" />
+                                    }
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-4" Elevation="1">
+                                <MudStack Spacing="3">
+                                    <MudText Typo="Typo.h6" Color="Color.Primary">Threat Intelligence</MudText>
+
+                                    <MudSwitch T="bool" @bind-checked="_config.ThreatIntel.Enabled"
+                                              Label="Enable Threat Intelligence"
+                                              Color="Color.Primary" />
+
+                                    @if (_config.ThreatIntel.Enabled)
+                                    {
+                                        <MudSwitch T="bool" @bind-checked="_config.ThreatIntel.UseVirusTotal"
+                                                  Label="Use VirusTotal"
+                                                  Color="Color.Primary" />
+
+                                        <MudSwitch T="bool" @bind-checked="_config.ThreatIntel.UseGoogleSafeBrowsing"
+                                                  Label="Use Google Safe Browsing"
+                                                  Color="Color.Primary" />
+
+                                        <MudNumericField @bind-Value="_threatIntelTimeoutSeconds"
+                                                        Label="Timeout (seconds)"
+                                                        Min="5" Max="60"
+                                                        helperText="Request timeout for threat intel APIs" />
+                                    }
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-4" Elevation="1">
+                                <MudStack Spacing="3">
+                                    <MudText Typo="Typo.h6" Color="Color.Primary">SEO Scraping</MudText>
+
+                                    <MudSwitch T="bool" @bind-checked="_config.SeoScraping.Enabled"
+                                              Label="Enable SEO Scraping"
+                                              Color="Color.Primary" />
+
+                                    @if (_config.SeoScraping.Enabled)
+                                    {
+                                        <MudNumericField @bind-Value="_seoTimeoutSeconds"
+                                                        Label="Timeout (seconds)"
+                                                        Min="5" Max="30"
+                                                        helperText="Request timeout for SEO scraping" />
+                                    }
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-4" Elevation="1">
+                                <MudStack Spacing="3">
+                                    <MudText Typo="Typo.h6" Color="Color.Primary">Image Spam Detection</MudText>
+
+                                    <MudSwitch T="bool" @bind-checked="_config.ImageSpam.Enabled"
+                                              Label="Enable Image Spam Detection"
+                                              Color="Color.Primary" />
+
+                                    @if (_config.ImageSpam.Enabled)
+                                    {
+                                        <MudSwitch T="bool" @bind-checked="_config.ImageSpam.UseOpenAIVision"
+                                                  Label="Use OpenAI Vision"
+                                                  Color="Color.Primary" />
+
+                                        <MudNumericField @bind-Value="_imageTimeoutSeconds"
+                                                        Label="Timeout (seconds)"
+                                                        Min="10" Max="60"
+                                                        helperText="Request timeout for image analysis" />
+                                    }
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+                    </MudGrid>
+                </MudTabPanel>
+            </MudTabs>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private TelegramGroupsAdmin.SpamDetection.Configuration.SpamDetectionConfig? _config;
+    private bool _loading = true;
+    private bool _saving = false;
+    private string? _currentUserId;
+
+    // Helper fields for TimeSpan to int conversion
+    private int _timeoutSeconds = 5;
+    private int _cacheHours = 24;
+    private int _threatIntelTimeoutSeconds = 30;
+    private int _seoTimeoutSeconds = 10;
+    private int _imageTimeoutSeconds = 30;
+
+    private readonly string[] _similarityLabels = { "0.1", "0.3", "0.5", "0.7", "0.9" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUserId = authState.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        await LoadConfiguration();
+    }
+
+    private async Task LoadConfiguration()
+    {
+        _loading = true;
+        try
+        {
+            _config = await ConfigRepository.GetGlobalConfigAsync();
+
+            // Convert TimeSpan values to int for UI
+            _timeoutSeconds = (int)_config.Cas.Timeout.TotalSeconds;
+            _cacheHours = (int)_config.UrlBlocklist.CacheDuration.TotalHours;
+            _threatIntelTimeoutSeconds = (int)_config.ThreatIntel.Timeout.TotalSeconds;
+            _seoTimeoutSeconds = (int)_config.SeoScraping.Timeout.TotalSeconds;
+            _imageTimeoutSeconds = (int)_config.ImageSpam.Timeout.TotalSeconds;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new TelegramGroupsAdmin.SpamDetection.Configuration.SpamDetectionConfig(); // Use default
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveConfiguration()
+    {
+        if (_config == null) return;
+
+        _saving = true;
+        try
+        {
+            // Convert int values back to TimeSpan
+            _config.Cas.Timeout = TimeSpan.FromSeconds(_timeoutSeconds);
+            _config.UrlBlocklist.CacheDuration = TimeSpan.FromHours(_cacheHours);
+            _config.ThreatIntel.Timeout = TimeSpan.FromSeconds(_threatIntelTimeoutSeconds);
+            _config.SeoScraping.Timeout = TimeSpan.FromSeconds(_seoTimeoutSeconds);
+            _config.ImageSpam.Timeout = TimeSpan.FromSeconds(_imageTimeoutSeconds);
+
+            await ConfigRepository.UpdateGlobalConfigAsync(_config, _currentUserId);
+            Snackbar.Add("Configuration saved successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

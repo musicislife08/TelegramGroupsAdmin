@@ -1,0 +1,463 @@
+@page "/spam/analytics"
+@using Microsoft.AspNetCore.Authorization
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.SpamDetection.Repositories
+@using TelegramGroupsAdmin.Repositories
+@using TelegramGroupsAdmin.Models
+@using DataModels = TelegramGroupsAdmin.Data.Models
+@using UiModels = TelegramGroupsAdmin.Models
+@inject IStopWordsRepository StopWordsRepository
+@inject ITrainingSamplesRepository TrainingSamplesRepository
+@inject MessageHistoryRepository MessageHistoryRepository
+@inject ISnackbar Snackbar
+@attribute [Authorize(Roles = "Admin,Owner")]
+
+<PageTitle>Spam Detection Analytics - TelegramGroupsAdmin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h4">Spam Detection Analytics</MudText>
+            <MudButton Variant="Variant.Outlined"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Refresh"
+                      OnClick="RefreshData"
+                      Disabled="@_loading">
+                Refresh Data
+            </MudButton>
+        </MudStack>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+
+        <!-- Overview Cards -->
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Dataset" Size="Size.Large" Color="Color.Primary" />
+                        <MudText Typo="Typo.h4">@_totalSpamChecks</MudText>
+                        <MudText Typo="Typo.body2" Align="Align.Center">Total Checks</MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Error" />
+                        <MudText Typo="Typo.h4">@_spamDetected</MudText>
+                        <MudText Typo="Typo.body2" Align="Align.Center">Spam Detected</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Error">@_spamPercentage.ToString("F1")%</MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Large" Color="Color.Secondary" />
+                        <MudText Typo="Typo.h4">@_totalStopWords</MudText>
+                        <MudText Typo="Typo.body2" Align="Align.Center">Stop Words</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Success">@_enabledStopWords enabled</MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Large" Color="Color.Info" />
+                        <MudText Typo="Typo.h4">@_totalTrainingSamples</MudText>
+                        <MudText Typo="Typo.body2" Align="Align.Center">Training Samples</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Info">@_trainingSpamPercentage.ToString("F1")% spam</MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Training Data Quality -->
+        @if (_trainingStats != null)
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.h6" Color="Color.Primary">Training Data Overview</MudText>
+
+                    <MudGrid>
+                        <MudItem xs="12" md="8">
+                            <MudStack Spacing="2">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                    <MudText Typo="Typo.body1">Spam Samples</MudText>
+                                    <MudText Typo="Typo.body1" Class="font-weight-bold">@_trainingStats.SpamSamples</MudText>
+                                </MudStack>
+                                <MudProgressLinear Color="Color.Error" Size="Size.Small" Value="@_trainingStats.SpamPercentage" />
+
+                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                    <MudText Typo="Typo.body1">Ham (Legitimate) Samples</MudText>
+                                    <MudText Typo="Typo.body1" Class="font-weight-bold">@_trainingStats.HamSamples</MudText>
+                                </MudStack>
+                                <MudProgressLinear Color="Color.Success" Size="Size.Small" Value="@(100 - _trainingStats.SpamPercentage)" />
+
+                                <MudDivider Class="my-2" />
+
+                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                    <MudText Typo="Typo.body1">Balance Quality</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetBalanceColor()">
+                                        @GetBalanceStatus()
+                                    </MudChip>
+                                </MudStack>
+                            </MudStack>
+                        </MudItem>
+
+                        <MudItem xs="12" md="4">
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.subtitle1">Sources</MudText>
+                                @foreach (var source in _trainingStats.SamplesBySource.Take(5))
+                                {
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                        <MudText Typo="Typo.body2">@source.Key</MudText>
+                                        <MudText Typo="Typo.body2">@source.Value</MudText>
+                                    </MudStack>
+                                }
+                            </MudStack>
+                        </MudItem>
+                    </MudGrid>
+                </MudStack>
+            </MudPaper>
+        }
+
+        <!-- Spam Samples Performance -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Primary">Spam Detection Performance</MudText>
+
+                @if (_topTrainingSamples?.Any() == true)
+                {
+                    <MudText Typo="Typo.subtitle1">Most Effective Spam Samples</MudText>
+                    <MudTable Items="@_topTrainingSamples" Dense="true" Hover="true">
+                        <HeaderContent>
+                            <MudTh>Sample Text</MudTh>
+                            <MudTh>Source</MudTh>
+                            <MudTh>Detections</MudTh>
+                            <MudTh>Last Detected</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                <MudText Style="max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    @context.MessageText
+                                </MudText>
+                            </MudTd>
+                            <MudTd>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">@context.Source</MudChip>
+                            </MudTd>
+                            <MudTd>@context.DetectionCount</MudTd>
+                            <MudTd>
+                                @if (context.LastDetectedDate.HasValue)
+                                {
+                                    @DateTimeOffset.FromUnixTimeSeconds(context.LastDetectedDate.Value).ToString("MM/dd HH:mm")
+                                }
+                                else
+                                {
+                                    <MudText Class="mud-text-secondary">Never</MudText>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info">
+                        No spam samples with detection history found. Add some spam samples to improve detection accuracy.
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+
+        <!-- Recent Activity -->
+        @if (_recentSpamChecks?.Any() == true)
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.h6" Color="Color.Primary">Recent Spam Checks</MudText>
+
+                    <MudTable Items="@_recentSpamChecks" Dense="true" Hover="true">
+                        <HeaderContent>
+                            <MudTh>Timestamp</MudTh>
+                            <MudTh>Result</MudTh>
+                            <MudTh>Confidence</MudTh>
+                            <MudTh>Reason</MudTh>
+                            <MudTh>User</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@DateTimeOffset.FromUnixTimeSeconds(context.CheckTimestamp).ToString("MM/dd HH:mm:ss")</MudTd>
+                            <MudTd>
+                                <MudChip T="string" Size="Size.Small" Color="@(context.IsSpam ? Color.Error : Color.Success)">
+                                    @(context.IsSpam ? "SPAM" : "HAM")
+                                </MudChip>
+                            </MudTd>
+                            <MudTd>@context.Confidence%</MudTd>
+                            <MudTd>
+                                <MudText Style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    @context.Reason
+                                </MudText>
+                            </MudTd>
+                            <MudTd>@(context.UserId.ToString())</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudStack>
+            </MudPaper>
+        }
+
+        <!-- System Health -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Primary">System Health</MudText>
+
+                <MudGrid>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudCard>
+                            <MudCardContent>
+                                <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Secondary" />
+                                    <MudText Typo="Typo.h6">@_totalStopWords</MudText>
+                                    <MudText Typo="Typo.body2">Stop Words</MudText>
+                                    <MudText Typo="Typo.caption" Color="@(_enabledStopWords > 0 ? Color.Success : Color.Warning)">
+                                        @_enabledStopWords active
+                                    </MudText>
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudCard>
+                            <MudCardContent>
+                                <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Info" />
+                                    <MudText Typo="Typo.h6">@_totalSpamSamples</MudText>
+                                    <MudText Typo="Typo.body2">Spam Samples</MudText>
+                                    <MudText Typo="Typo.caption" Color="@(_totalSpamSamples > 10 ? Color.Success : Color.Warning)">
+                                        @(_totalSpamSamples > 10 ? "Good coverage" : "Need more samples")
+                                    </MudText>
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudCard>
+                            <MudCardContent>
+                                <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.Psychology" Color="Color.Primary" />
+                                    <MudText Typo="Typo.h6">@_totalTrainingSamples</MudText>
+                                    <MudText Typo="Typo.body2">Training Data</MudText>
+                                    <MudText Typo="Typo.caption" Color="@GetTrainingDataHealthColor()">
+                                        @GetTrainingDataHealthText()
+                                    </MudText>
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudCard>
+                            <MudCardContent>
+                                <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.Analytics" Color="Color.Success" />
+                                    <MudText Typo="Typo.h6">@_spamDetectionRate.ToString("F1")%</MudText>
+                                    <MudText Typo="Typo.body2">Detection Rate</MudText>
+                                    <MudText Typo="Typo.caption" Color="@(_spamDetectionRate > 0 ? Color.Success : Color.Info)">
+                                        Last 24h
+                                    </MudText>
+                                </MudStack>
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                </MudGrid>
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+</MudContainer>
+
+@code {
+    private bool _loading = true;
+
+    // Overview statistics
+    private int _totalSpamChecks = 0;
+    private int _spamDetected = 0;
+    private double _spamPercentage = 0;
+    private int _totalStopWords = 0;
+    private int _enabledStopWords = 0;
+    private int _totalTrainingSamples = 0;
+    private double _trainingSpamPercentage = 0;
+    private int _totalSpamSamples = 0;
+    private double _spamDetectionRate = 0;
+
+    // Detailed data
+    private TrainingStats? _trainingStats;
+    private List<TrainingSample>? _topTrainingSamples;
+    private List<SpamCheckRecord>? _recentSpamChecks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAnalytics();
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadAnalytics();
+    }
+
+    private async Task LoadAnalytics()
+    {
+        _loading = true;
+        try
+        {
+            // Load all data in parallel
+            var stopWordsTask = LoadStopWordsStats();
+            var spamSamplesTask = LoadSpamSamplesStats();
+            var trainingStatsTask = LoadTrainingStats();
+            var spamChecksTask = LoadSpamCheckStats();
+
+            await Task.WhenAll(stopWordsTask, spamSamplesTask, trainingStatsTask, spamChecksTask);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading analytics: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadStopWordsStats()
+    {
+        try
+        {
+            var allStopWords = await StopWordsRepository.GetAllStopWordsAsync();
+            _totalStopWords = allStopWords.Count();
+
+            var enabledStopWords = await StopWordsRepository.GetEnabledStopWordsAsync();
+            _enabledStopWords = enabledStopWords.Count();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load stop words statistics: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private async Task LoadSpamSamplesStats()
+    {
+        try
+        {
+            var allSamples = await TrainingSamplesRepository.GetSpamSamplesAsync();
+            _totalSpamSamples = allSamples.Count();
+
+            _topTrainingSamples = allSamples
+                .Select(s => s.ToUiModel())
+                .Where(s => s.DetectionCount > 0)
+                .OrderByDescending(s => s.DetectionCount)
+                .Take(10)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load spam samples statistics: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private async Task LoadTrainingStats()
+    {
+        try
+        {
+            var dataStats = await TrainingSamplesRepository.GetStatsAsync();
+            _trainingStats = dataStats.ToUiModel();
+            _totalTrainingSamples = _trainingStats.TotalSamples;
+            _trainingSpamPercentage = _trainingStats.SpamPercentage;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load training statistics: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private async Task LoadSpamCheckStats()
+    {
+        try
+        {
+            // Query detection_results table instead of obsolete spam_checks table
+            var recentDetections = await MessageHistoryRepository.GetRecentDetectionsAsync(100);
+            _recentSpamChecks = recentDetections.Take(20).Select(d => new SpamCheckRecord(
+                Id: d.Id,
+                CheckTimestamp: d.DetectedAt,
+                UserId: d.UserId,
+                ContentHash: null,
+                IsSpam: d.IsSpam,
+                Confidence: d.Confidence,
+                Reason: d.Details ?? $"{d.DetectionMethod} detection",
+                CheckType: d.DetectionMethod,
+                MatchedMessageId: d.MessageId
+            )).ToList();
+
+            var stats = await MessageHistoryRepository.GetDetectionStatsAsync();
+            _totalSpamChecks = stats.TotalDetections;
+            _spamDetected = stats.SpamDetected;
+            _spamPercentage = stats.SpamPercentage;
+            _spamDetectionRate = stats.Last24hSpamPercentage;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load spam detection statistics: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private Color GetBalanceColor()
+    {
+        if (_trainingStats == null) return Color.Default;
+
+        var spamRatio = _trainingStats.SpamPercentage;
+        return spamRatio switch
+        {
+            >= 40 and <= 60 => Color.Success,   // Well balanced
+            >= 30 and <= 70 => Color.Warning,   // Acceptable
+            _ => Color.Error                     // Poor balance
+        };
+    }
+
+    private string GetBalanceStatus()
+    {
+        if (_trainingStats == null) return "Unknown";
+
+        var spamRatio = _trainingStats.SpamPercentage;
+        return spamRatio switch
+        {
+            >= 40 and <= 60 => "Excellent",
+            >= 30 and <= 70 => "Good",
+            < 30 => "Too Few Spam Samples",
+            > 70 => "Too Few Ham Samples",
+            _ => "Unknown"
+        };
+    }
+
+    private Color GetTrainingDataHealthColor()
+    {
+        return _totalTrainingSamples switch
+        {
+            >= 100 => Color.Success,
+            >= 50 => Color.Warning,
+            _ => Color.Error
+        };
+    }
+
+    private string GetTrainingDataHealthText()
+    {
+        return _totalTrainingSamples switch
+        {
+            >= 100 => "Excellent",
+            >= 50 => "Good",
+            >= 20 => "Basic",
+            _ => "Insufficient"
+        };
+    }
+
+}

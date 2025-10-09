@@ -1,8 +1,10 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin", "TelegramGroupsAdmin\TelegramGroupsAdmin.csproj", "{8357DB82-AE99-44FB-A4A0-B1F9F1897C82}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.Data", "TelegramGroupsAdmin.Data\TelegramGroupsAdmin.Data.csproj", "{B4C39FB0-0DD9-474D-B63A-77AC4992E45A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.SpamDetection", "TelegramGroupsAdmin.SpamDetection\TelegramGroupsAdmin.SpamDetection.csproj", "{F24AFE5D-7603-4634-A7A3-C6F09773049C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -38,6 +40,18 @@ Global
 		{B4C39FB0-0DD9-474D-B63A-77AC4992E45A}.Release|x64.Build.0 = Release|Any CPU
 		{B4C39FB0-0DD9-474D-B63A-77AC4992E45A}.Release|x86.ActiveCfg = Release|Any CPU
 		{B4C39FB0-0DD9-474D-B63A-77AC4992E45A}.Release|x86.Build.0 = Release|Any CPU
+		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Debug|x64.Build.0 = Debug|Any CPU
+		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Debug|x86.Build.0 = Debug|Any CPU
+		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Release|x64.ActiveCfg = Release|Any CPU
+		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Release|x64.Build.0 = Release|Any CPU
+		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Release|x86.ActiveCfg = Release|Any CPU
+		{F24AFE5D-7603-4634-A7A3-C6F09773049C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

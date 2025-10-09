@@ -7,31 +7,31 @@ public enum InviteStatus
     Revoked = 2
 }
 
-// DTO for Dapper mapping from SQLite (SQLite stores booleans as Int64)
-internal record UserRecordDto(
-    string id,
-    string email,
-    string normalized_email,
-    string password_hash,
-    string security_stamp,
-    long permission_level,
-    string? invited_by,
-    long is_active,
-    string? totp_secret,
-    long totp_enabled,
-    long created_at,
-    long? last_login_at,
-    long status,
-    string? modified_by,
-    long? modified_at,
-    long email_verified,
-    string? email_verification_token,
-    long? email_verification_token_expires_at,
-    string? password_reset_token,
-    long? password_reset_token_expires_at,
-    long? totp_setup_started_at
-)
+// DTO for Dapper mapping from PostgreSQL
+public record UserRecordDto
 {
+    public string id { get; init; } = string.Empty;
+    public string email { get; init; } = string.Empty;
+    public string normalized_email { get; init; } = string.Empty;
+    public string password_hash { get; init; } = string.Empty;
+    public string security_stamp { get; init; } = string.Empty;
+    public int permission_level { get; init; }
+    public string? invited_by { get; init; }
+    public bool is_active { get; init; }
+    public string? totp_secret { get; init; }
+    public bool totp_enabled { get; init; }
+    public long created_at { get; init; }
+    public long? last_login_at { get; init; }
+    public int status { get; init; }
+    public string? modified_by { get; init; }
+    public long? modified_at { get; init; }
+    public bool email_verified { get; init; }
+    public string? email_verification_token { get; init; }
+    public long? email_verification_token_expires_at { get; init; }
+    public string? password_reset_token { get; init; }
+    public long? password_reset_token_expires_at { get; init; }
+    public long? totp_setup_started_at { get; init; }
+
     // Map DTO to domain record
     public UserRecord ToUserRecord() => new UserRecord(
         Id: id,
@@ -41,16 +41,16 @@ internal record UserRecordDto(
         SecurityStamp: security_stamp,
         PermissionLevel: permission_level,
         InvitedBy: invited_by,
-        IsActive: is_active != 0,
+        IsActive: is_active,
         TotpSecret: totp_secret,
-        TotpEnabled: totp_enabled != 0,
+        TotpEnabled: totp_enabled,
         TotpSetupStartedAt: totp_setup_started_at,
         CreatedAt: created_at,
         LastLoginAt: last_login_at,
         Status: (UserStatus)status,
         ModifiedBy: modified_by,
         ModifiedAt: modified_at,
-        EmailVerified: email_verified != 0,
+        EmailVerified: email_verified,
         EmailVerificationToken: email_verification_token,
         EmailVerificationTokenExpiresAt: email_verification_token_expires_at,
         PasswordResetToken: password_reset_token,
@@ -64,7 +64,7 @@ public record UserRecord(
     string NormalizedEmail,
     string PasswordHash,
     string SecurityStamp,
-    long PermissionLevel,
+    int PermissionLevel,
     string? InvitedBy,
     bool IsActive, // Deprecated - kept for backward compatibility, use Status instead
     string? TotpSecret,
@@ -93,13 +93,13 @@ public record UserRecord(
 };
 
 // DTO for RecoveryCodeRecord
-internal record RecoveryCodeRecordDto(
-    long Id,
-    string UserId,
-    string CodeHash,
-    long? UsedAt
-)
+public record RecoveryCodeRecordDto
 {
+    public long Id { get; init; }
+    public string UserId { get; init; } = string.Empty;
+    public string CodeHash { get; init; } = string.Empty;
+    public long? UsedAt { get; init; }
+
     public RecoveryCodeRecord ToRecoveryCodeRecord() => new RecoveryCodeRecord(
         Id: Id,
         UserId: UserId,
@@ -116,24 +116,24 @@ public record RecoveryCodeRecord(
 );
 
 // DTO for InviteRecord
-internal record InviteRecordDto(
-    string token,
-    string created_by,
-    long created_at,
-    long expires_at,
-    string? used_by,
-    long permission_level,
-    long status,
-    long? modified_at
-)
+public record InviteRecordDto
 {
+    public string token { get; init; } = string.Empty;
+    public string created_by { get; init; } = string.Empty;
+    public long created_at { get; init; }
+    public long expires_at { get; init; }
+    public string? used_by { get; init; }
+    public int permission_level { get; init; }
+    public int status { get; init; }
+    public long? modified_at { get; init; }
+
     public InviteRecord ToInviteRecord() => new InviteRecord(
         Token: token,
         CreatedBy: created_by,
         CreatedAt: created_at,
         ExpiresAt: expires_at,
         UsedBy: used_by,
-        PermissionLevel: (int)permission_level,
+        PermissionLevel: permission_level,
         Status: (InviteStatus)status,
         ModifiedAt: modified_at
     );
@@ -151,18 +151,18 @@ public record InviteRecord(
 );
 
 // DTO for InviteWithCreator (JOIN result)
-internal record InviteWithCreatorDto(
-    string token,
-    string created_by,
-    long created_at,
-    long expires_at,
-    string? used_by,
-    long permission_level,
-    long status,
-    long? modified_at,
-    string? creator_email
-)
+public record InviteWithCreatorDto
 {
+    public string token { get; init; } = string.Empty;
+    public string created_by { get; init; } = string.Empty;
+    public long created_at { get; init; }
+    public long expires_at { get; init; }
+    public string? used_by { get; init; }
+    public int permission_level { get; init; }
+    public int status { get; init; }
+    public long? modified_at { get; init; }
+    public string? creator_email { get; init; }
+
     public InviteWithCreator ToInviteWithCreator() => new InviteWithCreator(
         Invite: new InviteRecord(
             Token: token,
@@ -170,7 +170,7 @@ internal record InviteWithCreatorDto(
             CreatedAt: created_at,
             ExpiresAt: expires_at,
             UsedBy: used_by,
-            PermissionLevel: (int)permission_level,
+            PermissionLevel: permission_level,
             Status: (InviteStatus)status,
             ModifiedAt: modified_at
         ),
@@ -184,15 +184,15 @@ public record InviteWithCreator(
 );
 
 // DTO for AuditLogRecord
-internal record AuditLogRecordDto(
-    long id,
-    long event_type,
-    long timestamp,
-    string? actor_user_id,
-    string? target_user_id,
-    string? value
-)
+public record AuditLogRecordDto
 {
+    public long id { get; init; }
+    public int event_type { get; init; }
+    public long timestamp { get; init; }
+    public string? actor_user_id { get; init; }
+    public string? target_user_id { get; init; }
+    public string? value { get; init; }
+
     public AuditLogRecord ToAuditLogRecord() => new AuditLogRecord(
         Id: id,
         EventType: (AuditEventType)event_type,

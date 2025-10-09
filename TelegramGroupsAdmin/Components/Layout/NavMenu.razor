@@ -12,6 +12,13 @@
         {
             <MudNavLink Href="/audit" Icon="@Icons.Material.Filled.Security">Audit Log</MudNavLink>
             <MudNavLink Href="/users" Icon="@Icons.Material.Filled.People">Users</MudNavLink>
+
+            <MudNavGroup Title="Spam Detection" Icon="@Icons.Material.Filled.Shield" Expanded="false">
+                <MudNavLink Href="/spam/stopwords" Icon="@Icons.Material.Filled.Block">Stop Words</MudNavLink>
+                <MudNavLink Href="/spam/training" Icon="@Icons.Material.Filled.School">Training Data</MudNavLink>
+                <MudNavLink Href="/spam/config" Icon="@Icons.Material.Filled.Settings">Configuration</MudNavLink>
+                <MudNavLink Href="/spam/analytics" Icon="@Icons.Material.Filled.Analytics">Analytics</MudNavLink>
+            </MudNavGroup>
         }
 
         <MudDivider Class="my-2" />

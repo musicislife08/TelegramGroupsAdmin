@@ -1,0 +1,235 @@
+@page "/spam/stopwords"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.SpamDetection.Repositories
+@inject IStopWordsRepository StopWordsRepository
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@attribute [Authorize(Roles = "Admin,Owner")]
+
+<PageTitle>Stop Words Management - TelegramGroupsAdmin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Stop Words Management</MudText>
+        <MudButton Variant="Variant.Filled"
+                  Color="Color.Primary"
+                  StartIcon="@Icons.Material.Filled.Add"
+                  OnClick="AddStopWord">
+            Add Stop Word
+        </MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Spacing="3">
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                <MudTextField @bind-Value="_searchText"
+                             Placeholder="Search stop words..."
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             Immediate="true"
+                             OnKeyUp="OnSearchChanged"
+                             Style="max-width: 300px;" />
+
+                <MudText Typo="Typo.body2" Class="ml-auto">
+                    Showing @_filteredStopWords.Count() of @_allStopWords.Count() stop words
+                </MudText>
+            </MudStack>
+
+            <MudTable Items="@_filteredStopWords"
+                     Hover="true"
+                     Breakpoint="Breakpoint.Sm"
+                     Loading="@_loading"
+                     LoadingProgressColor="Color.Info"
+                     Dense="true">
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel SortBy="new Func<StopWordItem, object>(x => x.Word)">Word</MudTableSortLabel></MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<StopWordItem, object>(x => x.AddedDate)">Added Date</MudTableSortLabel></MudTh>
+                    <MudTh>Added By</MudTh>
+                    <MudTh>Notes</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Word">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.Enabled ? Color.Default : Color.Error)">
+                            @context.Word
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.Enabled ? Color.Success : Color.Error)">
+                            @(context.Enabled ? "Enabled" : "Disabled")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Added Date">@context.AddedDate.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                    <MudTd DataLabel="Added By">@(context.AddedBy ?? "System")</MudTd>
+                    <MudTd DataLabel="Notes">
+                        @if (!string.IsNullOrEmpty(context.Notes))
+                        {
+                            <MudTooltip Text="@context.Notes">
+                                <MudText Typo="Typo.body2" Style="max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                    @context.Notes
+                                </MudText>
+                            </MudTooltip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudStack Row="true" Spacing="1">
+                            <MudIconButton Icon="@(context.Enabled ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                         Color="@(context.Enabled ? Color.Warning : Color.Success)"
+                                         Size="Size.Small"
+                                         OnClick="() => ToggleStopWordStatus(context)"
+                                         title="@(context.Enabled ? "Disable" : "Enable")" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                         Color="Color.Primary"
+                                         Size="Size.Small"
+                                         OnClick="() => EditStopWord(context)"
+                                         title="Edit" />
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body1" Align="Align.Center" Class="py-8">
+                        @if (string.IsNullOrEmpty(_searchText))
+                        {
+                            <span>No stop words configured yet. Add some to get started!</span>
+                        }
+                        else
+                        {
+                            <span>No stop words match your search: "@_searchText"</span>
+                        }
+                    </MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private List<StopWordItem> _allStopWords = new();
+    private IEnumerable<StopWordItem> _filteredStopWords = new List<StopWordItem>();
+    private bool _loading = true;
+    private string _searchText = string.Empty;
+    private string? _currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUserId = authState.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        await LoadStopWords();
+    }
+
+    private async Task LoadStopWords()
+    {
+        _loading = true;
+        try
+        {
+            var stopWords = await StopWordsRepository.GetAllStopWordsAsync();
+            _allStopWords = stopWords.Select(MapToStopWordItem).ToList();
+            FilterStopWords();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading stop words: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void FilterStopWords()
+    {
+        _filteredStopWords = string.IsNullOrEmpty(_searchText)
+            ? _allStopWords
+            : _allStopWords.Where(w => w.Word.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                                      (!string.IsNullOrEmpty(w.Notes) && w.Notes.Contains(_searchText, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private void OnSearchChanged()
+    {
+        FilterStopWords();
+    }
+
+    private async Task AddStopWord()
+    {
+        var dialog = await DialogService.ShowAsync<AddStopWordDialog>("Add Stop Word");
+        var result = await dialog.Result;
+
+        if (result is not null && !result.Canceled && result.Data is AddStopWordData data)
+        {
+            try
+            {
+                await StopWordsRepository.AddStopWordAsync(data.Word, _currentUserId, data.Notes);
+                Snackbar.Add("Stop word added successfully", Severity.Success);
+                await LoadStopWords();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error adding stop word: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task EditStopWord(StopWordItem stopWord)
+    {
+        var parameters = new DialogParameters()
+        {
+            { nameof(EditStopWordDialog.StopWord), stopWord }
+        };
+
+        var dialog = await DialogService.ShowAsync<EditStopWordDialog>("Edit Stop Word", parameters);
+        var result = await dialog.Result;
+
+        if (result is not null && !result.Canceled && result.Data is EditStopWordData data)
+        {
+            try
+            {
+                await StopWordsRepository.UpdateStopWordNotesAsync(data.Id, data.Notes);
+                Snackbar.Add("Stop word updated successfully", Severity.Success);
+                await LoadStopWords();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error updating stop word: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task ToggleStopWordStatus(StopWordItem stopWord)
+    {
+        try
+        {
+            var newStatus = !stopWord.Enabled;
+            await StopWordsRepository.SetStopWordEnabledAsync(stopWord.Id, newStatus);
+
+            Snackbar.Add($"Stop word {(newStatus ? "enabled" : "disabled")} successfully", Severity.Success);
+            await LoadStopWords();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error updating stop word status: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static StopWordItem MapToStopWordItem(dynamic stopWord)
+    {
+        return new StopWordItem
+        {
+            Id = stopWord.Id,
+            Word = stopWord.Word,
+            Enabled = stopWord.Enabled,
+            AddedDate = DateTimeOffset.FromUnixTimeSeconds(stopWord.AddedDate).DateTime,
+            AddedBy = stopWord.AddedBy,
+            Notes = stopWord.Notes
+        };
+    }
+
+}

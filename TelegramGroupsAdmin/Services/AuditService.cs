@@ -1,5 +1,6 @@
-using TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.Data.Repositories;
+using TelegramGroupsAdmin.Models;
+using TelegramGroupsAdmin.Repositories;
+using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -19,7 +20,7 @@ public class AuditService : IAuditService
         string? value = null,
         CancellationToken ct = default)
     {
-        return _repository.LogEventAsync(eventType, actorUserId, targetUserId, value, ct);
+        return _repository.LogEventAsync((DataModels.AuditEventType)eventType, actorUserId, targetUserId, value, ct);
     }
 
     public Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = 100, CancellationToken ct = default)
@@ -39,6 +40,6 @@ public class AuditService : IAuditService
 
     public Task<List<AuditLogRecord>> GetEventsByTypeAsync(AuditEventType eventType, int limit = 100, CancellationToken ct = default)
     {
-        return _repository.GetEventsByTypeAsync(eventType, limit, ct);
+        return _repository.GetEventsByTypeAsync((DataModels.AuditEventType)eventType, limit, ct);
     }
 }
