@@ -234,7 +234,7 @@ public static class ServiceCollectionExtensions
         // Background services
         services.AddSingleton<TelegramAdminBotService>();
         services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());
-        services.AddScoped<TelegramGroupsAdmin.SpamDetection.Services.IMessageHistoryService>(sp => new StubMessageHistoryService());
+        services.AddScoped<TelegramGroupsAdmin.SpamDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
         services.AddHostedService(sp => sp.GetRequiredService<TelegramAdminBotService>());
         services.AddHostedService<CleanupBackgroundService>();
 

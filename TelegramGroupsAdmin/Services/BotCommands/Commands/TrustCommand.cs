@@ -65,6 +65,7 @@ public class TrustCommand : IBotCommand
 
         using var scope = _serviceProvider.CreateScope();
         var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+        var telegramUserMappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
 
         // Check if user is already trusted
         var isAlreadyTrusted = await userActionsRepository.IsUserTrustedAsync(
@@ -76,6 +77,13 @@ public class TrustCommand : IBotCommand
             return $"ℹ️ User @{targetUser.Username ?? targetUser.Id.ToString()} is already trusted.";
         }
 
+        // Map executor Telegram ID to web app user ID
+        string? executorUserId = null;
+        if (message.From?.Id != null)
+        {
+            executorUserId = await telegramUserMappingRepository.GetUserIdByTelegramIdAsync(message.From.Id);
+        }
+
         // Create trust action (permanent, global for now - can be enhanced later for per-chat)
         // Note: MessageId set to null since message may not be in our history DB (FK constraint)
         var trustAction = new UserActionRecord(
@@ -84,7 +92,7 @@ public class TrustCommand : IBotCommand
             ChatIds: null, // NULL = global trust (all chats)
             ActionType: UserActionType.Trust,
             MessageId: null, // Don't link to message (may not exist in our DB)
-            IssuedBy: null, // TODO: Map Telegram user to web app user
+            IssuedBy: executorUserId, // Mapped from telegram_user_mappings (may be null if not linked)
             IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             ExpiresAt: null, // Permanent trust
             Reason: $"Trusted by admin in chat {message.Chat.Title ?? message.Chat.Username ?? message.Chat.Id.ToString()}"

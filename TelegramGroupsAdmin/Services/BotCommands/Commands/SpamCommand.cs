@@ -55,6 +55,7 @@ public class SpamCommand : IBotCommand
         var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
         var detectionResultsRepository = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
         var messageRepository = scope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
+        var telegramUserMappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
 
         // Check if target user is an admin (can't mark admin messages as spam)
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, spamUserId.Value);
@@ -72,6 +73,13 @@ public class SpamCommand : IBotCommand
 
         try
         {
+            // Map executor Telegram ID to web app user ID
+            string? executorUserId = null;
+            if (message.From?.Id != null)
+            {
+                executorUserId = await telegramUserMappingRepository.GetUserIdByTelegramIdAsync(message.From.Id);
+            }
+
             // 1. Delete the spam message
             await botClient.DeleteMessage(message.Chat.Id, spamMessage.MessageId, cancellationToken);
 
@@ -88,7 +96,7 @@ public class SpamCommand : IBotCommand
                 IsSpam = true,
                 Confidence = 100,
                 Reason = $"Manually marked as spam by admin in chat {message.Chat.Title ?? message.Chat.Id.ToString()}",
-                AddedBy = null, // TODO: Map Telegram user to web app user via telegram_user_mappings
+                AddedBy = executorUserId, // Mapped from telegram_user_mappings (may be null if not linked)
                 UserId = spamUserId.Value,
                 MessageText = spamMessage.Text ?? "[no text]"
             };

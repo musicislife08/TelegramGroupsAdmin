@@ -189,6 +189,31 @@ public class MessageHistoryRepository
         return dtos.Select(dto => dto.ToMessageRecord().ToUiModel()).ToList();
     }
 
+    public async Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10)
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+
+        const string sql = """
+            SELECT message_id, user_id, user_name,
+                   chat_id, timestamp,
+                   message_text, photo_file_id,
+                   photo_file_size, urls,
+                   edit_date, content_hash,
+                   chat_name, photo_local_path,
+                   photo_thumbnail_path
+            FROM messages
+            WHERE chat_id = @ChatId
+            ORDER BY timestamp DESC
+            LIMIT @Limit;
+            """;
+
+        var dtos = await connection.QueryAsync<DataModels.MessageRecordDto>(
+            sql,
+            new { ChatId = chatId, Limit = limit });
+
+        return dtos.Select(dto => dto.ToMessageRecord().ToUiModel()).ToList();
+    }
+
     public async Task<List<UiModels.MessageRecord>> GetMessagesByDateRangeAsync(
         long startTimestamp,
         long endTimestamp,

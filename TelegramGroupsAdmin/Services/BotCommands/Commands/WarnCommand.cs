@@ -52,6 +52,7 @@ public class WarnCommand : IBotCommand
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
         var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
         var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+        var telegramUserMappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
 
         // Check if target is admin (can't warn admins)
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id);
@@ -64,6 +65,13 @@ public class WarnCommand : IBotCommand
 
         try
         {
+            // Map executor Telegram ID to web app user ID
+            string? executorUserId = null;
+            if (message.From?.Id != null)
+            {
+                executorUserId = await telegramUserMappingRepository.GetUserIdByTelegramIdAsync(message.From.Id);
+            }
+
             // Save warning to user_actions
             var warnAction = new UserActionRecord(
                 Id: 0,
@@ -71,7 +79,7 @@ public class WarnCommand : IBotCommand
                 ChatIds: new[] { message.Chat.Id }, // Warn specific to this chat
                 ActionType: UserActionType.Warn,
                 MessageId: message.ReplyToMessage.MessageId,
-                IssuedBy: null, // TODO: Map Telegram user to web app user
+                IssuedBy: executorUserId, // Mapped from telegram_user_mappings (may be null if not linked)
                 IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 ExpiresAt: null, // Warnings don't expire
                 Reason: reason
