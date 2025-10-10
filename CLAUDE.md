@@ -11,6 +11,51 @@ ASP.NET Core 10.0 Blazor Server + Minimal API. Telegram spam detection (text + i
 - VirusTotal API, OpenAI Vision API
 - SendGrid email service
 
+## Solution Structure
+
+### Projects
+
+**TelegramGroupsAdmin** (main application)
+- Blazor Server UI + Minimal API endpoints
+- 108-line Program.cs with extension method architecture
+- Service registrations via `ServiceCollectionExtensions`
+- Pipeline configuration via `WebApplicationExtensions`
+
+**TelegramGroupsAdmin.Configuration** (shared configuration library)
+- All configuration option classes (`AppOptions`, `OpenAIOptions`, `TelegramOptions`, etc.)
+- `AddApplicationConfiguration()` extension method
+- Shared across all projects for consistent configuration
+
+**TelegramGroupsAdmin.Data** (data access layer)
+- Database models and DTOs
+- FluentMigrator migrations
+- Data Protection services
+- Internal to repositories - UI uses UI models instead
+
+**TelegramGroupsAdmin.SpamDetection** (spam detection library)
+- 9 spam detection algorithms
+- Self-contained, reusable library
+- Database-driven configuration
+
+### Extension Method Architecture
+
+**ServiceCollectionExtensions.cs** - Service registration:
+- `AddBlazorServices()` - Blazor Server + MudBlazor + HttpClient
+- `AddCookieAuthentication()` - Cookie auth with security settings
+- `AddApplicationServices()` - Auth, users, messages, email
+- `AddHttpClients()` - HTTP clients with rate limiting
+- `AddTelegramServices()` - Bot commands and background services
+- `AddRepositories()` - All repositories and orchestrators
+- `AddTgSpamWebDataServices()` - Data Protection + Identity repos
+
+**WebApplicationExtensions.cs** - Pipeline configuration:
+- `ConfigurePipeline()` - Standard middleware setup
+- `MapApiEndpoints()` - API endpoint mapping
+- `RunDatabaseMigrationsAsync()` - Database migrations
+
+**ConfigurationExtensions.cs** - Configuration binding:
+- `AddApplicationConfiguration()` - Binds all IOptions from environment variables
+
 ## Architecture
 
 ### Spam Detection Library (Enhanced) ✅
