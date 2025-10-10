@@ -261,7 +261,7 @@ await RunDatabaseMigrationsAsync(app, connectionString);
 if (args.Contains("--migrate-only") || args.Contains("--migrate"))
 {
     app.Logger.LogInformation("Migration complete. Exiting (--migrate-only flag).");
-    return;
+    Environment.Exit(0);
 }
 
 // Check for --export-users flag to export decrypted user data and exit
@@ -272,7 +272,7 @@ if (args.Contains("--export-users"))
     var exportService = scope.ServiceProvider.GetRequiredService<IUserDataExportService>();
     await exportService.ExportAsync(exportPath);
     app.Logger.LogInformation("User export complete. Exiting (--export-users flag).");
-    return;
+    Environment.Exit(0);
 }
 
 // Check for --import-users flag to import user data (will be encrypted) and exit
@@ -282,13 +282,13 @@ if (args.Contains("--import-users"))
     if (importPath == null)
     {
         app.Logger.LogError("--import-users requires a file path argument");
-        return;
+        Environment.Exit(1);
     }
     using var scope = app.Services.CreateScope();
     var exportService = scope.ServiceProvider.GetRequiredService<IUserDataExportService>();
     await exportService.ImportAsync(importPath);
     app.Logger.LogInformation("User import complete. Exiting (--import-users flag).");
-    return;
+    Environment.Exit(0);
 }
 
 // Configure the HTTP request pipeline.
