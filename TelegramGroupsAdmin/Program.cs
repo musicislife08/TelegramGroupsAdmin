@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Threading.RateLimiting;
 using Dapper;
 using FluentMigrator.Runner;
@@ -13,6 +14,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Configuration;
 using TelegramGroupsAdmin.Endpoints;
+using TelegramGroupsAdmin.Models;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.BackgroundServices;
@@ -95,6 +97,7 @@ builder.Services.AddScoped<IInviteService, InviteService>();
 builder.Services.AddScoped<IMessageExportService, MessageExportService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IUserDataExportService, UserDataExportService>();
 
 // Email service (SendGrid)
 builder.Services.Configure<TelegramGroupsAdmin.Services.Email.SendGridOptions>(
@@ -261,6 +264,33 @@ if (args.Contains("--migrate-only") || args.Contains("--migrate"))
     return;
 }
 
+// Check for --export-users flag to export decrypted user data and exit
+if (args.Contains("--export-users"))
+{
+    var exportPath = args.SkipWhile(a => a != "--export-users").Skip(1).FirstOrDefault() ?? "users_export.json";
+    using var scope = app.Services.CreateScope();
+    var exportService = scope.ServiceProvider.GetRequiredService<IUserDataExportService>();
+    await exportService.ExportAsync(exportPath);
+    app.Logger.LogInformation("User export complete. Exiting (--export-users flag).");
+    return;
+}
+
+// Check for --import-users flag to import user data (will be encrypted) and exit
+if (args.Contains("--import-users"))
+{
+    var importPath = args.SkipWhile(a => a != "--import-users").Skip(1).FirstOrDefault();
+    if (importPath == null)
+    {
+        app.Logger.LogError("--import-users requires a file path argument");
+        return;
+    }
+    using var scope = app.Services.CreateScope();
+    var exportService = scope.ServiceProvider.GetRequiredService<IUserDataExportService>();
+    await exportService.ImportAsync(importPath);
+    app.Logger.LogInformation("User import complete. Exiting (--import-users flag).");
+    return;
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -287,8 +317,6 @@ app.MapAuthEndpoints();
 app.MapEmailVerificationEndpoints();
 
 app.Run();
-
-return;
 
 // ============================================================================
 // Helper Methods
