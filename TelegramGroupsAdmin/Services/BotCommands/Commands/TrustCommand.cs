@@ -1,3 +1,4 @@
+using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Models;
 using TelegramGroupsAdmin.Repositories;
@@ -17,6 +18,7 @@ public class TrustCommand : IBotCommand
     public string Usage => "/trust (reply to message) OR /trust <username>";
     public int MinPermissionLevel => 1; // Admin required
     public bool RequiresReply => false;
+    public bool DeleteCommandMessage => false; // Keep visible for confirmation
 
     public TrustCommand(
         ILogger<TrustCommand> logger,
@@ -27,6 +29,7 @@ public class TrustCommand : IBotCommand
     }
 
     public async Task<string> ExecuteAsync(
+        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,

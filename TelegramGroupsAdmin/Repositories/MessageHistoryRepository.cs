@@ -338,11 +338,12 @@ public class MessageHistoryRepository
 
         const string sql = """
             SELECT message_id, user_id, user_name,
-                   chat_id, timestamp, expires_at,
+                   chat_id, timestamp,
                    message_text, photo_file_id,
                    photo_file_size, urls, edit_date,
                    content_hash, chat_name,
-                   photo_local_path, photo_thumbnail_path
+                   photo_local_path, photo_thumbnail_path,
+                   deleted_at, deletion_source
             FROM messages
             WHERE message_id = @MessageId;
             """;
@@ -478,5 +479,34 @@ public class MessageHistoryRepository
             UserId = (long)r.user_id,
             MessageText = r.message_text as string
         }).ToList();
+    }
+
+    /// <summary>
+    /// Mark a message as deleted (soft delete)
+    /// </summary>
+    public async Task MarkMessageAsDeletedAsync(long messageId, string deletionSource)
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+
+        const string sql = """
+            UPDATE messages
+            SET deleted_at = @DeletedAt,
+                deletion_source = @DeletionSource
+            WHERE message_id = @MessageId;
+            """;
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        await connection.ExecuteAsync(sql, new
+        {
+            MessageId = messageId,
+            DeletedAt = now,
+            DeletionSource = deletionSource
+        });
+
+        _logger.LogDebug(
+            "Marked message {MessageId} as deleted (source: {DeletionSource})",
+            messageId,
+            deletionSource);
     }
 }

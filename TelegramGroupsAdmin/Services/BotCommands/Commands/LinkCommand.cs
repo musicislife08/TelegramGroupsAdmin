@@ -14,6 +14,7 @@ public class LinkCommand : IBotCommand
     public string Usage => "/link <token>";
     public int MinPermissionLevel => 0; // Anyone can link
     public bool RequiresReply => false;
+    public bool DeleteCommandMessage => true; // Delete for security (contains token)
 
     public LinkCommand(
         ILogger<LinkCommand> logger,
@@ -24,6 +25,7 @@ public class LinkCommand : IBotCommand
     }
 
     public async Task<string> ExecuteAsync(
+        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,

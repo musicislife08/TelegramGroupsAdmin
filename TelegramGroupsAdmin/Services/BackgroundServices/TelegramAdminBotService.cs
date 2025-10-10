@@ -110,30 +110,88 @@ public partial class TelegramAdminBotService(
         {
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-            // Update last_seen_at for this chat (fallback if MyChatMember event wasn't received)
+            // Update last_seen_at for this chat (also auto-adds chat if it doesn't exist)
+            // Then refresh admin cache for newly discovered chats
             using (var scope = serviceProvider.CreateScope())
             {
                 var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+                var existingChat = await managedChatsRepository.GetByChatIdAsync(message.Chat.Id);
+                var isNewChat = existingChat == null;
+
                 await managedChatsRepository.UpdateLastSeenAsync(message.Chat.Id, now);
+
+                // If this is a newly discovered chat, refresh its admin cache
+                if (isNewChat)
+                {
+                    logger.LogInformation("Discovered new chat {ChatId}, refreshing admin cache", message.Chat.Id);
+                    try
+                    {
+                        await RefreshChatAdminsAsync(botClient, message.Chat.Id, default);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to refresh admins for newly discovered chat {ChatId}", message.Chat.Id);
+                    }
+                }
             }
 
-            // Check if message is a bot command
+            // Check if message is a bot command (execute first, then save to history)
+            // Note: Errors are caught to ensure message history is always saved
+            CommandResult? commandResult = null;
             if (commandRouter.IsCommand(message))
             {
-                var response = await commandRouter.RouteCommandAsync(botClient, message);
-                if (response != null)
+                try
                 {
-                    await botClient.SendMessage(
-                        chatId: message.Chat.Id,
-                        text: response,
-                        parseMode: ParseMode.Markdown,
-                        replyParameters: new ReplyParameters { MessageId = message.MessageId });
+                    commandResult = await commandRouter.RouteCommandAsync(botClient, message);
+                    if (commandResult != null)
+                    {
+                        // Send response if there is one
+                        if (commandResult.Response != null)
+                        {
+                            await botClient.SendMessage(
+                                chatId: message.Chat.Id,
+                                text: commandResult.Response,
+                                parseMode: ParseMode.Markdown,
+                                replyParameters: new ReplyParameters { MessageId = message.MessageId });
+                        }
+                    }
                 }
-                return; // Don't save command messages to history
+                catch (Exception ex)
+                {
+                    logger.LogError(ex,
+                        "Error executing command in chat {ChatId}, message will still be saved to history",
+                        message.Chat.Id);
+                    // Continue to save message to history regardless of command error
+                }
+                // Continue to save command message to history (don't return early)
+            }
+
+            // Check for @admin mentions (independent of commands)
+            // Note: Errors are caught to ensure message history is always saved
+            var text = message.Text ?? message.Caption;
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                try
+                {
+                    using (var scope = serviceProvider.CreateScope())
+                    {
+                        var adminMentionHandler = scope.ServiceProvider.GetRequiredService<AdminMentionHandler>();
+                        if (adminMentionHandler.ContainsAdminMention(text))
+                        {
+                            await adminMentionHandler.NotifyAdminsAsync(botClient, message);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex,
+                        "Error handling @admin mention in chat {ChatId}, message will still be saved to history",
+                        message.Chat.Id);
+                    // Continue to save message to history regardless of error
+                }
             }
 
             // Extract URLs from message text
-            var text = message.Text ?? message.Caption;
             var urls = text != null ? ExtractUrls(text) : null;
 
             // Get photo file ID if present and download image
@@ -174,7 +232,9 @@ public partial class TelegramAdminBotService(
                 ContentHash: contentHash,
                 ChatName: message.Chat.Title ?? message.Chat.Username,
                 PhotoLocalPath: photoLocalPath,
-                PhotoThumbnailPath: photoThumbnailPath
+                PhotoThumbnailPath: photoThumbnailPath,
+                DeletedAt: null,
+                DeletionSource: null
             );
 
             await repository.InsertMessageAsync(messageRecord);
@@ -189,6 +249,23 @@ public partial class TelegramAdminBotService(
                 message.Chat.Id,
                 photoFileId != null,
                 text != null);
+
+            // Delete command message if requested (AFTER saving to database for FK integrity)
+            if (commandResult?.DeleteCommandMessage == true)
+            {
+                try
+                {
+                    await botClient.DeleteMessage(
+                        chatId: message.Chat.Id,
+                        messageId: message.MessageId);
+
+                    logger.LogDebug("Deleted command message {MessageId} in chat {ChatId}", message.MessageId, message.Chat.Id);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to delete command message {MessageId} in chat {ChatId}", message.MessageId, message.Chat.Id);
+                }
+            }
 
             // TODO: Queue spam detection check using orchestrator (Phase 2.5)
             // The orchestrator handles trust/admin checks + spam detection in one place

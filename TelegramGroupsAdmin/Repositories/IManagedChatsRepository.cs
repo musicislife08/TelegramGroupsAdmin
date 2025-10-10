@@ -50,4 +50,9 @@ public interface IManagedChatsRepository
     /// Get all chats (active and inactive)
     /// </summary>
     Task<List<ManagedChatRecord>> GetAllChatsAsync();
+
+    /// <summary>
+    /// Get all active managed chats (alias for GetActiveChatsAsync)
+    /// </summary>
+    Task<List<ManagedChatRecord>> GetAllAsync();
 }

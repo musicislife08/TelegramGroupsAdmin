@@ -352,4 +352,40 @@ public class UserActionsRepository : IUserActionsRepository
 
         return deleted;
     }
+
+    public async Task<List<UserActionRecord>> GetActiveActionsAsync(long userId, UserActionType actionType)
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+
+        const string sql = """
+            SELECT id, user_id, chat_ids, action_type, message_id,
+                   issued_by, issued_at, expires_at, reason
+            FROM user_actions
+            WHERE user_id = @UserId
+              AND action_type = @ActionType
+              AND (expires_at IS NULL OR expires_at > @Now);
+            """;
+
+        var dtos = await connection.QueryAsync<DataModels.UserActionRecordDto>(
+            sql,
+            new { UserId = userId, ActionType = (int)actionType, Now = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
+
+        return dtos.Select(dto => dto.ToUserActionRecord().ToUiModel()).ToList();
+    }
+
+    public async Task DeactivateAsync(long actionId)
+    {
+        await using var connection = new NpgsqlConnection(_connectionString);
+
+        // Soft delete by setting expires_at to now
+        const string sql = """
+            UPDATE user_actions
+            SET expires_at = @Now
+            WHERE id = @Id;
+            """;
+
+        await connection.ExecuteAsync(sql, new { Id = actionId, Now = DateTimeOffset.UtcNow.ToUnixTimeSeconds() });
+
+        _logger.LogDebug("Deactivated user action {ActionId}", actionId);
+    }
 }

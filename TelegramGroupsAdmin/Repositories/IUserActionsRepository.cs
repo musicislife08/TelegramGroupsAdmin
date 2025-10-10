@@ -28,6 +28,16 @@ public interface IUserActionsRepository
     Task<List<UserActionRecord>> GetActiveActionsByUserIdAsync(long userId);
 
     /// <summary>
+    /// Get active actions for a user filtered by action type (not expired)
+    /// </summary>
+    Task<List<UserActionRecord>> GetActiveActionsAsync(long userId, UserActionType actionType);
+
+    /// <summary>
+    /// Deactivate an action by ID (soft delete)
+    /// </summary>
+    Task DeactivateAsync(long actionId);
+
+    /// <summary>
     /// Get all active bans across all users
     /// </summary>
     Task<List<UserActionRecord>> GetActiveBansAsync();

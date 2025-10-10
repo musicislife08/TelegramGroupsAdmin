@@ -26,6 +26,8 @@ public record MessageRecordDto
     public string? chat_name { get; init; }
     public string? photo_local_path { get; init; }
     public string? photo_thumbnail_path { get; init; }
+    public long? deleted_at { get; init; }
+    public string? deletion_source { get; init; }
 
     public MessageRecord ToMessageRecord() => new MessageRecord(
         MessageId: message_id,
@@ -41,7 +43,9 @@ public record MessageRecordDto
         ContentHash: content_hash,
         ChatName: chat_name,
         PhotoLocalPath: photo_local_path,
-        PhotoThumbnailPath: photo_thumbnail_path
+        PhotoThumbnailPath: photo_thumbnail_path,
+        DeletedAt: deleted_at,
+        DeletionSource: deletion_source
     );
 }
 
@@ -59,7 +63,9 @@ public record MessageRecord(
     string? ContentHash,
     string? ChatName,
     string? PhotoLocalPath,
-    string? PhotoThumbnailPath
+    string? PhotoThumbnailPath,
+    long? DeletedAt,
+    string? DeletionSource
 );
 
 // DTO for PhotoMessageRecord (uses actual database column names)

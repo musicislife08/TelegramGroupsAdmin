@@ -1,4 +1,5 @@
 using System.Text;
+using Telegram.Bot;
 using Telegram.Bot.Types;
 
 namespace TelegramGroupsAdmin.Services.BotCommands.Commands;
@@ -19,7 +20,8 @@ public class HelpCommand : IBotCommand
         new("ban", "Ban user from all managed chats", 1),
         new("trust", "Whitelist user (bypass spam detection)", 1),
         new("unban", "Remove ban from user", 1),
-        new("warn", "Issue warning to user", 1)
+        new("warn", "Issue warning to user", 1),
+        new("delete", "[TEST] Delete a message", 1)
     };
 
     private record CommandMetadata(string Name, string Description, int MinPermissionLevel);
@@ -34,8 +36,10 @@ public class HelpCommand : IBotCommand
     public string Usage => "/help";
     public int MinPermissionLevel => 0; // Everyone can see help
     public bool RequiresReply => false;
+    public bool DeleteCommandMessage => false; // Keep visible for reference
 
     public Task<string> ExecuteAsync(
+        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,

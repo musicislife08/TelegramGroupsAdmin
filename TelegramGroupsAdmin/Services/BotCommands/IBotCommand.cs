@@ -1,3 +1,4 @@
+using Telegram.Bot;
 using Telegram.Bot.Types;
 
 namespace TelegramGroupsAdmin.Services.BotCommands;
@@ -33,14 +34,21 @@ public interface IBotCommand
     bool RequiresReply { get; }
 
     /// <summary>
+    /// Whether to delete the command message after execution (for moderation commands)
+    /// </summary>
+    bool DeleteCommandMessage { get; }
+
+    /// <summary>
     /// Execute the command
     /// </summary>
+    /// <param name="botClient">Telegram bot client for API calls</param>
     /// <param name="message">Telegram message containing the command</param>
     /// <param name="args">Command arguments (parsed after command name)</param>
     /// <param name="userPermissionLevel">Permission level of user who issued command</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Response message to send to user</returns>
     Task<string> ExecuteAsync(
+        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,

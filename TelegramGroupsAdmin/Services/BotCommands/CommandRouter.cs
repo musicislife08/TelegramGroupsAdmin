@@ -6,6 +6,11 @@ using TelegramGroupsAdmin.Repositories;
 namespace TelegramGroupsAdmin.Services.BotCommands;
 
 /// <summary>
+/// Result of executing a bot command
+/// </summary>
+public record CommandResult(string? Response, bool DeleteCommandMessage);
+
+/// <summary>
 /// Routes bot commands to appropriate handlers with permission checking
 /// </summary>
 public partial class CommandRouter
@@ -41,7 +46,7 @@ public partial class CommandRouter
     /// <summary>
     /// Route and execute bot command
     /// </summary>
-    public async Task<string?> RouteCommandAsync(
+    public async Task<CommandResult?> RouteCommandAsync(
         ITelegramBotClient botClient,
         Message message,
         CancellationToken cancellationToken = default)
@@ -64,7 +69,7 @@ public partial class CommandRouter
 
         if (!_commands.TryGetValue(commandName, out var command))
         {
-            return "❌ Unknown command. Use /help to see available commands.";
+            return new CommandResult("❌ Unknown command. Use /help to see available commands.", false);
         }
 
         try
@@ -81,18 +86,20 @@ public partial class CommandRouter
                     "User {UserId} (@{Username}) attempted to use command /{Command} without sufficient permissions (has {UserLevel}, needs {RequiredLevel})",
                     message.From.Id, message.From.Username ?? "none", commandName, permissionLevel, command.MinPermissionLevel);
 
-                return permissionLevel == -1
+                var permissionMessage = permissionLevel == -1
                     ? $"❌ You don't have permission to use this command.\n\n" +
                       $"• Telegram group admins can use admin commands automatically\n" +
                       $"• Or link your web app account: /link <token>\n" +
                       $"  (Generate token at: Profile → Linked Telegram Accounts)"
                     : $"❌ Insufficient permissions. This command requires {GetPermissionName(command.MinPermissionLevel)} level.";
+
+                return new CommandResult(permissionMessage, false);
             }
 
             // Check reply requirement
             if (command.RequiresReply && message.ReplyToMessage == null)
             {
-                return $"❌ This command requires replying to a message.\n\nUsage: {command.Usage}";
+                return new CommandResult($"❌ This command requires replying to a message.\n\nUsage: {command.Usage}", false);
             }
 
             // Execute command
@@ -100,14 +107,14 @@ public partial class CommandRouter
                 "Executing command /{Command} by user {UserId} ({Username}) with args: {Args}",
                 commandName, message.From.Id, message.From.Username, string.Join(", ", args));
 
-            var response = await command.ExecuteAsync(message, args, permissionLevel, cancellationToken);
+            var response = await command.ExecuteAsync(botClient, message, args, permissionLevel, cancellationToken);
 
-            return response;
+            return new CommandResult(response, command.DeleteCommandMessage);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error executing command /{Command} by user {UserId}", commandName, message.From?.Id);
-            return $"❌ Error executing command: {ex.Message}";
+            return new CommandResult($"❌ Error executing command: {ex.Message}", false);
         }
     }
 

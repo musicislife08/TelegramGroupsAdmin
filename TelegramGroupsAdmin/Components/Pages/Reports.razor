@@ -1,0 +1,369 @@
+@page "/reports"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Models
+@using TelegramGroupsAdmin.Repositories
+@using TelegramGroupsAdmin.Services
+@inject IReportsRepository ReportsRepository
+@inject MessageHistoryRepository MessageRepository
+@inject IReportActionsService ReportActionsService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ILogger<Reports> Logger
+@attribute [Authorize(Roles = "Admin,Owner")]
+
+<PageTitle>Reports Queue - TelegramGroupsAdmin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Reports Queue</MudText>
+
+    @* Filters *@
+    <MudPaper Class="pa-3 mb-4" Elevation="1">
+        <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+            <MudSelect T="ReportStatus?" Label="Status" @bind-Value="_selectedStatus" Variant="Variant.Outlined" Dense="true">
+                <MudSelectItem T="ReportStatus?" Value="@((ReportStatus?)null)">All</MudSelectItem>
+                <MudSelectItem T="ReportStatus?" Value="@ReportStatus.Pending">Pending</MudSelectItem>
+                <MudSelectItem T="ReportStatus?" Value="@ReportStatus.Reviewed">Reviewed</MudSelectItem>
+                <MudSelectItem T="ReportStatus?" Value="@ReportStatus.Dismissed">Dismissed</MudSelectItem>
+            </MudSelect>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="LoadReportsAsync"
+                       Disabled="_loading">
+                Refresh
+            </MudButton>
+
+            <MudSpacer />
+
+            <MudChip T="string" Color="Color.Warning" Size="Size.Small">
+                @_pendingCount Pending
+            </MudChip>
+        </MudStack>
+    </MudPaper>
+
+    @* Loading State *@
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    @* Reports List *@
+    @if (_reports.Any())
+    {
+        <MudPaper Elevation="2">
+            <MudTable Items="@_reports" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
+                <HeaderContent>
+                    <MudTh>ID</MudTh>
+                    <MudTh>Reported User</MudTh>
+                    <MudTh>Message</MudTh>
+                    <MudTh>Reporter</MudTh>
+                    <MudTh>Reported At</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Context</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="ID">#@context.Id</MudTd>
+                    <MudTd DataLabel="Reported User">
+                        @{
+                            var message = GetMessage(context.MessageId, context.ChatId);
+                            if (message != null)
+                            {
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2">@message.UserName</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @message.UserId</MudText>
+                                </MudStack>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">Message not found</MudText>
+                            }
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Message">
+                        @{
+                            var msg = GetMessage(context.MessageId, context.ChatId);
+                            if (msg != null)
+                            {
+                                var messageText = msg.MessageText ?? "[No text]";
+
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Style="max-width: 400px; word-break: break-word; white-space: pre-wrap;">@messageText</MudText>
+                                    @if (msg.PhotoFileId != null)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Image" Color="Color.Info">Has Image</MudChip>
+                                    }
+                                    @if (msg.DeletedAt.HasValue)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Error">Deleted</MudChip>
+                                    }
+                                </MudStack>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Warning">Message not cached</MudText>
+                            }
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Reporter">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body2">@context.ReportedByUserName</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.ReportedByUserId</MudText>
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Reported At">@FormatDate(context.ReportedAt)</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                            @context.Status.ToString()
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Context">
+                        @{
+                            var currentReport = context;
+                            var tmeLink = GetTelegramLink(currentReport.ChatId, currentReport.MessageId);
+                        }
+                        <MudStack Row="true" Spacing="1">
+                            @if (tmeLink != null)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Send"
+                                              Size="Size.Small"
+                                              Color="Color.Info"
+                                              Href="@tmeLink"
+                                              Target="_blank"
+                                              title="Open in Telegram" />
+                            }
+                            <MudIconButton Icon="@Icons.Material.Filled.History"
+                                          Size="Size.Small"
+                                          Color="Color.Info"
+                                          Href="@GetMessagesLink(currentReport.ChatId, currentReport.MessageId)"
+                                          title="View in Messages" />
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        @if (context.Status == ReportStatus.Pending)
+                        {
+                            <MudStack Row="true" Spacing="1">
+                                <MudIconButton Icon="@Icons.Material.Filled.Block"
+                                              Size="Size.Small"
+                                              Color="Color.Error"
+                                              OnClick="@(() => HandleAction(context, "spam"))"
+                                              title="Mark as Spam & Delete" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Gavel"
+                                              Size="Size.Small"
+                                              Color="Color.Warning"
+                                              OnClick="@(() => HandleAction(context, "ban"))"
+                                              title="Ban User" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Warning"
+                                              Size="Size.Small"
+                                              Color="Color.Warning"
+                                              OnClick="@(() => HandleAction(context, "warn"))"
+                                              title="Warn User" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                              Size="Size.Small"
+                                              Color="Color.Default"
+                                              OnClick="@(() => HandleAction(context, "dismiss"))"
+                                              title="Dismiss Report" />
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @context.ActionTaken
+                            </MudText>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+    }
+    else if (!_loading)
+    {
+        <MudPaper Class="pa-8" Elevation="0">
+            <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Color="Color.Success" />
+                <MudText Typo="Typo.h6" Color="Color.Secondary">No reports found</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    @if (_selectedStatus == ReportStatus.Pending)
+                    {
+                        <text>All reports have been reviewed!</text>
+                    }
+                    else
+                    {
+                        <text>No reports match the selected filter.</text>
+                    }
+                </MudText>
+            </MudStack>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private List<Report> _reports = new();
+    private Dictionary<(int MessageId, long ChatId), MessageRecord> _messageCache = new();
+    private ReportStatus? _selectedStatus = ReportStatus.Pending;
+    private bool _loading = true;
+    private int _pendingCount = 0;
+    private string _currentUserId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get current user ID
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var userIdClaim = user.FindFirst("sub");
+            if (userIdClaim != null)
+            {
+                _currentUserId = userIdClaim.Value;
+            }
+        }
+
+        await LoadReportsAsync();
+    }
+
+    private async Task LoadReportsAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Load reports
+            _reports = await ReportsRepository.GetReportsAsync(
+                chatId: null,
+                status: _selectedStatus,
+                limit: 100,
+                offset: 0);
+
+            // Load pending count
+            _pendingCount = await ReportsRepository.GetPendingCountAsync();
+
+            // Load message data for all reports
+            _messageCache.Clear();
+            foreach (var report in _reports)
+            {
+                var message = await MessageRepository.GetMessageAsync(report.MessageId);
+                if (message != null)
+                {
+                    _messageCache[(report.MessageId, report.ChatId)] = message;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading reports");
+            Snackbar.Add("Failed to load reports", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private MessageRecord? GetMessage(int messageId, long chatId)
+    {
+        _messageCache.TryGetValue((messageId, chatId), out var message);
+        return message;
+    }
+
+    private async Task HandleAction(Report report, string action)
+    {
+        try
+        {
+            switch (action)
+            {
+                case "spam":
+                    await ReportActionsService.HandleSpamActionAsync(report.Id, _currentUserId);
+                    Snackbar.Add($"Report #{report.Id} processed: Message deleted as spam", Severity.Success);
+                    break;
+
+                case "ban":
+                    await ReportActionsService.HandleBanActionAsync(report.Id, _currentUserId);
+                    Snackbar.Add($"Report #{report.Id} processed: User banned", Severity.Success);
+                    break;
+
+                case "warn":
+                    await ReportActionsService.HandleWarnActionAsync(report.Id, _currentUserId);
+                    Snackbar.Add($"Report #{report.Id} processed: Warning issued", Severity.Success);
+                    break;
+
+                case "dismiss":
+                    await ReportActionsService.HandleDismissActionAsync(report.Id, _currentUserId);
+                    Snackbar.Add($"Report #{report.Id} dismissed", Severity.Info);
+                    break;
+
+                default:
+                    Snackbar.Add($"Unknown action: {action}", Severity.Error);
+                    return;
+            }
+
+            // Reload reports after action
+            await LoadReportsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error handling action {Action} for report {ReportId}", action, report.Id);
+            Snackbar.Add($"Failed to process report: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private Color GetStatusColor(ReportStatus status)
+    {
+        return status switch
+        {
+            ReportStatus.Pending => Color.Warning,
+            ReportStatus.Reviewed => Color.Success,
+            ReportStatus.Dismissed => Color.Default,
+            _ => Color.Default
+        };
+    }
+
+    private string FormatDate(long? timestamp)
+    {
+        if (!timestamp.HasValue) return "N/A";
+        var date = DateTimeOffset.FromUnixTimeSeconds(timestamp.Value);
+        var now = DateTimeOffset.UtcNow;
+        var diff = now - date;
+
+        if (diff.TotalMinutes < 1) return "Just now";
+        if (diff.TotalHours < 1) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalDays < 1) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
+
+        return date.LocalDateTime.ToString("MMM dd, yyyy");
+    }
+
+    private string? GetTelegramLink(long chatId, int messageId)
+    {
+        // Convert chat_id to t.me link format
+        // Public chats/channels: t.me/username/messageId
+        // Private chats: t.me/c/chatId/messageId (requires removing -100 prefix)
+
+        // For private supergroups/channels, chatId format is -100XXXXXXXXXX
+        // t.me link format requires removing the -100 prefix
+        if (chatId < 0)
+        {
+            var chatIdStr = chatId.ToString();
+            if (chatIdStr.StartsWith("-100"))
+            {
+                var numericId = chatIdStr.Substring(4); // Remove -100 prefix
+                return $"https://t.me/c/{numericId}/{messageId}";
+            }
+        }
+
+        // For public chats, we'd need the username which we don't have in our schema yet
+        // Return null for now - could be enhanced by storing chat_username in messages table
+        return null;
+    }
+
+    private string GetMessagesLink(long chatId, int messageId)
+    {
+        return $"/messages?chat={chatId}&highlight={messageId}";
+    }
+}

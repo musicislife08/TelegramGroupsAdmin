@@ -199,6 +199,7 @@ builder.Services.AddSingleton<IBotCommand, Commands.TrustCommand>();
 builder.Services.AddSingleton<IBotCommand, Commands.UnbanCommand>();
 builder.Services.AddSingleton<IBotCommand, Commands.WarnCommand>();
 builder.Services.AddSingleton<IBotCommand, Commands.ReportCommand>();
+builder.Services.AddSingleton<IBotCommand, Commands.DeleteCommand>(); // TEMPORARY TEST COMMAND
 builder.Services.AddSingleton<CommandRouter>();
 
 // Background services (register as singleton first, then add as hosted service)
@@ -234,12 +235,19 @@ builder.Services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
 builder.Services.AddScoped<ITelegramUserMappingRepository, TelegramUserMappingRepository>();
 builder.Services.AddScoped<ITelegramLinkTokenRepository, TelegramLinkTokenRepository>();
 builder.Services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
+builder.Services.AddScoped<IReportsRepository, ReportsRepository>();
 
 // Register Spam Detection library
 builder.Services.AddSpamDetection();
 
 // Register Spam Check Orchestrator (wraps trust/admin checks + spam detection)
 builder.Services.AddScoped<ISpamCheckOrchestrator, SpamCheckOrchestrator>();
+
+// Register Report Actions Service
+builder.Services.AddScoped<IReportActionsService, ReportActionsService>();
+
+// Register Admin Mention Handler
+builder.Services.AddScoped<AdminMentionHandler>();
 
 var app = builder.Build();
 

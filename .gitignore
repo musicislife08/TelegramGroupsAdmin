@@ -2,7 +2,7 @@ bin/
 obj/
 /packages/
 riderModule.iml
-/_ReSharper.Caches/.DS_Store
+.DS_Store
 tg-spam/
 compose/*
 !compose/compose.yml

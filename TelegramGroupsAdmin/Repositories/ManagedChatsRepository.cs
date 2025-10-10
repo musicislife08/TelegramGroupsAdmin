@@ -151,10 +151,17 @@ public class ManagedChatsRepository : IManagedChatsRepository
     {
         await using var connection = new NpgsqlConnection(_connectionString);
 
+        // UPSERT: Insert if chat doesn't exist (with minimal default values), otherwise just update last_seen_at
         const string sql = """
-            UPDATE managed_chats
-            SET last_seen_at = @Timestamp
-            WHERE chat_id = @ChatId;
+            INSERT INTO managed_chats (
+                chat_id, chat_name, chat_type, bot_status,
+                is_admin, added_at, is_active, last_seen_at, settings_json
+            ) VALUES (
+                @ChatId, 'Unknown', 0, 1,
+                false, @Timestamp, true, @Timestamp, NULL
+            )
+            ON CONFLICT (chat_id) DO UPDATE SET
+                last_seen_at = EXCLUDED.last_seen_at;
             """;
 
         await connection.ExecuteAsync(sql, new { ChatId = chatId, Timestamp = timestamp });
@@ -173,5 +180,10 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
         var dtos = await connection.QueryAsync<DataModels.ManagedChatRecordDto>(sql);
         return dtos.Select(dto => dto.ToManagedChatRecord().ToUiModel()).ToList();
+    }
+
+    public async Task<List<ManagedChatRecord>> GetAllAsync()
+    {
+        return await GetActiveChatsAsync();
     }
 }

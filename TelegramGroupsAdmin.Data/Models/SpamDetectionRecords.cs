@@ -139,3 +139,70 @@ public record StopWord(
     string? AddedBy,
     string? Notes
 );
+
+// ============================================================================
+// Reports
+// ============================================================================
+
+/// <summary>
+/// DTO for Dapper mapping from PostgreSQL (snake_case column names)
+/// Public to allow cross-assembly repository usage
+/// </summary>
+public record ReportDto
+{
+    public long id { get; init; }
+    public int message_id { get; init; }
+    public long chat_id { get; init; }
+    public int report_command_message_id { get; init; }
+    public long reported_by_user_id { get; init; }
+    public string? reported_by_user_name { get; init; }
+    public long reported_at { get; init; }
+    public int status { get; init; }
+    public string? reviewed_by { get; init; }
+    public long? reviewed_at { get; init; }
+    public string? action_taken { get; init; }
+    public string? admin_notes { get; init; }
+
+    public Report ToReport() => new Report(
+        Id: id,
+        MessageId: message_id,
+        ChatId: chat_id,
+        ReportCommandMessageId: report_command_message_id,
+        ReportedByUserId: reported_by_user_id,
+        ReportedByUserName: reported_by_user_name,
+        ReportedAt: reported_at,
+        Status: (ReportStatus)status,
+        ReviewedBy: reviewed_by,
+        ReviewedAt: reviewed_at,
+        ActionTaken: action_taken,
+        AdminNotes: admin_notes
+    );
+}
+
+/// <summary>
+/// Public domain model for reports
+/// </summary>
+public record Report(
+    long Id,
+    int MessageId,
+    long ChatId,
+    int ReportCommandMessageId,
+    long ReportedByUserId,
+    string? ReportedByUserName,
+    long ReportedAt,
+    ReportStatus Status,
+    string? ReviewedBy,
+    long? ReviewedAt,
+    string? ActionTaken,
+    string? AdminNotes
+);
+
+/// <summary>
+/// Report status enum
+/// </summary>
+public enum ReportStatus
+{
+    Pending = 0,
+    Reviewed = 1,
+    Dismissed = 2
+}

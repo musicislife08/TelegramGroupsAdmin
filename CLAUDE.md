@@ -66,6 +66,8 @@ ASP.NET Core 10.0 Blazor Server + Minimal API. Telegram spam detection (text + i
 - `IUserManagementService` - User CRUD, 2FA reset
 - `IMessageExportService` - CSV/JSON export
 - `IEmailService` - SendGrid email abstraction
+- `IReportActionsService` - Handle admin actions on user reports (spam/ban/warn/dismiss)
+- `AdminMentionHandler` - Detect and notify admins when @admin is mentioned
 
 ### Layered Architecture & Data Model Separation ✅
 
@@ -443,6 +445,7 @@ builder.Logging.AddFilter("TelegramGroupsAdmin", LogLevel.Information);
   - `#stopwords` - Stop words management (StopWords component)
   - `#training` - Bayes training data management (TrainingData component)
 - `/users` - User management, invite system, 2FA reset (Admin/Owner only)
+- `/reports` - User-submitted reports queue with action buttons (Admin/Owner only)
 - `/audit` - Audit log viewer (Admin/Owner only)
 - `/settings` - Application settings with tabs (Admin/Owner only):
   - `#spam` - Spam detection configuration (SpamDetectionConfig component)
@@ -649,12 +652,27 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
   - ✅ **CommandRouter, TelegramAdminBotService** - Inject IServiceProvider, create scopes on-demand
   - ✅ **All IBotCommand implementations** - Use IServiceProvider pattern for repository access
   - ✅ **Migration 202601090** - Convert user_actions.action_type from VARCHAR to INT (enum storage)
-- [ ] **Implement command actions** - Remaining commands:
+- [x] **Reports system** ✅ **COMPLETE**:
+  - ✅ **/report command** - Users can report messages for admin review (reply-to-message required)
+  - ✅ **Reports database** - reports table with status tracking, reviewed_by, action_taken
+  - ✅ **ReportsRepository** - Full CRUD operations with filtering by chat/status
+  - ✅ **Reports UI** - /reports page with filtering, full message text display, action buttons
+  - ✅ **Report actions** - Spam (delete), Ban (cross-chat), Warn (with escalation), Dismiss
+  - ✅ **ReportActionsService** - Handle admin actions with Telegram API integration
+  - ✅ **Message deletion tracking** - deleted_at, deletion_source columns in messages table
+  - ✅ **Resilient design** - Reports work independently of message caching
+- [x] **@admin mention notifications** ✅ **COMPLETE**:
+  - ✅ **AdminMentionHandler** - Detects @admin in any message (text or caption)
+  - ✅ **HTML text mentions** - Uses tg://user?id=X for all users (works without usernames)
+  - ✅ **Auto-discovery** - Chats auto-added to managed_chats on first message
+  - ✅ **Admin caching** - Auto-populates chat_admins table on discovery
+  - ✅ **Smart filtering** - Skips sender and bot itself from notification list
+  - ✅ **Error handling** - Failures don't prevent message history from being saved
+- [ ] **Implement remaining command actions**:
   - `/spam` - Delete message, insert to detection_results, ban if threshold exceeded (TODO: prevent marking admins/trusted)
   - `/ban` - Insert to user_actions, call Telegram BanChatMember across all chats
   - `/unban` - Remove from user_actions, call Telegram UnbanChatMember
   - `/warn` - Insert to user_actions, auto-ban after threshold
-  - `/report` - Create admin notification, queue for review
 - [ ] **Cross-chat actions** - Bans/warns across all managed groups
 - [ ] **Edit monitoring** - Detect "post innocent, edit to spam" tactic
 

@@ -140,7 +140,9 @@ internal static class ModelMappings
         ContentHash: data.ContentHash,
         ChatName: data.ChatName,
         PhotoLocalPath: data.PhotoLocalPath,
-        PhotoThumbnailPath: data.PhotoThumbnailPath
+        PhotoThumbnailPath: data.PhotoThumbnailPath,
+        DeletedAt: data.DeletedAt,
+        DeletionSource: data.DeletionSource
     );
 
     public static DataModels.MessageRecord ToDataModel(this UiModels.MessageRecord ui) => new(
@@ -157,7 +159,9 @@ internal static class ModelMappings
         ContentHash: ui.ContentHash,
         ChatName: ui.ChatName,
         PhotoLocalPath: ui.PhotoLocalPath,
-        PhotoThumbnailPath: ui.PhotoThumbnailPath
+        PhotoThumbnailPath: ui.PhotoThumbnailPath,
+        DeletedAt: ui.DeletedAt,
+        DeletionSource: ui.DeletionSource
     );
 
     public static UiModels.PhotoMessageRecord ToUiModel(this DataModels.PhotoMessageRecord data) => new(
@@ -404,4 +408,35 @@ internal static class ModelMappings
         used_at = ui.UsedAt,
         used_by_telegram_id = ui.UsedByTelegramId
     };
+
+    // Report mappings
+    public static UiModels.Report ToUiModel(this DataModels.Report data) => new(
+        Id: data.Id,
+        MessageId: data.MessageId,
+        ChatId: data.ChatId,
+        ReportCommandMessageId: data.ReportCommandMessageId,
+        ReportedByUserId: data.ReportedByUserId,
+        ReportedByUserName: data.ReportedByUserName,
+        ReportedAt: data.ReportedAt,
+        Status: (UiModels.ReportStatus)data.Status,
+        ReviewedBy: data.ReviewedBy,
+        ReviewedAt: data.ReviewedAt,
+        ActionTaken: data.ActionTaken,
+        AdminNotes: data.AdminNotes
+    );
+
+    public static DataModels.Report ToDataModel(this UiModels.Report ui) => new(
+        Id: ui.Id,
+        MessageId: ui.MessageId,
+        ChatId: ui.ChatId,
+        ReportCommandMessageId: ui.ReportCommandMessageId,
+        ReportedByUserId: ui.ReportedByUserId,
+        ReportedByUserName: ui.ReportedByUserName,
+        ReportedAt: ui.ReportedAt,
+        Status: (DataModels.ReportStatus)ui.Status,
+        ReviewedBy: ui.ReviewedBy,
+        ReviewedAt: ui.ReviewedAt,
+        ActionTaken: ui.ActionTaken,
+        AdminNotes: ui.AdminNotes
+    );
 }

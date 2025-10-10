@@ -40,3 +40,31 @@ public record StopWord(
     string? AddedBy,
     string? Notes
 );
+
+/// <summary>
+/// Report record for UI display (user-submitted reports from /report command)
+/// </summary>
+public record Report(
+    long Id,
+    int MessageId,
+    long ChatId,
+    int ReportCommandMessageId,
+    long ReportedByUserId,
+    string? ReportedByUserName,
+    long ReportedAt,
+    ReportStatus Status,
+    string? ReviewedBy,
+    long? ReviewedAt,
+    string? ActionTaken,
+    string? AdminNotes
+);
+
+/// <summary>
+/// Report status enum
+/// </summary>
+public enum ReportStatus
+{
+    Pending = 0,
+    Reviewed = 1,
+    Dismissed = 2
+}

@@ -17,7 +17,9 @@ public record MessageRecord(
     string? ContentHash,
     string? ChatName,
     string? PhotoLocalPath,
-    string? PhotoThumbnailPath
+    string? PhotoThumbnailPath,
+    long? DeletedAt,
+    string? DeletionSource
 );
 
 /// <summary>
