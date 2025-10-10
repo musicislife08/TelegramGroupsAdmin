@@ -19,4 +19,8 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0-rc.1.25451.107" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\TelegramGroupsAdmin.Configuration\TelegramGroupsAdmin.Configuration.csproj" />
+  </ItemGroup>
+
 </Project>

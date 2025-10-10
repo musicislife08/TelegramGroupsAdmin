@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
-using TelegramGroupsAdmin.Data.Configuration;
+using TelegramGroupsAdmin.Configuration;
 
 namespace TelegramGroupsAdmin.Services.Vision;
 

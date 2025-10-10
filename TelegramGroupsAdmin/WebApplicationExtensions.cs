@@ -1,0 +1,95 @@
+using FluentMigrator.Runner;
+using Microsoft.Extensions.Options;
+using TelegramGroupsAdmin.Components;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Endpoints;
+
+namespace TelegramGroupsAdmin;
+
+public static class WebApplicationExtensions
+{
+    /// <summary>
+    /// Configures the HTTP request pipeline with standard middleware
+    /// </summary>
+    public static WebApplication ConfigurePipeline(this WebApplication app)
+    {
+        if (!app.Environment.IsDevelopment())
+        {
+            app.UseExceptionHandler("/Error", createScopeForErrors: true);
+            app.UseHsts();
+        }
+
+        app.UseHttpsRedirection();
+
+        // Configure static file serving for images
+        ConfigureImageStaticFiles(app);
+
+        app.UseAuthentication();
+        app.UseAuthorization();
+        app.UseAntiforgery();
+
+        app.MapStaticAssets();
+        app.MapRazorComponents<App>()
+            .AddInteractiveServerRenderMode();
+
+        return app;
+    }
+
+    /// <summary>
+    /// Maps all API endpoints
+    /// </summary>
+    public static WebApplication MapApiEndpoints(this WebApplication app)
+    {
+        app.MapAuthEndpoints();
+        app.MapEmailVerificationEndpoints();
+
+        return app;
+    }
+
+    /// <summary>
+    /// Runs database migrations
+    /// </summary>
+    public static Task RunDatabaseMigrationsAsync(this WebApplication app, string connectionString)
+    {
+        var migrationAssembly = typeof(TelegramGroupsAdmin.Data.Migrations.IdentitySchema).Assembly;
+
+        app.Logger.LogInformation("Running PostgreSQL database migrations");
+
+        using var scope = app.Services.CreateScope();
+        var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+
+        runner.MigrateUp();
+
+        app.Logger.LogInformation("PostgreSQL database migration complete");
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Configures static file serving for uploaded images
+    /// </summary>
+    private static void ConfigureImageStaticFiles(WebApplication app)
+    {
+        var messageHistoryOptions = app.Services.GetRequiredService<IOptions<MessageHistoryOptions>>().Value;
+
+        if (!messageHistoryOptions.Enabled)
+        {
+            return;
+        }
+
+        var imagesPath = Path.Combine(messageHistoryOptions.DatabasePath, "images");
+        Directory.CreateDirectory(imagesPath);
+
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(imagesPath),
+            RequestPath = "/images",
+            OnPrepareResponse = ctx =>
+            {
+                ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=86400");
+            }
+        });
+
+        app.Logger.LogInformation("Configured static file serving for images at {ImagesPath}", imagesPath);
+    }
+}

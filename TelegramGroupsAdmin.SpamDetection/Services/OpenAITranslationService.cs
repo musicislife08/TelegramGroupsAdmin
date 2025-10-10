@@ -2,7 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using TelegramGroupsAdmin.Data.Configuration;
+using TelegramGroupsAdmin.Configuration;
 
 namespace TelegramGroupsAdmin.SpamDetection.Services;
 

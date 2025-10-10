@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Data.Configuration;
+namespace TelegramGroupsAdmin.Configuration;
 
 public sealed record OpenAIOptions
 {
