@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
+using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
@@ -13,14 +14,14 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public class SpacingSpamCheck : ISpamCheck
 {
     private readonly ILogger<SpacingSpamCheck> _logger;
-    private readonly SpamDetectionConfig _config;
+    private readonly ISpamDetectionConfigRepository _configRepository;
 
     public string CheckName => "Spacing";
 
-    public SpacingSpamCheck(ILogger<SpacingSpamCheck> logger, SpamDetectionConfig config)
+    public SpacingSpamCheck(ILogger<SpacingSpamCheck> logger, ISpamDetectionConfigRepository configRepository)
     {
         _logger = logger;
-        _config = config;
+        _configRepository = configRepository;
     }
 
     /// <summary>
@@ -28,67 +29,77 @@ public class SpacingSpamCheck : ISpamCheck
     /// </summary>
     public bool ShouldExecute(SpamCheckRequest request)
     {
-        // Check if spacing check is enabled
-        if (!_config.Spacing.Enabled)
-        {
-            return false;
-        }
-
         // Skip empty or very short messages
         if (string.IsNullOrWhiteSpace(request.Message) || request.Message.Length < 20)
         {
             return false;
         }
 
+        // Check if enabled is done in CheckAsync since we need to load config from DB
         return true;
     }
 
     /// <summary>
     /// Execute spacing spam check
     /// </summary>
-    public Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
+    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
     {
         try
         {
-            var analysis = AnalyzeSpacing(request.Message);
+            // Load config from database
+            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+
+            // Check if this check is enabled
+            if (!config.Spacing.Enabled)
+            {
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    IsSpam = false,
+                    Details = "Check disabled",
+                    Confidence = 0
+                };
+            }
+
+            var analysis = AnalyzeSpacing(request.Message, config);
             var isSpam = analysis.IsSuspicious;
             var confidence = CalculateConfidence(analysis);
 
             _logger.LogDebug("Spacing check for user {UserId}: SpaceRatio={SpaceRatio:F3}, ShortWordRatio={ShortWordRatio:F3}, IsSuspicious={IsSuspicious}",
                 request.UserId, analysis.SpaceRatio, analysis.ShortWordRatio, analysis.IsSuspicious);
 
-            return Task.FromResult(new SpamCheckResponse
+            return new SpamCheckResponse
             {
                 CheckName = CheckName,
                 IsSpam = isSpam,
                 Details = analysis.Details,
                 Confidence = confidence
-            });
+            };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Spacing check failed for user {UserId}", request.UserId);
-            return Task.FromResult(new SpamCheckResponse
+            return new SpamCheckResponse
             {
                 CheckName = CheckName,
                 IsSpam = false,
                 Details = "Spacing check failed due to error",
                 Confidence = 0,
                 Error = ex
-            });
+            };
         }
     }
 
     /// <summary>
     /// Analyze core spacing patterns in the message (simplified approach)
     /// </summary>
-    private SpacingAnalysis AnalyzeSpacing(string message)
+    private SpacingAnalysis AnalyzeSpacing(string message, SpamDetectionConfig config)
     {
         // Extract words for basic analysis
         var words = ExtractWords(message);
         var wordCount = words.Length;
 
-        if (wordCount < _config.Spacing.MinWordsCount)
+        if (wordCount < config.Spacing.MinWordsCount)
         {
             return new SpacingAnalysis
             {
@@ -107,7 +118,7 @@ public class SpacingSpamCheck : ISpamCheck
         var spaceRatio = (double)spaceCount / totalChars;
 
         // Core ratio 2: Short word ratio
-        var shortWords = words.Count(w => w.Length <= _config.Spacing.ShortWordLength);
+        var shortWords = words.Count(w => w.Length <= config.Spacing.ShortWordLength);
         var shortWordRatio = (double)shortWords / wordCount;
 
         var avgWordLength = words.Average(w => w.Length);
@@ -116,8 +127,8 @@ public class SpacingSpamCheck : ISpamCheck
         var suspiciousPatterns = DetectCoreSuspiciousPatterns(message);
 
         // Determine if spacing is suspicious based on core metrics
-        var isSuspicious = spaceRatio >= _config.Spacing.SpaceRatioThreshold ||
-                          shortWordRatio >= _config.Spacing.ShortWordRatioThreshold ||
+        var isSuspicious = spaceRatio >= config.Spacing.SpaceRatioThreshold ||
+                          shortWordRatio >= config.Spacing.ShortWordRatioThreshold ||
                           suspiciousPatterns.Any();
 
         var details = BuildSpacingDetails(spaceRatio, shortWordRatio, avgWordLength, suspiciousPatterns);

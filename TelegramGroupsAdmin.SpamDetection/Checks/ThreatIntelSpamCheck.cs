@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
+using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
@@ -16,7 +17,7 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public partial class ThreatIntelSpamCheck : ISpamCheck
 {
     private readonly ILogger<ThreatIntelSpamCheck> _logger;
-    private readonly SpamDetectionConfig _config;
+    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly IHttpClientFactory _httpClientFactory;
 
     private static readonly Regex UrlRegex = CompiledUrlRegex();
@@ -25,11 +26,11 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
 
     public ThreatIntelSpamCheck(
         ILogger<ThreatIntelSpamCheck> logger,
-        SpamDetectionConfig config,
+        ISpamDetectionConfigRepository configRepository,
         IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
-        _config = config;
+        _configRepository = configRepository;
         _httpClientFactory = httpClientFactory;
     }
 
@@ -38,12 +39,6 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
     /// </summary>
     public bool ShouldExecute(SpamCheckRequest request)
     {
-        // Check if threat intel check is enabled
-        if (!_config.ThreatIntel.Enabled)
-        {
-            return false;
-        }
-
         // Skip empty messages
         if (string.IsNullOrWhiteSpace(request.Message))
         {
@@ -59,6 +54,21 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
     /// </summary>
     public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
     {
+        // Load config from database
+        var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+
+        // Check if this check is enabled
+        if (!config.ThreatIntel.Enabled)
+        {
+            return new SpamCheckResponse
+            {
+                CheckName = CheckName,
+                IsSpam = false,
+                Details = "Check disabled",
+                Confidence = 0
+            };
+        }
+
         try
         {
             var urls = ExtractUrls(request.Message);
@@ -66,7 +76,7 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
             foreach (var url in urls)
             {
                 // Check VirusTotal if enabled
-                if (_config.ThreatIntel.UseVirusTotal)
+                if (config.ThreatIntel.UseVirusTotal)
                 {
                     var virusTotalResult = await CheckVirusTotalAsync(url, cancellationToken);
                     if (virusTotalResult.IsThreat)

@@ -146,7 +146,15 @@ public enum AuditEventType
     UserPasswordChanged = 16,
     UserPermissionChanged = 17,
     UserTotpReset = 18,
-    UserTotpEnabled = 19
+    UserTotpEnabled = 19,
+
+    // Settings Changes (20-29 reserved for settings)
+    SpamDetectionConfigChanged = 20,
+    GeneralSettingsChanged = 21,
+    TelegramSettingsChanged = 22,
+    NotificationSettingsChanged = 23,
+    SecuritySettingsChanged = 24,
+    IntegrationSettingsChanged = 25
 }
 
 public enum InviteFilter

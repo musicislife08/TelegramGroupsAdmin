@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
+using TelegramGroupsAdmin.SpamDetection.Repositories;
 using TelegramGroupsAdmin.SpamDetection.Services;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
@@ -17,7 +18,7 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public class OpenAISpamCheck : ISpamCheck
 {
     private readonly ILogger<OpenAISpamCheck> _logger;
-    private readonly SpamDetectionConfig _config;
+    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly OpenAIOptions _openAIOptions;
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
@@ -27,14 +28,14 @@ public class OpenAISpamCheck : ISpamCheck
 
     public OpenAISpamCheck(
         ILogger<OpenAISpamCheck> logger,
-        SpamDetectionConfig config,
+        ISpamDetectionConfigRepository configRepository,
         IOptions<OpenAIOptions> openAIOptions,
         IHttpClientFactory httpClientFactory,
         IMemoryCache cache,
         IMessageHistoryService messageHistoryService)
     {
         _logger = logger;
-        _config = config;
+        _configRepository = configRepository;
         _openAIOptions = openAIOptions.Value;
         _httpClient = httpClientFactory.CreateClient();
         _cache = cache;
@@ -50,30 +51,13 @@ public class OpenAISpamCheck : ISpamCheck
     /// </summary>
     public bool ShouldExecute(SpamCheckRequest request)
     {
-        // Check if OpenAI check is enabled
-        if (!_config.OpenAI.Enabled)
-        {
-            return false;
-        }
-
         // Skip empty messages
         if (string.IsNullOrWhiteSpace(request.Message))
         {
             return false;
         }
 
-        // Skip short messages unless specifically configured to check them
-        if (!_config.OpenAI.CheckShortMessages && request.Message.Length < _config.MinMessageLength)
-        {
-            return false;
-        }
-
-        // In veto mode, only run if other checks flagged as spam
-        if (_config.OpenAI.VetoMode && !request.HasSpamFlags)
-        {
-            return false; // Don't run veto if no spam detected by other checks
-        }
-
+        // Check if enabled is done in CheckAsync since we need to load config from DB
         return true;
     }
 
@@ -84,12 +68,51 @@ public class OpenAISpamCheck : ISpamCheck
     {
         try
         {
+            // Load config from database
+            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+
+            // Check if this check is enabled
+            if (!config.OpenAI.Enabled)
+            {
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    IsSpam = false,
+                    Details = "Check disabled",
+                    Confidence = 0
+                };
+            }
+
+            // Skip short messages unless specifically configured to check them
+            if (!config.OpenAI.CheckShortMessages && request.Message.Length < config.MinMessageLength)
+            {
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    IsSpam = false,
+                    Details = $"Message too short (< {config.MinMessageLength} chars)",
+                    Confidence = 0
+                };
+            }
+
+            // In veto mode, only run if other checks flagged as spam
+            if (config.OpenAI.VetoMode && !request.HasSpamFlags)
+            {
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    IsSpam = false,
+                    Details = "Veto mode: no spam flags from other checks",
+                    Confidence = 0
+                };
+            }
+
             // Check cache first
             var cacheKey = $"openai_check_{GetMessageHash(request.Message)}";
             if (_cache.TryGetValue(cacheKey, out OpenAIResponse? cachedResponse) && cachedResponse != null)
             {
                 _logger.LogDebug("OpenAI check for user {UserId}: Using cached result", request.UserId);
-                return CreateResponse(cachedResponse, fromCache: true);
+                return CreateResponse(cachedResponse, config, fromCache: true);
             }
 
             // Check API key
@@ -107,7 +130,7 @@ public class OpenAISpamCheck : ISpamCheck
             }
 
             // Prepare the API request with history context
-            var apiRequest = await CreateOpenAIRequestAsync(request, cancellationToken);
+            var apiRequest = await CreateOpenAIRequestAsync(request, config, cancellationToken);
             var requestJson = JsonSerializer.Serialize(apiRequest, new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
@@ -173,7 +196,7 @@ public class OpenAISpamCheck : ISpamCheck
             // Cache the result for 1 hour
             _cache.Set(cacheKey, openaiResponse, TimeSpan.FromHours(1));
 
-            return CreateResponse(openaiResponse, fromCache: false);
+            return CreateResponse(openaiResponse, config, fromCache: false);
         }
         catch (TaskCanceledException)
         {
@@ -204,9 +227,9 @@ public class OpenAISpamCheck : ISpamCheck
     /// <summary>
     /// Create enhanced OpenAI API request with history context and JSON response format
     /// </summary>
-    private async Task<OpenAIRequest> CreateOpenAIRequestAsync(SpamCheckRequest request, CancellationToken cancellationToken)
+    private async Task<OpenAIRequest> CreateOpenAIRequestAsync(SpamCheckRequest request, SpamDetectionConfig config, CancellationToken cancellationToken)
     {
-        var systemPrompt = _config.OpenAI.SystemPrompt ?? GetDefaultSystemPrompt(_config.OpenAI.VetoMode);
+        var systemPrompt = config.OpenAI.SystemPrompt ?? GetDefaultSystemPrompt(config.OpenAI.VetoMode);
 
         // Get message history for context
         var history = await _messageHistoryService.GetRecentMessagesAsync(request.ChatId ?? "unknown", 5, cancellationToken);
@@ -223,7 +246,7 @@ public class OpenAISpamCheck : ISpamCheck
             contextBuilder.AppendLine();
         }
 
-        var userPrompt = _config.OpenAI.VetoMode
+        var userPrompt = config.OpenAI.VetoMode
             ? $"Analyze this message that was flagged by other spam filters. Is it actually spam?\n\n{contextBuilder}\nCurrent message from user {request.UserName} (ID: {request.UserId}):\n\"{request.Message}\"\n\nRespond with JSON: {{\"is_spam\": true/false, \"reason\": \"explanation\", \"confidence\": 0.0-1.0}}"
             : $"Analyze this message for spam content.\n\n{contextBuilder}\nMessage from user {request.UserName} (ID: {request.UserId}):\n\"{request.Message}\"\n\nRespond with JSON: {{\"is_spam\": true/false, \"reason\": \"explanation\", \"confidence\": 0.0-1.0}}";
 
@@ -283,7 +306,7 @@ public class OpenAISpamCheck : ISpamCheck
     /// <summary>
     /// Create spam check response from OpenAI API response with JSON parsing and fallback
     /// </summary>
-    private SpamCheckResponse CreateResponse(OpenAIResponse openaiResponse, bool fromCache)
+    private SpamCheckResponse CreateResponse(OpenAIResponse openaiResponse, SpamDetectionConfig config, bool fromCache)
     {
         var choice = openaiResponse.Choices?.FirstOrDefault();
         var content = choice?.Message?.Content?.Trim();
@@ -304,7 +327,7 @@ public class OpenAISpamCheck : ISpamCheck
             if (jsonResponse != null)
             {
                 var confidence = (int)Math.Round((jsonResponse.Confidence ?? 0.8) * 100);
-                var details = _config.OpenAI.VetoMode
+                var details = config.OpenAI.VetoMode
                     ? (jsonResponse.IsSpam ? $"OpenAI confirmed spam: {jsonResponse.Reason}" : $"OpenAI vetoed spam: {jsonResponse.Reason}")
                     : (jsonResponse.IsSpam ? $"OpenAI detected spam: {jsonResponse.Reason}" : $"OpenAI found no spam: {jsonResponse.Reason}");
 
@@ -331,7 +354,7 @@ public class OpenAISpamCheck : ISpamCheck
         }
 
         // Fallback to legacy parsing if JSON fails
-        return CreateLegacyResponse(content, fromCache);
+        return CreateLegacyResponse(content, config, fromCache);
     }
 
     /// <summary>
@@ -357,13 +380,13 @@ public class OpenAISpamCheck : ISpamCheck
     /// <summary>
     /// Legacy response parsing for non-JSON responses
     /// </summary>
-    private SpamCheckResponse CreateLegacyResponse(string content, bool fromCache)
+    private SpamCheckResponse CreateLegacyResponse(string content, SpamDetectionConfig config, bool fromCache)
     {
         var upperContent = content.ToUpperInvariant();
         var isSpam = upperContent.Contains("SPAM") && !upperContent.Contains("NOT_SPAM");
         var confidence = isSpam ? 75 : 0; // Lower confidence for legacy parsing
 
-        var details = _config.OpenAI.VetoMode
+        var details = config.OpenAI.VetoMode
             ? (isSpam ? "OpenAI confirmed spam (legacy)" : "OpenAI vetoed spam (legacy)")
             : (isSpam ? "OpenAI detected spam (legacy)" : "OpenAI found no spam (legacy)");
 

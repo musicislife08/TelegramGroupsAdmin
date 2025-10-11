@@ -15,7 +15,7 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public class BayesSpamCheck : ISpamCheck
 {
     private readonly ILogger<BayesSpamCheck> _logger;
-    private readonly SpamDetectionConfig _config;
+    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly ITrainingSamplesRepository _trainingSamplesRepository;
     private readonly ITokenizerService _tokenizerService;
     private BayesClassifier? _classifier;
@@ -26,12 +26,12 @@ public class BayesSpamCheck : ISpamCheck
 
     public BayesSpamCheck(
         ILogger<BayesSpamCheck> logger,
-        SpamDetectionConfig config,
+        ISpamDetectionConfigRepository configRepository,
         ITrainingSamplesRepository trainingSamplesRepository,
         ITokenizerService tokenizerService)
     {
         _logger = logger;
-        _config = config;
+        _configRepository = configRepository;
         _trainingSamplesRepository = trainingSamplesRepository;
         _tokenizerService = tokenizerService;
     }
@@ -41,18 +41,13 @@ public class BayesSpamCheck : ISpamCheck
     /// </summary>
     public bool ShouldExecute(SpamCheckRequest request)
     {
-        // Check if Bayes check is enabled
-        if (!_config.Bayes.Enabled)
+        // Skip empty messages
+        if (string.IsNullOrWhiteSpace(request.Message))
         {
             return false;
         }
 
-        // Skip empty or very short messages
-        if (string.IsNullOrWhiteSpace(request.Message) || request.Message.Length < _config.MinMessageLength)
-        {
-            return false;
-        }
-
+        // Check if enabled is done in CheckAsync since we need to load config from DB
         return true;
     }
 
@@ -63,6 +58,33 @@ public class BayesSpamCheck : ISpamCheck
     {
         try
         {
+            // Load config from database
+            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+
+            // Check if this check is enabled
+            if (!config.Bayes.Enabled)
+            {
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    IsSpam = false,
+                    Details = "Check disabled",
+                    Confidence = 0
+                };
+            }
+
+            // Check message length
+            if (request.Message.Length < config.MinMessageLength)
+            {
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    IsSpam = false,
+                    Details = $"Message too short (< {config.MinMessageLength} chars)",
+                    Confidence = 0
+                };
+            }
+
             // Ensure classifier is trained with latest data
             await EnsureClassifierTrainedAsync(cancellationToken);
 
@@ -82,13 +104,13 @@ public class BayesSpamCheck : ISpamCheck
             var (spamProbability, details, certainty) = _classifier.ClassifyMessage(processedMessage);
 
             var spamProbabilityPercent = spamProbability * 100;
-            var isSpam = spamProbabilityPercent >= _config.Bayes.MinSpamProbability;
+            var isSpam = spamProbabilityPercent >= config.Bayes.MinSpamProbability;
 
             // Adjust confidence based on certainty (how confident the classifier is)
             var confidence = (int)(spamProbabilityPercent * certainty);
 
             _logger.LogDebug("Bayes check for user {UserId}: SpamProbability={SpamProbability:F3}, Certainty={Certainty:F3}, Threshold={Threshold}, IsSpam={IsSpam}",
-                request.UserId, spamProbabilityPercent, certainty, _config.Bayes.MinSpamProbability, isSpam);
+                request.UserId, spamProbabilityPercent, certainty, config.Bayes.MinSpamProbability, isSpam);
 
             return new SpamCheckResponse
             {

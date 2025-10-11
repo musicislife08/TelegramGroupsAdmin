@@ -14,7 +14,7 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public class StopWordsSpamCheck : ISpamCheck
 {
     private readonly ILogger<StopWordsSpamCheck> _logger;
-    private readonly SpamDetectionConfig _config;
+    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly IStopWordsRepository _stopWordsRepository;
     private readonly ITokenizerService _tokenizerService;
     private HashSet<string>? _cachedStopWords;
@@ -26,12 +26,12 @@ public class StopWordsSpamCheck : ISpamCheck
 
     public StopWordsSpamCheck(
         ILogger<StopWordsSpamCheck> logger,
-        SpamDetectionConfig config,
+        ISpamDetectionConfigRepository configRepository,
         IStopWordsRepository stopWordsRepository,
         ITokenizerService tokenizerService)
     {
         _logger = logger;
-        _config = config;
+        _configRepository = configRepository;
         _stopWordsRepository = stopWordsRepository;
         _tokenizerService = tokenizerService;
     }
@@ -41,18 +41,13 @@ public class StopWordsSpamCheck : ISpamCheck
     /// </summary>
     public bool ShouldExecute(SpamCheckRequest request)
     {
-        // Check if stop words check is enabled
-        if (!_config.StopWords.Enabled)
-        {
-            return false;
-        }
-
         // Skip empty messages
         if (string.IsNullOrWhiteSpace(request.Message))
         {
             return false;
         }
 
+        // Check if enabled is done in CheckAsync since we need to load config from DB
         return true;
     }
 
@@ -63,6 +58,21 @@ public class StopWordsSpamCheck : ISpamCheck
     {
         try
         {
+            // Load config from database
+            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+
+            // Check if this check is enabled
+            if (!config.StopWords.Enabled)
+            {
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    IsSpam = false,
+                    Details = "Check disabled",
+                    Confidence = 0
+                };
+            }
+
             // Get stop words from database (with caching)
             var stopWords = await GetStopWordsAsync(cancellationToken);
             if (!stopWords.Any())
@@ -99,7 +109,7 @@ public class StopWordsSpamCheck : ISpamCheck
 
             // Calculate confidence based on matches
             var confidence = CalculateConfidence(foundMatches.Count, request.Message?.Length ?? 0);
-            var isSpam = confidence >= _config.StopWords.ConfidenceThreshold;
+            var isSpam = confidence >= config.StopWords.ConfidenceThreshold;
 
             var details = foundMatches.Any()
                 ? $"Found stop words: {string.Join(", ", foundMatches.Take(3))}" + (foundMatches.Count > 3 ? $" (+{foundMatches.Count - 3} more)" : "")

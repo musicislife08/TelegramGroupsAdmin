@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
+using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
@@ -14,7 +15,7 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public class CasSpamCheck : ISpamCheck
 {
     private readonly ILogger<CasSpamCheck> _logger;
-    private readonly SpamDetectionConfig _config;
+    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
 
@@ -22,21 +23,14 @@ public class CasSpamCheck : ISpamCheck
 
     public CasSpamCheck(
         ILogger<CasSpamCheck> logger,
-        SpamDetectionConfig config,
+        ISpamDetectionConfigRepository configRepository,
         IHttpClientFactory httpClientFactory,
         IMemoryCache cache)
     {
         _logger = logger;
-        _config = config;
+        _configRepository = configRepository;
         _httpClient = httpClientFactory.CreateClient();
         _cache = cache;
-
-        // Configure HTTP client
-        _httpClient.Timeout = _config.Cas.Timeout;
-        if (!string.IsNullOrEmpty(_config.Cas.UserAgent))
-        {
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", _config.Cas.UserAgent);
-        }
     }
 
     /// <summary>
@@ -44,18 +38,13 @@ public class CasSpamCheck : ISpamCheck
     /// </summary>
     public bool ShouldExecute(SpamCheckRequest request)
     {
-        // Check if CAS check is enabled
-        if (!_config.Cas.Enabled)
-        {
-            return false;
-        }
-
         // Need user ID for CAS lookup
         if (string.IsNullOrWhiteSpace(request.UserId))
         {
             return false;
         }
 
+        // Check if enabled is done in CheckAsync since we need to load config from DB
         return true;
     }
 
@@ -64,19 +53,42 @@ public class CasSpamCheck : ISpamCheck
     /// </summary>
     public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
     {
-        var cacheKey = $"cas_check_{request.UserId}";
-
-        // Check cache first
-        if (_cache.TryGetValue(cacheKey, out CasResponse? cachedResponse) && cachedResponse != null)
-        {
-            _logger.LogDebug("CAS check for user {UserId}: Using cached result", request.UserId);
-            return CreateResponse(cachedResponse, fromCache: true);
-        }
-
         try
         {
+            // Load config from database
+            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+
+            // Check if this check is enabled
+            if (!config.Cas.Enabled)
+            {
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    IsSpam = false,
+                    Details = "Check disabled",
+                    Confidence = 0
+                };
+            }
+
+            // Configure HTTP client with latest config
+            _httpClient.Timeout = config.Cas.Timeout;
+            if (!string.IsNullOrEmpty(config.Cas.UserAgent))
+            {
+                _httpClient.DefaultRequestHeaders.Clear();
+                _httpClient.DefaultRequestHeaders.Add("User-Agent", config.Cas.UserAgent);
+            }
+
+            var cacheKey = $"cas_check_{request.UserId}";
+
+            // Check cache first
+            if (_cache.TryGetValue(cacheKey, out CasResponse? cachedResponse) && cachedResponse != null)
+            {
+                _logger.LogDebug("CAS check for user {UserId}: Using cached result", request.UserId);
+                return CreateResponse(cachedResponse, fromCache: true);
+            }
+
             // Make API request to CAS
-            var apiUrl = $"{_config.Cas.ApiUrl.TrimEnd('/')}/check?user_id={request.UserId}";
+            var apiUrl = $"{config.Cas.ApiUrl.TrimEnd('/')}/check?user_id={request.UserId}";
             _logger.LogDebug("CAS check for user {UserId}: Calling {ApiUrl}", request.UserId, apiUrl);
 
             using var response = await _httpClient.GetAsync(apiUrl, cancellationToken);

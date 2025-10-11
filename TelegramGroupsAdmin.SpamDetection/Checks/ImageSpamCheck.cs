@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
+using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
@@ -17,7 +18,7 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public class ImageSpamCheck : ISpamCheck
 {
     private readonly ILogger<ImageSpamCheck> _logger;
-    private readonly SpamDetectionConfig _config;
+    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly OpenAIOptions _openAIOptions;
     private readonly HttpClient _httpClient;
 
@@ -25,17 +26,17 @@ public class ImageSpamCheck : ISpamCheck
 
     public ImageSpamCheck(
         ILogger<ImageSpamCheck> logger,
-        SpamDetectionConfig config,
+        ISpamDetectionConfigRepository configRepository,
         IOptions<OpenAIOptions> openAIOptions,
         IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
-        _config = config;
+        _configRepository = configRepository;
         _openAIOptions = openAIOptions.Value;
         _httpClient = httpClientFactory.CreateClient();
 
-        // Configure HTTP client
-        _httpClient.Timeout = _config.ImageSpam.Timeout;
+        // Configure HTTP client - will be updated from config in CheckAsync
+        _httpClient.Timeout = TimeSpan.FromSeconds(30);
     }
 
     /// <summary>
@@ -43,18 +44,6 @@ public class ImageSpamCheck : ISpamCheck
     /// </summary>
     public bool ShouldExecute(SpamCheckRequest request)
     {
-        // Check if image spam detection is enabled
-        if (!_config.ImageSpam.Enabled)
-        {
-            return false;
-        }
-
-        // Check if we're using OpenAI Vision
-        if (!_config.ImageSpam.UseOpenAIVision)
-        {
-            return false;
-        }
-
         // Only run if image data is provided
         return request.ImageData != null;
     }
@@ -64,6 +53,33 @@ public class ImageSpamCheck : ISpamCheck
     /// </summary>
     public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
     {
+        // Load config from database
+        var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+
+        // Check if this check is enabled
+        if (!config.ImageSpam.Enabled)
+        {
+            return new SpamCheckResponse
+            {
+                CheckName = CheckName,
+                IsSpam = false,
+                Details = "Check disabled",
+                Confidence = 0
+            };
+        }
+
+        // Check if we're using OpenAI Vision
+        if (!config.ImageSpam.UseOpenAIVision)
+        {
+            return new SpamCheckResponse
+            {
+                CheckName = CheckName,
+                IsSpam = false,
+                Details = "OpenAI Vision not enabled",
+                Confidence = 0
+            };
+        }
+
         if (request.ImageData == null)
         {
             return new SpamCheckResponse
@@ -74,6 +90,9 @@ public class ImageSpamCheck : ISpamCheck
                 Confidence = 0
             };
         }
+
+        // Update HTTP client timeout from config
+        _httpClient.Timeout = config.ImageSpam.Timeout;
 
         try
         {

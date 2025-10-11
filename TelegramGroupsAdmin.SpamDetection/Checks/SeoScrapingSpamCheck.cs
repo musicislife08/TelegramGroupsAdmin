@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
+using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
@@ -15,7 +16,7 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public partial class SeoScrapingSpamCheck : ISpamCheck
 {
     private readonly ILogger<SeoScrapingSpamCheck> _logger;
-    private readonly SpamDetectionConfig _config;
+    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly HttpClient _httpClient;
 
     private static readonly Regex UrlRegex = CompiledUrlRegex();
@@ -52,15 +53,15 @@ public partial class SeoScrapingSpamCheck : ISpamCheck
 
     public SeoScrapingSpamCheck(
         ILogger<SeoScrapingSpamCheck> logger,
-        SpamDetectionConfig config,
+        ISpamDetectionConfigRepository configRepository,
         IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
-        _config = config;
+        _configRepository = configRepository;
         _httpClient = httpClientFactory.CreateClient();
 
-        // Configure HTTP client
-        _httpClient.Timeout = _config.SeoScraping.Timeout;
+        // Configure HTTP client - will be updated from config in CheckAsync
+        _httpClient.Timeout = TimeSpan.FromSeconds(10);
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (TelegramGroupsAdmin/1.0)");
     }
 
@@ -69,12 +70,6 @@ public partial class SeoScrapingSpamCheck : ISpamCheck
     /// </summary>
     public bool ShouldExecute(SpamCheckRequest request)
     {
-        // Check if SEO scraping check is enabled
-        if (!_config.SeoScraping.Enabled)
-        {
-            return false;
-        }
-
         // Skip empty messages
         if (string.IsNullOrWhiteSpace(request.Message))
         {
@@ -90,6 +85,23 @@ public partial class SeoScrapingSpamCheck : ISpamCheck
     /// </summary>
     public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
     {
+        // Load config from database
+        var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+
+        // Check if this check is enabled
+        if (!config.SeoScraping.Enabled)
+        {
+            return new SpamCheckResponse
+            {
+                CheckName = CheckName,
+                IsSpam = false,
+                Details = "Check disabled",
+                Confidence = 0
+            };
+        }
+
+        // Update HTTP client timeout from config
+        _httpClient.Timeout = config.SeoScraping.Timeout;
         try
         {
             var urls = ExtractUrls(request.Message);

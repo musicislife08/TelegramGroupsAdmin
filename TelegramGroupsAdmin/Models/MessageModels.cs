@@ -165,3 +165,49 @@ public record ManagedChatRecord(
     long? LastSeenAt,
     string? SettingsJson
 );
+
+/// <summary>
+/// Managed chat with health status information
+/// </summary>
+public class ManagedChatInfo
+{
+    public required ManagedChatRecord Chat { get; init; }
+    public required ChatHealthStatus HealthStatus { get; init; }
+    public bool HasCustomSpamConfig { get; init; }
+}
+
+/// <summary>
+/// Health status for a chat
+/// </summary>
+public class ChatHealthStatus
+{
+    public long ChatId { get; set; }
+    public bool IsReachable { get; set; }
+    public string? ChatTitle { get; set; }
+    public string BotStatus { get; set; } = "Unknown";
+    public bool IsAdmin { get; set; }
+    public bool CanDeleteMessages { get; set; }
+    public bool CanRestrictMembers { get; set; }
+    public bool CanPromoteMembers { get; set; }
+    public bool CanInviteUsers { get; set; }
+    public int AdminCount { get; set; }
+    public string Status { get; set; } = "Unknown";
+    public List<string> Warnings { get; set; } = new();
+}
+
+/// <summary>
+/// Bot permissions test result
+/// </summary>
+public class BotPermissionsTest
+{
+    public long ChatId { get; set; }
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string BotStatus { get; set; } = "Unknown";
+    public bool IsAdmin { get; set; }
+    public bool CanDeleteMessages { get; set; }
+    public bool CanRestrictMembers { get; set; }
+    public bool CanPromoteMembers { get; set; }
+    public bool CanInviteUsers { get; set; }
+    public bool CanPinMessages { get; set; }
+}

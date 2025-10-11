@@ -16,7 +16,7 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public class SimilaritySpamCheck : ISpamCheck
 {
     private readonly ILogger<SimilaritySpamCheck> _logger;
-    private readonly SpamDetectionConfig _config;
+    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly ITrainingSamplesRepository _trainingSamplesRepository;
     private readonly ITokenizerService _tokenizerService;
 
@@ -32,12 +32,12 @@ public class SimilaritySpamCheck : ISpamCheck
 
     public SimilaritySpamCheck(
         ILogger<SimilaritySpamCheck> logger,
-        SpamDetectionConfig config,
+        ISpamDetectionConfigRepository configRepository,
         ITrainingSamplesRepository trainingSamplesRepository,
         ITokenizerService tokenizerService)
     {
         _logger = logger;
-        _config = config;
+        _configRepository = configRepository;
         _trainingSamplesRepository = trainingSamplesRepository;
         _tokenizerService = tokenizerService;
     }
@@ -47,18 +47,13 @@ public class SimilaritySpamCheck : ISpamCheck
     /// </summary>
     public bool ShouldExecute(SpamCheckRequest request)
     {
-        // Check if similarity check is enabled
-        if (!_config.Similarity.Enabled)
+        // Skip empty messages
+        if (string.IsNullOrWhiteSpace(request.Message))
         {
             return false;
         }
 
-        // Skip empty or very short messages
-        if (string.IsNullOrWhiteSpace(request.Message) || request.Message.Length < _config.MinMessageLength)
-        {
-            return false;
-        }
-
+        // Check if enabled is done in CheckAsync since we need to load config from DB
         return true;
     }
 
@@ -69,6 +64,33 @@ public class SimilaritySpamCheck : ISpamCheck
     {
         try
         {
+            // Load config from database
+            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+
+            // Check if this check is enabled
+            if (!config.Similarity.Enabled)
+            {
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    IsSpam = false,
+                    Details = "Check disabled",
+                    Confidence = 0
+                };
+            }
+
+            // Check message length
+            if (request.Message.Length < config.MinMessageLength)
+            {
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    IsSpam = false,
+                    Details = $"Message too short (< {config.MinMessageLength} chars)",
+                    Confidence = 0
+                };
+            }
+
             // Get cached spam samples and vectors
             await RefreshCacheIfNeededAsync(request.ChatId, cancellationToken);
 
@@ -119,7 +141,7 @@ public class SimilaritySpamCheck : ISpamCheck
                 }
 
                 // Early exit: if we've checked enough samples and have a decent match
-                if (checkedCount >= 20 && maxSimilarity >= _config.Similarity.Threshold)
+                if (checkedCount >= 20 && maxSimilarity >= config.Similarity.Threshold)
                 {
                     _logger.LogDebug("Early exit after checking {CheckedCount} samples with threshold match", checkedCount);
                     break;
@@ -127,7 +149,7 @@ public class SimilaritySpamCheck : ISpamCheck
             }
 
             // Determine if message is spam based on similarity threshold
-            var isSpam = maxSimilarity >= _config.Similarity.Threshold;
+            var isSpam = maxSimilarity >= config.Similarity.Threshold;
             var confidence = (int)(maxSimilarity * 100);
 
             // Update detection count for matched sample
@@ -141,7 +163,7 @@ public class SimilaritySpamCheck : ISpamCheck
                 : $"Low similarity ({maxSimilarity:F3}) to spam samples (checked {checkedCount}/{sortedSamples.Count})";
 
             _logger.LogDebug("Similarity check for user {UserId}: MaxSimilarity={MaxSimilarity:F3}, Threshold={Threshold}, Checked={CheckedCount}, IsSpam={IsSpam}",
-                request.UserId, maxSimilarity, _config.Similarity.Threshold, checkedCount, isSpam);
+                request.UserId, maxSimilarity, config.Similarity.Threshold, checkedCount, isSpam);
 
             return new SpamCheckResponse
             {

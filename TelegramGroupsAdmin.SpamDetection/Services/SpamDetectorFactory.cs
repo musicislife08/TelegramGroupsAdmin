@@ -28,10 +28,16 @@ public class SpamDetectorFactory : ISpamDetectorFactory
         _translationService = translationService;
     }
 
-    private async Task<SpamDetectionConfig> GetConfigAsync(CancellationToken cancellationToken)
+    private async Task<SpamDetectionConfig> GetConfigAsync(SpamCheckRequest request, CancellationToken cancellationToken)
     {
         try
         {
+            // Use per-chat config if ChatId is provided, otherwise use global
+            if (!string.IsNullOrEmpty(request.ChatId))
+            {
+                return await _configRepository.GetChatConfigAsync(request.ChatId, cancellationToken);
+            }
+
             return await _configRepository.GetGlobalConfigAsync(cancellationToken);
         }
         catch (Exception ex)
@@ -46,8 +52,8 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     /// </summary>
     public async Task<SpamDetectionResult> CheckMessageAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
     {
-        // Load latest config from database
-        var config = await GetConfigAsync(cancellationToken);
+        // Load latest config from database (per-chat or global)
+        var config = await GetConfigAsync(request, cancellationToken);
 
         var checkResults = new List<SpamCheckResponse>();
 
@@ -93,8 +99,8 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     /// </summary>
     public async Task<SpamDetectionResult> CheckMessageWithoutOpenAIAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
     {
-        // Load latest config from database
-        var config = await GetConfigAsync(cancellationToken);
+        // Load latest config from database (per-chat or global)
+        var config = await GetConfigAsync(request, cancellationToken);
 
         var checkResults = new List<SpamCheckResponse>();
 

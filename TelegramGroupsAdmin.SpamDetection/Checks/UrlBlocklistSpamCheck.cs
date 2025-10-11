@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
+using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
@@ -16,7 +17,7 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public partial class UrlBlocklistSpamCheck : ISpamCheck
 {
     private readonly ILogger<UrlBlocklistSpamCheck> _logger;
-    private readonly SpamDetectionConfig _config;
+    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
 
@@ -31,12 +32,12 @@ public partial class UrlBlocklistSpamCheck : ISpamCheck
 
     public UrlBlocklistSpamCheck(
         ILogger<UrlBlocklistSpamCheck> logger,
-        SpamDetectionConfig config,
+        ISpamDetectionConfigRepository configRepository,
         IHttpClientFactory httpClientFactory,
         IMemoryCache cache)
     {
         _logger = logger;
-        _config = config;
+        _configRepository = configRepository;
         _httpClient = httpClientFactory.CreateClient();
         _cache = cache;
 
@@ -49,12 +50,6 @@ public partial class UrlBlocklistSpamCheck : ISpamCheck
     /// </summary>
     public bool ShouldExecute(SpamCheckRequest request)
     {
-        // Check if URL blocklist check is enabled
-        if (!_config.UrlBlocklist.Enabled)
-        {
-            return false;
-        }
-
         // Skip empty messages
         if (string.IsNullOrWhiteSpace(request.Message))
         {
@@ -72,6 +67,21 @@ public partial class UrlBlocklistSpamCheck : ISpamCheck
     {
         try
         {
+            // Load config from database
+            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+
+            // Check if this check is enabled
+            if (!config.UrlBlocklist.Enabled)
+            {
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    IsSpam = false,
+                    Details = "Check disabled",
+                    Confidence = 0
+                };
+            }
+
             var allUrls = ExtractUrlsAndDomains(request.Message);
 
             foreach (var url in allUrls)

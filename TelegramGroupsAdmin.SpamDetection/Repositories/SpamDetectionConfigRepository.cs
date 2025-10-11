@@ -16,6 +16,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,  // Important for deserialization!
         WriteIndented = true
     };
 
@@ -26,7 +27,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     }
 
     /// <summary>
-    /// Get the global spam detection configuration
+    /// Get the global spam detection configuration (chat_id = '0')
     /// </summary>
     public async Task<SpamDetectionConfig> GetGlobalConfigAsync(CancellationToken cancellationToken = default)
     {
@@ -36,7 +37,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
             const string sql = @"
                 SELECT config_json
                 FROM spam_detection_configs
-                WHERE chat_id IS NULL
+                WHERE chat_id = '0'
                 ORDER BY last_updated DESC
                 LIMIT 1";
 
@@ -45,10 +46,16 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
             if (string.IsNullOrEmpty(configJson))
             {
                 // Return default configuration if none exists
+                _logger.LogWarning("No global config found in database, returning defaults");
                 return new SpamDetectionConfig();
             }
 
             var config = JsonSerializer.Deserialize<SpamDetectionConfig>(configJson, JsonOptions);
+
+            // Debug logging to verify what we loaded
+            _logger.LogDebug("Loaded global config - StopWords.Enabled: {StopWordsEnabled}, CAS.Enabled: {CasEnabled}, Bayes.Enabled: {BayesEnabled}",
+                config?.StopWords.Enabled, config?.Cas.Enabled, config?.Bayes.Enabled);
+
             return config ?? new SpamDetectionConfig();
         }
         catch (Exception ex)
@@ -67,44 +74,32 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
         {
             await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
             var configJson = JsonSerializer.Serialize(config, JsonOptions);
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-            // Check if global config exists (chat_id IS NULL)
-            const string checkSql = "SELECT COUNT(*) FROM spam_detection_configs WHERE chat_id IS NULL";
-            var exists = await connection.ExecuteScalarAsync<int>(checkSql) > 0;
+            // Debug logging to verify what we're saving
+            _logger.LogDebug("Saving global config - StopWords.Enabled: {StopWordsEnabled}, CAS.Enabled: {CasEnabled}, Bayes.Enabled: {BayesEnabled}",
+                config.StopWords.Enabled, config.Cas.Enabled, config.Bayes.Enabled);
 
-            if (exists)
+            // Use PostgreSQL's INSERT ... ON CONFLICT for atomic upsert
+            // chat_id = '0' represents global configuration
+            // The uc_spam_detection_configs_chat unique constraint ensures uniqueness
+            const string upsertSql = @"
+                INSERT INTO spam_detection_configs (chat_id, config_json, last_updated, updated_by)
+                VALUES ('0', @ConfigJson, @LastUpdated, @UpdatedBy)
+                ON CONFLICT (chat_id)
+                DO UPDATE SET
+                    config_json = EXCLUDED.config_json,
+                    last_updated = EXCLUDED.last_updated,
+                    updated_by = EXCLUDED.updated_by";
+
+            await connection.ExecuteAsync(upsertSql, new
             {
-                // Update existing global config
-                const string updateSql = @"
-                    UPDATE spam_detection_configs
-                    SET config_json = @ConfigJson,
-                        last_updated = @LastUpdated,
-                        updated_by = @UpdatedBy
-                    WHERE chat_id IS NULL";
+                ConfigJson = configJson,
+                LastUpdated = timestamp,
+                UpdatedBy = updatedBy
+            });
 
-                await connection.ExecuteAsync(updateSql, new
-                {
-                    ConfigJson = configJson,
-                    LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                    UpdatedBy = updatedBy
-                });
-            }
-            else
-            {
-                // Insert new global config
-                const string insertSql = @"
-                    INSERT INTO spam_detection_configs (chat_id, config_json, last_updated, updated_by)
-                    VALUES (NULL, @ConfigJson, @LastUpdated, @UpdatedBy)";
-
-                await connection.ExecuteAsync(insertSql, new
-                {
-                    ConfigJson = configJson,
-                    LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                    UpdatedBy = updatedBy
-                });
-            }
-
-            _logger.LogInformation("Updated global spam detection configuration");
+            _logger.LogInformation("Updated global spam detection configuration (updated_by: {UpdatedBy})", updatedBy);
             return true;
         }
         catch (Exception ex)
@@ -116,34 +111,41 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
 
     /// <summary>
     /// Get configuration for a specific chat (falls back to global if not found)
+    /// Uses a single SQL query with COALESCE to check chat-specific config first, then global
     /// </summary>
     public async Task<SpamDetectionConfig> GetChatConfigAsync(string chatId, CancellationToken cancellationToken = default)
     {
         try
         {
             await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+            // Single query that checks for chat-specific config, falls back to global ('0')
+            // COALESCE returns the first non-NULL value
             const string sql = @"
-                SELECT config_json
-                FROM spam_detection_configs
-                WHERE chat_id = @ChatId
-                ORDER BY last_updated DESC
-                LIMIT 1";
+                SELECT COALESCE(
+                    (SELECT config_json FROM spam_detection_configs WHERE chat_id = @ChatId LIMIT 1),
+                    (SELECT config_json FROM spam_detection_configs WHERE chat_id = '0' LIMIT 1)
+                ) as config_json";
 
             var configJson = await connection.QuerySingleOrDefaultAsync<string>(sql, new { ChatId = chatId });
 
             if (string.IsNullOrEmpty(configJson))
             {
-                // Fall back to global configuration
-                return await GetGlobalConfigAsync(cancellationToken);
+                // No config found at all (neither chat-specific nor global)
+                _logger.LogWarning("No config found for chat {ChatId} or global, returning defaults", chatId);
+                return new SpamDetectionConfig();
             }
 
             var config = JsonSerializer.Deserialize<SpamDetectionConfig>(configJson, JsonOptions);
-            return config ?? await GetGlobalConfigAsync(cancellationToken);
+
+            _logger.LogDebug("Loaded config for chat {ChatId}", chatId);
+
+            return config ?? new SpamDetectionConfig();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve spam detection configuration for chat {ChatId}", chatId);
-            return await GetGlobalConfigAsync(cancellationToken); // Fall back to global
+            return new SpamDetectionConfig(); // Return default on error
         }
     }
 
@@ -197,11 +199,11 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
                     chat_id as ChatId,
                     last_updated as LastUpdated,
                     updated_by as UpdatedBy,
-                    CASE WHEN chat_id IS NULL THEN 'Global Configuration' ELSE chat_id END as ChatName,
-                    CASE WHEN chat_id IS NOT NULL THEN 1 ELSE 0 END as HasCustomConfig
+                    CASE WHEN chat_id = '0' THEN 'Global Configuration' ELSE chat_id END as ChatName,
+                    CASE WHEN chat_id != '0' THEN 1 ELSE 0 END as HasCustomConfig
                 FROM spam_detection_configs
                 ORDER BY
-                    CASE WHEN chat_id IS NULL THEN 0 ELSE 1 END,
+                    CASE WHEN chat_id = '0' THEN 0 ELSE 1 END,
                     chat_id";
 
             var configs = await connection.QueryAsync<ChatConfigInfo>(sql);
