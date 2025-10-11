@@ -56,7 +56,7 @@ builder.Services
     .ConfigureRunner(rb => rb
         .AddPostgres()
         .WithGlobalConnectionString(connectionString)
-        .ScanIn(typeof(TelegramGroupsAdmin.Data.Migrations.IdentitySchema).Assembly).For.Migrations())
+        .ScanIn(typeof(TelegramGroupsAdmin.Data.Migrations.InitialSchema).Assembly).For.Migrations())
     .AddLogging(lb => lb.AddFluentMigratorConsole());
 
 var app = builder.Build();

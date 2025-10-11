@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Data.Attributes;
+
 namespace TelegramGroupsAdmin.Data.Models;
 
 public enum InviteStatus
@@ -18,6 +20,8 @@ public record UserRecordDto
     public int permission_level { get; init; }
     public string? invited_by { get; init; }
     public bool is_active { get; init; }
+
+    [ProtectedData]
     public string? totp_secret { get; init; }
     public bool totp_enabled { get; init; }
     public long created_at { get; init; }

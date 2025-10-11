@@ -10,6 +10,7 @@
 @inject IIntermediateAuthService IntermediateAuthService
 @inject IHttpContextAccessor HttpContextAccessor
 @inject ILogger<Login> Logger
+@inject NavigationManager Navigation
 @attribute [AllowAnonymous]
 @attribute [ExcludeFromInteractiveRouting]
 
@@ -80,9 +81,16 @@
     private string? _errorMessage;
     private string? _successMessage;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _model ??= new LoginModel();
+
+        // Redirect to registration if no users exist (first run)
+        if (await AuthService.IsFirstRunAsync())
+        {
+            Navigation.NavigateTo("/register", forceLoad: true);
+            return;
+        }
 
         // Handle email verification status messages
         if (!string.IsNullOrEmpty(Verified))

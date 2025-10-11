@@ -166,6 +166,7 @@ TelegramGroupsAdmin.Data/
 ## Database Schema (PostgreSQL)
 
 **Single PostgreSQL database:** `telegram_groups_admin`
+**Single consolidated migration:** `202601100_InitialSchema.cs` (18 tables, validated against known good schema)
 
 ### Core Tables (Normalized Design)
 
@@ -744,6 +745,13 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
   - **CLI flags:** `--export <path>` / `--import <path>` with 5-second safety delay
   - **Restore behavior:** Full wipe + restore in single transaction, foreign key-aware deletion order
   - **Transaction safety:** Single transaction, full rollback on any error, topological sort for dependencies
+  - **Data Protection:** `[ProtectedData]` attribute for cross-machine encryption
+    - Decrypts on export (old machine's keys)
+    - Re-encrypts on import (new machine's keys)
+    - Applied to: `totp_secret` (extensible to other encrypted fields)
+  - **Self-referencing FKs:** Temporarily disables triggers during restore for circular dependencies
+  - **Topological sort:** Proper parent→child insertion order, skips self-referencing FKs
+  - **Sequence reset:** Automatically resets identity sequences after restore
   - **UI:** Settings page "Backup & Restore" tab + unauthenticated restore modal on registration page
   - **Version checking:** Prevents incompatible restore with metadata version validation
   - **DTOs:** All 18 tables have proper snake_case DTOs matching database schema exactly
@@ -819,35 +827,26 @@ TelegramAdminBotService (unified bot - formerly HistoryBotService):
 
 ---
 
-## Current Session Status (January 2025)
+## Production Status (January 2025)
 
-### 🎯 **Active Work: Phase 2.2 Database Schema Normalization**
+### ✅ **Migration & Backup System Complete**
 
-**Completed This Session:**
-1. ✅ Documentation consolidated (CLAUDE.md updated, obsolete docs removed)
-2. ✅ Database schema normalized and migrated
-3. ✅ Migration tool added (`dotnet run --migrate-only`)
-4. ✅ All data successfully migrated to new schema
+**Key Achievements:**
+1. ✅ **Consolidated migration** - Single `202601100_InitialSchema.cs` creates all 18 tables
+2. ✅ **Schema validated** - Matches known good production schema exactly
+3. ✅ **Backup/restore system** - Cross-machine support with Data Protection handling
+4. ✅ **Build quality** - 0 errors, 0 warnings maintained
+5. ✅ **Topological sort** - Proper FK dependency resolution for restore
+6. ✅ **Self-referencing FKs** - Trigger disable/enable for circular dependencies
 
-**In Progress:**
-- ⏳ Updating `TrainingSamplesRepository` to query `detection_results` table (2/10 methods converted)
+**Recent Fixes:**
+- Removed obsolete `spam_samples` table (normalized to `detection_results`)
+- Fixed topological sort to handle circular dependencies
+- Added `[ProtectedData]` attribute for dynamic encryption handling
+- Sequence reset after restore to prevent duplicate key violations
+- Strict DTO validation (fails on missing DTOs instead of silent skip)
 
-**Next Steps:**
-1. **Finish repository updates** (~8 methods remaining in TrainingSamplesRepository)
-2. **Model consistency pass** - All DTOs → init-only properties, UI models → appropriate mutability
-3. **Update spam detection algorithms** - BayesSpamCheck (bounded training query), SimilaritySpamCheck
-4. **Update cleanup service** - Smart retention logic (keep spam/ham forever, clean mundane messages)
-5. **Remove obsolete code** - `/check` endpoint, `SpamCheckRepository`
-6. **Update Blazor UI** - Training Data and Stop Words pages for new schema
-
-**Files Modified This Session:**
-- `CLAUDE.md` - Comprehensive schema documentation
-- `TelegramGroupsAdmin.Data/Migrations/202601086_NormalizeMessageSchema.cs` - Migration (NEW)
-- `TelegramGroupsAdmin/Program.cs` - Added `--migrate-only` flag
-- `TelegramGroupsAdmin.SpamDetection/Repositories/TrainingSamplesRepository.cs` - Partial conversion (IN PROGRESS)
-- Deleted: `SPAM_DETECTION_REQUIREMENTS.md`, `SPAM_DETECTION_IMPLEMENTATION_DIFFERENCES.md`
-
-**Known Issues:**
-- Build will fail until `TrainingSamplesRepository` update is complete (references non-existent `training_samples` table)
-- Spam detection checks (Bayes, Similarity) need query updates
-- UI pages need schema updates
+**System Ready For:**
+- Fresh database initialization (`dotnet run --migrate-only`)
+- Cross-machine backup/restore with TOTP preservation
+- Production deployment

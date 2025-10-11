@@ -51,7 +51,7 @@ public static class WebApplicationExtensions
     /// </summary>
     public static Task RunDatabaseMigrationsAsync(this WebApplication app, string connectionString)
     {
-        var migrationAssembly = typeof(TelegramGroupsAdmin.Data.Migrations.IdentitySchema).Assembly;
+        var migrationAssembly = typeof(TelegramGroupsAdmin.Data.Migrations.InitialSchema).Assembly;
 
         app.Logger.LogInformation("Running PostgreSQL database migrations");
 

@@ -4,6 +4,8 @@ using System.Reflection;
 using System.Text.Json;
 using Dapper;
 using Npgsql;
+using TelegramGroupsAdmin.Data.Attributes;
+using TelegramGroupsAdmin.Data.Services;
 
 namespace TelegramGroupsAdmin.Services.Backup;
 
@@ -11,12 +13,17 @@ public class BackupService : IBackupService
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly ILogger<BackupService> _logger;
+    private readonly ITotpProtectionService _totpProtection;
     private const string CurrentVersion = "2.0";
 
-    public BackupService(NpgsqlDataSource dataSource, ILogger<BackupService> logger)
+    public BackupService(
+        NpgsqlDataSource dataSource,
+        ILogger<BackupService> logger,
+        ITotpProtectionService totpProtection)
     {
         _dataSource = dataSource;
         _logger = logger;
+        _totpProtection = totpProtection;
     }
 
     public async Task<byte[]> ExportAsync()
@@ -113,9 +120,17 @@ public class BackupService : IBackupService
 
         // Match tables to DTOs by convention (snake_case table name → PascalCaseDto)
         var mapping = new Dictionary<string, Type>();
+        var knownSystemTables = new HashSet<string> { "VersionInfo" }; // FluentMigrator table
 
         foreach (var tableName in tableNames)
         {
+            // Skip known system tables
+            if (knownSystemTables.Contains(tableName))
+            {
+                _logger.LogDebug("Skipping system table '{TableName}'", tableName);
+                continue;
+            }
+
             var dtoType = FindDtoForTable(tableName, dtoTypes);
             if (dtoType != null)
             {
@@ -199,8 +214,103 @@ public class BackupService : IBackupService
 
         var resultProperty = task.GetType().GetProperty("Result");
         var enumerable = (IEnumerable<object>)resultProperty!.GetValue(task)!;
+        var records = enumerable.ToList();
 
-        return enumerable.ToList();
+        // Check if this DTO has any properties with [ProtectedData] attribute
+        var protectedProperties = dtoType.GetProperties()
+            .Where(p => p.GetCustomAttribute<ProtectedDataAttribute>() != null)
+            .ToList();
+
+        if (protectedProperties.Any())
+        {
+            records = await DecryptProtectedDataAsync(records, dtoType, protectedProperties);
+        }
+
+        return records;
+    }
+
+    /// <summary>
+    /// Decrypt Data Protection encrypted fields for cross-machine backup
+    /// </summary>
+    private Task<List<object>> DecryptProtectedDataAsync(List<object> records, Type dtoType, List<PropertyInfo> protectedProperties)
+    {
+        var decryptedRecords = new List<object>();
+
+        foreach (var record in records)
+        {
+            var recordCopy = Activator.CreateInstance(dtoType)!;
+
+            foreach (var prop in dtoType.GetProperties())
+            {
+                var value = prop.GetValue(record);
+
+                // Check if this property has [ProtectedData] attribute and has a value
+                if (protectedProperties.Contains(prop) && value is string encryptedValue && !string.IsNullOrEmpty(encryptedValue))
+                {
+                    try
+                    {
+                        // Decrypt using current machine's keys
+                        var decryptedValue = _totpProtection.Unprotect(encryptedValue);
+                        prop.SetValue(recordCopy, decryptedValue);
+                        _logger.LogDebug("Decrypted protected property {PropertyName}", prop.Name);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to decrypt protected property {PropertyName}, keeping encrypted value", prop.Name);
+                        prop.SetValue(recordCopy, value);
+                    }
+                }
+                else
+                {
+                    // Copy non-protected properties as-is
+                    prop.SetValue(recordCopy, value);
+                }
+            }
+
+            decryptedRecords.Add(recordCopy);
+        }
+
+        return Task.FromResult(decryptedRecords);
+    }
+
+    /// <summary>
+    /// Encrypt Data Protection fields using the new machine's keys during restore
+    /// </summary>
+    private object EncryptProtectedData(object? dto, Type dtoType, List<PropertyInfo> protectedProperties)
+    {
+        if (dto == null)
+            return dto!;
+
+        var encryptedDto = Activator.CreateInstance(dtoType)!;
+
+        foreach (var prop in dtoType.GetProperties())
+        {
+            var value = prop.GetValue(dto);
+
+            // Check if this property has [ProtectedData] attribute and has a value
+            if (protectedProperties.Contains(prop) && value is string decryptedValue && !string.IsNullOrEmpty(decryptedValue))
+            {
+                try
+                {
+                    // Encrypt using new machine's keys
+                    var encryptedValue = _totpProtection.Protect(decryptedValue);
+                    prop.SetValue(encryptedDto, encryptedValue);
+                    _logger.LogDebug("Encrypted protected property {PropertyName}", prop.Name);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to encrypt protected property {PropertyName}", prop.Name);
+                    throw;
+                }
+            }
+            else
+            {
+                // Copy non-protected properties as-is
+                prop.SetValue(encryptedDto, value);
+            }
+        }
+
+        return encryptedDto;
     }
 
     public async Task RestoreAsync(byte[] backupBytes)
@@ -245,13 +355,52 @@ public class BackupService : IBackupService
             // Discover current table/DTO mappings
             var currentTables = await DiscoverTablesAsync(connection);
 
+            // Validate that all backup tables have DTOs (except known system tables)
+            var knownSystemTables = new HashSet<string> { "VersionInfo" };
+            var missingDtos = backup.Data.Keys
+                .Where(t => !knownSystemTables.Contains(t))
+                .Where(t => !currentTables.ContainsKey(t))
+                .ToList();
+
+            if (missingDtos.Any())
+            {
+                throw new InvalidOperationException(
+                    $"Cannot restore: backup contains tables without DTOs: {string.Join(", ", missingDtos)}. " +
+                    "This likely means the backup is from a different schema version or DTOs are missing.");
+            }
+
             // Wipe all tables in reverse dependency order
             _logger.LogWarning("Wiping all tables...");
             await WipeAllTablesAsync(connection, transaction, currentTables.Keys.ToList());
 
-            // Restore each table from backup
-            foreach (var (tableName, records) in backup.Data)
+            // Get foreign key dependencies for proper restore order
+            const string fkQuery = """
+                SELECT
+                    tc.table_name,
+                    ccu.table_name AS foreign_table_name
+                FROM information_schema.table_constraints AS tc
+                JOIN information_schema.constraint_column_usage AS ccu
+                    ON tc.constraint_name = ccu.constraint_name
+                WHERE tc.constraint_type = 'FOREIGN KEY'
+                """;
+
+            var fkDeps = await connection.QueryAsync<(string table_name, string foreign_table_name)>(fkQuery);
+
+            // Sort tables in dependency order (parents before children) for restore
+            var tablesToRestore = backup.Data.Keys.Where(t => currentTables.ContainsKey(t)).ToList();
+            _logger.LogInformation("Tables to restore: {Tables}", string.Join(", ", tablesToRestore));
+            var sortedTables = TopologicalSort(tablesToRestore, fkDeps.ToList());
+            // TopologicalSort already returns in correct order for insertion (handles circular deps)
+            _logger.LogInformation("Restore order after sort: {Tables}", string.Join(", ", sortedTables));
+
+            // Restore each table from backup in dependency order
+            foreach (var tableName in sortedTables)
             {
+                if (!backup.Data.TryGetValue(tableName, out var records))
+                {
+                    continue; // Table not in backup
+                }
+
                 if (!currentTables.TryGetValue(tableName, out var dtoType))
                 {
                     _logger.LogWarning("Table {TableName} from backup not found in current schema, skipping", tableName);
@@ -260,9 +409,9 @@ public class BackupService : IBackupService
 
                 try
                 {
-                    _logger.LogDebug("Restoring table: {TableName} ({Count} records)", tableName, records.Count);
+                    _logger.LogInformation("Restoring table: {TableName} ({Count} records)", tableName, records.Count);
                     await RestoreTableAsync(connection, transaction, tableName, dtoType, records);
-                    _logger.LogDebug("Restored {Count} records to {TableName}", records.Count, tableName);
+                    _logger.LogInformation("Restored {Count} records to {TableName}", records.Count, tableName);
                 }
                 catch (Exception ex)
                 {
@@ -273,6 +422,9 @@ public class BackupService : IBackupService
 
             await transaction.CommitAsync();
             _logger.LogInformation("System restore complete - all data restored successfully");
+
+            // Reset all identity sequences to prevent duplicate key violations
+            await ResetSequencesAsync(connection, sortedTables);
         }
         catch (Exception ex)
         {
@@ -291,13 +443,18 @@ public class BackupService : IBackupService
             return;
         }
 
+        // Temporarily disable FK constraints for self-referencing tables
+        await connection.ExecuteAsync($"ALTER TABLE {tableName} DISABLE TRIGGER ALL", transaction);
+
         // Get column names from DTO type using reflection
         var properties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
         var columnNames = properties.Select(p => p.Name).ToList();
         var columnList = string.Join(", ", columnNames);
         var paramList = string.Join(", ", columnNames.Select(c => $"@{c}"));
 
-        var sql = $"INSERT INTO {tableName} ({columnList}) VALUES ({paramList})";
+        // Use OVERRIDING SYSTEM VALUE for tables with GENERATED ALWAYS AS IDENTITY columns
+        // This allows us to insert explicit ID values during restore
+        var sql = $"INSERT INTO {tableName} ({columnList}) OVERRIDING SYSTEM VALUE VALUES ({paramList})";
 
         // Deserialize JSON elements back to DTO type
         var jsonOptions = new JsonSerializerOptions
@@ -305,16 +462,65 @@ public class BackupService : IBackupService
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
         };
 
+        // Check if this DTO has any properties with [ProtectedData] attribute
+        var protectedProperties = dtoType.GetProperties()
+            .Where(p => p.GetCustomAttribute<ProtectedDataAttribute>() != null)
+            .ToList();
+
         foreach (var record in records)
         {
             // Convert object back to DTO type via JSON round-trip (handles JsonElement → DTO)
             var jsonElement = (JsonElement)record;
             var dto = JsonSerializer.Deserialize(jsonElement.GetRawText(), dtoType, jsonOptions);
 
+            // Encrypt any [ProtectedData] properties for the new machine
+            if (protectedProperties.Any())
+            {
+                dto = EncryptProtectedData(dto, dtoType, protectedProperties);
+            }
+
             await connection.ExecuteAsync(sql, dto, transaction);
         }
 
+        // Re-enable FK constraints
+        await connection.ExecuteAsync($"ALTER TABLE {tableName} ENABLE TRIGGER ALL", transaction);
+
         _logger.LogDebug("Inserted {Count} records into {TableName}", records.Count, tableName);
+    }
+
+    private async Task ResetSequencesAsync(NpgsqlConnection connection, List<string> tables)
+    {
+        // Query for all identity columns and their sequences
+        const string sequenceQuery = """
+            SELECT
+                c.table_name,
+                c.column_name,
+                pg_get_serial_sequence(quote_ident(c.table_name), quote_ident(c.column_name)) as sequence_name
+            FROM information_schema.columns c
+            WHERE c.table_schema = 'public'
+                AND c.is_identity = 'YES'
+                AND c.table_name = ANY(@tables)
+            """;
+
+        var identityColumns = await connection.QueryAsync<(string table_name, string column_name, string sequence_name)>(
+            sequenceQuery,
+            new { tables }
+        );
+
+        foreach (var (tableName, columnName, sequenceName) in identityColumns)
+        {
+            if (string.IsNullOrEmpty(sequenceName))
+                continue;
+
+            // Reset sequence to max(id) + 1 from the table
+            var resetSql = $"SELECT setval('{sequenceName}', COALESCE((SELECT MAX({columnName}) FROM {tableName}), 1))";
+            await connection.ExecuteScalarAsync(resetSql);
+
+            _logger.LogDebug("Reset sequence {SequenceName} for {TableName}.{ColumnName}",
+                sequenceName, tableName, columnName);
+        }
+
+        _logger.LogInformation("All identity sequences reset successfully");
     }
 
     private async Task WipeAllTablesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<string> tables)
@@ -332,8 +538,9 @@ public class BackupService : IBackupService
 
         var fkDeps = await connection.QueryAsync<(string table_name, string foreign_table_name)>(fkQuery);
 
-        // Build dependency graph and perform topological sort (reverse for deletion order)
+        // Build dependency graph and perform topological sort
         var sortedTables = TopologicalSort(tables, fkDeps.ToList());
+        sortedTables.Reverse(); // Reverse for deletion order (children before parents)
 
         foreach (var table in sortedTables)
         {
@@ -343,7 +550,7 @@ public class BackupService : IBackupService
     }
 
     /// <summary>
-    /// Topological sort for table deletion order (children before parents)
+    /// Topological sort for table restore/insertion order (parents before children)
     /// </summary>
     private List<string> TopologicalSort(List<string> tables, List<(string child, string parent)> dependencies)
     {
@@ -358,8 +565,13 @@ public class BackupService : IBackupService
         }
 
         // Build adjacency list (parent → children)
+        // Skip self-referencing foreign keys (circular dependencies within same table)
         foreach (var (child, parent) in dependencies)
         {
+            // Skip if child and parent are the same table (self-referencing FK)
+            if (child == parent)
+                continue;
+
             if (graph.ContainsKey(parent) && graph.ContainsKey(child))
             {
                 graph[parent].Add(child);
@@ -384,8 +596,13 @@ public class BackupService : IBackupService
             }
         }
 
-        // Reverse for deletion order (children first, parents last)
-        result.Reverse();
+        // Add any remaining tables (circular dependencies or isolated tables)
+        var remaining = tables.Where(t => !result.Contains(t)).ToList();
+        result.AddRange(remaining);
+
+        // Result is currently in insertion order (parents before children)
+        // Reverse ONLY for deletion in WipeAllTablesAsync
+        // For restore, we DON'T reverse (keep insertion order)
         return result;
     }
 
