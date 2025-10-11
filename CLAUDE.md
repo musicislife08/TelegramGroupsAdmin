@@ -687,7 +687,27 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [ ] **User actions UI** - Review bans, warns, appeals (future)
 - [ ] **Multi-chat management** - Configure per-chat settings (future)
 
-**Phase 2.5: Advanced Features** 🔮 **FUTURE**
+**Phase 2.5: Backup & Restore System** 🔄 **PLANNED**
+- [ ] **Full system backup/restore** - Replace existing `--export-users`/`--import-users` with comprehensive backup
+  - **Format:** tar.gz containing MessagePack-serialized data (not JSON - binary, 50% smaller, fast)
+  - **Scope:** ALL tables (users w/ TOTP secrets, messages, spam config, Telegram mappings, everything)
+  - **CLI flags:** `--export <path>` / `--import <path>` (replaces old user-only export)
+  - **Restore behavior:** ALWAYS full wipe + restore (no merge mode, preserves all IDs/GUIDs exactly)
+  - **Transaction safety:** Single transaction, full rollback on any error
+  - **UI pages:** `/backup` (Admin/Owner export button), `/restore` (file upload + wipe warning)
+  - **First-time setup:** Add "Restore from backup" option to registration flow
+  - **Security:** Unencrypted (user responsibility to secure/delete file after use)
+  - **Implementation:** IBackupService replaces IUserDataExportService, remove old UserDataExportService
+  - **Tasks:**
+    1. Add MessagePack NuGet package
+    2. Create backup data models for all tables
+    3. Implement IBackupService (ExportAsync → tar.gz bytes, RestoreAsync → wipe all + import)
+    4. Update Program.cs CLI flags (--export/--import)
+    5. Create /backup and /restore UI pages
+    6. Add restore option to first-time setup
+    7. Remove old UserDataExportService
+
+**Phase 2.6: Advanced Features** 🔮 **FUTURE**
 - [ ] **Ban appeal workflow** - UI + bot commands
 - [ ] **Join verification** - Rule acceptance on join
 - [ ] **OpenAI-guided setup** - Smart configuration
