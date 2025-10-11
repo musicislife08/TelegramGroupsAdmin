@@ -1,0 +1,232 @@
+@using TelegramGroupsAdmin.Services.Backup
+@using Microsoft.AspNetCore.Components.Forms
+@inject IBackupService BackupService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<MudGrid>
+    <!-- Backup Section -->
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+            <MudText Typo="Typo.h6" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Backup" Class="mr-2" />
+                Create Backup
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                Export a complete backup of all system data (users, messages, spam config, TOTP secrets, etc.)
+            </MudText>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Download"
+                       OnClick="ExportBackup"
+                       Disabled="@_isExporting"
+                       FullWidth="true">
+                @if (_isExporting)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Creating backup...</span>
+                }
+                else
+                {
+                    <span>Create & Download Backup</span>
+                }
+            </MudButton>
+
+            @if (_lastBackupSize > 0)
+            {
+                <MudAlert Severity="Severity.Success" Class="mt-4">
+                    Backup created: @FormatBytes(_lastBackupSize)
+                </MudAlert>
+            }
+
+            <MudAlert Severity="Severity.Info" Class="mt-4" Dense="true">
+                <MudText Typo="Typo.body2">
+                    <strong>What's included:</strong> Users, messages, spam config, bans/warnings, Telegram mappings, chats, reports, audit logs
+                </MudText>
+            </MudAlert>
+
+            <MudAlert Severity="Severity.Warning" Class="mt-2" Dense="true">
+                <MudText Typo="Typo.body2">
+                    <strong>Security:</strong> Contains TOTP secrets and password hashes. Store securely and delete after transfer.
+                </MudText>
+            </MudAlert>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Restore Section -->
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+            <MudText Typo="Typo.h6" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.SettingsBackupRestore" Class="mr-2" />
+                Restore from Backup
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                Restore system from a backup file (THIS WILL WIPE ALL CURRENT DATA)
+            </MudText>
+
+            @if (_metadata != null)
+            {
+                <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Backup Info</MudText>
+                    <MudText Typo="Typo.body2"><strong>Created:</strong> @DateTimeOffset.FromUnixTimeSeconds(_metadata.CreatedAt).ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
+                    <MudText Typo="Typo.body2"><strong>Users:</strong> @_metadata.UserCount | <strong>Messages:</strong> @_metadata.MessageCount</MudText>
+                    <MudText Typo="Typo.body2"><strong>Size:</strong> @FormatBytes(_metadata.FileSizeBytes)</MudText>
+                </MudPaper>
+            }
+
+            <MudFileUpload T="IBrowserFile" FilesChanged="OnFileSelected" Accept=".tar.gz,.gz">
+                <ActivatorContent>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Upload"
+                               Disabled="@_isRestoring"
+                               FullWidth="true">
+                        Select Backup File
+                    </MudButton>
+                </ActivatorContent>
+            </MudFileUpload>
+
+            @if (_selectedFile != null)
+            {
+                <MudText Typo="Typo.body2" Class="mt-2">
+                    <strong>@_selectedFile.Name</strong> (@FormatBytes(_selectedFile.Size))
+                </MudText>
+            }
+
+            @if (_metadata != null && !_isRestoring)
+            {
+                <MudCheckBox @bind-Value="_confirmWipe" Color="Color.Error" Class="mt-3" Dense="true">
+                    I understand this will <strong>permanently delete all current data</strong>
+                </MudCheckBox>
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.RestoreFromTrash"
+                           OnClick="RestoreBackup"
+                           Disabled="@(!_confirmWipe)"
+                           FullWidth="true"
+                           Class="mt-2">
+                    WIPE & RESTORE FROM BACKUP
+                </MudButton>
+            }
+
+            @if (_isRestoring)
+            {
+                <MudProgressLinear Indeterminate="true" Class="mt-3" />
+                <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
+                    Restoring... This may take a few minutes.
+                </MudText>
+            }
+
+            <MudAlert Severity="Severity.Error" Class="mt-3" Dense="true">
+                <MudText Typo="Typo.body2">
+                    <strong>Warning:</strong> Restore wipes ALL data and replaces it with the backup. You will be logged out after restore.
+                </MudText>
+            </MudAlert>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private bool _isExporting = false;
+    private long _lastBackupSize = 0;
+
+    private IBrowserFile? _selectedFile;
+    private BackupMetadata? _metadata;
+    private bool _confirmWipe = false;
+    private bool _isRestoring = false;
+    private byte[]? _backupBytes;
+
+    private async Task ExportBackup()
+    {
+        _isExporting = true;
+        _lastBackupSize = 0;
+        StateHasChanged();
+
+        try
+        {
+            var backupBytes = await BackupService.ExportAsync();
+            _lastBackupSize = backupBytes.Length;
+
+            var fileName = $"telegram_groups_admin_backup_{DateTimeOffset.UtcNow:yyyyMMdd_HHmmss}.tar.gz";
+            await JS.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(backupBytes));
+
+            Snackbar.Add($"Backup created successfully! ({FormatBytes(backupBytes.Length)})", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Backup failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnFileSelected(IBrowserFile file)
+    {
+        _selectedFile = file;
+        _metadata = null;
+        _confirmWipe = false;
+        StateHasChanged();
+
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024 * 500); // 500MB max
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            _backupBytes = ms.ToArray();
+
+            _metadata = await BackupService.GetMetadataAsync(_backupBytes);
+            Snackbar.Add("Backup file loaded successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to read backup file: {ex.Message}", Severity.Error);
+            _selectedFile = null;
+            _backupBytes = null;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RestoreBackup()
+    {
+        if (_backupBytes == null || !_confirmWipe)
+            return;
+
+        _isRestoring = true;
+        StateHasChanged();
+
+        try
+        {
+            await BackupService.RestoreAsync(_backupBytes);
+            Snackbar.Add("System restored successfully! You will be logged out.", Severity.Success);
+
+            await Task.Delay(2000);
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Restore failed: {ex.Message}", Severity.Error);
+            _isRestoring = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len /= 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+}

@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "Admin,Owner")]
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Components.Shared.SpamManagement
+@using TelegramGroupsAdmin.Components.Shared
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -60,6 +61,10 @@
                 </MudText>
             </MudPaper>
         </MudTabPanel>
+
+        <MudTabPanel Text="Backup & Restore" Icon="@Icons.Material.Filled.Backup">
+            <BackupRestore />
+        </MudTabPanel>
     </MudTabs>
 </MudContainer>
 
@@ -78,6 +83,7 @@
             "notifications" => 3,
             "security" => 4,
             "integrations" => 5,
+            "backup" => 6,
             _ => 0
         };
 
@@ -95,6 +101,7 @@
             "notifications" => 3,
             "security" => 4,
             "integrations" => 5,
+            "backup" => 6,
             _ => 0
         };
 
@@ -118,6 +125,7 @@
             3 => "notifications",
             4 => "security",
             5 => "integrations",
+            6 => "backup",
             _ => "spam"
         };
 

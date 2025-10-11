@@ -2,10 +2,12 @@
 @using System.Net.Http.Json
 @using System.Text.Json
 @using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Components.Shared
 @inject HttpClient HttpClient
 @inject IAuthService AuthService
 @inject NavigationManager Navigation
 @inject ILogger<Register> Logger
+@inject IDialogService DialogService
 @attribute [AllowAnonymous]
 
 <PageTitle>Register - Telegram Groups Admin</PageTitle>
@@ -32,7 +34,7 @@
                 <MudButton Variant="Variant.Text"
                            Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.SettingsBackupRestore"
-                           Href="/restore">
+                           OnClick="OpenRestoreModal">
                     Restore from Backup
                 </MudButton>
             </MudAlert>
@@ -131,6 +133,18 @@
         {
             _inviteToken = InviteQueryParam;
         }
+    }
+
+    private async Task OpenRestoreModal()
+    {
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        await DialogService.ShowAsync<RestoreBackupModal>("Restore from Backup", options);
     }
 
     private async Task HandleRegisterAsync()

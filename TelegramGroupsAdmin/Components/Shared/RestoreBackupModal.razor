@@ -1,0 +1,148 @@
+@using TelegramGroupsAdmin.Services.Backup
+@using Microsoft.AspNetCore.Components.Forms
+@inject IBackupService BackupService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-4">Restore System from Backup</MudText>
+
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            <MudText Typo="Typo.body2">
+                This will restore all users, settings, and data from a backup file.
+                After restore completes, log in with credentials from the backup.
+            </MudText>
+        </MudAlert>
+
+        @if (_metadata != null)
+        {
+            <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Backup Information</MudText>
+                <MudText Typo="Typo.body2"><strong>Created:</strong> @DateTimeOffset.FromUnixTimeSeconds(_metadata.CreatedAt).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+                <MudText Typo="Typo.body2"><strong>Version:</strong> @_metadata.Version</MudText>
+                <MudText Typo="Typo.body2"><strong>Users:</strong> @_metadata.UserCount</MudText>
+                <MudText Typo="Typo.body2"><strong>Messages:</strong> @_metadata.MessageCount</MudText>
+                <MudText Typo="Typo.body2"><strong>File Size:</strong> @FormatBytes(_metadata.FileSizeBytes)</MudText>
+            </MudPaper>
+        }
+
+        <MudFileUpload T="IBrowserFile" FilesChanged="OnFileSelected" Accept=".tar.gz,.gz">
+            <ActivatorContent>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Upload"
+                           Disabled="@_isRestoring"
+                           FullWidth="true">
+                    Select Backup File
+                </MudButton>
+            </ActivatorContent>
+        </MudFileUpload>
+
+        @if (_selectedFile != null)
+        {
+            <MudText Typo="Typo.body2" Class="mt-2">
+                Selected: <strong>@_selectedFile.Name</strong> (@FormatBytes(_selectedFile.Size))
+            </MudText>
+        }
+
+        @if (_isRestoring)
+        {
+            <MudProgressLinear Indeterminate="true" Class="mt-4" />
+            <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
+                Restoring system... This may take a few minutes.
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@_isRestoring">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="RestoreBackup"
+                   Disabled="@(_metadata == null || _isRestoring)">
+            Restore
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private IBrowserFile? _selectedFile;
+    private BackupMetadata? _metadata;
+    private bool _isRestoring = false;
+    private byte[]? _backupBytes;
+
+    private async Task OnFileSelected(IBrowserFile file)
+    {
+        _selectedFile = file;
+        _metadata = null;
+        StateHasChanged();
+
+        try
+        {
+            // Read file (500MB max)
+            using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024 * 500);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            _backupBytes = ms.ToArray();
+
+            // Get metadata
+            _metadata = await BackupService.GetMetadataAsync(_backupBytes);
+            Snackbar.Add("Backup file loaded successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to read backup file: {ex.Message}", Severity.Error);
+            _selectedFile = null;
+            _backupBytes = null;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RestoreBackup()
+    {
+        if (_backupBytes == null)
+            return;
+
+        _isRestoring = true;
+        StateHasChanged();
+
+        try
+        {
+            await BackupService.RestoreAsync(_backupBytes);
+            Snackbar.Add("System restored successfully! Redirecting to login...", Severity.Success);
+
+            // Close dialog and redirect
+            MudDialog.Close(DialogResult.Ok(true));
+            await Task.Delay(1000);
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Restore failed: {ex.Message}", Severity.Error);
+            _isRestoring = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len /= 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+}
