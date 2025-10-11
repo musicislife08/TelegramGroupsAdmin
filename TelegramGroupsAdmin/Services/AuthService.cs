@@ -40,6 +40,38 @@ public class AuthService(
             return new AuthResult(false, null, null, null, false, false, "Invalid email or password");
         }
 
+        // Check user status (Disabled = 2, Deleted = 3)
+        if (user.Status == UserStatus.Disabled)
+        {
+            logger.LogWarning("Login attempt for disabled user: {UserId}", user.Id);
+
+            // Audit log - failed login (disabled account)
+            await auditLog.LogEventAsync(
+                AuditEventType.UserLoginFailed,
+                actorUserId: user.Id,
+                targetUserId: user.Id,
+                value: "Account disabled",
+                ct: ct);
+
+            return new AuthResult(false, null, null, null, false, false, "Account has been disabled. Please contact an administrator.");
+        }
+
+        if (user.Status == UserStatus.Deleted)
+        {
+            logger.LogWarning("Login attempt for deleted user: {UserId}", user.Id);
+
+            // Audit log - failed login (deleted account)
+            await auditLog.LogEventAsync(
+                AuditEventType.UserLoginFailed,
+                actorUserId: user.Id,
+                targetUserId: user.Id,
+                value: "Account deleted",
+                ct: ct);
+
+            return new AuthResult(false, null, null, null, false, false, "Account has been deleted. Please contact an administrator.");
+        }
+
+        // Check legacy is_active field (should be redundant with status check, but keep for safety)
         if (!user.IsActive)
         {
             logger.LogWarning("Login attempt for inactive user: {UserId}", user.Id);
@@ -49,7 +81,7 @@ public class AuthService(
                 AuditEventType.UserLoginFailed,
                 actorUserId: user.Id,
                 targetUserId: user.Id,
-                value: "Account inactive",
+                value: "Account inactive (legacy flag)",
                 ct: ct);
 
             return new AuthResult(false, null, null, null, false, false, "Account is inactive");

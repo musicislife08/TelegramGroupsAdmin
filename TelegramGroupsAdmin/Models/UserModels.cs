@@ -116,39 +116,37 @@ public enum PermissionLevel
 
 public enum AuditEventType
 {
-    Login = 0,
-    Logout = 1,
-    PasswordChange = 2,
-    TotpEnabled = 3,
-    TotpDisabled = 4,
-    UserCreated = 5,
-    UserModified = 6,
-    UserDeleted = 7,
-    InviteCreated = 8,
-    InviteUsed = 9,
-    InviteRevoked = 10,
-    PermissionChanged = 11,
-    FailedLogin = 12,
-    PasswordReset = 13,
-    UserInviteCreated = 14,
-    UserInviteRevoked = 15,
-    UserPermissionChanged = 16,
-    UserStatusChanged = 17,
-    UserTotpDisabled = 18,
-    DataExported = 19,
-    UserTotpEnabled = 20,
-    UserEmailChanged = 21,
-    UserPasswordChanged = 22,
-    UserLoginFailed = 23,
-    UserLogout = 24,
-    MessageExported = 25,
-    UserLogin = 26,
-    UserRegistered = 27,
-    UserPasswordReset = 28,
-    UserPasswordResetRequested = 29,
-    UserEmailVerificationSent = 30,
-    SystemConfigChanged = 31,
-    UserEmailVerified = 32
+    // Data Operations
+    DataExported = 0,
+    MessageExported = 1,
+
+    // System Events
+    SystemConfigChanged = 2,
+
+    // User Authentication
+    UserEmailVerificationSent = 3,
+    UserEmailVerified = 4,
+    UserLogin = 5,
+    UserLoginFailed = 6,
+    UserLogout = 7,
+    UserPasswordReset = 8,
+    UserPasswordResetRequested = 9,
+
+    // User Invites
+    UserInviteCreated = 10,
+    UserInviteRevoked = 11,
+
+    // User Lifecycle
+    UserDeleted = 12,
+    UserRegistered = 13,
+    UserStatusChanged = 14,
+
+    // User Profile Changes
+    UserEmailChanged = 15,
+    UserPasswordChanged = 16,
+    UserPermissionChanged = 17,
+    UserTotpReset = 18,
+    UserTotpEnabled = 19
 }
 
 public enum InviteFilter

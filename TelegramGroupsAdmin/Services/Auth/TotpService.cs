@@ -152,10 +152,10 @@ public class TotpService(
 
         // Audit log
         await auditLog.LogEventAsync(
-            AuditEventType.UserTotpDisabled,
+            AuditEventType.UserTotpReset,
             actorUserId: userId,
             targetUserId: userId,
-            value: "TOTP 2FA disabled",
+            value: "TOTP 2FA disabled by user",
             ct: ct);
 
         return true;

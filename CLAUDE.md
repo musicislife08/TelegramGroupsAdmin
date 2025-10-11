@@ -583,6 +583,8 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 4. **Null Safety** - Added proper null checking for all nullable references
 5. **Type Safety** - Fixed all generic type inference issues
 6. **Telegram API Alignment** - Refactored all "group" terminology to "chat" for consistency with Telegram Bot API
+7. **Enum Cleanup** - Removed 13 duplicate AuditEventType values, consolidated to 20 unique values with data migration
+8. **UI/UX Improvements** - Three-dot menus, instant filters, proper disabled user login messages
 
 ## Troubleshooting
 **Telegram bot not caching**: Check TELEGRAM__BOTTOKEN, bot added to chat, privacy mode off

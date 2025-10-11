@@ -50,7 +50,7 @@ public class UserRepository
                    email_verification_token_expires_at, password_reset_token,
                    password_reset_token_expires_at, totp_setup_started_at
             FROM users
-            WHERE normalized_email = @NormalizedEmail AND status = 1;
+            WHERE normalized_email = @NormalizedEmail AND status != 3;
             """;
 
         var dto = await connection.QueryFirstOrDefaultAsync<DataModels.UserRecordDto>(sql, new { NormalizedEmail = normalizedEmail });
@@ -356,7 +356,6 @@ public class UserRepository
                    email_verification_token_expires_at, password_reset_token,
                    password_reset_token_expires_at, totp_setup_started_at
             FROM users
-            WHERE status != 3
             ORDER BY created_at DESC;
             """;
 

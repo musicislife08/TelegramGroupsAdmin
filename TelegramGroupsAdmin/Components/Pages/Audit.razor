@@ -16,9 +16,16 @@
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
         <MudText Typo="Typo.h4">Audit Log</MudText>
-        <MudChip T="string" Icon="@Icons.Material.Filled.Security" Color="Color.Primary">
-            @_events.Count events
-        </MudChip>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudChip T="string" Icon="@Icons.Material.Filled.Security" Color="Color.Primary">
+                @_events.Count events
+            </MudChip>
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh"
+                          Color="Color.Primary"
+                          OnClick="LoadDataAsync"
+                          title="Refresh Audit Log"
+                          Size="Size.Medium" />
+        </MudStack>
     </MudStack>
 
     @if (_loading)
@@ -29,10 +36,11 @@
     <!-- Filters -->
     <MudPaper Class="pa-4 mb-4" Elevation="2">
         <MudGrid>
-            <MudItem xs="12" sm="6" md="3">
+            <MudItem xs="12" sm="6" md="4">
                 <MudSelect T="AuditEventType?"
                           Label="Event Type"
-                          @bind-Value="_filterEventType"
+                          Value="_filterEventType"
+                          ValueChanged="OnEventTypeFilterChanged"
                           Clearable="true"
                           AnchorOrigin="Origin.BottomCenter">
                     <MudSelectItem T="AuditEventType?" Value="null">All Events</MudSelectItem>
@@ -42,10 +50,11 @@
                     }
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" sm="6" md="3">
+            <MudItem xs="12" sm="6" md="4">
                 <MudSelect T="string?"
                           Label="Actor (Who)"
-                          @bind-Value="_filterActorUserId"
+                          Value="_filterActorUserId"
+                          ValueChanged="OnActorFilterChanged"
                           Clearable="true"
                           AnchorOrigin="Origin.BottomCenter">
                     <MudSelectItem T="string?" Value="null">All Actors</MudSelectItem>
@@ -56,10 +65,11 @@
                     <MudSelectItem T="string?" Value="@("SYSTEM")">SYSTEM</MudSelectItem>
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" sm="6" md="3">
+            <MudItem xs="12" sm="6" md="4">
                 <MudSelect T="string?"
                           Label="Target User"
-                          @bind-Value="_filterTargetUserId"
+                          Value="_filterTargetUserId"
+                          ValueChanged="OnTargetFilterChanged"
                           Clearable="true"
                           AnchorOrigin="Origin.BottomCenter">
                     <MudSelectItem T="string?" Value="null">All Targets</MudSelectItem>
@@ -68,15 +78,6 @@
                         <MudSelectItem T="string?" Value="@user.Id">@user.Email</MudSelectItem>
                     }
                 </MudSelect>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3" Class="d-flex align-end">
-                <MudButton Variant="Variant.Filled"
-                          Color="Color.Primary"
-                          FullWidth="true"
-                          OnClick="ApplyFilters"
-                          StartIcon="@Icons.Material.Filled.FilterList">
-                    Apply Filters
-                </MudButton>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -206,6 +207,24 @@
         }
     }
 
+    private void OnEventTypeFilterChanged(AuditEventType? value)
+    {
+        _filterEventType = value;
+        ApplyFilters();
+    }
+
+    private void OnActorFilterChanged(string? value)
+    {
+        _filterActorUserId = value;
+        ApplyFilters();
+    }
+
+    private void OnTargetFilterChanged(string? value)
+    {
+        _filterTargetUserId = value;
+        ApplyFilters();
+    }
+
     private void ApplyFilters()
     {
         var filtered = _events.AsEnumerable();
@@ -244,32 +263,37 @@
 
     private static string GetEventTypeName(AuditEventType eventType) => eventType switch
     {
-        // User Lifecycle
-        AuditEventType.UserInviteCreated => "Invite Created",
-        AuditEventType.UserInviteRevoked => "Invite Revoked",
-        AuditEventType.UserRegistered => "User Registered",
-        AuditEventType.UserStatusChanged => "Status Changed",
-        AuditEventType.UserDeleted => "User Deleted",
+        // Data Operations
+        AuditEventType.DataExported => "Data Export",
+        AuditEventType.MessageExported => "Message Export",
 
-        // User Profile Changes
-        AuditEventType.UserPermissionChanged => "Permission Changed",
-        AuditEventType.UserEmailChanged => "Email Changed",
-        AuditEventType.UserPasswordChanged => "Password Changed",
-        AuditEventType.UserTotpEnabled => "TOTP Enabled",
-        AuditEventType.UserTotpDisabled => "TOTP Disabled",
+        // System Events
+        AuditEventType.SystemConfigChanged => "Config Changed",
 
-        // Authentication Events
+        // User Authentication
+        AuditEventType.UserEmailVerificationSent => "Email Verification Sent",
+        AuditEventType.UserEmailVerified => "Email Verified",
         AuditEventType.UserLogin => "Login",
         AuditEventType.UserLoginFailed => "Login Failed",
         AuditEventType.UserLogout => "Logout",
         AuditEventType.UserPasswordReset => "Password Reset",
+        AuditEventType.UserPasswordResetRequested => "Password Reset Requested",
 
-        // Data Operations
-        AuditEventType.MessageExported => "Message Export",
-        AuditEventType.DataExported => "Data Export",
+        // User Invites
+        AuditEventType.UserInviteCreated => "Invite Created",
+        AuditEventType.UserInviteRevoked => "Invite Revoked",
 
-        // System Events
-        AuditEventType.SystemConfigChanged => "Config Changed",
+        // User Lifecycle
+        AuditEventType.UserDeleted => "User Deleted",
+        AuditEventType.UserRegistered => "User Registered",
+        AuditEventType.UserStatusChanged => "Status Changed",
+
+        // User Profile Changes
+        AuditEventType.UserEmailChanged => "Email Changed",
+        AuditEventType.UserPasswordChanged => "Password Changed",
+        AuditEventType.UserPermissionChanged => "Permission Changed",
+        AuditEventType.UserTotpReset => "TOTP Reset",
+        AuditEventType.UserTotpEnabled => "TOTP Enabled",
 
         _ => eventType.ToString()
     };
@@ -286,6 +310,7 @@
         AuditEventType.UserStatusChanged => Color.Warning,
         AuditEventType.UserEmailChanged => Color.Warning,
         AuditEventType.UserPasswordChanged => Color.Warning,
+        AuditEventType.UserTotpReset => Color.Warning,
 
         // Errors/Security events
         AuditEventType.UserLoginFailed => Color.Error,

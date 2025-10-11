@@ -77,7 +77,7 @@ public class UserManagementService(UserRepository userRepository, IAuditService 
 
         // Audit log
         await auditLog.LogEventAsync(
-            AuditEventType.UserTotpDisabled,
+            AuditEventType.UserTotpReset,
             actorUserId: modifiedBy,
             targetUserId: userId,
             value: "2FA reset by admin",
