@@ -71,8 +71,8 @@
                 <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
                     <MudText Typo="Typo.subtitle2" Class="mb-2">Backup Info</MudText>
                     <MudText Typo="Typo.body2"><strong>Created:</strong> @DateTimeOffset.FromUnixTimeSeconds(_metadata.CreatedAt).ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
-                    <MudText Typo="Typo.body2"><strong>Users:</strong> @_metadata.UserCount | <strong>Messages:</strong> @_metadata.MessageCount</MudText>
-                    <MudText Typo="Typo.body2"><strong>Size:</strong> @FormatBytes(_metadata.FileSizeBytes)</MudText>
+                    <MudText Typo="Typo.body2"><strong>Version:</strong> @_metadata.Version | <strong>Tables:</strong> @_metadata.TableCount</MudText>
+                    <MudText Typo="Typo.body2"><strong>Size:</strong> @FormatBytes(_selectedFile?.Size ?? 0)</MudText>
                 </MudPaper>
             }
 

@@ -12,16 +12,16 @@ internal static class ModelMappings
     // ChatAdmin mappings
     public static UiModels.ChatAdmin ToUiModel(this DataModels.ChatAdminRecord data) => new()
     {
-        Id = data.id,
-        ChatId = data.chat_id,
-        TelegramId = data.telegram_id,
-        IsCreator = data.is_creator,
-        PromotedAt = data.promoted_at,
-        LastVerifiedAt = data.last_verified_at,
-        IsActive = data.is_active
+        Id = data.Id,
+        ChatId = data.ChatId,
+        TelegramId = data.TelegramId,
+        IsCreator = data.IsCreator,
+        PromotedAt = data.PromotedAt,
+        LastVerifiedAt = data.LastVerifiedAt,
+        IsActive = data.IsActive
     };
 
-    public static DataModels.ChatAdminRecord ToDataModel(this UiModels.ChatAdmin ui) => new()
+    public static DataModels.ChatAdminRecordDto ToDataModel(this UiModels.ChatAdmin ui) => new()
     {
         id = ui.Id,
         chat_id = ui.ChatId,
@@ -371,15 +371,15 @@ internal static class ModelMappings
 
     // TelegramUserMapping mappings
     public static UiModels.TelegramUserMappingRecord ToUiModel(this DataModels.TelegramUserMappingRecord data) => new(
-        Id: data.id,
-        TelegramId: data.telegram_id,
-        TelegramUsername: data.telegram_username,
-        UserId: data.user_id,
-        LinkedAt: data.linked_at,
-        IsActive: data.is_active
+        Id: data.Id,
+        TelegramId: data.TelegramId,
+        TelegramUsername: data.TelegramUsername,
+        UserId: data.UserId,
+        LinkedAt: data.LinkedAt,
+        IsActive: data.IsActive
     );
 
-    public static DataModels.TelegramUserMappingRecord ToDataModel(this UiModels.TelegramUserMappingRecord ui) => new()
+    public static DataModels.TelegramUserMappingRecordDto ToDataModel(this UiModels.TelegramUserMappingRecord ui) => new()
     {
         id = ui.Id,
         telegram_id = ui.TelegramId,
@@ -391,15 +391,15 @@ internal static class ModelMappings
 
     // TelegramLinkToken mappings
     public static UiModels.TelegramLinkTokenRecord ToUiModel(this DataModels.TelegramLinkTokenRecord data) => new(
-        Token: data.token,
-        UserId: data.user_id,
-        CreatedAt: data.created_at,
-        ExpiresAt: data.expires_at,
-        UsedAt: data.used_at,
-        UsedByTelegramId: data.used_by_telegram_id
+        Token: data.Token,
+        UserId: data.UserId,
+        CreatedAt: data.CreatedAt,
+        ExpiresAt: data.ExpiresAt,
+        UsedAt: data.UsedAt,
+        UsedByTelegramId: data.UsedByTelegramId
     );
 
-    public static DataModels.TelegramLinkTokenRecord ToDataModel(this UiModels.TelegramLinkTokenRecord ui) => new()
+    public static DataModels.TelegramLinkTokenRecordDto ToDataModel(this UiModels.TelegramLinkTokenRecord ui) => new()
     {
         token = ui.Token,
         user_id = ui.UserId,

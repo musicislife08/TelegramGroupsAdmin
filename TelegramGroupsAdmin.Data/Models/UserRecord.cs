@@ -95,16 +95,16 @@ public record UserRecord(
 // DTO for RecoveryCodeRecord
 public record RecoveryCodeRecordDto
 {
-    public long Id { get; init; }
-    public string UserId { get; init; } = string.Empty;
-    public string CodeHash { get; init; } = string.Empty;
-    public long? UsedAt { get; init; }
+    public long id { get; init; }
+    public string user_id { get; init; } = string.Empty;
+    public string code_hash { get; init; } = string.Empty;
+    public long? used_at { get; init; }
 
     public RecoveryCodeRecord ToRecoveryCodeRecord() => new RecoveryCodeRecord(
-        Id: Id,
-        UserId: UserId,
-        CodeHash: CodeHash,
-        UsedAt: UsedAt
+        Id: id,
+        UserId: user_id,
+        CodeHash: code_hash,
+        UsedAt: used_at
     );
 }
 

@@ -6,7 +6,7 @@ namespace TelegramGroupsAdmin.Services.Backup;
 public interface IBackupService
 {
     /// <summary>
-    /// Export all system data to a tar.gz file
+    /// Export all system data to a gzip-compressed JSON file
     /// </summary>
     /// <returns>Compressed backup file bytes</returns>
     Task<byte[]> ExportAsync();
@@ -14,24 +14,12 @@ public interface IBackupService
     /// <summary>
     /// Restore system from backup file (WIPES ALL DATA FIRST)
     /// </summary>
-    /// <param name="backupBytes">tar.gz backup file bytes</param>
+    /// <param name="backupBytes">gzip backup file bytes</param>
     Task RestoreAsync(byte[] backupBytes);
 
     /// <summary>
     /// Get backup metadata without restoring
     /// </summary>
-    /// <param name="backupBytes">tar.gz backup file bytes</param>
+    /// <param name="backupBytes">gzip backup file bytes</param>
     Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes);
 }
-
-/// <summary>
-/// Metadata about a backup file
-/// </summary>
-public record BackupMetadata(
-    long CreatedAt,
-    string Version,
-    int UserCount,
-    int MessageCount,
-    int DetectionCount,
-    long FileSizeBytes
-);

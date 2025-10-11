@@ -1,10 +1,10 @@
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// Data model for telegram_user_mappings table (database DTO)
+/// DTO for telegram_user_mappings table (database DTO)
 /// Maps Telegram users to web app users for permission checking
 /// </summary>
-public record TelegramUserMappingRecord
+public record TelegramUserMappingRecordDto
 {
     public long id { get; init; }
     public long telegram_id { get; init; }
@@ -13,3 +13,12 @@ public record TelegramUserMappingRecord
     public long linked_at { get; init; }
     public bool is_active { get; init; }
 }
+
+public record TelegramUserMappingRecord(
+    long Id,
+    long TelegramId,
+    string? TelegramUsername,
+    string UserId,
+    long LinkedAt,
+    bool IsActive
+);

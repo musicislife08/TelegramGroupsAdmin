@@ -1,22 +1,21 @@
+using System.Data;
 using System.IO.Compression;
+using System.Reflection;
+using System.Text.Json;
 using Dapper;
-using MessagePack;
 using Npgsql;
 
 namespace TelegramGroupsAdmin.Services.Backup;
 
-/// <summary>
-/// Service for creating and restoring full system backups using MessagePack + tar.gz compression
-/// </summary>
 public class BackupService : IBackupService
 {
-    private readonly string _connectionString;
+    private readonly NpgsqlDataSource _dataSource;
     private readonly ILogger<BackupService> _logger;
+    private const string CurrentVersion = "2.0";
 
-    public BackupService(IConfiguration configuration, ILogger<BackupService> logger)
+    public BackupService(NpgsqlDataSource dataSource, ILogger<BackupService> logger)
     {
-        _connectionString = configuration.GetConnectionString("PostgreSQL")
-            ?? throw new InvalidOperationException("PostgreSQL connection string not found");
+        _dataSource = dataSource;
         _logger = logger;
     }
 
@@ -24,576 +23,400 @@ public class BackupService : IBackupService
     {
         _logger.LogInformation("Starting full system backup export");
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-
         var backup = new SystemBackup
         {
-            CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            Version = "1.0"
+            Metadata = new BackupMetadata
+            {
+                Version = CurrentVersion,
+                CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                AppVersion = "1.0.0"
+            }
         };
 
-        // Export all tables
-        backup.Users = (await ExportUsersAsync(connection)).ToList();
-        backup.Invites = (await ExportInvitesAsync(connection)).ToList();
-        backup.AuditLogs = (await ExportAuditLogsAsync(connection)).ToList();
-        backup.VerificationTokens = (await ExportVerificationTokensAsync(connection)).ToList();
-        backup.Messages = (await ExportMessagesAsync(connection)).ToList();
-        backup.MessageEdits = (await ExportMessageEditsAsync(connection)).ToList();
-        backup.DetectionResults = (await ExportDetectionResultsAsync(connection)).ToList();
-        backup.UserActions = (await ExportUserActionsAsync(connection)).ToList();
-        backup.StopWords = (await ExportStopWordsAsync(connection)).ToList();
-        backup.SpamDetectionConfigs = (await ExportSpamDetectionConfigsAsync(connection)).ToList();
-        backup.SpamCheckConfigs = (await ExportSpamCheckConfigsAsync(connection)).ToList();
-        backup.ChatPrompts = (await ExportChatPromptsAsync(connection)).ToList();
-        backup.ManagedChats = (await ExportManagedChatsAsync(connection)).ToList();
-        backup.ChatAdmins = (await ExportChatAdminsAsync(connection)).ToList();
-        backup.TelegramUserMappings = (await ExportTelegramUserMappingsAsync(connection)).ToList();
-        backup.TelegramLinkTokens = (await ExportTelegramLinkTokensAsync(connection)).ToList();
-        backup.Reports = (await ExportReportsAsync(connection)).ToList();
+        await using var connection = await _dataSource.OpenConnectionAsync();
 
-        _logger.LogInformation(
-            "Exported {UserCount} users, {MessageCount} messages, {DetectionCount} detections",
-            backup.Users.Count, backup.Messages.Count, backup.DetectionResults.Count);
+        // Discover all tables dynamically from database
+        var tables = await DiscoverTablesAsync(connection);
+        _logger.LogInformation("Discovered {TableCount} tables to backup", tables.Count);
 
-        // Serialize with MessagePack
-        var serialized = MessagePackSerializer.Serialize(backup);
+        backup.Metadata.Tables = tables.Keys.ToList();
+        backup.Metadata.TableCount = tables.Count;
 
-        // Compress with gzip
-        using var compressedStream = new MemoryStream();
-        using (var gzipStream = new GZipStream(compressedStream, CompressionLevel.Optimal))
+        // Export each table using reflection
+        foreach (var (tableName, dtoType) in tables)
         {
-            await gzipStream.WriteAsync(serialized);
+            try
+            {
+                _logger.LogDebug("Exporting table: {TableName}", tableName);
+                var records = await ExportTableAsync(connection, tableName, dtoType);
+                backup.Data[tableName] = records;
+                _logger.LogDebug("Exported {Count} records from {TableName}", records.Count, tableName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to export table {TableName}", tableName);
+                throw;
+            }
         }
 
-        var compressed = compressedStream.ToArray();
-        _logger.LogInformation(
-            "Backup complete: {OriginalSize} bytes → {CompressedSize} bytes ({Ratio:F1}% compression)",
-            serialized.Length, compressed.Length, (1 - (double)compressed.Length / serialized.Length) * 100);
+        // Serialize to JSON
+        var jsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = false, // Minimized JSON
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+        };
 
-        return compressed;
+        var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(backup, jsonOptions);
+        _logger.LogInformation("Serialized backup to JSON: {Size} bytes", jsonBytes.Length);
+
+        // Compress with gzip
+        using var outputStream = new MemoryStream();
+        await using (var gzipStream = new GZipStream(outputStream, CompressionLevel.Optimal))
+        {
+            await gzipStream.WriteAsync(jsonBytes);
+        }
+
+        var compressedBytes = outputStream.ToArray();
+        _logger.LogInformation("Backup export complete: {OriginalSize} bytes → {CompressedSize} bytes ({Ratio:P1} compression)",
+            jsonBytes.Length, compressedBytes.Length, 1 - (double)compressedBytes.Length / jsonBytes.Length);
+
+        return compressedBytes;
+    }
+
+    /// <summary>
+    /// Discover all tables and their corresponding DTO types by reflection
+    /// </summary>
+    private async Task<Dictionary<string, Type>> DiscoverTablesAsync(NpgsqlConnection connection)
+    {
+        // Get all tables from database
+        const string sql = """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+            AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+            """;
+
+        var tableNames = (await connection.QueryAsync<string>(sql)).ToList();
+
+        // Load TelegramGroupsAdmin.Data assembly and find all DTO types
+        var dataAssembly = AppDomain.CurrentDomain.GetAssemblies()
+            .FirstOrDefault(a => a.GetName().Name == "TelegramGroupsAdmin.Data")
+            ?? throw new InvalidOperationException("TelegramGroupsAdmin.Data assembly not found");
+
+        var dtoTypes = dataAssembly.GetTypes()
+            .Where(t => t.Namespace == "TelegramGroupsAdmin.Data.Models")
+            .Where(t => t.Name.EndsWith("Dto") && (t.IsClass || t.IsValueType))
+            .ToList();
+
+        _logger.LogDebug("Found {DtoCount} DTO types in Data assembly", dtoTypes.Count);
+
+        // Match tables to DTOs by convention (snake_case table name → PascalCaseDto)
+        var mapping = new Dictionary<string, Type>();
+
+        foreach (var tableName in tableNames)
+        {
+            var dtoType = FindDtoForTable(tableName, dtoTypes);
+            if (dtoType != null)
+            {
+                mapping[tableName] = dtoType;
+                _logger.LogDebug("Mapped table '{TableName}' → {DtoType}", tableName, dtoType.Name);
+            }
+            else
+            {
+                _logger.LogWarning("No DTO found for table '{TableName}', skipping", tableName);
+            }
+        }
+
+        return mapping;
+    }
+
+    /// <summary>
+    /// Find DTO type for a table using naming conventions
+    /// Examples: users → UserRecordDto, stop_words → StopWordDto
+    /// </summary>
+    private Type? FindDtoForTable(string tableName, List<Type> dtoTypes)
+    {
+        // Try exact match first (e.g., "users" → "UserRecordDto")
+        var pascalName = ToPascalCase(tableName);
+
+        // Try common DTO naming patterns
+        var candidates = new[]
+        {
+            $"{pascalName}Dto",
+            $"{pascalName}RecordDto",
+            $"{Singularize(pascalName)}Dto",
+            $"{Singularize(pascalName)}RecordDto"
+        };
+
+        return dtoTypes.FirstOrDefault(dto =>
+            candidates.Any(c => dto.Name.Equals(c, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>
+    /// Convert snake_case to PascalCase (e.g., "stop_words" → "StopWords")
+    /// </summary>
+    private string ToPascalCase(string snakeCase)
+    {
+        var parts = snakeCase.Split('_');
+        return string.Concat(parts.Select(p =>
+            char.ToUpperInvariant(p[0]) + p.Substring(1).ToLowerInvariant()));
+    }
+
+    /// <summary>
+    /// Simple pluralization removal (users → user, stop_words → stop_word)
+    /// </summary>
+    private string Singularize(string plural)
+    {
+        if (plural.EndsWith("s", StringComparison.OrdinalIgnoreCase))
+            return plural.Substring(0, plural.Length - 1);
+        return plural;
+    }
+
+    private async Task<List<object>> ExportTableAsync(NpgsqlConnection connection, string tableName, Type dtoType)
+    {
+        // Get all properties from DTO using reflection
+        var properties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+
+        // DTOs use snake_case property names that match database columns
+        var columnNames = properties.Select(p => p.Name).ToList();
+
+        var columnList = string.Join(", ", columnNames);
+
+        // Determine sort column (prefer id, created_at, or first column)
+        var sortColumn = columnNames.Contains("id") ? "id" :
+                        columnNames.Contains("created_at") ? "created_at" :
+                        columnNames.FirstOrDefault() ?? "id";
+
+        var sql = $"SELECT {columnList} FROM {tableName} ORDER BY {sortColumn}";
+
+        // Use Dapper with reflection to query and deserialize to DTO type
+        var queryAsync = typeof(SqlMapper).GetMethod("QueryAsync", 1,
+            new[] { typeof(IDbConnection), typeof(string), typeof(object), typeof(IDbTransaction), typeof(int?), typeof(CommandType?) });
+        var genericMethod = queryAsync!.MakeGenericMethod(dtoType);
+        var task = (Task)genericMethod.Invoke(null, new object?[] { connection, sql, null, null, null, null })!;
+        await task.ConfigureAwait(false);
+
+        var resultProperty = task.GetType().GetProperty("Result");
+        var enumerable = (IEnumerable<object>)resultProperty!.GetValue(task)!;
+
+        return enumerable.ToList();
     }
 
     public async Task RestoreAsync(byte[] backupBytes)
     {
-        _logger.LogWarning("Starting full system restore - ALL DATA WILL BE WIPED");
+        _logger.LogWarning("Starting full system restore - THIS WILL WIPE ALL DATA");
 
-        // Decompress
-        using var compressedStream = new MemoryStream(backupBytes);
-        using var decompressedStream = new MemoryStream();
-        using (var gzipStream = new GZipStream(compressedStream, CompressionMode.Decompress))
+        // Decompress gzip
+        using var inputStream = new MemoryStream(backupBytes);
+        await using var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress);
+        using var outputStream = new MemoryStream();
+        await gzipStream.CopyToAsync(outputStream);
+        var jsonBytes = outputStream.ToArray();
+
+        _logger.LogInformation("Decompressed backup: {CompressedSize} bytes → {OriginalSize} bytes",
+            backupBytes.Length, jsonBytes.Length);
+
+        // Deserialize JSON
+        var jsonOptions = new JsonSerializerOptions
         {
-            await gzipStream.CopyToAsync(decompressedStream);
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+        };
+
+        var backup = JsonSerializer.Deserialize<SystemBackup>(jsonBytes, jsonOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize backup");
+
+        // Version check
+        if (backup.Metadata.Version != CurrentVersion)
+        {
+            throw new InvalidOperationException(
+                $"Backup version mismatch: expected {CurrentVersion}, got {backup.Metadata.Version}. " +
+                "Cannot restore - schema may be incompatible.");
         }
 
-        // Deserialize
-        var backup = MessagePackSerializer.Deserialize<SystemBackup>(decompressedStream.ToArray());
+        _logger.LogInformation("Backup metadata: version={Version}, created={CreatedAt}, tables={TableCount}",
+            backup.Metadata.Version, DateTimeOffset.FromUnixTimeSeconds(backup.Metadata.CreatedAt), backup.Metadata.TableCount);
 
-        _logger.LogInformation(
-            "Restoring backup from {CreatedAt} (version {Version}): {UserCount} users, {MessageCount} messages",
-            DateTimeOffset.FromUnixTimeSeconds(backup.CreatedAt), backup.Version,
-            backup.Users.Count, backup.Messages.Count);
-
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        // Single transaction - all or nothing
+        await using var connection = await _dataSource.OpenConnectionAsync();
         await using var transaction = await connection.BeginTransactionAsync();
+
         try
         {
-            // Wipe all tables (preserve VersionInfo for migrations)
-            await WipeAllTablesAsync(connection, transaction);
+            // Discover current table/DTO mappings
+            var currentTables = await DiscoverTablesAsync(connection);
 
-            // Restore all tables
-            await RestoreUsersAsync(connection, transaction, backup.Users);
-            await RestoreInvitesAsync(connection, transaction, backup.Invites);
-            await RestoreAuditLogsAsync(connection, transaction, backup.AuditLogs);
-            await RestoreVerificationTokensAsync(connection, transaction, backup.VerificationTokens);
-            await RestoreMessagesAsync(connection, transaction, backup.Messages);
-            await RestoreMessageEditsAsync(connection, transaction, backup.MessageEdits);
-            await RestoreDetectionResultsAsync(connection, transaction, backup.DetectionResults);
-            await RestoreUserActionsAsync(connection, transaction, backup.UserActions);
-            await RestoreStopWordsAsync(connection, transaction, backup.StopWords);
-            await RestoreSpamDetectionConfigsAsync(connection, transaction, backup.SpamDetectionConfigs);
-            await RestoreSpamCheckConfigsAsync(connection, transaction, backup.SpamCheckConfigs);
-            await RestoreChatPromptsAsync(connection, transaction, backup.ChatPrompts);
-            await RestoreManagedChatsAsync(connection, transaction, backup.ManagedChats);
-            await RestoreChatAdminsAsync(connection, transaction, backup.ChatAdmins);
-            await RestoreTelegramUserMappingsAsync(connection, transaction, backup.TelegramUserMappings);
-            await RestoreTelegramLinkTokensAsync(connection, transaction, backup.TelegramLinkTokens);
-            await RestoreReportsAsync(connection, transaction, backup.Reports);
+            // Wipe all tables in reverse dependency order
+            _logger.LogWarning("Wiping all tables...");
+            await WipeAllTablesAsync(connection, transaction, currentTables.Keys.ToList());
 
-            // Reset sequences for tables with auto-increment IDs
-            await ResetSequencesAsync(connection, transaction);
+            // Restore each table from backup
+            foreach (var (tableName, records) in backup.Data)
+            {
+                if (!currentTables.TryGetValue(tableName, out var dtoType))
+                {
+                    _logger.LogWarning("Table {TableName} from backup not found in current schema, skipping", tableName);
+                    continue;
+                }
+
+                try
+                {
+                    _logger.LogDebug("Restoring table: {TableName} ({Count} records)", tableName, records.Count);
+                    await RestoreTableAsync(connection, transaction, tableName, dtoType, records);
+                    _logger.LogDebug("Restored {Count} records to {TableName}", records.Count, tableName);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to restore table {TableName}", tableName);
+                    throw;
+                }
+            }
 
             await transaction.CommitAsync();
-            _logger.LogInformation("System restore completed successfully");
+            _logger.LogInformation("System restore complete - all data restored successfully");
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            _logger.LogError(ex, "System restore failed - rolled back all changes");
+            _logger.LogError(ex, "System restore failed - rolling back transaction");
             throw;
         }
     }
 
-    public async Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes)
+    private async Task RestoreTableAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
+        string tableName, Type dtoType, List<object> records)
     {
-        // Decompress
-        using var compressedStream = new MemoryStream(backupBytes);
-        using var decompressedStream = new MemoryStream();
-        using (var gzipStream = new GZipStream(compressedStream, CompressionMode.Decompress))
+        if (records.Count == 0)
         {
-            await gzipStream.CopyToAsync(decompressedStream);
+            _logger.LogDebug("No records to restore for {TableName}", tableName);
+            return;
         }
 
-        // Deserialize
-        var backup = MessagePackSerializer.Deserialize<SystemBackup>(decompressedStream.ToArray());
-
-        return new BackupMetadata(
-            CreatedAt: backup.CreatedAt,
-            Version: backup.Version,
-            UserCount: backup.Users.Count,
-            MessageCount: backup.Messages.Count,
-            DetectionCount: backup.DetectionResults.Count,
-            FileSizeBytes: backupBytes.Length
-        );
-    }
-
-    #region Export Methods
-
-    private async Task<IEnumerable<UserBackup>> ExportUsersAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM users ORDER BY created_at";
-        return await connection.QueryAsync<UserBackup>(sql);
-    }
-
-    private async Task<IEnumerable<InviteBackup>> ExportInvitesAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM invites ORDER BY created_at";
-        return await connection.QueryAsync<InviteBackup>(sql);
-    }
-
-    private async Task<IEnumerable<AuditLogBackup>> ExportAuditLogsAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM audit_log ORDER BY id";
-        return await connection.QueryAsync<AuditLogBackup>(sql);
-    }
-
-    private async Task<IEnumerable<VerificationTokenBackup>> ExportVerificationTokensAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM verification_tokens ORDER BY id";
-        return await connection.QueryAsync<VerificationTokenBackup>(sql);
-    }
-
-    private async Task<IEnumerable<MessageBackup>> ExportMessagesAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM messages ORDER BY timestamp";
-        return await connection.QueryAsync<MessageBackup>(sql);
-    }
-
-    private async Task<IEnumerable<MessageEditBackup>> ExportMessageEditsAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM message_edits ORDER BY id";
-        return await connection.QueryAsync<MessageEditBackup>(sql);
-    }
-
-    private async Task<IEnumerable<DetectionResultBackup>> ExportDetectionResultsAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM detection_results ORDER BY id";
-        return await connection.QueryAsync<DetectionResultBackup>(sql);
-    }
-
-    private async Task<IEnumerable<UserActionBackup>> ExportUserActionsAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM user_actions ORDER BY id";
-        return await connection.QueryAsync<UserActionBackup>(sql);
-    }
-
-    private async Task<IEnumerable<StopWordBackup>> ExportStopWordsAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM stop_words ORDER BY id";
-        return await connection.QueryAsync<StopWordBackup>(sql);
-    }
-
-    private async Task<IEnumerable<SpamDetectionConfigBackup>> ExportSpamDetectionConfigsAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM spam_detection_configs ORDER BY chat_id";
-        return await connection.QueryAsync<SpamDetectionConfigBackup>(sql);
-    }
-
-    private async Task<IEnumerable<SpamCheckConfigBackup>> ExportSpamCheckConfigsAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM spam_check_configs ORDER BY check_name";
-        return await connection.QueryAsync<SpamCheckConfigBackup>(sql);
-    }
-
-    private async Task<IEnumerable<ChatPromptBackup>> ExportChatPromptsAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM chat_prompts ORDER BY id";
-        return await connection.QueryAsync<ChatPromptBackup>(sql);
-    }
-
-    private async Task<IEnumerable<ManagedChatBackup>> ExportManagedChatsAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM managed_chats ORDER BY chat_id";
-        return await connection.QueryAsync<ManagedChatBackup>(sql);
-    }
-
-    private async Task<IEnumerable<ChatAdminBackup>> ExportChatAdminsAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM chat_admins ORDER BY id";
-        return await connection.QueryAsync<ChatAdminBackup>(sql);
-    }
-
-    private async Task<IEnumerable<TelegramUserMappingBackup>> ExportTelegramUserMappingsAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM telegram_user_mappings ORDER BY id";
-        return await connection.QueryAsync<TelegramUserMappingBackup>(sql);
-    }
-
-    private async Task<IEnumerable<TelegramLinkTokenBackup>> ExportTelegramLinkTokensAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM telegram_link_tokens ORDER BY id";
-        return await connection.QueryAsync<TelegramLinkTokenBackup>(sql);
-    }
-
-    private async Task<IEnumerable<ReportBackup>> ExportReportsAsync(NpgsqlConnection connection)
-    {
-        const string sql = "SELECT * FROM reports ORDER BY id";
-        return await connection.QueryAsync<ReportBackup>(sql);
-    }
-
-    #endregion
-
-    #region Restore Methods
-
-    private async Task WipeAllTablesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction)
-    {
-        _logger.LogWarning("Wiping all tables");
-
-        // Order matters - respect foreign keys
-        await connection.ExecuteAsync("TRUNCATE TABLE reports CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE telegram_link_tokens CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE telegram_user_mappings CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE chat_admins CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE managed_chats CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE chat_prompts CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE spam_check_configs CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE spam_detection_configs CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE stop_words CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE user_actions CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE detection_results CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE message_edits CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE messages CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE verification_tokens CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE audit_log CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE invites CASCADE", transaction);
-        await connection.ExecuteAsync("TRUNCATE TABLE users CASCADE", transaction);
-    }
-
-    private async Task RestoreUsersAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<UserBackup> users)
-    {
-        if (users.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO users (
-                id, email, normalized_email, password_hash, security_stamp,
-                permission_level, invited_by, is_active, totp_secret, totp_enabled,
-                totp_setup_started_at, created_at, last_login_at, status,
-                modified_by, modified_at, email_verified, email_verification_token,
-                email_verification_token_expires_at, password_reset_token, password_reset_token_expires_at
-            ) VALUES (
-                @Id, @Email, @NormalizedEmail, @PasswordHash, @SecurityStamp,
-                @PermissionLevel, @InvitedBy, @IsActive, @TotpSecret, @TotpEnabled,
-                @TotpSetupStartedAt, @CreatedAt, @LastLoginAt, @Status,
-                @ModifiedBy, @ModifiedAt, @EmailVerified, @EmailVerificationToken,
-                @EmailVerificationTokenExpiresAt, @PasswordResetToken, @PasswordResetTokenExpiresAt
-            )
-            """;
-
-        await connection.ExecuteAsync(sql, users, transaction);
-        _logger.LogInformation("Restored {Count} users", users.Count);
-    }
-
-    private async Task RestoreInvitesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<InviteBackup> invites)
-    {
-        if (invites.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO invites (
-                token, created_by, created_at, expires_at, used_by,
-                permission_level, status, modified_at
-            ) VALUES (
-                @Token, @CreatedBy, @CreatedAt, @ExpiresAt, @UsedBy,
-                @PermissionLevel, @Status, @ModifiedAt
-            )
-            """;
-
-        await connection.ExecuteAsync(sql, invites, transaction);
-        _logger.LogInformation("Restored {Count} invites", invites.Count);
-    }
-
-    private async Task RestoreAuditLogsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<AuditLogBackup> logs)
-    {
-        if (logs.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO audit_log (id, event_type, timestamp, actor_user_id, target_user_id, value)
-            VALUES (@Id, @EventType, @Timestamp, @ActorUserId, @TargetUserId, @Value)
-            """;
-
-        await connection.ExecuteAsync(sql, logs, transaction);
-        _logger.LogInformation("Restored {Count} audit logs", logs.Count);
-    }
-
-    private async Task RestoreVerificationTokensAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<VerificationTokenBackup> tokens)
-    {
-        if (tokens.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO verification_tokens (id, user_id, token_type, token, value, expires_at, created_at, used_at)
-            VALUES (@Id, @UserId, @TokenType, @Token, @Value, @ExpiresAt, @CreatedAt, @UsedAt)
-            """;
-
-        await connection.ExecuteAsync(sql, tokens, transaction);
-        _logger.LogInformation("Restored {Count} verification tokens", tokens.Count);
-    }
-
-    private async Task RestoreMessagesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<MessageBackup> messages)
-    {
-        if (messages.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO messages (
-                message_id, chat_id, user_id, user_name, timestamp,
-                message_text, photo_file_id, photo_file_size, photo_local_path,
-                photo_thumbnail_path, urls, content_hash, chat_name, edit_date,
-                deleted_at, deletion_source
-            ) VALUES (
-                @MessageId, @ChatId, @UserId, @UserName, @Timestamp,
-                @MessageText, @PhotoFileId, @PhotoFileSize, @PhotoLocalPath,
-                @PhotoThumbnailPath, @Urls, @ContentHash, @ChatName, @EditDate,
-                @DeletedAt, @DeletionSource
-            )
-            """;
-
-        await connection.ExecuteAsync(sql, messages, transaction);
-        _logger.LogInformation("Restored {Count} messages", messages.Count);
-    }
-
-    private async Task RestoreMessageEditsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<MessageEditBackup> edits)
-    {
-        if (edits.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO message_edits (id, message_id, edit_date, previous_text, previous_content_hash)
-            VALUES (@Id, @MessageId, @EditDate, @PreviousText, @PreviousContentHash)
-            """;
-
-        await connection.ExecuteAsync(sql, edits, transaction);
-        _logger.LogInformation("Restored {Count} message edits", edits.Count);
-    }
-
-    private async Task RestoreDetectionResultsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<DetectionResultBackup> results)
-    {
-        if (results.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO detection_results (
-                id, message_id, detected_at, detection_source, detection_method,
-                is_spam, confidence, reason, added_by, user_id, message_text
-            ) VALUES (
-                @Id, @MessageId, @DetectedAt, @DetectionSource, @DetectionMethod,
-                @IsSpam, @Confidence, @Reason, @AddedBy, @UserId, @MessageText
-            )
-            """;
-
-        await connection.ExecuteAsync(sql, results, transaction);
-        _logger.LogInformation("Restored {Count} detection results", results.Count);
-    }
-
-    private async Task RestoreUserActionsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<UserActionBackup> actions)
-    {
-        if (actions.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO user_actions (
-                id, user_id, chat_ids, action_type, message_id,
-                issued_by, issued_at, expires_at, reason
-            ) VALUES (
-                @Id, @UserId, @ChatIds, @ActionType, @MessageId,
-                @IssuedBy, @IssuedAt, @ExpiresAt, @Reason
-            )
-            """;
-
-        await connection.ExecuteAsync(sql, actions, transaction);
-        _logger.LogInformation("Restored {Count} user actions", actions.Count);
-    }
-
-    private async Task RestoreStopWordsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<StopWordBackup> words)
-    {
-        if (words.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO stop_words (
-                id, word, word_type, added_date, source, enabled,
-                added_by, detection_count, last_detected_date
-            ) VALUES (
-                @Id, @Word, @WordType, @AddedDate, @Source, @Enabled,
-                @AddedBy, @DetectionCount, @LastDetectedDate
-            )
-            """;
-
-        await connection.ExecuteAsync(sql, words, transaction);
-        _logger.LogInformation("Restored {Count} stop words", words.Count);
-    }
-
-    private async Task RestoreSpamDetectionConfigsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<SpamDetectionConfigBackup> configs)
-    {
-        if (configs.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO spam_detection_configs (
-                chat_id, min_confidence_threshold, enabled_checks, custom_prompt,
-                auto_ban_threshold, created_at, updated_at
-            ) VALUES (
-                @ChatId, @MinConfidenceThreshold, @EnabledChecks, @CustomPrompt,
-                @AutoBanThreshold, @CreatedAt, @UpdatedAt
-            )
-            """;
-
-        await connection.ExecuteAsync(sql, configs, transaction);
-        _logger.LogInformation("Restored {Count} spam detection configs", configs.Count);
-    }
-
-    private async Task RestoreSpamCheckConfigsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<SpamCheckConfigBackup> configs)
-    {
-        if (configs.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO spam_check_configs (check_name, enabled, confidence_weight, config_json, updated_at)
-            VALUES (@CheckName, @Enabled, @ConfidenceWeight, @ConfigJson, @UpdatedAt)
-            """;
-
-        await connection.ExecuteAsync(sql, configs, transaction);
-        _logger.LogInformation("Restored {Count} spam check configs", configs.Count);
-    }
-
-    private async Task RestoreChatPromptsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<ChatPromptBackup> prompts)
-    {
-        if (prompts.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO chat_prompts (id, chat_id, prompt, created_at, updated_at)
-            VALUES (@Id, @ChatId, @Prompt, @CreatedAt, @UpdatedAt)
-            """;
-
-        await connection.ExecuteAsync(sql, prompts, transaction);
-        _logger.LogInformation("Restored {Count} chat prompts", prompts.Count);
-    }
-
-    private async Task RestoreManagedChatsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<ManagedChatBackup> chats)
-    {
-        if (chats.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO managed_chats (chat_id, chat_title, chat_username, chat_type, added_at, is_active)
-            VALUES (@ChatId, @ChatTitle, @ChatUsername, @ChatType, @AddedAt, @IsActive)
-            """;
-
-        await connection.ExecuteAsync(sql, chats, transaction);
-        _logger.LogInformation("Restored {Count} managed chats", chats.Count);
-    }
-
-    private async Task RestoreChatAdminsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<ChatAdminBackup> admins)
-    {
-        if (admins.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO chat_admins (id, chat_id, telegram_user_id, telegram_username, cached_at, is_active)
-            VALUES (@Id, @ChatId, @TelegramUserId, @TelegramUsername, @CachedAt, @IsActive)
-            """;
-
-        await connection.ExecuteAsync(sql, admins, transaction);
-        _logger.LogInformation("Restored {Count} chat admins", admins.Count);
-    }
-
-    private async Task RestoreTelegramUserMappingsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<TelegramUserMappingBackup> mappings)
-    {
-        if (mappings.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO telegram_user_mappings (id, telegram_id, telegram_username, user_id, linked_at, is_active)
-            VALUES (@Id, @TelegramId, @TelegramUsername, @UserId, @LinkedAt, @IsActive)
-            """;
-
-        await connection.ExecuteAsync(sql, mappings, transaction);
-        _logger.LogInformation("Restored {Count} Telegram user mappings", mappings.Count);
-    }
-
-    private async Task RestoreTelegramLinkTokensAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<TelegramLinkTokenBackup> tokens)
-    {
-        if (tokens.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO telegram_link_tokens (id, token, user_id, created_at, expires_at, used)
-            VALUES (@Id, @Token, @UserId, @CreatedAt, @ExpiresAt, @Used)
-            """;
-
-        await connection.ExecuteAsync(sql, tokens, transaction);
-        _logger.LogInformation("Restored {Count} Telegram link tokens", tokens.Count);
-    }
-
-    private async Task RestoreReportsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<ReportBackup> reports)
-    {
-        if (reports.Count == 0) return;
-
-        const string sql = """
-            INSERT INTO reports (
-                id, message_id, chat_id, reported_user_id, reported_username,
-                reported_by, reporter_username, reported_at, reason, status,
-                reviewed_by, reviewed_at, action_taken, message_text,
-                message_photo_file_id, chat_title
-            ) VALUES (
-                @Id, @MessageId, @ChatId, @ReportedUserId, @ReportedUsername,
-                @ReportedBy, @ReporterUsername, @ReportedAt, @Reason, @Status,
-                @ReviewedBy, @ReviewedAt, @ActionTaken, @MessageText,
-                @MessagePhotoFileId, @ChatTitle
-            )
-            """;
-
-        await connection.ExecuteAsync(sql, reports, transaction);
-        _logger.LogInformation("Restored {Count} reports", reports.Count);
-    }
-
-    private async Task ResetSequencesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction)
-    {
-        _logger.LogInformation("Resetting auto-increment sequences");
-
-        // Reset sequences to max ID + 1 for tables with SERIAL/BIGSERIAL columns
-        var sequences = new[]
+        // Get column names from DTO type using reflection
+        var properties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var columnNames = properties.Select(p => p.Name).ToList();
+        var columnList = string.Join(", ", columnNames);
+        var paramList = string.Join(", ", columnNames.Select(c => $"@{c}"));
+
+        var sql = $"INSERT INTO {tableName} ({columnList}) VALUES ({paramList})";
+
+        // Deserialize JSON elements back to DTO type
+        var jsonOptions = new JsonSerializerOptions
         {
-            ("audit_log", "audit_log_id_seq", "id"),
-            ("verification_tokens", "verification_tokens_id_seq", "id"),
-            ("message_edits", "message_edits_id_seq", "id"),
-            ("detection_results", "detection_results_id_seq", "id"),
-            ("user_actions", "user_actions_id_seq", "id"),
-            ("stop_words", "stop_words_id_seq", "id"),
-            ("chat_prompts", "chat_prompts_id_seq", "id"),
-            ("chat_admins", "chat_admins_id_seq", "id"),
-            ("telegram_user_mappings", "telegram_user_mappings_id_seq", "id"),
-            ("telegram_link_tokens", "telegram_link_tokens_id_seq", "id"),
-            ("reports", "reports_id_seq", "id")
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
         };
 
-        foreach (var (table, sequence, column) in sequences)
+        foreach (var record in records)
         {
-            await connection.ExecuteAsync(
-                $"SELECT setval('{sequence}', COALESCE((SELECT MAX({column}) FROM {table}), 0) + 1, false)",
-                transaction: transaction);
+            // Convert object back to DTO type via JSON round-trip (handles JsonElement → DTO)
+            var jsonElement = (JsonElement)record;
+            var dto = JsonSerializer.Deserialize(jsonElement.GetRawText(), dtoType, jsonOptions);
+
+            await connection.ExecuteAsync(sql, dto, transaction);
+        }
+
+        _logger.LogDebug("Inserted {Count} records into {TableName}", records.Count, tableName);
+    }
+
+    private async Task WipeAllTablesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<string> tables)
+    {
+        // Query foreign key dependencies to determine deletion order
+        const string fkQuery = """
+            SELECT
+                tc.table_name,
+                ccu.table_name AS foreign_table_name
+            FROM information_schema.table_constraints AS tc
+            JOIN information_schema.constraint_column_usage AS ccu
+                ON tc.constraint_name = ccu.constraint_name
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+            """;
+
+        var fkDeps = await connection.QueryAsync<(string table_name, string foreign_table_name)>(fkQuery);
+
+        // Build dependency graph and perform topological sort (reverse for deletion order)
+        var sortedTables = TopologicalSort(tables, fkDeps.ToList());
+
+        foreach (var table in sortedTables)
+        {
+            await connection.ExecuteAsync($"DELETE FROM {table}", transaction: transaction);
+            _logger.LogDebug("Wiped table: {TableName}", table);
         }
     }
 
-    #endregion
+    /// <summary>
+    /// Topological sort for table deletion order (children before parents)
+    /// </summary>
+    private List<string> TopologicalSort(List<string> tables, List<(string child, string parent)> dependencies)
+    {
+        var graph = new Dictionary<string, List<string>>();
+        var inDegree = new Dictionary<string, int>();
+
+        // Initialize graph
+        foreach (var table in tables)
+        {
+            graph[table] = new List<string>();
+            inDegree[table] = 0;
+        }
+
+        // Build adjacency list (parent → children)
+        foreach (var (child, parent) in dependencies)
+        {
+            if (graph.ContainsKey(parent) && graph.ContainsKey(child))
+            {
+                graph[parent].Add(child);
+                inDegree[child]++;
+            }
+        }
+
+        // Kahn's algorithm for topological sort
+        var queue = new Queue<string>(tables.Where(t => inDegree[t] == 0));
+        var result = new List<string>();
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            result.Add(current);
+
+            foreach (var neighbor in graph[current])
+            {
+                inDegree[neighbor]--;
+                if (inDegree[neighbor] == 0)
+                    queue.Enqueue(neighbor);
+            }
+        }
+
+        // Reverse for deletion order (children first, parents last)
+        result.Reverse();
+        return result;
+    }
+
+    public async Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes)
+    {
+        try
+        {
+            // Decompress gzip
+            using var inputStream = new MemoryStream(backupBytes);
+            await using var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress);
+            using var outputStream = new MemoryStream();
+            await gzipStream.CopyToAsync(outputStream);
+            var jsonBytes = outputStream.ToArray();
+
+            // Deserialize only metadata (efficient - don't load full backup)
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+            };
+
+            using var jsonDoc = JsonDocument.Parse(jsonBytes);
+            var metadataElement = jsonDoc.RootElement.GetProperty("metadata");
+            var metadata = JsonSerializer.Deserialize<BackupMetadata>(metadataElement.GetRawText(), jsonOptions)
+                ?? throw new InvalidOperationException("Failed to deserialize metadata");
+
+            return metadata;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to read backup metadata");
+            throw new InvalidOperationException("Invalid backup file format", ex);
+        }
+    }
 }

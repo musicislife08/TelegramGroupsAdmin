@@ -732,25 +732,22 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [ ] **User actions UI** - Review bans, warns, appeals (future)
 - [ ] **Multi-chat management** - Configure per-chat settings (future)
 
-**Phase 2.5: Backup & Restore System** 🔄 **PLANNED**
-- [ ] **Full system backup/restore** - Replace existing `--export-users`/`--import-users` with comprehensive backup
-  - **Format:** tar.gz containing MessagePack-serialized data (not JSON - binary, 50% smaller, fast)
-  - **Scope:** ALL tables (users w/ TOTP secrets, messages, spam config, Telegram mappings, everything)
-  - **CLI flags:** `--export <path>` / `--import <path>` (replaces old user-only export)
-  - **Restore behavior:** ALWAYS full wipe + restore (no merge mode, preserves all IDs/GUIDs exactly)
-  - **Transaction safety:** Single transaction, full rollback on any error
-  - **UI pages:** `/backup` (Admin/Owner export button), `/restore` (file upload + wipe warning)
-  - **First-time setup:** Add "Restore from backup" option to registration flow
-  - **Security:** Unencrypted (user responsibility to secure/delete file after use)
-  - **Implementation:** IBackupService replaces IUserDataExportService, remove old UserDataExportService
-  - **Tasks:**
-    1. Add MessagePack NuGet package
-    2. Create backup data models for all tables
-    3. Implement IBackupService (ExportAsync → tar.gz bytes, RestoreAsync → wipe all + import)
-    4. Update Program.cs CLI flags (--export/--import)
-    5. Create /backup and /restore UI pages
-    6. Add restore option to first-time setup
-    7. Remove old UserDataExportService
+**Phase 2.5: Backup & Restore System** ✅ **COMPLETE**
+- [x] **Full system backup/restore** - Fully dynamic JSON + reflection system
+  - **Format:** gzip-compressed JSON (minimized, 81% compression ratio)
+  - **Architecture:** Zero-maintenance reflection-based system
+    - Auto-discovers tables from PostgreSQL information_schema
+    - Auto-discovers DTOs from TelegramGroupsAdmin.Data assembly
+    - No hardcoded table mappings or column lists
+    - Schema changes automatically reflected in backups
+  - **Scope:** ALL 18 tables (users w/ TOTP secrets, messages, spam config, Telegram mappings, everything)
+  - **CLI flags:** `--export <path>` / `--import <path>` with 5-second safety delay
+  - **Restore behavior:** Full wipe + restore in single transaction, foreign key-aware deletion order
+  - **Transaction safety:** Single transaction, full rollback on any error, topological sort for dependencies
+  - **UI:** Settings page "Backup & Restore" tab + unauthenticated restore modal on registration page
+  - **Version checking:** Prevents incompatible restore with metadata version validation
+  - **DTOs:** All 18 tables have proper snake_case DTOs matching database schema exactly
+  - **Benefits over MessagePack:** Human-readable, no special attributes, simpler debugging, reflection-friendly
 
 **Phase 2.6: Advanced Features** 🔮 **FUTURE**
 - [ ] **Ban appeal workflow** - UI + bot commands

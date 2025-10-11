@@ -77,7 +77,7 @@ public static class WebApplicationExtensions
             return;
         }
 
-        var imagesPath = Path.Combine(messageHistoryOptions.DatabasePath, "images");
+        var imagesPath = Path.GetFullPath(messageHistoryOptions.ImageStoragePath);
         Directory.CreateDirectory(imagesPath);
 
         app.UseStaticFiles(new StaticFileOptions

@@ -1,10 +1,10 @@
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// Data model for chat_admins table (database DTO)
+/// DTO for chat_admins table (database DTO)
 /// Tracks Telegram admin status per chat for permission caching
 /// </summary>
-public record ChatAdminRecord
+public record ChatAdminRecordDto
 {
     public long id { get; init; }
     public long chat_id { get; init; }
@@ -14,3 +14,13 @@ public record ChatAdminRecord
     public long last_verified_at { get; init; }
     public bool is_active { get; init; }
 }
+
+public record ChatAdminRecord(
+    long Id,
+    long ChatId,
+    long TelegramId,
+    bool IsCreator,
+    long PromotedAt,
+    long LastVerifiedAt,
+    bool IsActive
+);
