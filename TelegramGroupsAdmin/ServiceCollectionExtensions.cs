@@ -129,7 +129,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMessageExportService, MessageExportService>();
         services.AddScoped<IUserManagementService, UserManagementService>();
         services.AddScoped<IAuditService, AuditService>();
-        services.AddScoped<IUserDataExportService, UserDataExportService>();
+
+        // Backup service (replaces old UserDataExportService)
+        services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupService, TelegramGroupsAdmin.Services.Backup.BackupService>();
 
         // Email service (SendGrid)
         services.AddScoped<TelegramGroupsAdmin.Services.Email.IEmailService, TelegramGroupsAdmin.Services.Email.SendGridEmailService>();

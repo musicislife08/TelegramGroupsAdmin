@@ -1,0 +1,188 @@
+@page "/restore"
+@using TelegramGroupsAdmin.Services.Backup
+@using Microsoft.AspNetCore.Components.Forms
+@inject IBackupService BackupService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@attribute [Authorize]
+
+<PageTitle>System Restore</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">System Restore</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+        Restore system from a backup file (THIS WILL WIPE ALL CURRENT DATA)
+    </MudText>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudAlert Severity="Severity.Error" Class="mb-4">
+            <MudText Typo="Typo.h6" Class="mb-2">⚠️ DANGER ZONE ⚠️</MudText>
+            <MudText Typo="Typo.body2">
+                This operation will <strong>PERMANENTLY DELETE ALL CURRENT DATA</strong> and replace it with data from the backup file.
+                This action <strong>CANNOT BE UNDONE</strong>. Make sure you have a current backup before proceeding.
+            </MudText>
+        </MudAlert>
+
+        @if (_metadata != null)
+        {
+            <MudPaper Class="pa-4 mb-4" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-2">Backup Information</MudText>
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2"><strong>Created:</strong> @DateTimeOffset.FromUnixTimeSeconds(_metadata.CreatedAt).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2"><strong>Version:</strong> @_metadata.Version</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2"><strong>Users:</strong> @_metadata.UserCount</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2"><strong>Messages:</strong> @_metadata.MessageCount</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2"><strong>Detections:</strong> @_metadata.DetectionCount</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2"><strong>File Size:</strong> @FormatBytes(_metadata.FileSizeBytes)</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        }
+
+        <MudFileUpload T="IBrowserFile" FilesChanged="OnFileSelected" Accept=".tar.gz,.gz">
+            <ActivatorContent>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Upload"
+                           Disabled="@_isRestoring">
+                    Select Backup File
+                </MudButton>
+            </ActivatorContent>
+        </MudFileUpload>
+
+        @if (_selectedFile != null)
+        {
+            <MudText Typo="Typo.body2" Class="mt-2">
+                Selected: <strong>@_selectedFile.Name</strong> (@FormatBytes(_selectedFile.Size))
+            </MudText>
+        }
+
+        @if (_metadata != null && !_isRestoring)
+        {
+            <MudCheckBox @bind-Value="_confirmWipe" Color="Color.Error" Class="mt-4">
+                I understand this will <strong>permanently delete all current data</strong>
+            </MudCheckBox>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.RestoreFromTrash"
+                       OnClick="RestoreBackup"
+                       Disabled="@(!_confirmWipe)"
+                       Class="mt-2">
+                WIPE & RESTORE FROM BACKUP
+            </MudButton>
+        }
+
+        @if (_isRestoring)
+        {
+            <MudProgressLinear Indeterminate="true" Class="mt-4" />
+            <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
+                Restoring system... This may take a few minutes.
+            </MudText>
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" Class="mb-2">What Happens During Restore</MudText>
+        <MudList T="string" Dense="true">
+            <MudListItem T="string" Icon="@Icons.Material.Filled.Delete">All current data is deleted</MudListItem>
+            <MudListItem T="string" Icon="@Icons.Material.Filled.Upload">Backup data is imported</MudListItem>
+            <MudListItem T="string" Icon="@Icons.Material.Filled.Key">All IDs and GUIDs are preserved exactly</MudListItem>
+            <MudListItem T="string" Icon="@Icons.Material.Filled.Shield">TOTP secrets and passwords are restored</MudListItem>
+            <MudListItem T="string" Icon="@Icons.Material.Filled.Logout">You will be logged out (credentials changed)</MudListItem>
+        </MudList>
+
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            <MudText Typo="Typo.body2">
+                After restore completes, log in with your credentials from the backup.
+                If restore fails, all changes will be rolled back.
+            </MudText>
+        </MudAlert>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private IBrowserFile? _selectedFile;
+    private BackupMetadata? _metadata;
+    private bool _confirmWipe = false;
+    private bool _isRestoring = false;
+    private byte[]? _backupBytes;
+
+    private async Task OnFileSelected(IBrowserFile file)
+    {
+        _selectedFile = file;
+        _metadata = null;
+        _confirmWipe = false;
+        StateHasChanged();
+
+        try
+        {
+            // Read file
+            using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024 * 500); // 500MB max
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            _backupBytes = ms.ToArray();
+
+            // Get metadata
+            _metadata = await BackupService.GetMetadataAsync(_backupBytes);
+            Snackbar.Add("Backup file loaded successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to read backup file: {ex.Message}", Severity.Error);
+            _selectedFile = null;
+            _backupBytes = null;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RestoreBackup()
+    {
+        if (_backupBytes == null || !_confirmWipe)
+            return;
+
+        _isRestoring = true;
+        StateHasChanged();
+
+        try
+        {
+            await BackupService.RestoreAsync(_backupBytes);
+            Snackbar.Add("System restored successfully! You will be logged out.", Severity.Success);
+
+            // Wait 2 seconds then redirect to login
+            await Task.Delay(2000);
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Restore failed: {ex.Message}", Severity.Error);
+            _isRestoring = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len /= 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+}

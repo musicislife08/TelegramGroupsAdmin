@@ -24,6 +24,18 @@
             <MudAlert Severity="Severity.Info" Class="mb-4">
                 No users exist. The first account will be created with Owner permissions.
             </MudAlert>
+
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    <strong>Have a backup?</strong> You can restore from a previous backup instead of creating a new account.
+                </MudText>
+                <MudButton Variant="Variant.Text"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.SettingsBackupRestore"
+                           Href="/restore">
+                    Restore from Backup
+                </MudButton>
+            </MudAlert>
         }
 
         @if (!string.IsNullOrEmpty(_errorMessage))

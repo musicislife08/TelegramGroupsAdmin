@@ -1,7 +1,6 @@
 using FluentMigrator.Runner;
 using TelegramGroupsAdmin;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.SpamDetection.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -72,30 +71,42 @@ if (args.Contains("--migrate-only") || args.Contains("--migrate"))
     Environment.Exit(0);
 }
 
-// Check for --export-users flag to export decrypted user data and exit
-if (args.Contains("--export-users"))
+// Check for --export flag to create full system backup
+if (args.Contains("--export"))
 {
-    var exportPath = args.SkipWhile(a => a != "--export-users").Skip(1).FirstOrDefault() ?? "users_export.json";
+    var exportPath = args.SkipWhile(a => a != "--export").Skip(1).FirstOrDefault() ?? $"backup_{DateTimeOffset.UtcNow:yyyyMMdd_HHmmss}.tar.gz";
     using var scope = app.Services.CreateScope();
-    var exportService = scope.ServiceProvider.GetRequiredService<IUserDataExportService>();
-    await exportService.ExportAsync(exportPath);
-    app.Logger.LogInformation("User export complete. Exiting (--export-users flag).");
+    var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Services.Backup.IBackupService>();
+    var backupBytes = await backupService.ExportAsync();
+    await File.WriteAllBytesAsync(exportPath, backupBytes);
+    app.Logger.LogInformation("System backup exported to {Path} ({Size} bytes). Exiting (--export flag).", exportPath, backupBytes.Length);
     Environment.Exit(0);
 }
 
-// Check for --import-users flag to import user data (will be encrypted) and exit
-if (args.Contains("--import-users"))
+// Check for --import flag to restore full system backup (WIPES ALL DATA)
+if (args.Contains("--import"))
 {
-    var importPath = args.SkipWhile(a => a != "--import-users").Skip(1).FirstOrDefault();
+    var importPath = args.SkipWhile(a => a != "--import").Skip(1).FirstOrDefault();
     if (importPath == null)
     {
-        app.Logger.LogError("--import-users requires a file path argument");
+        app.Logger.LogError("--import requires a file path argument");
         Environment.Exit(1);
     }
+    if (!File.Exists(importPath))
+    {
+        app.Logger.LogError("Import file not found: {Path}", importPath);
+        Environment.Exit(1);
+    }
+
+    app.Logger.LogWarning("⚠️  WARNING: This will WIPE ALL DATA and restore from backup!");
+    app.Logger.LogWarning("⚠️  Press Ctrl+C within 5 seconds to cancel...");
+    await Task.Delay(5000);
+
     using var scope = app.Services.CreateScope();
-    var exportService = scope.ServiceProvider.GetRequiredService<IUserDataExportService>();
-    await exportService.ImportAsync(importPath);
-    app.Logger.LogInformation("User import complete. Exiting (--import-users flag).");
+    var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Services.Backup.IBackupService>();
+    var backupBytes = await File.ReadAllBytesAsync(importPath);
+    await backupService.RestoreAsync(backupBytes);
+    app.Logger.LogInformation("System restore complete. Exiting (--import flag).");
     Environment.Exit(0);
 }
 
