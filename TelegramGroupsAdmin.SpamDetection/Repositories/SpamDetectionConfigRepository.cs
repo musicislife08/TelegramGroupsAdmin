@@ -68,21 +68,41 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
             await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
             var configJson = JsonSerializer.Serialize(config, JsonOptions);
 
-            // PostgreSQL uses ON CONFLICT instead of INSERT OR REPLACE
-            const string sql = @"
-                INSERT INTO spam_detection_configs (chat_id, config_json, last_updated, updated_by)
-                VALUES (NULL, @ConfigJson, @LastUpdated, @UpdatedBy)
-                ON CONFLICT (chat_id) DO UPDATE
-                SET config_json = EXCLUDED.config_json,
-                    last_updated = EXCLUDED.last_updated,
-                    updated_by = EXCLUDED.updated_by";
+            // Check if global config exists (chat_id IS NULL)
+            const string checkSql = "SELECT COUNT(*) FROM spam_detection_configs WHERE chat_id IS NULL";
+            var exists = await connection.ExecuteScalarAsync<int>(checkSql) > 0;
 
-            await connection.ExecuteAsync(sql, new
+            if (exists)
             {
-                ConfigJson = configJson,
-                LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                UpdatedBy = updatedBy
-            });
+                // Update existing global config
+                const string updateSql = @"
+                    UPDATE spam_detection_configs
+                    SET config_json = @ConfigJson,
+                        last_updated = @LastUpdated,
+                        updated_by = @UpdatedBy
+                    WHERE chat_id IS NULL";
+
+                await connection.ExecuteAsync(updateSql, new
+                {
+                    ConfigJson = configJson,
+                    LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    UpdatedBy = updatedBy
+                });
+            }
+            else
+            {
+                // Insert new global config
+                const string insertSql = @"
+                    INSERT INTO spam_detection_configs (chat_id, config_json, last_updated, updated_by)
+                    VALUES (NULL, @ConfigJson, @LastUpdated, @UpdatedBy)";
+
+                await connection.ExecuteAsync(insertSql, new
+                {
+                    ConfigJson = configJson,
+                    LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    UpdatedBy = updatedBy
+                });
+            }
 
             _logger.LogInformation("Updated global spam detection configuration");
             return true;

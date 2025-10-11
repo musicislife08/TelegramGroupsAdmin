@@ -15,14 +15,10 @@ public static class ServiceCollectionExtensions
     /// Add spam detection services to the service collection
     /// </summary>
     /// <param name="services">Service collection</param>
-    /// <param name="config">Spam detection configuration</param>
     /// <returns>Service collection for chaining</returns>
-    public static IServiceCollection AddSpamDetection(this IServiceCollection services, SpamDetectionConfig config)
+    public static IServiceCollection AddSpamDetection(this IServiceCollection services)
     {
-        // Register configuration
-        services.AddSingleton(config);
-
-        // Register main spam detector factory
+        // Register main spam detector factory (loads config from repository dynamically)
         services.AddScoped<ISpamDetectorFactory, SpamDetectorFactory>();
 
         // Register core services
@@ -54,15 +50,5 @@ public static class ServiceCollectionExtensions
         services.AddMemoryCache();
 
         return services;
-    }
-
-    /// <summary>
-    /// Add spam detection services with default configuration
-    /// </summary>
-    /// <param name="services">Service collection</param>
-    /// <returns>Service collection for chaining</returns>
-    public static IServiceCollection AddSpamDetection(this IServiceCollection services)
-    {
-        return services.AddSpamDetection(new SpamDetectionConfig());
     }
 }

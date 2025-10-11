@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
+using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Services;
 
@@ -11,20 +12,33 @@ namespace TelegramGroupsAdmin.SpamDetection.Services;
 public class SpamDetectorFactory : ISpamDetectorFactory
 {
     private readonly ILogger<SpamDetectorFactory> _logger;
-    private readonly SpamDetectionConfig _config;
+    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly IEnumerable<ISpamCheck> _spamChecks;
     private readonly IOpenAITranslationService _translationService;
 
     public SpamDetectorFactory(
         ILogger<SpamDetectorFactory> logger,
-        SpamDetectionConfig config,
+        ISpamDetectionConfigRepository configRepository,
         IEnumerable<ISpamCheck> spamChecks,
         IOpenAITranslationService translationService)
     {
         _logger = logger;
-        _config = config;
+        _configRepository = configRepository;
         _spamChecks = spamChecks;
         _translationService = translationService;
+    }
+
+    private async Task<SpamDetectionConfig> GetConfigAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _configRepository.GetGlobalConfigAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load spam detection config, using default");
+            return new SpamDetectionConfig();
+        }
     }
 
     /// <summary>
@@ -32,6 +46,9 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     /// </summary>
     public async Task<SpamDetectionResult> CheckMessageAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
     {
+        // Load latest config from database
+        var config = await GetConfigAsync(cancellationToken);
+
         var checkResults = new List<SpamCheckResponse>();
 
         _logger.LogDebug("Starting spam detection for user {UserId} in chat {ChatId}", request.UserId, request.ChatId);
@@ -41,7 +58,7 @@ public class SpamDetectorFactory : ISpamDetectorFactory
         checkResults.AddRange(nonOpenAIResult.CheckResults);
 
         // Determine if we should run OpenAI veto check
-        var shouldRunOpenAI = nonOpenAIResult.ShouldVeto && _config.OpenAI.Enabled && _config.OpenAI.VetoMode;
+        var shouldRunOpenAI = nonOpenAIResult.ShouldVeto && config.OpenAI.Enabled && config.OpenAI.VetoMode;
 
         if (shouldRunOpenAI)
         {
@@ -68,7 +85,7 @@ public class SpamDetectorFactory : ISpamDetectorFactory
             }
         }
 
-        return AggregateResults(checkResults);
+        return AggregateResults(checkResults, config);
     }
 
     /// <summary>
@@ -76,10 +93,13 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     /// </summary>
     public async Task<SpamDetectionResult> CheckMessageWithoutOpenAIAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
     {
+        // Load latest config from database
+        var config = await GetConfigAsync(cancellationToken);
+
         var checkResults = new List<SpamCheckResponse>();
 
         // Preprocess: Check for invisible characters and translate if needed
-        var (processedRequest, invisibleCharResult) = await PreprocessMessageAsync(request, cancellationToken);
+        var (processedRequest, invisibleCharResult) = await PreprocessMessageAsync(request, config, cancellationToken);
 
         // Add invisible character check result if applicable
         if (invisibleCharResult != null)
@@ -114,13 +134,13 @@ public class SpamDetectorFactory : ISpamDetectorFactory
             }
         }
 
-        return AggregateResults(checkResults);
+        return AggregateResults(checkResults, config);
     }
 
     /// <summary>
     /// Aggregate results from multiple spam checks
     /// </summary>
-    private SpamDetectionResult AggregateResults(List<SpamCheckResponse> checkResults)
+    private SpamDetectionResult AggregateResults(List<SpamCheckResponse> checkResults, SpamDetectionConfig config)
     {
         var spamResults = checkResults.Where(r => r.IsSpam).ToList();
         var isSpam = spamResults.Any();
@@ -130,7 +150,7 @@ public class SpamDetectorFactory : ISpamDetectorFactory
         var avgConfidence = isSpam ? (int)spamResults.Average(r => r.Confidence) : 0;
 
         // Determine recommended action based on confidence thresholds
-        var recommendedAction = DetermineAction(maxConfidence);
+        var recommendedAction = DetermineAction(maxConfidence, config);
 
         // Primary reason is from the highest confidence check
         var primaryReason = isSpam
@@ -138,7 +158,7 @@ public class SpamDetectorFactory : ISpamDetectorFactory
             : "No spam detected";
 
         // Should veto if spam detected but confidence is not extremely high
-        var shouldVeto = isSpam && maxConfidence < 95 && _config.OpenAI.VetoMode;
+        var shouldVeto = isSpam && maxConfidence < 95 && config.OpenAI.VetoMode;
 
         var result = new SpamDetectionResult
         {
@@ -179,13 +199,13 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     /// <summary>
     /// Determine recommended action based on confidence score
     /// </summary>
-    private SpamAction DetermineAction(int confidence)
+    private SpamAction DetermineAction(int confidence, SpamDetectionConfig config)
     {
-        if (confidence >= _config.AutoBanThreshold)
+        if (confidence >= config.AutoBanThreshold)
         {
             return SpamAction.AutoBan;
         }
-        if (confidence >= _config.ReviewQueueThreshold)
+        if (confidence >= config.ReviewQueueThreshold)
         {
             return SpamAction.ReviewQueue;
         }
@@ -198,12 +218,13 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     /// <returns>Tuple of (processed request with potentially translated text, invisible char check result if applicable)</returns>
     private async Task<(SpamCheckRequest processedRequest, SpamCheckResponse? invisibleCharResult)> PreprocessMessageAsync(
         SpamCheckRequest request,
+        SpamDetectionConfig config,
         CancellationToken cancellationToken)
     {
         SpamCheckResponse? invisibleCharResult = null;
 
         // Check for invisible characters first (immediate spam indicator)
-        if (_config.MultiLanguage.Enabled && !string.IsNullOrWhiteSpace(request.Message))
+        if (config.MultiLanguage.Enabled && !string.IsNullOrWhiteSpace(request.Message))
         {
             var invisibleChars = CountInvisibleCharacters(request.Message);
             if (invisibleChars > 0)
@@ -221,7 +242,7 @@ public class SpamDetectorFactory : ISpamDetectorFactory
         }
 
         // Translate foreign language to English if enabled
-        if (_config.MultiLanguage.Enabled && !string.IsNullOrWhiteSpace(request.Message) && request.Message.Length >= 20)
+        if (config.MultiLanguage.Enabled && !string.IsNullOrWhiteSpace(request.Message) && request.Message.Length >= 20)
         {
             // Quick check: if message is mostly Latin script, likely English - skip expensive OpenAI translation
             if (IsLikelyLatinScript(request.Message))
