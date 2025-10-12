@@ -28,10 +28,16 @@ public partial class TelegramAdminBotService(
 {
     private readonly TelegramOptions _options = options.Value;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
+    private ITelegramBotClient? _botClient;
 
     // Events for real-time UI updates
     public event Action<MessageRecord>? OnNewMessage;
     public event Action<MessageEditRecord>? OnMessageEdited;
+
+    /// <summary>
+    /// Get the bot client instance (available after service starts)
+    /// </summary>
+    public ITelegramBotClient? BotClient => _botClient;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -42,7 +48,8 @@ public partial class TelegramAdminBotService(
             return;
         }
 
-        var botClient = botFactory.GetOrCreate(_options.BotToken);
+        _botClient = botFactory.GetOrCreate(_options.BotToken);
+        var botClient = _botClient;
 
         // Register bot commands in Telegram UI
         await RegisterBotCommandsAsync(botClient, stoppingToken);
