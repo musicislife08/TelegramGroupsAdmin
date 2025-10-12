@@ -173,7 +173,7 @@ public class ManagedChatInfo
 {
     public required ManagedChatRecord Chat { get; init; }
     public required ChatHealthStatus HealthStatus { get; init; }
-    public bool HasCustomSpamConfig { get; init; }
+    public bool HasCustomSpamConfig { get; set; }
 }
 
 /// <summary>

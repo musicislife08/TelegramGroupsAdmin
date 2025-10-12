@@ -1,8 +1,10 @@
 @page "/chats"
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Models
+@using TelegramGroupsAdmin.Components.Shared.ChatManagement
 @inject IManagedChatService ManagedChatService
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @attribute [Authorize]
 
 <PageTitle>Chat Management</PageTitle>
@@ -159,9 +161,18 @@
         };
     }
 
-    private void OpenChatConfig(ManagedChatInfo chatInfo)
+    private async Task OpenChatConfig(ManagedChatInfo chatInfo)
     {
-        // TODO: Open modal for chat configuration
-        Snackbar.Add($"Configuration modal for {chatInfo.Chat.ChatName} coming soon", Severity.Info);
+        var parameters = new DialogParameters { ["ChatInfo"] = chatInfo };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
+
+        var dialog = await DialogService.ShowAsync<ChatConfigModal>($"Configure: {chatInfo.Chat.ChatName}", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            // Reload chats after modal closes
+            await LoadChatsAsync();
+        }
     }
 }

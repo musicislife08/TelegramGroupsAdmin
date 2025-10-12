@@ -1,0 +1,511 @@
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Models
+@using TelegramGroupsAdmin.SpamDetection.Repositories
+@using TelegramGroupsAdmin.SpamDetection.Configuration
+@using TelegramGroupsAdmin.Repositories
+@inject IManagedChatService ManagedChatService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ISpamDetectionConfigRepository SpamConfigRepository
+@inject IChatAdminsRepository ChatAdminsRepository
+@inject ITelegramUserMappingRepository TelegramMappingsRepository
+@inject IUserManagementService UserManagementService
+
+<MudDialog>
+    <DialogContent>
+        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+            <!-- Health & Status Tab -->
+            <MudTabPanel Text="Health & Status" Icon="@Icons.Material.Filled.HealthAndSafety">
+                @if (_healthStatus == null)
+                {
+                    <MudProgressCircular Indeterminate="true" />
+                }
+                else
+                {
+                    <MudStack Spacing="3">
+                        <!-- Overall Status -->
+                        <MudPaper Elevation="1" Class="pa-4">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Overall Status</MudText>
+                            <MudChip T="string" Color="@GetHealthColor(_healthStatus.Status)">@_healthStatus.Status</MudChip>
+
+                            @if (!_healthStatus.IsReachable)
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mt-2">
+                                    Bot cannot reach this chat. The bot may have been removed or the chat may be deleted.
+                                </MudAlert>
+                            }
+                        </MudPaper>
+
+                        <!-- Bot Status & Permissions -->
+                        <MudPaper Elevation="1" Class="pa-4">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Bot Permissions</MudText>
+                            <MudSimpleTable Dense="true">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Bot Status:</strong></td>
+                                        <td>@_healthStatus.BotStatus</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Is Admin:</strong></td>
+                                        <td>@(_healthStatus.IsAdmin ? "Yes" : "No")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Can Delete Messages:</strong></td>
+                                        <td>@(_healthStatus.CanDeleteMessages ? "Yes" : "No")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Can Ban Users:</strong></td>
+                                        <td>@(_healthStatus.CanRestrictMembers ? "Yes" : "No")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Can Promote Members:</strong></td>
+                                        <td>@(_healthStatus.CanPromoteMembers ? "Yes" : "No")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Can Invite Users:</strong></td>
+                                        <td>@(_healthStatus.CanInviteUsers ? "Yes" : "No")</td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+
+                        <!-- Warnings -->
+                        @if (_healthStatus.Warnings.Count > 0)
+                        {
+                            <MudPaper Elevation="1" Class="pa-4">
+                                <MudText Typo="Typo.h6" GutterBottom="true">Warnings</MudText>
+                                @foreach (var warning in _healthStatus.Warnings)
+                                {
+                                    <MudAlert Severity="Severity.Warning" Class="mb-2">@warning</MudAlert>
+                                }
+                            </MudPaper>
+                        }
+
+                        <!-- Quick Actions -->
+                        <MudPaper Elevation="1" Class="pa-4">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Quick Actions</MudText>
+                            <MudStack Row="true" Spacing="2">
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                          OnClick="RefreshHealthAsync" Disabled="@_refreshing">
+                                    @if (_refreshing)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                    }
+                                    else
+                                    {
+                                        <span>Refresh Health</span>
+                                    }
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Info"
+                                          OnClick="RefreshAdminsAsync" Disabled="@_refreshingAdmins">
+                                    @if (_refreshingAdmins)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                    }
+                                    else
+                                    {
+                                        <span>Refresh Admins</span>
+                                    }
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Error"
+                                          OnClick="LeaveChatAsync" Disabled="@_leaving">
+                                    @if (_leaving)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                    }
+                                    else
+                                    {
+                                        <span>Leave Chat</span>
+                                    }
+                                </MudButton>
+                            </MudStack>
+                        </MudPaper>
+                    </MudStack>
+                }
+            </MudTabPanel>
+
+            <!-- Spam Detection Tab -->
+            <MudTabPanel Text="Spam Detection" Icon="@Icons.Material.Filled.Shield">
+                @if (_loadingConfig)
+                {
+                    <MudProgressCircular Indeterminate="true" />
+                }
+                else
+                {
+                    <MudStack Spacing="3">
+                        <!-- Configuration Mode Selection -->
+                        <MudPaper Elevation="1" Class="pa-4">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Configuration Mode</MudText>
+                            <MudRadioGroup @bind-Value="_useCustomConfig" @bind-Value:after="LoadConfigAsync" T="bool">
+                                <MudRadio Value="false" T="bool">Use Global Configuration</MudRadio>
+                                <MudRadio Value="true" T="bool">Use Custom Configuration for this Chat</MudRadio>
+                            </MudRadioGroup>
+
+                            @if (!_useCustomConfig && ChatInfo.HasCustomSpamConfig)
+                            {
+                                <MudAlert Severity="Severity.Info" Class="mt-2">
+                                    This chat currently has a custom configuration. Switching to global will delete the custom settings.
+                                </MudAlert>
+                            }
+                        </MudPaper>
+
+                        @if (_useCustomConfig && _chatConfig != null)
+                        {
+                            <!-- General Settings -->
+                            <MudPaper Elevation="1" Class="pa-4">
+                                <MudText Typo="Typo.h6" GutterBottom="true">General Settings</MudText>
+                                <MudStack Spacing="2">
+                                    <MudNumericField @bind-Value="_chatConfig.AutoBanThreshold"
+                                                    Label="Auto-Ban Threshold"
+                                                    HelperText="Confidence threshold for automatic ban (0-100)"
+                                                    Min="0" Max="100" />
+                                    <MudNumericField @bind-Value="_chatConfig.ReviewQueueThreshold"
+                                                    Label="Review Queue Threshold"
+                                                    HelperText="Minimum confidence to send to review queue (0-100)"
+                                                    Min="0" Max="100" />
+                                    <MudNumericField @bind-Value="_chatConfig.MinMessageLength"
+                                                    Label="Min Message Length"
+                                                    HelperText="Minimum length for expensive checks"
+                                                    Min="1" />
+                                </MudStack>
+                            </MudPaper>
+
+                            <!-- Algorithm Toggles -->
+                            <MudPaper Elevation="1" Class="pa-4">
+                                <MudText Typo="Typo.h6" GutterBottom="true">Detection Algorithms</MudText>
+                                <MudStack Spacing="2">
+                                    <MudSwitch @bind-Value="_chatConfig.StopWords.Enabled" Label="Stop Words Check" Color="Color.Primary" />
+                                    <MudSwitch @bind-Value="_chatConfig.Cas.Enabled" Label="CAS (Combot Anti-Spam)" Color="Color.Primary" />
+                                    <MudSwitch @bind-Value="_chatConfig.Similarity.Enabled" Label="Similarity Check" Color="Color.Primary" />
+                                    <MudSwitch @bind-Value="_chatConfig.Bayes.Enabled" Label="Bayes Classifier" Color="Color.Primary" />
+                                    <MudSwitch @bind-Value="_chatConfig.MultiLanguage.Enabled" Label="Multi-Language Detection" Color="Color.Primary" />
+                                    <MudSwitch @bind-Value="_chatConfig.Spacing.Enabled" Label="Spacing Analysis" Color="Color.Primary" />
+                                    <MudSwitch @bind-Value="_chatConfig.OpenAI.Enabled" Label="OpenAI Check" Color="Color.Primary" />
+                                    <MudSwitch @bind-Value="_chatConfig.UrlBlocklist.Enabled" Label="URL Blocklist" Color="Color.Primary" />
+                                    <MudSwitch @bind-Value="_chatConfig.ThreatIntel.Enabled" Label="Threat Intelligence" Color="Color.Primary" />
+                                    <MudSwitch @bind-Value="_chatConfig.ImageSpam.Enabled" Label="Image Spam Detection" Color="Color.Primary" />
+                                </MudStack>
+                            </MudPaper>
+
+                            <!-- OpenAI Custom Prompt -->
+                            @if (_chatConfig.OpenAI.Enabled)
+                            {
+                                <MudPaper Elevation="1" Class="pa-4">
+                                    <MudText Typo="Typo.h6" GutterBottom="true">OpenAI Custom Prompt</MudText>
+                                    <MudTextField @bind-Value="_chatConfig.OpenAI.SystemPrompt"
+                                                 Label="Custom System Prompt (Optional)"
+                                                 Lines="5"
+                                                 HelperText="Add chat-specific context for better spam detection" />
+                                </MudPaper>
+                            }
+
+                            <!-- Save Button -->
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                      OnClick="SaveConfigAsync" Disabled="@_savingConfig" FullWidth="true">
+                                @if (_savingConfig)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                }
+                                else
+                                {
+                                    <span>Save Configuration</span>
+                                }
+                            </MudButton>
+                        }
+                        else if (!_useCustomConfig)
+                        {
+                            <MudAlert Severity="Severity.Info">
+                                This chat is using the global spam detection configuration.
+                                To customize settings for this chat specifically, enable "Use Custom Configuration" above.
+                            </MudAlert>
+                        }
+                    </MudStack>
+                }
+            </MudTabPanel>
+
+            <!-- Admins Tab -->
+            <MudTabPanel Text="Admins" Icon="@Icons.Material.Filled.AdminPanelSettings">
+                @if (_loadingAdmins)
+                {
+                    <MudProgressCircular Indeterminate="true" />
+                }
+                else if (_admins == null || !_admins.Any())
+                {
+                    <MudAlert Severity="Severity.Info">No admin information available for this chat.</MudAlert>
+                }
+                else
+                {
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.body1">
+                            This chat has <strong>@_admins.Count admin(s)</strong> cached. Last refresh: @FormatTimestamp(ChatInfo.Chat.LastSeenAt ?? 0)
+                        </MudText>
+
+                        <MudTable Items="@_admins" Dense="true" Hover="true">
+                            <HeaderContent>
+                                <MudTh>Telegram ID</MudTh>
+                                <MudTh>Role</MudTh>
+                                <MudTh>Web App User</MudTh>
+                                <MudTh>Status</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Telegram ID">@context.TelegramId</MudTd>
+                                <MudTd DataLabel="Role">
+                                    @if (context.IsCreator)
+                                    {
+                                        <MudChip T="string" Color="Color.Success" Size="Size.Small">Creator</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Color="Color.Info" Size="Size.Small">Admin</MudChip>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Web App User">
+                                    @{
+                                        var linkedEmail = _adminLinkages.GetValueOrDefault(context.TelegramId);
+                                        if (!string.IsNullOrEmpty(linkedEmail))
+                                        {
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                <MudIcon Icon="@Icons.Material.Filled.Link" Size="Size.Small" Color="Color.Success" />
+                                                <MudText Typo="Typo.body2">@linkedEmail</MudText>
+                                            </MudStack>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.body2" Color="Color.Dark">Not linked</MudText>
+                                        }
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Status">
+                                    @if (context.IsActive)
+                                    {
+                                        <MudChip T="string" Color="Color.Success" Size="Size.Small">Active</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Color="Color.Default" Size="Size.Small">Inactive</MudChip>
+                                    }
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </MudStack>
+                }
+            </MudTabPanel>
+        </MudTabs>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public ManagedChatInfo ChatInfo { get; set; } = null!;
+
+    private ChatHealthStatus? _healthStatus;
+    private bool _refreshing;
+    private bool _refreshingAdmins;
+    private bool _leaving;
+
+    // Spam Detection Config
+    private bool _loadingConfig = true;
+    private bool _savingConfig;
+    private bool _useCustomConfig;
+    private SpamDetectionConfig? _chatConfig;
+
+    // Admins Tab
+    private bool _loadingAdmins = true;
+    private List<ChatAdmin>? _admins;
+    private Dictionary<long, string> _adminLinkages = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _healthStatus = ChatInfo.HealthStatus;
+        _useCustomConfig = ChatInfo.HasCustomSpamConfig;
+        await Task.WhenAll(LoadConfigAsync(), LoadAdminsAsync());
+    }
+
+    private async Task LoadAdminsAsync()
+    {
+        _loadingAdmins = true;
+        try
+        {
+            _admins = await ChatAdminsRepository.GetChatAdminsAsync(ChatInfo.Chat.ChatId);
+
+            // Load linkage information for each admin
+            _adminLinkages.Clear();
+            foreach (var admin in _admins)
+            {
+                var userId = await TelegramMappingsRepository.GetUserIdByTelegramIdAsync(admin.TelegramId);
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var user = await UserManagementService.GetUserByIdAsync(userId);
+                    if (user != null)
+                    {
+                        _adminLinkages[admin.TelegramId] = user.Email;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load admins: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingAdmins = false;
+        }
+    }
+
+    private string FormatTimestamp(long timestamp)
+    {
+        if (timestamp == 0) return "Never";
+        var dt = DateTimeOffset.FromUnixTimeSeconds(timestamp);
+        return dt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    }
+
+    private async Task LoadConfigAsync()
+    {
+        _loadingConfig = true;
+        try
+        {
+            var chatIdStr = ChatInfo.Chat.ChatId.ToString();
+
+            if (_useCustomConfig)
+            {
+                // Try to load existing custom config
+                _chatConfig = await SpamConfigRepository.GetChatConfigAsync(chatIdStr);
+
+                // If no custom config exists yet, start with global as template
+                if (!ChatInfo.HasCustomSpamConfig)
+                {
+                    var globalConfig = await SpamConfigRepository.GetGlobalConfigAsync();
+                    _chatConfig = globalConfig;
+                }
+            }
+            else
+            {
+                _chatConfig = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load config: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingConfig = false;
+        }
+    }
+
+    private async Task SaveConfigAsync()
+    {
+        _savingConfig = true;
+        try
+        {
+            var chatIdStr = ChatInfo.Chat.ChatId.ToString();
+
+            if (_useCustomConfig && _chatConfig != null)
+            {
+                // Save custom config
+                await SpamConfigRepository.UpdateChatConfigAsync(chatIdStr, _chatConfig);
+                ChatInfo.HasCustomSpamConfig = true;
+                Snackbar.Add("Configuration saved successfully", Severity.Success);
+            }
+            else if (!_useCustomConfig && ChatInfo.HasCustomSpamConfig)
+            {
+                // Delete custom config (revert to global)
+                await SpamConfigRepository.DeleteChatConfigAsync(chatIdStr);
+                ChatInfo.HasCustomSpamConfig = false;
+                Snackbar.Add("Reverted to global configuration", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save config: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _savingConfig = false;
+        }
+    }
+
+    private async Task RefreshHealthAsync()
+    {
+        _refreshing = true;
+        try
+        {
+            _healthStatus = await ManagedChatService.PerformHealthCheckAsync(ChatInfo.Chat.ChatId);
+            Snackbar.Add("Health check refreshed", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to refresh health: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _refreshing = false;
+        }
+    }
+
+    private async Task RefreshAdminsAsync()
+    {
+        _refreshingAdmins = true;
+        try
+        {
+            var count = await ManagedChatService.RefreshChatAdminsAsync(ChatInfo.Chat.ChatId);
+            await LoadAdminsAsync(); // Reload admin list
+            Snackbar.Add($"Refreshed {count} admins", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to refresh admins: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _refreshingAdmins = false;
+        }
+    }
+
+    private async Task LeaveChatAsync()
+    {
+        bool? confirm = await DialogService.ShowMessageBox(
+            "Leave Chat",
+            $"Are you sure you want the bot to leave {ChatInfo.Chat.ChatName}? This action cannot be undone.",
+            yesText: "Leave", cancelText: "Cancel");
+
+        if (confirm == true)
+        {
+            _leaving = true;
+            try
+            {
+                await ManagedChatService.LeaveChatAsync(ChatInfo.Chat.ChatId);
+                Snackbar.Add("Bot left the chat", Severity.Success);
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to leave chat: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _leaving = false;
+            }
+        }
+    }
+
+    private Color GetHealthColor(string status)
+    {
+        return status switch
+        {
+            "Healthy" => Color.Success,
+            "Warning" => Color.Warning,
+            "Error" => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private void Close()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+}
