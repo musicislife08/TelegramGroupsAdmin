@@ -1,0 +1,167 @@
+@page "/chats"
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Models
+@inject IManagedChatService ManagedChatService
+@inject ISnackbar Snackbar
+@attribute [Authorize]
+
+<PageTitle>Chat Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Chat Management</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">
+        Manage Telegram chats where the bot is active. Configure spam detection settings per chat.
+    </MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudTable Items="@_chats" Dense="true" Hover="true" Striped="true" Filter="new Func<ManagedChatInfo, bool>(FilterFunc)">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">Managed Chats</MudText>
+                <MudSpacer />
+                <MudTextField @bind-Value="_searchString" Placeholder="Search chats" Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>Chat Name</MudTh>
+                <MudTh>Type</MudTh>
+                <MudTh>Bot Status</MudTh>
+                <MudTh>Health</MudTh>
+                <MudTh>Custom Config</MudTh>
+                <MudTh>Last Seen</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Chat Name">
+                    @context.Chat.ChatName
+                    @if (!context.Chat.IsActive)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default">Inactive</MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Type">@context.Chat.ChatType.ToString()</MudTd>
+                <MudTd DataLabel="Bot Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetBotStatusColor(context.Chat.BotStatus)">
+                        @context.Chat.BotStatus.ToString()
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Health">
+                    <MudChip T="string" Size="Size.Small" Color="@GetHealthColor(context.HealthStatus.Status)">
+                        @context.HealthStatus.Status
+                    </MudChip>
+                    @if (context.HealthStatus.Warnings.Count > 0)
+                    {
+                        <MudTooltip Text="@string.Join(", ", context.HealthStatus.Warnings)">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Warning" />
+                        </MudTooltip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Custom Config">
+                    @if (context.HasCustomSpamConfig)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Success" />
+                    }
+                    else
+                    {
+                        <span>Global</span>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Last Seen">
+                    @if (context.Chat.LastSeenAt.HasValue)
+                    {
+                        @DateTimeOffset.FromUnixTimeSeconds(context.Chat.LastSeenAt.Value).ToString("g")
+                    }
+                    else
+                    {
+                        <span>Never</span>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                              OnClick="@(() => OpenChatConfig(context))">
+                        Configure
+                    </MudButton>
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+            </PagerContent>
+        </MudTable>
+    }
+</MudContainer>
+
+@code {
+    private List<ManagedChatInfo> _chats = new();
+    private bool _loading = true;
+    private string _searchString = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadChatsAsync();
+    }
+
+    private async Task LoadChatsAsync()
+    {
+        _loading = true;
+        try
+        {
+            _chats = await ManagedChatService.GetAllChatsWithHealthAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load chats: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private bool FilterFunc(ManagedChatInfo chat)
+    {
+        if (string.IsNullOrWhiteSpace(_searchString))
+            return true;
+
+        if (!string.IsNullOrEmpty(chat.Chat.ChatName) &&
+            chat.Chat.ChatName.Contains(_searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (chat.Chat.ChatId.ToString().Contains(_searchString))
+            return true;
+
+        return false;
+    }
+
+    private Color GetBotStatusColor(BotChatStatus status)
+    {
+        return status switch
+        {
+            BotChatStatus.Administrator => Color.Success,
+            BotChatStatus.Member => Color.Info,
+            BotChatStatus.Left => Color.Default,
+            BotChatStatus.Kicked => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private Color GetHealthColor(string status)
+    {
+        return status switch
+        {
+            "Healthy" => Color.Success,
+            "Warning" => Color.Warning,
+            "Error" => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    private void OpenChatConfig(ManagedChatInfo chatInfo)
+    {
+        // TODO: Open modal for chat configuration
+        Snackbar.Add($"Configuration modal for {chatInfo.Chat.ChatName} coming soon", Severity.Info);
+    }
+}
