@@ -1,9 +1,11 @@
 @using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Services.BackgroundServices
 @using TelegramGroupsAdmin.Models
 @using TelegramGroupsAdmin.SpamDetection.Repositories
 @using TelegramGroupsAdmin.SpamDetection.Configuration
 @using TelegramGroupsAdmin.Repositories
-@inject IManagedChatService ManagedChatService
+@using Telegram.Bot
+@inject TelegramAdminBotService BotService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject ISpamDetectionConfigRepository SpamConfigRepository
@@ -81,45 +83,10 @@
                             </MudPaper>
                         }
 
-                        <!-- Quick Actions -->
-                        <MudPaper Elevation="1" Class="pa-4">
-                            <MudText Typo="Typo.h6" GutterBottom="true">Quick Actions</MudText>
-                            <MudStack Row="true" Spacing="2">
-                                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
-                                          OnClick="RefreshHealthAsync" Disabled="@_refreshing">
-                                    @if (_refreshing)
-                                    {
-                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                    }
-                                    else
-                                    {
-                                        <span>Refresh Health</span>
-                                    }
-                                </MudButton>
-                                <MudButton Variant="Variant.Outlined" Color="Color.Info"
-                                          OnClick="RefreshAdminsAsync" Disabled="@_refreshingAdmins">
-                                    @if (_refreshingAdmins)
-                                    {
-                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                    }
-                                    else
-                                    {
-                                        <span>Refresh Admins</span>
-                                    }
-                                </MudButton>
-                                <MudButton Variant="Variant.Outlined" Color="Color.Error"
-                                          OnClick="LeaveChatAsync" Disabled="@_leaving">
-                                    @if (_leaving)
-                                    {
-                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                    }
-                                    else
-                                    {
-                                        <span>Leave Chat</span>
-                                    }
-                                </MudButton>
-                            </MudStack>
-                        </MudPaper>
+                        <!-- Info message about automatic updates -->
+                        <MudAlert Severity="Severity.Info">
+                            Health status updates automatically every minute and when bot permissions change.
+                        </MudAlert>
                     </MudStack>
                 }
             </MudTabPanel>
@@ -302,9 +269,6 @@
     [Parameter] public ManagedChatInfo ChatInfo { get; set; } = null!;
 
     private ChatHealthStatus? _healthStatus;
-    private bool _refreshing;
-    private bool _refreshingAdmins;
-    private bool _leaving;
 
     // Spam Detection Config
     private bool _loadingConfig = true;
@@ -426,70 +390,6 @@
         finally
         {
             _savingConfig = false;
-        }
-    }
-
-    private async Task RefreshHealthAsync()
-    {
-        _refreshing = true;
-        try
-        {
-            _healthStatus = await ManagedChatService.PerformHealthCheckAsync(ChatInfo.Chat.ChatId);
-            Snackbar.Add("Health check refreshed", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to refresh health: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _refreshing = false;
-        }
-    }
-
-    private async Task RefreshAdminsAsync()
-    {
-        _refreshingAdmins = true;
-        try
-        {
-            var count = await ManagedChatService.RefreshChatAdminsAsync(ChatInfo.Chat.ChatId);
-            await LoadAdminsAsync(); // Reload admin list
-            Snackbar.Add($"Refreshed {count} admins", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to refresh admins: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _refreshingAdmins = false;
-        }
-    }
-
-    private async Task LeaveChatAsync()
-    {
-        bool? confirm = await DialogService.ShowMessageBox(
-            "Leave Chat",
-            $"Are you sure you want the bot to leave {ChatInfo.Chat.ChatName}? This action cannot be undone.",
-            yesText: "Leave", cancelText: "Cancel");
-
-        if (confirm == true)
-        {
-            _leaving = true;
-            try
-            {
-                await ManagedChatService.LeaveChatAsync(ChatInfo.Chat.ChatId);
-                Snackbar.Add("Bot left the chat", Severity.Success);
-                Close();
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Failed to leave chat: {ex.Message}", Severity.Error);
-            }
-            finally
-            {
-                _leaving = false;
-            }
         }
     }
 
