@@ -1,9 +1,12 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Models;
 using TelegramGroupsAdmin.Repositories;
+using TelegramGroupsAdmin.Services.Telegram;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -20,12 +23,13 @@ public class ManagedChatService : IManagedChatService
     public ManagedChatService(
         IManagedChatsRepository chatsRepository,
         IChatAdminsRepository adminsRepository,
-        ITelegramBotClient botClient,
+        TelegramBotClientFactory botFactory,
+        IOptions<TelegramOptions> telegramOptions,
         ILogger<ManagedChatService> logger)
     {
         _chatsRepository = chatsRepository;
         _adminsRepository = adminsRepository;
-        _botClient = botClient;
+        _botClient = botFactory.GetOrCreate(telegramOptions.Value.BotToken);
         _logger = logger;
     }
 
