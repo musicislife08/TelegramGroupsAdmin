@@ -1,11 +1,17 @@
 @page "/chats"
 @using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Services.BackgroundServices
 @using TelegramGroupsAdmin.Models
+@using TelegramGroupsAdmin.Repositories
 @using TelegramGroupsAdmin.Components.Shared.ChatManagement
-@inject IManagedChatService ManagedChatService
+@using TelegramGroupsAdmin.SpamDetection.Repositories
+@inject TelegramAdminBotService BotService
+@inject IManagedChatsRepository ManagedChatsRepository
+@inject ISpamDetectionConfigRepository SpamConfigRepository
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @attribute [Authorize]
+@implements IDisposable
 
 <PageTitle>Chat Management</PageTitle>
 
@@ -103,6 +109,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Subscribe to health updates
+        BotService.OnHealthUpdate += HandleHealthUpdate;
+
         await LoadChatsAsync();
     }
 
@@ -111,7 +120,34 @@
         _loading = true;
         try
         {
-            _chats = await ManagedChatService.GetAllChatsWithHealthAsync();
+            // Load all managed chats
+            var chats = await ManagedChatsRepository.GetAllChatsAsync();
+
+            // Check which chats have custom spam configs
+            var allConfigs = await SpamConfigRepository.GetAllChatConfigsAsync();
+            var customConfigChatIds = allConfigs
+                .Where(c => c.ChatId != "0")
+                .Select(c => long.Parse(c.ChatId))
+                .ToHashSet();
+
+            _chats = new List<ManagedChatInfo>();
+            foreach (var chat in chats)
+            {
+                // Get cached health status from bot service
+                var health = BotService.GetCachedHealth(chat.ChatId) ?? new ChatHealthStatus
+                {
+                    ChatId = chat.ChatId,
+                    Status = "Checking...",
+                    IsReachable = true
+                };
+
+                _chats.Add(new ManagedChatInfo
+                {
+                    Chat = chat,
+                    HealthStatus = health,
+                    HasCustomSpamConfig = customConfigChatIds.Contains(chat.ChatId)
+                });
+            }
         }
         catch (Exception ex)
         {
@@ -121,6 +157,23 @@
         {
             _loading = false;
         }
+    }
+
+    private void HandleHealthUpdate(ChatHealthStatus health)
+    {
+        // Update health status for the chat in real-time
+        var chat = _chats.FirstOrDefault(c => c.Chat.ChatId == health.ChatId);
+        if (chat != null)
+        {
+            chat.HealthStatus = health;
+            InvokeAsync(StateHasChanged); // Re-render UI
+        }
+    }
+
+    public void Dispose()
+    {
+        // Unsubscribe from events
+        BotService.OnHealthUpdate -= HandleHealthUpdate;
     }
 
     private bool FilterFunc(ManagedChatInfo chat)

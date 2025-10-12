@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
@@ -29,15 +30,23 @@ public partial class TelegramAdminBotService(
     private readonly TelegramOptions _options = options.Value;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
     private ITelegramBotClient? _botClient;
+    private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();
 
     // Events for real-time UI updates
     public event Action<MessageRecord>? OnNewMessage;
     public event Action<MessageEditRecord>? OnMessageEdited;
+    public event Action<ChatHealthStatus>? OnHealthUpdate;
 
     /// <summary>
     /// Get the bot client instance (available after service starts)
     /// </summary>
     public ITelegramBotClient? BotClient => _botClient;
+
+    /// <summary>
+    /// Get cached health status for a chat (null if not yet checked)
+    /// </summary>
+    public ChatHealthStatus? GetCachedHealth(long chatId)
+        => _healthCache.TryGetValue(chatId, out var health) ? health : null;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -56,6 +65,30 @@ public partial class TelegramAdminBotService(
 
         // Cache admin lists for all managed chats
         await RefreshAllChatAdminsAsync(botClient, stoppingToken);
+
+        // Perform initial health check for all chats
+        await RefreshAllHealthAsync();
+
+        // Start periodic health check timer (runs every 1 minute)
+        _ = Task.Run(async () =>
+        {
+            var healthTimer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+            try
+            {
+                while (await healthTimer.WaitForNextTickAsync(stoppingToken))
+                {
+                    await RefreshAllHealthAsync();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                logger.LogInformation("Health check timer cancelled");
+            }
+            finally
+            {
+                healthTimer.Dispose();
+            }
+        }, stoppingToken);
 
         logger.LogInformation("Telegram admin bot started listening for messages in all chats");
 
@@ -587,6 +620,9 @@ public partial class TelegramAdminBotService(
                     chat.Title ?? chat.Username ?? "Unknown",
                     newStatus);
             }
+
+            // Trigger immediate health check when bot status changes
+            await RefreshHealthForChatAsync(chat.Id);
         }
         catch (Exception ex)
         {
@@ -727,4 +763,121 @@ public partial class TelegramAdminBotService(
         2 => "Owner",
         _ => "Unknown"
     };
+
+    /// <summary>
+    /// Perform health check on a specific chat and update cache
+    /// </summary>
+    private async Task RefreshHealthForChatAsync(long chatId)
+    {
+        try
+        {
+            if (_botClient == null)
+            {
+                logger.LogWarning("Bot client not initialized, skipping health check for chat {ChatId}", chatId);
+                return;
+            }
+
+            var health = await PerformHealthCheckAsync(_botClient, chatId);
+            _healthCache[chatId] = health;
+            OnHealthUpdate?.Invoke(health);
+
+            logger.LogDebug("Health check completed for chat {ChatId}: {Status}", chatId, health.Status);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to perform health check for chat {ChatId}", chatId);
+        }
+    }
+
+    /// <summary>
+    /// Perform health check on a chat (check reachability, permissions, etc.)
+    /// </summary>
+    private async Task<ChatHealthStatus> PerformHealthCheckAsync(ITelegramBotClient botClient, long chatId)
+    {
+        var health = new ChatHealthStatus
+        {
+            ChatId = chatId,
+            IsReachable = false,
+            Status = "Unknown"
+        };
+
+        try
+        {
+            // Try to get chat info
+            var chat = await botClient.GetChat(chatId);
+            health.IsReachable = true;
+            health.ChatTitle = chat.Title ?? chat.Username ?? $"Chat {chatId}";
+
+            // Get bot's member status
+            var botMember = await botClient.GetChatMember(chatId, botClient.BotId);
+            health.BotStatus = botMember.Status.ToString();
+            health.IsAdmin = botMember.Status == ChatMemberStatus.Administrator;
+
+            // Check permissions if admin
+            if (botMember.Status == ChatMemberStatus.Administrator && botMember is ChatMemberAdministrator admin)
+            {
+                health.CanDeleteMessages = admin.CanDeleteMessages;
+                health.CanRestrictMembers = admin.CanRestrictMembers;
+                health.CanPromoteMembers = admin.CanPromoteMembers;
+                health.CanInviteUsers = admin.CanInviteUsers;
+            }
+
+            // Get admin count
+            var admins = await botClient.GetChatAdministrators(chatId);
+            health.AdminCount = admins.Length;
+
+            // Determine overall status
+            health.Status = "Healthy";
+            health.Warnings.Clear();
+
+            if (!health.IsAdmin)
+            {
+                health.Status = "Warning";
+                health.Warnings.Add("Bot is not an admin in this chat");
+            }
+            else
+            {
+                if (!health.CanDeleteMessages)
+                    health.Warnings.Add("Bot cannot delete messages");
+                if (!health.CanRestrictMembers)
+                    health.Warnings.Add("Bot cannot ban/restrict users");
+
+                if (health.Warnings.Count > 0)
+                    health.Status = "Warning";
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Health check failed for chat {ChatId}", chatId);
+            health.IsReachable = false;
+            health.Status = "Error";
+            health.Warnings.Add($"Cannot reach chat: {ex.Message}");
+        }
+
+        return health;
+    }
+
+    /// <summary>
+    /// Refresh health for all managed chats
+    /// </summary>
+    private async Task RefreshAllHealthAsync()
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+            var chats = await managedChatsRepository.GetAllChatsAsync();
+
+            foreach (var chat in chats.Where(c => c.IsActive))
+            {
+                await RefreshHealthForChatAsync(chat.ChatId);
+            }
+
+            logger.LogInformation("Completed health check for {Count} chats", chats.Count(c => c.IsActive));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to refresh health for all chats");
+        }
+    }
 }
