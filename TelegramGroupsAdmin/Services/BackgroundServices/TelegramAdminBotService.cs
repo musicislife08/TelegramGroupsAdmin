@@ -560,6 +560,82 @@ public partial class TelegramAdminBotService(
                 "Recorded edit for message {MessageId} in chat {ChatId}",
                 editedMessage.MessageId,
                 editedMessage.Chat.Id);
+
+            // Phase 2.7: Re-scan edited message for spam (detect "post innocent, edit to spam" tactic)
+            if (!string.IsNullOrWhiteSpace(newText))
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var scope = serviceProvider.CreateScope();
+                        var orchestrator = scope.ServiceProvider.GetRequiredService<ISpamCheckOrchestrator>();
+                        var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
+                        var spamDetectorFactory = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.SpamDetection.Services.ISpamDetectorFactory>();
+
+                        var request = new TelegramGroupsAdmin.SpamDetection.Models.SpamCheckRequest
+                        {
+                            Message = newText,
+                            UserId = editedMessage.From?.Id.ToString() ?? "",
+                            UserName = editedMessage.From?.Username,
+                            ChatId = editedMessage.Chat.Id.ToString()
+                        };
+
+                        var result = await orchestrator.CheckAsync(request);
+
+                        // Store detection result with incremented edit_version
+                        if (!result.SpamCheckSkipped && result.SpamResult != null)
+                        {
+                            // Get the latest edit_version for this message
+                            var existingResults = await detectionResultsRepo.GetByMessageIdAsync(editedMessage.MessageId);
+                            var maxEditVersion = existingResults.Any()
+                                ? existingResults.Max(r => r.EditVersion)
+                                : 0;
+
+                            var detectionResult = new Models.DetectionResultRecord
+                            {
+                                MessageId = editedMessage.MessageId,
+                                DetectedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                                DetectionSource = "auto",
+                                DetectionMethod = result.SpamResult.CheckResults.Count > 0
+                                    ? string.Join(", ", result.SpamResult.CheckResults.Select(c => c.CheckName))
+                                    : "Unknown",
+                                IsSpam = result.SpamResult.IsSpam,
+                                Confidence = result.SpamResult.MaxConfidence,
+                                Reason = $"[Edit #{maxEditVersion + 1}] {result.SpamResult.PrimaryReason}",
+                                AddedBy = null, // Auto-detection
+                                UsedForTraining = DetermineIfTrainingWorthy(result.SpamResult),
+                                NetConfidence = result.SpamResult.NetConfidence,
+                                CheckResultsJson = spamDetectorFactory.GetType()
+                                    .GetMethod("SerializeCheckResults", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                                    ?.Invoke(null, new object[] { result.SpamResult.CheckResults }) as string,
+                                EditVersion = maxEditVersion + 1
+                            };
+
+                            await detectionResultsRepo.InsertAsync(detectionResult);
+
+                            logger.LogInformation(
+                                "Stored detection result for edited message {MessageId} (edit #{EditVersion}): {IsSpam} (net: {NetConfidence}, training: {UsedForTraining})",
+                                editedMessage.MessageId,
+                                detectionResult.EditVersion,
+                                result.SpamResult.IsSpam ? "spam" : "ham",
+                                result.SpamResult.NetConfidence,
+                                detectionResult.UsedForTraining);
+
+                            // Take action if edited content is spam
+                            await HandleSpamDetectionActionsAsync(
+                                scope.ServiceProvider,
+                                editedMessage,
+                                result.SpamResult,
+                                detectionResult);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to re-scan edited message {MessageId} for spam", editedMessage.MessageId);
+                    }
+                }, CancellationToken.None);
+            }
         }
         catch (Exception ex)
         {
