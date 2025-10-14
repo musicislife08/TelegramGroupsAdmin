@@ -221,6 +221,23 @@ ASP.NET Core 10.0 Blazor Server + Minimal API. Telegram spam detection (text + i
   - Revocable if spam detected (compromised account protection)
   - Logged to audit_log as UserAutoWhitelisted event
 
+#### **welcome_analytics** - Welcome system tracking
+**Columns:**
+- id (BIGSERIAL) - Auto-increment primary key
+- user_id (BIGINT) - Telegram user ID
+- chat_id (BIGINT) - Telegram chat ID
+- joined_at (BIGINT) - Unix timestamp when user joined
+- response_type (TEXT) - 'accepted', 'denied', 'timeout', or 'left'
+- responded_at (BIGINT) - Unix timestamp when user responded (NULL if timeout/left)
+- dm_sent (BOOLEAN) - Did DM succeed after acceptance?
+- kicked (BOOLEAN) - Was user kicked (denied/timeout)?
+- created_at (BIGINT) - Record creation timestamp
+
+**Purpose:** Track welcome system effectiveness and user behavior
+- Analytics: acceptance rate per chat, average response time, kick rate
+- Spam correlation: users who accept then spam quickly may indicate compromised accounts
+**Retention:** Permanent (analytics data)
+
 ### Configuration Tables
 
 #### **stop_words** - Keyword blocklist
@@ -658,11 +675,20 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - UI integration in Reports and Messages pages
 
 **Phase 4.5: Welcome Message System**
-- Auto-DM new users when joining chat (ChatMemberUpdated event)
-- Per-chat templates with variables: {chat_name}, {username}, {rules_url}
-- TickerQ delayed job (default 5min delay before sending)
-- Configuration in welcome_config JSONB (enabled, template, delay_minutes)
-- UI: `/settings#telegram` tab for template editing
+- Rule acceptance enforcement before user can post (ChatMemberUpdated event triggers flow)
+- Two-stage message system: consent in chat, detailed info via DM (fallback to chat if DM fails)
+- User flow: restrict permissions on join → post welcome with inline buttons → timeout if no response (default 60s)
+- Accept: restore permissions, delete welcome, DM rules (or post in chat if DM blocked)
+- Deny/timeout: kick user (ban + immediate unban), delete welcome
+- Returning members: show welcome again (simpler, rules may have changed)
+- Callback validation: only tagged user can click their buttons (others get 10s auto-delete warning)
+- Wrong user clicks: temporary warning message deleted after 10s
+- User leaves before timeout: cancel job, delete welcome
+- Analytics tracking: welcome_responses table (acceptance rate, DM success, spam correlation)
+- Configuration in welcome_config JSONB (timeout, templates, button text)
+- Templates support variables: {chat_name}, {username}, {rules_text}, {helpful_info}
+- Three templates: chat_welcome (consent), dm_template (preferred), chat_fallback (if DM fails)
+- UI: `/settings#telegram` tab for template editing and timeout configuration
 
 **Phase 4.6: Settings UI Completion**
 - `/settings#general` - App config (retention, timezone, session timeout, password policy)
