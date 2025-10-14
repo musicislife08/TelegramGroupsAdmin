@@ -368,12 +368,36 @@ CREATE TABLE verification_tokens (
 4. **Cross-chat support** - All tables support multiple chat_ids
 5. **Audit trail** - Complete history of who did what, when
 
-### Background Services
-- `TelegramAdminBotService` - Unified Telegram bot (renamed from HistoryBotService)
-  - Currently: Message history caching, real-time events
-  - Future: Bot commands, spam detection, moderation actions
-- `SpamCheckQueueWorker` (planned) - Async spam detection processing
-- `CleanupBackgroundService` - Message retention cleanup with smart retention (keeps spam/ham samples)
+### Background Services (Refactored Architecture) ✅
+
+**Composition Pattern** - Services separated by responsibility for maintainability:
+
+1. **TelegramAdminBotService.cs** (208 lines) - Core bot lifecycle
+   - Bot polling and update routing
+   - Command registration with Telegram
+   - Event forwarding from child services
+   - Implements `IMessageHistoryService` interface
+
+2. **MessageProcessingService.cs** (509 lines) - Message handling
+   - New message processing and storage
+   - Edit monitoring with spam re-scanning
+   - Image download/thumbnail generation
+   - Spam detection orchestration
+   - URL extraction and content hashing
+
+3. **ChatManagementService.cs** (359 lines) - Chat/admin management
+   - MyChatMember event handling (bot added/removed)
+   - Admin cache refresh (startup + runtime)
+   - Health checking (per-chat + all chats)
+   - Chat name updates from Telegram API
+
+4. **SpamActionService.cs** (230 lines) - Spam action handling
+   - Training data quality control
+   - Auto-ban execution (cross-chat enforcement)
+   - Borderline report creation
+   - Confidence-based decision logic
+
+5. **CleanupBackgroundService.cs** (80 lines) - Message retention cleanup with smart retention (keeps spam/ham samples)
 
 ## Configuration (Env Vars)
 
@@ -668,13 +692,14 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - Messages page: Mark as Spam/Ham buttons + Detection History dialog
 - All check results stored as JSON with `used_for_training` flag
 
-**Phase 2.7: Spam Action Implementation** 🔄 **NEXT**
-- [ ] Auto-create reports for borderline detections (net +0 to +50)
-- [ ] Auto-ban implementation (net >80 after OpenAI confirmation)
-- [ ] Unban logic for "Mark as Ham" button
-- [ ] Command actions: `/spam`, `/ban`, `/unban`, `/warn` with Telegram API calls
-- [ ] Cross-chat ban enforcement
-- [ ] Edit monitoring with re-scanning
+**Phase 2.7: Spam Action Implementation** ✅ **COMPLETE**
+- [x] Auto-create reports for borderline detections (net +0 to +50)
+- [x] Auto-ban implementation (net >50 + OpenAI 85%+ confirmation)
+- [x] Unban logic for "Mark as Ham" button
+- [x] Command actions: `/spam`, `/ban`, `/unban`, `/warn` with Telegram API calls
+- [x] Cross-chat ban enforcement
+- [x] Edit monitoring with re-scanning
+- [x] **Major refactoring**: Split TelegramAdminBotService (1,243 lines → 4 focused services)
 
 ### Phase 3: Advanced Multi-Chat Features (FUTURE)
 
@@ -693,16 +718,37 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 
 ## Next Steps (Prioritized for 2025)
 
-### **Current Priority: Phase 2.7 - Spam Action Implementation** 🎯
-Complete the spam detection workflow with automatic actions and cross-chat enforcement.
+### **Recent Completion: Phase 2.7 ✅ + Major Refactoring**
+- ✅ **Spam action workflow complete** - Auto-ban, reports, cross-chat enforcement, edit monitoring
+- ✅ **Service architecture refactored** - TelegramAdminBotService split from 1,243 lines → 4 focused services (83% reduction)
+- ✅ **Code quality maintained** - 0 errors, 0 warnings throughout refactoring
 
-**Tasks:**
-1. Auto-create reports for borderline detections (net +0 to +50) → existing `/reports` page
-2. Auto-ban for confident spam (net >80 after OpenAI 85%+ confirmation)
-3. Unban logic for "Mark as Ham" button (check `user_actions`, call UnbanChatMember API)
-4. Complete bot command actions: `/spam`, `/ban`, `/unban`, `/warn` with Telegram API
-5. Cross-chat enforcement (ban across all managed chats)
-6. Edit monitoring (re-scan edited messages with `edit_version` tracking)
+### **Current Decision Point: EF Core Migration** 🤔
+
+**Context:** Project has grown significantly (18 tables, 20+ repositories, complex relationships)
+
+**Dapper Pain Points:**
+1. **Manual SQL everywhere** - Every CRUD operation requires hand-written SQL
+2. **Schema sync risk** - Migrations and DTOs can drift from actual queries
+3. **No type safety** - Column renames break at runtime, not compile time
+4. **Relationship complexity** - Manual joins, no navigation properties
+5. **Change tracking** - No automatic dirty checking, must track manually
+
+**EF Core Benefits:**
+1. **Type-safe queries** - LINQ, compile-time checking, IntelliSense
+2. **Auto-generated SQL** - No manual INSERT/UPDATE/DELETE statements
+3. **Navigation properties** - `message.DetectionResults` instead of manual joins
+4. **Change tracking** - Automatic dirty detection, optimized updates
+5. **Migration validation** - Schema always matches entity classes
+6. **Better performance tooling** - Query logging, includes optimization, compiled queries
+
+**Considerations:**
+- Migration effort: ~2-3 days (convert 20+ repositories, test thoroughly)
+- Performance: EF Core 10 has excellent performance (comparable to Dapper for most operations)
+- Learning curve: Minimal (team already knows .NET/C#, LINQ is natural)
+- FluentMigrator: Keep for initial schema creation, use EF migrations going forward
+
+**Recommendation:** Discuss pros/cons before committing to migration
 
 ---
 
