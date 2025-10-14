@@ -134,6 +134,9 @@ public static class ServiceCollectionExtensions
         // Email service (SendGrid)
         services.AddScoped<TelegramGroupsAdmin.Services.Email.IEmailService, TelegramGroupsAdmin.Services.Email.SendGridEmailService>();
 
+        // Moderation service (shared by bot commands and UI)
+        services.AddScoped<ModerationActionService>();
+
         return services;
     }
 
@@ -235,6 +238,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SpamActionService>();
         services.AddSingleton<ChatManagementService>();
         services.AddSingleton<MessageProcessingService>();
+        services.AddScoped<UserAutoTrustService>();
         services.AddSingleton<TelegramAdminBotService>();
         services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());
         services.AddScoped<TelegramGroupsAdmin.SpamDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();

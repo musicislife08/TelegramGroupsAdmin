@@ -12,6 +12,7 @@ public class TrustCommand : IBotCommand
 {
     private readonly ILogger<TrustCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ModerationActionService _moderationService;
 
     public string Name => "trust";
     public string Description => "Whitelist user (bypass spam detection)";
@@ -22,10 +23,12 @@ public class TrustCommand : IBotCommand
 
     public TrustCommand(
         ILogger<TrustCommand> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ModerationActionService moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _moderationService = moderationService;
     }
 
     public async Task<string> ExecuteAsync(
@@ -65,7 +68,6 @@ public class TrustCommand : IBotCommand
 
         using var scope = _serviceProvider.CreateScope();
         var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-        var telegramUserMappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
 
         // Check if user is already trusted
         var isAlreadyTrusted = await userActionsRepository.IsUserTrustedAsync(
@@ -78,26 +80,24 @@ public class TrustCommand : IBotCommand
         }
 
         // Map executor Telegram ID to web app user ID
-        string? executorUserId = null;
-        if (message.From?.Id != null)
+        string? executorUserId = await _moderationService.GetExecutorUserIdAsync(message.From?.Id);
+
+        // Build reason with chat context
+        var chatName = message.Chat.Title ?? message.Chat.Username ?? message.Chat.Id.ToString();
+        var reason = $"Trusted by admin in chat {chatName}";
+
+        // Execute trust action via centralized service
+        var result = await _moderationService.TrustUserAsync(
+            userId: targetUser.Id,
+            executorId: executorUserId,
+            reason: reason);
+
+        // Build response based on result
+        if (!result.Success)
         {
-            executorUserId = await telegramUserMappingRepository.GetUserIdByTelegramIdAsync(message.From.Id);
+            _logger.LogError("Failed to trust user {UserId}: {Error}", targetUser.Id, result.ErrorMessage);
+            return $"❌ Failed to trust user: {result.ErrorMessage}";
         }
-
-        // Create trust action (permanent, global - all trusts apply to all chats)
-        // Note: MessageId set to null since message may not be in our history DB (FK constraint)
-        var trustAction = new UserActionRecord(
-            Id: 0, // Will be assigned by database
-            UserId: targetUser.Id,
-            ActionType: UserActionType.Trust,
-            MessageId: null, // Don't link to message (may not exist in our DB)
-            IssuedBy: executorUserId, // Mapped from telegram_user_mappings (may be null if not linked)
-            IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            ExpiresAt: null, // Permanent trust
-            Reason: $"Trusted by admin in chat {message.Chat.Title ?? message.Chat.Username ?? message.Chat.Id.ToString()}"
-        );
-
-        await userActionsRepository.InsertAsync(trustAction);
 
         _logger.LogInformation(
             "User {TargetId} (@{TargetUsername}) trusted by {ExecutorId} in chat {ChatId}",

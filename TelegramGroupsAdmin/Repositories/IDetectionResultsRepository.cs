@@ -46,6 +46,12 @@ public interface IDetectionResultsRepository
     Task<bool> IsUserTrustedAsync(long userId, long? chatId = null);
 
     /// <summary>
+    /// Get recent non-spam detection results for a user (global, not per-chat)
+    /// Used for auto-whitelisting after N consecutive non-spam messages
+    /// </summary>
+    Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit = 3);
+
+    /// <summary>
     /// Get detection statistics
     /// </summary>
     Task<DetectionStats> GetStatsAsync();

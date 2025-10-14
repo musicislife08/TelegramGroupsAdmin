@@ -16,7 +16,7 @@ public class ReportActionsService : IReportActionsService
 {
     private readonly IReportsRepository _reportsRepository;
     private readonly MessageHistoryRepository _messageRepository;
-    private readonly IUserActionsRepository _userActionsRepository;
+    private readonly ModerationActionService _moderationService;
     private readonly TelegramBotClientFactory _botFactory;
     private readonly TelegramOptions _telegramOptions;
     private readonly ILogger<ReportActionsService> _logger;
@@ -24,14 +24,14 @@ public class ReportActionsService : IReportActionsService
     public ReportActionsService(
         IReportsRepository reportsRepository,
         MessageHistoryRepository messageRepository,
-        IUserActionsRepository userActionsRepository,
+        ModerationActionService moderationService,
         TelegramBotClientFactory botFactory,
         IOptions<TelegramOptions> telegramOptions,
         ILogger<ReportActionsService> logger)
     {
         _reportsRepository = reportsRepository;
         _messageRepository = messageRepository;
-        _userActionsRepository = userActionsRepository;
+        _moderationService = moderationService;
         _botFactory = botFactory;
         _telegramOptions = telegramOptions.Value;
         _logger = logger;
@@ -45,32 +45,28 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Report {reportId} not found");
         }
 
+        var message = await _messageRepository.GetMessageAsync(report.MessageId);
+        if (message == null)
+        {
+            throw new InvalidOperationException($"Message {report.MessageId} not found");
+        }
+
         var botClient = _botFactory.GetOrCreate(_telegramOptions.BotToken);
 
-        // Delete the reported message
-        try
-        {
-            await botClient.DeleteMessage(
-                chatId: report.ChatId,
-                messageId: report.MessageId);
+        // Execute spam + ban action via ModerationActionService
+        var result = await _moderationService.MarkAsSpamAndBanAsync(
+            botClient: botClient,
+            messageId: report.MessageId,
+            userId: message.UserId,
+            chatId: report.ChatId,
+            executorId: reviewerId,
+            reason: $"Report #{reportId} - spam/abuse",
+            cancellationToken: default);
 
-            // Mark message as deleted in database
-            await _messageRepository.MarkMessageAsDeletedAsync(
-                report.MessageId,
-                "spam_action");
-
-            _logger.LogInformation(
-                "Deleted message {MessageId} in chat {ChatId} via spam action on report {ReportId}",
-                report.MessageId,
-                report.ChatId,
-                reportId);
-        }
-        catch (Exception ex)
+        if (!result.Success)
         {
-            _logger.LogWarning(ex,
-                "Failed to delete message {MessageId} in chat {ChatId} (may already be deleted)",
-                report.MessageId,
-                report.ChatId);
+            _logger.LogError("Spam action failed for report {ReportId}: {Error}", reportId, result.ErrorMessage);
+            throw new InvalidOperationException($"Failed to execute spam action: {result.ErrorMessage}");
         }
 
         // Update report status
@@ -79,12 +75,12 @@ public class ReportActionsService : IReportActionsService
             ReportStatus.Reviewed,
             reviewerId,
             "spam",
-            "Message deleted as spam");
+            $"User banned from {result.ChatsAffected} chats, message deleted");
 
         // Reply to original /report command
         await SendReportReplyAsync(
             report,
-            "✅ Report reviewed: Message deleted as spam");
+            $"✅ Report reviewed: User banned from {result.ChatsAffected} chats, message deleted as spam");
     }
 
     public async Task HandleBanActionAsync(long reportId, string reviewerId)
@@ -103,40 +99,19 @@ public class ReportActionsService : IReportActionsService
 
         var botClient = _botFactory.GetOrCreate(_telegramOptions.BotToken);
 
-        // Ban user in the chat
-        try
+        // Execute ban action via ModerationActionService
+        var result = await _moderationService.BanUserAsync(
+            botClient: botClient,
+            userId: message.UserId,
+            messageId: report.MessageId,
+            executorId: reviewerId,
+            reason: $"Report #{reportId} - spam/abuse",
+            cancellationToken: default);
+
+        if (!result.Success)
         {
-            await botClient.BanChatMember(
-                chatId: report.ChatId,
-                userId: message.UserId);
-
-            // Record ban action (all bans are global)
-            var banAction = new UserActionRecord(
-                Id: 0,
-                UserId: message.UserId,
-                ActionType: UserActionType.Ban,
-                MessageId: report.MessageId,
-                IssuedBy: $"admin_{reviewerId}",
-                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                ExpiresAt: null, // Permanent ban
-                Reason: $"Report #{reportId} - spam/abuse"
-            );
-
-            await _userActionsRepository.InsertAsync(banAction);
-
-            _logger.LogInformation(
-                "Banned user {UserId} in chat {ChatId} via report {ReportId}",
-                message.UserId,
-                report.ChatId,
-                reportId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Failed to ban user {UserId} in chat {ChatId}",
-                message.UserId,
-                report.ChatId);
-            throw;
+            _logger.LogError("Ban action failed for report {ReportId}: {Error}", reportId, result.ErrorMessage);
+            throw new InvalidOperationException($"Failed to execute ban action: {result.ErrorMessage}");
         }
 
         // Delete the message
@@ -163,12 +138,12 @@ public class ReportActionsService : IReportActionsService
             ReportStatus.Reviewed,
             reviewerId,
             "ban",
-            $"User {message.UserId} banned");
+            $"User banned from {result.ChatsAffected} chats");
 
         // Reply to original /report command
         await SendReportReplyAsync(
             report,
-            $"✅ Report reviewed: User banned from chat");
+            $"✅ Report reviewed: User banned from {result.ChatsAffected} chats");
     }
 
     public async Task HandleWarnActionAsync(long reportId, string reviewerId)
@@ -185,19 +160,18 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Message {report.MessageId} not found");
         }
 
-        // Record warn action (all warnings are global)
-        var warnAction = new UserActionRecord(
-            Id: 0,
-            UserId: message.UserId,
-            ActionType: UserActionType.Warn,
-            MessageId: report.MessageId,
-            IssuedBy: $"admin_{reviewerId}",
-            IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            ExpiresAt: null,
-            Reason: $"Report #{reportId} - inappropriate behavior"
-        );
+        // Execute warn action via ModerationActionService
+        var result = await _moderationService.WarnUserAsync(
+            userId: message.UserId,
+            messageId: report.MessageId,
+            executorId: reviewerId,
+            reason: $"Report #{reportId} - inappropriate behavior");
 
-        await _userActionsRepository.InsertAsync(warnAction);
+        if (!result.Success)
+        {
+            _logger.LogError("Warn action failed for report {ReportId}: {Error}", reportId, result.ErrorMessage);
+            throw new InvalidOperationException($"Failed to execute warn action: {result.ErrorMessage}");
+        }
 
         // Update report status
         await _reportsRepository.UpdateReportStatusAsync(
@@ -211,11 +185,6 @@ public class ReportActionsService : IReportActionsService
         await SendReportReplyAsync(
             report,
             $"✅ Report reviewed: Warning issued to user");
-
-        _logger.LogInformation(
-            "Warned user {UserId} via report {ReportId}",
-            message.UserId,
-            reportId);
     }
 
     public async Task HandleDismissActionAsync(long reportId, string reviewerId, string? reason = null)

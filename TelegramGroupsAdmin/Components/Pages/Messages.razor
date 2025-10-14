@@ -19,10 +19,9 @@
 @inject IMessageHistoryService MessageHistoryService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDetectionResultsRepository DetectionResultsRepository
-@inject IUserActionsRepository UserActionsRepository
-@inject IManagedChatsRepository ManagedChatsRepository
 @inject Services.Telegram.TelegramBotClientFactory BotClientFactory
 @inject IOptions<Configuration.TelegramOptions> TelegramOptions
+@inject ModerationActionService ModerationService
 @inject ILogger<Messages> Logger
 @attribute [Authorize]
 @implements IDisposable
@@ -353,54 +352,60 @@
                || _filterState.HasEdits.HasValue;
     }
 
-    // Phase 2.6: Spam/Ham action handlers
+    // Phase 2.7: Spam/Ham action handlers (uses ModerationActionService)
     private async Task HandleMarkAsSpam(MessageRecord message)
     {
         try
         {
-            // Create detection result marked as spam (manual classification)
-            var detectionResult = new DetectionResultRecord
+            // Get current user for audit trail
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var executorId = authState.User.Identity?.Name;
+
+            // Get bot client
+            var botClient = BotClientFactory.GetOrCreate(TelegramOptions.Value.BotToken);
+
+            // Call moderation service (deletes message, bans user globally, creates detection result)
+            var result = await ModerationService.MarkAsSpamAndBanAsync(
+                botClient,
+                message.MessageId,
+                message.UserId,
+                message.ChatId,
+                executorId,
+                "Manually marked as spam by admin via UI");
+
+            if (result.Success)
             {
-                MessageId = message.MessageId,
-                DetectedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                DetectionSource = "manual",
-                DetectionMethod = "Manual",
-                IsSpam = true,
-                Confidence = 100, // Manual classifications are 100% confident
-                Reason = "Manually marked as spam by admin",
-                AddedBy = (await AuthStateProvider.GetAuthenticationStateAsync()).User.Identity?.Name,
-                UsedForTraining = true, // Manual decisions are always training-worthy
-                NetConfidence = null, // Manual classifications don't have net confidence
-                CheckResultsJson = null,
-                EditVersion = 0
-            };
+                // Refresh detection history for this message
+                var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
+                _detectionHistory[message.MessageId] = history;
 
-            await DetectionResultsRepository.InsertAsync(detectionResult);
+                // Refresh spam check display
+                if (history.Any())
+                {
+                    var latest = history.OrderByDescending(h => h.DetectedAt).First();
+                    _spamChecks[message.MessageId] = new SpamCheckRecord(
+                        Id: latest.Id,
+                        CheckTimestamp: latest.DetectedAt,
+                        UserId: message.UserId,
+                        ContentHash: null,
+                        IsSpam: latest.IsSpam,
+                        Confidence: latest.Confidence,
+                        Reason: latest.Reason,
+                        CheckType: latest.DetectionMethod,
+                        MatchedMessageId: null
+                    );
+                }
 
-            // Refresh detection history for this message
-            var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
-            _detectionHistory[message.MessageId] = history;
+                StateHasChanged();
 
-            // Refresh spam check display
-            if (history.Any())
-            {
-                var latest = history.OrderByDescending(h => h.DetectedAt).First();
-                _spamChecks[message.MessageId] = new SpamCheckRecord(
-                    Id: latest.Id,
-                    CheckTimestamp: latest.DetectedAt,
-                    UserId: message.UserId,
-                    ContentHash: null,
-                    IsSpam: latest.IsSpam,
-                    Confidence: latest.Confidence,
-                    Reason: latest.Reason,
-                    CheckType: latest.DetectionMethod,
-                    MatchedMessageId: null
-                );
+                Logger.LogInformation(
+                    "Message {MessageId} marked as spam: user banned from {ChatsAffected} chats, message deleted: {MessageDeleted}",
+                    message.MessageId, result.ChatsAffected, result.MessageDeleted);
             }
-
-            StateHasChanged();
-
-            Logger.LogInformation("Message {MessageId} marked as spam by user", message.MessageId);
+            else
+            {
+                Logger.LogError("Failed to mark message {MessageId} as spam: {Error}", message.MessageId, result.ErrorMessage);
+            }
         }
         catch (Exception ex)
         {
@@ -412,7 +417,11 @@
     {
         try
         {
-            // Create detection result marked as ham/not spam (manual classification)
+            // Get current user for audit trail
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var executorId = authState.User.Identity?.Name;
+
+            // 1. Create detection result marked as ham (for training data)
             var detectionResult = new DetectionResultRecord
             {
                 MessageId = message.MessageId,
@@ -422,7 +431,8 @@
                 IsSpam = false, // Mark as NOT spam
                 Confidence = 100, // Manual classifications are 100% confident
                 Reason = "Manually marked as ham (not spam) by admin - false positive correction",
-                AddedBy = (await AuthStateProvider.GetAuthenticationStateAsync()).User.Identity?.Name,
+                AddedBy = executorId,
+                UserId = message.UserId,
                 UsedForTraining = true, // Manual decisions are always training-worthy
                 NetConfidence = null,
                 CheckResultsJson = null,
@@ -431,8 +441,14 @@
 
             await DetectionResultsRepository.InsertAsync(detectionResult);
 
-            // Phase 2.7: Implement unban logic if user was auto-banned
-            await HandleUnbanIfNeededAsync(message);
+            // 2. Unban user and restore trust (false positive correction)
+            var botClient = BotClientFactory.GetOrCreate(TelegramOptions.Value.BotToken);
+            var unbanResult = await ModerationService.UnbanUserAsync(
+                botClient,
+                message.UserId,
+                executorId,
+                "False positive correction - message marked as ham by admin via UI",
+                restoreTrust: true); // Restore trust to bypass future spam checks
 
             // Refresh detection history for this message
             var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
@@ -457,7 +473,16 @@
 
             StateHasChanged();
 
-            Logger.LogInformation("Message {MessageId} marked as ham by user", message.MessageId);
+            if (unbanResult.Success)
+            {
+                Logger.LogInformation(
+                    "Message {MessageId} marked as ham: user unbanned from {ChatsAffected} chats, trust restored: {TrustRestored}",
+                    message.MessageId, unbanResult.ChatsAffected, unbanResult.TrustRestored);
+            }
+            else
+            {
+                Logger.LogWarning("Message {MessageId} marked as ham but unban failed: {Error}", message.MessageId, unbanResult.ErrorMessage);
+            }
         }
         catch (Exception ex)
         {
@@ -484,94 +509,5 @@
         };
 
         await DialogService.ShowAsync<DetectionHistoryDialog>("Detection History", parameters, options);
-    }
-
-    /// <summary>
-    /// Phase 2.7: Handle unban if user was auto-banned (false positive correction)
-    /// </summary>
-    private async Task HandleUnbanIfNeededAsync(MessageRecord message)
-    {
-        try
-        {
-            // Check if user has active bans
-            var activeBans = await UserActionsRepository.GetActiveActionsAsync(message.UserId, UserActionType.Ban);
-
-            if (!activeBans.Any())
-            {
-                Logger.LogInformation("No active bans found for user {UserId} - skipping unban", message.UserId);
-                return;
-            }
-
-            Logger.LogInformation(
-                "Found {BanCount} active ban(s) for user {UserId} - proceeding with unban",
-                activeBans.Count,
-                message.UserId);
-
-            // Create unban action in database
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var unbanAction = new UserActionRecord(
-                Id: 0, // Will be assigned by database
-                UserId: message.UserId,
-                ActionType: UserActionType.Unban,
-                MessageId: message.MessageId,
-                IssuedBy: authState.User.Identity?.Name ?? "Admin",
-                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                ExpiresAt: null,
-                Reason: "False positive correction - message marked as ham by admin"
-            );
-
-            await UserActionsRepository.InsertAsync(unbanAction);
-
-            // Deactivate all active bans for this user
-            foreach (var ban in activeBans)
-            {
-                await UserActionsRepository.DeactivateAsync(ban.Id);
-            }
-
-            // Unban user across all managed chats via Telegram API
-            var managedChats = await ManagedChatsRepository.GetAllChatsAsync();
-            var activeChats = managedChats.Where(c => c.IsActive).ToList();
-            var botClient = BotClientFactory.GetOrCreate(TelegramOptions.Value.BotToken);
-
-            int successCount = 0;
-            int failCount = 0;
-
-            foreach (var chat in activeChats)
-            {
-                try
-                {
-                    await botClient.UnbanChatMember(
-                        chatId: chat.ChatId,
-                        userId: message.UserId,
-                        onlyIfBanned: true); // Only unban if user is actually banned
-
-                    successCount++;
-
-                    Logger.LogInformation(
-                        "Unbanned user {UserId} from chat {ChatId}",
-                        message.UserId,
-                        chat.ChatId);
-                }
-                catch (Exception ex)
-                {
-                    failCount++;
-                    Logger.LogWarning(ex,
-                        "Failed to unban user {UserId} from chat {ChatId} (may not be banned in this chat)",
-                        message.UserId,
-                        chat.ChatId);
-                }
-            }
-
-            Logger.LogInformation(
-                "Unban complete for user {UserId}: {SuccessCount}/{TotalCount} successful, {FailCount} failed",
-                message.UserId,
-                successCount,
-                activeChats.Count,
-                failCount);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to handle unban for user {UserId}", message.UserId);
-        }
     }
 }

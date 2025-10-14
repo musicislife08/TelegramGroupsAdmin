@@ -6,14 +6,19 @@ namespace TelegramGroupsAdmin.SpamDetection.Configuration;
 public class SpamDetectionConfig
 {
     /// <summary>
-    /// Only check first N messages from each user
+    /// Enable auto-whitelisting after users prove themselves with non-spam messages.
+    /// When enabled, users who post N consecutive non-spam messages are automatically
+    /// whitelisted and skip all future spam checks (global trust).
+    /// Trust is revoked if spam detected (e.g., compromised account, manual /spam).
     /// </summary>
-    public bool FirstMessageOnly { get; set; } = false;
+    public bool FirstMessageOnly { get; set; } = true;
 
     /// <summary>
-    /// Number of first messages to check if FirstMessageOnly is true
+    /// Number of consecutive non-spam messages required before auto-whitelisting.
+    /// Default: 3 (protects against "post innocent → edit to spam" tactic)
+    /// Users are fully spam-checked until threshold reached, then globally trusted.
     /// </summary>
-    public int FirstMessagesCount { get; set; } = 1;
+    public int FirstMessagesCount { get; set; } = 3;
 
     /// <summary>
     /// Minimum message length to trigger expensive checks (similarity, Bayes)

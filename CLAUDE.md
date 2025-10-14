@@ -141,27 +141,13 @@ ASP.NET Core 10.0 Blazor Server + Minimal API. Telegram spam detection (text + i
 
 #### **File Organization**
 
-```
-TelegramGroupsAdmin/
-├── Models/                          # UI Models (what Blazor uses)
-│   ├── UserModels.cs               # Users, Invites, Audit, Enums
-│   ├── MessageModels.cs            # Messages, Edits, History
-│   ├── SpamDetectionModels.cs      # Spam samples, training data
-│   └── VerificationModels.cs       # Email/password tokens
-├── Repositories/                    # Data access layer
-│   ├── ModelMappings.cs            # Data ↔ UI conversions
-│   ├── UserRepository.cs           # Returns UI.UserRecord
-│   ├── MessageHistoryRepository.cs # Returns UI.MessageRecord
-│   └── ...                         # All repos return UI models
-└── Services/                        # Business logic
-    └── ...                         # Use UI models exclusively
+**TelegramGroupsAdmin/** (main project)
+- Models/ - UI Models (UserModels.cs, MessageModels.cs, SpamDetectionModels.cs, VerificationModels.cs)
+- Repositories/ - Data access layer with ModelMappings.cs for Data ↔ UI conversions
+- Services/ - Business logic using UI models exclusively
 
-TelegramGroupsAdmin.Data/
-└── Models/                          # Data Models (database DTOs)
-    ├── UserRecord.cs               # Database DTOs + Dapper mappings
-    ├── MessageRecord.cs            # Snake_case → PascalCase conversion
-    └── ...                         # Internal to Data layer only
-```
+**TelegramGroupsAdmin.Data/** (data layer)
+- Models/ - Database DTOs internal to data layer (snake_case → PascalCase conversion)
 
 ## Database Schema (PostgreSQL)
 
@@ -171,40 +157,30 @@ TelegramGroupsAdmin.Data/
 ### Core Tables (Normalized Design)
 
 #### **messages** - Central message storage
-```sql
-CREATE TABLE messages (
-    message_id BIGINT PRIMARY KEY,           -- Telegram message ID
-    chat_id BIGINT NOT NULL,                 -- Telegram chat ID
-    user_id BIGINT NOT NULL,                 -- Telegram user ID
-    user_name TEXT,                          -- Username (cached)
-    timestamp BIGINT NOT NULL,               -- Unix timestamp
-    message_text TEXT,                       -- Message content
-    photo_file_id TEXT,                      -- Telegram file ID
-    photo_file_size INT,                     -- Photo size in bytes
-    photo_local_path TEXT,                   -- Downloaded photo path
-    photo_thumbnail_path TEXT,               -- Thumbnail path
-    urls TEXT,                               -- Extracted URLs
-    content_hash VARCHAR(64),                -- MD5 hash for deduplication
-    chat_name TEXT,                          -- Chat name (cached)
-    edit_date BIGINT                         -- Last edit timestamp (NULL if never edited)
-);
-```
+**Columns:**
+- message_id (BIGINT) - Telegram message ID (primary key)
+- chat_id, user_id (BIGINT) - Telegram chat and user IDs
+- user_name, chat_name (TEXT) - Cached display names
+- timestamp, edit_date (BIGINT) - Unix timestamps for create/edit
+- message_text (TEXT) - Message content
+- photo_file_id, photo_file_size, photo_local_path, photo_thumbnail_path - Image storage metadata
+- urls (TEXT) - Extracted URLs from message
+- content_hash (VARCHAR) - MD5 hash for deduplication
+
 **Retention:** Configurable (default 180 days), except messages referenced by `detection_results` or `user_actions`
 
 #### **detection_results** - Spam/ham classifications
-```sql
-CREATE TABLE detection_results (
-    id BIGSERIAL PRIMARY KEY,
-    message_id BIGINT NOT NULL REFERENCES messages(message_id) ON DELETE CASCADE,
-    detected_at BIGINT NOT NULL,             -- When detection occurred
-    detection_source TEXT NOT NULL,          -- 'auto' | 'manual'
-    is_spam BOOLEAN NOT NULL,                -- true=spam, false=ham (unban/false positive)
-    confidence INT,                          -- 0-100 confidence score
-    reason TEXT,                             -- Human-readable detection reason
-    detection_method TEXT,                   -- 'StopWords' | 'Bayes' | 'Manual' | etc
-    added_by TEXT REFERENCES users(id)       -- Who classified it (NULL for auto)
-);
-```
+**Columns:**
+- id (BIGSERIAL) - Auto-increment primary key
+- message_id (BIGINT) - References messages table (cascade delete)
+- detected_at (BIGINT) - Unix timestamp when detection occurred
+- detection_source (TEXT) - 'auto' or 'manual'
+- is_spam (BOOLEAN) - true=spam, false=ham/false positive
+- confidence (INT) - 0-100 confidence score
+- reason (TEXT) - Human-readable detection reason
+- detection_method (TEXT) - Algorithm name ('StopWords', 'Bayes', 'Manual', etc)
+- added_by (TEXT) - Web UI user ID who classified it (NULL for auto)
+
 **Purpose:**
 - Spam detection history (for analytics)
 - Bayes training data (bounded query: recent 10k + all manual)
@@ -212,160 +188,122 @@ CREATE TABLE detection_results (
 **Retention:** Permanent (never cleaned up)
 
 #### **message_edits** - Edit history audit trail
-```sql
-CREATE TABLE message_edits (
-    id BIGSERIAL PRIMARY KEY,
-    message_id BIGINT NOT NULL REFERENCES messages(message_id) ON DELETE CASCADE,
-    edit_date BIGINT NOT NULL,               -- When edit occurred
-    previous_text TEXT,                      -- Text before edit
-    previous_content_hash VARCHAR(64)        -- Hash before edit
-);
-```
+**Columns:**
+- id (BIGSERIAL) - Auto-increment primary key
+- message_id (BIGINT) - References messages table (cascade delete)
+- edit_date (BIGINT) - Unix timestamp when edit occurred
+- previous_text (TEXT) - Message text before edit
+- previous_content_hash (VARCHAR) - MD5 hash before edit
+
 **Purpose:** Track message edits (spam tactic: post innocent message, edit to spam later)
 **Retention:** Cascades with messages table
 
-#### **user_actions** - Moderation actions (bans, warns, mutes)
-```sql
-CREATE TABLE user_actions (
-    id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL,                 -- Telegram user ID
-    chat_ids BIGINT[],                       -- NULL=all chats, []=specific chats
-    action_type TEXT NOT NULL,               -- 'ban' | 'warn' | 'mute' | 'trust' | 'unban'
-    message_id BIGINT REFERENCES messages(message_id) ON DELETE SET NULL,
-    issued_by TEXT REFERENCES users(id),     -- Admin who issued action
-    issued_at BIGINT NOT NULL,               -- When action was taken
-    expires_at BIGINT,                       -- NULL=permanent, else temp ban/mute
-    reason TEXT                              -- Why action was taken
-);
-```
-**Purpose:** Cross-chat moderation actions
+#### **user_actions** - Moderation actions (bans, warns, mutes, trusts)
+**Columns:**
+- id (BIGSERIAL) - Auto-increment primary key
+- user_id (BIGINT) - Telegram user ID being actioned
+- action_type (TEXT) - 'ban', 'warn', 'mute', 'trust', or 'unban'
+- message_id (BIGINT) - Related message (NULL on delete)
+- issued_by (TEXT) - Web UI user ID who issued action (NULL for system/auto)
+- issued_at (BIGINT) - Unix timestamp when action was taken
+- expires_at (BIGINT) - Expiry timestamp (NULL=permanent)
+- reason (TEXT) - Human-readable reason for action
+
+**Purpose:** Global moderation actions (all actions apply across all managed chats)
 **Retention:** Permanent
 
 **User Whitelisting (Trust Action):**
 - Action type `trust` marks user as trusted (bypasses all spam checks)
-- Applied per-chat or globally (NULL chat_ids = all chats)
+- Applied globally across all chats
 - Manual: Admin uses `/trust` command or UI
-- Auto-trust (future): After X non-spam messages in Y days (configurable threshold)
-  - Suggestion: 10 messages over 7 days with 0 spam flags
-  - Revocable if spam detected after trust granted
-  - Analytics: Track trust accuracy (% of trusted users who later spam)
+- Auto-trust: After N consecutive non-spam messages (configurable threshold, default 3)
+  - Implemented via UserAutoTrustService
+  - Revocable if spam detected (compromised account protection)
+  - Logged to audit_log as UserAutoWhitelisted event
 
 ### Configuration Tables
 
 #### **stop_words** - Keyword blocklist
-```sql
-CREATE TABLE stop_words (
-    id BIGSERIAL PRIMARY KEY,
-    word TEXT NOT NULL,
-    word_type INT NOT NULL,                  -- 0=message, 1=username, 2=userID
-    added_date BIGINT NOT NULL,
-    source TEXT NOT NULL,                    -- 'manual' | 'auto' | 'imported'
-    enabled BOOLEAN DEFAULT true,
-    added_by TEXT REFERENCES users(id),
-    detection_count INT DEFAULT 0,           -- Usage tracking
-    last_detected_date BIGINT
-);
-```
+**Columns:**
+- id (BIGSERIAL) - Auto-increment primary key
+- word (TEXT) - The blocked keyword/phrase
+- word_type (INT) - 0=message content, 1=username, 2=userID
+- added_date (BIGINT) - Unix timestamp when added
+- source (TEXT) - 'manual', 'auto', or 'imported'
+- enabled (BOOLEAN) - Whether the rule is active
+- added_by (TEXT) - Web UI user ID who added it
+- detection_count (INT) - Usage tracking counter
+- last_detected_date (BIGINT) - Last time this word triggered
 
 #### **spam_detection_configs** - Per-chat detection settings
-```sql
-CREATE TABLE spam_detection_configs (
-    chat_id TEXT PRIMARY KEY,
-    min_confidence_threshold INT DEFAULT 85,
-    enabled_checks TEXT[],                   -- Which algorithms to run
-    custom_prompt TEXT,                      -- OpenAI custom instructions
-    auto_ban_threshold INT DEFAULT 95,       -- Auto-ban at this confidence
-    created_at BIGINT NOT NULL,
-    updated_at BIGINT
-);
-```
+**Columns:**
+- chat_id (TEXT) - Telegram chat ID (primary key)
+- min_confidence_threshold (INT) - Minimum confidence to flag (default 85)
+- enabled_checks (TEXT[]) - Array of enabled algorithm names
+- custom_prompt (TEXT) - Custom OpenAI instructions for this chat
+- auto_ban_threshold (INT) - Auto-ban threshold (default 95)
+- created_at, updated_at (BIGINT) - Timestamps
 
 #### **spam_check_configs** - Algorithm-specific settings
-```sql
-CREATE TABLE spam_check_configs (
-    check_name TEXT PRIMARY KEY,
-    enabled BOOLEAN DEFAULT true,
-    confidence_weight INT DEFAULT 100,       -- Confidence multiplier
-    config_json TEXT,                        -- Algorithm-specific settings
-    updated_at BIGINT
-);
-```
+**Columns:**
+- check_name (TEXT) - Algorithm name (primary key)
+- enabled (BOOLEAN) - Whether this check is globally enabled
+- confidence_weight (INT) - Confidence multiplier (default 100)
+- config_json (TEXT) - Algorithm-specific JSON configuration
+- updated_at (BIGINT) - Last update timestamp
 
 ### Identity & Auth Tables
 
 #### **users** - Web UI users (not Telegram users)
-```sql
-CREATE TABLE users (
-    id TEXT PRIMARY KEY,                     -- GUID
-    email TEXT NOT NULL UNIQUE,
-    normalized_email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    security_stamp TEXT NOT NULL,
-    permission_level INT NOT NULL,           -- 0=ReadOnly, 1=Admin, 2=Owner
-    invited_by TEXT REFERENCES users(id),
-    is_active BOOLEAN DEFAULT true,
-    totp_secret TEXT,
-    totp_enabled BOOLEAN DEFAULT false,
-    totp_setup_started_at BIGINT,
-    created_at BIGINT NOT NULL,
-    last_login_at BIGINT,
-    status INT NOT NULL,                     -- 0=Pending, 1=Active, 2=Disabled, 3=Deleted
-    modified_by TEXT,
-    modified_at BIGINT,
-    email_verified BOOLEAN DEFAULT false,
-    email_verification_token TEXT,
-    email_verification_token_expires_at BIGINT,
-    password_reset_token TEXT,
-    password_reset_token_expires_at BIGINT
-);
-```
+**Columns:**
+- id (TEXT) - GUID primary key
+- email, normalized_email (TEXT) - Email address (unique)
+- password_hash, security_stamp (TEXT) - Authentication data
+- permission_level (INT) - 0=ReadOnly, 1=Admin, 2=Owner
+- invited_by (TEXT) - References users(id) for audit trail
+- is_active (BOOLEAN) - Account enabled flag
+- totp_secret, totp_enabled, totp_setup_started_at - 2FA configuration
+- created_at, last_login_at, modified_at (BIGINT) - Timestamps
+- status (INT) - 0=Pending, 1=Active, 2=Disabled, 3=Deleted
+- modified_by (TEXT) - Who last modified this user
+- email_verified (BOOLEAN) - Email verification status
+- email_verification_token, email_verification_token_expires_at - Email verification
+- password_reset_token, password_reset_token_expires_at - Password reset
 
 #### **invites** - Invite token system
-```sql
-CREATE TABLE invites (
-    token TEXT PRIMARY KEY,
-    created_by TEXT NOT NULL REFERENCES users(id),
-    created_at BIGINT NOT NULL,
-    expires_at BIGINT NOT NULL,
-    used_by TEXT REFERENCES users(id),
-    permission_level INT NOT NULL,
-    status INT NOT NULL,                     -- 0=Pending, 1=Used, 2=Revoked
-    modified_at BIGINT
-);
-```
+**Columns:**
+- token (TEXT) - Unique invite token (primary key)
+- created_by (TEXT) - References users(id) who created it
+- created_at, expires_at (BIGINT) - Creation and expiry timestamps
+- used_by (TEXT) - References users(id) who used it
+- permission_level (INT) - Permission level granted by this invite
+- status (INT) - 0=Pending, 1=Used, 2=Revoked
+- modified_at (BIGINT) - Last modification timestamp
 
 #### **audit_log** - Security audit trail
-```sql
-CREATE TABLE audit_log (
-    id BIGSERIAL PRIMARY KEY,
-    event_type INT NOT NULL,                 -- Enum: Login, Logout, UserCreated, etc
-    timestamp BIGINT NOT NULL,
-    actor_user_id TEXT REFERENCES users(id), -- Who did it
-    target_user_id TEXT REFERENCES users(id),-- Who was affected
-    value TEXT                               -- Additional context
-);
-```
+**Columns:**
+- id (BIGSERIAL) - Auto-increment primary key
+- event_type (INT) - Enum value (Login, Logout, UserCreated, etc)
+- timestamp (BIGINT) - Unix timestamp when event occurred
+- actor_user_id (TEXT) - References users(id) who performed action
+- target_user_id (TEXT) - References users(id) who was affected
+- value (TEXT) - Additional context/details about the event
 
 #### **verification_tokens** - Email/password reset tokens
-```sql
-CREATE TABLE verification_tokens (
-    id BIGSERIAL PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id),
-    token_type TEXT NOT NULL,                -- 'email_verify' | 'password_reset' | 'email_change'
-    token TEXT NOT NULL UNIQUE,
-    value TEXT,                              -- New email for email_change
-    expires_at BIGINT NOT NULL,
-    created_at BIGINT NOT NULL,
-    used_at BIGINT
-);
-```
+**Columns:**
+- id (BIGSERIAL) - Auto-increment primary key
+- user_id (TEXT) - References users(id)
+- token_type (TEXT) - 'email_verify', 'password_reset', or 'email_change'
+- token (TEXT) - Unique token string
+- value (TEXT) - Additional data (e.g., new email for email_change)
+- expires_at, created_at, used_at (BIGINT) - Token lifecycle timestamps
 
 ### Design Principles
 
 1. **Normalized storage** - Message content stored once, referenced by detections/actions
 2. **Cascade deletes** - When message deleted, edits cascade; detections/actions remain for analytics
 3. **Configurable retention** - Messages cleaned up after N days, unless flagged as spam
-4. **Cross-chat support** - All tables support multiple chat_ids
+4. **Global actions** - All moderation actions (ban/warn/trust) apply across all managed chats
 5. **Audit trail** - Complete history of who did what, when
 
 ### Background Services (Refactored Architecture) ✅
@@ -402,41 +340,27 @@ CREATE TABLE verification_tokens (
 ## Configuration (Env Vars)
 
 ### Required
-```
-VIRUSTOTAL__APIKEY
-OPENAI__APIKEY
-TELEGRAM__BOTTOKEN
-TELEGRAM__CHATID
-SPAMDETECTION__APIKEY
-SENDGRID__APIKEY
-SENDGRID__FROMEMAIL
-SENDGRID__FROMNAME
-```
+- VIRUSTOTAL__APIKEY - VirusTotal API key for threat intelligence
+- OPENAI__APIKEY - OpenAI API key for vision and translation spam detection
+- TELEGRAM__BOTTOKEN - Telegram bot token
+- TELEGRAM__CHATID - Default Telegram chat ID
+- SPAMDETECTION__APIKEY - Spam detection API key
+- SENDGRID__APIKEY, SENDGRID__FROMEMAIL, SENDGRID__FROMNAME - Email service configuration
 
 ### Optional
-```
-APP__BASEURL=http://localhost:5161
-OPENAI__MODEL=gpt-4o-mini
-OPENAI__MAXTOKENS=500
-MESSAGEHISTORY__ENABLED=true
-MESSAGEHISTORY__DATABASEPATH=/data/message_history.db
-MESSAGEHISTORY__RETENTIONHOURS=720
-MESSAGEHISTORY__CLEANUPINTERVALMINUTES=1440
-SPAMDETECTION__TIMEOUTSECONDS=30
-SPAMDETECTION__IMAGELOOKUPRETRYDELAYMS=100
-SPAMDETECTION__MINCONFIDENCETHRESHOLD=85
-IDENTITY__DATABASEPATH=/data/identity.db
-DATAPROTECTION__KEYSPATH=/data/keys
-```
+- APP__BASEURL - Base URL for application (default: http://localhost:5161)
+- OPENAI__MODEL - OpenAI model to use (default: gpt-4o-mini)
+- OPENAI__MAXTOKENS - Max tokens for OpenAI responses (default: 500)
+- MESSAGEHISTORY__ENABLED, MESSAGEHISTORY__DATABASEPATH, MESSAGEHISTORY__RETENTIONHOURS, MESSAGEHISTORY__CLEANUPINTERVALMINUTES - Message history configuration
+- SPAMDETECTION__TIMEOUTSECONDS, SPAMDETECTION__IMAGELOOKUPRETRYDELAYMS, SPAMDETECTION__MINCONFIDENCETHRESHOLD - Spam detection tuning
+- IDENTITY__DATABASEPATH, DATAPROTECTION__KEYSPATH - Identity and data protection paths
 
 ## Logging
 
-### Configuration (Program.cs:26-31)
-```csharp
-builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
-builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Information);
-builder.Logging.AddFilter("TelegramGroupsAdmin", LogLevel.Information);
-```
+### Configuration
+- Microsoft namespace: LogLevel.Warning
+- Microsoft.Hosting.Lifetime: LogLevel.Information
+- TelegramGroupsAdmin: LogLevel.Information
 
 ### Log Levels
 - **Error**: Unexpected application errors (exceptions)
@@ -480,9 +404,7 @@ builder.Logging.AddFilter("TelegramGroupsAdmin", LogLevel.Information);
 ## API Endpoints
 
 ### GET /health
-```json
-{"status": "healthy", "bot": {...stats...}}
-```
+Returns JSON with status=healthy and bot statistics
 
 ### Auth Endpoints
 - POST /api/auth/login - Returns {requiresTotp, userId, intermediateToken} if 2FA enabled
@@ -547,12 +469,7 @@ builder.Logging.AddFilter("TelegramGroupsAdmin", LogLevel.Information);
 - Audit trail for create/use/revoke
 
 ## Build/Run
-```bash
-dotnet build TelegramGroupsAdmin.sln
-dotnet run --project TelegramGroupsAdmin/TelegramGroupsAdmin.csproj
-docker build -t telegram-groups-admin .
-docker run -p 8080:8080 -e VIRUSTOTAL__APIKEY=X telegram-groups-admin
-```
+Build solution with dotnet build, run main project with dotnet run. Docker image can be built and run with standard docker commands, exposing port 8080 and passing environment variables.
 
 ## Architecture Evolution ✅
 
@@ -654,7 +571,7 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [x] **Data migrated** - Training samples migrated to `detection_results` with synthetic message records
 - [x] **Update repositories** - All repositories updated (TrainingSamplesRepository, MessageHistoryRepository)
 - [x] **Model consistency** - All DTOs use init-only properties, removed `expires_at` field
-- [x] **Type corrections** - Fixed `chat_ids` type (string[] → long[]), column names (details → reason)
+- [x] **Type corrections** - Removed `chat_ids` column (all actions are global), column names (details → reason)
 - [x] **Update spam checks** - BayesSpamCheck bounded query (all manual + recent 10k auto samples)
 - [x] **Update UI** - SpamAnalytics page queries `detection_results` instead of `spam_checks`
 

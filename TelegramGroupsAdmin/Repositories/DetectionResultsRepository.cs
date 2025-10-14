@@ -210,6 +210,49 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return isTrusted;
     }
 
+    public async Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit = 3)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        // Get last N non-spam detection results for this user (global, not per-chat)
+        // Used for auto-whitelisting: if user has N consecutive non-spam messages, trust them
+        var results = await context.DetectionResults
+            .AsNoTracking()
+            .Join(context.Messages,
+                dr => dr.MessageId,
+                m => m.MessageId,
+                (dr, m) => new { DetectionResult = dr, Message = m })
+            .Where(x => x.Message.UserId == userId && !x.DetectionResult.IsSpam)
+            .OrderByDescending(x => x.DetectionResult.DetectedAt)
+            .Take(limit)
+            .Select(x => new DetectionResultRecord
+            {
+                Id = x.DetectionResult.Id,
+                MessageId = x.DetectionResult.MessageId,
+                DetectedAt = x.DetectionResult.DetectedAt,
+                DetectionSource = x.DetectionResult.DetectionSource,
+                DetectionMethod = x.DetectionResult.DetectionMethod,
+                IsSpam = x.DetectionResult.IsSpam,
+                Confidence = x.DetectionResult.Confidence,
+                Reason = x.DetectionResult.Reason,
+                AddedBy = x.DetectionResult.AddedBy,
+                UsedForTraining = x.DetectionResult.UsedForTraining,
+                NetConfidence = x.DetectionResult.NetConfidence,
+                CheckResultsJson = x.DetectionResult.CheckResultsJson,
+                EditVersion = x.DetectionResult.EditVersion,
+                UserId = x.Message.UserId,
+                MessageText = x.Message.MessageText
+            })
+            .ToListAsync();
+
+        _logger.LogDebug(
+            "Retrieved {Count} recent non-spam results for user {UserId} (limit: {Limit})",
+            results.Count,
+            userId,
+            limit);
+
+        return results;
+    }
+
     public async Task<DetectionStats> GetStatsAsync()
     {
         await using var context = await _contextFactory.CreateDbContextAsync();

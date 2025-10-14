@@ -13,6 +13,7 @@ public class BanCommand : IBotCommand
 {
     private readonly ILogger<BanCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ModerationActionService _moderationService;
 
     public string Name => "ban";
     public string Description => "Ban user from all managed chats";
@@ -23,10 +24,12 @@ public class BanCommand : IBotCommand
 
     public BanCommand(
         ILogger<BanCommand> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ModerationActionService moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _moderationService = moderationService;
     }
 
     public async Task<string> ExecuteAsync(
@@ -49,9 +52,6 @@ public class BanCommand : IBotCommand
 
         using var scope = _serviceProvider.CreateScope();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-        var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-        var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-        var telegramUserMappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
 
         // Check if target is admin (can't ban admins)
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id);
@@ -64,62 +64,35 @@ public class BanCommand : IBotCommand
 
         try
         {
-            // Get all managed chats for cross-chat ban
-            var managedChats = await managedChatsRepository.GetAllAsync();
-            var bannedChats = new List<long>();
-            var failedChats = new List<(long chatId, string error)>();
-
-            foreach (var chat in managedChats)
-            {
-                try
-                {
-                    await botClient.BanChatMember(
-                        chatId: chat.ChatId,
-                        userId: targetUser.Id,
-                        untilDate: null, // Permanent ban
-                        revokeMessages: true, // Delete all messages from this user
-                        cancellationToken: cancellationToken);
-
-                    bannedChats.Add(chat.ChatId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to ban user {UserId} from chat {ChatId}", targetUser.Id, chat.ChatId);
-                    failedChats.Add((chat.ChatId, ex.Message));
-                }
-            }
-
             // Map executor Telegram ID to web app user ID
-            string? executorUserId = null;
-            if (message.From?.Id != null)
+            var executorUserId = await _moderationService.GetExecutorUserIdAsync(message.From?.Id);
+
+            // Execute ban via ModerationActionService
+            var result = await _moderationService.BanUserAsync(
+                botClient,
+                targetUser.Id,
+                message.ReplyToMessage.MessageId,
+                executorUserId,
+                reason,
+                cancellationToken);
+
+            if (!result.Success)
             {
-                executorUserId = await telegramUserMappingRepository.GetUserIdByTelegramIdAsync(message.From.Id);
+                return $"❌ Failed to ban user: {result.ErrorMessage}";
             }
 
-            // Save ban record to user_actions (all bans are global)
-            var banAction = new UserActionRecord(
-                Id: 0,
-                UserId: targetUser.Id,
-                ActionType: UserActionType.Ban,
-                MessageId: message.ReplyToMessage.MessageId,
-                IssuedBy: executorUserId, // Mapped from telegram_user_mappings (may be null if not linked)
-                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                ExpiresAt: null, // Permanent ban
-                Reason: reason
-            );
-            await userActionsRepository.InsertAsync(banAction);
-
-            _logger.LogInformation(
-                "User {TargetId} ({TargetUsername}) banned by {ExecutorId} from {BannedCount} chats. Reason: {Reason}",
-                targetUser.Id, targetUser.Username, message.From?.Id, bannedChats.Count, reason);
-
-            var response = $"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} banned from {bannedChats.Count} chat(s)\n" +
+            // Build success message
+            var response = $"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} banned from {result.ChatsAffected} chat(s)\n" +
                           $"Reason: {reason}";
 
-            if (failedChats.Any())
+            if (result.TrustRemoved)
             {
-                response += $"\n\n⚠️ Failed to ban from {failedChats.Count} chat(s)";
+                response += "\n⚠️ User trust revoked";
             }
+
+            _logger.LogInformation(
+                "User {TargetId} ({TargetUsername}) banned by {ExecutorId} from {ChatsAffected} chats. Reason: {Reason}",
+                targetUser.Id, targetUser.Username, message.From?.Id, result.ChatsAffected, reason);
 
             return response;
         }

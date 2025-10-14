@@ -13,6 +13,7 @@ public class UnbanCommand : IBotCommand
 {
     private readonly ILogger<UnbanCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ModerationActionService _moderationService;
 
     public string Name => "unban";
     public string Description => "Remove ban from user";
@@ -23,10 +24,12 @@ public class UnbanCommand : IBotCommand
 
     public UnbanCommand(
         ILogger<UnbanCommand> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ModerationActionService moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _moderationService = moderationService;
     }
 
     public async Task<string> ExecuteAsync(
@@ -47,60 +50,27 @@ public class UnbanCommand : IBotCommand
             return "❌ Could not identify target user.";
         }
 
-        using var scope = _serviceProvider.CreateScope();
-        var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-        var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-
         try
         {
-            // Check if user has active bans
-            var activeBans = await userActionsRepository.GetActiveActionsAsync(targetUser.Id, UserActionType.Ban);
+            // Get executor user ID (maps Telegram user ID to web app user ID)
+            var executorId = await _moderationService.GetExecutorUserIdAsync(message.From?.Id ?? 0);
 
-            if (!activeBans.Any())
+            // Execute unban action through ModerationActionService
+            var result = await _moderationService.UnbanUserAsync(
+                botClient,
+                targetUser.Id,
+                executorId,
+                $"Manual unban command by {message.From?.Username ?? message.From?.Id.ToString() ?? "unknown"}",
+                restoreTrust: false,
+                cancellationToken);
+
+            // Build response based on result
+            if (!result.Success)
             {
-                return $"ℹ️ User @{targetUser.Username ?? targetUser.Id.ToString()} is not banned.";
+                return $"❌ {result.ErrorMessage}";
             }
 
-            // Get all managed chats for cross-chat unban
-            var managedChats = await managedChatsRepository.GetAllAsync();
-            var unbannedChats = new List<long>();
-            var failedChats = new List<(long chatId, string error)>();
-
-            foreach (var chat in managedChats)
-            {
-                try
-                {
-                    await botClient.UnbanChatMember(
-                        chatId: chat.ChatId,
-                        userId: targetUser.Id,
-                        onlyIfBanned: true,
-                        cancellationToken: cancellationToken);
-
-                    unbannedChats.Add(chat.ChatId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to unban user {UserId} from chat {ChatId}", targetUser.Id, chat.ChatId);
-                    failedChats.Add((chat.ChatId, ex.Message));
-                }
-            }
-
-            // Deactivate ban records
-            foreach (var ban in activeBans)
-            {
-                await userActionsRepository.DeactivateAsync(ban.Id);
-            }
-
-            _logger.LogInformation(
-                "User {TargetId} ({TargetUsername}) unbanned by {ExecutorId} from {UnbannedCount} chats",
-                targetUser.Id, targetUser.Username, message.From?.Id, unbannedChats.Count);
-
-            var response = $"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} unbanned from {unbannedChats.Count} chat(s)";
-
-            if (failedChats.Any())
-            {
-                response += $"\n\n⚠️ Failed to unban from {failedChats.Count} chat(s)";
-            }
+            var response = $"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} unbanned from {result.ChatsAffected} chat(s)";
 
             return response;
         }

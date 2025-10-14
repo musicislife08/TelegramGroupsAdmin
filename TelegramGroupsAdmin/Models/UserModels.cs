@@ -147,6 +147,7 @@ public enum AuditEventType
     UserPermissionChanged = 17,
     UserTotpReset = 18,
     UserTotpEnabled = 19,
+    UserAutoWhitelisted = 26,
 
     // Settings Changes (20-29 reserved for settings)
     SpamDetectionConfigChanged = 20,

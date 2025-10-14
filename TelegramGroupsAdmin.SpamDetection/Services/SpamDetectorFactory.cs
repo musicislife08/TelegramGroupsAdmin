@@ -36,7 +36,7 @@ public class SpamDetectorFactory : ISpamDetectorFactory
             // Use per-chat config if ChatId is provided, otherwise use global
             if (!string.IsNullOrEmpty(request.ChatId))
             {
-                return await _configRepository.GetChatConfigAsync(request.ChatId, cancellationToken);
+                return await _configRepository.GetEffectiveConfigAsync(request.ChatId, cancellationToken);
             }
 
             return await _configRepository.GetGlobalConfigAsync(cancellationToken);

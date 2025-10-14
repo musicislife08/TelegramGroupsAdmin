@@ -114,10 +114,10 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     }
 
     /// <summary>
-    /// Get configuration for a specific chat (falls back to global if not found)
+    /// Get effective configuration for a specific chat (chat-specific overrides, falls back to global defaults)
     /// Uses a single SQL query with COALESCE to check chat-specific config first, then global
     /// </summary>
-    public async Task<SpamDetectionConfig> GetChatConfigAsync(string chatId, CancellationToken cancellationToken = default)
+    public async Task<SpamDetectionConfig> GetEffectiveConfigAsync(string chatId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try

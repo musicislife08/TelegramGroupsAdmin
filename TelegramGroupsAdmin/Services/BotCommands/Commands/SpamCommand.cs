@@ -13,6 +13,7 @@ public class SpamCommand : IBotCommand
 {
     private readonly ILogger<SpamCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly ModerationActionService _moderationService;
 
     public string Name => "spam";
     public string Description => "Mark message as spam and delete it";
@@ -23,10 +24,12 @@ public class SpamCommand : IBotCommand
 
     public SpamCommand(
         ILogger<SpamCommand> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ModerationActionService moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _moderationService = moderationService;
     }
 
     public async Task<string> ExecuteAsync(
@@ -53,9 +56,6 @@ public class SpamCommand : IBotCommand
         using var scope = _serviceProvider.CreateScope();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
         var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-        var detectionResultsRepository = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
-        var messageRepository = scope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
-        var telegramUserMappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
 
         // Check if target user is an admin (can't mark admin messages as spam)
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, spamUserId.Value);
@@ -71,87 +71,38 @@ public class SpamCommand : IBotCommand
             return "❌ Cannot mark trusted user messages as spam.";
         }
 
-        try
+        // Map executor Telegram ID to web app user ID
+        var executorUserId = await _moderationService.GetExecutorUserIdAsync(message.From?.Id);
+
+        // Execute spam and ban action via centralized service
+        var reason = $"Spam detected via /spam command in chat {message.Chat.Title ?? message.Chat.Id.ToString()}";
+        var result = await _moderationService.MarkAsSpamAndBanAsync(
+            botClient,
+            spamMessage.MessageId,
+            spamUserId.Value,
+            message.Chat.Id,
+            executorUserId,
+            reason,
+            cancellationToken);
+
+        if (!result.Success)
         {
-            // Map executor Telegram ID to web app user ID
-            string? executorUserId = null;
-            if (message.From?.Id != null)
-            {
-                executorUserId = await telegramUserMappingRepository.GetUserIdByTelegramIdAsync(message.From.Id);
-            }
-
-            // 1. Delete the spam message
-            await botClient.DeleteMessage(message.Chat.Id, spamMessage.MessageId, cancellationToken);
-
-            // 2. Mark message as deleted in database
-            await messageRepository.MarkMessageAsDeletedAsync(spamMessage.MessageId, "spam_command");
-
-            // 3. Insert detection result (manual spam classification)
-            var detectionResult = new DetectionResultRecord
-            {
-                MessageId = spamMessage.MessageId,
-                DetectedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                DetectionSource = "manual",
-                DetectionMethod = "Manual",
-                IsSpam = true,
-                Confidence = 100,
-                Reason = $"Manually marked as spam by admin in chat {message.Chat.Title ?? message.Chat.Id.ToString()}",
-                AddedBy = executorUserId, // Mapped from telegram_user_mappings (may be null if not linked)
-                UserId = spamUserId.Value,
-                MessageText = spamMessage.Text ?? "[no text]"
-            };
-            await detectionResultsRepository.InsertAsync(detectionResult);
-
-            _logger.LogInformation(
-                "Spam command executed by {AdminId} on message {MessageId} from user {SpamUserId} ({SpamUserName}) in chat {ChatId}",
-                message.From?.Id, spamMessage.MessageId, spamUserId, spamUserName, message.Chat.Id);
-
-            // 4. Ban user globally across all managed chats
-            var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-            var allChats = await managedChatsRepository.GetAllChatsAsync();
-
-            int bannedCount = 0;
-            foreach (var chat in allChats.Where(c => c.IsActive))
-            {
-                try
-                {
-                    await botClient.BanChatMember(
-                        chatId: chat.ChatId,
-                        userId: spamUserId.Value,
-                        cancellationToken: cancellationToken);
-                    bannedCount++;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to ban user {UserId} from chat {ChatId}", spamUserId, chat.ChatId);
-                }
-            }
-
-            // 5. Record ban action
-            var banAction = new UserActionRecord(
-                Id: 0,
-                UserId: spamUserId.Value,
-                ActionType: UserActionType.Ban,
-                MessageId: spamMessage.MessageId,
-                IssuedBy: executorUserId,
-                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                ExpiresAt: null, // Permanent ban
-                Reason: $"Spam detected via /spam command in chat {message.Chat.Title ?? message.Chat.Id.ToString()}"
-            );
-            await userActionsRepository.InsertAsync(banAction);
-
-            _logger.LogInformation(
-                "Banned user {UserId} from {BannedCount} chats via /spam command",
-                spamUserId, bannedCount);
-
-            return $"✅ Message deleted and marked as spam\n" +
-                   $"User: @{spamUserName} ({spamUserId})\n" +
-                   $"🚫 Banned from {bannedCount} chat(s)";
+            return $"❌ Failed to process spam action: {result.ErrorMessage}";
         }
-        catch (Exception ex)
+
+        _logger.LogInformation(
+            "Spam command executed by {AdminId} on message {MessageId} from user {SpamUserId} ({SpamUserName}) in chat {ChatId}",
+            message.From?.Id, spamMessage.MessageId, spamUserId, spamUserName, message.Chat.Id);
+
+        var response = $"✅ Message deleted and marked as spam\n" +
+                       $"User: @{spamUserName} ({spamUserId})\n" +
+                       $"🚫 Banned from {result.ChatsAffected} chat(s)";
+
+        if (result.TrustRemoved)
         {
-            _logger.LogError(ex, "Failed to delete spam message {MessageId}", spamMessage.MessageId);
-            return $"❌ Failed to delete message: {ex.Message}";
+            response += "\n⚠️ User trust revoked (compromised account protection)";
         }
+
+        return response;
     }
 }

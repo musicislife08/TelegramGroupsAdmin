@@ -456,7 +456,7 @@
         try
         {
             _config = ChatId.HasValue
-                ? await ConfigRepository.GetChatConfigAsync(ChatId.Value.ToString())
+                ? await ConfigRepository.GetEffectiveConfigAsync(ChatId.Value.ToString())
                 : await ConfigRepository.GetGlobalConfigAsync();
 
             // Convert TimeSpan values to int for UI
@@ -486,7 +486,7 @@
         {
             // Load the current config from DB to compare changes
             var oldConfig = ChatId.HasValue
-                ? await ConfigRepository.GetChatConfigAsync(ChatId.Value.ToString())
+                ? await ConfigRepository.GetEffectiveConfigAsync(ChatId.Value.ToString())
                 : await ConfigRepository.GetGlobalConfigAsync();
 
             // Convert int values back to TimeSpan

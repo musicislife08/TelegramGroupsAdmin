@@ -391,6 +391,13 @@ public partial class MessageProcessingService(
                     result.SpamResult.NetConfidence,
                     detectionResult.UsedForTraining);
 
+                // Check for auto-trust after storing non-spam detection result
+                if (!result.SpamResult.IsSpam && message.From?.Id != null)
+                {
+                    var autoTrustService = scope.ServiceProvider.GetRequiredService<UserAutoTrustService>();
+                    await autoTrustService.CheckAndApplyAutoTrustAsync(message.From.Id, message.Chat.Id);
+                }
+
                 // Phase 2.7: Handle spam actions based on net confidence
                 await spamActionService.HandleSpamDetectionActionsAsync(
                     message,

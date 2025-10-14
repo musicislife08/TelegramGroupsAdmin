@@ -13,7 +13,7 @@ public class WarnCommand : IBotCommand
 {
     private readonly ILogger<WarnCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private const int WarnThreshold = 3; // Auto-ban after 3 warnings
+    private readonly ModerationActionService _moderationService;
 
     public string Name => "warn";
     public string Description => "Issue warning to user";
@@ -24,10 +24,12 @@ public class WarnCommand : IBotCommand
 
     public WarnCommand(
         ILogger<WarnCommand> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        ModerationActionService moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _moderationService = moderationService;
     }
 
     public async Task<string> ExecuteAsync(
@@ -50,9 +52,6 @@ public class WarnCommand : IBotCommand
 
         using var scope = _serviceProvider.CreateScope();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-        var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-        var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-        var telegramUserMappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
 
         // Check if target is admin (can't warn admins)
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id);
@@ -66,78 +65,27 @@ public class WarnCommand : IBotCommand
         try
         {
             // Map executor Telegram ID to web app user ID
-            string? executorUserId = null;
-            if (message.From?.Id != null)
-            {
-                executorUserId = await telegramUserMappingRepository.GetUserIdByTelegramIdAsync(message.From.Id);
-            }
+            string? executorUserId = await _moderationService.GetExecutorUserIdAsync(message.From?.Id);
 
-            // Save warning to user_actions (all warnings are global)
-            var warnAction = new UserActionRecord(
-                Id: 0,
-                UserId: targetUser.Id,
-                ActionType: UserActionType.Warn,
-                MessageId: message.ReplyToMessage.MessageId,
-                IssuedBy: executorUserId, // Mapped from telegram_user_mappings (may be null if not linked)
-                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                ExpiresAt: null, // Warnings don't expire
-                Reason: reason
+            // Execute warn action using service
+            var result = await _moderationService.WarnUserAsync(
+                userId: targetUser.Id,
+                messageId: message.ReplyToMessage.MessageId,
+                executorId: executorUserId,
+                reason: reason
             );
-            await userActionsRepository.InsertAsync(warnAction);
 
-            // Check warning count for this user (globally across all chats)
-            var activeWarnings = await userActionsRepository.GetActiveActionsAsync(targetUser.Id, UserActionType.Warn);
-            var warnCount = activeWarnings.Count;
-
-            _logger.LogInformation(
-                "Warning {WarnCount}/{Threshold} issued to user {TargetId} ({TargetUsername}) by {ExecutorId} - Reason: {Reason}",
-                warnCount, WarnThreshold, targetUser.Id, targetUser.Username, message.From?.Id, reason);
-
-            // Auto-ban if threshold exceeded
-            if (warnCount >= WarnThreshold)
+            if (!result.Success)
             {
-                var managedChats = await managedChatsRepository.GetAllAsync();
-                var bannedChats = new List<long>();
-
-                foreach (var chat in managedChats)
-                {
-                    try
-                    {
-                        await botClient.BanChatMember(
-                            chatId: chat.ChatId,
-                            userId: targetUser.Id,
-                            untilDate: null, // Permanent ban
-                            revokeMessages: true,
-                            cancellationToken: cancellationToken);
-
-                        bannedChats.Add(chat.ChatId);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to auto-ban user {UserId} from chat {ChatId}", targetUser.Id, chat.ChatId);
-                    }
-                }
-
-                // Save ban record (all bans are global)
-                var banAction = new UserActionRecord(
-                    Id: 0,
-                    UserId: targetUser.Id,
-                    ActionType: UserActionType.Ban,
-                    MessageId: message.ReplyToMessage.MessageId,
-                    IssuedBy: null,
-                    IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                    ExpiresAt: null,
-                    Reason: $"Auto-banned after {warnCount} warnings. Last: {reason}"
-                );
-                await userActionsRepository.InsertAsync(banAction);
-
-                return $"⚠️ Warning issued to @{targetUser.Username ?? targetUser.Id.ToString()}\n" +
-                       $"Reason: {reason}\n\n" +
-                       $"🚫 **User auto-banned** after {warnCount} warnings!";
+                return $"❌ Failed to issue warning: {result.ErrorMessage}";
             }
 
-            return $"⚠️ Warning {warnCount}/{WarnThreshold} issued to @{targetUser.Username ?? targetUser.Id.ToString()}\n" +
-                   $"Reason: {reason}";
+            // Build response message
+            var username = targetUser.Username ?? targetUser.Id.ToString();
+            var response = $"⚠️ Warning issued to @{username}\n" +
+                          $"Reason: {reason}";
+
+            return response;
         }
         catch (Exception ex)
         {
