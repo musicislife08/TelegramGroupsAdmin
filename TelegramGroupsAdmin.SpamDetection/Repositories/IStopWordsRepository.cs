@@ -28,7 +28,7 @@ public interface IStopWordsRepository
     /// <summary>
     /// Get all stop words (enabled and disabled) with full details
     /// </summary>
-    Task<IEnumerable<object>> GetAllStopWordsAsync(CancellationToken cancellationToken = default);
+    Task<IEnumerable<TelegramGroupsAdmin.Data.Models.StopWordWithEmailDto>> GetAllStopWordsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Update stop word notes

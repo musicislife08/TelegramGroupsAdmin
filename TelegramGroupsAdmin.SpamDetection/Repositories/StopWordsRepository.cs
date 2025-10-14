@@ -121,28 +121,25 @@ public class StopWordsRepository : IStopWordsRepository
     /// <summary>
     /// Get all stop words (enabled and disabled) with full details
     /// </summary>
-    public async Task<IEnumerable<object>> GetAllStopWordsAsync(CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<StopWordWithEmailDto>> GetAllStopWordsAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            // Query with LEFT JOIN to users table (similar to original Dapper query)
+            // Query with LEFT JOIN to users table to get email for AddedBy
+            // Returns Data DTOs which will be converted to UI models by the caller
             var stopWords = await context.StopWords
                 .AsNoTracking()
                 .GroupJoin(
                     context.Users,
                     sw => sw.AddedBy,
                     u => u.Id,
-                    (sw, users) => new
+                    (sw, users) => new StopWordWithEmailDto
                     {
-                        sw.Id,
-                        sw.Word,
-                        sw.Enabled,
-                        sw.AddedDate,
-                        AddedBy = users.Select(u => u.Email).FirstOrDefault() ?? "Unknown",
-                        sw.Notes
+                        StopWord = sw,
+                        AddedByEmail = users.Select(u => u.Email).FirstOrDefault()
                     })
-                .OrderBy(sw => sw.Word)
+                .OrderBy(sw => sw.StopWord.Word)
                 .ToListAsync(cancellationToken);
 
             return stopWords;
@@ -150,7 +147,7 @@ public class StopWordsRepository : IStopWordsRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve all stop words");
-            return Enumerable.Empty<object>();
+            return Enumerable.Empty<StopWordWithEmailDto>();
         }
     }
 

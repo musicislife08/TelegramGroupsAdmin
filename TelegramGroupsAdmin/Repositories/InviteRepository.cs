@@ -143,11 +143,20 @@ public class InviteRepository
             .Join(context.Users,
                 invite => invite.CreatedBy,
                 user => user.Id,
-                (invite, user) => new { Invite = invite, CreatorEmail = user.Email })
+                (invite, user) => new DataModels.InviteWithCreatorDto
+                {
+                    Invite = invite,
+                    CreatorEmail = user.Email
+                })
             .GroupJoin(context.Users,
                 x => x.Invite.UsedBy,
                 user => user.Id,
-                (x, usedByUsers) => new { x.Invite, x.CreatorEmail, UsedByEmail = usedByUsers.Select(u => u.Email).FirstOrDefault() });
+                (x, usedByUsers) => new DataModels.InviteWithCreatorDto
+                {
+                    Invite = x.Invite,
+                    CreatorEmail = x.CreatorEmail,
+                    UsedByEmail = usedByUsers.Select(u => u.Email).FirstOrDefault()
+                });
 
         if (filter != DataModels.InviteFilter.All)
         {

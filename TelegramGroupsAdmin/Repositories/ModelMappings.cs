@@ -236,6 +236,15 @@ internal static class ModelMappings
         Notes: data.Notes
     );
 
+    public static UiModels.StopWord ToUiModel(this DataModels.StopWordWithEmailDto data) => new(
+        Id: data.StopWord.Id,
+        Word: data.StopWord.Word,
+        Enabled: data.StopWord.Enabled,
+        AddedDate: data.StopWord.AddedDate,
+        AddedBy: data.AddedByEmail,
+        Notes: data.StopWord.Notes
+    );
+
     // Verification Token mappings
     public static UiModels.VerificationToken ToUiModel(this DataModels.VerificationTokenDto data) => new(
         Id: data.Id,
