@@ -11,19 +11,21 @@ namespace TelegramGroupsAdmin.Repositories;
 /// </summary>
 public class ChatAdminsRepository : IChatAdminsRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<ChatAdminsRepository> _logger;
 
-    public ChatAdminsRepository(AppDbContext context, ILogger<ChatAdminsRepository> logger)
+    public ChatAdminsRepository(IDbContextFactory<AppDbContext> contextFactory, ILogger<ChatAdminsRepository> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
     /// <inheritdoc/>
     public async Task<int> GetPermissionLevelAsync(long chatId, long telegramId)
     {
-        var admin = await _context.ChatAdmins
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var admin = await context.ChatAdmins
             .AsNoTracking()
             .Where(ca => ca.ChatId == chatId && ca.TelegramId == telegramId && ca.IsActive == true)
             .Select(ca => new { ca.IsCreator })
@@ -40,7 +42,9 @@ public class ChatAdminsRepository : IChatAdminsRepository
     /// <inheritdoc/>
     public async Task<bool> IsAdminAsync(long chatId, long telegramId)
     {
-        return await _context.ChatAdmins
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await context.ChatAdmins
             .AsNoTracking()
             .AnyAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId && ca.IsActive == true);
     }
@@ -48,7 +52,9 @@ public class ChatAdminsRepository : IChatAdminsRepository
     /// <inheritdoc/>
     public async Task<List<ChatAdmin>> GetChatAdminsAsync(long chatId)
     {
-        var entities = await _context.ChatAdmins
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var entities = await context.ChatAdmins
             .AsNoTracking()
             .Where(ca => ca.ChatId == chatId && ca.IsActive == true)
             .OrderByDescending(ca => ca.IsCreator)
@@ -61,7 +67,9 @@ public class ChatAdminsRepository : IChatAdminsRepository
     /// <inheritdoc/>
     public async Task<List<long>> GetAdminChatsAsync(long telegramId)
     {
-        var chatIds = await _context.ChatAdmins
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var chatIds = await context.ChatAdmins
             .AsNoTracking()
             .Where(ca => ca.TelegramId == telegramId && ca.IsActive == true)
             .OrderBy(ca => ca.ChatId)
@@ -74,9 +82,11 @@ public class ChatAdminsRepository : IChatAdminsRepository
     /// <inheritdoc/>
     public async Task UpsertAsync(long chatId, long telegramId, bool isCreator, string? username = null)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        var existing = await _context.ChatAdmins
+        var existing = await context.ChatAdmins
             .FirstOrDefaultAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId);
 
         if (existing != null)
@@ -100,10 +110,10 @@ public class ChatAdminsRepository : IChatAdminsRepository
                 LastVerifiedAt = now,
                 IsActive = true
             };
-            _context.ChatAdmins.Add(newAdmin);
+            context.ChatAdmins.Add(newAdmin);
         }
 
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
 
         _logger.LogDebug("Upserted admin: chat={ChatId}, user={TelegramId} (@{Username}), creator={IsCreator}",
             chatId, telegramId, username ?? "unknown", isCreator);
@@ -112,9 +122,11 @@ public class ChatAdminsRepository : IChatAdminsRepository
     /// <inheritdoc/>
     public async Task DeactivateAsync(long chatId, long telegramId)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        var admins = await _context.ChatAdmins
+        var admins = await context.ChatAdmins
             .Where(ca => ca.ChatId == chatId && ca.TelegramId == telegramId)
             .ToListAsync();
 
@@ -125,7 +137,7 @@ public class ChatAdminsRepository : IChatAdminsRepository
         }
 
         var rowsAffected = admins.Count;
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
 
         if (rowsAffected > 0)
         {
@@ -136,7 +148,9 @@ public class ChatAdminsRepository : IChatAdminsRepository
     /// <inheritdoc/>
     public async Task DeleteByChatIdAsync(long chatId)
     {
-        var toDelete = await _context.ChatAdmins
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var toDelete = await context.ChatAdmins
             .Where(ca => ca.ChatId == chatId)
             .ToListAsync();
 
@@ -144,8 +158,8 @@ public class ChatAdminsRepository : IChatAdminsRepository
 
         if (rowsAffected > 0)
         {
-            _context.ChatAdmins.RemoveRange(toDelete);
-            await _context.SaveChangesAsync();
+            context.ChatAdmins.RemoveRange(toDelete);
+            await context.SaveChangesAsync();
 
             _logger.LogInformation("Deleted {Count} admin records for chat {ChatId}", rowsAffected, chatId);
         }
@@ -154,15 +168,17 @@ public class ChatAdminsRepository : IChatAdminsRepository
     /// <inheritdoc/>
     public async Task UpdateLastVerifiedAsync(long chatId, long telegramId)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        var admin = await _context.ChatAdmins
+        var admin = await context.ChatAdmins
             .FirstOrDefaultAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId);
 
         if (admin != null)
         {
             admin.LastVerifiedAt = now;
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
         }
     }
 }

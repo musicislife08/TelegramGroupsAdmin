@@ -8,12 +8,12 @@ namespace TelegramGroupsAdmin.Repositories;
 
 public class AuditLogRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<AuditLogRepository> _logger;
 
-    public AuditLogRepository(AppDbContext context, ILogger<AuditLogRepository> logger)
+    public AuditLogRepository(IDbContextFactory<AppDbContext> contextFactory, ILogger<AuditLogRepository> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
@@ -24,6 +24,8 @@ public class AuditLogRepository
         string? value = null,
         CancellationToken ct = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
         var entity = new DataModels.AuditLogRecordDto
         {
             EventType = eventType,
@@ -33,8 +35,8 @@ public class AuditLogRepository
             Value = value
         };
 
-        _context.AuditLogs.Add(entity);
-        await _context.SaveChangesAsync(ct);
+        context.AuditLogs.Add(entity);
+        await context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Audit log: {EventType} by {ActorUserId} on {TargetUserId}",
             eventType, actorUserId ?? "SYSTEM", targetUserId ?? "N/A");
@@ -42,7 +44,9 @@ public class AuditLogRepository
 
     public async Task<List<UiModels.AuditLogRecord>> GetRecentEventsAsync(int limit = 100, CancellationToken ct = default)
     {
-        var entities = await _context.AuditLogs
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var entities = await context.AuditLogs
             .AsNoTracking()
             .OrderByDescending(al => al.Timestamp)
             .Take(limit)
@@ -53,7 +57,9 @@ public class AuditLogRepository
 
     public async Task<List<UiModels.AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = 100, CancellationToken ct = default)
     {
-        var entities = await _context.AuditLogs
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var entities = await context.AuditLogs
             .AsNoTracking()
             .Where(al => al.TargetUserId == userId)
             .OrderByDescending(al => al.Timestamp)
@@ -65,7 +71,9 @@ public class AuditLogRepository
 
     public async Task<List<UiModels.AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = 100, CancellationToken ct = default)
     {
-        var entities = await _context.AuditLogs
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var entities = await context.AuditLogs
             .AsNoTracking()
             .Where(al => al.ActorUserId == actorUserId)
             .OrderByDescending(al => al.Timestamp)
@@ -77,7 +85,9 @@ public class AuditLogRepository
 
     public async Task<List<UiModels.AuditLogRecord>> GetEventsByTypeAsync(DataModels.AuditEventType eventType, int limit = 100, CancellationToken ct = default)
     {
-        var entities = await _context.AuditLogs
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var entities = await context.AuditLogs
             .AsNoTracking()
             .Where(al => al.EventType == eventType)
             .OrderByDescending(al => al.Timestamp)

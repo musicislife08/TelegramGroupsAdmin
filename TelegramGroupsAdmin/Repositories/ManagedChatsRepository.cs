@@ -7,20 +7,21 @@ namespace TelegramGroupsAdmin.Repositories;
 
 public class ManagedChatsRepository : IManagedChatsRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<ManagedChatsRepository> _logger;
 
     public ManagedChatsRepository(
-        AppDbContext context,
+        IDbContextFactory<AppDbContext> contextFactory,
         ILogger<ManagedChatsRepository> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
     public async Task UpsertAsync(ManagedChatRecord chat)
     {
-        var existing = await _context.ManagedChats
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var existing = await context.ManagedChats
             .FirstOrDefaultAsync(mc => mc.ChatId == chat.ChatId);
 
         if (existing != null)
@@ -42,10 +43,10 @@ public class ManagedChatsRepository : IManagedChatsRepository
         {
             // Insert new record
             var entity = chat.ToDataModel();
-            _context.ManagedChats.Add(entity);
+            context.ManagedChats.Add(entity);
         }
 
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
 
         _logger.LogDebug(
             "Upserted managed chat {ChatId} ({ChatName}): {BotStatus}, admin={IsAdmin}, active={IsActive}",
@@ -58,7 +59,8 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
     public async Task<ManagedChatRecord?> GetByChatIdAsync(long chatId)
     {
-        var entity = await _context.ManagedChats
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.ManagedChats
             .AsNoTracking()
             .FirstOrDefaultAsync(mc => mc.ChatId == chatId);
 
@@ -67,7 +69,8 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
     public async Task<List<ManagedChatRecord>> GetActiveChatsAsync()
     {
-        var entities = await _context.ManagedChats
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entities = await context.ManagedChats
             .AsNoTracking()
             .Where(mc => mc.IsActive == true)
             .OrderBy(mc => mc.ChatName)
@@ -78,7 +81,8 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
     public async Task<List<ManagedChatRecord>> GetAdminChatsAsync()
     {
-        var entities = await _context.ManagedChats
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entities = await context.ManagedChats
             .AsNoTracking()
             .Where(mc => mc.IsActive == true && mc.IsAdmin == true)
             .OrderBy(mc => mc.ChatName)
@@ -89,20 +93,22 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
     public async Task<bool> IsActiveAndAdminAsync(long chatId)
     {
-        return await _context.ManagedChats
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        return await context.ManagedChats
             .AsNoTracking()
             .AnyAsync(mc => mc.ChatId == chatId && mc.IsActive == true && mc.IsAdmin == true);
     }
 
     public async Task MarkInactiveAsync(long chatId)
     {
-        var entity = await _context.ManagedChats
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.ManagedChats
             .FirstOrDefaultAsync(mc => mc.ChatId == chatId);
 
         if (entity != null)
         {
             entity.IsActive = false;
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
             _logger.LogInformation("Marked chat {ChatId} as inactive", chatId);
         }
@@ -110,7 +116,8 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
     public async Task UpdateLastSeenAsync(long chatId, long timestamp)
     {
-        var existing = await _context.ManagedChats
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var existing = await context.ManagedChats
             .FirstOrDefaultAsync(mc => mc.ChatId == chatId);
 
         if (existing != null)
@@ -133,15 +140,16 @@ public class ManagedChatsRepository : IManagedChatsRepository
                 LastSeenAt = timestamp,
                 SettingsJson = null
             };
-            _context.ManagedChats.Add(newChat);
+            context.ManagedChats.Add(newChat);
         }
 
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
     }
 
     public async Task<List<ManagedChatRecord>> GetAllChatsAsync()
     {
-        var entities = await _context.ManagedChats
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entities = await context.ManagedChats
             .AsNoTracking()
             .OrderByDescending(mc => mc.IsActive)
             .ThenBy(mc => mc.ChatName)

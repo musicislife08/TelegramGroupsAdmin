@@ -8,20 +8,21 @@ namespace TelegramGroupsAdmin.Repositories;
 
 public class MessageHistoryRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<MessageHistoryRepository> _logger;
 
-    public MessageHistoryRepository(AppDbContext context, ILogger<MessageHistoryRepository> logger)
+    public MessageHistoryRepository(IDbContextFactory<AppDbContext> contextFactory, ILogger<MessageHistoryRepository> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
     public async Task InsertMessageAsync(UiModels.MessageRecord message)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         var entity = message.ToDataModel();
-        _context.Messages.Add(entity);
-        await _context.SaveChangesAsync();
+        context.Messages.Add(entity);
+        await context.SaveChangesAsync();
 
         _logger.LogDebug(
             "Inserted message {MessageId} from user {UserId} (photo: {HasPhoto})",
@@ -30,7 +31,8 @@ public class MessageHistoryRepository
 
     public async Task<UiModels.PhotoMessageRecord?> GetUserRecentPhotoAsync(long userId, long chatId)
     {
-        var entity = await _context.Messages
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.Messages
             .AsNoTracking()
             .Where(m => m.UserId == userId
                 && m.ChatId == chatId
@@ -54,14 +56,15 @@ public class MessageHistoryRepository
 
     public async Task<(int deletedCount, List<string> imagePaths)> CleanupExpiredAsync()
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Retention: Keep messages from last 30 days OR messages with detection_results (training data)
         var retentionCutoff = DateTimeOffset.UtcNow.AddDays(-30).ToUnixTimeSeconds();
 
         // First, get image paths for messages that will be deleted
-        var expiredImages = await _context.Messages
+        var expiredImages = await context.Messages
             .AsNoTracking()
             .Where(m => m.Timestamp < retentionCutoff
-                && !_context.DetectionResults.Any(dr => dr.MessageId == m.MessageId))
+                && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId))
             .Where(m => m.PhotoLocalPath != null || m.PhotoThumbnailPath != null)
             .Select(m => new { m.PhotoLocalPath, m.PhotoThumbnailPath })
             .ToListAsync();
@@ -77,9 +80,9 @@ public class MessageHistoryRepository
         }
 
         // Get messages that will be deleted
-        var expiredMessages = await _context.Messages
+        var expiredMessages = await context.Messages
             .Where(m => m.Timestamp < retentionCutoff
-                && !_context.DetectionResults.Any(dr => dr.MessageId == m.MessageId))
+                && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId))
             .ToListAsync();
 
         if (expiredMessages.Count == 0)
@@ -90,16 +93,16 @@ public class MessageHistoryRepository
         var expiredMessageIds = expiredMessages.Select(m => m.MessageId).ToList();
 
         // Delete message edits for expired messages (will cascade delete via FK, but doing explicitly for logging)
-        var editsToDelete = await _context.MessageEdits
+        var editsToDelete = await context.MessageEdits
             .Where(e => expiredMessageIds.Contains(e.MessageId))
             .ToListAsync();
         var deletedEdits = editsToDelete.Count;
-        _context.MessageEdits.RemoveRange(editsToDelete);
+        context.MessageEdits.RemoveRange(editsToDelete);
 
         // Delete expired messages (EF Core will handle cascade)
-        _context.Messages.RemoveRange(expiredMessages);
+        context.Messages.RemoveRange(expiredMessages);
 
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
         var deleted = expiredMessages.Count;
 
         if (deleted > 0)
@@ -120,7 +123,8 @@ public class MessageHistoryRepository
 
     public async Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100)
     {
-        var entities = await _context.Messages
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entities = await context.Messages
             .AsNoTracking()
             .OrderByDescending(m => m.Timestamp)
             .Take(limit)
@@ -131,7 +135,8 @@ public class MessageHistoryRepository
 
     public async Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10)
     {
-        var entities = await _context.Messages
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entities = await context.Messages
             .AsNoTracking()
             .Where(m => m.ChatId == chatId)
             .OrderByDescending(m => m.Timestamp)
@@ -146,7 +151,8 @@ public class MessageHistoryRepository
         long endTimestamp,
         int limit = 1000)
     {
-        var entities = await _context.Messages
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entities = await context.Messages
             .AsNoTracking()
             .Where(m => m.Timestamp >= startTimestamp && m.Timestamp <= endTimestamp)
             .OrderByDescending(m => m.Timestamp)
@@ -158,17 +164,18 @@ public class MessageHistoryRepository
 
     public async Task<UiModels.HistoryStats> GetStatsAsync()
     {
-        var totalMessages = await _context.Messages.CountAsync();
-        var uniqueUsers = await _context.Messages.Select(m => m.UserId).Distinct().CountAsync();
-        var photoCount = await _context.Messages.CountAsync(m => m.PhotoFileId != null);
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var totalMessages = await context.Messages.CountAsync();
+        var uniqueUsers = await context.Messages.Select(m => m.UserId).Distinct().CountAsync();
+        var photoCount = await context.Messages.CountAsync(m => m.PhotoFileId != null);
 
         long oldestTimestamp = 0;
         long newestTimestamp = 0;
 
         if (totalMessages > 0)
         {
-            oldestTimestamp = await _context.Messages.MinAsync(m => m.Timestamp);
-            newestTimestamp = await _context.Messages.MaxAsync(m => m.Timestamp);
+            oldestTimestamp = await context.Messages.MinAsync(m => m.Timestamp);
+            newestTimestamp = await context.Messages.MaxAsync(m => m.Timestamp);
         }
 
         var result = new UiModels.HistoryStats(
@@ -183,14 +190,15 @@ public class MessageHistoryRepository
 
     public async Task<Dictionary<long, UiModels.SpamCheckRecord>> GetSpamChecksForMessagesAsync(IEnumerable<long> messageIds)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         var messageIdArray = messageIds.ToArray();
 
         // Query detection_results table (spam_checks table was dropped in normalized schema)
         // Map detection_results fields to SpamCheckRecord for backward compatibility
-        var results = await _context.DetectionResults
+        var results = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => messageIdArray.Contains(dr.MessageId))
-            .Join(_context.Messages,
+            .Join(context.Messages,
                 dr => dr.MessageId,
                 m => m.MessageId,
                 (dr, m) => new
@@ -225,9 +233,10 @@ public class MessageHistoryRepository
 
     public async Task<Dictionary<long, int>> GetEditCountsForMessagesAsync(IEnumerable<long> messageIds)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         var messageIdArray = messageIds.ToArray();
 
-        var results = await _context.MessageEdits
+        var results = await context.MessageEdits
             .AsNoTracking()
             .Where(e => messageIdArray.Contains(e.MessageId))
             .GroupBy(e => e.MessageId)
@@ -239,7 +248,8 @@ public class MessageHistoryRepository
 
     public async Task<List<UiModels.MessageEditRecord>> GetEditsForMessageAsync(long messageId)
     {
-        var entities = await _context.MessageEdits
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entities = await context.MessageEdits
             .AsNoTracking()
             .Where(e => e.MessageId == messageId)
             .OrderBy(e => e.EditDate)
@@ -250,9 +260,10 @@ public class MessageHistoryRepository
 
     public async Task InsertMessageEditAsync(UiModels.MessageEditRecord edit)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         var entity = edit.ToDataModel();
-        _context.MessageEdits.Add(entity);
-        await _context.SaveChangesAsync();
+        context.MessageEdits.Add(entity);
+        await context.SaveChangesAsync();
 
         _logger.LogDebug(
             "Inserted edit for message {MessageId} at {EditDate}",
@@ -262,7 +273,8 @@ public class MessageHistoryRepository
 
     public async Task<UiModels.MessageRecord?> GetMessageAsync(long messageId)
     {
-        var entity = await _context.Messages
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.Messages
             .AsNoTracking()
             .FirstOrDefaultAsync(m => m.MessageId == messageId);
 
@@ -271,7 +283,8 @@ public class MessageHistoryRepository
 
     public async Task UpdateMessageAsync(UiModels.MessageRecord message)
     {
-        var entity = await _context.Messages.FindAsync(message.MessageId);
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.Messages.FindAsync(message.MessageId);
 
         if (entity != null)
         {
@@ -280,7 +293,7 @@ public class MessageHistoryRepository
             entity.EditDate = message.EditDate;
             entity.ContentHash = message.ContentHash;
 
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
             _logger.LogDebug(
                 "Updated message {MessageId} with new edit date {EditDate}",
@@ -291,7 +304,8 @@ public class MessageHistoryRepository
 
     public async Task<List<string>> GetDistinctUserNamesAsync()
     {
-        var userNames = await _context.Messages
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var userNames = await context.Messages
             .AsNoTracking()
             .Where(m => m.UserName != null && m.UserName != "")
             .Select(m => m.UserName!)
@@ -304,7 +318,8 @@ public class MessageHistoryRepository
 
     public async Task<List<string>> GetDistinctChatNamesAsync()
     {
-        var chatNames = await _context.Messages
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var chatNames = await context.Messages
             .AsNoTracking()
             .Where(m => m.ChatName != null && m.ChatName != "")
             .Select(m => m.ChatName!)
@@ -317,8 +332,9 @@ public class MessageHistoryRepository
 
     public async Task<UiModels.DetectionStats> GetDetectionStatsAsync()
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Overall stats from detection_results
-        var allDetections = await _context.DetectionResults
+        var allDetections = await context.DetectionResults
             .AsNoTracking()
             .Select(dr => new { dr.IsSpam, dr.Confidence })
             .ToListAsync();
@@ -331,7 +347,7 @@ public class MessageHistoryRepository
 
         // Last 24h stats
         var since24h = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeSeconds();
-        var recentDetections = await _context.DetectionResults
+        var recentDetections = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.DetectedAt >= since24h)
             .Select(dr => dr.IsSpam)
@@ -354,9 +370,10 @@ public class MessageHistoryRepository
 
     public async Task<List<UiModels.DetectionResultRecord>> GetRecentDetectionsAsync(int limit = 100)
     {
-        var results = await _context.DetectionResults
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var results = await context.DetectionResults
             .AsNoTracking()
-            .Join(_context.Messages,
+            .Join(context.Messages,
                 dr => dr.MessageId,
                 m => m.MessageId,
                 (dr, m) => new
@@ -396,7 +413,8 @@ public class MessageHistoryRepository
     /// </summary>
     public async Task MarkMessageAsDeletedAsync(long messageId, string deletionSource)
     {
-        var entity = await _context.Messages.FindAsync(messageId);
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.Messages.FindAsync(messageId);
 
         if (entity != null)
         {
@@ -404,7 +422,7 @@ public class MessageHistoryRepository
             entity.DeletedAt = now;
             entity.DeletionSource = deletionSource;
 
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
             _logger.LogDebug(
                 "Marked message {MessageId} as deleted (source: {DeletionSource})",

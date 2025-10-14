@@ -8,19 +8,21 @@ namespace TelegramGroupsAdmin.Repositories;
 
 public class VerificationTokenRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<VerificationTokenRepository> _logger;
 
-    public VerificationTokenRepository(AppDbContext context, ILogger<VerificationTokenRepository> logger)
+    public VerificationTokenRepository(IDbContextFactory<AppDbContext> contextFactory, ILogger<VerificationTokenRepository> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
     public async Task<long> CreateAsync(DataModels.VerificationTokenDto verificationToken, CancellationToken ct = default)
     {
-        _context.VerificationTokens.Add(verificationToken);
-        await _context.SaveChangesAsync(ct);
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        context.VerificationTokens.Add(verificationToken);
+        await context.SaveChangesAsync(ct);
 
         _logger.LogDebug("Created verification token {Id} for user {UserId}, type {TokenType}",
             verificationToken.Id, verificationToken.UserId, verificationToken.TokenType);
@@ -30,7 +32,9 @@ public class VerificationTokenRepository
 
     public async Task<UiModels.VerificationToken?> GetByTokenAsync(string token, CancellationToken ct = default)
     {
-        var entity = await _context.VerificationTokens
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var entity = await context.VerificationTokens
             .AsNoTracking()
             .FirstOrDefaultAsync(vt => vt.Token == token, ct);
 
@@ -39,6 +43,8 @@ public class VerificationTokenRepository
 
     public async Task<UiModels.VerificationToken?> GetValidTokenAsync(string token, DataModels.TokenType tokenType, CancellationToken ct = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
         var tokenTypeString = tokenType switch
         {
             DataModels.TokenType.EmailVerification => "email_verify",
@@ -49,7 +55,7 @@ public class VerificationTokenRepository
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        var entity = await _context.VerificationTokens
+        var entity = await context.VerificationTokens
             .AsNoTracking()
             .FirstOrDefaultAsync(vt =>
                 vt.Token == token
@@ -62,27 +68,31 @@ public class VerificationTokenRepository
 
     public async Task MarkAsUsedAsync(string token, CancellationToken ct = default)
     {
-        var entity = await _context.VerificationTokens.FirstOrDefaultAsync(vt => vt.Token == token, ct);
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var entity = await context.VerificationTokens.FirstOrDefaultAsync(vt => vt.Token == token, ct);
         if (entity == null) return;
 
         entity.UsedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        await _context.SaveChangesAsync(ct);
+        await context.SaveChangesAsync(ct);
 
         _logger.LogDebug("Marked verification token as used: {Token}", token);
     }
 
     public async Task<int> CleanupExpiredAsync(CancellationToken ct = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        var expiredTokens = await _context.VerificationTokens
+        var expiredTokens = await context.VerificationTokens
             .Where(vt => vt.ExpiresAt <= now)
             .ToListAsync(ct);
 
         if (expiredTokens.Count > 0)
         {
-            _context.VerificationTokens.RemoveRange(expiredTokens);
-            await _context.SaveChangesAsync(ct);
+            context.VerificationTokens.RemoveRange(expiredTokens);
+            await context.SaveChangesAsync(ct);
             _logger.LogInformation("Cleaned up {Count} expired verification tokens", expiredTokens.Count);
         }
 
@@ -91,14 +101,16 @@ public class VerificationTokenRepository
 
     public async Task<int> DeleteByUserIdAsync(string userId, CancellationToken ct = default)
     {
-        var tokens = await _context.VerificationTokens
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var tokens = await context.VerificationTokens
             .Where(vt => vt.UserId == userId)
             .ToListAsync(ct);
 
         if (tokens.Count > 0)
         {
-            _context.VerificationTokens.RemoveRange(tokens);
-            await _context.SaveChangesAsync(ct);
+            context.VerificationTokens.RemoveRange(tokens);
+            await context.SaveChangesAsync(ct);
             _logger.LogDebug("Deleted {Count} verification tokens for user {UserId}", tokens.Count, userId);
         }
 

@@ -8,22 +8,24 @@ namespace TelegramGroupsAdmin.Repositories;
 
 public class ReportsRepository : IReportsRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<ReportsRepository> _logger;
 
     public ReportsRepository(
-        AppDbContext context,
+        IDbContextFactory<AppDbContext> contextFactory,
         ILogger<ReportsRepository> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
     public async Task<long> InsertAsync(Report report)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
         var entity = report.ToDataModel();
-        _context.Reports.Add(entity);
-        await _context.SaveChangesAsync();
+        context.Reports.Add(entity);
+        await context.SaveChangesAsync();
 
         _logger.LogInformation(
             "Inserted report {ReportId} for message {MessageId} in chat {ChatId} by user {UserId}",
@@ -37,7 +39,9 @@ public class ReportsRepository : IReportsRepository
 
     public async Task<Report?> GetByIdAsync(long id)
     {
-        var entity = await _context.Reports
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var entity = await context.Reports
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == id);
 
@@ -55,7 +59,9 @@ public class ReportsRepository : IReportsRepository
         int limit = 100,
         int offset = 0)
     {
-        var query = _context.Reports.AsNoTracking();
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var query = context.Reports.AsNoTracking();
 
         if (chatId.HasValue)
         {
@@ -83,7 +89,9 @@ public class ReportsRepository : IReportsRepository
         string actionTaken,
         string? adminNotes = null)
     {
-        var entity = await _context.Reports.FindAsync(reportId);
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var entity = await context.Reports.FindAsync(reportId);
 
         if (entity != null)
         {
@@ -95,7 +103,7 @@ public class ReportsRepository : IReportsRepository
             entity.ActionTaken = actionTaken;
             entity.AdminNotes = adminNotes;
 
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
             _logger.LogInformation(
                 "Updated report {ReportId} to status {Status} by user {ReviewedBy} (action: {ActionTaken})",
@@ -108,7 +116,9 @@ public class ReportsRepository : IReportsRepository
 
     public async Task<int> GetPendingCountAsync(long? chatId = null)
     {
-        var query = _context.Reports.AsNoTracking()
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var query = context.Reports.AsNoTracking()
             .Where(r => r.Status == DataModels.ReportStatus.Pending);
 
         if (chatId.HasValue)
@@ -121,7 +131,9 @@ public class ReportsRepository : IReportsRepository
 
     public async Task DeleteOldReportsAsync(long olderThanTimestamp)
     {
-        var toDelete = await _context.Reports
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var toDelete = await context.Reports
             .Where(r => r.ReportedAt < olderThanTimestamp
                 && r.Status != DataModels.ReportStatus.Pending)
             .ToListAsync();
@@ -130,8 +142,8 @@ public class ReportsRepository : IReportsRepository
 
         if (deleted > 0)
         {
-            _context.Reports.RemoveRange(toDelete);
-            await _context.SaveChangesAsync();
+            context.Reports.RemoveRange(toDelete);
+            await context.SaveChangesAsync();
 
             _logger.LogInformation(
                 "Deleted {Count} old reports (older than {Timestamp})",
