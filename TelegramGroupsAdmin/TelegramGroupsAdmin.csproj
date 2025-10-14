@@ -36,6 +36,7 @@
         <PackageReference Include="Telegram.Bot" Version="22.7.3-dev.4" />
         <PackageReference Include="TickerQ" Version="2.5.3" />
         <PackageReference Include="TickerQ.EntityFrameworkCore" Version="2.5.3" />
+        <PackageReference Include="TickerQ.Utilities" Version="2.5.3" />
     </ItemGroup>
 
     <ItemGroup>

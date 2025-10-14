@@ -330,6 +330,9 @@ public static class ServiceCollectionExtensions
             // options.AddDashboardBasicAuth();
         });
 
+        // Register job classes (TickerQ discovers [TickerFunction] methods via source generators)
+        services.AddScoped<Jobs.TestJob>();
+
         return services;
     }
 }

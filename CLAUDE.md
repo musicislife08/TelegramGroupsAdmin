@@ -10,6 +10,7 @@ ASP.NET Core 10.0 Blazor Server + Minimal API. Telegram spam detection (text + i
 - Cookie auth + TOTP 2FA
 - VirusTotal API, OpenAI Vision API
 - SendGrid email service
+- TickerQ 2.5.3 (background job scheduler with EF Core integration)
 
 ## Solution Structure
 
@@ -47,6 +48,7 @@ ASP.NET Core 10.0 Blazor Server + Minimal API. Telegram spam detection (text + i
 - `AddTelegramServices()` - Bot commands and background services
 - `AddRepositories()` - All repositories and orchestrators
 - `AddTgSpamWebDataServices()` - Data Protection + Identity repos
+- `AddTickerQBackgroundJobs()` - TickerQ background job system with PostgreSQL backend
 
 **WebApplicationExtensions.cs** - Pipeline configuration:
 - `ConfigurePipeline()` - Standard middleware setup
@@ -550,6 +552,11 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 **DB growing**: Check retention (720h default), cleanup service running
 **Rate limits**: Check logs for LogWarning messages from VirusTotalService or OpenAIVisionSpamDetectionService
 **Build issues**: Run `dotnet clean && dotnet build` - project maintains 0 errors/warnings standard
+**TickerQ attribute not found**: If `TickerFunctionAttribute` or `TickerFunctionContext<T>` cannot be found, ensure you're using the correct namespaces:
+  - `using TickerQ.Utilities.Base;` (for TickerFunctionAttribute)
+  - `using TickerQ.Utilities.Models;` (for TickerFunctionContext<T>)
+  - These types are in the `TickerQ.Utilities` package, which is a transitive dependency
+  - **Pro tip**: When NuGet package documentation is unclear, clone the GitHub repo and inspect the source code directly to find correct namespaces
 
 ## Roadmap
 
