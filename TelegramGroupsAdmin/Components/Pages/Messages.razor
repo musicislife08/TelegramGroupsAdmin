@@ -1,7 +1,10 @@
 @page "/messages"
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.Extensions.Options
 @using Microsoft.JSInterop
+@using Telegram.Bot
+@using Telegram.Bot.Requests
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Models
 @using TelegramGroupsAdmin.Repositories
@@ -16,6 +19,10 @@
 @inject IMessageHistoryService MessageHistoryService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDetectionResultsRepository DetectionResultsRepository
+@inject IUserActionsRepository UserActionsRepository
+@inject IManagedChatsRepository ManagedChatsRepository
+@inject Services.Telegram.TelegramBotClientFactory BotClientFactory
+@inject IOptions<Configuration.TelegramOptions> TelegramOptions
 @inject ILogger<Messages> Logger
 @attribute [Authorize]
 @implements IDisposable
@@ -424,7 +431,8 @@
 
             await DetectionResultsRepository.InsertAsync(detectionResult);
 
-            // TODO: Implement unban logic if user was auto-banned (Phase 2.7)
+            // Phase 2.7: Implement unban logic if user was auto-banned
+            await HandleUnbanIfNeededAsync(message);
 
             // Refresh detection history for this message
             var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
@@ -476,5 +484,94 @@
         };
 
         await DialogService.ShowAsync<DetectionHistoryDialog>("Detection History", parameters, options);
+    }
+
+    /// <summary>
+    /// Phase 2.7: Handle unban if user was auto-banned (false positive correction)
+    /// </summary>
+    private async Task HandleUnbanIfNeededAsync(MessageRecord message)
+    {
+        try
+        {
+            // Check if user has active bans
+            var activeBans = await UserActionsRepository.GetActiveActionsAsync(message.UserId, UserActionType.Ban);
+
+            if (!activeBans.Any())
+            {
+                Logger.LogInformation("No active bans found for user {UserId} - skipping unban", message.UserId);
+                return;
+            }
+
+            Logger.LogInformation(
+                "Found {BanCount} active ban(s) for user {UserId} - proceeding with unban",
+                activeBans.Count,
+                message.UserId);
+
+            // Create unban action in database
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var unbanAction = new UserActionRecord(
+                Id: 0, // Will be assigned by database
+                UserId: message.UserId,
+                ActionType: UserActionType.Unban,
+                MessageId: message.MessageId,
+                IssuedBy: authState.User.Identity?.Name ?? "Admin",
+                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                ExpiresAt: null,
+                Reason: "False positive correction - message marked as ham by admin"
+            );
+
+            await UserActionsRepository.InsertAsync(unbanAction);
+
+            // Deactivate all active bans for this user
+            foreach (var ban in activeBans)
+            {
+                await UserActionsRepository.DeactivateAsync(ban.Id);
+            }
+
+            // Unban user across all managed chats via Telegram API
+            var managedChats = await ManagedChatsRepository.GetAllChatsAsync();
+            var activeChats = managedChats.Where(c => c.IsActive).ToList();
+            var botClient = BotClientFactory.GetOrCreate(TelegramOptions.Value.BotToken);
+
+            int successCount = 0;
+            int failCount = 0;
+
+            foreach (var chat in activeChats)
+            {
+                try
+                {
+                    await botClient.UnbanChatMember(
+                        chatId: chat.ChatId,
+                        userId: message.UserId,
+                        onlyIfBanned: true); // Only unban if user is actually banned
+
+                    successCount++;
+
+                    Logger.LogInformation(
+                        "Unbanned user {UserId} from chat {ChatId}",
+                        message.UserId,
+                        chat.ChatId);
+                }
+                catch (Exception ex)
+                {
+                    failCount++;
+                    Logger.LogWarning(ex,
+                        "Failed to unban user {UserId} from chat {ChatId} (may not be banned in this chat)",
+                        message.UserId,
+                        chat.ChatId);
+                }
+            }
+
+            Logger.LogInformation(
+                "Unban complete for user {UserId}: {SuccessCount}/{TotalCount} successful, {FailCount} failed",
+                message.UserId,
+                successCount,
+                activeChats.Count,
+                failCount);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to handle unban for user {UserId}", message.UserId);
+        }
     }
 }
