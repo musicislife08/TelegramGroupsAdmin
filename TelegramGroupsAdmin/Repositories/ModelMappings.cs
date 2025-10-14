@@ -10,28 +10,28 @@ namespace TelegramGroupsAdmin.Repositories;
 internal static class ModelMappings
 {
     // ChatAdmin mappings
-    public static UiModels.ChatAdmin ToUiModel(this DataModels.ChatAdminRecordDto data) => new()
+    public static UiModels.ChatAdmin ToUiModel(this DataModels.ChatAdminRecord data) => new()
     {
-        Id = data.id,
-        ChatId = data.chat_id,
-        TelegramId = data.telegram_id,
-        Username = data.username,
-        IsCreator = data.is_creator,
-        PromotedAt = data.promoted_at,
-        LastVerifiedAt = data.last_verified_at,
-        IsActive = data.is_active
+        Id = data.Id,
+        ChatId = data.ChatId,
+        TelegramId = data.TelegramId,
+        Username = data.Username,
+        IsCreator = data.IsCreator,
+        PromotedAt = data.PromotedAt,
+        LastVerifiedAt = data.LastVerifiedAt,
+        IsActive = data.IsActive
     };
 
-    public static DataModels.ChatAdminRecordDto ToDataModel(this UiModels.ChatAdmin ui) => new()
+    public static DataModels.ChatAdminRecord ToDataModel(this UiModels.ChatAdmin ui) => new()
     {
-        id = ui.Id,
-        chat_id = ui.ChatId,
-        telegram_id = ui.TelegramId,
-        username = ui.Username,
-        is_creator = ui.IsCreator,
-        promoted_at = ui.PromotedAt,
-        last_verified_at = ui.LastVerifiedAt,
-        is_active = ui.IsActive
+        Id = ui.Id,
+        ChatId = ui.ChatId,
+        TelegramId = ui.TelegramId,
+        Username = ui.Username,
+        IsCreator = ui.IsCreator,
+        PromotedAt = ui.PromotedAt,
+        LastVerifiedAt = ui.LastVerifiedAt,
+        IsActive = ui.IsActive
     };
 
 
@@ -166,19 +166,8 @@ internal static class ModelMappings
         DeletionSource: ui.DeletionSource
     );
 
-    public static UiModels.PhotoMessageRecord ToUiModel(this DataModels.PhotoMessageRecord data) => new(
-        FileId: data.FileId,
-        MessageText: data.MessageText,
-        Timestamp: data.Timestamp
-    );
-
-    public static UiModels.HistoryStats ToUiModel(this DataModels.HistoryStats data) => new(
-        TotalMessages: (int)data.TotalMessages,
-        UniqueUsers: (int)data.UniqueUsers,
-        PhotoCount: (int)data.PhotoCount,
-        OldestTimestamp: data.OldestTimestamp,
-        NewestTimestamp: data.NewestTimestamp
-    );
+    // Note: PhotoMessageRecord, HistoryStats, SpamCheckRecord are UI-only models
+    // They are constructed directly in repositories (MessageHistoryRepository), not mapped from database entities
 
     public static UiModels.MessageEditRecord ToUiModel(this DataModels.MessageEditRecord data) => new(
         Id: data.Id,
@@ -198,30 +187,6 @@ internal static class ModelMappings
         NewText: ui.NewText,
         OldContentHash: ui.OldContentHash,
         NewContentHash: ui.NewContentHash
-    );
-
-    public static UiModels.SpamCheckRecord ToUiModel(this DataModels.SpamCheckRecord data) => new(
-        Id: data.Id,
-        CheckTimestamp: data.CheckTimestamp,
-        UserId: data.UserId,
-        ContentHash: data.ContentHash,
-        IsSpam: data.IsSpam,
-        Confidence: data.Confidence,
-        Reason: data.Reason,
-        CheckType: data.CheckType,
-        MatchedMessageId: data.MatchedMessageId
-    );
-
-    public static DataModels.SpamCheckRecord ToDataModel(this UiModels.SpamCheckRecord ui) => new(
-        Id: ui.Id,
-        CheckTimestamp: ui.CheckTimestamp,
-        UserId: ui.UserId,
-        ContentHash: ui.ContentHash,
-        IsSpam: ui.IsSpam,
-        Confidence: ui.Confidence,
-        Reason: ui.Reason,
-        CheckType: ui.CheckType,
-        MatchedMessageId: ui.MatchedMessageId
     );
 
     public static DataModels.InviteRecord ToDataModel(this UiModels.InviteRecord ui) => new(
@@ -387,14 +352,14 @@ internal static class ModelMappings
         IsActive: data.IsActive
     );
 
-    public static DataModels.TelegramUserMappingRecordDto ToDataModel(this UiModels.TelegramUserMappingRecord ui) => new()
+    public static DataModels.TelegramUserMappingRecord ToDataModel(this UiModels.TelegramUserMappingRecord ui) => new()
     {
-        id = ui.Id,
-        telegram_id = ui.TelegramId,
-        telegram_username = ui.TelegramUsername,
-        user_id = ui.UserId,
-        linked_at = ui.LinkedAt,
-        is_active = ui.IsActive
+        Id = ui.Id,
+        TelegramId = ui.TelegramId,
+        TelegramUsername = ui.TelegramUsername,
+        UserId = ui.UserId,
+        LinkedAt = ui.LinkedAt,
+        IsActive = ui.IsActive
     };
 
     // TelegramLinkToken mappings
@@ -407,14 +372,14 @@ internal static class ModelMappings
         UsedByTelegramId: data.UsedByTelegramId
     );
 
-    public static DataModels.TelegramLinkTokenRecordDto ToDataModel(this UiModels.TelegramLinkTokenRecord ui) => new()
+    public static DataModels.TelegramLinkTokenRecord ToDataModel(this UiModels.TelegramLinkTokenRecord ui) => new()
     {
-        token = ui.Token,
-        user_id = ui.UserId,
-        created_at = ui.CreatedAt,
-        expires_at = ui.ExpiresAt,
-        used_at = ui.UsedAt,
-        used_by_telegram_id = ui.UsedByTelegramId
+        Token = ui.Token,
+        UserId = ui.UserId,
+        CreatedAt = ui.CreatedAt,
+        ExpiresAt = ui.ExpiresAt,
+        UsedAt = ui.UsedAt,
+        UsedByTelegramId = ui.UsedByTelegramId
     };
 
     // Report mappings

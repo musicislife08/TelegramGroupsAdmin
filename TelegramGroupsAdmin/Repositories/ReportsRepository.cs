@@ -1,85 +1,46 @@
-using Dapper;
-using Npgsql;
-using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Models;
-using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
 public class ReportsRepository : IReportsRepository
 {
-    private readonly string _connectionString;
+    private readonly AppDbContext _context;
     private readonly ILogger<ReportsRepository> _logger;
 
     public ReportsRepository(
-        IConfiguration configuration,
+        AppDbContext context,
         ILogger<ReportsRepository> logger)
     {
-        _connectionString = configuration.GetConnectionString("PostgreSQL")
-            ?? throw new InvalidOperationException("PostgreSQL connection string not found");
+        _context = context;
         _logger = logger;
     }
 
     public async Task<long> InsertAsync(Report report)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-
-        const string sql = """
-            INSERT INTO reports (
-                message_id, chat_id, report_command_message_id,
-                reported_by_user_id, reported_by_user_name, reported_at,
-                status, reviewed_by, reviewed_at, action_taken, admin_notes
-            ) VALUES (
-                @MessageId, @ChatId, @ReportCommandMessageId,
-                @ReportedByUserId, @ReportedByUserName, @ReportedAt,
-                @Status, @ReviewedBy, @ReviewedAt, @ActionTaken, @AdminNotes
-            )
-            RETURNING id;
-            """;
-
-        var id = await connection.ExecuteScalarAsync<long>(sql, new
-        {
-            report.MessageId,
-            report.ChatId,
-            report.ReportCommandMessageId,
-            report.ReportedByUserId,
-            report.ReportedByUserName,
-            report.ReportedAt,
-            Status = (int)report.Status,
-            report.ReviewedBy,
-            report.ReviewedAt,
-            report.ActionTaken,
-            report.AdminNotes
-        });
+        var entity = report.ToDataModel();
+        _context.Reports.Add(entity);
+        await _context.SaveChangesAsync();
 
         _logger.LogInformation(
             "Inserted report {ReportId} for message {MessageId} in chat {ChatId} by user {UserId}",
-            id,
+            entity.Id,
             report.MessageId,
             report.ChatId,
             report.ReportedByUserId);
 
-        return id;
+        return entity.Id;
     }
 
     public async Task<Report?> GetByIdAsync(long id)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Reports
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id);
 
-        const string sql = """
-            SELECT id, message_id, chat_id, report_command_message_id,
-                   reported_by_user_id, reported_by_user_name, reported_at,
-                   status, reviewed_by, reviewed_at, action_taken, admin_notes
-            FROM reports
-            WHERE id = @Id;
-            """;
-
-        var dto = await connection.QuerySingleOrDefaultAsync<DataModels.ReportDto>(
-            sql,
-            new { Id = id });
-
-        return dto?.ToReport().ToUiModel();
+        return entity?.ToUiModel();
     }
 
     public async Task<List<Report>> GetPendingReportsAsync(long? chatId = null)
@@ -93,37 +54,25 @@ public class ReportsRepository : IReportsRepository
         int limit = 100,
         int offset = 0)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-
-        var sql = """
-            SELECT id, message_id, chat_id, report_command_message_id,
-                   reported_by_user_id, reported_by_user_name, reported_at,
-                   status, reviewed_by, reviewed_at, action_taken, admin_notes
-            FROM reports
-            WHERE 1=1
-            """;
-
-        var parameters = new DynamicParameters();
+        var query = _context.Reports.AsNoTracking();
 
         if (chatId.HasValue)
         {
-            sql += " AND chat_id = @ChatId";
-            parameters.Add("ChatId", chatId.Value);
+            query = query.Where(r => r.ChatId == chatId.Value);
         }
 
         if (status.HasValue)
         {
-            sql += " AND status = @Status";
-            parameters.Add("Status", (int)status.Value);
+            query = query.Where(r => r.Status == status.Value);
         }
 
-        sql += " ORDER BY reported_at DESC LIMIT @Limit OFFSET @Offset;";
-        parameters.Add("Limit", limit);
-        parameters.Add("Offset", offset);
+        var entities = await query
+            .OrderByDescending(r => r.ReportedAt)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync();
 
-        var dtos = await connection.QueryAsync<DataModels.ReportDto>(sql, parameters);
-
-        return dtos.Select(dto => dto.ToReport().ToUiModel()).ToList();
+        return entities.Select(e => e.ToUiModel()).ToList();
     }
 
     public async Task UpdateReportStatusAsync(
@@ -133,73 +82,56 @@ public class ReportsRepository : IReportsRepository
         string actionTaken,
         string? adminNotes = null)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Reports.FindAsync(reportId);
 
-        const string sql = """
-            UPDATE reports
-            SET status = @Status,
-                reviewed_by = @ReviewedBy,
-                reviewed_at = @ReviewedAt,
-                action_taken = @ActionTaken,
-                admin_notes = @AdminNotes
-            WHERE id = @ReportId;
-            """;
-
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-        await connection.ExecuteAsync(sql, new
+        if (entity != null)
         {
-            ReportId = reportId,
-            Status = (int)status,
-            ReviewedBy = reviewedBy,
-            ReviewedAt = now,
-            ActionTaken = actionTaken,
-            AdminNotes = adminNotes
-        });
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        _logger.LogInformation(
-            "Updated report {ReportId} to status {Status} by user {ReviewedBy} (action: {ActionTaken})",
-            reportId,
-            status,
-            reviewedBy,
-            actionTaken);
+            entity.Status = status;
+            entity.ReviewedBy = reviewedBy;
+            entity.ReviewedAt = now;
+            entity.ActionTaken = actionTaken;
+            entity.AdminNotes = adminNotes;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Updated report {ReportId} to status {Status} by user {ReviewedBy} (action: {ActionTaken})",
+                reportId,
+                status,
+                reviewedBy,
+                actionTaken);
+        }
     }
 
     public async Task<int> GetPendingCountAsync(long? chatId = null)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-
-        var sql = "SELECT COUNT(*) FROM reports WHERE status = @Status";
-        var parameters = new DynamicParameters();
-        parameters.Add("Status", (int)ReportStatus.Pending);
+        var query = _context.Reports.AsNoTracking()
+            .Where(r => r.Status == ReportStatus.Pending);
 
         if (chatId.HasValue)
         {
-            sql += " AND chat_id = @ChatId";
-            parameters.Add("ChatId", chatId.Value);
+            query = query.Where(r => r.ChatId == chatId.Value);
         }
 
-        return await connection.ExecuteScalarAsync<int>(sql, parameters);
+        return await query.CountAsync();
     }
 
     public async Task DeleteOldReportsAsync(long olderThanTimestamp)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var toDelete = await _context.Reports
+            .Where(r => r.ReportedAt < olderThanTimestamp
+                && r.Status != ReportStatus.Pending)
+            .ToListAsync();
 
-        const string sql = """
-            DELETE FROM reports
-            WHERE reported_at < @OlderThanTimestamp
-              AND status != @PendingStatus;
-            """;
-
-        var deleted = await connection.ExecuteAsync(sql, new
-        {
-            OlderThanTimestamp = olderThanTimestamp,
-            PendingStatus = (int)ReportStatus.Pending
-        });
+        var deleted = toDelete.Count;
 
         if (deleted > 0)
         {
+            _context.Reports.RemoveRange(toDelete);
+            await _context.SaveChangesAsync();
+
             _logger.LogInformation(
                 "Deleted {Count} old reports (older than {Timestamp})",
                 deleted,

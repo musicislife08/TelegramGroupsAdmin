@@ -1,143 +1,67 @@
-using Dapper;
-using Npgsql;
-using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Data;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
-// CRITICAL DAPPER/DTO CONVENTION:
-// All SQL SELECT statements MUST use raw snake_case column names without aliases.
-// DTOs use positional record constructors that are CASE-SENSITIVE.
-//
-// ✅ CORRECT:   SELECT user_id, email FROM users
-// ❌ INCORRECT: SELECT user_id AS UserId, email AS Email FROM users
-//
-// See MessageRecord.cs for detailed explanation.
-
 public class UserRepository
 {
-    private readonly string _connectionString;
+    private readonly AppDbContext _context;
     private readonly ILogger<UserRepository> _logger;
 
-    public UserRepository(IConfiguration configuration, ILogger<UserRepository> logger)
+    public UserRepository(AppDbContext context, ILogger<UserRepository> logger)
     {
-        _connectionString = configuration.GetConnectionString("PostgreSQL")
-            ?? throw new InvalidOperationException("PostgreSQL connection string not found");
+        _context = context;
         _logger = logger;
     }
 
     public async Task<int> GetUserCountAsync(CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-
-        const string sql = "SELECT COUNT(*) FROM users;";
-
-        return await connection.ExecuteScalarAsync<int>(sql);
+        return await _context.Users.CountAsync(ct);
     }
 
     public async Task<UiModels.UserRecord?> GetByEmailAsync(string email, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
         var normalizedEmail = email.ToUpperInvariant();
 
-        const string sql = """
-            SELECT id, email, normalized_email, password_hash, security_stamp,
-                   permission_level, invited_by, is_active, totp_secret,
-                   totp_enabled, created_at, last_login_at, status,
-                   modified_by, modified_at, email_verified, email_verification_token,
-                   email_verification_token_expires_at, password_reset_token,
-                   password_reset_token_expires_at, totp_setup_started_at
-            FROM users
-            WHERE normalized_email = @NormalizedEmail AND status != 3;
-            """;
+        var entity = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.NormalizedEmail == normalizedEmail && u.Status != (int)UiModels.UserStatus.Deleted)
+            .FirstOrDefaultAsync(ct);
 
-        var dto = await connection.QueryFirstOrDefaultAsync<DataModels.UserRecordDto>(sql, new { NormalizedEmail = normalizedEmail });
-        return dto?.ToUserRecord().ToUiModel();
+        return entity?.ToUiModel();
     }
 
     public async Task<UiModels.UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
         var normalizedEmail = email.ToUpperInvariant();
 
-        const string sql = """
-            SELECT id, email, normalized_email, password_hash, security_stamp,
-                   permission_level, invited_by, is_active, totp_secret,
-                   totp_enabled, created_at, last_login_at, status,
-                   modified_by, modified_at, email_verified, email_verification_token,
-                   email_verification_token_expires_at, password_reset_token,
-                   password_reset_token_expires_at, totp_setup_started_at
-            FROM users
-            WHERE normalized_email = @NormalizedEmail;
-            """;
+        var entity = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.NormalizedEmail == normalizedEmail)
+            .FirstOrDefaultAsync(ct);
 
-        var dto = await connection.QueryFirstOrDefaultAsync<DataModels.UserRecordDto>(sql, new { NormalizedEmail = normalizedEmail });
-        return dto?.ToUserRecord().ToUiModel();
+        return entity?.ToUiModel();
     }
 
     public async Task<UiModels.UserRecord?> GetByIdAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == userId, ct);
 
-        const string sql = """
-            SELECT id, email, normalized_email, password_hash, security_stamp,
-                   permission_level, invited_by, is_active, totp_secret,
-                   totp_enabled, created_at, last_login_at, status,
-                   modified_by, modified_at, email_verified, email_verification_token,
-                   email_verification_token_expires_at, password_reset_token,
-                   password_reset_token_expires_at, totp_setup_started_at
-            FROM users
-            WHERE id = @UserId;
-            """;
-
-        var dto = await connection.QueryFirstOrDefaultAsync<DataModels.UserRecordDto>(sql, new { UserId = userId });
-        return dto?.ToUserRecord().ToUiModel();
+        return entity?.ToUiModel();
     }
 
     public async Task<string> CreateAsync(UiModels.UserRecord user, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = user.ToDataModel();
+        entity.NormalizedEmail = user.Email.ToUpperInvariant();
 
-        var normalizedEmail = user.Email.ToUpperInvariant();
-
-        const string sql = """
-            INSERT INTO users (
-                id, email, normalized_email, password_hash, security_stamp,
-                permission_level, invited_by, is_active, totp_secret, totp_enabled,
-                created_at, last_login_at, email_verified, email_verification_token,
-                email_verification_token_expires_at, password_reset_token,
-                password_reset_token_expires_at
-            ) VALUES (
-                @Id, @Email, @NormalizedEmail, @PasswordHash, @SecurityStamp,
-                @PermissionLevel, @InvitedBy, @IsActive, @TotpSecret, @TotpEnabled,
-                @CreatedAt, @LastLoginAt, @EmailVerified, @EmailVerificationToken,
-                @EmailVerificationTokenExpiresAt, @PasswordResetToken,
-                @PasswordResetTokenExpiresAt
-            );
-            """;
-
-        await connection.ExecuteAsync(sql, new
-        {
-            user.Id,
-            user.Email,
-            NormalizedEmail = normalizedEmail,
-            user.PasswordHash,
-            user.SecurityStamp,
-            user.PermissionLevel,
-            user.InvitedBy,
-            user.IsActive,
-            user.TotpSecret,
-            user.TotpEnabled,
-            user.CreatedAt,
-            user.LastLoginAt,
-            user.EmailVerified,
-            user.EmailVerificationToken,
-            user.EmailVerificationTokenExpiresAt,
-            user.PasswordResetToken,
-            user.PasswordResetTokenExpiresAt
-        });
+        _context.Users.Add(entity);
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Created user {Email} with ID {UserId}", user.Email, user.Id);
 
@@ -146,356 +70,242 @@ public class UserRepository
 
     public async Task UpdateLastLoginAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
 
-        const string sql = """
-            UPDATE users
-            SET last_login_at = @Now
-            WHERE id = @UserId;
-            """;
-
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        await connection.ExecuteAsync(sql, new { UserId = userId, Now = now });
+        entity.LastLoginAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await _context.SaveChangesAsync(ct);
     }
 
     public async Task UpdateSecurityStampAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
 
-        const string sql = """
-            UPDATE users
-            SET security_stamp = @SecurityStamp
-            WHERE id = @UserId;
-            """;
-
-        var newStamp = Guid.NewGuid().ToString();
-        await connection.ExecuteAsync(sql, new { UserId = userId, SecurityStamp = newStamp });
+        entity.SecurityStamp = Guid.NewGuid().ToString();
+        await _context.SaveChangesAsync(ct);
     }
 
     public async Task UpdateTotpSecretAsync(string userId, string totpSecret, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
 
-        const string sql = """
-            UPDATE users
-            SET totp_secret = @TotpSecret,
-                totp_setup_started_at = @TotpSetupStartedAt
-            WHERE id = @UserId;
-            """;
-
-        await connection.ExecuteAsync(sql, new
-        {
-            UserId = userId,
-            TotpSecret = totpSecret,
-            TotpSetupStartedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
-        });
+        entity.TotpSecret = totpSecret;
+        entity.TotpSetupStartedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await _context.SaveChangesAsync(ct);
     }
 
     public async Task EnableTotpAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
 
-        const string sql = """
-            UPDATE users
-            SET totp_enabled = 1,
-                totp_setup_started_at = NULL
-            WHERE id = @UserId;
-            """;
-
-        await connection.ExecuteAsync(sql, new { UserId = userId });
+        entity.TotpEnabled = true;
+        entity.TotpSetupStartedAt = null;
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Enabled TOTP for user {UserId}", userId);
     }
 
     public async Task DisableTotpAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
 
-        const string sql = """
-            UPDATE users
-            SET totp_secret = NULL, totp_enabled = 0
-            WHERE id = @UserId;
-            """;
-
-        await connection.ExecuteAsync(sql, new { UserId = userId });
+        entity.TotpSecret = null;
+        entity.TotpEnabled = false;
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Disabled TOTP for user {UserId}", userId);
     }
 
     public async Task ResetTotpAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
 
-        // Clear TOTP secret, disable TOTP, and clear setup timestamp
-        const string sql = """
-            UPDATE users
-            SET totp_secret = NULL,
-                totp_enabled = 0,
-                totp_setup_started_at = NULL
-            WHERE id = @UserId;
-            """;
-
-        await connection.ExecuteAsync(sql, new { UserId = userId });
+        entity.TotpSecret = null;
+        entity.TotpEnabled = false;
+        entity.TotpSetupStartedAt = null;
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Reset TOTP for user {UserId}", userId);
     }
 
     public async Task DeleteRecoveryCodesAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var codes = await _context.RecoveryCodes
+            .Where(rc => rc.UserId == userId)
+            .ToListAsync(ct);
 
-        const string sql = """
-            DELETE FROM recovery_codes
-            WHERE user_id = @UserId;
-            """;
-
-        await connection.ExecuteAsync(sql, new { UserId = userId });
+        _context.RecoveryCodes.RemoveRange(codes);
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Deleted all recovery codes for user {UserId}", userId);
     }
 
     public async Task<List<UiModels.RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entities = await _context.RecoveryCodes
+            .AsNoTracking()
+            .Where(rc => rc.UserId == userId && rc.UsedAt == null)
+            .ToListAsync();
 
-        const string sql = """
-            SELECT id, user_id, code_hash, used_at
-            FROM recovery_codes
-            WHERE user_id = @UserId AND used_at IS NULL;
-            """;
-
-        var dtos = await connection.QueryAsync<DataModels.RecoveryCodeRecordDto>(sql, new { UserId = userId });
-        return dtos.Select(dto => dto.ToRecoveryCodeRecord().ToUiModel()).ToList();
+        return entities.Select(e => e.ToUiModel()).ToList();
     }
 
     public async Task AddRecoveryCodesAsync(string userId, List<string> codeHashes)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-
-        const string sql = """
-            INSERT INTO recovery_codes (user_id, code_hash)
-            VALUES (@UserId, @CodeHash);
-            """;
-
-        foreach (var codeHash in codeHashes)
+        var entities = codeHashes.Select(codeHash => new DataModels.RecoveryCodeRecord
         {
-            await connection.ExecuteAsync(sql, new { UserId = userId, CodeHash = codeHash });
-        }
+            UserId = userId,
+            CodeHash = codeHash,
+            UsedAt = null
+        }).ToList();
+
+        _context.RecoveryCodes.AddRange(entities);
+        await _context.SaveChangesAsync();
 
         _logger.LogInformation("Added {Count} recovery codes for user {UserId}", codeHashes.Count, userId);
     }
 
     public async Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = new DataModels.RecoveryCodeRecord
+        {
+            UserId = userId,
+            CodeHash = codeHash,
+            UsedAt = null
+        };
 
-        const string sql = """
-            INSERT INTO recovery_codes (user_id, code_hash)
-            VALUES (@UserId, @CodeHash);
-            """;
-
-        await connection.ExecuteAsync(sql, new { UserId = userId, CodeHash = codeHash });
+        _context.RecoveryCodes.Add(entity);
+        await _context.SaveChangesAsync(ct);
     }
 
     public async Task<bool> UseRecoveryCodeAsync(string userId, string codeHash, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.RecoveryCodes
+            .FirstOrDefaultAsync(rc => rc.UserId == userId && rc.CodeHash == codeHash && rc.UsedAt == null, ct);
 
-        const string sql = """
-            UPDATE recovery_codes
-            SET used_at = @Now
-            WHERE user_id = @UserId AND code_hash = @CodeHash AND used_at IS NULL;
-            """;
+        if (entity == null)
+            return false;
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var affected = await connection.ExecuteAsync(sql, new { UserId = userId, CodeHash = codeHash, Now = now });
+        entity.UsedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await _context.SaveChangesAsync(ct);
 
-        return affected > 0;
+        return true;
     }
 
     public async Task<UiModels.InviteRecord?> GetInviteByTokenAsync(string token, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Invites
+            .AsNoTracking()
+            .FirstOrDefaultAsync(i => i.Token == token, ct);
 
-        const string sql = """
-            SELECT token, created_by, created_at, expires_at, used_by,
-                   permission_level, status, modified_at
-            FROM invites
-            WHERE token = @Token;
-            """;
-
-        var dto = await connection.QueryFirstOrDefaultAsync<DataModels.InviteRecordDto>(sql, new { Token = token });
-        return dto?.ToInviteRecord().ToUiModel();
+        return entity?.ToUiModel();
     }
 
     public async Task UseInviteAsync(string token, string userId, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Invites.FirstOrDefaultAsync(i => i.Token == token, ct);
+        if (entity == null) return;
 
-        const string sql = """
-            UPDATE invites
-            SET used_by = @UserId, status = 1, modified_at = @Now
-            WHERE token = @Token;
-            """;
+        entity.UsedBy = userId;
+        entity.Status = (int)UiModels.InviteStatus.Used;
+        entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        await connection.ExecuteAsync(sql, new { Token = token, UserId = userId, Now = now });
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Invite {Token} used by user {UserId}", token, userId);
     }
 
     public async Task<List<UiModels.UserRecord>> GetAllAsync(CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entities = await _context.Users
+            .AsNoTracking()
+            .OrderByDescending(u => u.CreatedAt)
+            .ToListAsync(ct);
 
-        const string sql = """
-            SELECT id, email, normalized_email, password_hash, security_stamp,
-                   permission_level, invited_by, is_active, totp_secret,
-                   totp_enabled, created_at, last_login_at, status,
-                   modified_by, modified_at, email_verified, email_verification_token,
-                   email_verification_token_expires_at, password_reset_token,
-                   password_reset_token_expires_at, totp_setup_started_at
-            FROM users
-            ORDER BY created_at DESC;
-            """;
-
-        var dtos = await connection.QueryAsync<DataModels.UserRecordDto>(sql);
-        return dtos.Select(dto => dto.ToUserRecord().ToUiModel()).ToList();
+        return entities.Select(e => e.ToUiModel()).ToList();
     }
 
     public async Task<List<UiModels.UserRecord>> GetAllIncludingDeletedAsync(CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entities = await _context.Users
+            .AsNoTracking()
+            .OrderByDescending(u => u.CreatedAt)
+            .ToListAsync(ct);
 
-        const string sql = """
-            SELECT id, email, normalized_email, password_hash, security_stamp,
-                   permission_level, invited_by, is_active, totp_secret,
-                   totp_enabled, created_at, last_login_at, status,
-                   modified_by, modified_at, email_verified, email_verification_token,
-                   email_verification_token_expires_at, password_reset_token,
-                   password_reset_token_expires_at, totp_setup_started_at
-            FROM users
-            ORDER BY created_at DESC;
-            """;
-
-        var dtos = await connection.QueryAsync<DataModels.UserRecordDto>(sql);
-        return dtos.Select(dto => dto.ToUserRecord().ToUiModel()).ToList();
+        return entities.Select(e => e.ToUiModel()).ToList();
     }
 
     public async Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
 
-        const string sql = """
-            UPDATE users
-            SET permission_level = @PermissionLevel,
-                modified_by = @ModifiedBy,
-                modified_at = @ModifiedAt
-            WHERE id = @UserId;
-            """;
+        entity.PermissionLevel = permissionLevel;
+        entity.ModifiedBy = modifiedBy;
+        entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        await connection.ExecuteAsync(sql, new
-        {
-            UserId = userId,
-            PermissionLevel = permissionLevel,
-            ModifiedBy = modifiedBy,
-            ModifiedAt = now
-        });
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Updated permission level for user {UserId} to {PermissionLevel} by {ModifiedBy}", userId, permissionLevel, modifiedBy);
     }
 
     public async Task SetActiveAsync(string userId, bool isActive, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
 
-        const string sql = """
-            UPDATE users
-            SET is_active = @IsActive
-            WHERE id = @UserId;
-            """;
-
-        await connection.ExecuteAsync(sql, new { UserId = userId, IsActive = isActive });
+        entity.IsActive = isActive;
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Set user {UserId} active status to {IsActive}", userId, isActive);
     }
 
     public async Task UpdateStatusAsync(string userId, UiModels.UserStatus newStatus, string modifiedBy, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
 
-        const string sql = """
-            UPDATE users
-            SET status = @Status,
-                is_active = @IsActive,
-                modified_by = @ModifiedBy,
-                modified_at = @ModifiedAt
-            WHERE id = @UserId;
-            """;
+        entity.Status = (int)newStatus;
+        entity.IsActive = newStatus == UiModels.UserStatus.Active;
+        entity.ModifiedBy = modifiedBy;
+        entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        await connection.ExecuteAsync(sql, new
-        {
-            UserId = userId,
-            Status = (int)newStatus,
-            IsActive = newStatus == UiModels.UserStatus.Active, // Keep is_active in sync for backward compatibility
-            ModifiedBy = modifiedBy,
-            ModifiedAt = now
-        });
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Updated status for user {UserId} to {Status} by {ModifiedBy}", userId, newStatus, modifiedBy);
     }
 
     public async Task UpdateAsync(UiModels.UserRecord user, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.Users.FirstOrDefaultAsync(u => u.Id == user.Id, ct);
+        if (entity == null) return;
 
-        const string sql = """
-            UPDATE users
-            SET email = @Email,
-                normalized_email = @NormalizedEmail,
-                password_hash = @PasswordHash,
-                security_stamp = @SecurityStamp,
-                permission_level = @PermissionLevel,
-                invited_by = @InvitedBy,
-                is_active = @IsActive,
-                totp_secret = @TotpSecret,
-                totp_enabled = @TotpEnabled,
-                last_login_at = @LastLoginAt,
-                status = @Status,
-                modified_by = @ModifiedBy,
-                modified_at = @ModifiedAt,
-                email_verified = @EmailVerified,
-                email_verification_token = @EmailVerificationToken,
-                email_verification_token_expires_at = @EmailVerificationTokenExpiresAt,
-                password_reset_token = @PasswordResetToken,
-                password_reset_token_expires_at = @PasswordResetTokenExpiresAt
-            WHERE id = @Id;
-            """;
+        // Update all fields
+        entity.Email = user.Email;
+        entity.NormalizedEmail = user.NormalizedEmail;
+        entity.PasswordHash = user.PasswordHash;
+        entity.SecurityStamp = user.SecurityStamp;
+        entity.PermissionLevel = (int)user.PermissionLevel;
+        entity.InvitedBy = user.InvitedBy;
+        entity.IsActive = user.IsActive;
+        entity.TotpSecret = user.TotpSecret;
+        entity.TotpEnabled = user.TotpEnabled;
+        entity.LastLoginAt = user.LastLoginAt;
+        entity.Status = (int)user.Status;
+        entity.ModifiedBy = user.ModifiedBy;
+        entity.ModifiedAt = user.ModifiedAt;
+        entity.EmailVerified = user.EmailVerified;
+        entity.EmailVerificationToken = user.EmailVerificationToken;
+        entity.EmailVerificationTokenExpiresAt = user.EmailVerificationTokenExpiresAt;
+        entity.PasswordResetToken = user.PasswordResetToken;
+        entity.PasswordResetTokenExpiresAt = user.PasswordResetTokenExpiresAt;
 
-        await connection.ExecuteAsync(sql, new
-        {
-            user.Id,
-            user.Email,
-            user.NormalizedEmail,
-            user.PasswordHash,
-            user.SecurityStamp,
-            user.PermissionLevel,
-            user.InvitedBy,
-            user.IsActive,
-            user.TotpSecret,
-            user.TotpEnabled,
-            user.LastLoginAt,
-            Status = (int)user.Status,
-            user.ModifiedBy,
-            user.ModifiedAt,
-            user.EmailVerified,
-            user.EmailVerificationToken,
-            user.EmailVerificationTokenExpiresAt,
-            user.PasswordResetToken,
-            user.PasswordResetTokenExpiresAt
-        });
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Updated user {UserId}", user.Id);
     }

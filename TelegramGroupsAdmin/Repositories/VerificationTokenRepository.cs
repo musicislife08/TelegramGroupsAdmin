@@ -1,77 +1,44 @@
-using Dapper;
-using Npgsql;
-using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Data;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
-// CRITICAL DAPPER/DTO CONVENTION:
-// All SQL SELECT statements MUST use raw snake_case column names without aliases.
-// DTOs use positional record constructors that are CASE-SENSITIVE.
-// See MessageRecord.cs for detailed explanation.
-
 public class VerificationTokenRepository
 {
-    private readonly string _connectionString;
+    private readonly AppDbContext _context;
     private readonly ILogger<VerificationTokenRepository> _logger;
 
-    public VerificationTokenRepository(IConfiguration configuration, ILogger<VerificationTokenRepository> logger)
+    public VerificationTokenRepository(AppDbContext context, ILogger<VerificationTokenRepository> logger)
     {
-        _connectionString = configuration.GetConnectionString("PostgreSQL")
-            ?? throw new InvalidOperationException("PostgreSQL connection string not found");
+        _context = context;
         _logger = logger;
     }
 
     public async Task<long> CreateAsync(DataModels.VerificationToken verificationToken, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-
-        const string sql = """
-            INSERT INTO verification_tokens (
-                user_id, token_type, token, value, expires_at, created_at, used_at
-            ) VALUES (
-                @UserId, @TokenType, @Token, @Value, @ExpiresAt, @CreatedAt, @UsedAt
-            )
-            RETURNING id;
-            """;
-
-        var id = await connection.ExecuteScalarAsync<long>(sql, new
-        {
-            verificationToken.UserId,
-            TokenType = verificationToken.TokenTypeString,
-            verificationToken.Token,
-            verificationToken.Value,
-            verificationToken.ExpiresAt,
-            verificationToken.CreatedAt,
-            verificationToken.UsedAt
-        });
+        _context.VerificationTokens.Add(verificationToken);
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogDebug("Created verification token {Id} for user {UserId}, type {TokenType}",
-            id, verificationToken.UserId, verificationToken.TokenType);
+            verificationToken.Id, verificationToken.UserId, verificationToken.TokenType);
 
-        return id;
+        return verificationToken.Id;
     }
 
     public async Task<UiModels.VerificationToken?> GetByTokenAsync(string token, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.VerificationTokens
+            .AsNoTracking()
+            .FirstOrDefaultAsync(vt => vt.Token == token, ct);
 
-        const string sql = """
-            SELECT id, user_id, token_type, token, value, expires_at, created_at, used_at
-            FROM verification_tokens
-            WHERE token = @Token;
-            """;
-
-        var dto = await connection.QueryFirstOrDefaultAsync<DataModels.VerificationTokenDto>(sql, new { Token = token });
-        return dto?.ToVerificationToken().ToUiModel();
+        return entity?.ToUiModel();
     }
 
     public async Task<UiModels.VerificationToken?> GetValidTokenAsync(string token, DataModels.TokenType tokenType, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-
         var tokenTypeString = tokenType switch
         {
             DataModels.TokenType.EmailVerification => "email_verify",
@@ -80,78 +47,61 @@ public class VerificationTokenRepository
             _ => throw new ArgumentException($"Unknown token type: {tokenType}")
         };
 
-        const string sql = """
-            SELECT id, user_id, token_type, token, value, expires_at, created_at, used_at
-            FROM verification_tokens
-            WHERE token = @Token
-              AND token_type = @TokenType
-              AND used_at IS NULL
-              AND expires_at > @Now;
-            """;
-
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var dto = await connection.QueryFirstOrDefaultAsync<DataModels.VerificationTokenDto>(sql, new
-        {
-            Token = token,
-            TokenType = tokenTypeString,
-            Now = now
-        });
 
-        return dto?.ToVerificationToken().ToUiModel();
+        var entity = await _context.VerificationTokens
+            .AsNoTracking()
+            .FirstOrDefaultAsync(vt =>
+                vt.Token == token
+                && vt.TokenTypeString == tokenTypeString
+                && vt.UsedAt == null
+                && vt.ExpiresAt > now, ct);
+
+        return entity?.ToUiModel();
     }
 
     public async Task MarkAsUsedAsync(string token, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.VerificationTokens.FirstOrDefaultAsync(vt => vt.Token == token, ct);
+        if (entity == null) return;
 
-        const string sql = """
-            UPDATE verification_tokens
-            SET used_at = @Now
-            WHERE token = @Token;
-            """;
-
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        await connection.ExecuteAsync(sql, new { Token = token, Now = now });
+        entity.UsedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await _context.SaveChangesAsync(ct);
 
         _logger.LogDebug("Marked verification token as used: {Token}", token);
     }
 
     public async Task<int> CleanupExpiredAsync(CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-
-        const string sql = """
-            DELETE FROM verification_tokens
-            WHERE expires_at <= @Now;
-            """;
-
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var deleted = await connection.ExecuteAsync(sql, new { Now = now });
 
-        if (deleted > 0)
+        var expiredTokens = await _context.VerificationTokens
+            .Where(vt => vt.ExpiresAt <= now)
+            .ToListAsync(ct);
+
+        if (expiredTokens.Count > 0)
         {
-            _logger.LogInformation("Cleaned up {Count} expired verification tokens", deleted);
+            _context.VerificationTokens.RemoveRange(expiredTokens);
+            await _context.SaveChangesAsync(ct);
+            _logger.LogInformation("Cleaned up {Count} expired verification tokens", expiredTokens.Count);
         }
 
-        return deleted;
+        return expiredTokens.Count;
     }
 
     public async Task<int> DeleteByUserIdAsync(string userId, CancellationToken ct = default)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var tokens = await _context.VerificationTokens
+            .Where(vt => vt.UserId == userId)
+            .ToListAsync(ct);
 
-        const string sql = """
-            DELETE FROM verification_tokens
-            WHERE user_id = @UserId;
-            """;
-
-        var deleted = await connection.ExecuteAsync(sql, new { UserId = userId });
-
-        if (deleted > 0)
+        if (tokens.Count > 0)
         {
-            _logger.LogDebug("Deleted {Count} verification tokens for user {UserId}", deleted, userId);
+            _context.VerificationTokens.RemoveRange(tokens);
+            await _context.SaveChangesAsync(ct);
+            _logger.LogDebug("Deleted {Count} verification tokens for user {UserId}", tokens.Count, userId);
         }
 
-        return deleted;
+        return tokens.Count;
     }
 }

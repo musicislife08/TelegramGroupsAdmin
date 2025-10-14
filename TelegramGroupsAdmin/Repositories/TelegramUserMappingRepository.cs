@@ -1,5 +1,5 @@
-using Dapper;
-using Npgsql;
+using Microsoft.EntityFrameworkCore;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
@@ -7,92 +7,67 @@ namespace TelegramGroupsAdmin.Repositories;
 
 public class TelegramUserMappingRepository : ITelegramUserMappingRepository
 {
-    private readonly string _connectionString;
+    private readonly AppDbContext _context;
 
-    public TelegramUserMappingRepository(IConfiguration configuration)
+    public TelegramUserMappingRepository(AppDbContext context)
     {
-        _connectionString = configuration.GetConnectionString("PostgreSQL")
-            ?? throw new InvalidOperationException("PostgreSQL connection string not found");
+        _context = context;
     }
 
     public async Task<IEnumerable<TelegramUserMappingRecord>> GetByUserIdAsync(string userId)
     {
-        const string sql = """
-            SELECT id, telegram_id, telegram_username, user_id, linked_at, is_active
-            FROM telegram_user_mappings
-            WHERE user_id = @UserId AND is_active = true
-            ORDER BY linked_at DESC
-            """;
+        var entities = await _context.TelegramUserMappings
+            .AsNoTracking()
+            .Where(tum => tum.UserId == userId && tum.IsActive)
+            .OrderByDescending(tum => tum.LinkedAt)
+            .ToListAsync();
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        var results = await connection.QueryAsync<DataModels.TelegramUserMappingRecord>(sql, new { UserId = userId });
-        return results.Select(r => r.ToUiModel());
+        return entities.Select(e => e.ToUiModel());
     }
 
     public async Task<TelegramUserMappingRecord?> GetByTelegramIdAsync(long telegramId)
     {
-        const string sql = """
-            SELECT id, telegram_id, telegram_username, user_id, linked_at, is_active
-            FROM telegram_user_mappings
-            WHERE telegram_id = @TelegramId AND is_active = true
-            LIMIT 1
-            """;
+        var entity = await _context.TelegramUserMappings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(tum => tum.TelegramId == telegramId && tum.IsActive);
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        var result = await connection.QuerySingleOrDefaultAsync<DataModels.TelegramUserMappingRecord>(sql, new { TelegramId = telegramId });
-        return result?.ToUiModel();
+        return entity?.ToUiModel();
     }
 
     public async Task<string?> GetUserIdByTelegramIdAsync(long telegramId)
     {
-        const string sql = """
-            SELECT user_id
-            FROM telegram_user_mappings
-            WHERE telegram_id = @TelegramId AND is_active = true
-            LIMIT 1
-            """;
+        var entity = await _context.TelegramUserMappings
+            .AsNoTracking()
+            .Where(tum => tum.TelegramId == telegramId && tum.IsActive)
+            .Select(tum => tum.UserId)
+            .FirstOrDefaultAsync();
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        return await connection.QuerySingleOrDefaultAsync<string?>(sql, new { TelegramId = telegramId });
+        return entity;
     }
 
     public async Task<long> InsertAsync(TelegramUserMappingRecord mapping)
     {
-        const string sql = """
-            INSERT INTO telegram_user_mappings (telegram_id, telegram_username, user_id, linked_at, is_active)
-            VALUES (@telegram_id, @telegram_username, @user_id, @linked_at, @is_active)
-            RETURNING id
-            """;
-
-        await using var connection = new NpgsqlConnection(_connectionString);
-        var dataModel = mapping.ToDataModel();
-        return await connection.ExecuteScalarAsync<long>(sql, dataModel);
+        var entity = mapping.ToDataModel();
+        _context.TelegramUserMappings.Add(entity);
+        await _context.SaveChangesAsync();
+        return entity.Id;
     }
 
     public async Task<bool> DeactivateAsync(long mappingId)
     {
-        const string sql = """
-            UPDATE telegram_user_mappings
-            SET is_active = false
-            WHERE id = @Id
-            """;
+        var entity = await _context.TelegramUserMappings.FirstOrDefaultAsync(tum => tum.Id == mappingId);
+        if (entity == null)
+            return false;
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        var rowsAffected = await connection.ExecuteAsync(sql, new { Id = mappingId });
-        return rowsAffected > 0;
+        entity.IsActive = false;
+        await _context.SaveChangesAsync();
+        return true;
     }
 
     public async Task<bool> IsTelegramIdLinkedAsync(long telegramId)
     {
-        const string sql = """
-            SELECT EXISTS(
-                SELECT 1
-                FROM telegram_user_mappings
-                WHERE telegram_id = @TelegramId AND is_active = true
-            )
-            """;
-
-        await using var connection = new NpgsqlConnection(_connectionString);
-        return await connection.ExecuteScalarAsync<bool>(sql, new { TelegramId = telegramId });
+        return await _context.TelegramUserMappings
+            .AsNoTracking()
+            .AnyAsync(tum => tum.TelegramId == telegramId && tum.IsActive);
     }
 }

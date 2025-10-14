@@ -1,5 +1,5 @@
-using Dapper;
-using Npgsql;
+using Microsoft.EntityFrameworkCore;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
@@ -7,91 +7,77 @@ namespace TelegramGroupsAdmin.Repositories;
 
 public class TelegramLinkTokenRepository : ITelegramLinkTokenRepository
 {
-    private readonly string _connectionString;
+    private readonly AppDbContext _context;
 
-    public TelegramLinkTokenRepository(IConfiguration configuration)
+    public TelegramLinkTokenRepository(AppDbContext context)
     {
-        _connectionString = configuration.GetConnectionString("PostgreSQL")
-            ?? throw new InvalidOperationException("PostgreSQL connection string not found");
+        _context = context;
     }
 
     public async Task InsertAsync(TelegramLinkTokenRecord token)
     {
-        const string sql = """
-            INSERT INTO telegram_link_tokens (token, user_id, created_at, expires_at, used_at, used_by_telegram_id)
-            VALUES (@token, @user_id, @created_at, @expires_at, @used_at, @used_by_telegram_id)
-            """;
-
-        await using var connection = new NpgsqlConnection(_connectionString);
-        var dataModel = token.ToDataModel();
-        await connection.ExecuteAsync(sql, dataModel);
+        var entity = token.ToDataModel();
+        _context.TelegramLinkTokens.Add(entity);
+        await _context.SaveChangesAsync();
     }
 
     public async Task<TelegramLinkTokenRecord?> GetByTokenAsync(string token)
     {
-        const string sql = """
-            SELECT token, user_id, created_at, expires_at, used_at, used_by_telegram_id
-            FROM telegram_link_tokens
-            WHERE token = @Token
-            LIMIT 1
-            """;
+        var entity = await _context.TelegramLinkTokens
+            .AsNoTracking()
+            .FirstOrDefaultAsync(tlt => tlt.Token == token);
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        var result = await connection.QuerySingleOrDefaultAsync<DataModels.TelegramLinkTokenRecord>(sql, new { Token = token });
-        return result?.ToUiModel();
+        return entity?.ToUiModel();
     }
 
     public async Task MarkAsUsedAsync(string token, long telegramId)
     {
-        const string sql = """
-            UPDATE telegram_link_tokens
-            SET used_at = @UsedAt,
-                used_by_telegram_id = @TelegramId
-            WHERE token = @Token
-            """;
+        var entity = await _context.TelegramLinkTokens.FirstOrDefaultAsync(tlt => tlt.Token == token);
+        if (entity == null) return;
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        await connection.ExecuteAsync(sql, new { Token = token, UsedAt = now, TelegramId = telegramId });
+        entity.UsedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        entity.UsedByTelegramId = telegramId;
+        await _context.SaveChangesAsync();
     }
 
     public async Task DeleteExpiredTokensAsync(long beforeTimestamp)
     {
-        const string sql = """
-            DELETE FROM telegram_link_tokens
-            WHERE expires_at < @BeforeTimestamp
-            """;
+        var expiredTokens = await _context.TelegramLinkTokens
+            .Where(tlt => tlt.ExpiresAt < beforeTimestamp)
+            .ToListAsync();
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.ExecuteAsync(sql, new { BeforeTimestamp = beforeTimestamp });
+        if (expiredTokens.Count > 0)
+        {
+            _context.TelegramLinkTokens.RemoveRange(expiredTokens);
+            await _context.SaveChangesAsync();
+        }
     }
 
     public async Task<IEnumerable<TelegramLinkTokenRecord>> GetActiveTokensForUserAsync(string userId)
     {
-        const string sql = """
-            SELECT token, user_id, created_at, expires_at, used_at, used_by_telegram_id
-            FROM telegram_link_tokens
-            WHERE user_id = @UserId
-              AND used_at IS NULL
-              AND expires_at > @Now
-            ORDER BY created_at DESC
-            """;
-
-        await using var connection = new NpgsqlConnection(_connectionString);
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var results = await connection.QueryAsync<DataModels.TelegramLinkTokenRecord>(sql, new { UserId = userId, Now = now });
-        return results.Select(r => r.ToUiModel());
+
+        var entities = await _context.TelegramLinkTokens
+            .AsNoTracking()
+            .Where(tlt => tlt.UserId == userId
+                && tlt.UsedAt == null
+                && tlt.ExpiresAt > now)
+            .OrderByDescending(tlt => tlt.CreatedAt)
+            .ToListAsync();
+
+        return entities.Select(e => e.ToUiModel());
     }
 
     public async Task RevokeUnusedTokensForUserAsync(string userId)
     {
-        const string sql = """
-            DELETE FROM telegram_link_tokens
-            WHERE user_id = @UserId
-              AND used_at IS NULL
-            """;
+        var tokensToRevoke = await _context.TelegramLinkTokens
+            .Where(tlt => tlt.UserId == userId && tlt.UsedAt == null)
+            .ToListAsync();
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.ExecuteAsync(sql, new { UserId = userId });
+        if (tokensToRevoke.Count > 0)
+        {
+            _context.TelegramLinkTokens.RemoveRange(tokensToRevoke);
+            await _context.SaveChangesAsync();
+        }
     }
 }

@@ -1,19 +1,9 @@
-using Npgsql;
-using Dapper;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.SpamDetection.Repositories;
-
-// CRITICAL DAPPER/DTO CONVENTION:
-// All SQL SELECT statements MUST use raw snake_case column names without aliases.
-// DTOs use init-only property setters for materialization.
-//
-// ✅ CORRECT:   SELECT id, message_text FROM detection_results
-// ❌ INCORRECT: SELECT id AS Id, message_text AS MessageText FROM detection_results
-//
-// NOTE: This repository queries the new normalized schema (detection_results + messages)
-// but maintains the old interface for backward compatibility during migration.
 
 /// <summary>
 /// Repository implementation for spam detection results (formerly training samples)
@@ -21,12 +11,12 @@ namespace TelegramGroupsAdmin.SpamDetection.Repositories;
 /// </summary>
 public class TrainingSamplesRepository : ITrainingSamplesRepository
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly AppDbContext _context;
     private readonly ILogger<TrainingSamplesRepository> _logger;
 
-    public TrainingSamplesRepository(NpgsqlDataSource dataSource, ILogger<TrainingSamplesRepository> logger)
+    public TrainingSamplesRepository(AppDbContext context, ILogger<TrainingSamplesRepository> logger)
     {
-        _dataSource = dataSource;
+        _context = context;
         _logger = logger;
     }
 
@@ -38,21 +28,27 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = @"
-                SELECT dr.id, m.message_text, dr.is_spam, dr.detected_at as added_date,
-                       dr.detection_source as source, dr.confidence as confidence_when_added,
-                       ARRAY[m.chat_id] as chat_ids,
-                       COALESCE(u.email, 'Unknown') as added_by,
-                       0 as detection_count, NULL::bigint as last_detected_date
-                FROM detection_results dr
-                JOIN messages m ON dr.message_id = m.message_id
-                LEFT JOIN users u ON dr.added_by = u.id
-                WHERE dr.used_for_training = true
-                ORDER BY dr.detected_at DESC";
+            var results = await _context.DetectionResults
+                .AsNoTracking()
+                .Include(dr => dr.Message)
+                .Where(dr => dr.UsedForTraining)
+                .OrderByDescending(dr => dr.DetectedAt)
+                .Select(dr => new TrainingSample
+                {
+                    Id = dr.Id,
+                    MessageText = dr.Message!.MessageText!,
+                    IsSpam = dr.IsSpam,
+                    AddedDate = dr.DetectedAt,
+                    Source = dr.DetectionSource,
+                    ConfidenceWhenAdded = dr.Confidence,
+                    ChatIds = new long[] { dr.Message!.ChatId },
+                    AddedBy = dr.AddedBy,
+                    DetectionCount = 0,
+                    LastDetectedDate = null
+                })
+                .ToListAsync(cancellationToken);
 
-            var dtos = await connection.QueryAsync<TrainingSampleDto>(sql);
-            return dtos.Select(dto => dto.ToTrainingSample());
+            return results;
         }
         catch (Exception ex)
         {
@@ -71,20 +67,27 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = @"
-                SELECT dr.id, m.message_text, dr.is_spam, dr.detected_at as added_date,
-                       dr.detection_source as source, dr.confidence as confidence_when_added,
-                       ARRAY[m.chat_id] as chat_ids, dr.added_by,
-                       0 as detection_count, NULL::bigint as last_detected_date
-                FROM detection_results dr
-                JOIN messages m ON dr.message_id = m.message_id
-                WHERE dr.is_spam = true
-                  AND dr.used_for_training = true
-                ORDER BY dr.detected_at DESC";
+            var results = await _context.DetectionResults
+                .AsNoTracking()
+                .Include(dr => dr.Message)
+                .Where(dr => dr.IsSpam && dr.UsedForTraining)
+                .OrderByDescending(dr => dr.DetectedAt)
+                .Select(dr => new TrainingSample
+                {
+                    Id = dr.Id,
+                    MessageText = dr.Message!.MessageText!,
+                    IsSpam = dr.IsSpam,
+                    AddedDate = dr.DetectedAt,
+                    Source = dr.DetectionSource,
+                    ConfidenceWhenAdded = dr.Confidence,
+                    ChatIds = new long[] { dr.Message!.ChatId },
+                    AddedBy = dr.AddedBy,
+                    DetectionCount = 0,
+                    LastDetectedDate = null
+                })
+                .ToListAsync(cancellationToken);
 
-            var dtos = await connection.QueryAsync<TrainingSampleDto>(sql);
-            return dtos.Select(dto => dto.ToTrainingSample());
+            return results;
         }
         catch (Exception ex)
         {
@@ -114,64 +117,70 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
 
             try
             {
                 var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 var chatIdLong = chatId != null ? long.Parse(chatId) : -1; // -1 for unknown chat
 
-                // Step 1: Insert or find message
-                const string insertMessageSql = @"
-                    INSERT INTO messages (message_id, chat_id, user_id, user_name, timestamp, message_text, content_hash)
-                    VALUES (
-                        (SELECT COALESCE(MIN(message_id), 0) - 1 FROM messages WHERE message_id < 0), -- Next negative ID
-                        @ChatId, -1, 'Manual', @Timestamp, @MessageText, MD5(@MessageText)
-                    )
-                    ON CONFLICT (message_id) DO NOTHING
-                    RETURNING message_id";
-
-                // Try to find existing message by text and timestamp
-                const string findMessageSql = @"
-                    SELECT message_id FROM messages
-                    WHERE message_text = @MessageText AND timestamp = @Timestamp
-                    LIMIT 1";
+                // Step 1: Try to find existing message by text and timestamp
+                var existingMessage = await _context.Messages
+                    .FirstOrDefaultAsync(m => m.MessageText == messageText && m.Timestamp == timestamp, cancellationToken);
 
                 long messageId;
-                var existingMessageId = await connection.QuerySingleOrDefaultAsync<long?>(findMessageSql, new { MessageText = messageText, Timestamp = timestamp }, transaction);
-
-                if (existingMessageId.HasValue)
+                if (existingMessage != null)
                 {
-                    messageId = existingMessageId.Value;
+                    messageId = existingMessage.MessageId;
                 }
                 else
                 {
-                    messageId = await connection.QuerySingleAsync<long>(insertMessageSql, new { ChatId = chatIdLong, Timestamp = timestamp, MessageText = messageText }, transaction);
+                    // Generate next negative ID for synthetic messages
+                    var minMessageId = await _context.Messages
+                        .Where(m => m.MessageId < 0)
+                        .MinAsync(m => (long?)m.MessageId, cancellationToken) ?? 0;
+
+                    messageId = minMessageId - 1;
+
+                    // Insert new message
+                    var newMessage = new MessageRecord
+                    {
+                        MessageId = messageId,
+                        ChatId = chatIdLong,
+                        UserId = -1,
+                        UserName = "Manual",
+                        Timestamp = timestamp,
+                        MessageText = messageText,
+                        ContentHash = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(messageText))
+                            .Aggregate("", (current, b) => current + b.ToString("x2"))
+                    };
+
+                    _context.Messages.Add(newMessage);
+                    await _context.SaveChangesAsync(cancellationToken);
                 }
 
                 // Step 2: Insert detection_result
-                const string insertDetectionSql = @"
-                    INSERT INTO detection_results (message_id, detected_at, detection_source, is_spam, confidence, added_by, detection_method)
-                    VALUES (@MessageId, @DetectedAt, @Source, @IsSpam, @Confidence, @AddedBy, 'Manual')
-                    RETURNING id";
-
-                var detectionId = await connection.QuerySingleAsync<long>(insertDetectionSql, new
+                var detectionResult = new DetectionResultRecord
                 {
                     MessageId = messageId,
                     DetectedAt = timestamp,
-                    Source = source,
+                    DetectionSource = source,
                     IsSpam = isSpam,
-                    Confidence = confidenceWhenAdded,
-                    AddedBy = addedBy
-                }, transaction);
+                    Confidence = confidenceWhenAdded ?? 0,
+                    AddedBy = addedBy,
+                    DetectionMethod = "Manual",
+                    UsedForTraining = true
+                };
+
+                _context.DetectionResults.Add(detectionResult);
+                await _context.SaveChangesAsync(cancellationToken);
 
                 await transaction.CommitAsync(cancellationToken);
 
                 _logger.LogInformation("Added detection result: {Type} from {Source} (Detection ID: {Id}, Message ID: {MessageId})",
-                    isSpam ? "SPAM" : "HAM", source, detectionId, messageId);
+                    isSpam ? "SPAM" : "HAM", source, detectionResult.Id, messageId);
 
-                return detectionId;
+                return detectionResult.Id;
             }
             catch
             {
@@ -193,19 +202,27 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = @"
-                SELECT dr.id, m.message_text, dr.is_spam, dr.detected_at as added_date,
-                       dr.detection_source as source, dr.confidence as confidence_when_added,
-                       ARRAY[m.chat_id] as chat_ids, dr.added_by,
-                       0 as detection_count, NULL::bigint as last_detected_date
-                FROM detection_results dr
-                JOIN messages m ON dr.message_id = m.message_id
-                WHERE dr.detection_source = @Source
-                ORDER BY dr.detected_at DESC";
+            var results = await _context.DetectionResults
+                .AsNoTracking()
+                .Include(dr => dr.Message)
+                .Where(dr => dr.DetectionSource == source)
+                .OrderByDescending(dr => dr.DetectedAt)
+                .Select(dr => new TrainingSample
+                {
+                    Id = dr.Id,
+                    MessageText = dr.Message!.MessageText!,
+                    IsSpam = dr.IsSpam,
+                    AddedDate = dr.DetectedAt,
+                    Source = dr.DetectionSource,
+                    ConfidenceWhenAdded = dr.Confidence,
+                    ChatIds = new long[] { dr.Message!.ChatId },
+                    AddedBy = dr.AddedBy,
+                    DetectionCount = 0,
+                    LastDetectedDate = null
+                })
+                .ToListAsync(cancellationToken);
 
-            var dtos = await connection.QueryAsync<TrainingSampleDto>(sql, new { Source = source });
-            return dtos.Select(dto => dto.ToTrainingSample());
+            return results;
         }
         catch (Exception ex)
         {
@@ -223,9 +240,13 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = "DELETE FROM detection_results WHERE detected_at < @OlderThanUnixTime";
-            var deletedCount = await connection.ExecuteAsync(sql, new { OlderThanUnixTime = olderThanUnixTime });
+            var oldResults = await _context.DetectionResults
+                .Where(dr => dr.DetectedAt < olderThanUnixTime)
+                .ToListAsync(cancellationToken);
+
+            var deletedCount = oldResults.Count;
+            _context.DetectionResults.RemoveRange(oldResults);
+            await _context.SaveChangesAsync(cancellationToken);
 
             _logger.LogWarning("Deleted {Count} old detection results (this removes training data!)", deletedCount);
             return deletedCount;
@@ -244,44 +265,37 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
 
             try
             {
-                // Update detection_result
-                const string updateDetectionSql = @"
-                    UPDATE detection_results
-                    SET is_spam = @IsSpam, detection_source = @Source, confidence = @Confidence
-                    WHERE id = @Id
-                    RETURNING message_id";
+                // Find detection result
+                var detectionResult = await _context.DetectionResults
+                    .FirstOrDefaultAsync(dr => dr.Id == id, cancellationToken);
 
-                var messageId = await connection.QuerySingleOrDefaultAsync<long?>(updateDetectionSql, new
-                {
-                    Id = id,
-                    IsSpam = isSpam,
-                    Source = source,
-                    Confidence = confidenceWhenAdded
-                }, transaction);
-
-                if (!messageId.HasValue)
+                if (detectionResult == null)
                 {
                     await transaction.RollbackAsync(cancellationToken);
                     return false;
                 }
 
-                // Update message text
-                const string updateMessageSql = @"
-                    UPDATE messages
-                    SET message_text = @MessageText, content_hash = MD5(@MessageText)
-                    WHERE message_id = @MessageId";
+                // Update detection result
+                detectionResult.IsSpam = isSpam;
+                detectionResult.DetectionSource = source;
+                detectionResult.Confidence = confidenceWhenAdded ?? 0;
 
-                await connection.ExecuteAsync(updateMessageSql, new
+                // Find and update message
+                var message = await _context.Messages
+                    .FindAsync(new object[] { detectionResult.MessageId }, cancellationToken);
+
+                if (message != null)
                 {
-                    MessageId = messageId.Value,
-                    MessageText = messageText
-                }, transaction);
+                    message.MessageText = messageText;
+                    message.ContentHash = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(messageText))
+                        .Aggregate("", (current, b) => current + b.ToString("x2"));
+                }
 
+                await _context.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
 
                 _logger.LogInformation("Updated detection result {Id} to {Type}", id, isSpam ? "SPAM" : "HAM");
@@ -308,17 +322,17 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = "DELETE FROM detection_results WHERE id = @Id";
-            var rowsAffected = await connection.ExecuteAsync(sql, new { Id = id });
+            var detectionResult = await _context.DetectionResults
+                .FirstOrDefaultAsync(dr => dr.Id == id, cancellationToken);
 
-            if (rowsAffected > 0)
-            {
-                _logger.LogWarning("Deleted detection result {Id} (training data removed!)", id);
-                return true;
-            }
+            if (detectionResult == null)
+                return false;
 
-            return false;
+            _context.DetectionResults.Remove(detectionResult);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogWarning("Deleted detection result {Id} (training data removed!)", id);
+            return true;
         }
         catch (Exception ex)
         {
@@ -334,45 +348,41 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string countSql = @"
-                SELECT
-                    CAST(COUNT(*) AS INTEGER) as total,
-                    CAST(COALESCE(SUM(CASE WHEN is_spam = true THEN 1 ELSE 0 END), 0) AS INTEGER) as spam,
-                    CAST(COALESCE(SUM(CASE WHEN is_spam = false THEN 1 ELSE 0 END), 0) AS INTEGER) as ham
-                FROM detection_results";
+            var allResults = await _context.DetectionResults
+                .AsNoTracking()
+                .Select(dr => new { dr.IsSpam, dr.DetectionSource })
+                .ToListAsync(cancellationToken);
 
-            const string sourceSql = @"
-                SELECT id, detection_source as source
-                FROM detection_results";
+            var total = allResults.Count;
+            var spam = allResults.Count(r => r.IsSpam);
+            var ham = total - spam;
+            var spamPercentage = total > 0 ? (double)spam / total * 100 : 0;
 
-            // Use DTO to handle nullable SUM results properly
-            var statsDto = await connection.QuerySingleAsync<TrainingStatsDto>(countSql);
-
-            // Pull id+source and count in C# to avoid type issues with COUNT(*)
-            var rows = await connection.QueryAsync<(long id, string source)>(sourceSql);
-            var sourceDict = rows
-                .GroupBy(r => r.source)
+            var sourceDict = allResults
+                .GroupBy(r => r.DetectionSource)
                 .OrderByDescending(g => g.Count())
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.Count()
-                );
+                .ToDictionary(g => g.Key, g => g.Count());
 
-            // Convert DTO to domain model with populated source dictionary
-            var stats = statsDto.ToTrainingStats();
-            return stats with { SamplesBySource = sourceDict };
+            return new TrainingStats
+            {
+                TotalSamples = total,
+                SpamSamples = spam,
+                HamSamples = ham,
+                SpamPercentage = spamPercentage,
+                SamplesBySource = sourceDict
+            };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get training statistics");
-            return new TrainingStats(
-                TotalSamples: 0,
-                SpamSamples: 0,
-                HamSamples: 0,
-                SpamPercentage: 0,
-                SamplesBySource: new Dictionary<string, int>()
-            );
+            return new TrainingStats
+            {
+                TotalSamples = 0,
+                SpamSamples = 0,
+                HamSamples = 0,
+                SpamPercentage = 0,
+                SamplesBySource = new Dictionary<string, int>()
+            };
         }
     }
 }

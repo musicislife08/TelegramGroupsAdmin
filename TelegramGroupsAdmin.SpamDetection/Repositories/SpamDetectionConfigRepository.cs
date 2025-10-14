@@ -1,7 +1,7 @@
-using Npgsql;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
-using Dapper;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
 
 namespace TelegramGroupsAdmin.SpamDetection.Repositories;
@@ -11,7 +11,7 @@ namespace TelegramGroupsAdmin.SpamDetection.Repositories;
 /// </summary>
 public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly AppDbContext _context;
     private readonly ILogger<SpamDetectionConfigRepository> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -20,9 +20,9 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
         WriteIndented = true
     };
 
-    public SpamDetectionConfigRepository(NpgsqlDataSource dataSource, ILogger<SpamDetectionConfigRepository> logger)
+    public SpamDetectionConfigRepository(AppDbContext context, ILogger<SpamDetectionConfigRepository> logger)
     {
-        _dataSource = dataSource;
+        _context = context;
         _logger = logger;
     }
 
@@ -33,24 +33,20 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = @"
-                SELECT config_json
-                FROM spam_detection_configs
-                WHERE chat_id = '0'
-                ORDER BY last_updated DESC
-                LIMIT 1";
+            var entity = await _context.SpamDetectionConfigs
+                .AsNoTracking()
+                .Where(c => c.ChatId == "0")
+                .OrderByDescending(c => c.LastUpdated)
+                .FirstOrDefaultAsync(cancellationToken);
 
-            var configJson = await connection.QuerySingleOrDefaultAsync<string>(sql);
-
-            if (string.IsNullOrEmpty(configJson))
+            if (entity == null || string.IsNullOrEmpty(entity.ConfigJson))
             {
                 // Return default configuration if none exists
                 _logger.LogWarning("No global config found in database, returning defaults");
                 return new SpamDetectionConfig();
             }
 
-            var config = JsonSerializer.Deserialize<SpamDetectionConfig>(configJson, JsonOptions);
+            var config = JsonSerializer.Deserialize<SpamDetectionConfig>(entity.ConfigJson, JsonOptions);
 
             // Debug logging to verify what we loaded
             _logger.LogDebug("Loaded global config - StopWords.Enabled: {StopWordsEnabled}, CAS.Enabled: {CasEnabled}, Bayes.Enabled: {BayesEnabled}",
@@ -72,7 +68,6 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
             var configJson = JsonSerializer.Serialize(config, JsonOptions);
             var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
@@ -80,24 +75,30 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
             _logger.LogDebug("Saving global config - StopWords.Enabled: {StopWordsEnabled}, CAS.Enabled: {CasEnabled}, Bayes.Enabled: {BayesEnabled}",
                 config.StopWords.Enabled, config.Cas.Enabled, config.Bayes.Enabled);
 
-            // Use PostgreSQL's INSERT ... ON CONFLICT for atomic upsert
-            // chat_id = '0' represents global configuration
-            // The uc_spam_detection_configs_chat unique constraint ensures uniqueness
-            const string upsertSql = @"
-                INSERT INTO spam_detection_configs (chat_id, config_json, last_updated, updated_by)
-                VALUES ('0', @ConfigJson, @LastUpdated, @UpdatedBy)
-                ON CONFLICT (chat_id)
-                DO UPDATE SET
-                    config_json = EXCLUDED.config_json,
-                    last_updated = EXCLUDED.last_updated,
-                    updated_by = EXCLUDED.updated_by";
+            var entity = await _context.SpamDetectionConfigs
+                .FirstOrDefaultAsync(c => c.ChatId == "0", cancellationToken);
 
-            await connection.ExecuteAsync(upsertSql, new
+            if (entity == null)
             {
-                ConfigJson = configJson,
-                LastUpdated = timestamp,
-                UpdatedBy = updatedBy
-            });
+                // Insert new record
+                entity = new TelegramGroupsAdmin.Data.Models.SpamDetectionConfigRecord
+                {
+                    ChatId = "0",
+                    ConfigJson = configJson,
+                    LastUpdated = timestamp,
+                    UpdatedBy = updatedBy
+                };
+                _context.SpamDetectionConfigs.Add(entity);
+            }
+            else
+            {
+                // Update existing record
+                entity.ConfigJson = configJson;
+                entity.LastUpdated = timestamp;
+                entity.UpdatedBy = updatedBy;
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Updated global spam detection configuration (updated_by: {UpdatedBy})", updatedBy);
             return true;
@@ -117,17 +118,22 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            // Try to get chat-specific config first
+            var chatEntity = await _context.SpamDetectionConfigs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
-            // Single query that checks for chat-specific config, falls back to global ('0')
-            // COALESCE returns the first non-NULL value
-            const string sql = @"
-                SELECT COALESCE(
-                    (SELECT config_json FROM spam_detection_configs WHERE chat_id = @ChatId LIMIT 1),
-                    (SELECT config_json FROM spam_detection_configs WHERE chat_id = '0' LIMIT 1)
-                ) as config_json";
+            string? configJson = chatEntity?.ConfigJson;
 
-            var configJson = await connection.QuerySingleOrDefaultAsync<string>(sql, new { ChatId = chatId });
+            // If no chat-specific config, fall back to global
+            if (string.IsNullOrEmpty(configJson))
+            {
+                var globalEntity = await _context.SpamDetectionConfigs
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.ChatId == "0", cancellationToken);
+
+                configJson = globalEntity?.ConfigJson;
+            }
 
             if (string.IsNullOrEmpty(configJson))
             {
@@ -156,25 +162,33 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
             var configJson = JsonSerializer.Serialize(config, JsonOptions);
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-            // PostgreSQL uses ON CONFLICT instead of INSERT OR REPLACE
-            const string sql = @"
-                INSERT INTO spam_detection_configs (chat_id, config_json, last_updated, updated_by)
-                VALUES (@ChatId, @ConfigJson, @LastUpdated, @UpdatedBy)
-                ON CONFLICT (chat_id) DO UPDATE
-                SET config_json = EXCLUDED.config_json,
-                    last_updated = EXCLUDED.last_updated,
-                    updated_by = EXCLUDED.updated_by";
+            var entity = await _context.SpamDetectionConfigs
+                .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
-            await connection.ExecuteAsync(sql, new
+            if (entity == null)
             {
-                ChatId = chatId,
-                ConfigJson = configJson,
-                LastUpdated = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                UpdatedBy = updatedBy
-            });
+                // Insert new record
+                entity = new TelegramGroupsAdmin.Data.Models.SpamDetectionConfigRecord
+                {
+                    ChatId = chatId,
+                    ConfigJson = configJson,
+                    LastUpdated = timestamp,
+                    UpdatedBy = updatedBy
+                };
+                _context.SpamDetectionConfigs.Add(entity);
+            }
+            else
+            {
+                // Update existing record
+                entity.ConfigJson = configJson;
+                entity.LastUpdated = timestamp;
+                entity.UpdatedBy = updatedBy;
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Updated spam detection configuration for chat {ChatId}", chatId);
             return true;
@@ -193,21 +207,20 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = @"
-                SELECT
-                    chat_id as ChatId,
-                    last_updated as LastUpdated,
-                    updated_by as UpdatedBy,
-                    CASE WHEN chat_id = '0' THEN 'Global Configuration' ELSE chat_id END as ChatName,
-                    CASE WHEN chat_id != '0' THEN 1 ELSE 0 END as HasCustomConfig
-                FROM spam_detection_configs
-                ORDER BY
-                    CASE WHEN chat_id = '0' THEN 0 ELSE 1 END,
-                    chat_id";
+            var entities = await _context.SpamDetectionConfigs
+                .AsNoTracking()
+                .OrderBy(c => c.ChatId == "0" ? 0 : 1)
+                .ThenBy(c => c.ChatId)
+                .ToListAsync(cancellationToken);
 
-            var configs = await connection.QueryAsync<ChatConfigInfo>(sql);
-            return configs;
+            return entities.Select(e => new ChatConfigInfo
+            {
+                ChatId = e.ChatId ?? "0",
+                LastUpdated = e.LastUpdated,
+                UpdatedBy = e.UpdatedBy,
+                ChatName = e.ChatId == "0" ? "Global Configuration" : e.ChatId,
+                HasCustomConfig = e.ChatId != "0"
+            });
         }
         catch (Exception ex)
         {
@@ -223,17 +236,17 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = "DELETE FROM spam_detection_configs WHERE chat_id = @ChatId";
-            var rowsAffected = await connection.ExecuteAsync(sql, new { ChatId = chatId });
+            var entity = await _context.SpamDetectionConfigs
+                .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
-            if (rowsAffected > 0)
-            {
-                _logger.LogInformation("Deleted spam detection configuration for chat {ChatId}", chatId);
-                return true;
-            }
+            if (entity == null)
+                return false;
 
-            return false;
+            _context.SpamDetectionConfigs.Remove(entity);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Deleted spam detection configuration for chat {ChatId}", chatId);
+            return true;
         }
         catch (Exception ex)
         {

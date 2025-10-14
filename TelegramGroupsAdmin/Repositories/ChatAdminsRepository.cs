@@ -1,7 +1,7 @@
-using Dapper;
-using Npgsql;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Models;
-using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
@@ -11,106 +11,99 @@ namespace TelegramGroupsAdmin.Repositories;
 /// </summary>
 public class ChatAdminsRepository : IChatAdminsRepository
 {
-    private readonly string _connectionString;
+    private readonly AppDbContext _context;
     private readonly ILogger<ChatAdminsRepository> _logger;
 
-    public ChatAdminsRepository(IConfiguration configuration, ILogger<ChatAdminsRepository> logger)
+    public ChatAdminsRepository(AppDbContext context, ILogger<ChatAdminsRepository> logger)
     {
-        _connectionString = configuration.GetConnectionString("PostgreSQL")
-            ?? throw new InvalidOperationException("PostgreSQL connection string not found");
+        _context = context;
         _logger = logger;
     }
 
     /// <inheritdoc/>
     public async Task<int> GetPermissionLevelAsync(long chatId, long telegramId)
     {
-        const string sql = """
-            SELECT is_creator
-            FROM chat_admins
-            WHERE chat_id = @ChatId AND telegram_id = @TelegramId AND is_active = true
-            LIMIT 1
-            """;
+        var admin = await _context.ChatAdmins
+            .AsNoTracking()
+            .Where(ca => ca.ChatId == chatId && ca.TelegramId == telegramId && ca.IsActive == true)
+            .Select(ca => new { ca.IsCreator })
+            .FirstOrDefaultAsync();
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        var isCreator = await connection.QueryFirstOrDefaultAsync<bool?>(sql, new { ChatId = chatId, TelegramId = telegramId });
-
-        if (isCreator == null)
+        if (admin == null)
         {
             return -1; // Not an admin
         }
 
-        return isCreator.Value ? 2 : 1; // Creator = Owner (2), Admin = Admin (1)
+        return admin.IsCreator ? 2 : 1; // Creator = Owner (2), Admin = Admin (1)
     }
 
     /// <inheritdoc/>
     public async Task<bool> IsAdminAsync(long chatId, long telegramId)
     {
-        const string sql = """
-            SELECT EXISTS(
-                SELECT 1 FROM chat_admins
-                WHERE chat_id = @ChatId AND telegram_id = @TelegramId AND is_active = true
-            )
-            """;
-
-        await using var connection = new NpgsqlConnection(_connectionString);
-        return await connection.ExecuteScalarAsync<bool>(sql, new { ChatId = chatId, TelegramId = telegramId });
+        return await _context.ChatAdmins
+            .AsNoTracking()
+            .AnyAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId && ca.IsActive == true);
     }
 
     /// <inheritdoc/>
     public async Task<List<ChatAdmin>> GetChatAdminsAsync(long chatId)
     {
-        const string sql = """
-            SELECT id, chat_id, telegram_id, username, is_creator, promoted_at, last_verified_at, is_active
-            FROM chat_admins
-            WHERE chat_id = @ChatId AND is_active = true
-            ORDER BY is_creator DESC, promoted_at ASC
-            """;
+        var entities = await _context.ChatAdmins
+            .AsNoTracking()
+            .Where(ca => ca.ChatId == chatId && ca.IsActive == true)
+            .OrderByDescending(ca => ca.IsCreator)
+            .ThenBy(ca => ca.PromotedAt)
+            .ToListAsync();
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        var dataRecords = await connection.QueryAsync<DataModels.ChatAdminRecordDto>(sql, new { ChatId = chatId });
-        return dataRecords.Select(r => r.ToUiModel()).ToList();
+        return entities.Select(e => e.ToUiModel()).ToList();
     }
 
     /// <inheritdoc/>
     public async Task<List<long>> GetAdminChatsAsync(long telegramId)
     {
-        const string sql = """
-            SELECT chat_id
-            FROM chat_admins
-            WHERE telegram_id = @TelegramId AND is_active = true
-            ORDER BY chat_id
-            """;
+        var chatIds = await _context.ChatAdmins
+            .AsNoTracking()
+            .Where(ca => ca.TelegramId == telegramId && ca.IsActive == true)
+            .OrderBy(ca => ca.ChatId)
+            .Select(ca => ca.ChatId)
+            .ToListAsync();
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        var chatIds = await connection.QueryAsync<long>(sql, new { TelegramId = telegramId });
-        return chatIds.ToList();
+        return chatIds;
     }
 
     /// <inheritdoc/>
     public async Task UpsertAsync(long chatId, long telegramId, bool isCreator, string? username = null)
     {
-        const string sql = """
-            INSERT INTO chat_admins (chat_id, telegram_id, username, is_creator, promoted_at, last_verified_at, is_active)
-            VALUES (@ChatId, @TelegramId, @Username, @IsCreator, @Now, @Now, true)
-            ON CONFLICT (chat_id, telegram_id)
-            DO UPDATE SET
-                username = EXCLUDED.username,
-                is_creator = EXCLUDED.is_creator,
-                last_verified_at = EXCLUDED.last_verified_at,
-                is_active = true
-            """;
-
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.ExecuteAsync(sql, new
+        var existing = await _context.ChatAdmins
+            .FirstOrDefaultAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId);
+
+        if (existing != null)
         {
-            ChatId = chatId,
-            TelegramId = telegramId,
-            Username = username,
-            IsCreator = isCreator,
-            Now = now
-        });
+            // Update existing record
+            existing.Username = username;
+            existing.IsCreator = isCreator;
+            existing.LastVerifiedAt = now;
+            existing.IsActive = true;
+        }
+        else
+        {
+            // Insert new record
+            var newAdmin = new Data.Models.ChatAdminRecord
+            {
+                ChatId = chatId,
+                TelegramId = telegramId,
+                Username = username,
+                IsCreator = isCreator,
+                PromotedAt = now,
+                LastVerifiedAt = now,
+                IsActive = true
+            };
+            _context.ChatAdmins.Add(newAdmin);
+        }
+
+        await _context.SaveChangesAsync();
 
         _logger.LogDebug("Upserted admin: chat={ChatId}, user={TelegramId} (@{Username}), creator={IsCreator}",
             chatId, telegramId, username ?? "unknown", isCreator);
@@ -119,21 +112,20 @@ public class ChatAdminsRepository : IChatAdminsRepository
     /// <inheritdoc/>
     public async Task DeactivateAsync(long chatId, long telegramId)
     {
-        const string sql = """
-            UPDATE chat_admins
-            SET is_active = false, last_verified_at = @Now
-            WHERE chat_id = @ChatId AND telegram_id = @TelegramId
-            """;
-
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        var rowsAffected = await connection.ExecuteAsync(sql, new
+        var admins = await _context.ChatAdmins
+            .Where(ca => ca.ChatId == chatId && ca.TelegramId == telegramId)
+            .ToListAsync();
+
+        foreach (var admin in admins)
         {
-            ChatId = chatId,
-            TelegramId = telegramId,
-            Now = now
-        });
+            admin.IsActive = false;
+            admin.LastVerifiedAt = now;
+        }
+
+        var rowsAffected = admins.Count;
+        await _context.SaveChangesAsync();
 
         if (rowsAffected > 0)
         {
@@ -144,13 +136,17 @@ public class ChatAdminsRepository : IChatAdminsRepository
     /// <inheritdoc/>
     public async Task DeleteByChatIdAsync(long chatId)
     {
-        const string sql = "DELETE FROM chat_admins WHERE chat_id = @ChatId";
+        var toDelete = await _context.ChatAdmins
+            .Where(ca => ca.ChatId == chatId)
+            .ToListAsync();
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        var rowsAffected = await connection.ExecuteAsync(sql, new { ChatId = chatId });
+        var rowsAffected = toDelete.Count;
 
         if (rowsAffected > 0)
         {
+            _context.ChatAdmins.RemoveRange(toDelete);
+            await _context.SaveChangesAsync();
+
             _logger.LogInformation("Deleted {Count} admin records for chat {ChatId}", rowsAffected, chatId);
         }
     }
@@ -158,20 +154,15 @@ public class ChatAdminsRepository : IChatAdminsRepository
     /// <inheritdoc/>
     public async Task UpdateLastVerifiedAsync(long chatId, long telegramId)
     {
-        const string sql = """
-            UPDATE chat_admins
-            SET last_verified_at = @Now
-            WHERE chat_id = @ChatId AND telegram_id = @TelegramId
-            """;
-
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.ExecuteAsync(sql, new
+        var admin = await _context.ChatAdmins
+            .FirstOrDefaultAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId);
+
+        if (admin != null)
         {
-            ChatId = chatId,
-            TelegramId = telegramId,
-            Now = now
-        });
+            admin.LastVerifiedAt = now;
+            await _context.SaveChangesAsync();
+        }
     }
 }

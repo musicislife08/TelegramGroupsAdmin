@@ -1,60 +1,51 @@
-using Dapper;
-using Npgsql;
-using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Models;
-using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
 public class ManagedChatsRepository : IManagedChatsRepository
 {
-    private readonly string _connectionString;
+    private readonly AppDbContext _context;
     private readonly ILogger<ManagedChatsRepository> _logger;
 
     public ManagedChatsRepository(
-        IConfiguration configuration,
+        AppDbContext context,
         ILogger<ManagedChatsRepository> logger)
     {
-        _connectionString = configuration.GetConnectionString("PostgreSQL")
-            ?? throw new InvalidOperationException("PostgreSQL connection string not found");
+        _context = context;
         _logger = logger;
     }
 
     public async Task UpsertAsync(ManagedChatRecord chat)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var existing = await _context.ManagedChats
+            .FirstOrDefaultAsync(mc => mc.ChatId == chat.ChatId);
 
-        const string sql = """
-            INSERT INTO managed_chats (
-                chat_id, chat_name, chat_type, bot_status,
-                is_admin, added_at, is_active, last_seen_at, settings_json
-            ) VALUES (
-                @ChatId, @ChatName, @ChatType, @BotStatus,
-                @IsAdmin, @AddedAt, @IsActive, @LastSeenAt, @SettingsJson
-            )
-            ON CONFLICT (chat_id) DO UPDATE SET
-                chat_name = EXCLUDED.chat_name,
-                chat_type = EXCLUDED.chat_type,
-                bot_status = EXCLUDED.bot_status,
-                is_admin = EXCLUDED.is_admin,
-                is_active = EXCLUDED.is_active,
-                last_seen_at = EXCLUDED.last_seen_at,
-                settings_json = COALESCE(EXCLUDED.settings_json, managed_chats.settings_json);
-            """;
-
-        await connection.ExecuteAsync(sql, new
+        if (existing != null)
         {
-            chat.ChatId,
-            chat.ChatName,
-            ChatType = (int)chat.ChatType,
-            BotStatus = (int)chat.BotStatus,
-            chat.IsAdmin,
-            chat.AddedAt,
-            chat.IsActive,
-            chat.LastSeenAt,
-            chat.SettingsJson
-        });
+            // Update existing record
+            existing.ChatName = chat.ChatName;
+            existing.ChatType = chat.ChatType;
+            existing.BotStatus = chat.BotStatus;
+            existing.IsAdmin = chat.IsAdmin;
+            existing.IsActive = chat.IsActive;
+            existing.LastSeenAt = chat.LastSeenAt;
+            // Only update settings if provided (COALESCE logic)
+            if (chat.SettingsJson != null)
+            {
+                existing.SettingsJson = chat.SettingsJson;
+            }
+        }
+        else
+        {
+            // Insert new record
+            var entity = chat.ToDataModel();
+            _context.ManagedChats.Add(entity);
+        }
+
+        await _context.SaveChangesAsync();
 
         _logger.LogDebug(
             "Upserted managed chat {ChatId} ({ChatName}): {BotStatus}, admin={IsAdmin}, active={IsActive}",
@@ -67,119 +58,96 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
     public async Task<ManagedChatRecord?> GetByChatIdAsync(long chatId)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.ManagedChats
+            .AsNoTracking()
+            .FirstOrDefaultAsync(mc => mc.ChatId == chatId);
 
-        const string sql = """
-            SELECT chat_id, chat_name, chat_type, bot_status,
-                   is_admin, added_at, is_active, last_seen_at, settings_json
-            FROM managed_chats
-            WHERE chat_id = @ChatId;
-            """;
-
-        var dto = await connection.QuerySingleOrDefaultAsync<DataModels.ManagedChatRecordDto>(
-            sql,
-            new { ChatId = chatId });
-
-        return dto?.ToManagedChatRecord().ToUiModel();
+        return entity?.ToUiModel();
     }
 
     public async Task<List<ManagedChatRecord>> GetActiveChatsAsync()
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entities = await _context.ManagedChats
+            .AsNoTracking()
+            .Where(mc => mc.IsActive == true)
+            .OrderBy(mc => mc.ChatName)
+            .ToListAsync();
 
-        const string sql = """
-            SELECT chat_id, chat_name, chat_type, bot_status,
-                   is_admin, added_at, is_active, last_seen_at, settings_json
-            FROM managed_chats
-            WHERE is_active = true
-            ORDER BY chat_name ASC;
-            """;
-
-        var dtos = await connection.QueryAsync<DataModels.ManagedChatRecordDto>(sql);
-        return dtos.Select(dto => dto.ToManagedChatRecord().ToUiModel()).ToList();
+        return entities.Select(e => e.ToUiModel()).ToList();
     }
 
     public async Task<List<ManagedChatRecord>> GetAdminChatsAsync()
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entities = await _context.ManagedChats
+            .AsNoTracking()
+            .Where(mc => mc.IsActive == true && mc.IsAdmin == true)
+            .OrderBy(mc => mc.ChatName)
+            .ToListAsync();
 
-        const string sql = """
-            SELECT chat_id, chat_name, chat_type, bot_status,
-                   is_admin, added_at, is_active, last_seen_at, settings_json
-            FROM managed_chats
-            WHERE is_active = true
-              AND is_admin = true
-            ORDER BY chat_name ASC;
-            """;
-
-        var dtos = await connection.QueryAsync<DataModels.ManagedChatRecordDto>(sql);
-        return dtos.Select(dto => dto.ToManagedChatRecord().ToUiModel()).ToList();
+        return entities.Select(e => e.ToUiModel()).ToList();
     }
 
     public async Task<bool> IsActiveAndAdminAsync(long chatId)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
-
-        const string sql = """
-            SELECT EXISTS (
-                SELECT 1 FROM managed_chats
-                WHERE chat_id = @ChatId
-                  AND is_active = true
-                  AND is_admin = true
-            );
-            """;
-
-        return await connection.ExecuteScalarAsync<bool>(sql, new { ChatId = chatId });
+        return await _context.ManagedChats
+            .AsNoTracking()
+            .AnyAsync(mc => mc.ChatId == chatId && mc.IsActive == true && mc.IsAdmin == true);
     }
 
     public async Task MarkInactiveAsync(long chatId)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entity = await _context.ManagedChats
+            .FirstOrDefaultAsync(mc => mc.ChatId == chatId);
 
-        const string sql = """
-            UPDATE managed_chats
-            SET is_active = false
-            WHERE chat_id = @ChatId;
-            """;
+        if (entity != null)
+        {
+            entity.IsActive = false;
+            await _context.SaveChangesAsync();
 
-        await connection.ExecuteAsync(sql, new { ChatId = chatId });
-
-        _logger.LogInformation("Marked chat {ChatId} as inactive", chatId);
+            _logger.LogInformation("Marked chat {ChatId} as inactive", chatId);
+        }
     }
 
     public async Task UpdateLastSeenAsync(long chatId, long timestamp)
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var existing = await _context.ManagedChats
+            .FirstOrDefaultAsync(mc => mc.ChatId == chatId);
 
-        // UPSERT: Insert if chat doesn't exist (with minimal default values), otherwise just update last_seen_at
-        const string sql = """
-            INSERT INTO managed_chats (
-                chat_id, chat_name, chat_type, bot_status,
-                is_admin, added_at, is_active, last_seen_at, settings_json
-            ) VALUES (
-                @ChatId, 'Unknown', 0, 1,
-                false, @Timestamp, true, @Timestamp, NULL
-            )
-            ON CONFLICT (chat_id) DO UPDATE SET
-                last_seen_at = EXCLUDED.last_seen_at;
-            """;
+        if (existing != null)
+        {
+            // Update existing record
+            existing.LastSeenAt = timestamp;
+        }
+        else
+        {
+            // UPSERT: Insert if chat doesn't exist (with minimal default values)
+            var newChat = new Data.Models.ManagedChatRecord
+            {
+                ChatId = chatId,
+                ChatName = "Unknown",
+                ChatType = ChatType.Private,
+                BotStatus = BotStatus.Member,
+                IsAdmin = false,
+                AddedAt = timestamp,
+                IsActive = true,
+                LastSeenAt = timestamp,
+                SettingsJson = null
+            };
+            _context.ManagedChats.Add(newChat);
+        }
 
-        await connection.ExecuteAsync(sql, new { ChatId = chatId, Timestamp = timestamp });
+        await _context.SaveChangesAsync();
     }
 
     public async Task<List<ManagedChatRecord>> GetAllChatsAsync()
     {
-        await using var connection = new NpgsqlConnection(_connectionString);
+        var entities = await _context.ManagedChats
+            .AsNoTracking()
+            .OrderByDescending(mc => mc.IsActive)
+            .ThenBy(mc => mc.ChatName)
+            .ToListAsync();
 
-        const string sql = """
-            SELECT chat_id, chat_name, chat_type, bot_status,
-                   is_admin, added_at, is_active, last_seen_at, settings_json
-            FROM managed_chats
-            ORDER BY is_active DESC, chat_name ASC;
-            """;
-
-        var dtos = await connection.QueryAsync<DataModels.ManagedChatRecordDto>(sql);
-        return dtos.Select(dto => dto.ToManagedChatRecord().ToUiModel()).ToList();
+        return entities.Select(e => e.ToUiModel()).ToList();
     }
 
     public async Task<List<ManagedChatRecord>> GetAllAsync()
