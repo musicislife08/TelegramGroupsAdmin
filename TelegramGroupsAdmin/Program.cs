@@ -41,6 +41,9 @@ var connectionString = builder.Configuration.GetConnectionString("PostgreSQL")
     ?? throw new InvalidOperationException("PostgreSQL connection string not configured");
 builder.Services.AddDataServices(connectionString);
 
+// Background job system (TickerQ with PostgreSQL backend)
+builder.Services.AddTickerQBackgroundJobs();
+
 // Telegram services and bot commands
 builder.Services.AddTelegramServices();
 

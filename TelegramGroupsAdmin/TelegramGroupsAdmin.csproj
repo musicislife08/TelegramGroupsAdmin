@@ -34,6 +34,8 @@
         <PackageReference Include="SendGrid" Version="9.29.3" />
         <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
         <PackageReference Include="Telegram.Bot" Version="22.7.3-dev.4" />
+        <PackageReference Include="TickerQ" Version="2.5.3" />
+        <PackageReference Include="TickerQ.EntityFrameworkCore" Version="2.5.3" />
     </ItemGroup>
 
     <ItemGroup>

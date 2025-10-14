@@ -9,6 +9,8 @@ using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
+using TickerQ.DependencyInjection;
+using TickerQ.EntityFrameworkCore.DependencyInjection;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services;
@@ -304,6 +306,31 @@ public static class ServiceCollectionExtensions
         services.AddDataProtection()
             .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
             .SetApplicationName("TgSpamPreFilter");
+    }
+
+    /// <summary>
+    /// Adds TickerQ background job system with PostgreSQL backend
+    /// </summary>
+    public static IServiceCollection AddTickerQBackgroundJobs(this IServiceCollection services)
+    {
+        services.AddTickerQ(options =>
+        {
+            // Max concurrent jobs
+            options.SetMaxConcurrency(4);
+
+            // Use EF Core for persistence (PostgreSQL via AppDbContext)
+            options.AddOperationalStore<TelegramGroupsAdmin.Data.AppDbContext>(efOptions =>
+            {
+                // Only include TickerQ tables during design-time migrations
+                efOptions.UseModelCustomizerForMigrations();
+            });
+
+            // Optional: Add dashboard UI at /tickerq-dashboard
+            // options.AddDashboard(basePath: "/tickerq-dashboard");
+            // options.AddDashboardBasicAuth();
+        });
+
+        return services;
     }
 }
 
