@@ -364,12 +364,12 @@ public partial class TelegramAdminBotService(
                                 result.SpamResult.NetConfidence,
                                 detectionResult.UsedForTraining);
 
-                            // TODO (Phase 2.7): Handle spam actions based on net confidence
-                            // - Net > +50: Queue for OpenAI veto (already done in SpamDetectorFactory)
-                            // - After OpenAI veto:
-                            //   - OpenAI confident (85%+) & spam -> Auto-ban
-                            //   - OpenAI uncertain (<85%) -> Admin review queue
-                            // - Net ≤ +50 AND > 0: Admin review queue
+                            // Phase 2.7: Handle spam actions based on net confidence
+                            await HandleSpamDetectionActionsAsync(
+                                scope.ServiceProvider,
+                                message,
+                                result.SpamResult,
+                                detectionResult);
                         }
                     }
                     catch (Exception ex)
@@ -976,5 +976,192 @@ public partial class TelegramAdminBotService(
         // Only use for training if net confidence is very high (>80)
         // This prevents low-quality auto-detections from polluting training data
         return result.NetConfidence > 80;
+    }
+
+    /// <summary>
+    /// Phase 2.7: Handle spam detection actions based on confidence levels
+    /// - Net > +50 with OpenAI 85%+ confident → Auto-ban
+    /// - Net > +50 with OpenAI <85% confident → Create report for admin review
+    /// - Net +0 to +50 (borderline) → Create report for admin review
+    /// - Net < 0 → No action (clean message)
+    /// </summary>
+    private async Task HandleSpamDetectionActionsAsync(
+        IServiceProvider serviceProvider,
+        Message message,
+        TelegramGroupsAdmin.SpamDetection.Services.SpamDetectionResult spamResult,
+        Models.DetectionResultRecord detectionResult)
+    {
+        try
+        {
+            // Only take action if spam was detected
+            if (!spamResult.IsSpam || spamResult.NetConfidence <= 0)
+            {
+                return;
+            }
+
+            var reportsRepo = serviceProvider.GetRequiredService<IReportsRepository>();
+
+            // Check if OpenAI was involved and how confident it was
+            var openAIResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == "OpenAI");
+            var openAIConfident = openAIResult != null && openAIResult.Confidence >= 85;
+
+            // Decision logic based on net confidence and OpenAI involvement
+            if (spamResult.NetConfidence > 50 && openAIConfident && openAIResult!.IsSpam)
+            {
+                // Phase 2.7.2: Auto-ban implementation
+                // High confidence + OpenAI confirmed = auto-ban across all managed chats
+                logger.LogInformation(
+                    "Message {MessageId} from user {UserId} in chat {ChatId} triggers auto-ban (net: {NetConfidence}, OpenAI: {OpenAIConf}%)",
+                    message.MessageId,
+                    message.From?.Id,
+                    message.Chat.Id,
+                    spamResult.NetConfidence,
+                    openAIResult.Confidence);
+
+                await ExecuteAutoBanAsync(
+                    serviceProvider,
+                    message,
+                    spamResult,
+                    openAIResult);
+            }
+            else if (spamResult.NetConfidence > 0)
+            {
+                // Borderline detection (0 < net ≤ 50) OR OpenAI uncertain (<85%) → Admin review
+                var reason = spamResult.NetConfidence > 50
+                    ? $"OpenAI uncertain (<85%) - Net: {spamResult.NetConfidence}, OpenAI: {openAIResult?.Confidence ?? 0}%"
+                    : $"Borderline detection - Net: {spamResult.NetConfidence}";
+
+                await CreateBorderlineReportAsync(
+                    reportsRepo,
+                    message,
+                    spamResult,
+                    detectionResult,
+                    reason);
+
+                logger.LogInformation(
+                    "Created admin review report for message {MessageId} in chat {ChatId}: {Reason}",
+                    message.MessageId,
+                    message.Chat.Id,
+                    reason);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to handle spam detection actions for message {MessageId}",
+                message.MessageId);
+        }
+    }
+
+    /// <summary>
+    /// Phase 2.7: Create a report for borderline spam detections
+    /// </summary>
+    private static async Task CreateBorderlineReportAsync(
+        IReportsRepository reportsRepo,
+        Message message,
+        TelegramGroupsAdmin.SpamDetection.Services.SpamDetectionResult spamResult,
+        Models.DetectionResultRecord detectionResult,
+        string reason)
+    {
+        var report = new Models.Report(
+            Id: 0, // Will be assigned by database
+            MessageId: (int)message.MessageId, // Convert to int (Telegram message IDs fit in int32)
+            ChatId: message.Chat.Id,
+            ReportCommandMessageId: null, // Auto-generated report (not from /report command)
+            ReportedByUserId: null, // System-generated (not user-reported)
+            ReportedByUserName: "Auto-Detection",
+            ReportedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            Status: Models.ReportStatus.Pending,
+            ReviewedBy: null,
+            ReviewedAt: null,
+            ActionTaken: null,
+            AdminNotes: $"{reason}\n\nDetection Details:\n{detectionResult.Reason}\n\nNet Confidence: {spamResult.NetConfidence}\nMax Confidence: {spamResult.MaxConfidence}",
+            WebUserId: null // System-generated
+        );
+
+        await reportsRepo.InsertAsync(report);
+    }
+
+    /// <summary>
+    /// Phase 2.7.2: Execute auto-ban for confident spam across all managed chats
+    /// </summary>
+    private async Task ExecuteAutoBanAsync(
+        IServiceProvider serviceProvider,
+        Message message,
+        TelegramGroupsAdmin.SpamDetection.Services.SpamDetectionResult spamResult,
+        TelegramGroupsAdmin.SpamDetection.Models.SpamCheckResponse openAIResult)
+    {
+        try
+        {
+            var userActionsRepo = serviceProvider.GetRequiredService<IUserActionsRepository>();
+            var managedChatsRepo = serviceProvider.GetRequiredService<IManagedChatsRepository>();
+
+            // Store ban action in database
+            var banAction = new Models.UserActionRecord(
+                Id: 0, // Will be assigned by database
+                UserId: message.From!.Id,
+                ActionType: Models.UserActionType.Ban,
+                MessageId: message.MessageId,
+                IssuedBy: "Auto-Detection",
+                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                ExpiresAt: null, // Permanent ban
+                Reason: $"Auto-ban: High confidence spam (Net: {spamResult.NetConfidence}, OpenAI: {openAIResult.Confidence}%)"
+            );
+
+            await userActionsRepo.InsertAsync(banAction);
+
+            // Get all managed chats for cross-chat enforcement
+            var managedChats = await managedChatsRepo.GetAllChatsAsync();
+            var activeChats = managedChats.Where(c => c.IsActive).ToList();
+
+            logger.LogInformation(
+                "Executing auto-ban for user {UserId} across {ChatCount} managed chats",
+                message.From.Id,
+                activeChats.Count);
+
+            // Ban user across all managed chats via Telegram API
+            int successCount = 0;
+            int failCount = 0;
+
+            foreach (var chat in activeChats)
+            {
+                try
+                {
+                    await _botClient!.BanChatMember(
+                        chatId: chat.ChatId,
+                        userId: message.From.Id,
+                        untilDate: null, // Permanent ban
+                        revokeMessages: true); // Delete all messages from this user
+
+                    successCount++;
+
+                    logger.LogInformation(
+                        "Banned user {UserId} from chat {ChatId}",
+                        message.From.Id,
+                        chat.ChatId);
+                }
+                catch (Exception ex)
+                {
+                    failCount++;
+                    logger.LogError(ex,
+                        "Failed to ban user {UserId} from chat {ChatId}",
+                        message.From.Id,
+                        chat.ChatId);
+                }
+            }
+
+            logger.LogInformation(
+                "Auto-ban complete for user {UserId}: {SuccessCount}/{TotalCount} successful, {FailCount} failed",
+                message.From.Id,
+                successCount,
+                activeChats.Count,
+                failCount);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to execute auto-ban for user {UserId}",
+                message.From?.Id);
+        }
     }
 }
