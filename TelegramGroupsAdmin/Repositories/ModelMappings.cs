@@ -204,28 +204,6 @@ internal static class ModelMappings
         ModifiedAt = ui.ModifiedAt
     };
 
-    // Spam Detection mappings
-    public static UiModels.TrainingSample ToUiModel(this DataModels.TrainingSampleDto data) => new(
-        Id: data.Id,
-        MessageText: data.MessageText,
-        IsSpam: data.IsSpam,
-        AddedDate: data.AddedDate,
-        Source: data.Source,
-        ConfidenceWhenAdded: data.ConfidenceWhenAdded,
-        ChatIds: data.ChatIds ?? [],
-        AddedBy: data.AddedBy,
-        DetectionCount: data.DetectionCount,
-        LastDetectedDate: data.LastDetectedDate
-    );
-
-    public static UiModels.TrainingStats ToUiModel(this DataModels.TrainingStatsDto data) => new(
-        TotalSamples: data.TotalSamples,
-        SpamSamples: data.SpamSamples,
-        HamSamples: data.HamSamples,
-        SpamPercentage: data.SpamPercentage,
-        SamplesBySource: data.SamplesBySource
-    );
-
     // Verification Token mappings
     public static UiModels.VerificationToken ToUiModel(this DataModels.VerificationTokenDto data) => new(
         Id: data.Id,

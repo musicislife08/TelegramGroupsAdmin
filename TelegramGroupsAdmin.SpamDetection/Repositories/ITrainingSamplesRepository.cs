@@ -1,5 +1,3 @@
-using TelegramGroupsAdmin.Data.Models;
-
 namespace TelegramGroupsAdmin.SpamDetection.Repositories;
 
 /// <summary>
@@ -10,13 +8,13 @@ public interface ITrainingSamplesRepository
     /// <summary>
     /// Get all training samples
     /// </summary>
-    Task<IEnumerable<TrainingSampleDto>> GetAllSamplesAsync(CancellationToken cancellationToken = default);
+    Task<IEnumerable<Models.TrainingSample>> GetAllSamplesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get only spam training samples (is_spam = true), optionally filtered by chat
     /// Used by Similarity spam check for TF-IDF matching
     /// </summary>
-    Task<IEnumerable<TrainingSampleDto>> GetSpamSamplesAsync(string? chatId = null, CancellationToken cancellationToken = default);
+    Task<IEnumerable<Models.TrainingSample>> GetSpamSamplesAsync(string? chatId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Increment detection count for a sample when it successfully detects spam/ham
@@ -31,7 +29,7 @@ public interface ITrainingSamplesRepository
     /// <summary>
     /// Get training samples by source
     /// </summary>
-    Task<IEnumerable<TrainingSampleDto>> GetSamplesBySourceAsync(string source, CancellationToken cancellationToken = default);
+    Task<IEnumerable<Models.TrainingSample>> GetSamplesBySourceAsync(string source, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Delete training samples older than specified date
@@ -51,7 +49,5 @@ public interface ITrainingSamplesRepository
     /// <summary>
     /// Get training statistics
     /// </summary>
-    Task<TrainingStatsDto> GetStatsAsync(CancellationToken cancellationToken = default);
+    Task<Models.TrainingStats> GetStatsAsync(CancellationToken cancellationToken = default);
 }
-
-// Models are defined in TelegramGroupsAdmin.Data.Models namespace

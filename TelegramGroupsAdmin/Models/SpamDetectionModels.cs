@@ -1,33 +1,6 @@
 namespace TelegramGroupsAdmin.Models;
 
 /// <summary>
-/// Training sample for UI display
-/// </summary>
-public record TrainingSample(
-    long Id,
-    string MessageText,
-    bool IsSpam,
-    long AddedDate,
-    string Source,
-    int? ConfidenceWhenAdded,
-    long[] ChatIds,
-    string? AddedBy,
-    int DetectionCount,
-    long? LastDetectedDate
-);
-
-/// <summary>
-/// Training statistics for UI display
-/// </summary>
-public record TrainingStats(
-    int TotalSamples,
-    int SpamSamples,
-    int HamSamples,
-    double SpamPercentage,
-    Dictionary<string, int> SamplesBySource
-);
-
-/// <summary>
 /// Report record for UI display (user-submitted reports from /report command OR web UI)
 /// Phase 2.6: Supports both Telegram /report command and web UI "Flag for Review" button
 /// </summary>

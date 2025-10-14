@@ -1,6 +1,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.SpamDetection.Repositories
+@using TelegramGroupsAdmin.SpamDetection.Models
 @using TelegramGroupsAdmin.Repositories
 @using TelegramGroupsAdmin.Models
 @using DataModels = TelegramGroupsAdmin.Data.Models
@@ -351,7 +352,6 @@
             _totalSpamSamples = allSamples.Count();
 
             _topTrainingSamples = allSamples
-                .Select(s => s.ToUiModel())
                 .Where(s => s.DetectionCount > 0)
                 .OrderByDescending(s => s.DetectionCount)
                 .Take(10)
@@ -368,7 +368,7 @@
         try
         {
             var dataStats = await TrainingSamplesRepository.GetStatsAsync();
-            _trainingStats = dataStats.ToUiModel();
+            _trainingStats = dataStats;
             _totalTrainingSamples = _trainingStats.TotalSamples;
             _trainingSpamPercentage = _trainingStats.SpamPercentage;
         }

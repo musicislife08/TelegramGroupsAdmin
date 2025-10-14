@@ -25,12 +25,12 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     /// Get all detection results (spam and ham samples)
     /// Phase 2.6: Only returns training-worthy samples (used_for_training = true)
     /// </summary>
-    public async Task<IEnumerable<TrainingSampleDto>> GetAllSamplesAsync(CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<Models.TrainingSample>> GetAllSamplesAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var results = await context.DetectionResults
+            var dtos = await context.DetectionResults
                 .AsNoTracking()
                 .Include(dr => dr.Message)
                 .Where(dr => dr.UsedForTraining)
@@ -50,12 +50,12 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 })
                 .ToListAsync(cancellationToken);
 
-            return results;
+            return dtos.Select(dto => dto.ToModel());
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve detection results");
-            return Enumerable.Empty<TrainingSampleDto>();
+            return Enumerable.Empty<Models.TrainingSample>();
         }
     }
 
@@ -65,12 +65,12 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     /// All spam is global - no per-chat filtering needed
     /// Phase 2.6: Only returns training-worthy samples (used_for_training = true)
     /// </summary>
-    public async Task<IEnumerable<TrainingSampleDto>> GetSpamSamplesAsync(string? chatId = null, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<Models.TrainingSample>> GetSpamSamplesAsync(string? chatId = null, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var results = await context.DetectionResults
+            var dtos = await context.DetectionResults
                 .AsNoTracking()
                 .Include(dr => dr.Message)
                 .Where(dr => dr.IsSpam && dr.UsedForTraining)
@@ -90,12 +90,12 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 })
                 .ToListAsync(cancellationToken);
 
-            return results;
+            return dtos.Select(dto => dto.ToModel());
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve spam detection results");
-            return Enumerable.Empty<TrainingSampleDto>();
+            return Enumerable.Empty<Models.TrainingSample>();
         }
     }
 
@@ -202,12 +202,12 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     /// <summary>
     /// Get detection results by source
     /// </summary>
-    public async Task<IEnumerable<TrainingSampleDto>> GetSamplesBySourceAsync(string source, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<Models.TrainingSample>> GetSamplesBySourceAsync(string source, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var results = await context.DetectionResults
+            var dtos = await context.DetectionResults
                 .AsNoTracking()
                 .Include(dr => dr.Message)
                 .Where(dr => dr.DetectionSource == source)
@@ -227,12 +227,12 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 })
                 .ToListAsync(cancellationToken);
 
-            return results;
+            return dtos.Select(dto => dto.ToModel());
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve detection results for source {Source}", source);
-            return Enumerable.Empty<TrainingSampleDto>();
+            return Enumerable.Empty<Models.TrainingSample>();
         }
     }
 
@@ -352,7 +352,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     /// <summary>
     /// Get detection statistics
     /// </summary>
-    public async Task<TrainingStatsDto> GetStatsAsync(CancellationToken cancellationToken = default)
+    public async Task<Models.TrainingStats> GetStatsAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
@@ -372,7 +372,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 .OrderByDescending(g => g.Count())
                 .ToDictionary(g => g.Key, g => g.Count());
 
-            return new TrainingStatsDto
+            var dto = new TrainingStatsDto
             {
                 TotalSamples = total,
                 SpamSamples = spam,
@@ -380,11 +380,13 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 SpamPercentage = spamPercentage,
                 SamplesBySource = sourceDict
             };
+
+            return dto.ToModel();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get training statistics");
-            return new TrainingStatsDto
+            var errorDto = new TrainingStatsDto
             {
                 TotalSamples = 0,
                 SpamSamples = 0,
@@ -392,6 +394,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 SpamPercentage = 0,
                 SamplesBySource = new Dictionary<string, int>()
             };
+            return errorDto.ToModel();
         }
     }
 }

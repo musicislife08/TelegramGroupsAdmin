@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.SpamDetection.Repositories
+@using TelegramGroupsAdmin.SpamDetection.Models
 @using TelegramGroupsAdmin.Repositories
 @using DataModels = TelegramGroupsAdmin.Data.Models
 @using UiModels = TelegramGroupsAdmin.Models
@@ -243,8 +244,8 @@
 
             await Task.WhenAll(samplesTask, statsTask);
 
-            _allSamples = (await samplesTask).Select(s => s.ToUiModel()).ToList();
-            _stats = (await statsTask).ToUiModel();
+            _allSamples = (await samplesTask).ToList();
+            _stats = await statsTask;
             FilterSamples();
         }
         catch (Exception ex)
