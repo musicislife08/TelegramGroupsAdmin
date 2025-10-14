@@ -13,16 +13,18 @@ public static class ServiceCollectionExtensions
         // Npgsql data source for Dapper (BackupService only - infrastructure exception)
         services.AddNpgsqlDataSource(connectionString);
 
-        // EF Core DbContext Factory with pooling (works for both scoped and singleton scenarios)
+        // EF Core DbContext with pooling (scoped lifetime, automatically disposed)
+        // Using AddDbContext instead of manual factory ensures proper disposal
+        services.AddDbContext<AppDbContext>(
+            options => options
+                .UseNpgsql(connectionString)
+                .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking), // Default to no tracking for better concurrency
+            contextLifetime: ServiceLifetime.Scoped,
+            optionsLifetime: ServiceLifetime.Singleton);
+
+        // Also register factory for scenarios that need explicit context creation (background services)
         services.AddPooledDbContextFactory<AppDbContext>(options =>
             options.UseNpgsql(connectionString));
-
-        // Also register AppDbContext for DI (uses the factory internally)
-        services.AddScoped(sp =>
-        {
-            var factory = sp.GetRequiredService<IDbContextFactory<AppDbContext>>();
-            return factory.CreateDbContext();
-        });
 
         return services;
     }
