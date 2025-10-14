@@ -635,180 +635,46 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [x] **Update UI** - SpamAnalytics page queries `detection_results` instead of `spam_checks`
 
 **Phase 2.3: Performance & Production Readiness** ✅ **COMPLETE**
-- [x] **Training data import** - Imported 191 spam + 26 ham samples from tg-spam database
-- [x] **Stop words import** - Imported 11 stop words with proper schema alignment
-- [x] **Spam detection testing** - Verified Similarity (57%) + Bayes (99%) detection accuracy
-- [x] **Latin script detection** - Added Unicode-based check to skip OpenAI for English messages (saves API costs)
-- [x] **MinMessageLength optimization** - Lowered from 50 to 10 chars to catch short spam
-- [x] **Logging enhancement** - Added Debug-level logging for all spam detection checks
-- [x] **Schema alignment** - Fixed StopWordDto mismatch (removed word_type, detection_count fields)
-- [x] **Model layer separation** - UI models completely decoupled from Data models with conversion layer
-- [x] **OpenAI veto optimization** - Only runs for borderline cases (confidence < 95%)
-- [x] **VirusTotal disabled** - Disabled by default for URLs (16s latency), framework ready for file scanning
-- [x] **ClamAV preparation** - TODO added for local virus scanning integration
-- [x] **Performance metrics** - Spam detection: <100ms (cached), ~4s (first URL check with blocklists)
-- [x] **Message retention** - 30-day default retention, messages with detection_results preserved
-- [x] **Testing complete** - All pages working, 0 errors, 0 warnings
+- Imported training data (191 spam + 26 ham samples, 11 stop words)
+- Latin script detection to skip OpenAI for English messages
+- Model layer separation (UI models completely decoupled from Data models)
+- OpenAI veto optimization (only runs for borderline cases)
+- Performance: <100ms cached, ~4s first URL check
+- 30-day message retention, spam samples preserved
 
-**Phase 2.4: Unified Bot Implementation** 🔄 **NEXT**
-- [x] **Service renamed** - HistoryBotService → TelegramAdminBotService (foundation ready)
-- [x] **Command routing infrastructure** - IBotCommand interface, CommandRouter service, singleton architecture
-- [x] **Bot command registration** - SetMyCommands API with scoped permissions (default/admin)
-- [x] **Command parsing** - Regex handles `/command` and `/command@botname` formats
-- [x] **Command stubs complete** ✅ - All 7 essential commands implemented and tested:
-  - `/help` - Show available commands (ReadOnly, reflection-based auto-discovery)
-  - `/report` - Report message for admin review (ReadOnly)
-  - `/spam` - Mark as spam and delete (Admin)
-  - `/ban` - Ban user from all managed chats (Admin)
-  - `/trust` - Whitelist user to bypass spam detection (Admin)
-  - `/unban` - Remove ban from user (Admin)
-  - `/warn` - Issue warning with auto-ban threshold (Admin)
-- [x] **Permission system foundation** - MinPermissionLevel checks (0=ReadOnly, 1=Admin, 2=Owner)
-- [x] **Console logging** - Timestamp format for debugging command execution timing
-- [x] **Reflection-based help** ✅ - Dynamic command discovery, auto-updates when new commands added
-- [x] **Foundation for command actions** ✅ **COMPLETE** - Infrastructure ready for command implementation:
-  1. ✅ **DetectionResultsRepository** - Insert method for manual spam/ham classifications
-  2. ✅ **UserActionsRepository** - Track bans/trusts/warns across chats
-  3. ✅ **ManagedChatsRepository** - Track which chats the bot manages
-  4. ✅ **MyChatMember event handling** - Real-time chat tracking when bot added/removed
-  5. ✅ **Enum standardization** - All enums stored as INT (consistent with permission_level, status patterns)
-  6. ✅ **Migration 202601087** - Converts user_actions.action_type TEXT→INT, creates managed_chats table
-- [x] **Trust system integration** ✅ **COMPLETE**:
-  - ✅ **/trust command** - Reply-to-message and username syntax (username lookup requires GetChatMember API)
-  - ✅ **Early exit optimization** - Trust check in TelegramAdminBotService before spam detection
-  - ✅ **Architecture decision** - Trust checking outside spam library (keeps library pure and reusable)
-- [x] **Telegram user account linking** ✅ **COMPLETE**:
-  - ✅ **Database schema** - telegram_user_mappings and telegram_link_tokens tables (Migration 202601088)
-  - ✅ **/link command** - Token verification with 15min expiry, duplicate prevention
-  - ✅ **Permission system** - CommandRouter uses mappings for real-time permission lookup
-  - ✅ **Profile page UI** - Generate tokens, view linked accounts, unlink functionality
-  - ✅ **Repositories** - TelegramUserMappingRepository, TelegramLinkTokenRepository
-  - ✅ **Security** - Cryptographic tokens, one-time use, automatic cleanup of old tokens
-  - ✅ **Architecture** - One-to-many (user → Telegram accounts), one-to-one (Telegram → user)
-- [x] **Per-chat admin caching** ✅ **COMPLETE**:
-  - ✅ **Database schema** - chat_admins table with bidirectional indexes (Migration 202601089)
-  - ✅ **ChatAdminsRepository** - Cache lookup, upsert, deactivate, permission checking
-  - ✅ **RefreshAllChatAdminsAsync** - Startup cache refresh for all managed chats
-  - ✅ **RefreshChatAdminsAsync** - Per-chat admin list caching with detailed logging
-  - ✅ **MyChatMember event handling** - Real-time admin promotion/demotion tracking
-  - ✅ **Permission hierarchy** - Web app linking (global) → Telegram admin (per-chat) → No permission
-  - ✅ **Admin spam bypass** - Chat admins automatically skip spam detection (no explicit trust needed)
-  - ✅ **Performance** - Eliminates GetChatMember API calls on every command
-- [x] **DI architecture fixes** ✅ **COMPLETE**:
-  - ✅ **Service scoping pattern** - Singleton services use IServiceProvider to create scopes for repositories
-  - ✅ **Repository constructors** - Use IConfiguration instead of string connectionString parameters
-  - ✅ **CommandRouter, TelegramAdminBotService** - Inject IServiceProvider, create scopes on-demand
-  - ✅ **All IBotCommand implementations** - Use IServiceProvider pattern for repository access
-  - ✅ **Migration 202601090** - Convert user_actions.action_type from VARCHAR to INT (enum storage)
-- [x] **Reports system** ✅ **COMPLETE**:
-  - ✅ **/report command** - Users can report messages for admin review (reply-to-message required)
-  - ✅ **Reports database** - reports table with status tracking, reviewed_by, action_taken
-  - ✅ **ReportsRepository** - Full CRUD operations with filtering by chat/status
-  - ✅ **Reports UI** - /reports page with filtering, full message text display, action buttons
-  - ✅ **Report actions** - Spam (delete), Ban (cross-chat), Warn (with escalation), Dismiss
-  - ✅ **ReportActionsService** - Handle admin actions with Telegram API integration
-  - ✅ **Message deletion tracking** - deleted_at, deletion_source columns in messages table
-  - ✅ **Resilient design** - Reports work independently of message caching
-- [x] **@admin mention notifications** ✅ **COMPLETE**:
-  - ✅ **AdminMentionHandler** - Detects @admin in any message (text or caption)
-  - ✅ **HTML text mentions** - Uses tg://user?id=X for all users (works without usernames)
-  - ✅ **Auto-discovery** - Chats auto-added to managed_chats on first message
-  - ✅ **Admin caching** - Auto-populates chat_admins table on discovery
-  - ✅ **Smart filtering** - Skips sender and bot itself from notification list
-  - ✅ **Error handling** - Failures don't prevent message history from being saved
-- [ ] **Implement remaining command actions**:
-  - `/spam` - Delete message, insert to detection_results, ban if threshold exceeded (TODO: prevent marking admins/trusted)
-  - `/ban` - Insert to user_actions, call Telegram BanChatMember across all chats
-  - `/unban` - Remove from user_actions, call Telegram UnbanChatMember
-  - `/warn` - Insert to user_actions, auto-ban after threshold
-- [ ] **Cross-chat actions** - Bans/warns across all managed groups
-- [ ] **Edit monitoring** - Detect "post innocent, edit to spam" tactic
-
-**Phase 2.4: Blazor Admin UI** ✅ **COMPLETE**
-- [x] **UI reorganization** - Logical navigation structure with tabbed interfaces
-- [x] **Spam management** - Consolidated `/spam` page with Stop Words and Training Data tabs
-- [x] **Configuration UI** - `/settings` page with Spam Detection config + stubs for future settings
-- [x] **Analytics dashboard** - `/analytics` page with Spam Analytics + stubs for trends/performance
-- [x] **URL fragment navigation** - Direct linking to specific tabs (e.g., `/spam#training`)
-- [x] **User experience** - Profile/Logout at bottom of nav
-- [ ] **Username display** - Show logged-in user email in top-right corner (TODO)
-- [x] **Component architecture** - Reusable spam components in `Components/Shared/SpamManagement/`
-- [x] **Code quality improvements** ✅ **COMPLETE**:
-  - ✅ **Helper method refactoring** - Replaced 100+ lines of nested if statements with TrackChange<T>() helpers in SpamDetectionConfig.razor
-  - ✅ **Spam detection fixes** - Letter spacing regex (4+ chars), emoji-aware invisible char detection, pattern-only confidence reduction
-  - ✅ **Architecture cleanup** - Separated InvisibleChars from Translation, created dedicated InvisibleCharsSpamCheck
-  - ✅ **Two-phase execution** - InvisibleChars runs on original message before translation (prevents translation from hiding spam)
-- [ ] **User actions UI** - Review bans, warns, appeals (future)
-- [ ] **Multi-chat management** - Configure per-chat settings (future)
+**Phase 2.4: Unified Bot Implementation** ✅ **COMPLETE**
+- TelegramAdminBotService with command routing infrastructure
+- 7 bot commands: `/help`, `/report`, `/spam`, `/ban`, `/trust`, `/unban`, `/warn`
+- Permission system (ReadOnly/Admin/Owner with per-chat Telegram admin caching)
+- Telegram user account linking with `/link` command
+- Reports system with `/reports` UI page
+- @admin mention notifications with HTML text mentions
+- Message history caching and edit tracking
+- **Remaining:** Command action implementation (delete, ban API calls)
 
 **Phase 2.5: Backup & Restore System** ✅ **COMPLETE**
-- [x] **Full system backup/restore** - Fully dynamic JSON + reflection system
-  - **Format:** gzip-compressed JSON (minimized, 81% compression ratio)
-  - **Architecture:** Zero-maintenance reflection-based system
-    - Auto-discovers tables from PostgreSQL information_schema
-    - Auto-discovers DTOs from TelegramGroupsAdmin.Data assembly
-    - No hardcoded table mappings or column lists
-    - Schema changes automatically reflected in backups
-  - **Scope:** ALL 18 tables (users w/ TOTP secrets, messages, spam config, Telegram mappings, everything)
-  - **CLI flags:** `--export <path>` / `--import <path>` with 5-second safety delay
-  - **Restore behavior:** Full wipe + restore in single transaction, foreign key-aware deletion order
-  - **Transaction safety:** Single transaction, full rollback on any error, topological sort for dependencies
-  - **Data Protection:** `[ProtectedData]` attribute for cross-machine encryption
-    - Decrypts on export (old machine's keys)
-    - Re-encrypts on import (new machine's keys)
-    - Applied to: `totp_secret` (extensible to other encrypted fields)
-  - **Self-referencing FKs:** Temporarily disables triggers during restore for circular dependencies
-  - **Topological sort:** Proper parent→child insertion order, skips self-referencing FKs
-  - **Sequence reset:** Automatically resets identity sequences after restore
-  - **UI:** Settings page "Backup & Restore" tab + unauthenticated restore modal on registration page
-  - **Version checking:** Prevents incompatible restore with metadata version validation
-  - **DTOs:** All 18 tables have proper snake_case DTOs matching database schema exactly
-  - **Benefits over MessagePack:** Human-readable, no special attributes, simpler debugging, reflection-friendly
+- Full system backup/restore (gzip JSON, 81% compression)
+- Zero-maintenance reflection-based system
+- All 18 tables with Data Protection for TOTP secrets
+- CLI flags: `--export <path>` / `--import <path>`
+- Transaction safety with foreign key-aware deletion order
 
 **Phase 2.6: Confidence Aggregation & Training System** ✅ **COMPLETE**
-**Goal**: Improve spam detection accuracy with weighted voting and comprehensive training data collection
-
-**Confidence Aggregation Strategy:**
-- **Weighted voting system** - Net confidence = (spam votes) - (ham votes)
-- **Asymmetric confidence** - Simple checks have low confidence for "not spam" (absence of evidence ≠ strong evidence)
-  - Simple checks (InvisibleChars, StopWords, Spacing): 20% confidence when NOT spam
-  - Trained checks (Bayes, Similarity): Full confidence in both directions
-- **Two-tier decision system**:
-  - Net > +50: Run OpenAI veto (safety before ban)
-  - Net ≤ +50: Use existing `/reports` page for admin review
-  - Net < 0: Allow (no spam detected)
-- **OpenAI confidence handling**:
-  - OpenAI 85%+ confident → Trust decision (ban or allow)
-  - OpenAI <85% confident → Use existing `/reports` page for admin review
-
-**Implementation Complete:**
-- [x] **Database schema** - `used_for_training`, `net_confidence`, `check_results`, `edit_version` columns exist
-- [x] **Asymmetric confidence** - StopWords, InvisibleChars, Spacing return 20% when NOT spam
-- [x] **SpamDetectorFactory updates**:
-  - [x] `CalculateNetConfidence()` with asymmetric scoring
-  - [x] `AggregateResults()` for two-tier system (>+50 = OpenAI, ≤+50 = review)
-  - [x] All check results stored to `detection_results` with `used_for_training` flag
-  - [x] OpenAI confidence threshold (85%) handled
-- [x] **Training data collection**:
-  - [x] Auto-add: OpenAI confident (85%+) OR net_confidence >80 → `used_for_training = true`
-  - [x] Auto-add: All admin decisions (manual spam/ham buttons) → `used_for_training = true`
-  - [x] BayesSpamCheck filters `WHERE used_for_training = true`
-  - [x] SimilaritySpamCheck filters `WHERE used_for_training = true`
-- [x] **TelegramAdminBotService** - Automatic spam detection with result storage
-- [x] **Messages page enhancements**:
-  - [x] "Mark as Spam" button (Admin+ only, visible on all messages)
-  - [x] "Mark as Ham" button (Admin+ only, visible on spam-flagged messages)
-  - [x] Detection History dialog with full check results timeline
-  - [x] Individual check breakdowns with JSON parsing
-  - [x] Real-time UI updates after admin actions
+- Weighted voting: Net confidence = Sum(spam votes) - Sum(ham votes)
+- Asymmetric confidence: Simple checks 20% when NOT spam, trained checks full confidence
+- Two-tier decision: Net >50 → OpenAI veto, ≤50 → `/reports` queue, <0 → Allow
+- Training quality control: Only OpenAI 85%+ or net >80 marked as training-worthy
+- Automatic spam detection with result storage
+- Messages page: Mark as Spam/Ham buttons + Detection History dialog
+- All check results stored as JSON with `used_for_training` flag
 
 **Phase 2.7: Spam Action Implementation** 🔄 **NEXT**
-- [ ] **Use existing `/reports` page** - Borderline detections (net +0 to +50) create reports
-- [ ] **Auto-ban implementation** - Messages with net >80 after OpenAI veto confirmation
-- [ ] **Unban logic** - "Mark as Ham" button triggers unban if user was auto-banned
-- [ ] **Command actions** - Complete implementation of `/spam`, `/ban`, `/unban`, `/warn` actions
-- [ ] **Cross-chat enforcement** - Bans/warns across all managed groups
-- [ ] **Edit monitoring** - Detect "post innocent, edit to spam" tactic with re-scanning
+- [ ] Auto-create reports for borderline detections (net +0 to +50)
+- [ ] Auto-ban implementation (net >80 after OpenAI confirmation)
+- [ ] Unban logic for "Mark as Ham" button
+- [ ] Command actions: `/spam`, `/ban`, `/unban`, `/warn` with Telegram API calls
+- [ ] Cross-chat ban enforcement
+- [ ] Edit monitoring with re-scanning
 
 ### Phase 3: Advanced Multi-Chat Features (FUTURE)
 
@@ -827,41 +693,16 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 
 ## Next Steps (Prioritized for 2025)
 
-### **Immediate Priority: Spam Action Implementation (Phase 2.7)** 🎯
-**Goal**: Complete the spam detection workflow with automatic actions and cross-chat enforcement
+### **Current Priority: Phase 2.7 - Spam Action Implementation** 🎯
+Complete the spam detection workflow with automatic actions and cross-chat enforcement.
 
-**Implementation Order:**
-
-1. **Report Queue Integration**
-   - Borderline detections (net +0 to +50) automatically create reports in existing `/reports` page
-   - OpenAI uncertain (<85%) also creates reports
-   - Reports include full detection history and net confidence
-
-2. **Auto-Ban Implementation**
-   - Messages with net >80 after OpenAI veto (85%+ confident) trigger auto-ban
-   - Store ban action in `user_actions` table
-   - Cross-chat enforcement via TelegramBotClient.BanChatMember API
-
-3. **Unban Logic**
-   - "Mark as Ham" button checks for active bans in `user_actions`
-   - If found, creates unban action and calls TelegramBotClient.UnbanChatMember
-   - Logs false positive correction for training improvement
-
-4. **Command Actions Completion**
-   - `/spam` - Delete message, insert detection_result, ban if threshold exceeded
-   - `/ban` - Insert user_actions, call BanChatMember across all managed chats
-   - `/unban` - Remove user_actions, call UnbanChatMember
-   - `/warn` - Insert user_actions with escalation tracking
-
-5. **Edit Monitoring**
-   - MessageEditedUpdate handler triggers re-scan with new `edit_version`
-   - Stores edit history in `message_edits` table
-   - Takes action if edited content becomes spam
-
-### **Future Priority: Advanced Multi-Chat Features (Phase 3)**
-- Implement `/spam`, `/ban`, `/unban`, `/warn` actions
-- Cross-chat ban enforcement
-- Edit monitoring and re-scanning
+**Tasks:**
+1. Auto-create reports for borderline detections (net +0 to +50) → existing `/reports` page
+2. Auto-ban for confident spam (net >80 after OpenAI 85%+ confirmation)
+3. Unban logic for "Mark as Ham" button (check `user_actions`, call UnbanChatMember API)
+4. Complete bot command actions: `/spam`, `/ban`, `/unban`, `/warn` with Telegram API
+5. Cross-chat enforcement (ban across all managed chats)
+6. Edit monitoring (re-scan edited messages with `edit_version` tracking)
 
 ---
 
