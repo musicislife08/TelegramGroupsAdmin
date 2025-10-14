@@ -10,7 +10,7 @@ namespace TelegramGroupsAdmin.Repositories;
 internal static class ModelMappings
 {
     // ChatAdmin mappings
-    public static UiModels.ChatAdmin ToUiModel(this DataModels.ChatAdminRecord data) => new()
+    public static UiModels.ChatAdmin ToUiModel(this DataModels.ChatAdminRecordDto data) => new()
     {
         Id = data.Id,
         ChatId = data.ChatId,
@@ -22,7 +22,7 @@ internal static class ModelMappings
         IsActive = data.IsActive
     };
 
-    public static DataModels.ChatAdminRecord ToDataModel(this UiModels.ChatAdmin ui) => new()
+    public static DataModels.ChatAdminRecordDto ToDataModel(this UiModels.ChatAdmin ui) => new()
     {
         Id = ui.Id,
         ChatId = ui.ChatId,
@@ -36,7 +36,7 @@ internal static class ModelMappings
 
 
     // User mappings
-    public static UiModels.UserRecord ToUiModel(this DataModels.UserRecord data) => new(
+    public static UiModels.UserRecord ToUiModel(this DataModels.UserRecordDto data) => new(
         Id: data.Id,
         Email: data.Email,
         NormalizedEmail: data.NormalizedEmail,
@@ -60,7 +60,7 @@ internal static class ModelMappings
         PasswordResetTokenExpiresAt: data.PasswordResetTokenExpiresAt
     );
 
-    public static DataModels.UserRecord ToDataModel(this UiModels.UserRecord ui) => new()
+    public static DataModels.UserRecordDto ToDataModel(this UiModels.UserRecord ui) => new()
     {
         Id = ui.Id,
         Email = ui.Email,
@@ -86,7 +86,7 @@ internal static class ModelMappings
     };
 
     // Recovery Code mappings
-    public static UiModels.RecoveryCodeRecord ToUiModel(this DataModels.RecoveryCodeRecord data) => new(
+    public static UiModels.RecoveryCodeRecord ToUiModel(this DataModels.RecoveryCodeRecordDto data) => new(
         Id: data.Id,
         UserId: data.UserId,
         CodeHash: data.CodeHash,
@@ -94,7 +94,7 @@ internal static class ModelMappings
     );
 
     // Invite mappings
-    public static UiModels.InviteRecord ToUiModel(this DataModels.InviteRecord data) => new(
+    public static UiModels.InviteRecord ToUiModel(this DataModels.InviteRecordDto data) => new(
         Token: data.Token,
         CreatedBy: data.CreatedBy,
         CreatedAt: data.CreatedAt,
@@ -105,7 +105,7 @@ internal static class ModelMappings
         ModifiedAt: data.ModifiedAt
     );
 
-    public static UiModels.InviteWithCreator ToUiModel(this DataModels.InviteWithCreator data) => new(
+    public static UiModels.InviteWithCreator ToUiModel(this DataModels.InviteWithCreatorDto data) => new(
         Token: data.Invite.Token,
         CreatedBy: data.Invite.CreatedBy,
         CreatedByEmail: data.CreatorEmail,
@@ -119,7 +119,7 @@ internal static class ModelMappings
     );
 
     // Audit Log mappings
-    public static UiModels.AuditLogRecord ToUiModel(this DataModels.AuditLogRecord data) => new(
+    public static UiModels.AuditLogRecord ToUiModel(this DataModels.AuditLogRecordDto data) => new(
         Id: data.Id,
         EventType: (UiModels.AuditEventType)data.EventType,
         Timestamp: data.Timestamp,
@@ -129,7 +129,7 @@ internal static class ModelMappings
     );
 
     // Message mappings
-    public static UiModels.MessageRecord ToUiModel(this DataModels.MessageRecord data) => new(
+    public static UiModels.MessageRecord ToUiModel(this DataModels.MessageRecordDto data) => new(
         MessageId: data.MessageId,
         UserId: data.UserId,
         UserName: data.UserName,
@@ -148,7 +148,7 @@ internal static class ModelMappings
         DeletionSource: data.DeletionSource
     );
 
-    public static DataModels.MessageRecord ToDataModel(this UiModels.MessageRecord ui) => new()
+    public static DataModels.MessageRecordDto ToDataModel(this UiModels.MessageRecord ui) => new()
     {
         MessageId = ui.MessageId,
         UserId = ui.UserId,
@@ -171,7 +171,7 @@ internal static class ModelMappings
     // Note: PhotoMessageRecord, HistoryStats, SpamCheckRecord are UI-only models
     // They are constructed directly in repositories (MessageHistoryRepository), not mapped from database entities
 
-    public static UiModels.MessageEditRecord ToUiModel(this DataModels.MessageEditRecord data) => new(
+    public static UiModels.MessageEditRecord ToUiModel(this DataModels.MessageEditRecordDto data) => new(
         Id: data.Id,
         MessageId: data.MessageId,
         OldText: data.OldText,
@@ -181,7 +181,7 @@ internal static class ModelMappings
         NewContentHash: data.NewContentHash
     );
 
-    public static DataModels.MessageEditRecord ToDataModel(this UiModels.MessageEditRecord ui) => new()
+    public static DataModels.MessageEditRecordDto ToDataModel(this UiModels.MessageEditRecord ui) => new()
     {
         Id = ui.Id,
         MessageId = ui.MessageId,
@@ -192,7 +192,7 @@ internal static class ModelMappings
         NewContentHash = ui.NewContentHash
     };
 
-    public static DataModels.InviteRecord ToDataModel(this UiModels.InviteRecord ui) => new()
+    public static DataModels.InviteRecordDto ToDataModel(this UiModels.InviteRecord ui) => new()
     {
         Token = ui.Token,
         CreatedBy = ui.CreatedBy,
@@ -205,7 +205,7 @@ internal static class ModelMappings
     };
 
     // Spam Detection mappings
-    public static UiModels.TrainingSample ToUiModel(this DataModels.TrainingSample data) => new(
+    public static UiModels.TrainingSample ToUiModel(this DataModels.TrainingSampleDto data) => new(
         Id: data.Id,
         MessageText: data.MessageText,
         IsSpam: data.IsSpam,
@@ -218,7 +218,7 @@ internal static class ModelMappings
         LastDetectedDate: data.LastDetectedDate
     );
 
-    public static UiModels.TrainingStats ToUiModel(this DataModels.TrainingStats data) => new(
+    public static UiModels.TrainingStats ToUiModel(this DataModels.TrainingStatsDto data) => new(
         TotalSamples: data.TotalSamples,
         SpamSamples: data.SpamSamples,
         HamSamples: data.HamSamples,
@@ -227,7 +227,7 @@ internal static class ModelMappings
     );
 
 
-    public static UiModels.StopWord ToUiModel(this DataModels.StopWord data) => new(
+    public static UiModels.StopWord ToUiModel(this DataModels.StopWordDto data) => new(
         Id: data.Id,
         Word: data.Word,
         Enabled: data.Enabled,
@@ -237,7 +237,7 @@ internal static class ModelMappings
     );
 
     // Verification Token mappings
-    public static UiModels.VerificationToken ToUiModel(this DataModels.VerificationToken data) => new(
+    public static UiModels.VerificationToken ToUiModel(this DataModels.VerificationTokenDto data) => new(
         Id: data.Id,
         UserId: data.UserId,
         TokenType: (UiModels.TokenType)data.TokenType,
@@ -248,7 +248,7 @@ internal static class ModelMappings
         UsedAt: data.UsedAt
     );
 
-    public static DataModels.VerificationToken ToDataModel(this UiModels.VerificationToken ui) => new()
+    public static DataModels.VerificationTokenDto ToDataModel(this UiModels.VerificationToken ui) => new()
     {
         Id = ui.Id,
         UserId = ui.UserId,
@@ -261,7 +261,7 @@ internal static class ModelMappings
     };
 
     // Detection Result mappings
-    public static UiModels.DetectionResultRecord ToUiModel(this DataModels.DetectionResultRecord data)
+    public static UiModels.DetectionResultRecord ToUiModel(this DataModels.DetectionResultRecordDto data)
     {
         return new UiModels.DetectionResultRecord
         {
@@ -283,7 +283,7 @@ internal static class ModelMappings
         };
     }
 
-    public static DataModels.DetectionResultRecord ToDataModel(this UiModels.DetectionResultRecord ui) => new()
+    public static DataModels.DetectionResultRecordDto ToDataModel(this UiModels.DetectionResultRecord ui) => new()
     {
         Id = ui.Id,
         MessageId = ui.MessageId,
@@ -301,7 +301,7 @@ internal static class ModelMappings
     };
 
     // User Action mappings (all actions are global now)
-    public static UiModels.UserActionRecord ToUiModel(this DataModels.UserActionRecord data) => new(
+    public static UiModels.UserActionRecord ToUiModel(this DataModels.UserActionRecordDto data) => new(
         Id: data.Id,
         UserId: data.UserId,
         ActionType: (UiModels.UserActionType)data.ActionType,
@@ -312,7 +312,7 @@ internal static class ModelMappings
         Reason: data.Reason
     );
 
-    public static DataModels.UserActionRecord ToDataModel(this UiModels.UserActionRecord ui) => new()
+    public static DataModels.UserActionRecordDto ToDataModel(this UiModels.UserActionRecord ui) => new()
     {
         Id = ui.Id,
         UserId = ui.UserId,
@@ -325,7 +325,7 @@ internal static class ModelMappings
     };
 
     // Managed Chat mappings
-    public static UiModels.ManagedChatRecord ToUiModel(this DataModels.ManagedChatRecord data) => new(
+    public static UiModels.ManagedChatRecord ToUiModel(this DataModels.ManagedChatRecordDto data) => new(
         ChatId: data.ChatId,
         ChatName: data.ChatName,
         ChatType: (UiModels.ManagedChatType)data.ChatType,
@@ -337,7 +337,7 @@ internal static class ModelMappings
         SettingsJson: data.SettingsJson
     );
 
-    public static DataModels.ManagedChatRecord ToDataModel(this UiModels.ManagedChatRecord ui) => new()
+    public static DataModels.ManagedChatRecordDto ToDataModel(this UiModels.ManagedChatRecord ui) => new()
     {
         ChatId = ui.ChatId,
         ChatName = ui.ChatName,
@@ -351,7 +351,7 @@ internal static class ModelMappings
     };
 
     // TelegramUserMapping mappings
-    public static UiModels.TelegramUserMappingRecord ToUiModel(this DataModels.TelegramUserMappingRecord data) => new(
+    public static UiModels.TelegramUserMappingRecord ToUiModel(this DataModels.TelegramUserMappingRecordDto data) => new(
         Id: data.Id,
         TelegramId: data.TelegramId,
         TelegramUsername: data.TelegramUsername,
@@ -360,7 +360,7 @@ internal static class ModelMappings
         IsActive: data.IsActive
     );
 
-    public static DataModels.TelegramUserMappingRecord ToDataModel(this UiModels.TelegramUserMappingRecord ui) => new()
+    public static DataModels.TelegramUserMappingRecordDto ToDataModel(this UiModels.TelegramUserMappingRecord ui) => new()
     {
         Id = ui.Id,
         TelegramId = ui.TelegramId,
@@ -371,7 +371,7 @@ internal static class ModelMappings
     };
 
     // TelegramLinkToken mappings
-    public static UiModels.TelegramLinkTokenRecord ToUiModel(this DataModels.TelegramLinkTokenRecord data) => new(
+    public static UiModels.TelegramLinkTokenRecord ToUiModel(this DataModels.TelegramLinkTokenRecordDto data) => new(
         Token: data.Token,
         UserId: data.UserId,
         CreatedAt: data.CreatedAt,
@@ -380,7 +380,7 @@ internal static class ModelMappings
         UsedByTelegramId: data.UsedByTelegramId
     );
 
-    public static DataModels.TelegramLinkTokenRecord ToDataModel(this UiModels.TelegramLinkTokenRecord ui) => new()
+    public static DataModels.TelegramLinkTokenRecordDto ToDataModel(this UiModels.TelegramLinkTokenRecord ui) => new()
     {
         Token = ui.Token,
         UserId = ui.UserId,
@@ -391,7 +391,7 @@ internal static class ModelMappings
     };
 
     // Report mappings
-    public static UiModels.Report ToUiModel(this DataModels.Report data) => new(
+    public static UiModels.Report ToUiModel(this DataModels.ReportDto data) => new(
         Id: data.Id,
         MessageId: data.MessageId,
         ChatId: data.ChatId,
@@ -406,7 +406,7 @@ internal static class ModelMappings
         AdminNotes: data.AdminNotes
     );
 
-    public static DataModels.Report ToDataModel(this UiModels.Report ui) => new()
+    public static DataModels.ReportDto ToDataModel(this UiModels.Report ui) => new()
     {
         Id = ui.Id,
         MessageId = ui.MessageId,

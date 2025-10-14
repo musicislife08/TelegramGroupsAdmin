@@ -3,7 +3,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace TgSpam_PreFilterApi.Data.EFMigrations
+namespace TgSpam_PreFilterApi.Data.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -325,14 +325,14 @@ namespace TgSpam_PreFilterApi.Data.EFMigrations
                     permission_level = table.Column<int>(type: "integer", nullable: false),
                     status = table.Column<int>(type: "integer", nullable: false),
                     modified_at = table.Column<long>(type: "bigint", nullable: true),
-                    UserRecordId = table.Column<string>(type: "character varying(450)", nullable: true)
+                    UserRecordDtoId = table.Column<string>(type: "character varying(450)", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_invites", x => x.token);
                     table.ForeignKey(
-                        name: "FK_invites_users_UserRecordId",
-                        column: x => x.UserRecordId,
+                        name: "FK_invites_users_UserRecordDtoId",
+                        column: x => x.UserRecordDtoId,
                         principalTable: "users",
                         principalColumn: "id");
                     table.ForeignKey(
@@ -410,14 +410,14 @@ namespace TgSpam_PreFilterApi.Data.EFMigrations
                     expires_at = table.Column<long>(type: "bigint", nullable: false),
                     used_at = table.Column<long>(type: "bigint", nullable: true),
                     used_by_telegram_id = table.Column<long>(type: "bigint", nullable: true),
-                    UserRecordId = table.Column<string>(type: "character varying(450)", nullable: true)
+                    UserRecordDtoId = table.Column<string>(type: "character varying(450)", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_telegram_link_tokens", x => x.token);
                     table.ForeignKey(
-                        name: "FK_telegram_link_tokens_users_UserRecordId",
-                        column: x => x.UserRecordId,
+                        name: "FK_telegram_link_tokens_users_UserRecordDtoId",
+                        column: x => x.UserRecordDtoId,
                         principalTable: "users",
                         principalColumn: "id");
                     table.ForeignKey(
@@ -512,9 +512,9 @@ namespace TgSpam_PreFilterApi.Data.EFMigrations
                 column: "used_by");
 
             migrationBuilder.CreateIndex(
-                name: "IX_invites_UserRecordId",
+                name: "IX_invites_UserRecordDtoId",
                 table: "invites",
-                column: "UserRecordId");
+                column: "UserRecordDtoId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_message_edits_message_id",
@@ -557,9 +557,9 @@ namespace TgSpam_PreFilterApi.Data.EFMigrations
                 column: "user_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_telegram_link_tokens_UserRecordId",
+                name: "IX_telegram_link_tokens_UserRecordDtoId",
                 table: "telegram_link_tokens",
-                column: "UserRecordId");
+                column: "UserRecordDtoId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_telegram_user_mappings_telegram_id",

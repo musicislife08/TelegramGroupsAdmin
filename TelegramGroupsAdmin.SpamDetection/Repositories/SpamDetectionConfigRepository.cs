@@ -81,7 +81,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
             if (entity == null)
             {
                 // Insert new record
-                entity = new TelegramGroupsAdmin.Data.Models.SpamDetectionConfigRecord
+                entity = new TelegramGroupsAdmin.Data.Models.SpamDetectionConfigRecordDto
                 {
                     ChatId = "0",
                     ConfigJson = configJson,
@@ -171,7 +171,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
             if (entity == null)
             {
                 // Insert new record
-                entity = new TelegramGroupsAdmin.Data.Models.SpamDetectionConfigRecord
+                entity = new TelegramGroupsAdmin.Data.Models.SpamDetectionConfigRecordDto
                 {
                     ChatId = chatId,
                     ConfigJson = configJson,

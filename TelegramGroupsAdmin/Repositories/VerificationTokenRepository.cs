@@ -17,7 +17,7 @@ public class VerificationTokenRepository
         _logger = logger;
     }
 
-    public async Task<long> CreateAsync(DataModels.VerificationToken verificationToken, CancellationToken ct = default)
+    public async Task<long> CreateAsync(DataModels.VerificationTokenDto verificationToken, CancellationToken ct = default)
     {
         _context.VerificationTokens.Add(verificationToken);
         await _context.SaveChangesAsync(ct);

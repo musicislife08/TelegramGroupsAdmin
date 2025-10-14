@@ -18,7 +18,7 @@ namespace TelegramGroupsAdmin.Services.BackgroundServices;
 /// Handles message processing: new messages, edits, spam detection, image download
 /// </summary>
 public partial class MessageProcessingService(
-    MessageHistoryRepository repository,
+    IServiceScopeFactory scopeFactory,
     IOptions<MessageHistoryOptions> historyOptions,
     CommandRouter commandRouter,
     ChatManagementService chatManagementService,
@@ -26,6 +26,7 @@ public partial class MessageProcessingService(
     IServiceProvider serviceProvider,
     ILogger<MessageProcessingService> logger)
 {
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
 
     // Events for real-time UI updates
@@ -169,7 +170,12 @@ public partial class MessageProcessingService(
                 DeletionSource: null
             );
 
-            await repository.InsertMessageAsync(messageRecord);
+            // Save message to database using a scoped repository
+            using (var scope = _scopeFactory.CreateScope())
+            {
+                var repository = scope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
+                await repository.InsertMessageAsync(messageRecord);
+            }
 
             // Raise event for real-time UI updates
             OnNewMessage?.Invoke(messageRecord);
@@ -226,6 +232,9 @@ public partial class MessageProcessingService(
     {
         try
         {
+            using var scope = _scopeFactory.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
+
             // Get the old message from the database
             var oldMessage = await repository.GetMessageAsync(editedMessage.MessageId);
             if (oldMessage == null)

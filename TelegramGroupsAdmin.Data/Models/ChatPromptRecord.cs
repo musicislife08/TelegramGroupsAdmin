@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// Custom prompts per chat for OpenAI spam detection
 /// </summary>
 [Table("chat_prompts")]
-public class ChatPromptRecord
+public class ChatPromptRecordDto
 {
     [Key]
     [Column("id")]

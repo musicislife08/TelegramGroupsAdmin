@@ -1,6 +1,7 @@
 using System.Data;
 using System.IO.Compression;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using Dapper;
 using Npgsql;
@@ -173,9 +174,9 @@ public class BackupService : IBackupService
     /// </summary>
     private string ToPascalCase(string snakeCase)
     {
-        var parts = snakeCase.Split('_');
+        var parts = snakeCase.Split('_', StringSplitOptions.RemoveEmptyEntries);
         return string.Concat(parts.Select(p =>
-            char.ToUpperInvariant(p[0]) + p.Substring(1).ToLowerInvariant()));
+            p.Length > 0 ? char.ToUpperInvariant(p[0]) + p.Substring(1).ToLowerInvariant() : ""));
     }
 
     /// <summary>
@@ -285,6 +286,14 @@ public class BackupService : IBackupService
 
         foreach (var prop in dtoType.GetProperties())
         {
+            // Skip properties without a setter (readonly, init-only, or navigation properties)
+            if (!prop.CanWrite || prop.GetSetMethod() == null)
+                continue;
+
+            // Skip navigation properties (collections or complex types without [Column])
+            if (typeof(System.Collections.IEnumerable).IsAssignableFrom(prop.PropertyType) && prop.PropertyType != typeof(string))
+                continue;
+
             var value = prop.GetValue(dto);
 
             // Check if this property has [ProtectedData] attribute and has a value
@@ -448,9 +457,36 @@ public class BackupService : IBackupService
 
         // Get column names from DTO type using reflection
         var properties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-        var columnNames = properties.Select(p => p.Name).ToList();
-        var columnList = string.Join(", ", columnNames);
-        var paramList = string.Join(", ", columnNames.Select(c => $"@{c}"));
+
+        // Get actual column names from [Column] attributes (skip navigation properties)
+        // Navigation properties are typically: virtual, collections (ICollection, IEnumerable, List), or marked [NotMapped]
+        var columnMappings = properties
+            .Where(p =>
+            {
+                // Skip if marked [NotMapped]
+                if (p.GetCustomAttribute<System.ComponentModel.DataAnnotations.Schema.NotMappedAttribute>() != null)
+                    return false;
+
+                // Skip if it's a collection type (navigation property)
+                if (typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) && p.PropertyType != typeof(string))
+                    return false;
+
+                // Skip if it's a virtual complex type without [Column] attribute (likely navigation property)
+                var columnAttr = p.GetCustomAttribute<System.ComponentModel.DataAnnotations.Schema.ColumnAttribute>();
+                if (columnAttr == null && p.PropertyType.IsClass && p.PropertyType != typeof(string) && !p.PropertyType.IsValueType)
+                    return false;
+
+                return true;
+            })
+            .Select(p =>
+            {
+                var columnAttr = p.GetCustomAttribute<System.ComponentModel.DataAnnotations.Schema.ColumnAttribute>();
+                var columnName = columnAttr?.Name ?? ToSnakeCase(p.Name);
+                return new { PropertyName = p.Name, ColumnName = columnName };
+            }).ToList();
+
+        var columnList = string.Join(", ", columnMappings.Select(m => m.ColumnName));
+        var paramList = string.Join(", ", columnMappings.Select(m => $"@{m.PropertyName}"));
 
         // Use OVERRIDING SYSTEM VALUE for tables with GENERATED ALWAYS AS IDENTITY columns
         // This allows us to insert explicit ID values during restore
@@ -459,7 +495,8 @@ public class BackupService : IBackupService
         // Deserialize JSON elements back to DTO type
         var jsonOptions = new JsonSerializerOptions
         {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) }
         };
 
         // Check if this DTO has any properties with [ProtectedData] attribute
@@ -635,5 +672,31 @@ public class BackupService : IBackupService
             _logger.LogError(ex, "Failed to read backup metadata");
             throw new InvalidOperationException("Invalid backup file format", ex);
         }
+    }
+
+    /// <summary>
+    /// Convert PascalCase property name to snake_case column name
+    /// </summary>
+    private static string ToSnakeCase(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return input;
+
+        var result = new StringBuilder();
+        result.Append(char.ToLowerInvariant(input[0]));
+
+        for (int i = 1; i < input.Length; i++)
+        {
+            if (char.IsUpper(input[i]))
+            {
+                result.Append('_');
+                result.Append(char.ToLowerInvariant(input[i]));
+            }
+            else
+            {
+                result.Append(input[i]);
+            }
+        }
+
+        return result.ToString();
     }
 }

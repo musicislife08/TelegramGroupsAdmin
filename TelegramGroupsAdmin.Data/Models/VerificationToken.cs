@@ -14,7 +14,7 @@ public enum TokenType
 /// EF Core entity for verification_tokens table
 /// </summary>
 [Table("verification_tokens")]
-public class VerificationToken
+public class VerificationTokenDto
 {
     [Key]
     [Column("id")]
@@ -48,7 +48,7 @@ public class VerificationToken
 
     // Navigation property
     [ForeignKey(nameof(UserId))]
-    public virtual UserRecord? User { get; set; }
+    public virtual UserRecordDto? User { get; set; }
 
     // Helper properties (not mapped)
     [NotMapped]

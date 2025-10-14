@@ -24,7 +24,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     /// Get all detection results (spam and ham samples)
     /// Phase 2.6: Only returns training-worthy samples (used_for_training = true)
     /// </summary>
-    public async Task<IEnumerable<TrainingSample>> GetAllSamplesAsync(CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<TrainingSampleDto>> GetAllSamplesAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -33,7 +33,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 .Include(dr => dr.Message)
                 .Where(dr => dr.UsedForTraining)
                 .OrderByDescending(dr => dr.DetectedAt)
-                .Select(dr => new TrainingSample
+                .Select(dr => new TrainingSampleDto
                 {
                     Id = dr.Id,
                     MessageText = dr.Message!.MessageText!,
@@ -53,7 +53,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve detection results");
-            return Enumerable.Empty<TrainingSample>();
+            return Enumerable.Empty<TrainingSampleDto>();
         }
     }
 
@@ -63,7 +63,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     /// All spam is global - no per-chat filtering needed
     /// Phase 2.6: Only returns training-worthy samples (used_for_training = true)
     /// </summary>
-    public async Task<IEnumerable<TrainingSample>> GetSpamSamplesAsync(string? chatId = null, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<TrainingSampleDto>> GetSpamSamplesAsync(string? chatId = null, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -72,7 +72,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 .Include(dr => dr.Message)
                 .Where(dr => dr.IsSpam && dr.UsedForTraining)
                 .OrderByDescending(dr => dr.DetectedAt)
-                .Select(dr => new TrainingSample
+                .Select(dr => new TrainingSampleDto
                 {
                     Id = dr.Id,
                     MessageText = dr.Message!.MessageText!,
@@ -92,7 +92,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve spam detection results");
-            return Enumerable.Empty<TrainingSample>();
+            return Enumerable.Empty<TrainingSampleDto>();
         }
     }
 
@@ -143,7 +143,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                     messageId = minMessageId - 1;
 
                     // Insert new message
-                    var newMessage = new MessageRecord
+                    var newMessage = new MessageRecordDto
                     {
                         MessageId = messageId,
                         ChatId = chatIdLong,
@@ -160,7 +160,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 }
 
                 // Step 2: Insert detection_result
-                var detectionResult = new DetectionResultRecord
+                var detectionResult = new DetectionResultRecordDto
                 {
                     MessageId = messageId,
                     DetectedAt = timestamp,
@@ -198,7 +198,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     /// <summary>
     /// Get detection results by source
     /// </summary>
-    public async Task<IEnumerable<TrainingSample>> GetSamplesBySourceAsync(string source, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<TrainingSampleDto>> GetSamplesBySourceAsync(string source, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -207,7 +207,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 .Include(dr => dr.Message)
                 .Where(dr => dr.DetectionSource == source)
                 .OrderByDescending(dr => dr.DetectedAt)
-                .Select(dr => new TrainingSample
+                .Select(dr => new TrainingSampleDto
                 {
                     Id = dr.Id,
                     MessageText = dr.Message!.MessageText!,
@@ -227,7 +227,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve detection results for source {Source}", source);
-            return Enumerable.Empty<TrainingSample>();
+            return Enumerable.Empty<TrainingSampleDto>();
         }
     }
 
@@ -344,7 +344,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     /// <summary>
     /// Get detection statistics
     /// </summary>
-    public async Task<TrainingStats> GetStatsAsync(CancellationToken cancellationToken = default)
+    public async Task<TrainingStatsDto> GetStatsAsync(CancellationToken cancellationToken = default)
     {
         try
         {
@@ -363,7 +363,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 .OrderByDescending(g => g.Count())
                 .ToDictionary(g => g.Key, g => g.Count());
 
-            return new TrainingStats
+            return new TrainingStatsDto
             {
                 TotalSamples = total,
                 SpamSamples = spam,
@@ -375,7 +375,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get training statistics");
-            return new TrainingStats
+            return new TrainingStatsDto
             {
                 TotalSamples = 0,
                 SpamSamples = 0,

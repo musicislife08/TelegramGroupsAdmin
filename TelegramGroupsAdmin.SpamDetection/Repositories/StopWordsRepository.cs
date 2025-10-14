@@ -47,7 +47,7 @@ public class StopWordsRepository : IStopWordsRepository
     {
         try
         {
-            var stopWord = new StopWord
+            var stopWord = new StopWordDto
             {
                 Word = word.ToLowerInvariant(),
                 Enabled = true,

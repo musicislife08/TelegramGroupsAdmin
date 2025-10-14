@@ -90,7 +90,7 @@ public class ChatAdminsRepository : IChatAdminsRepository
         else
         {
             // Insert new record
-            var newAdmin = new Data.Models.ChatAdminRecord
+            var newAdmin = new Data.Models.ChatAdminRecordDto
             {
                 ChatId = chatId,
                 TelegramId = telegramId,

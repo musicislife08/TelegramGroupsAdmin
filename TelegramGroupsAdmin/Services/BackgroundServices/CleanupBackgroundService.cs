@@ -6,16 +6,16 @@ namespace TelegramGroupsAdmin.Services.BackgroundServices;
 
 public class CleanupBackgroundService : BackgroundService
 {
-    private readonly MessageHistoryRepository _repository;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly MessageHistoryOptions _options;
     private readonly ILogger<CleanupBackgroundService> _logger;
 
     public CleanupBackgroundService(
-        MessageHistoryRepository repository,
+        IServiceScopeFactory scopeFactory,
         IOptions<MessageHistoryOptions> options,
         ILogger<CleanupBackgroundService> logger)
     {
-        _repository = repository;
+        _scopeFactory = scopeFactory;
         _options = options.Value;
         _logger = logger;
     }
@@ -30,7 +30,11 @@ public class CleanupBackgroundService : BackgroundService
             {
                 await Task.Delay(TimeSpan.FromMinutes(_options.CleanupIntervalMinutes), stoppingToken);
 
-                var (deleted, imagePaths) = await _repository.CleanupExpiredAsync();
+                // Create a scope to resolve the repository
+                await using var scope = _scopeFactory.CreateAsyncScope();
+                var repository = scope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
+
+                var (deleted, imagePaths) = await repository.CleanupExpiredAsync();
 
                 // Delete image files from disk
                 var imageDeletedCount = 0;
@@ -52,7 +56,7 @@ public class CleanupBackgroundService : BackgroundService
                     }
                 }
 
-                var stats = await _repository.GetStatsAsync();
+                var stats = await repository.GetStatsAsync();
 
                 _logger.LogInformation(
                     "Cleanup complete: {Deleted} expired messages removed, {ImagesDeleted} images deleted. Stats: {Messages} messages, {Users} users, {Photos} photos, oldest: {Oldest}",

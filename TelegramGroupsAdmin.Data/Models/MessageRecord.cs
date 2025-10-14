@@ -7,7 +7,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// EF Core entity for messages table
 /// </summary>
 [Table("messages")]
-public class MessageRecord
+public class MessageRecordDto
 {
     [Key]
     [Column("message_id")]
@@ -60,16 +60,16 @@ public class MessageRecord
     public string? DeletionSource { get; set; }
 
     // Navigation properties
-    public virtual ICollection<DetectionResultRecord> DetectionResults { get; set; } = [];
-    public virtual ICollection<MessageEditRecord> MessageEdits { get; set; } = [];
-    public virtual ICollection<UserActionRecord> UserActions { get; set; } = [];
+    public virtual ICollection<DetectionResultRecordDto> DetectionResults { get; set; } = [];
+    public virtual ICollection<MessageEditRecordDto> MessageEdits { get; set; } = [];
+    public virtual ICollection<UserActionRecordDto> UserActions { get; set; } = [];
 }
 
 /// <summary>
 /// EF Core entity for message_edits table
 /// </summary>
 [Table("message_edits")]
-public class MessageEditRecord
+public class MessageEditRecordDto
 {
     [Key]
     [Column("id")]
@@ -97,5 +97,5 @@ public class MessageEditRecord
 
     // Navigation property
     [ForeignKey(nameof(MessageId))]
-    public virtual MessageRecord? Message { get; set; }
+    public virtual MessageRecordDto? Message { get; set; }
 }

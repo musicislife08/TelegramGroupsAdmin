@@ -24,7 +24,7 @@ public class SimilaritySpamCheck : ISpamCheck
     public string CheckName => "Similarity";
 
     // Cached spam samples and vectors
-    private List<TrainingSample>? _cachedSamples;
+    private List<TrainingSampleDto>? _cachedSamples;
     private Dictionary<long, double[]>? _cachedVectors;
     private HashSet<string>? _cachedVocabulary;
     private DateTime _lastCacheUpdate = DateTime.MinValue;

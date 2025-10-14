@@ -7,7 +7,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// EF Core entity for detection_results table
 /// </summary>
 [Table("detection_results")]
-public class DetectionResultRecord
+public class DetectionResultRecordDto
 {
     [Key]
     [Column("id")]
@@ -54,5 +54,5 @@ public class DetectionResultRecord
 
     // Navigation property
     [ForeignKey(nameof(MessageId))]
-    public virtual MessageRecord? Message { get; set; }
+    public virtual MessageRecordDto? Message { get; set; }
 }

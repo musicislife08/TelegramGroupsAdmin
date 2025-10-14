@@ -29,7 +29,7 @@ public enum ManagedChatType
 /// EF Core entity for managed_chats table
 /// </summary>
 [Table("managed_chats")]
-public class ManagedChatRecord
+public class ManagedChatRecordDto
 {
     [Key]
     [Column("chat_id")]
@@ -60,5 +60,5 @@ public class ManagedChatRecord
     public string? SettingsJson { get; set; }
 
     // Navigation properties
-    public virtual ICollection<ChatAdminRecord> ChatAdmins { get; set; } = [];
+    public virtual ICollection<ChatAdminRecordDto> ChatAdmins { get; set; } = [];
 }

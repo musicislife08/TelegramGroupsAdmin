@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// Tracks Telegram admin status per chat for permission caching
 /// </summary>
 [Table("chat_admins")]
-public class ChatAdminRecord
+public class ChatAdminRecordDto
 {
     [Key]
     [Column("id")]
@@ -37,5 +37,5 @@ public class ChatAdminRecord
 
     // Navigation property
     [ForeignKey(nameof(ChatId))]
-    public virtual ManagedChatRecord? ManagedChat { get; set; }
+    public virtual ManagedChatRecordDto? ManagedChat { get; set; }
 }

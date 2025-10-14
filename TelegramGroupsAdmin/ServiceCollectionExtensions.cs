@@ -47,14 +47,6 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Adds API data services (Message history repository only - no identity)
     /// </summary>
-    public static IServiceCollection AddTgSpamApiDataServices(
-        this IServiceCollection services)
-    {
-        // Message history repository (read-write for API)
-        services.AddSingleton<MessageHistoryRepository>();
-
-        return services;
-    }
 
     /// <summary>
     /// Adds Blazor Server and MudBlazor services

@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// One-time tokens for linking Telegram accounts to web users
 /// </summary>
 [Table("telegram_link_tokens")]
-public class TelegramLinkTokenRecord
+public class TelegramLinkTokenRecordDto
 {
     [Key]
     [Column("token")]
@@ -33,5 +33,5 @@ public class TelegramLinkTokenRecord
 
     // Navigation property
     [ForeignKey(nameof(UserId))]
-    public virtual UserRecord? User { get; set; }
+    public virtual UserRecordDto? User { get; set; }
 }

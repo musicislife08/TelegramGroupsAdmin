@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// Per-chat configuration for individual spam check algorithms
 /// </summary>
 [Table("spam_check_configs")]
-public class SpamCheckConfigRecord
+public class SpamCheckConfigRecordDto
 {
     [Key]
     [Column("id")]

@@ -42,7 +42,7 @@ public class InviteRepository
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var expiresAt = now + (validDays * 24 * 3600);
 
-        var entity = new DataModels.InviteRecord
+        var entity = new DataModels.InviteRecordDto
         {
             Token = token,
             CreatedBy = createdBy,

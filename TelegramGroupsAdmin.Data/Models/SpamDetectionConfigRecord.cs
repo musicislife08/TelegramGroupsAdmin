@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// Global and per-chat spam detection configuration (stored as JSON)
 /// </summary>
 [Table("spam_detection_configs")]
-public class SpamDetectionConfigRecord
+public class SpamDetectionConfigRecordDto
 {
     [Key]
     [Column("id")]

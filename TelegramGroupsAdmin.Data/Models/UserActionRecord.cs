@@ -20,7 +20,7 @@ public enum UserActionType
 /// All actions are global - origin chat can be tracked via message_id FK
 /// </summary>
 [Table("user_actions")]
-public class UserActionRecord
+public class UserActionRecordDto
 {
     [Key]
     [Column("id")]
@@ -49,5 +49,5 @@ public class UserActionRecord
 
     // Navigation property
     [ForeignKey(nameof(MessageId))]
-    public virtual MessageRecord? Message { get; set; }
+    public virtual MessageRecordDto? Message { get; set; }
 }

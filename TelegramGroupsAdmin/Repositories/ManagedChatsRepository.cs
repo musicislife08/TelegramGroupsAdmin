@@ -121,7 +121,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
         else
         {
             // UPSERT: Insert if chat doesn't exist (with minimal default values)
-            var newChat = new Data.Models.ManagedChatRecord
+            var newChat = new Data.Models.ManagedChatRecordDto
             {
                 ChatId = chatId,
                 ChatName = "Unknown",

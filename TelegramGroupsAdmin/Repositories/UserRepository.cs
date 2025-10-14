@@ -157,7 +157,7 @@ public class UserRepository
 
     public async Task AddRecoveryCodesAsync(string userId, List<string> codeHashes)
     {
-        var entities = codeHashes.Select(codeHash => new DataModels.RecoveryCodeRecord
+        var entities = codeHashes.Select(codeHash => new DataModels.RecoveryCodeRecordDto
         {
             UserId = userId,
             CodeHash = codeHash,
@@ -172,7 +172,7 @@ public class UserRepository
 
     public async Task CreateRecoveryCodeAsync(string userId, string codeHash, CancellationToken ct = default)
     {
-        var entity = new DataModels.RecoveryCodeRecord
+        var entity = new DataModels.RecoveryCodeRecordDto
         {
             UserId = userId,
             CodeHash = codeHash,

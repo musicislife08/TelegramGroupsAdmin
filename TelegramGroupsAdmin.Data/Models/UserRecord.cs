@@ -85,7 +85,7 @@ public enum AuditEventType
 /// EF Core entity for users table
 /// </summary>
 [Table("users")]
-public class UserRecord
+public class UserRecordDto
 {
     [Key]
     [Column("id")]
@@ -161,14 +161,14 @@ public class UserRecord
 
     // Navigation properties
     [ForeignKey(nameof(InvitedBy))]
-    public virtual UserRecord? InvitedByUser { get; set; }
+    public virtual UserRecordDto? InvitedByUser { get; set; }
 
-    public virtual ICollection<InviteRecord> CreatedInvites { get; set; } = [];
-    public virtual ICollection<TelegramUserMappingRecord> TelegramMappings { get; set; } = [];
-    public virtual ICollection<TelegramLinkTokenRecord> LinkTokens { get; set; } = [];
-    public virtual ICollection<VerificationToken> VerificationTokens { get; set; } = [];
-    public virtual ICollection<RecoveryCodeRecord> RecoveryCodes { get; set; } = [];
-    public virtual ICollection<Report> Reports { get; set; } = [];
+    public virtual ICollection<InviteRecordDto> CreatedInvites { get; set; } = [];
+    public virtual ICollection<TelegramUserMappingRecordDto> TelegramMappings { get; set; } = [];
+    public virtual ICollection<TelegramLinkTokenRecordDto> LinkTokens { get; set; } = [];
+    public virtual ICollection<VerificationTokenDto> VerificationTokens { get; set; } = [];
+    public virtual ICollection<RecoveryCodeRecordDto> RecoveryCodes { get; set; } = [];
+    public virtual ICollection<ReportDto> Reports { get; set; } = [];
 
     // Helper properties (not mapped)
     [NotMapped]
@@ -185,7 +185,7 @@ public class UserRecord
 /// EF Core entity for recovery_codes table
 /// </summary>
 [Table("recovery_codes")]
-public class RecoveryCodeRecord
+public class RecoveryCodeRecordDto
 {
     [Key]
     [Column("id")]
@@ -204,14 +204,14 @@ public class RecoveryCodeRecord
 
     // Navigation property
     [ForeignKey(nameof(UserId))]
-    public virtual UserRecord? User { get; set; }
+    public virtual UserRecordDto? User { get; set; }
 }
 
 /// <summary>
 /// EF Core entity for invites table
 /// </summary>
 [Table("invites")]
-public class InviteRecord
+public class InviteRecordDto
 {
     [Key]
     [Column("token")]
@@ -242,19 +242,19 @@ public class InviteRecord
 
     // Navigation properties
     [ForeignKey(nameof(CreatedBy))]
-    public virtual UserRecord? Creator { get; set; }
+    public virtual UserRecordDto? Creator { get; set; }
 
     [ForeignKey(nameof(UsedBy))]
-    public virtual UserRecord? UsedByUser { get; set; }
+    public virtual UserRecordDto? UsedByUser { get; set; }
 }
 
 /// <summary>
 /// DTO for invite with creator email (used in JOIN queries)
 /// Not an EF entity - just a DTO for query results
 /// </summary>
-public class InviteWithCreator
+public class InviteWithCreatorDto
 {
-    public InviteRecord Invite { get; set; } = null!;
+    public InviteRecordDto Invite { get; set; } = null!;
     public string CreatorEmail { get; set; } = string.Empty;
 }
 
@@ -262,7 +262,7 @@ public class InviteWithCreator
 /// EF Core entity for audit_log table
 /// </summary>
 [Table("audit_log")]
-public class AuditLogRecord
+public class AuditLogRecordDto
 {
     [Key]
     [Column("id")]

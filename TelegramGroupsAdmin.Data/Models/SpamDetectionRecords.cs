@@ -15,7 +15,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// Public to allow cross-assembly repository usage
 /// </summary>
 [Table("training_samples")]
-public class TrainingSample
+public class TrainingSampleDto
 {
     [Key]
     [Column("id")]
@@ -54,7 +54,7 @@ public class TrainingSample
 /// <summary>
 /// Public domain model for training statistics
 /// </summary>
-public class TrainingStats
+public class TrainingStatsDto
 {
     public int TotalSamples { get; set; }
     public int SpamSamples { get; set; }
@@ -72,7 +72,7 @@ public class TrainingStats
 /// Public to allow cross-assembly repository usage
 /// </summary>
 [Table("stop_words")]
-public class StopWord
+public class StopWordDto
 {
     [Key]
     [Column("id")]
@@ -115,7 +115,7 @@ public enum ReportStatus
 /// Phase 2.6: Supports both Telegram /report and web UI "Flag for Review"
 /// </summary>
 [Table("reports")]
-public class Report
+public class ReportDto
 {
     [Key]
     [Column("id")]
@@ -159,5 +159,5 @@ public class Report
 
     // Navigation property
     [ForeignKey(nameof(WebUserId))]
-    public virtual UserRecord? WebUser { get; set; }
+    public virtual UserRecordDto? WebUser { get; set; }
 }

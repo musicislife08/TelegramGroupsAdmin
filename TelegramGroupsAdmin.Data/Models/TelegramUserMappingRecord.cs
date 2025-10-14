@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// Maps Telegram users to web app users for permission checking
 /// </summary>
 [Table("telegram_user_mappings")]
-public class TelegramUserMappingRecord
+public class TelegramUserMappingRecordDto
 {
     [Key]
     [Column("id")]
@@ -32,5 +32,5 @@ public class TelegramUserMappingRecord
 
     // Navigation property
     [ForeignKey(nameof(UserId))]
-    public virtual UserRecord? User { get; set; }
+    public virtual UserRecordDto? User { get; set; }
 }

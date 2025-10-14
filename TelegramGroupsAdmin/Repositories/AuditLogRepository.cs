@@ -24,7 +24,7 @@ public class AuditLogRepository
         string? value = null,
         CancellationToken ct = default)
     {
-        var entity = new DataModels.AuditLogRecord
+        var entity = new DataModels.AuditLogRecordDto
         {
             EventType = eventType,
             Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
