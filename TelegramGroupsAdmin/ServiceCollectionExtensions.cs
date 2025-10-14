@@ -139,6 +139,9 @@ public static class ServiceCollectionExtensions
         // Moderation service (shared by bot commands and UI)
         services.AddScoped<ModerationActionService>();
 
+        // Configuration service (unified config storage)
+        services.AddScoped<IConfigService, ConfigService>();
+
         return services;
     }
 
@@ -268,6 +271,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITelegramLinkTokenRepository, TelegramLinkTokenRepository>();
         services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
         services.AddScoped<IReportsRepository, ReportsRepository>();
+        services.AddScoped<IConfigRepository, ConfigRepository>();
 
         // Spam Check Orchestrator
         services.AddScoped<ISpamCheckOrchestrator, SpamCheckOrchestrator>();

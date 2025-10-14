@@ -41,6 +41,9 @@ public class AppDbContext : DbContext
     public DbSet<SpamDetectionConfigRecordDto> SpamDetectionConfigs => Set<SpamDetectionConfigRecordDto>();
     public DbSet<SpamCheckConfigRecordDto> SpamCheckConfigs => Set<SpamCheckConfigRecordDto>();
 
+    // Configuration table
+    public DbSet<ConfigRecordDto> Configs => Set<ConfigRecordDto>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -56,6 +59,9 @@ public class AppDbContext : DbContext
 
         // Configure value conversions (enums, etc.)
         ConfigureValueConversions(modelBuilder);
+
+        // Configure special entities
+        ConfigureSpecialEntities(modelBuilder);
     }
 
     private static void ConfigureCompositeKeys(ModelBuilder modelBuilder)
@@ -235,5 +241,31 @@ public class AppDbContext : DbContext
 
         // VerificationTokenDto stores token_type as string in DB but exposes as enum
         // The entity already handles this with TokenTypeString property
+    }
+
+    private static void ConfigureSpecialEntities(ModelBuilder modelBuilder)
+    {
+        // Configure configs table - id is PK, chat_id is nullable (NULL = global config)
+        modelBuilder.Entity<ConfigRecordDto>()
+            .HasKey(c => c.Id);
+
+        // Create unique index on chat_id (allows one NULL for global config)
+        modelBuilder.Entity<ConfigRecordDto>()
+            .HasIndex(c => c.ChatId)
+            .IsUnique();
+
+        // Seed global config row (chat_id = NULL)
+        modelBuilder.Entity<ConfigRecordDto>()
+            .HasData(new ConfigRecordDto
+            {
+                Id = 1,
+                ChatId = null,
+                SpamDetectionConfig = null,
+                WelcomeConfig = null,
+                LogConfig = null,
+                ModerationConfig = null,
+                CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                UpdatedAt = null
+            });
     }
 }
