@@ -239,7 +239,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IBotCommand, Commands.DeleteCommand>();
         services.AddSingleton<CommandRouter>();
 
-        // Background services
+        // Background services (refactored into smaller services)
+        services.AddSingleton<SpamActionService>();
+        services.AddSingleton<ChatManagementService>();
+        services.AddSingleton<MessageProcessingService>();
         services.AddSingleton<TelegramAdminBotService>();
         services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());
         services.AddScoped<TelegramGroupsAdmin.SpamDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
