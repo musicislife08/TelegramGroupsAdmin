@@ -15,10 +15,9 @@ public static class ServiceCollectionExtensions
 
         // EF Core DbContext with pooling (scoped lifetime, automatically disposed)
         // Using AddDbContext instead of manual factory ensures proper disposal
+        // Default tracking behavior - use .AsNoTracking() explicitly for read-only queries
         services.AddDbContext<AppDbContext>(
-            options => options
-                .UseNpgsql(connectionString)
-                .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking), // Default to no tracking for better concurrency
+            options => options.UseNpgsql(connectionString),
             contextLifetime: ServiceLifetime.Scoped,
             optionsLifetime: ServiceLifetime.Singleton);
 
