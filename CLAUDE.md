@@ -628,47 +628,140 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
   - Chat templates - Per-chat configs exist but no template/copy feature needed
   - Bulk operations UI - Already happening automatically (every ban is global)
 
-### Phase 4: Advanced Features (FUTURE)
+### Phase 4: Infrastructure & Configuration (FUTURE)
 
-- [ ] ML-based spam detection (train on historical data)
-- [ ] Sentiment analysis for toxicity detection
-- [ ] Automated report generation
-- [ ] API for third-party integrations
+**Goal:** Production-ready configuration management and background job infrastructure
+
+**Phase 4.1: TickerQ Background Job System**
+- PostgreSQL-backed job queue (TickerQ library)
+- Recurring jobs: message cleanup, admin cache refresh, health checks, daily stats aggregation
+- Scheduled jobs: temp ban expiration, welcome message delivery, email reminders
+- Job retry logic (case-by-case: email 3x, welcome 1x, temp ban indefinite, stats no retry)
+
+**Phase 4.2: Unified Configuration System**
+- Single `configs` table with JSONB columns per config type
+- `chat_id` column: NULL = global defaults, non-null = chat-specific overrides
+- Config types: spam_config, welcome_config, notification_config, moderation_config, integration_config (global), app_config (global), logging_config (global)
+- Three methods: Save (UI), Get (UI), GetEffective (app logic with auto-merge)
+- Seed global defaults on first run, features disabled until API keys configured
+- Migrate existing spam_detection_configs and environment variables to unified system
+
+**Phase 4.3: Runtime Log Level Configuration**
+- `/settings#logging` page for dynamic log level adjustment (like *arr apps)
+- Per-namespace configuration stored in logging_config JSONB
+- Immediate application via ILoggerFactory (no restart required)
+
+**Phase 4.4: Temporary Ban System**
+- `/tempban` command with three presets: Quick (5min), Medium (1hr), Long (24hr)
+- Telegram RestrictChatMember with until_date (auto-unrestricts, no TickerQ needed)
+- Record in user_actions table for audit trail
+- UI integration in Reports and Messages pages
+
+**Phase 4.5: Welcome Message System**
+- Auto-DM new users when joining chat (ChatMemberUpdated event)
+- Per-chat templates with variables: {chat_name}, {username}, {rules_url}
+- TickerQ delayed job (default 5min delay before sending)
+- Configuration in welcome_config JSONB (enabled, template, delay_minutes)
+- UI: `/settings#telegram` tab for template editing
+
+**Phase 4.6: Settings UI Completion**
+- `/settings#general` - App config (retention, timezone, session timeout, password policy)
+- `/settings#integrations` - API keys (encrypted storage, masked display, test connection buttons, feature status indicators)
+- `/settings#telegram` - Bot token, managed chats list, welcome message config
+- `/settings#notifications` - Email/Telegram toggles, spam wave thresholds, quiet hours
+- `/settings#security` - Password requirements, session timeout, login limits, audit retention
+- `/settings#logging` - Dynamic log level controls
+
+### Phase 5: Analytics & Data Aggregation (FUTURE)
+
+**Goal:** Complete analytics UI with historical data aggregation
+
+**Phase 5.1: Analytics Repository**
+- Time-series queries for message volume, spam/ham ratios, detection method breakdown
+- False positive/negative rate calculations
+- Per-check performance metrics (hit rates, accuracy, execution time)
+
+**Phase 5.2: Daily Stats Aggregation**
+- TickerQ daily jobs to pre-calculate analytics (avoid expensive queries)
+- New tables: analytics_daily_stats, api_usage_stats, check_performance_stats
+- Weekly/monthly rollup aggregation
+
+**Phase 5.3: Analytics UI Pages**
+- `/analytics#trends` - Message volume over time, spam/ham ratios, peak activity patterns
+- `/analytics#performance` - Detection accuracy metrics, per-check performance, confidence distributions
+
+**Phase 5.4: Charting Library**
+- Integrate charting library (MudBlazor Charts or ApexCharts.Blazor)
+- Line charts (time-series), bar charts (comparisons), pie charts (breakdowns)
+
+### Phase 6: ML-Powered Insights (FUTURE)
+
+**Goal:** Intelligent configuration recommendations and pattern detection
+
+**Phase 6.1: Insights Data Service**
+- Analyze manual override patterns (suggest threshold adjustments)
+- Check performance analysis (effectiveness, redundancy, cost per detection)
+- Stop word suggestions (analyze missed spam for keyword patterns)
+- Pattern detection (ML clustering for new spam tactics, coordinated attacks)
+- Auto-trust effectiveness (trust → ban conversion rates)
+
+**Phase 6.2: OpenAI Recommendation Generation**
+- Convert ML analysis to natural language recommendations
+- Actionable insights with "Apply" buttons
+- Priority levels (High/Medium/Low)
+
+**Phase 6.3: Insights Dashboard**
+- `/analytics#insights` - ML-powered configuration recommendations
+- Category cards: Configuration, Performance, Cost, Patterns, Auto-Trust
+- Historical recommendation tracking
+
+**Phase 6.4: Background Insights Generation**
+- TickerQ daily job for insights generation
+- Notification when high-priority insights available
+
+### Phase 7: Advanced Features (OPTIONAL)
+
+- ML-based spam detection algorithm (10th spam check using historical data)
+- Sentiment analysis for toxicity detection (shelved - too many false positives, `/report` sufficient)
+- API for third-party integrations (not needed currently)
 
 ## Next Steps (Prioritized for 2025)
 
-### **Recent Completion: Phases 2 & 3 ✅ COMPLETE**
+### **Recent Completion: Phases 1-3 ✅ COMPLETE**
 
-**Phase 2.7: Spam Action Implementation + Auto-Trust**
-- ✅ Auto-ban with cross-chat enforcement (global bans)
-- ✅ Auto-trust after 3 non-spam messages (FirstMessageOnly feature)
-- ✅ ModerationActionService - unified bot/UI moderation logic
-- ✅ Service architecture refactored (1,243 → 4 focused services, 83% reduction)
-- ✅ Build quality maintained (0 errors, 0 warnings)
-
-**Phase 3: Advanced Multi-Chat Features**
-- ✅ Cross-chat spam detection (all bans global)
-- ✅ Shared/global blacklist (user_actions, stop_words)
-- ✅ Global moderation actions (ban/warn/trust across all chats)
-- ✅ Multi-chat management (managed_chats tracking)
-
-### **Project Status: Production Ready**
-
-**Core Features Complete:**
+**Current State:**
 - ✅ 9 spam detection algorithms with confidence aggregation
 - ✅ Auto-ban, auto-trust, auto-report workflows
+- ✅ Cross-chat enforcement (global bans/trust)
 - ✅ Blazor UI with full admin capabilities
 - ✅ Telegram bot with 7 commands + @admin notifications
-- ✅ Cross-chat enforcement (global bans/trust)
+- ✅ ModerationActionService (unified bot/UI logic)
 - ✅ Edit monitoring with re-scanning
 - ✅ Backup/restore system
-- ✅ Audit logging and analytics
+- ✅ 0 errors, 0 warnings build quality
 
-**Available Next Steps:**
-- **Production deployment** - Real-world testing with multiple chats
-- **Phase 4 features** - ML-based detection, sentiment analysis, API integrations
-- **Performance optimization** - Query tuning, caching improvements
-- **UI enhancements** - Additional analytics, reporting features
+### **Next: Phase 4 - Infrastructure & Configuration**
+
+**Focus:** Production-ready configuration management and automation
+
+**Key deliverables:**
+1. TickerQ background job system (recurring, scheduled, queued jobs)
+2. Unified configs table (JSONB columns, chat_id NULL = global, per-chat overrides)
+3. Runtime log level configuration (dynamic adjustment like *arr apps)
+4. Temporary ban system (/tempban command with Telegram auto-unrestrict)
+5. Welcome message system (auto-DM new users via TickerQ)
+6. Settings UI completion (6 tabs with real functionality)
+
+**Why Phase 4 matters:**
+- Moves all config from environment variables to database (runtime changes, no restarts)
+- Enables per-chat customization (spam settings, welcome messages, notifications)
+- Production debugging capabilities (dynamic log levels)
+- Foundation for Phase 5 analytics (TickerQ daily aggregation jobs)
+
+**After Phase 4:**
+- Phase 5: Analytics UI with data aggregation
+- Phase 6: ML-powered insights and recommendations
+- Phase 7: Optional advanced features
 
 ---
 
