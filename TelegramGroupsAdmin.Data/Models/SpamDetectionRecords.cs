@@ -1,206 +1,103 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace TelegramGroupsAdmin.Data.Models;
 
-// NOTE: DTOs are PUBLIC (not internal) because repositories live in the SpamDetection project
-// which is a separate assembly. This is acceptable as DTOs are just data containers.
+// NOTE: Models are PUBLIC (not internal) because repositories live in the SpamDetection project
+// which is a separate assembly. This is acceptable as they are just data containers.
 
 // ============================================================================
 // Training Samples
 // ============================================================================
 
 /// <summary>
-/// DTO for Dapper mapping from PostgreSQL (snake_case column names)
-/// Public to allow cross-assembly repository usage
-/// Using record with init-only setters for Dapper to handle PostgreSQL arrays properly
-/// Positional records don't work because Dapper tries to match constructor parameters
-/// </summary>
-public record TrainingSampleDto
-{
-    public long id { get; init; }
-    public string message_text { get; init; } = string.Empty;
-    public bool is_spam { get; init; }
-    public long added_date { get; init; }
-    public string source { get; init; } = string.Empty;
-    public int? confidence_when_added { get; init; }
-    public long[]? chat_ids { get; init; }
-    public string? added_by { get; init; }
-    public int detection_count { get; init; }
-    public long? last_detected_date { get; init; }
-
-    public TrainingSample ToTrainingSample() => new TrainingSample(
-        Id: id,
-        MessageText: message_text,
-        IsSpam: is_spam,
-        AddedDate: added_date,
-        Source: source,
-        ConfidenceWhenAdded: confidence_when_added,
-        ChatIds: chat_ids ?? Array.Empty<long>(),
-        AddedBy: added_by,
-        DetectionCount: detection_count,
-        LastDetectedDate: last_detected_date
-    );
-}
-
-/// <summary>
-/// Public domain model for training samples
-/// </summary>
-public record TrainingSample(
-    long Id,
-    string MessageText,
-    bool IsSpam,
-    long AddedDate,
-    string Source,
-    int? ConfidenceWhenAdded,
-    long[] ChatIds,
-    string? AddedBy,
-    int DetectionCount,
-    long? LastDetectedDate
-);
-
-/// <summary>
-/// DTO for training statistics with proper nullable handling for SUM() results
+/// EF Core entity for training_samples table
 /// Public to allow cross-assembly repository usage
 /// </summary>
-public record TrainingStatsDto
+[Table("training_samples")]
+public class TrainingSample
 {
-    public int total { get; init; }
-    public int spam { get; init; }
-    public int ham { get; init; }
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
 
-    public TrainingStats ToTrainingStats() => new TrainingStats(
-        TotalSamples: total,
-        SpamSamples: spam,
-        HamSamples: ham,
-        SpamPercentage: total > 0 ? (double)spam / total * 100 : 0,
-        SamplesBySource: new Dictionary<string, int>()
-    );
-}
+    [Column("message_text")]
+    [Required]
+    public string MessageText { get; set; } = string.Empty;
 
-/// <summary>
-/// DTO for source counts
-/// Public to allow cross-assembly repository usage
-/// </summary>
-public record SourceCountDto
-{
-    public string source { get; init; } = string.Empty;
-    public long? count { get; init; }
+    [Column("is_spam")]
+    public bool IsSpam { get; set; }
 
-    /// <summary>
-    /// Safe count value that defaults to 0 if null
-    /// </summary>
-    public long SafeCount => count ?? 0;
+    [Column("added_date")]
+    public long AddedDate { get; set; }
+
+    [Column("source")]
+    [Required]
+    public string Source { get; set; } = string.Empty;
+
+    [Column("confidence_when_added")]
+    public int? ConfidenceWhenAdded { get; set; }
+
+    [Column("chat_ids")]
+    public long[]? ChatIds { get; set; }
+
+    [Column("added_by")]
+    public string? AddedBy { get; set; }
+
+    [Column("detection_count")]
+    public int DetectionCount { get; set; }
+
+    [Column("last_detected_date")]
+    public long? LastDetectedDate { get; set; }
 }
 
 /// <summary>
 /// Public domain model for training statistics
 /// </summary>
-public record TrainingStats(
-    int TotalSamples,
-    int SpamSamples,
-    int HamSamples,
-    double SpamPercentage,
-    Dictionary<string, int> SamplesBySource
-);
+public class TrainingStats
+{
+    public int TotalSamples { get; set; }
+    public int SpamSamples { get; set; }
+    public int HamSamples { get; set; }
+    public double SpamPercentage { get; set; }
+    public Dictionary<string, int> SamplesBySource { get; set; } = new();
+}
 
 // ============================================================================
 // Stop Words
 // ============================================================================
 
 /// <summary>
-/// DTO for Dapper mapping from PostgreSQL (snake_case column names)
+/// EF Core entity for stop_words table
 /// Public to allow cross-assembly repository usage
 /// </summary>
-public record StopWordDto
+[Table("stop_words")]
+public class StopWord
 {
-    public long id { get; init; }
-    public string word { get; init; } = string.Empty;
-    public bool enabled { get; init; }
-    public long added_date { get; init; }
-    public string? added_by { get; init; }
-    public string? notes { get; init; }
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
 
-    public StopWord ToStopWord() => new StopWord(
-        Id: id,
-        Word: word,
-        Enabled: enabled,
-        AddedDate: added_date,
-        AddedBy: added_by,
-        Notes: notes
-    );
+    [Column("word")]
+    [Required]
+    public string Word { get; set; } = string.Empty;
+
+    [Column("enabled")]
+    public bool Enabled { get; set; }
+
+    [Column("added_date")]
+    public long AddedDate { get; set; }
+
+    [Column("added_by")]
+    public string? AddedBy { get; set; }
+
+    [Column("notes")]
+    public string? Notes { get; set; }
 }
-
-/// <summary>
-/// Public domain model for stop words
-/// </summary>
-public record StopWord(
-    long Id,
-    string Word,
-    bool Enabled,
-    long AddedDate,
-    string? AddedBy,
-    string? Notes
-);
 
 // ============================================================================
 // Reports
 // ============================================================================
-
-/// <summary>
-/// DTO for Dapper mapping from PostgreSQL (snake_case column names)
-/// Public to allow cross-assembly repository usage
-/// Phase 2.6: Supports both Telegram /report and web UI "Flag for Review"
-/// </summary>
-public record ReportDto
-{
-    public long id { get; init; }
-    public int message_id { get; init; }
-    public long chat_id { get; init; }
-    public int? report_command_message_id { get; init; }  // Phase 2.6: Nullable for web reports
-    public long? reported_by_user_id { get; init; }       // Phase 2.6: Nullable for web reports
-    public string? reported_by_user_name { get; init; }
-    public long reported_at { get; init; }
-    public int status { get; init; }
-    public string? reviewed_by { get; init; }
-    public long? reviewed_at { get; init; }
-    public string? action_taken { get; init; }
-    public string? admin_notes { get; init; }
-    public string? web_user_id { get; init; }             // Phase 2.6: Web user ID
-
-    public Report ToReport() => new Report(
-        Id: id,
-        MessageId: message_id,
-        ChatId: chat_id,
-        ReportCommandMessageId: report_command_message_id,
-        ReportedByUserId: reported_by_user_id,
-        ReportedByUserName: reported_by_user_name,
-        ReportedAt: reported_at,
-        Status: (ReportStatus)status,
-        ReviewedBy: reviewed_by,
-        ReviewedAt: reviewed_at,
-        ActionTaken: action_taken,
-        AdminNotes: admin_notes,
-        WebUserId: web_user_id
-    );
-}
-
-/// <summary>
-/// Public domain model for reports
-/// Phase 2.6: Supports both Telegram /report and web UI "Flag for Review"
-/// </summary>
-public record Report(
-    long Id,
-    int MessageId,
-    long ChatId,
-    int? ReportCommandMessageId,      // NULL for web UI reports
-    long? ReportedByUserId,            // NULL if user has no Telegram link
-    string? ReportedByUserName,
-    long ReportedAt,
-    ReportStatus Status,
-    string? ReviewedBy,
-    long? ReviewedAt,
-    string? ActionTaken,
-    string? AdminNotes,
-    string? WebUserId = null           // Phase 2.6: Web user ID (FK to users table)
-);
 
 /// <summary>
 /// Report status enum
@@ -210,4 +107,57 @@ public enum ReportStatus
     Pending = 0,
     Reviewed = 1,
     Dismissed = 2
+}
+
+/// <summary>
+/// EF Core entity for reports table
+/// Public to allow cross-assembly repository usage
+/// Phase 2.6: Supports both Telegram /report and web UI "Flag for Review"
+/// </summary>
+[Table("reports")]
+public class Report
+{
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
+
+    [Column("message_id")]
+    public int MessageId { get; set; }
+
+    [Column("chat_id")]
+    public long ChatId { get; set; }
+
+    [Column("report_command_message_id")]
+    public int? ReportCommandMessageId { get; set; }  // NULL for web reports
+
+    [Column("reported_by_user_id")]
+    public long? ReportedByUserId { get; set; }       // NULL for web reports
+
+    [Column("reported_by_user_name")]
+    public string? ReportedByUserName { get; set; }
+
+    [Column("reported_at")]
+    public long ReportedAt { get; set; }
+
+    [Column("status")]
+    public int Status { get; set; }
+
+    [Column("reviewed_by")]
+    public string? ReviewedBy { get; set; }
+
+    [Column("reviewed_at")]
+    public long? ReviewedAt { get; set; }
+
+    [Column("action_taken")]
+    public string? ActionTaken { get; set; }
+
+    [Column("admin_notes")]
+    public string? AdminNotes { get; set; }
+
+    [Column("web_user_id")]
+    public string? WebUserId { get; set; }            // Phase 2.6: Web user ID (FK to users table)
+
+    // Navigation property
+    [ForeignKey(nameof(WebUserId))]
+    public virtual UserRecord? WebUser { get; set; }
 }

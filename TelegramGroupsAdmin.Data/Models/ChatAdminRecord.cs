@@ -1,27 +1,41 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// DTO for chat_admins table (database DTO)
+/// EF Core entity for chat_admins table
 /// Tracks Telegram admin status per chat for permission caching
 /// </summary>
-public record ChatAdminRecordDto
+[Table("chat_admins")]
+public class ChatAdminRecord
 {
-    public long id { get; init; }
-    public long chat_id { get; init; }
-    public long telegram_id { get; init; }
-    public string? username { get; init; }
-    public bool is_creator { get; init; }
-    public long promoted_at { get; init; }
-    public long last_verified_at { get; init; }
-    public bool is_active { get; init; }
-}
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
 
-public record ChatAdminRecord(
-    long Id,
-    long ChatId,
-    long TelegramId,
-    bool IsCreator,
-    long PromotedAt,
-    long LastVerifiedAt,
-    bool IsActive
-);
+    [Column("chat_id")]
+    public long ChatId { get; set; }
+
+    [Column("telegram_id")]
+    public long TelegramId { get; set; }
+
+    [Column("username")]
+    public string? Username { get; set; }
+
+    [Column("is_creator")]
+    public bool IsCreator { get; set; }
+
+    [Column("promoted_at")]
+    public long PromotedAt { get; set; }
+
+    [Column("last_verified_at")]
+    public long LastVerifiedAt { get; set; }
+
+    [Column("is_active")]
+    public bool IsActive { get; set; }
+
+    // Navigation property
+    [ForeignKey(nameof(ChatId))]
+    public virtual ManagedChatRecord? ManagedChat { get; set; }
+}

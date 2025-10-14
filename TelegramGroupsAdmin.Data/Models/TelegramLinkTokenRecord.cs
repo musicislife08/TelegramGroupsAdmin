@@ -1,24 +1,37 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// DTO for telegram_link_tokens table (database DTO)
+/// EF Core entity for telegram_link_tokens table
 /// One-time tokens for linking Telegram accounts to web users
 /// </summary>
-public record TelegramLinkTokenRecordDto
+[Table("telegram_link_tokens")]
+public class TelegramLinkTokenRecord
 {
-    public string token { get; init; } = string.Empty;
-    public string user_id { get; init; } = string.Empty;
-    public long created_at { get; init; }
-    public long expires_at { get; init; }
-    public long? used_at { get; init; }
-    public long? used_by_telegram_id { get; init; }
-}
+    [Key]
+    [Column("token")]
+    [MaxLength(256)]
+    public string Token { get; set; } = string.Empty;
 
-public record TelegramLinkTokenRecord(
-    string Token,
-    string UserId,
-    long CreatedAt,
-    long ExpiresAt,
-    long? UsedAt,
-    long? UsedByTelegramId
-);
+    [Column("user_id")]
+    [Required]
+    public string UserId { get; set; } = string.Empty;
+
+    [Column("created_at")]
+    public long CreatedAt { get; set; }
+
+    [Column("expires_at")]
+    public long ExpiresAt { get; set; }
+
+    [Column("used_at")]
+    public long? UsedAt { get; set; }
+
+    [Column("used_by_telegram_id")]
+    public long? UsedByTelegramId { get; set; }
+
+    // Navigation property
+    [ForeignKey(nameof(UserId))]
+    public virtual UserRecord? User { get; set; }
+}

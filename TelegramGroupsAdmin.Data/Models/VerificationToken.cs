@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace TelegramGroupsAdmin.Data.Models;
 
 public enum TokenType
@@ -7,28 +10,68 @@ public enum TokenType
     EmailChange
 }
 
-// DTO for Dapper mapping from PostgreSQL
-public record VerificationTokenDto
+/// <summary>
+/// EF Core entity for verification_tokens table
+/// </summary>
+[Table("verification_tokens")]
+public class VerificationToken
 {
-    public long id { get; init; }
-    public string user_id { get; init; } = string.Empty;
-    public string token_type { get; init; } = string.Empty;
-    public string token { get; init; } = string.Empty;
-    public string? value { get; init; }
-    public long expires_at { get; init; }
-    public long created_at { get; init; }
-    public long? used_at { get; init; }
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
 
-    public VerificationToken ToVerificationToken() => new VerificationToken(
-        Id: id,
-        UserId: user_id,
-        TokenType: ParseTokenType(token_type),
-        Token: token,
-        Value: value,
-        ExpiresAt: expires_at,
-        CreatedAt: created_at,
-        UsedAt: used_at
-    );
+    [Column("user_id")]
+    [Required]
+    public string UserId { get; set; } = string.Empty;
+
+    [Column("token_type")]
+    [Required]
+    [MaxLength(50)]
+    public string TokenTypeString { get; set; } = string.Empty;
+
+    [Column("token")]
+    [Required]
+    [MaxLength(256)]
+    public string Token { get; set; } = string.Empty;
+
+    [Column("value")]
+    public string? Value { get; set; }
+
+    [Column("expires_at")]
+    public long ExpiresAt { get; set; }
+
+    [Column("created_at")]
+    public long CreatedAt { get; set; }
+
+    [Column("used_at")]
+    public long? UsedAt { get; set; }
+
+    // Navigation property
+    [ForeignKey(nameof(UserId))]
+    public virtual UserRecord? User { get; set; }
+
+    // Helper properties (not mapped)
+    [NotMapped]
+    public TokenType TokenType
+    {
+        get => ParseTokenType(TokenTypeString);
+        set => TokenTypeString = value switch
+        {
+            TokenType.EmailVerification => "email_verify",
+            TokenType.PasswordReset => "password_reset",
+            TokenType.EmailChange => "email_change",
+            _ => throw new ArgumentException($"Unknown token type: {value}")
+        };
+    }
+
+    [NotMapped]
+    public bool IsExpired => DateTimeOffset.UtcNow.ToUnixTimeSeconds() > ExpiresAt;
+
+    [NotMapped]
+    public bool IsUsed => UsedAt.HasValue;
+
+    [NotMapped]
+    public bool IsValid => !IsExpired && !IsUsed;
 
     private static TokenType ParseTokenType(string tokenType) => tokenType switch
     {
@@ -36,29 +79,5 @@ public record VerificationTokenDto
         "password_reset" => TokenType.PasswordReset,
         "email_change" => TokenType.EmailChange,
         _ => throw new ArgumentException($"Unknown token type: {tokenType}")
-    };
-}
-
-public record VerificationToken(
-    long Id,
-    string UserId,
-    TokenType TokenType,
-    string Token,
-    string? Value,
-    long ExpiresAt,
-    long CreatedAt,
-    long? UsedAt
-)
-{
-    public bool IsExpired => DateTimeOffset.UtcNow.ToUnixTimeSeconds() > ExpiresAt;
-    public bool IsUsed => UsedAt.HasValue;
-    public bool IsValid => !IsExpired && !IsUsed;
-
-    public string TokenTypeString => TokenType switch
-    {
-        TokenType.EmailVerification => "email_verify",
-        TokenType.PasswordReset => "password_reset",
-        TokenType.EmailChange => "email_change",
-        _ => throw new ArgumentException($"Unknown token type: {TokenType}")
     };
 }

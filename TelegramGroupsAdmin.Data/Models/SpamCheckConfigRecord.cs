@@ -1,28 +1,39 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// DTO for spam_check_configs table (database DTO)
+/// EF Core entity for spam_check_configs table
 /// Per-chat configuration for individual spam check algorithms
 /// </summary>
-public record SpamCheckConfigRecordDto
+[Table("spam_check_configs")]
+public class SpamCheckConfigRecord
 {
-    public long id { get; init; }
-    public string chat_id { get; init; } = string.Empty;
-    public string check_name { get; init; } = string.Empty;
-    public bool enabled { get; init; }
-    public int? confidence_threshold { get; init; }
-    public string? configuration_json { get; init; }
-    public long modified_date { get; init; }
-    public string? modified_by { get; init; }
-}
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
 
-public record SpamCheckConfigRecord(
-    long Id,
-    string ChatId,
-    string CheckName,
-    bool Enabled,
-    int? ConfidenceThreshold,
-    string? ConfigurationJson,
-    long ModifiedDate,
-    string? ModifiedBy
-);
+    [Column("chat_id")]
+    [Required]
+    public string ChatId { get; set; } = string.Empty;
+
+    [Column("check_name")]
+    [Required]
+    public string CheckName { get; set; } = string.Empty;
+
+    [Column("enabled")]
+    public bool Enabled { get; set; }
+
+    [Column("confidence_threshold")]
+    public int? ConfidenceThreshold { get; set; }
+
+    [Column("configuration_json")]
+    public string? ConfigurationJson { get; set; }
+
+    [Column("modified_date")]
+    public long ModifiedDate { get; set; }
+
+    [Column("modified_by")]
+    public string? ModifiedBy { get; set; }
+}

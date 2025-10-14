@@ -1,22 +1,29 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// DTO for spam_detection_configs table (database DTO)
+/// EF Core entity for spam_detection_configs table
 /// Global and per-chat spam detection configuration (stored as JSON)
 /// </summary>
-public record SpamDetectionConfigRecordDto
+[Table("spam_detection_configs")]
+public class SpamDetectionConfigRecord
 {
-    public long id { get; init; }
-    public string? chat_id { get; init; }
-    public string config_json { get; init; } = string.Empty;
-    public long last_updated { get; init; }
-    public string? updated_by { get; init; }
-}
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
 
-public record SpamDetectionConfigRecord(
-    long Id,
-    string? ChatId,
-    string ConfigJson,
-    long LastUpdated,
-    string? UpdatedBy
-);
+    [Column("chat_id")]
+    public string? ChatId { get; set; }
+
+    [Column("config_json")]
+    [Required]
+    public string ConfigJson { get; set; } = string.Empty;
+
+    [Column("last_updated")]
+    public long LastUpdated { get; set; }
+
+    [Column("updated_by")]
+    public string? UpdatedBy { get; set; }
+}

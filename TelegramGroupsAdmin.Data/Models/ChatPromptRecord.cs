@@ -1,26 +1,36 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// DTO for chat_prompts table (database DTO)
+/// EF Core entity for chat_prompts table
 /// Custom prompts per chat for OpenAI spam detection
 /// </summary>
-public record ChatPromptRecordDto
+[Table("chat_prompts")]
+public class ChatPromptRecord
 {
-    public long id { get; init; }
-    public string chat_id { get; init; } = string.Empty;
-    public string custom_prompt { get; init; } = string.Empty;
-    public bool enabled { get; init; }
-    public long added_date { get; init; }
-    public string? added_by { get; init; }
-    public string? notes { get; init; }
-}
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
 
-public record ChatPromptRecord(
-    long Id,
-    string ChatId,
-    string CustomPrompt,
-    bool Enabled,
-    long AddedDate,
-    string? AddedBy,
-    string? Notes
-);
+    [Column("chat_id")]
+    [Required]
+    public string ChatId { get; set; } = string.Empty;
+
+    [Column("custom_prompt")]
+    [Required]
+    public string CustomPrompt { get; set; } = string.Empty;
+
+    [Column("enabled")]
+    public bool Enabled { get; set; }
+
+    [Column("added_date")]
+    public long AddedDate { get; set; }
+
+    [Column("added_by")]
+    public string? AddedBy { get; set; }
+
+    [Column("notes")]
+    public string? Notes { get; set; }
+}

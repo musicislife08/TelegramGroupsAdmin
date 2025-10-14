@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
@@ -12,41 +15,39 @@ public enum UserActionType
     Unban = 4
 }
 
-// DTO for UserActionRecord (PostgreSQL user_actions table)
-//
-// CRITICAL: All DTO properties MUST use snake_case to match PostgreSQL column names exactly.
-// Dapper uses init-only property setters for materialization.
-// All actions are global - origin chat can be tracked via message_id FK
-public record UserActionRecordDto
+/// <summary>
+/// EF Core entity for user_actions table
+/// All actions are global - origin chat can be tracked via message_id FK
+/// </summary>
+[Table("user_actions")]
+public class UserActionRecord
 {
-    public long id { get; init; }
-    public long user_id { get; init; }
-    public int action_type { get; init; }
-    public long? message_id { get; init; }
-    public string? issued_by { get; init; }
-    public long issued_at { get; init; }
-    public long? expires_at { get; init; }
-    public string? reason { get; init; }
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
 
-    public UserActionRecord ToUserActionRecord() => new UserActionRecord(
-        Id: id,
-        UserId: user_id,
-        ActionType: action_type,
-        MessageId: message_id,
-        IssuedBy: issued_by,
-        IssuedAt: issued_at,
-        ExpiresAt: expires_at,
-        Reason: reason
-    );
+    [Column("user_id")]
+    public long UserId { get; set; }
+
+    [Column("action_type")]
+    public int ActionType { get; set; }
+
+    [Column("message_id")]
+    public long? MessageId { get; set; }
+
+    [Column("issued_by")]
+    public string? IssuedBy { get; set; }
+
+    [Column("issued_at")]
+    public long IssuedAt { get; set; }
+
+    [Column("expires_at")]
+    public long? ExpiresAt { get; set; }
+
+    [Column("reason")]
+    public string? Reason { get; set; }
+
+    // Navigation property
+    [ForeignKey(nameof(MessageId))]
+    public virtual MessageRecord? Message { get; set; }
 }
-
-public record UserActionRecord(
-    long Id,
-    long UserId,
-    int ActionType,
-    long? MessageId,
-    string? IssuedBy,
-    long IssuedAt,
-    long? ExpiresAt,
-    string? Reason
-);

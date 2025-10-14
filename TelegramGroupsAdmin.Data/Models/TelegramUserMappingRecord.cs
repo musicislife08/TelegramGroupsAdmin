@@ -1,24 +1,36 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// DTO for telegram_user_mappings table (database DTO)
+/// EF Core entity for telegram_user_mappings table
 /// Maps Telegram users to web app users for permission checking
 /// </summary>
-public record TelegramUserMappingRecordDto
+[Table("telegram_user_mappings")]
+public class TelegramUserMappingRecord
 {
-    public long id { get; init; }
-    public long telegram_id { get; init; }
-    public string? telegram_username { get; init; }
-    public string user_id { get; init; } = string.Empty;
-    public long linked_at { get; init; }
-    public bool is_active { get; init; }
-}
+    [Key]
+    [Column("id")]
+    public long Id { get; set; }
 
-public record TelegramUserMappingRecord(
-    long Id,
-    long TelegramId,
-    string? TelegramUsername,
-    string UserId,
-    long LinkedAt,
-    bool IsActive
-);
+    [Column("telegram_id")]
+    public long TelegramId { get; set; }
+
+    [Column("telegram_username")]
+    public string? TelegramUsername { get; set; }
+
+    [Column("user_id")]
+    [Required]
+    public string UserId { get; set; } = string.Empty;
+
+    [Column("linked_at")]
+    public long LinkedAt { get; set; }
+
+    [Column("is_active")]
+    public bool IsActive { get; set; }
+
+    // Navigation property
+    [ForeignKey(nameof(UserId))]
+    public virtual UserRecord? User { get; set; }
+}
