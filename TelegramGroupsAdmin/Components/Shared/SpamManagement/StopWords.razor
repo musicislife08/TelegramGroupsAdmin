@@ -215,16 +215,17 @@
         }
     }
 
-    private static StopWordItem MapToStopWordItem(dynamic stopWord)
+    private static StopWordItem MapToStopWordItem(TelegramGroupsAdmin.SpamDetection.Models.StopWord stopWord)
     {
+        // Convert SpamDetection domain model to Blazor dialog model
         return new StopWordItem
         {
-            Id = stopWord.id,
-            Word = stopWord.word,
-            Enabled = stopWord.enabled,
-            AddedDate = DateTimeOffset.FromUnixTimeSeconds(stopWord.added_date).DateTime,
-            AddedBy = stopWord.added_by,
-            Notes = stopWord.notes
+            Id = stopWord.Id,
+            Word = stopWord.Word,
+            Enabled = stopWord.Enabled,
+            AddedDate = DateTimeOffset.FromUnixTimeSeconds(stopWord.AddedDate).DateTime,
+            AddedBy = stopWord.AddedBy,
+            Notes = stopWord.Notes
         };
     }
 

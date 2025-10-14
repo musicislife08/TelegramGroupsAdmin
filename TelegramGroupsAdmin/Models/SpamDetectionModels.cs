@@ -28,20 +28,6 @@ public record TrainingStats(
 );
 
 /// <summary>
-
-/// <summary>
-/// Stop word for UI display
-/// </summary>
-public record StopWord(
-    long Id,
-    string Word,
-    bool Enabled,
-    long AddedDate,
-    string? AddedBy,
-    string? Notes
-);
-
-/// <summary>
 /// Report record for UI display (user-submitted reports from /report command OR web UI)
 /// Phase 2.6: Supports both Telegram /report command and web UI "Flag for Review" button
 /// </summary>

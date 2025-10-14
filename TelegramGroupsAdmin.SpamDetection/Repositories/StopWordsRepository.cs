@@ -121,14 +121,14 @@ public class StopWordsRepository : IStopWordsRepository
     /// <summary>
     /// Get all stop words (enabled and disabled) with full details
     /// </summary>
-    public async Task<IEnumerable<StopWordWithEmailDto>> GetAllStopWordsAsync(CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<Models.StopWord>> GetAllStopWordsAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             // Query with LEFT JOIN to users table to get email for AddedBy
-            // Returns Data DTOs which will be converted to UI models by the caller
-            var stopWords = await context.StopWords
+            // Convert DTO to domain model before returning (DTO stays internal)
+            var stopWordDtos = await context.StopWords
                 .AsNoTracking()
                 .GroupJoin(
                     context.Users,
@@ -142,12 +142,12 @@ public class StopWordsRepository : IStopWordsRepository
                 .OrderBy(sw => sw.StopWord.Word)
                 .ToListAsync(cancellationToken);
 
-            return stopWords;
+            return stopWordDtos.Select(dto => dto.ToModel());
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve all stop words");
-            return Enumerable.Empty<StopWordWithEmailDto>();
+            return Enumerable.Empty<Models.StopWord>();
         }
     }
 
