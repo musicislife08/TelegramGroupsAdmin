@@ -205,9 +205,10 @@ public class SpacingSpamCheck : ISpamCheck
     /// </summary>
     private static bool HasLetterSpacing(string message)
     {
-        // Look for pattern of single letters separated by single spaces
-        // Match: "l i k e" or "t h i s"
-        return Regex.IsMatch(message, @"\b[a-zA-Z]\s[a-zA-Z]\s[a-zA-Z]", RegexOptions.IgnoreCase);
+        // Look for pattern of 4+ single letters separated by single spaces
+        // Match: "l i k e  t h i s" but not "I got my car"
+        // Requiring 4+ letters reduces false positives from natural English with "I" and "a"
+        return Regex.IsMatch(message, @"\b[a-zA-Z]\s[a-zA-Z]\s[a-zA-Z]\s[a-zA-Z]", RegexOptions.IgnoreCase);
     }
 
     /// <summary>
@@ -271,6 +272,7 @@ public class SpacingSpamCheck : ISpamCheck
 
     /// <summary>
     /// Calculate confidence score based on simplified spacing analysis
+    /// Reduces confidence for pattern-only detections to minimize false positives
     /// </summary>
     private static int CalculateConfidence(SpacingAnalysis analysis)
     {
@@ -280,42 +282,58 @@ public class SpacingSpamCheck : ISpamCheck
         }
 
         var confidence = 0;
+        var hasHighRatios = false;
 
         // Core ratio scoring (simplified)
         if (analysis.SpaceRatio >= 0.4)
         {
             confidence += 40;
+            hasHighRatios = true;
         }
         else if (analysis.SpaceRatio >= 0.3)
         {
             confidence += 25;
+            hasHighRatios = true;
         }
 
         if (analysis.ShortWordRatio >= 0.8)
         {
             confidence += 35;
+            hasHighRatios = true;
         }
         else if (analysis.ShortWordRatio >= 0.7)
         {
             confidence += 20;
+            hasHighRatios = true;
         }
 
-        // High scoring for core patterns
+        // Pattern scoring
+        var patternScore = 0;
         foreach (var pattern in analysis.SuspiciousPatterns)
         {
             if (pattern.Contains("invisible", StringComparison.OrdinalIgnoreCase))
             {
-                confidence += 50; // Invisible chars are highly suspicious
+                patternScore += 50; // Invisible chars are highly suspicious
             }
             else if (pattern.Contains("separated", StringComparison.OrdinalIgnoreCase))
             {
-                confidence += 40; // Letter spacing is very suspicious
+                patternScore += 40; // Letter spacing is very suspicious
             }
             else
             {
-                confidence += 20; // Other patterns
+                patternScore += 20; // Other patterns
             }
         }
+
+        // Apply pattern score reduction if no high ratios
+        // Pattern-only detections get 50% confidence penalty to reduce false positives
+        // This allows OpenAI veto and other checks to have more weight
+        if (!hasHighRatios && analysis.SuspiciousPatterns.Any())
+        {
+            patternScore = (int)(patternScore * 0.5);
+        }
+
+        confidence += patternScore;
 
         return Math.Min(100, confidence);
     }

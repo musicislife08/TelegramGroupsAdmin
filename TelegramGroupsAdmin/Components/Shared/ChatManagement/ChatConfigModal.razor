@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.SpamDetection.Repositories
 @using TelegramGroupsAdmin.SpamDetection.Configuration
 @using TelegramGroupsAdmin.Repositories
+@using TelegramGroupsAdmin.Components.Shared.SpamManagement
 @using Telegram.Bot
 @inject TelegramAdminBotService BotService
 @inject ISnackbar Snackbar
@@ -93,101 +94,50 @@
 
             <!-- Spam Detection Tab -->
             <MudTabPanel Text="Spam Detection" Icon="@Icons.Material.Filled.Shield">
-                @if (_loadingConfig)
-                {
-                    <MudProgressCircular Indeterminate="true" />
-                }
-                else
-                {
-                    <MudStack Spacing="3">
-                        <!-- Configuration Mode Selection -->
-                        <MudPaper Elevation="1" Class="pa-4">
-                            <MudText Typo="Typo.h6" GutterBottom="true">Configuration Mode</MudText>
-                            <MudRadioGroup @bind-Value="_useCustomConfig" @bind-Value:after="LoadConfigAsync" T="bool">
-                                <MudRadio Value="false" T="bool">Use Global Configuration</MudRadio>
-                                <MudRadio Value="true" T="bool">Use Custom Configuration for this Chat</MudRadio>
-                            </MudRadioGroup>
+                <MudStack Spacing="3">
+                    <!-- Configuration Mode Selection -->
+                    <MudPaper Elevation="1" Class="pa-4">
+                        <MudText Typo="Typo.h6" GutterBottom="true">Configuration Mode</MudText>
+                        <MudRadioGroup @bind-Value="_useCustomConfig" @bind-Value:after="OnConfigModeChanged" T="bool">
+                            <MudRadio Value="false" T="bool">Use Global Configuration</MudRadio>
+                            <MudRadio Value="true" T="bool">Use Custom Configuration for this Chat</MudRadio>
+                        </MudRadioGroup>
 
-                            @if (!_useCustomConfig && ChatInfo.HasCustomSpamConfig)
-                            {
-                                <MudAlert Severity="Severity.Info" Class="mt-2">
-                                    This chat currently has a custom configuration. Switching to global will delete the custom settings.
-                                </MudAlert>
-                            }
-                        </MudPaper>
-
-                        @if (_useCustomConfig && _chatConfig != null)
+                        @if (!_useCustomConfig && ChatInfo.HasCustomSpamConfig)
                         {
-                            <!-- General Settings -->
-                            <MudPaper Elevation="1" Class="pa-4">
-                                <MudText Typo="Typo.h6" GutterBottom="true">General Settings</MudText>
-                                <MudStack Spacing="2">
-                                    <MudNumericField @bind-Value="_chatConfig.AutoBanThreshold"
-                                                    Label="Auto-Ban Threshold"
-                                                    HelperText="Confidence threshold for automatic ban (0-100)"
-                                                    Min="0" Max="100" />
-                                    <MudNumericField @bind-Value="_chatConfig.ReviewQueueThreshold"
-                                                    Label="Review Queue Threshold"
-                                                    HelperText="Minimum confidence to send to review queue (0-100)"
-                                                    Min="0" Max="100" />
-                                    <MudNumericField @bind-Value="_chatConfig.MinMessageLength"
-                                                    Label="Min Message Length"
-                                                    HelperText="Minimum length for expensive checks"
-                                                    Min="1" />
-                                </MudStack>
-                            </MudPaper>
-
-                            <!-- Algorithm Toggles -->
-                            <MudPaper Elevation="1" Class="pa-4">
-                                <MudText Typo="Typo.h6" GutterBottom="true">Detection Algorithms</MudText>
-                                <MudStack Spacing="2">
-                                    <MudSwitch @bind-Value="_chatConfig.StopWords.Enabled" Label="Stop Words Check" Color="Color.Primary" />
-                                    <MudSwitch @bind-Value="_chatConfig.Cas.Enabled" Label="CAS (Combot Anti-Spam)" Color="Color.Primary" />
-                                    <MudSwitch @bind-Value="_chatConfig.Similarity.Enabled" Label="Similarity Check" Color="Color.Primary" />
-                                    <MudSwitch @bind-Value="_chatConfig.Bayes.Enabled" Label="Bayes Classifier" Color="Color.Primary" />
-                                    <MudSwitch @bind-Value="_chatConfig.MultiLanguage.Enabled" Label="Multi-Language Detection" Color="Color.Primary" />
-                                    <MudSwitch @bind-Value="_chatConfig.Spacing.Enabled" Label="Spacing Analysis" Color="Color.Primary" />
-                                    <MudSwitch @bind-Value="_chatConfig.OpenAI.Enabled" Label="OpenAI Check" Color="Color.Primary" />
-                                    <MudSwitch @bind-Value="_chatConfig.UrlBlocklist.Enabled" Label="URL Blocklist" Color="Color.Primary" />
-                                    <MudSwitch @bind-Value="_chatConfig.ThreatIntel.Enabled" Label="Threat Intelligence" Color="Color.Primary" />
-                                    <MudSwitch @bind-Value="_chatConfig.ImageSpam.Enabled" Label="Image Spam Detection" Color="Color.Primary" />
-                                </MudStack>
-                            </MudPaper>
-
-                            <!-- OpenAI Custom Prompt -->
-                            @if (_chatConfig.OpenAI.Enabled)
-                            {
-                                <MudPaper Elevation="1" Class="pa-4">
-                                    <MudText Typo="Typo.h6" GutterBottom="true">OpenAI Custom Prompt</MudText>
-                                    <MudTextField @bind-Value="_chatConfig.OpenAI.SystemPrompt"
-                                                 Label="Custom System Prompt (Optional)"
-                                                 Lines="5"
-                                                 HelperText="Add chat-specific context for better spam detection" />
-                                </MudPaper>
-                            }
-
-                            <!-- Save Button -->
-                            <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                                      OnClick="SaveConfigAsync" Disabled="@_savingConfig" FullWidth="true">
-                                @if (_savingConfig)
-                                {
-                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                }
-                                else
-                                {
-                                    <span>Save Configuration</span>
-                                }
-                            </MudButton>
-                        }
-                        else if (!_useCustomConfig)
-                        {
-                            <MudAlert Severity="Severity.Info">
-                                This chat is using the global spam detection configuration.
-                                To customize settings for this chat specifically, enable "Use Custom Configuration" above.
+                            <MudAlert Severity="Severity.Info" Class="mt-2">
+                                This chat currently has a custom configuration. Switching to global will delete the custom settings.
                             </MudAlert>
                         }
-                    </MudStack>
-                }
+                    </MudPaper>
+
+                    @if (_useCustomConfig)
+                    {
+                        <!-- Reusable SpamDetectionConfig component for per-chat configuration -->
+                        <SpamDetectionConfig @ref="_spamConfigComponent" ChatId="@ChatInfo.Chat.ChatId" OnSaved="OnConfigSaved" />
+
+                        <!-- Save Button -->
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                  OnClick="SaveSpamConfigAsync" Disabled="@_savingConfig" FullWidth="true">
+                            @if (_savingConfig)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                <MudText Class="ms-2">Saving...</MudText>
+                            }
+                            else
+                            {
+                                <span>Save Configuration</span>
+                            }
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">
+                            This chat is using the global spam detection configuration.
+                            To customize settings for this chat specifically, enable "Use Custom Configuration" above.
+                        </MudAlert>
+                    }
+                </MudStack>
             </MudTabPanel>
 
             <!-- Admins Tab -->
@@ -209,12 +159,23 @@
 
                         <MudTable Items="@_admins" Dense="true" Hover="true">
                             <HeaderContent>
+                                <MudTh>Username</MudTh>
                                 <MudTh>Telegram ID</MudTh>
                                 <MudTh>Role</MudTh>
                                 <MudTh>Web App User</MudTh>
                                 <MudTh>Status</MudTh>
                             </HeaderContent>
                             <RowTemplate>
+                                <MudTd DataLabel="Username">
+                                    @if (!string.IsNullOrEmpty(context.Username))
+                                    {
+                                        <text>@@@context.Username</text>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">No username</MudText>
+                                    }
+                                </MudTd>
                                 <MudTd DataLabel="Telegram ID">@context.TelegramId</MudTd>
                                 <MudTd DataLabel="Role">
                                     @if (context.IsCreator)
@@ -271,10 +232,9 @@
     private ChatHealthStatus? _healthStatus;
 
     // Spam Detection Config
-    private bool _loadingConfig = true;
     private bool _savingConfig;
     private bool _useCustomConfig;
-    private SpamDetectionConfig? _chatConfig;
+    private SpamManagement.SpamDetectionConfig? _spamConfigComponent;
 
     // Admins Tab
     private bool _loadingAdmins = true;
@@ -285,7 +245,7 @@
     {
         _healthStatus = ChatInfo.HealthStatus;
         _useCustomConfig = ChatInfo.HasCustomSpamConfig;
-        await Task.WhenAll(LoadConfigAsync(), LoadAdminsAsync());
+        await LoadAdminsAsync();
     }
 
     private async Task LoadAdminsAsync()
@@ -327,38 +287,30 @@
         return dt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
     }
 
-    private async Task LoadConfigAsync()
+    private async Task OnConfigModeChanged()
     {
-        _loadingConfig = true;
-        try
+        if (!_useCustomConfig && ChatInfo.HasCustomSpamConfig)
         {
-            var chatIdStr = ChatInfo.Chat.ChatId.ToString();
+            // User switched from custom to global - delete custom config
+            await SaveConfigAsync();
+        }
+    }
 
-            if (_useCustomConfig)
-            {
-                // Try to load existing custom config
-                _chatConfig = await SpamConfigRepository.GetChatConfigAsync(chatIdStr);
+    private async Task SaveSpamConfigAsync()
+    {
+        if (_spamConfigComponent != null)
+        {
+            _savingConfig = true;
+            await _spamConfigComponent.SaveConfiguration();
+            _savingConfig = false;
+        }
+    }
 
-                // If no custom config exists yet, start with global as template
-                if (!ChatInfo.HasCustomSpamConfig)
-                {
-                    var globalConfig = await SpamConfigRepository.GetGlobalConfigAsync();
-                    _chatConfig = globalConfig;
-                }
-            }
-            else
-            {
-                _chatConfig = null;
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to load config: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _loadingConfig = false;
-        }
+    private Task OnConfigSaved()
+    {
+        // Config was saved by SpamDetectionConfig component
+        ChatInfo.HasCustomSpamConfig = true;
+        return Task.CompletedTask;
     }
 
     private async Task SaveConfigAsync()
@@ -368,14 +320,7 @@
         {
             var chatIdStr = ChatInfo.Chat.ChatId.ToString();
 
-            if (_useCustomConfig && _chatConfig != null)
-            {
-                // Save custom config
-                await SpamConfigRepository.UpdateChatConfigAsync(chatIdStr, _chatConfig);
-                ChatInfo.HasCustomSpamConfig = true;
-                Snackbar.Add("Configuration saved successfully", Severity.Success);
-            }
-            else if (!_useCustomConfig && ChatInfo.HasCustomSpamConfig)
+            if (!_useCustomConfig && ChatInfo.HasCustomSpamConfig)
             {
                 // Delete custom config (revert to global)
                 await SpamConfigRepository.DeleteChatConfigAsync(chatIdStr);

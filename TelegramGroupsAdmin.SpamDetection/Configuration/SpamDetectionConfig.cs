@@ -31,6 +31,12 @@ public class SpamDetectionConfig
     public int ReviewQueueThreshold { get; set; } = 50;
 
     /// <summary>
+    /// Training mode - forces all spam detections into review queue instead of auto-banning
+    /// Use this to validate spam detection is working correctly before enabling auto-ban
+    /// </summary>
+    public bool TrainingMode { get; set; } = false;
+
+    /// <summary>
     /// Stop words configuration
     /// </summary>
     public StopWordsConfig StopWords { get; set; } = new();
@@ -51,9 +57,14 @@ public class SpamDetectionConfig
     public BayesConfig Bayes { get; set; } = new();
 
     /// <summary>
-    /// Multi-language word detection configuration
+    /// Invisible character detection configuration
     /// </summary>
-    public MultiLanguageConfig MultiLanguage { get; set; } = new();
+    public InvisibleCharsConfig InvisibleChars { get; set; } = new();
+
+    /// <summary>
+    /// Foreign language translation configuration
+    /// </summary>
+    public TranslationConfig Translation { get; set; } = new();
 
     /// <summary>
     /// Abnormal spacing detection configuration
@@ -161,12 +172,23 @@ public class BayesConfig
 }
 
 /// <summary>
-/// Multi-language detection configuration (translation-based)
+/// Invisible character detection configuration
 /// </summary>
-public class MultiLanguageConfig
+public class InvisibleCharsConfig
 {
     /// <summary>
-    /// Whether multi-language check is enabled
+    /// Whether invisible character detection is enabled
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+}
+
+/// <summary>
+/// Foreign language translation configuration
+/// </summary>
+public class TranslationConfig
+{
+    /// <summary>
+    /// Whether translation is enabled
     /// </summary>
     public bool Enabled { get; set; } = true;
 
@@ -221,6 +243,13 @@ public class OpenAIConfig
     /// Whether OpenAI runs in veto mode (confirm spam) or enhancement mode (find spam)
     /// </summary>
     public bool VetoMode { get; set; } = true;
+
+    /// <summary>
+    /// Confidence threshold for triggering OpenAI veto (0-100)
+    /// OpenAI veto only runs if spam is detected with confidence below this threshold
+    /// Higher values = more vetos (more conservative), Lower values = fewer vetos (more aggressive)
+    /// </summary>
+    public int VetoThreshold { get; set; } = 95;
 
     /// <summary>
     /// Whether to check short messages with OpenAI

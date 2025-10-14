@@ -64,6 +64,12 @@ public static class ServiceCollectionExtensions
         services.AddRazorComponents()
             .AddInteractiveServerComponents();
 
+        // Configure SignalR Hub options for Blazor Server (increase message size for image paste)
+        services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(options =>
+        {
+            options.MaximumReceiveMessageSize = 20 * 1024 * 1024; // 20MB (allow for base64 overhead)
+        });
+
         services.AddMudServices();
         services.AddHttpContextAccessor();
 

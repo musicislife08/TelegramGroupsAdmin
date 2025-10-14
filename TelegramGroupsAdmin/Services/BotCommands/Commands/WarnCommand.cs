@@ -72,11 +72,10 @@ public class WarnCommand : IBotCommand
                 executorUserId = await telegramUserMappingRepository.GetUserIdByTelegramIdAsync(message.From.Id);
             }
 
-            // Save warning to user_actions
+            // Save warning to user_actions (all warnings are global)
             var warnAction = new UserActionRecord(
                 Id: 0,
                 UserId: targetUser.Id,
-                ChatIds: new[] { message.Chat.Id }, // Warn specific to this chat
                 ActionType: UserActionType.Warn,
                 MessageId: message.ReplyToMessage.MessageId,
                 IssuedBy: executorUserId, // Mapped from telegram_user_mappings (may be null if not linked)
@@ -119,11 +118,10 @@ public class WarnCommand : IBotCommand
                     }
                 }
 
-                // Save ban record
+                // Save ban record (all bans are global)
                 var banAction = new UserActionRecord(
                     Id: 0,
                     UserId: targetUser.Id,
-                    ChatIds: null, // Global ban
                     ActionType: UserActionType.Ban,
                     MessageId: message.ReplyToMessage.MessageId,
                     IssuedBy: null,

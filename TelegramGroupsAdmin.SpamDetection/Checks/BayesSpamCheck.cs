@@ -106,8 +106,12 @@ public class BayesSpamCheck : ISpamCheck
             var spamProbabilityPercent = spamProbability * 100;
             var isSpam = spamProbabilityPercent >= config.Bayes.MinSpamProbability;
 
-            // Adjust confidence based on certainty (how confident the classifier is)
-            var confidence = (int)(spamProbabilityPercent * certainty);
+            // Calculate confidence based on certainty and how far from threshold
+            // If spam: confidence = spamProbability * certainty
+            // If ham: confidence = (100 - spamProbability) * certainty
+            var confidence = isSpam
+                ? (int)(spamProbabilityPercent * certainty)
+                : (int)((100 - spamProbabilityPercent) * certainty);
 
             _logger.LogDebug("Bayes check for user {UserId}: SpamProbability={SpamProbability:F3}, Certainty={Certainty:F3}, Threshold={Threshold}, IsSpam={IsSpam}",
                 request.UserId, spamProbabilityPercent, certainty, config.Bayes.MinSpamProbability, isSpam);

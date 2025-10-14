@@ -150,7 +150,13 @@ public class SimilaritySpamCheck : ISpamCheck
 
             // Determine if message is spam based on similarity threshold
             var isSpam = maxSimilarity >= config.Similarity.Threshold;
-            var confidence = (int)(maxSimilarity * 100);
+
+            // Calculate confidence based on similarity and spam decision
+            // If spam: confidence = similarity * 100 (how similar to known spam)
+            // If not spam: confidence = (1 - similarity) * 100 (how dissimilar from spam)
+            var confidence = isSpam
+                ? (int)(maxSimilarity * 100)
+                : (int)((1.0 - maxSimilarity) * 100);
 
             // Update detection count for matched sample
             if (isSpam && matchedSampleId > 0)

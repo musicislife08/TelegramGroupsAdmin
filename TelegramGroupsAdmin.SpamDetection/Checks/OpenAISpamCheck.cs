@@ -344,7 +344,7 @@ public class OpenAISpamCheck : ISpamCheck
                     CheckName = CheckName,
                     IsSpam = jsonResponse.IsSpam,
                     Details = details,
-                    Confidence = jsonResponse.IsSpam ? confidence : 0
+                    Confidence = confidence // Use confidence for both spam and non-spam (veto has high confidence too)
                 };
             }
         }

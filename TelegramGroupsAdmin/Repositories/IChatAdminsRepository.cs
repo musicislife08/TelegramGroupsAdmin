@@ -32,7 +32,7 @@ public interface IChatAdminsRepository
     /// <summary>
     /// Upsert admin record (insert or update if exists)
     /// </summary>
-    Task UpsertAsync(long chatId, long telegramId, bool isCreator);
+    Task UpsertAsync(long chatId, long telegramId, bool isCreator, string? username = null);
 
     /// <summary>
     /// Mark admin as demoted (soft delete via is_active=false)

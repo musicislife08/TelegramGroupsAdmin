@@ -45,7 +45,10 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Chat Name">
-                    @context.Chat.ChatName
+                    <div>
+                        <MudText Typo="Typo.body2">@context.Chat.ChatName</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.Chat.ChatId</MudText>
+                    </div>
                     @if (!context.Chat.IsActive)
                     {
                         <MudChip T="string" Size="Size.Small" Color="Color.Default">Inactive</MudChip>

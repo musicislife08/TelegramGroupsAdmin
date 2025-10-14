@@ -27,10 +27,10 @@ public class UserActionsRepository : IUserActionsRepository
 
         const string sql = """
             INSERT INTO user_actions (
-                user_id, chat_ids, action_type, message_id,
+                user_id, action_type, message_id,
                 issued_by, issued_at, expires_at, reason
             ) VALUES (
-                @UserId, @ChatIds, @ActionType, @MessageId,
+                @UserId, @ActionType, @MessageId,
                 @IssuedBy, @IssuedAt, @ExpiresAt, @Reason
             )
             RETURNING id;
@@ -39,7 +39,6 @@ public class UserActionsRepository : IUserActionsRepository
         var id = await connection.ExecuteScalarAsync<long>(sql, new
         {
             action.UserId,
-            action.ChatIds,
             action.ActionType,
             action.MessageId,
             action.IssuedBy,
@@ -49,10 +48,9 @@ public class UserActionsRepository : IUserActionsRepository
         });
 
         _logger.LogInformation(
-            "Inserted user action {ActionType} for user {UserId} (chat: {ChatIds}, expires: {ExpiresAt})",
+            "Inserted user action {ActionType} for user {UserId} (expires: {ExpiresAt})",
             action.ActionType,
             action.UserId,
-            action.ChatIds != null ? string.Join(",", action.ChatIds) : "global",
             action.ExpiresAt?.ToString() ?? "never");
 
         return id;
@@ -63,7 +61,7 @@ public class UserActionsRepository : IUserActionsRepository
         await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
-            SELECT id, user_id, chat_ids, action_type, message_id,
+            SELECT id, user_id, action_type, message_id,
                    issued_by, issued_at, expires_at, reason
             FROM user_actions
             WHERE id = @Id;
@@ -81,7 +79,7 @@ public class UserActionsRepository : IUserActionsRepository
         await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
-            SELECT id, user_id, chat_ids, action_type, message_id,
+            SELECT id, user_id, action_type, message_id,
                    issued_by, issued_at, expires_at, reason
             FROM user_actions
             WHERE user_id = @UserId
@@ -100,7 +98,7 @@ public class UserActionsRepository : IUserActionsRepository
         await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
-            SELECT id, user_id, chat_ids, action_type, message_id,
+            SELECT id, user_id, action_type, message_id,
                    issued_by, issued_at, expires_at, reason
             FROM user_actions
             WHERE user_id = @UserId
@@ -121,7 +119,7 @@ public class UserActionsRepository : IUserActionsRepository
         await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
-            SELECT id, user_id, chat_ids, action_type, message_id,
+            SELECT id, user_id, action_type, message_id,
                    issued_by, issued_at, expires_at, reason
             FROM user_actions
             WHERE action_type = @ActionType
@@ -141,25 +139,20 @@ public class UserActionsRepository : IUserActionsRepository
     {
         await using var connection = new NpgsqlConnection(_connectionString);
 
-        // Check for active ban
-        // chatId NULL = check global ban, otherwise check specific chat or global
+        // Check for active ban (all bans are global now)
         const string sql = """
             SELECT EXISTS (
                 SELECT 1 FROM user_actions
                 WHERE user_id = @UserId
                   AND action_type = @ActionType
                   AND (expires_at IS NULL OR expires_at > @Now)
-                  AND (
-                      chat_ids IS NULL
-                      OR @ChatId = ANY(chat_ids)
-                  )
             );
             """;
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var isBanned = await connection.ExecuteScalarAsync<bool>(
             sql,
-            new { UserId = userId, ChatId = chatId, Now = now, ActionType = (int)Models.UserActionType.Ban });
+            new { UserId = userId, Now = now, ActionType = (int)Models.UserActionType.Ban });
 
         return isBanned;
     }
@@ -168,24 +161,20 @@ public class UserActionsRepository : IUserActionsRepository
     {
         await using var connection = new NpgsqlConnection(_connectionString);
 
-        // Check for active 'trust' action
+        // Check for active 'trust' action (all trusts are global now)
         const string sql = """
             SELECT EXISTS (
                 SELECT 1 FROM user_actions
                 WHERE user_id = @UserId
                   AND action_type = @ActionType
                   AND (expires_at IS NULL OR expires_at > @Now)
-                  AND (
-                      chat_ids IS NULL
-                      OR @ChatId = ANY(chat_ids)
-                  )
             );
             """;
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var isTrusted = await connection.ExecuteScalarAsync<bool>(
             sql,
-            new { UserId = userId, ChatId = chatId, Now = now, ActionType = (int)Models.UserActionType.Trust });
+            new { UserId = userId, Now = now, ActionType = (int)Models.UserActionType.Trust });
 
         return isTrusted;
     }
@@ -194,23 +183,19 @@ public class UserActionsRepository : IUserActionsRepository
     {
         await using var connection = new NpgsqlConnection(_connectionString);
 
-        // Count active warns for user
+        // Count active warns for user (all warns are global now)
         const string sql = """
             SELECT COUNT(*)
             FROM user_actions
             WHERE user_id = @UserId
               AND action_type = @ActionType
-              AND (expires_at IS NULL OR expires_at > @Now)
-              AND (
-                  chat_ids IS NULL
-                  OR @ChatId = ANY(chat_ids)
-              );
+              AND (expires_at IS NULL OR expires_at > @Now);
             """;
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var count = await connection.ExecuteScalarAsync<int>(
             sql,
-            new { UserId = userId, ChatId = chatId, Now = now, ActionType = (int)Models.UserActionType.Warn });
+            new { UserId = userId, Now = now, ActionType = (int)Models.UserActionType.Warn });
 
         return count;
     }
@@ -235,59 +220,48 @@ public class UserActionsRepository : IUserActionsRepository
     {
         await using var connection = new NpgsqlConnection(_connectionString);
 
-        // Expire all active bans for user
+        // Expire all active bans for user (all bans are global now)
         const string sql = """
             UPDATE user_actions
             SET expires_at = @Now
             WHERE user_id = @UserId
               AND action_type = @ActionType
-              AND (expires_at IS NULL OR expires_at > @Now)
-              AND (
-                  @ChatId IS NULL
-                  OR chat_ids IS NULL
-                  OR @ChatId = ANY(chat_ids)
-              );
+              AND (expires_at IS NULL OR expires_at > @Now);
             """;
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var count = await connection.ExecuteAsync(
             sql,
-            new { UserId = userId, ChatId = chatId, Now = now, ActionType = (int)Models.UserActionType.Ban });
+            new { UserId = userId, Now = now, ActionType = (int)Models.UserActionType.Ban });
 
         _logger.LogInformation(
-            "Expired {Count} bans for user {UserId} (chat: {ChatId})",
+            "Expired {Count} bans for user {UserId}",
             count,
-            userId,
-            chatId?.ToString() ?? "all");
+            userId);
     }
 
     public async Task ExpireTrustsForUserAsync(long userId, long? chatId = null)
     {
         await using var connection = new NpgsqlConnection(_connectionString);
 
+        // Expire all active trusts for user (all trusts are global now)
         const string sql = """
             UPDATE user_actions
             SET expires_at = @Now
             WHERE user_id = @UserId
               AND action_type = @ActionType
-              AND (expires_at IS NULL OR expires_at > @Now)
-              AND (
-                  @ChatId IS NULL
-                  OR chat_ids IS NULL
-                  OR @ChatId = ANY(chat_ids)
-              );
+              AND (expires_at IS NULL OR expires_at > @Now);
             """;
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var count = await connection.ExecuteAsync(
             sql,
-            new { UserId = userId, ChatId = chatId, Now = now, ActionType = (int)Models.UserActionType.Trust });
+            new { UserId = userId, Now = now, ActionType = (int)Models.UserActionType.Trust });
 
         _logger.LogInformation(
-            "Expired {Count} trusts for user {UserId} (chat: {ChatId})",
+            "Expired {Count} trusts for user {UserId}",
             count,
-            userId,
-            chatId?.ToString() ?? "all");
+            userId);
     }
 
     public async Task<List<UserActionRecord>> GetRecentAsync(int limit = 100)
@@ -295,7 +269,7 @@ public class UserActionsRepository : IUserActionsRepository
         await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
-            SELECT id, user_id, chat_ids, action_type, message_id,
+            SELECT id, user_id, action_type, message_id,
                    issued_by, issued_at, expires_at, reason
             FROM user_actions
             ORDER BY issued_at DESC
@@ -305,26 +279,6 @@ public class UserActionsRepository : IUserActionsRepository
         var dtos = await connection.QueryAsync<DataModels.UserActionRecordDto>(
             sql,
             new { Limit = limit });
-
-        return dtos.Select(dto => dto.ToUserActionRecord().ToUiModel()).ToList();
-    }
-
-    public async Task<List<UserActionRecord>> GetByChatIdAsync(long chatId)
-    {
-        await using var connection = new NpgsqlConnection(_connectionString);
-
-        const string sql = """
-            SELECT id, user_id, chat_ids, action_type, message_id,
-                   issued_by, issued_at, expires_at, reason
-            FROM user_actions
-            WHERE chat_ids IS NULL
-               OR @ChatId = ANY(chat_ids)
-            ORDER BY issued_at DESC;
-            """;
-
-        var dtos = await connection.QueryAsync<DataModels.UserActionRecordDto>(
-            sql,
-            new { ChatId = chatId });
 
         return dtos.Select(dto => dto.ToUserActionRecord().ToUiModel()).ToList();
     }
@@ -358,7 +312,7 @@ public class UserActionsRepository : IUserActionsRepository
         await using var connection = new NpgsqlConnection(_connectionString);
 
         const string sql = """
-            SELECT id, user_id, chat_ids, action_type, message_id,
+            SELECT id, user_id, action_type, message_id,
                    issued_by, issued_at, expires_at, reason
             FROM user_actions
             WHERE user_id = @UserId

@@ -81,10 +81,11 @@ public class SpamDetectorFactory : ISpamDetectorFactory
                     var vetoResult = await openAICheck.CheckAsync(vetoRequest, cancellationToken);
                     checkResults.Add(vetoResult);
 
-                    // If OpenAI vetoes the spam detection, override the result
-                    if (!vetoResult.IsSpam && vetoResult.Confidence == 0)
+                    // If OpenAI vetoes the spam detection (says it's not spam), override the result
+                    if (!vetoResult.IsSpam)
                     {
-                        _logger.LogInformation("OpenAI vetoed spam detection for user {UserId}", request.UserId);
+                        _logger.LogInformation("OpenAI vetoed spam detection for user {UserId} with {Confidence}% confidence",
+                            request.UserId, vetoResult.Confidence);
                         return CreateVetoedResult(checkResults, vetoResult);
                     }
                 }
@@ -104,17 +105,32 @@ public class SpamDetectorFactory : ISpamDetectorFactory
 
         var checkResults = new List<SpamCheckResponse>();
 
-        // Preprocess: Check for invisible characters and translate if needed
-        var (processedRequest, invisibleCharResult) = await PreprocessMessageAsync(request, config, cancellationToken);
+        // Run all checks in two phases:
+        // Phase 1: Run InvisibleChars check on ORIGINAL message (before translation)
+        // Phase 2: Translate, then run all other checks on translated message
 
-        // Add invisible character check result if applicable
-        if (invisibleCharResult != null)
+        var invisibleCharsCheck = _spamChecks.FirstOrDefault(check => check.CheckName == "InvisibleChars");
+        if (invisibleCharsCheck != null && invisibleCharsCheck.ShouldExecute(request))
         {
-            checkResults.Add(invisibleCharResult);
+            try
+            {
+                _logger.LogDebug("Running InvisibleChars on original message for user {UserId}", request.UserId);
+                var result = await invisibleCharsCheck.CheckAsync(request, cancellationToken);
+                checkResults.Add(result);
+                _logger.LogDebug("InvisibleChars result: IsSpam={IsSpam}, Confidence={Confidence}",
+                    result.IsSpam, result.Confidence);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error running InvisibleChars for user {UserId}", request.UserId);
+            }
         }
 
-        // Run all checks except OpenAI (MultiLanguage is already handled in preprocessing)
-        var checks = _spamChecks.Where(check => check.CheckName != "OpenAI" && check.CheckName != "MultiLanguage").ToList();
+        // Preprocess: Translate foreign language if needed
+        var processedRequest = await PreprocessMessageAsync(request, config, cancellationToken);
+
+        // Run all other checks on potentially translated message
+        var checks = _spamChecks.Where(check => check.CheckName != "OpenAI" && check.CheckName != "InvisibleChars").ToList();
 
         foreach (var check in checks)
         {
@@ -163,8 +179,8 @@ public class SpamDetectorFactory : ISpamDetectorFactory
             ? spamResults.OrderByDescending(r => r.Confidence).First().Details
             : "No spam detected";
 
-        // Should veto if spam detected but confidence is not extremely high
-        var shouldVeto = isSpam && maxConfidence < 95 && config.OpenAI.VetoMode;
+        // Should veto if spam detected but confidence is below veto threshold
+        var shouldVeto = isSpam && maxConfidence < config.OpenAI.VetoThreshold && config.OpenAI.VetoMode;
 
         var result = new SpamDetectionResult
         {
@@ -191,14 +207,14 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     {
         return new SpamDetectionResult
         {
-            IsSpam = false, // Vetoed
-            MaxConfidence = 0,
-            AvgConfidence = 0,
-            SpamFlags = 0,
+            IsSpam = false, // Vetoed by OpenAI
+            MaxConfidence = vetoResult.Confidence, // OpenAI's confidence that it's NOT spam
+            AvgConfidence = vetoResult.Confidence,
+            SpamFlags = 0, // Veto overrides all flags
             CheckResults = checkResults,
             PrimaryReason = vetoResult.Details,
             RecommendedAction = SpamAction.Allow,
-            ShouldVeto = false
+            ShouldVeto = false // Veto already executed
         };
     }
 
@@ -219,36 +235,16 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     }
 
     /// <summary>
-    /// Preprocess message: check for invisible characters and translate if foreign language
+    /// Preprocess message: translate foreign languages to English if needed
     /// </summary>
-    /// <returns>Tuple of (processed request with potentially translated text, invisible char check result if applicable)</returns>
-    private async Task<(SpamCheckRequest processedRequest, SpamCheckResponse? invisibleCharResult)> PreprocessMessageAsync(
+    /// <returns>Request with potentially translated text</returns>
+    private async Task<SpamCheckRequest> PreprocessMessageAsync(
         SpamCheckRequest request,
         SpamDetectionConfig config,
         CancellationToken cancellationToken)
     {
-        SpamCheckResponse? invisibleCharResult = null;
-
-        // Check for invisible characters first (immediate spam indicator)
-        if (config.MultiLanguage.Enabled && !string.IsNullOrWhiteSpace(request.Message))
-        {
-            var invisibleChars = CountInvisibleCharacters(request.Message);
-            if (invisibleChars > 0)
-            {
-                _logger.LogWarning("Detected {Count} invisible characters in message from user {UserId}", invisibleChars, request.UserId);
-                invisibleCharResult = new SpamCheckResponse
-                {
-                    CheckName = "InvisibleChars",
-                    IsSpam = true,
-                    Details = $"Contains {invisibleChars} invisible/hidden characters",
-                    Confidence = 90
-                };
-                // Still continue with translation in case there's legitimate foreign text + invisible chars
-            }
-        }
-
         // Translate foreign language to English if enabled
-        if (config.MultiLanguage.Enabled && !string.IsNullOrWhiteSpace(request.Message) && request.Message.Length >= 20)
+        if (config.Translation.Enabled && !string.IsNullOrWhiteSpace(request.Message) && request.Message.Length >= 20)
         {
             // Quick check: if message is mostly Latin script, likely English - skip expensive OpenAI translation
             if (IsLikelyLatinScript(request.Message))
@@ -267,7 +263,7 @@ public class SpamDetectorFactory : ISpamDetectorFactory
                             translationResult.DetectedLanguage, request.UserId);
 
                         // Return request with translated text - all subsequent checks will use this
-                        return (request with { Message = translationResult.TranslatedText }, invisibleCharResult);
+                        return request with { Message = translationResult.TranslatedText };
                     }
                 }
                 catch (Exception ex)
@@ -279,25 +275,9 @@ public class SpamDetectorFactory : ISpamDetectorFactory
         }
 
         // No translation needed or failed - return original request
-        return (request, invisibleCharResult);
+        return request;
     }
 
-    /// <summary>
-    /// Count invisible/zero-width characters that might be used to hide spam
-    /// </summary>
-    private static int CountInvisibleCharacters(string message)
-    {
-        var invisibleChars = new[]
-        {
-            '\u200B', // Zero Width Space
-            '\u200C', // Zero Width Non-Joiner
-            '\u200D', // Zero Width Joiner
-            '\u2060', // Word Joiner
-            '\uFEFF'  // Zero Width No-Break Space
-        };
-
-        return message.Count(c => invisibleChars.Contains(c));
-    }
 
     /// <summary>
     /// Check if message is primarily Latin/ASCII script (likely English) to avoid unnecessary OpenAI translation

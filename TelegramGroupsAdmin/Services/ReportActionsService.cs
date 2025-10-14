@@ -110,11 +110,10 @@ public class ReportActionsService : IReportActionsService
                 chatId: report.ChatId,
                 userId: message.UserId);
 
-            // Record ban action
+            // Record ban action (all bans are global)
             var banAction = new UserActionRecord(
                 Id: 0,
                 UserId: message.UserId,
-                ChatIds: new[] { report.ChatId },
                 ActionType: UserActionType.Ban,
                 MessageId: report.MessageId,
                 IssuedBy: $"admin_{reviewerId}",
@@ -186,11 +185,10 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Message {report.MessageId} not found");
         }
 
-        // Record warn action
+        // Record warn action (all warnings are global)
         var warnAction = new UserActionRecord(
             Id: 0,
             UserId: message.UserId,
-            ChatIds: new[] { report.ChatId },
             ActionType: UserActionType.Warn,
             MessageId: report.MessageId,
             IssuedBy: $"admin_{reviewerId}",

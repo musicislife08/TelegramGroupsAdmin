@@ -10,15 +10,16 @@ namespace TelegramGroupsAdmin.Repositories;
 internal static class ModelMappings
 {
     // ChatAdmin mappings
-    public static UiModels.ChatAdmin ToUiModel(this DataModels.ChatAdminRecord data) => new()
+    public static UiModels.ChatAdmin ToUiModel(this DataModels.ChatAdminRecordDto data) => new()
     {
-        Id = data.Id,
-        ChatId = data.ChatId,
-        TelegramId = data.TelegramId,
-        IsCreator = data.IsCreator,
-        PromotedAt = data.PromotedAt,
-        LastVerifiedAt = data.LastVerifiedAt,
-        IsActive = data.IsActive
+        Id = data.id,
+        ChatId = data.chat_id,
+        TelegramId = data.telegram_id,
+        Username = data.username,
+        IsCreator = data.is_creator,
+        PromotedAt = data.promoted_at,
+        LastVerifiedAt = data.last_verified_at,
+        IsActive = data.is_active
     };
 
     public static DataModels.ChatAdminRecordDto ToDataModel(this UiModels.ChatAdmin ui) => new()
@@ -26,6 +27,7 @@ internal static class ModelMappings
         id = ui.Id,
         chat_id = ui.ChatId,
         telegram_id = ui.TelegramId,
+        username = ui.Username,
         is_creator = ui.IsCreator,
         promoted_at = ui.PromotedAt,
         last_verified_at = ui.LastVerifiedAt,
@@ -319,11 +321,10 @@ internal static class ModelMappings
         AddedBy: ui.AddedBy
     );
 
-    // User Action mappings
+    // User Action mappings (all actions are global now)
     public static UiModels.UserActionRecord ToUiModel(this DataModels.UserActionRecord data) => new(
         Id: data.Id,
         UserId: data.UserId,
-        ChatIds: data.ChatIds,
         ActionType: (UiModels.UserActionType)data.ActionType,
         MessageId: data.MessageId,
         IssuedBy: data.IssuedBy,
@@ -335,7 +336,6 @@ internal static class ModelMappings
     public static DataModels.UserActionRecord ToDataModel(this UiModels.UserActionRecord ui) => new(
         Id: ui.Id,
         UserId: ui.UserId,
-        ChatIds: ui.ChatIds,
         ActionType: (int)ui.ActionType,
         MessageId: ui.MessageId,
         IssuedBy: ui.IssuedBy,

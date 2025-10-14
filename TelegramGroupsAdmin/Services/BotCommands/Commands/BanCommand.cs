@@ -96,11 +96,10 @@ public class BanCommand : IBotCommand
                 executorUserId = await telegramUserMappingRepository.GetUserIdByTelegramIdAsync(message.From.Id);
             }
 
-            // Save ban record to user_actions (global ban - chatIds = null)
+            // Save ban record to user_actions (all bans are global)
             var banAction = new UserActionRecord(
                 Id: 0,
                 UserId: targetUser.Id,
-                ChatIds: null, // NULL = global ban across all chats
                 ActionType: UserActionType.Ban,
                 MessageId: message.ReplyToMessage.MessageId,
                 IssuedBy: executorUserId, // Mapped from telegram_user_mappings (may be null if not linked)

@@ -315,6 +315,9 @@ public partial class TelegramAdminBotService(
             // using (var scope = serviceProvider.CreateScope())
             // {
             //     var orchestrator = scope.ServiceProvider.GetRequiredService<ISpamCheckOrchestrator>();
+            //     var configRepo = scope.ServiceProvider.GetRequiredService<ISpamDetectionConfigRepository>();
+            //     var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
+            //
             //     var request = new SpamCheckRequest
             //     {
             //         Message = text ?? "",
@@ -323,7 +326,23 @@ public partial class TelegramAdminBotService(
             //         ChatId = message.Chat.Id.ToString()
             //     };
             //     var result = await orchestrator.CheckAsync(request);
-            //     if (result.IsSpam) { /* take action */ }
+            //
+            //     if (!result.SpamCheckSkipped && result.SpamResult?.IsSpam == true)
+            //     {
+            //         var config = await configRepo.GetChatConfigAsync(message.Chat.Id.ToString());
+            //
+            //         // Training mode: send to review queue instead of auto-ban
+            //         if (config.TrainingMode || result.SpamResult.Confidence < config.AutoBanThreshold)
+            //         {
+            //             // Create report for admin review
+            //             await reportsRepo.CreateReportAsync(new ReportRecord { ... });
+            //         }
+            //         else if (result.SpamResult.Confidence >= config.AutoBanThreshold)
+            //         {
+            //             // Auto-ban (only if NOT in training mode)
+            //             // Delete message, ban user, create detection_result
+            //         }
+            //     }
             // }
         }
         catch (Exception ex)
@@ -737,9 +756,10 @@ public partial class TelegramAdminBotService(
             foreach (var admin in admins)
             {
                 var isCreator = admin.Status == ChatMemberStatus.Creator;
-                await chatAdminsRepository.UpsertAsync(chatId, admin.User.Id, isCreator);
+                var username = admin.User.Username; // Store Telegram username (without @)
+                await chatAdminsRepository.UpsertAsync(chatId, admin.User.Id, isCreator, username);
 
-                var displayName = admin.User.Username ?? admin.User.FirstName ?? admin.User.Id.ToString();
+                var displayName = username ?? admin.User.FirstName ?? admin.User.Id.ToString();
                 adminNames.Add($"@{displayName}" + (isCreator ? " (creator)" : ""));
             }
 
@@ -777,9 +797,26 @@ public partial class TelegramAdminBotService(
                 return;
             }
 
-            var health = await PerformHealthCheckAsync(_botClient, chatId);
+            var (health, chatName) = await PerformHealthCheckAsync(_botClient, chatId);
             _healthCache[chatId] = health;
             OnHealthUpdate?.Invoke(health);
+
+            // Update chat name in database if we got a valid title from Telegram
+            if (health.IsReachable && !string.IsNullOrEmpty(chatName))
+            {
+                using var scope = serviceProvider.CreateScope();
+                var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+                var existingChat = await managedChatsRepository.GetByChatIdAsync(chatId);
+
+                if (existingChat != null && existingChat.ChatName != chatName)
+                {
+                    // Update with fresh chat name from Telegram
+                    var updatedChat = existingChat with { ChatName = chatName };
+                    await managedChatsRepository.UpsertAsync(updatedChat);
+                    logger.LogDebug("Updated chat name for {ChatId}: {OldName} -> {NewName}",
+                        chatId, existingChat.ChatName, chatName);
+                }
+            }
 
             logger.LogDebug("Health check completed for chat {ChatId}: {Status}", chatId, health.Status);
         }
@@ -791,8 +828,9 @@ public partial class TelegramAdminBotService(
 
     /// <summary>
     /// Perform health check on a chat (check reachability, permissions, etc.)
+    /// Returns tuple of (health status, chat name)
     /// </summary>
-    private async Task<ChatHealthStatus> PerformHealthCheckAsync(ITelegramBotClient botClient, long chatId)
+    private async Task<(ChatHealthStatus Health, string? ChatName)> PerformHealthCheckAsync(ITelegramBotClient botClient, long chatId)
     {
         var health = new ChatHealthStatus
         {
@@ -800,13 +838,14 @@ public partial class TelegramAdminBotService(
             IsReachable = false,
             Status = "Unknown"
         };
+        string? chatName = null;
 
         try
         {
             // Try to get chat info
             var chat = await botClient.GetChat(chatId);
             health.IsReachable = true;
-            health.ChatTitle = chat.Title ?? chat.Username ?? $"Chat {chatId}";
+            chatName = chat.Title ?? chat.Username ?? $"Chat {chatId}";
 
             // Get bot's member status
             var botMember = await botClient.GetChatMember(chatId, botClient.BotId);
@@ -854,7 +893,7 @@ public partial class TelegramAdminBotService(
             health.Warnings.Add($"Cannot reach chat: {ex.Message}");
         }
 
-        return health;
+        return (health, chatName);
     }
 
     /// <summary>

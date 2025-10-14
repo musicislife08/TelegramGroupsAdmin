@@ -31,7 +31,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITrainingSamplesRepository, TrainingSamplesRepository>();
 
         // Register individual spam checks
-        // NOTE: MultiLanguageSpamCheck is NOT registered - translation happens in SpamDetectorFactory preprocessing
+        // NOTE: Translation happens in SpamDetectorFactory preprocessing, not as a spam check
+        services.AddScoped<ISpamCheck, Checks.InvisibleCharsSpamCheck>();  // Runs FIRST on original message
         services.AddScoped<ISpamCheck, Checks.StopWordsSpamCheck>();
         services.AddScoped<ISpamCheck, Checks.CasSpamCheck>();
         services.AddScoped<ISpamCheck, Checks.SimilaritySpamCheck>();

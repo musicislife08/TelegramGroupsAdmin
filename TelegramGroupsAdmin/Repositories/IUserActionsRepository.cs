@@ -79,11 +79,6 @@ public interface IUserActionsRepository
     Task<List<UserActionRecord>> GetRecentAsync(int limit = 100);
 
     /// <summary>
-    /// Get all actions for a specific chat
-    /// </summary>
-    Task<List<UserActionRecord>> GetByChatIdAsync(long chatId);
-
-    /// <summary>
     /// Delete actions older than specified timestamp
     /// </summary>
     Task<int> DeleteOlderThanAsync(long timestamp);

@@ -16,11 +16,11 @@ public enum UserActionType
 //
 // CRITICAL: All DTO properties MUST use snake_case to match PostgreSQL column names exactly.
 // Dapper uses init-only property setters for materialization.
+// All actions are global - origin chat can be tracked via message_id FK
 public record UserActionRecordDto
 {
     public long id { get; init; }
     public long user_id { get; init; }
-    public long[]? chat_ids { get; init; }
     public int action_type { get; init; }
     public long? message_id { get; init; }
     public string? issued_by { get; init; }
@@ -31,7 +31,6 @@ public record UserActionRecordDto
     public UserActionRecord ToUserActionRecord() => new UserActionRecord(
         Id: id,
         UserId: user_id,
-        ChatIds: chat_ids,
         ActionType: action_type,
         MessageId: message_id,
         IssuedBy: issued_by,
@@ -44,7 +43,6 @@ public record UserActionRecordDto
 public record UserActionRecord(
     long Id,
     long UserId,
-    long[]? ChatIds,
     int ActionType,
     long? MessageId,
     string? IssuedBy,

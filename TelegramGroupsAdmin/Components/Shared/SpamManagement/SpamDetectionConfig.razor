@@ -10,26 +10,29 @@
 @inject ISnackbar Snackbar
 
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+<MudContainer MaxWidth="@(ChatId.HasValue ? MaxWidth.False : MaxWidth.ExtraLarge)" Class="@(ChatId.HasValue ? "" : "mt-4")">
     <MudStack Spacing="4">
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-            <MudText Typo="Typo.h4">Spam Detection Configuration</MudText>
-            <MudButton Variant="Variant.Filled"
-                      Color="Color.Primary"
-                      StartIcon="@Icons.Material.Filled.Save"
-                      OnClick="SaveConfiguration"
-                      Disabled="@_saving">
-                @if (_saving)
-                {
-                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
-                    <MudText Class="ms-2">Saving...</MudText>
-                }
-                else
-                {
-                    <MudText>Save Configuration</MudText>
-                }
-            </MudButton>
-        </MudStack>
+        @if (!ChatId.HasValue)
+        {
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.h4">Spam Detection Configuration</MudText>
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          StartIcon="@Icons.Material.Filled.Save"
+                          OnClick="SaveConfiguration"
+                          Disabled="@_saving">
+                    @if (_saving)
+                    {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true"/>
+                        <MudText Class="ms-2">Saving...</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Save Configuration</MudText>
+                    }
+                </MudButton>
+            </MudStack>
+        }
 
         @if (_loading)
         {
@@ -72,15 +75,31 @@
                                 <MudStack Spacing="3">
                                     <MudText Typo="Typo.h6" Color="Color.Primary">Action Thresholds</MudText>
 
+                                    <MudSwitch T="bool" @bind-Value="_config.TrainingMode"
+                                              Label="Training Mode"
+                                              Color="Color.Warning">
+                                        <MudText Typo="Typo.caption" Color="@(_config.TrainingMode ? Color.Warning : Color.Default)">
+                                            @if (_config.TrainingMode)
+                                            {
+                                                <text>⚠️ All spam detections sent to review queue (no auto-ban)</text>
+                                            }
+                                            else
+                                            {
+                                                <text>Use this to validate detection before enabling auto-ban</text>
+                                            }
+                                        </MudText>
+                                    </MudSwitch>
+
                                     <MudNumericField @bind-Value="_config.AutoBanThreshold"
                                                     Label="Auto-Ban Threshold"
                                                     Min="50" Max="100"
-                                                    helperText="Confidence >= this value triggers automatic ban" />
+                                                    Disabled="@_config.TrainingMode"
+                                                    HelperText="@(_config.TrainingMode ? "Disabled in training mode" : "Confidence >= this value triggers automatic ban")" />
 
                                     <MudNumericField @bind-Value="_config.ReviewQueueThreshold"
                                                     Label="Review Queue Threshold"
                                                     Min="20" Max="80"
-                                                    helperText="Confidence >= this value but < auto-ban goes to review" />
+                                                    HelperText="Confidence >= this value goes to review queue" />
                                 </MudStack>
                             </MudPaper>
                         </MudItem>
@@ -190,18 +209,38 @@
                         <MudItem xs="12" md="6">
                             <MudPaper Class="pa-4" Elevation="1">
                                 <MudStack Spacing="3">
-                                    <MudText Typo="Typo.h6" Color="Color.Primary">Multi-Language Detection</MudText>
+                                    <MudText Typo="Typo.h6" Color="Color.Primary">Invisible Characters</MudText>
 
-                                    <MudSwitch T="bool" @bind-Value="_config.MultiLanguage.Enabled"
-                                              Label="Enable Multi-Language Check"
+                                    <MudSwitch T="bool" @bind-Value="_config.InvisibleChars.Enabled"
+                                              Label="Enable Invisible Character Detection"
                                               Color="Color.Primary" />
 
-                                    @if (_config.MultiLanguage.Enabled)
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        Detects zero-width Unicode characters used by spammers (excludes legitimate emoji sequences)
+                                    </MudText>
+                                </MudStack>
+                            </MudPaper>
+                        </MudItem>
+
+                        <MudItem xs="12" md="6">
+                            <MudPaper Class="pa-4" Elevation="1">
+                                <MudStack Spacing="3">
+                                    <MudText Typo="Typo.h6" Color="Color.Primary">Translation</MudText>
+
+                                    <MudSwitch T="bool" @bind-Value="_config.Translation.Enabled"
+                                              Label="Enable Foreign Language Translation"
+                                              Color="Color.Primary" />
+
+                                    @if (_config.Translation.Enabled)
                                     {
-                                        <MudSwitch T="bool" @bind-Value="_config.MultiLanguage.CheckTranslatedContent"
+                                        <MudSwitch T="bool" @bind-Value="_config.Translation.CheckTranslatedContent"
                                                   Label="Check Translated Content"
                                                   Color="Color.Primary" />
                                     }
+
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        Translates non-English messages to English before running spam checks
+                                    </MudText>
                                 </MudStack>
                             </MudPaper>
                         </MudItem>
@@ -256,6 +295,14 @@
                                                   Label="Veto Mode (Confirm Spam)"
                                                   Color="Color.Primary"
                                                   helperText="If enabled, OpenAI confirms spam. If disabled, OpenAI finds spam." />
+
+                                        @if (_config.OpenAI.VetoMode)
+                                        {
+                                            <MudNumericField @bind-Value="_config.OpenAI.VetoThreshold"
+                                                            Label="Veto Threshold"
+                                                            Min="50" Max="100"
+                                                            HelperText="OpenAI veto runs only if spam confidence is below this (higher = more vetos)" />
+                                        }
 
                                         <MudSwitch T="bool" @bind-Value="_config.OpenAI.CheckShortMessages"
                                                   Label="Check Short Messages"
@@ -370,6 +417,18 @@
 </MudContainer>
 
 @code {
+    /// <summary>
+    /// Optional chat ID for per-chat configuration. If null, uses global configuration.
+    /// </summary>
+    [Parameter]
+    public long? ChatId { get; set; }
+
+    /// <summary>
+    /// Optional callback when configuration is saved (for per-chat mode to close modal)
+    /// </summary>
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
     private TelegramGroupsAdmin.SpamDetection.Configuration.SpamDetectionConfig? _config;
     private bool _loading = true;
     private bool _saving = false;
@@ -396,7 +455,9 @@
         _loading = true;
         try
         {
-            _config = await ConfigRepository.GetGlobalConfigAsync();
+            _config = ChatId.HasValue
+                ? await ConfigRepository.GetChatConfigAsync(ChatId.Value.ToString())
+                : await ConfigRepository.GetGlobalConfigAsync();
 
             // Convert TimeSpan values to int for UI
             _timeoutSeconds = (int)_config.Cas.Timeout.TotalSeconds;
@@ -416,7 +477,7 @@
         }
     }
 
-    private async Task SaveConfiguration()
+    public async Task SaveConfiguration()
     {
         if (_config == null) return;
 
@@ -424,7 +485,9 @@
         try
         {
             // Load the current config from DB to compare changes
-            var oldConfig = await ConfigRepository.GetGlobalConfigAsync();
+            var oldConfig = ChatId.HasValue
+                ? await ConfigRepository.GetChatConfigAsync(ChatId.Value.ToString())
+                : await ConfigRepository.GetGlobalConfigAsync();
 
             // Convert int values back to TimeSpan
             _config.Cas.Timeout = TimeSpan.FromSeconds(_timeoutSeconds);
@@ -436,115 +499,91 @@
             // Build detailed change log
             var changes = new List<string>();
 
-            // Check scope settings
-            if (oldConfig.FirstMessageOnly != _config.FirstMessageOnly)
-                changes.Add($"FirstMessageOnly: {oldConfig.FirstMessageOnly} → {_config.FirstMessageOnly}");
-            if (oldConfig.FirstMessagesCount != _config.FirstMessagesCount)
-                changes.Add($"FirstMessagesCount: {oldConfig.FirstMessagesCount} → {_config.FirstMessagesCount}");
-            if (oldConfig.MinMessageLength != _config.MinMessageLength)
-                changes.Add($"MinMessageLength: {oldConfig.MinMessageLength} → {_config.MinMessageLength}");
+            // Track all configuration changes
+            TrackChange(changes, "FirstMessageOnly", oldConfig.FirstMessageOnly, _config.FirstMessageOnly);
+            TrackChange(changes, "FirstMessagesCount", oldConfig.FirstMessagesCount, _config.FirstMessagesCount);
+            TrackChange(changes, "MinMessageLength", oldConfig.MinMessageLength, _config.MinMessageLength);
 
-            // Check enabled/disabled changes
-            if (oldConfig.StopWords.Enabled != _config.StopWords.Enabled)
-                changes.Add($"StopWords: {oldConfig.StopWords.Enabled} → {_config.StopWords.Enabled}");
-            if (oldConfig.Cas.Enabled != _config.Cas.Enabled)
-                changes.Add($"CAS: {oldConfig.Cas.Enabled} → {_config.Cas.Enabled}");
-            if (oldConfig.Similarity.Enabled != _config.Similarity.Enabled)
-                changes.Add($"Similarity: {oldConfig.Similarity.Enabled} → {_config.Similarity.Enabled}");
-            if (oldConfig.Bayes.Enabled != _config.Bayes.Enabled)
-                changes.Add($"Bayes: {oldConfig.Bayes.Enabled} → {_config.Bayes.Enabled}");
-            if (oldConfig.MultiLanguage.Enabled != _config.MultiLanguage.Enabled)
-                changes.Add($"MultiLanguage: {oldConfig.MultiLanguage.Enabled} → {_config.MultiLanguage.Enabled}");
-            if (oldConfig.Spacing.Enabled != _config.Spacing.Enabled)
-                changes.Add($"Spacing: {oldConfig.Spacing.Enabled} → {_config.Spacing.Enabled}");
-            if (oldConfig.OpenAI.Enabled != _config.OpenAI.Enabled)
-                changes.Add($"OpenAI: {oldConfig.OpenAI.Enabled} → {_config.OpenAI.Enabled}");
-            if (oldConfig.UrlBlocklist.Enabled != _config.UrlBlocklist.Enabled)
-                changes.Add($"UrlBlocklist: {oldConfig.UrlBlocklist.Enabled} → {_config.UrlBlocklist.Enabled}");
-            if (oldConfig.ThreatIntel.Enabled != _config.ThreatIntel.Enabled)
-                changes.Add($"ThreatIntel: {oldConfig.ThreatIntel.Enabled} → {_config.ThreatIntel.Enabled}");
-            if (oldConfig.SeoScraping.Enabled != _config.SeoScraping.Enabled)
-                changes.Add($"SeoScraping: {oldConfig.SeoScraping.Enabled} → {_config.SeoScraping.Enabled}");
-            if (oldConfig.ImageSpam.Enabled != _config.ImageSpam.Enabled)
-                changes.Add($"ImageSpam: {oldConfig.ImageSpam.Enabled} → {_config.ImageSpam.Enabled}");
+            TrackChange(changes, "StopWords", oldConfig.StopWords.Enabled, _config.StopWords.Enabled);
+            TrackChange(changes, "CAS", oldConfig.Cas.Enabled, _config.Cas.Enabled);
+            TrackChange(changes, "Similarity", oldConfig.Similarity.Enabled, _config.Similarity.Enabled);
+            TrackChange(changes, "Bayes", oldConfig.Bayes.Enabled, _config.Bayes.Enabled);
+            TrackChange(changes, "InvisibleChars", oldConfig.InvisibleChars.Enabled, _config.InvisibleChars.Enabled);
+            TrackChange(changes, "Translation", oldConfig.Translation.Enabled, _config.Translation.Enabled);
+            TrackChange(changes, "Spacing", oldConfig.Spacing.Enabled, _config.Spacing.Enabled);
+            TrackChange(changes, "OpenAI", oldConfig.OpenAI.Enabled, _config.OpenAI.Enabled);
+            TrackChange(changes, "UrlBlocklist", oldConfig.UrlBlocklist.Enabled, _config.UrlBlocklist.Enabled);
+            TrackChange(changes, "ThreatIntel", oldConfig.ThreatIntel.Enabled, _config.ThreatIntel.Enabled);
+            TrackChange(changes, "SeoScraping", oldConfig.SeoScraping.Enabled, _config.SeoScraping.Enabled);
+            TrackChange(changes, "ImageSpam", oldConfig.ImageSpam.Enabled, _config.ImageSpam.Enabled);
 
-            // Check threshold changes
-            if (oldConfig.AutoBanThreshold != _config.AutoBanThreshold)
-                changes.Add($"AutoBanThreshold: {oldConfig.AutoBanThreshold} → {_config.AutoBanThreshold}");
-            if (oldConfig.ReviewQueueThreshold != _config.ReviewQueueThreshold)
-                changes.Add($"ReviewQueueThreshold: {oldConfig.ReviewQueueThreshold} → {_config.ReviewQueueThreshold}");
-            if (oldConfig.StopWords.ConfidenceThreshold != _config.StopWords.ConfidenceThreshold)
-                changes.Add($"StopWordsConfidenceThreshold: {oldConfig.StopWords.ConfidenceThreshold} → {_config.StopWords.ConfidenceThreshold}");
-            if (oldConfig.Similarity.Threshold != _config.Similarity.Threshold)
-                changes.Add($"SimilarityThreshold: {oldConfig.Similarity.Threshold:F2} → {_config.Similarity.Threshold:F2}");
-            if (oldConfig.Bayes.MinSpamProbability != _config.Bayes.MinSpamProbability)
-                changes.Add($"BayesMinSpamProbability: {oldConfig.Bayes.MinSpamProbability:F2} → {_config.Bayes.MinSpamProbability:F2}");
+            TrackChange(changes, "TrainingMode", oldConfig.TrainingMode, _config.TrainingMode);
+            TrackChange(changes, "AutoBanThreshold", oldConfig.AutoBanThreshold, _config.AutoBanThreshold);
+            TrackChange(changes, "ReviewQueueThreshold", oldConfig.ReviewQueueThreshold, _config.ReviewQueueThreshold);
+            TrackChange(changes, "StopWordsConfidenceThreshold", oldConfig.StopWords.ConfidenceThreshold, _config.StopWords.ConfidenceThreshold);
+            TrackChangeFormatted(changes, "SimilarityThreshold", oldConfig.Similarity.Threshold, _config.Similarity.Threshold, "F2");
+            TrackChangeFormatted(changes, "BayesMinSpamProbability", oldConfig.Bayes.MinSpamProbability, _config.Bayes.MinSpamProbability, "F2");
 
-            // Check CAS config changes
-            if (oldConfig.Cas.ApiUrl != _config.Cas.ApiUrl)
-                changes.Add($"CAS ApiUrl: {oldConfig.Cas.ApiUrl} → {_config.Cas.ApiUrl}");
-            if (oldConfig.Cas.UserAgent != _config.Cas.UserAgent)
-                changes.Add($"CAS UserAgent: {oldConfig.Cas.UserAgent ?? "null"} → {_config.Cas.UserAgent ?? "null"}");
-            if (oldConfig.Cas.Timeout != _config.Cas.Timeout)
-                changes.Add($"CAS Timeout: {oldConfig.Cas.Timeout.TotalSeconds}s → {_config.Cas.Timeout.TotalSeconds}s");
+            TrackChange(changes, "CAS ApiUrl", oldConfig.Cas.ApiUrl, _config.Cas.ApiUrl);
+            TrackChange(changes, "CAS UserAgent", oldConfig.Cas.UserAgent ?? "null", _config.Cas.UserAgent ?? "null");
+            TrackChangeFormatted(changes, "CAS Timeout", oldConfig.Cas.Timeout.TotalSeconds, _config.Cas.Timeout.TotalSeconds, "F0", "s");
 
-            // Check MultiLanguage config changes
-            if (oldConfig.MultiLanguage.CheckTranslatedContent != _config.MultiLanguage.CheckTranslatedContent)
-                changes.Add($"MultiLanguage.CheckTranslatedContent: {oldConfig.MultiLanguage.CheckTranslatedContent} → {_config.MultiLanguage.CheckTranslatedContent}");
+            TrackChange(changes, "Translation.CheckTranslatedContent", oldConfig.Translation.CheckTranslatedContent, _config.Translation.CheckTranslatedContent);
 
-            // Check Spacing config changes
-            if (oldConfig.Spacing.MinWordsCount != _config.Spacing.MinWordsCount)
-                changes.Add($"Spacing.MinWordsCount: {oldConfig.Spacing.MinWordsCount} → {_config.Spacing.MinWordsCount}");
-            if (oldConfig.Spacing.ShortWordLength != _config.Spacing.ShortWordLength)
-                changes.Add($"Spacing.ShortWordLength: {oldConfig.Spacing.ShortWordLength} → {_config.Spacing.ShortWordLength}");
-            if (oldConfig.Spacing.ShortWordRatioThreshold != _config.Spacing.ShortWordRatioThreshold)
-                changes.Add($"Spacing.ShortWordRatioThreshold: {oldConfig.Spacing.ShortWordRatioThreshold:F2} → {_config.Spacing.ShortWordRatioThreshold:F2}");
-            if (oldConfig.Spacing.SpaceRatioThreshold != _config.Spacing.SpaceRatioThreshold)
-                changes.Add($"Spacing.SpaceRatioThreshold: {oldConfig.Spacing.SpaceRatioThreshold:F2} → {_config.Spacing.SpaceRatioThreshold:F2}");
+            TrackChange(changes, "Spacing.MinWordsCount", oldConfig.Spacing.MinWordsCount, _config.Spacing.MinWordsCount);
+            TrackChange(changes, "Spacing.ShortWordLength", oldConfig.Spacing.ShortWordLength, _config.Spacing.ShortWordLength);
+            TrackChangeFormatted(changes, "Spacing.ShortWordRatioThreshold", oldConfig.Spacing.ShortWordRatioThreshold, _config.Spacing.ShortWordRatioThreshold, "F2");
+            TrackChangeFormatted(changes, "Spacing.SpaceRatioThreshold", oldConfig.Spacing.SpaceRatioThreshold, _config.Spacing.SpaceRatioThreshold, "F2");
 
-            // Check OpenAI config changes
-            if (oldConfig.OpenAI.VetoMode != _config.OpenAI.VetoMode)
-                changes.Add($"OpenAI.VetoMode: {oldConfig.OpenAI.VetoMode} → {_config.OpenAI.VetoMode}");
-            if (oldConfig.OpenAI.CheckShortMessages != _config.OpenAI.CheckShortMessages)
-                changes.Add($"OpenAI.CheckShortMessages: {oldConfig.OpenAI.CheckShortMessages} → {_config.OpenAI.CheckShortMessages}");
-            if (oldConfig.OpenAI.SystemPrompt != _config.OpenAI.SystemPrompt)
-                changes.Add($"OpenAI.SystemPrompt: {(string.IsNullOrEmpty(oldConfig.OpenAI.SystemPrompt) ? "empty" : "set")} → {(string.IsNullOrEmpty(_config.OpenAI.SystemPrompt) ? "empty" : "set")}");
+            TrackChange(changes, "OpenAI.VetoMode", oldConfig.OpenAI.VetoMode, _config.OpenAI.VetoMode);
+            TrackChange(changes, "OpenAI.VetoThreshold", oldConfig.OpenAI.VetoThreshold, _config.OpenAI.VetoThreshold);
+            TrackChange(changes, "OpenAI.CheckShortMessages", oldConfig.OpenAI.CheckShortMessages, _config.OpenAI.CheckShortMessages);
+            TrackChange(changes, "OpenAI.SystemPrompt",
+                string.IsNullOrEmpty(oldConfig.OpenAI.SystemPrompt) ? "empty" : "set",
+                string.IsNullOrEmpty(_config.OpenAI.SystemPrompt) ? "empty" : "set");
 
-            // Check UrlBlocklist config changes
-            if (oldConfig.UrlBlocklist.CacheDuration != _config.UrlBlocklist.CacheDuration)
-                changes.Add($"UrlBlocklist CacheDuration: {oldConfig.UrlBlocklist.CacheDuration.TotalHours}h → {_config.UrlBlocklist.CacheDuration.TotalHours}h");
+            TrackChangeFormatted(changes, "UrlBlocklist CacheDuration", oldConfig.UrlBlocklist.CacheDuration.TotalHours, _config.UrlBlocklist.CacheDuration.TotalHours, "F0", "h");
 
-            // Check ThreatIntel config changes
-            if (oldConfig.ThreatIntel.UseVirusTotal != _config.ThreatIntel.UseVirusTotal)
-                changes.Add($"ThreatIntel.UseVirusTotal: {oldConfig.ThreatIntel.UseVirusTotal} → {_config.ThreatIntel.UseVirusTotal}");
-            if (oldConfig.ThreatIntel.Timeout != _config.ThreatIntel.Timeout)
-                changes.Add($"ThreatIntel Timeout: {oldConfig.ThreatIntel.Timeout.TotalSeconds}s → {_config.ThreatIntel.Timeout.TotalSeconds}s");
+            TrackChange(changes, "ThreatIntel.UseVirusTotal", oldConfig.ThreatIntel.UseVirusTotal, _config.ThreatIntel.UseVirusTotal);
+            TrackChangeFormatted(changes, "ThreatIntel Timeout", oldConfig.ThreatIntel.Timeout.TotalSeconds, _config.ThreatIntel.Timeout.TotalSeconds, "F0", "s");
 
-            // Check SeoScraping config changes
-            if (oldConfig.SeoScraping.Timeout != _config.SeoScraping.Timeout)
-                changes.Add($"SeoScraping Timeout: {oldConfig.SeoScraping.Timeout.TotalSeconds}s → {_config.SeoScraping.Timeout.TotalSeconds}s");
+            TrackChangeFormatted(changes, "SeoScraping Timeout", oldConfig.SeoScraping.Timeout.TotalSeconds, _config.SeoScraping.Timeout.TotalSeconds, "F0", "s");
 
-            // Check ImageSpam config changes
-            if (oldConfig.ImageSpam.UseOpenAIVision != _config.ImageSpam.UseOpenAIVision)
-                changes.Add($"ImageSpam.UseOpenAIVision: {oldConfig.ImageSpam.UseOpenAIVision} → {_config.ImageSpam.UseOpenAIVision}");
-            if (oldConfig.ImageSpam.Timeout != _config.ImageSpam.Timeout)
-                changes.Add($"ImageSpam Timeout: {oldConfig.ImageSpam.Timeout.TotalSeconds}s → {_config.ImageSpam.Timeout.TotalSeconds}s");
+            TrackChange(changes, "ImageSpam.UseOpenAIVision", oldConfig.ImageSpam.UseOpenAIVision, _config.ImageSpam.UseOpenAIVision);
+            TrackChangeFormatted(changes, "ImageSpam Timeout", oldConfig.ImageSpam.Timeout.TotalSeconds, _config.ImageSpam.Timeout.TotalSeconds, "F0", "s");
 
-            await ConfigRepository.UpdateGlobalConfigAsync(_config, _currentUserId);
+            if (ChatId.HasValue)
+            {
+                await ConfigRepository.UpdateChatConfigAsync(ChatId.Value.ToString(), _config, _currentUserId);
+            }
+            else
+            {
+                await ConfigRepository.UpdateGlobalConfigAsync(_config, _currentUserId);
+            }
 
             // Log the configuration change to audit log with details
             var changeDetails = changes.Count > 0
                 ? string.Join(", ", changes)
                 : "No changes detected";
 
+            var eventValue = ChatId.HasValue
+                ? $"Chat {ChatId}: {changeDetails}"
+                : changeDetails;
+
             await AuditLogRepository.LogEventAsync(
                 Data.Models.AuditEventType.SpamDetectionConfigChanged,
                 actorUserId: _currentUserId,
                 targetUserId: null,
-                value: changeDetails
+                value: eventValue
             );
 
             Snackbar.Add("Configuration saved successfully", Severity.Success);
+
+            // Invoke callback if provided (for per-chat mode to close modal)
+            if (OnSaved.HasDelegate)
+            {
+                await OnSaved.InvokeAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -553,6 +592,32 @@
         finally
         {
             _saving = false;
+        }
+    }
+
+    /// <summary>
+    /// Helper method to track configuration changes
+    /// </summary>
+    private void TrackChange<T>(List<string> changes, string name, T oldValue, T newValue)
+    {
+        if (!EqualityComparer<T>.Default.Equals(oldValue, newValue))
+        {
+            changes.Add($"{name}: {oldValue} → {newValue}");
+        }
+    }
+
+    /// <summary>
+    /// Helper method to track configuration changes with custom formatting
+    /// </summary>
+    private void TrackChangeFormatted<T>(List<string> changes, string name, T oldValue, T newValue, string format, string? suffix = null)
+        where T : IFormattable
+    {
+        if (!EqualityComparer<T>.Default.Equals(oldValue, newValue))
+        {
+            var oldFormatted = oldValue.ToString(format, System.Globalization.CultureInfo.InvariantCulture);
+            var newFormatted = newValue.ToString(format, System.Globalization.CultureInfo.InvariantCulture);
+            var suffixStr = suffix != null ? suffix : "";
+            changes.Add($"{name}: {oldFormatted}{suffixStr} → {newFormatted}{suffixStr}");
         }
     }
 }

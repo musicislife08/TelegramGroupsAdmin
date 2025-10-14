@@ -84,12 +84,11 @@ public class TrustCommand : IBotCommand
             executorUserId = await telegramUserMappingRepository.GetUserIdByTelegramIdAsync(message.From.Id);
         }
 
-        // Create trust action (permanent, global for now - can be enhanced later for per-chat)
+        // Create trust action (permanent, global - all trusts apply to all chats)
         // Note: MessageId set to null since message may not be in our history DB (FK constraint)
         var trustAction = new UserActionRecord(
             Id: 0, // Will be assigned by database
             UserId: targetUser.Id,
-            ChatIds: null, // NULL = global trust (all chats)
             ActionType: UserActionType.Trust,
             MessageId: null, // Don't link to message (may not exist in our DB)
             IssuedBy: executorUserId, // Mapped from telegram_user_mappings (may be null if not linked)

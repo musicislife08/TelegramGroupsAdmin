@@ -1,12 +1,16 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.SpamDetection.Models
+@using Microsoft.JSInterop
 @inject ISpamCheckOrchestrator SpamCheckOrchestrator
 @inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@implements IDisposable
 
 <MudPaper Class="pa-4" Elevation="0">
     <MudText Typo="Typo.h6" GutterBottom="true">Test Spam Detection</MudText>
     <MudText Typo="Typo.body2" Class="mb-4">
         Test how the spam detection engine would respond to a message. Optionally provide user ID/username to check trust status.
+        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Info" Color="Color.Info">Tip: Paste images directly (Ctrl+V)</MudChip>
     </MudText>
 
     <MudGrid>
@@ -16,8 +20,8 @@
                 Label="Message Text"
                 Variant="Variant.Outlined"
                 Lines="5"
-                Required="true"
-                HelperText="The message content to test for spam"
+                Required="false"
+                HelperText="The message content to test (optional if image uploaded)"
                 Immediate="true" />
         </MudItem>
 
@@ -40,6 +44,15 @@
         </MudItem>
 
         <MudItem xs="12">
+            <MudTextField
+                @bind-Value="_chatId"
+                Label="Chat ID (optional)"
+                Variant="Variant.Outlined"
+                HelperText="Leave empty for global config, or specify chat ID to test chat-specific config"
+                Immediate="true" />
+        </MudItem>
+
+        <MudItem xs="12">
             <MudFileUpload T="IBrowserFile" Accept="image/*" @bind-Files="_selectedImage" MaximumFileCount="1">
                 <ActivatorContent>
                     <MudButton HtmlTag="label"
@@ -56,6 +69,13 @@
                     @_selectedImage.Name (@FormatFileSize(_selectedImage.Size))
                 </MudChip>
             }
+            @if (_pastedImageData?.Length > 0)
+            {
+                var size = _pastedImageData.Length;
+                <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.ContentPaste" OnClose="ClearPastedImage">
+                    Pasted image (@FormatFileSize(size))
+                </MudChip>
+            }
         </MudItem>
 
         <MudItem xs="12">
@@ -64,7 +84,7 @@
                 Color="Color.Primary"
                 StartIcon="@Icons.Material.Filled.Security"
                 OnClick="RunSpamCheck"
-                Disabled="@(_isRunning || string.IsNullOrWhiteSpace(_messageText))">
+                Disabled="@(_isRunning || (string.IsNullOrWhiteSpace(_messageText) && _selectedImage == null && _pastedImageData == null))">
                 @(_isRunning ? "Checking..." : "Run Spam Check")
             </MudButton>
         </MudItem>
@@ -149,15 +169,103 @@
     private string _messageText = string.Empty;
     private string? _userId;
     private string? _userName;
+    private string? _chatId;
     private IBrowserFile? _selectedImage;
+    private byte[]? _pastedImageData;
     private bool _isRunning;
     private SpamCheckOrchestratorResult? _result;
+    private DotNetObjectReference<SpamTester>? _dotNetHelper;
+    private bool _pasteListenerSetup = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _dotNetHelper = DotNetObjectReference.Create(this);
+                await JSRuntime.InvokeVoidAsync("setupPasteListener", _dotNetHelper);
+                _pasteListenerSetup = true;
+            }
+            catch (Exception ex)
+            {
+                // Paste listener setup failed, but component should still work
+                Console.WriteLine($"Failed to setup paste listener: {ex.Message}");
+            }
+        }
+    }
+
+    [JSInvokable]
+    public Task OnImagePasted(string imageData)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(imageData))
+            {
+                return Task.CompletedTask;
+            }
+
+            // Convert base64 to byte array
+            var parts = imageData.Split(',');
+            if (parts.Length != 2)
+            {
+                Console.WriteLine($"Invalid image data format: expected 'data:image/...;base64,DATA'");
+                return Task.CompletedTask;
+            }
+
+            var base64Data = parts[1];
+            _pastedImageData = Convert.FromBase64String(base64Data);
+
+            // Use InvokeAsync to update UI on the correct thread
+            _ = InvokeAsync(() =>
+            {
+                Snackbar.Add("Image pasted successfully!", Severity.Success);
+                StateHasChanged();
+            });
+
+            return Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to process pasted image: {ex}");
+
+            // Use InvokeAsync for Snackbar too
+            _ = InvokeAsync(() =>
+            {
+                Snackbar.Add($"Failed to process pasted image: {ex.Message}", Severity.Warning);
+            });
+
+            return Task.CompletedTask;
+        }
+    }
+
+    private void ClearPastedImage()
+    {
+        _pastedImageData = null;
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        if (_pasteListenerSetup)
+        {
+            try
+            {
+                JSRuntime.InvokeVoidAsync("window.pasteListenerCleanup");
+            }
+            catch
+            {
+                // Cleanup failed, not critical
+            }
+        }
+        _dotNetHelper?.Dispose();
+    }
 
     private async Task RunSpamCheck()
     {
-        if (string.IsNullOrWhiteSpace(_messageText))
+        if (string.IsNullOrWhiteSpace(_messageText) && _selectedImage == null && _pastedImageData == null)
         {
-            Snackbar.Add("Please enter a message to test", Severity.Warning);
+            Snackbar.Add("Please enter a message or upload/paste an image to test", Severity.Warning);
             return;
         }
 
@@ -174,13 +282,18 @@
                 imageStream = _selectedImage.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024); // 10MB
                 imageFileName = _selectedImage.Name;
             }
+            else if (_pastedImageData != null)
+            {
+                imageStream = new MemoryStream(_pastedImageData);
+                imageFileName = "pasted-image.png";
+            }
 
             var request = new TelegramGroupsAdmin.SpamDetection.Models.SpamCheckRequest
             {
-                Message = _messageText,
+                Message = _messageText ?? string.Empty, // Empty string if only testing image
                 UserId = string.IsNullOrWhiteSpace(_userId) ? "0" : _userId, // Use "0" if no user provided
                 UserName = _userName,
-                ChatId = null, // No specific chat for manual testing
+                ChatId = string.IsNullOrWhiteSpace(_chatId) ? null : _chatId, // Use chat-specific config if provided
                 ImageData = imageStream,
                 ImageFileName = imageFileName
             };
@@ -218,6 +331,7 @@
     private void ClearImage()
     {
         _selectedImage = null;
+        StateHasChanged();
     }
 
     private string FormatFileSize(long bytes)

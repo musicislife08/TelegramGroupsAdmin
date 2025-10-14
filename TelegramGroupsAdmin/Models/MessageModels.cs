@@ -104,11 +104,11 @@ public class DetectionResultRecord
 
 /// <summary>
 /// User action record for UI display (bans, warns, mutes, trusts)
+/// All actions are global - origin chat can be tracked via MessageId
 /// </summary>
 public record UserActionRecord(
     long Id,
     long UserId,
-    long[]? ChatIds,
     UserActionType ActionType,
     long? MessageId,
     string? IssuedBy,
@@ -177,13 +177,12 @@ public class ManagedChatInfo
 }
 
 /// <summary>
-/// Health status for a chat
+/// Health status for a chat (health-related info only, no chat metadata)
 /// </summary>
 public class ChatHealthStatus
 {
     public long ChatId { get; set; }
     public bool IsReachable { get; set; }
-    public string? ChatTitle { get; set; }
     public string BotStatus { get; set; } = "Unknown";
     public bool IsAdmin { get; set; }
     public bool CanDeleteMessages { get; set; }

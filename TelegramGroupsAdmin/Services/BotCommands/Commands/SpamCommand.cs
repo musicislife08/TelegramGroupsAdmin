@@ -106,11 +106,47 @@ public class SpamCommand : IBotCommand
                 "Spam command executed by {AdminId} on message {MessageId} from user {SpamUserId} ({SpamUserName}) in chat {ChatId}",
                 message.From?.Id, spamMessage.MessageId, spamUserId, spamUserName, message.Chat.Id);
 
-            // TODO: Phase 2.4 - Auto-ban based on spam threshold
-            // Count spam detections for this user and auto-ban if threshold exceeded
+            // 4. Ban user globally across all managed chats
+            var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+            var allChats = await managedChatsRepository.GetAllChatsAsync();
+
+            int bannedCount = 0;
+            foreach (var chat in allChats.Where(c => c.IsActive))
+            {
+                try
+                {
+                    await botClient.BanChatMember(
+                        chatId: chat.ChatId,
+                        userId: spamUserId.Value,
+                        cancellationToken: cancellationToken);
+                    bannedCount++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to ban user {UserId} from chat {ChatId}", spamUserId, chat.ChatId);
+                }
+            }
+
+            // 5. Record ban action
+            var banAction = new UserActionRecord(
+                Id: 0,
+                UserId: spamUserId.Value,
+                ActionType: UserActionType.Ban,
+                MessageId: spamMessage.MessageId,
+                IssuedBy: executorUserId,
+                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                ExpiresAt: null, // Permanent ban
+                Reason: $"Spam detected via /spam command in chat {message.Chat.Title ?? message.Chat.Id.ToString()}"
+            );
+            await userActionsRepository.InsertAsync(banAction);
+
+            _logger.LogInformation(
+                "Banned user {UserId} from {BannedCount} chats via /spam command",
+                spamUserId, bannedCount);
 
             return $"✅ Message deleted and marked as spam\n" +
-                   $"User: @{spamUserName} ({spamUserId})";
+                   $"User: @{spamUserName} ({spamUserId})\n" +
+                   $"🚫 Banned from {bannedCount} chat(s)";
         }
         catch (Exception ex)
         {

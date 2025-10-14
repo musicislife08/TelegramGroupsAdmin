@@ -60,14 +60,14 @@ public class ChatAdminsRepository : IChatAdminsRepository
     public async Task<List<ChatAdmin>> GetChatAdminsAsync(long chatId)
     {
         const string sql = """
-            SELECT id, chat_id, telegram_id, is_creator, promoted_at, last_verified_at, is_active
+            SELECT id, chat_id, telegram_id, username, is_creator, promoted_at, last_verified_at, is_active
             FROM chat_admins
             WHERE chat_id = @ChatId AND is_active = true
             ORDER BY is_creator DESC, promoted_at ASC
             """;
 
         await using var connection = new NpgsqlConnection(_connectionString);
-        var dataRecords = await connection.QueryAsync<DataModels.ChatAdminRecord>(sql, new { ChatId = chatId });
+        var dataRecords = await connection.QueryAsync<DataModels.ChatAdminRecordDto>(sql, new { ChatId = chatId });
         return dataRecords.Select(r => r.ToUiModel()).ToList();
     }
 
@@ -87,13 +87,14 @@ public class ChatAdminsRepository : IChatAdminsRepository
     }
 
     /// <inheritdoc/>
-    public async Task UpsertAsync(long chatId, long telegramId, bool isCreator)
+    public async Task UpsertAsync(long chatId, long telegramId, bool isCreator, string? username = null)
     {
         const string sql = """
-            INSERT INTO chat_admins (chat_id, telegram_id, is_creator, promoted_at, last_verified_at, is_active)
-            VALUES (@ChatId, @TelegramId, @IsCreator, @Now, @Now, true)
+            INSERT INTO chat_admins (chat_id, telegram_id, username, is_creator, promoted_at, last_verified_at, is_active)
+            VALUES (@ChatId, @TelegramId, @Username, @IsCreator, @Now, @Now, true)
             ON CONFLICT (chat_id, telegram_id)
             DO UPDATE SET
+                username = EXCLUDED.username,
                 is_creator = EXCLUDED.is_creator,
                 last_verified_at = EXCLUDED.last_verified_at,
                 is_active = true
@@ -106,12 +107,13 @@ public class ChatAdminsRepository : IChatAdminsRepository
         {
             ChatId = chatId,
             TelegramId = telegramId,
+            Username = username,
             IsCreator = isCreator,
             Now = now
         });
 
-        _logger.LogDebug("Upserted admin: chat={ChatId}, user={TelegramId}, creator={IsCreator}",
-            chatId, telegramId, isCreator);
+        _logger.LogDebug("Upserted admin: chat={ChatId}, user={TelegramId} (@{Username}), creator={IsCreator}",
+            chatId, telegramId, username ?? "unknown", isCreator);
     }
 
     /// <inheritdoc/>

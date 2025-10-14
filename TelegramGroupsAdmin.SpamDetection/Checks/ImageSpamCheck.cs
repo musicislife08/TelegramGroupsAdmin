@@ -114,7 +114,7 @@ public class ImageSpamCheck : ISpamCheck
             await request.ImageData.CopyToAsync(ms, cancellationToken);
             var base64Image = Convert.ToBase64String(ms.ToArray());
 
-            var prompt = BuildPrompt(request.Message);
+            var prompt = BuildPrompt(request.Message, config);
 
             var apiRequest = new
             {
@@ -219,10 +219,25 @@ public class ImageSpamCheck : ISpamCheck
 
     /// <summary>
     /// Build prompt for OpenAI Vision analysis
+    /// Uses configurable system prompt if provided, otherwise uses default
     /// </summary>
-    private static string BuildPrompt(string? messageText) => $$"""
+    private static string BuildPrompt(string? messageText, SpamDetectionConfig config)
+    {
+        // Use custom prompt if provided, otherwise use default
+        var systemPrompt = config.OpenAI.SystemPrompt ?? GetDefaultImagePrompt();
+
+        var messageContext = messageText != null
+            ? $"Message text: \"{messageText}\""
+            : "No message text provided.";
+
+        return $"{systemPrompt}\n\n{messageContext}\n\nRespond ONLY with valid JSON (no markdown, no code blocks):\n{{\n  \"spam\": true or false,\n  \"confidence\": 1-100,\n  \"reason\": \"specific explanation\",\n  \"patterns_detected\": [\"list\", \"of\", \"patterns\"]\n}}";
+    }
+
+    /// <summary>
+    /// Get default image spam detection prompt (used when SystemPrompt is not configured)
+    /// </summary>
+    private static string GetDefaultImagePrompt() => """
         You are a spam detection system for Telegram. Analyze this image and determine if it's spam/scam.
-        {{(messageText != null ? $"Message text: \"{messageText}\"" : "No message text provided.")}}
 
         Common Telegram spam patterns:
         1. Crypto airdrop scams (fake celebrity accounts, "send X get Y back", urgent claims)
@@ -233,13 +248,8 @@ public class ImageSpamCheck : ISpamCheck
         6. Screenshots of fake transactions or social media posts
         7. Referral spam with voucher codes or suspicious links
 
-        Respond ONLY with valid JSON (no markdown, no code blocks):
-        {
-          "spam": true or false,
-          "confidence": 1-100,
-          "reason": "specific explanation",
-          "patterns_detected": ["list", "of", "patterns"]
-        }
+        IMPORTANT: Legitimate crypto trading news (market analysis, price movements, trading volume) is NOT spam.
+        Only flag content that is clearly attempting to scam users or steal money.
         """;
 
     /// <summary>
