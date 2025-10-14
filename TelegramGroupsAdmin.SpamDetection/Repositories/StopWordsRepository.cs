@@ -7,15 +7,16 @@ namespace TelegramGroupsAdmin.SpamDetection.Repositories;
 
 /// <summary>
 /// Repository implementation for stop words management (EF Core)
+/// Uses DbContextFactory to avoid concurrency issues
 /// </summary>
 public class StopWordsRepository : IStopWordsRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<StopWordsRepository> _logger;
 
-    public StopWordsRepository(AppDbContext context, ILogger<StopWordsRepository> logger)
+    public StopWordsRepository(IDbContextFactory<AppDbContext> contextFactory, ILogger<StopWordsRepository> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
@@ -24,9 +25,10 @@ public class StopWordsRepository : IStopWordsRepository
     /// </summary>
     public async Task<IEnumerable<string>> GetEnabledStopWordsAsync(CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            return await _context.StopWords
+            return await context.StopWords
                 .AsNoTracking()
                 .Where(sw => sw.Enabled)
                 .OrderBy(sw => sw.Word)
@@ -45,6 +47,7 @@ public class StopWordsRepository : IStopWordsRepository
     /// </summary>
     public async Task<long> AddStopWordAsync(string word, string? addedBy = null, string? notes = null, CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             var stopWord = new StopWordDto
@@ -56,8 +59,8 @@ public class StopWordsRepository : IStopWordsRepository
                 Notes = notes
             };
 
-            _context.StopWords.Add(stopWord);
-            await _context.SaveChangesAsync(cancellationToken);
+            context.StopWords.Add(stopWord);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Added stop word: {Word} (ID: {Id})", word, stopWord.Id);
             return stopWord.Id;
@@ -74,16 +77,17 @@ public class StopWordsRepository : IStopWordsRepository
     /// </summary>
     public async Task<bool> SetStopWordEnabledAsync(long id, bool enabled, CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var stopWord = await _context.StopWords.FindAsync([id], cancellationToken);
+            var stopWord = await context.StopWords.FindAsync([id], cancellationToken);
             if (stopWord == null)
             {
                 return false;
             }
 
             stopWord.Enabled = enabled;
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Updated stop word {Id} enabled status to {Enabled}", id, enabled);
             return true;
@@ -100,9 +104,10 @@ public class StopWordsRepository : IStopWordsRepository
     /// </summary>
     public async Task<bool> ExistsAsync(string word, CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            return await _context.StopWords
+            return await context.StopWords
                 .AsNoTracking()
                 .AnyAsync(sw => sw.Word == word.ToLowerInvariant(), cancellationToken);
         }
@@ -118,13 +123,14 @@ public class StopWordsRepository : IStopWordsRepository
     /// </summary>
     public async Task<IEnumerable<object>> GetAllStopWordsAsync(CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             // Query with LEFT JOIN to users table (similar to original Dapper query)
-            var stopWords = await _context.StopWords
+            var stopWords = await context.StopWords
                 .AsNoTracking()
                 .GroupJoin(
-                    _context.Users,
+                    context.Users,
                     sw => sw.AddedBy,
                     u => u.Id,
                     (sw, users) => new
@@ -153,16 +159,17 @@ public class StopWordsRepository : IStopWordsRepository
     /// </summary>
     public async Task<bool> UpdateStopWordNotesAsync(long id, string? notes, CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var stopWord = await _context.StopWords.FindAsync([id], cancellationToken);
+            var stopWord = await context.StopWords.FindAsync([id], cancellationToken);
             if (stopWord == null)
             {
                 return false;
             }
 
             stopWord.Notes = notes;
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Updated stop word {Id} notes", id);
             return true;

@@ -5,25 +5,30 @@ using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
+/// <summary>
+/// Uses DbContextFactory to avoid concurrency issues
+/// </summary>
 public class TelegramLinkTokenRepository : ITelegramLinkTokenRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
 
-    public TelegramLinkTokenRepository(AppDbContext context)
+    public TelegramLinkTokenRepository(IDbContextFactory<AppDbContext> contextFactory)
     {
-        _context = context;
+        _contextFactory = contextFactory;
     }
 
     public async Task InsertAsync(TelegramLinkTokenRecord token)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         var entity = token.ToDataModel();
-        _context.TelegramLinkTokens.Add(entity);
-        await _context.SaveChangesAsync();
+        context.TelegramLinkTokens.Add(entity);
+        await context.SaveChangesAsync();
     }
 
     public async Task<TelegramLinkTokenRecord?> GetByTokenAsync(string token)
     {
-        var entity = await _context.TelegramLinkTokens
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.TelegramLinkTokens
             .AsNoTracking()
             .FirstOrDefaultAsync(tlt => tlt.Token == token);
 
@@ -32,32 +37,35 @@ public class TelegramLinkTokenRepository : ITelegramLinkTokenRepository
 
     public async Task MarkAsUsedAsync(string token, long telegramId)
     {
-        var entity = await _context.TelegramLinkTokens.FirstOrDefaultAsync(tlt => tlt.Token == token);
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.TelegramLinkTokens.FirstOrDefaultAsync(tlt => tlt.Token == token);
         if (entity == null) return;
 
         entity.UsedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         entity.UsedByTelegramId = telegramId;
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
     }
 
     public async Task DeleteExpiredTokensAsync(long beforeTimestamp)
     {
-        var expiredTokens = await _context.TelegramLinkTokens
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var expiredTokens = await context.TelegramLinkTokens
             .Where(tlt => tlt.ExpiresAt < beforeTimestamp)
             .ToListAsync();
 
         if (expiredTokens.Count > 0)
         {
-            _context.TelegramLinkTokens.RemoveRange(expiredTokens);
-            await _context.SaveChangesAsync();
+            context.TelegramLinkTokens.RemoveRange(expiredTokens);
+            await context.SaveChangesAsync();
         }
     }
 
     public async Task<IEnumerable<TelegramLinkTokenRecord>> GetActiveTokensForUserAsync(string userId)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        var entities = await _context.TelegramLinkTokens
+        var entities = await context.TelegramLinkTokens
             .AsNoTracking()
             .Where(tlt => tlt.UserId == userId
                 && tlt.UsedAt == null
@@ -70,14 +78,15 @@ public class TelegramLinkTokenRepository : ITelegramLinkTokenRepository
 
     public async Task RevokeUnusedTokensForUserAsync(string userId)
     {
-        var tokensToRevoke = await _context.TelegramLinkTokens
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var tokensToRevoke = await context.TelegramLinkTokens
             .Where(tlt => tlt.UserId == userId && tlt.UsedAt == null)
             .ToListAsync();
 
         if (tokensToRevoke.Count > 0)
         {
-            _context.TelegramLinkTokens.RemoveRange(tokensToRevoke);
-            await _context.SaveChangesAsync();
+            context.TelegramLinkTokens.RemoveRange(tokensToRevoke);
+            await context.SaveChangesAsync();
         }
     }
 }

@@ -8,22 +8,23 @@ namespace TelegramGroupsAdmin.Repositories;
 
 public class DetectionResultsRepository : IDetectionResultsRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<DetectionResultsRepository> _logger;
 
     public DetectionResultsRepository(
-        AppDbContext context,
+        IDbContextFactory<AppDbContext> contextFactory,
         ILogger<DetectionResultsRepository> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
     public async Task InsertAsync(DetectionResultRecord result)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         var entity = result.ToDataModel();
-        _context.DetectionResults.Add(entity);
-        await _context.SaveChangesAsync();
+        context.DetectionResults.Add(entity);
+        await context.SaveChangesAsync();
 
         _logger.LogDebug(
             "Inserted detection result for message {MessageId}: {IsSpam} (confidence: {Confidence}, net: {NetConfidence}, training: {UsedForTraining}, edit_version: {EditVersion})",
@@ -37,10 +38,11 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
     public async Task<DetectionResultRecord?> GetByIdAsync(long id)
     {
-        var result = await _context.DetectionResults
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var result = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.Id == id)
-            .Join(_context.Messages,
+            .Join(context.Messages,
                 dr => dr.MessageId,
                 m => m.MessageId,
                 (dr, m) => new { DetectionResult = dr, Message = m })
@@ -69,10 +71,11 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
     public async Task<List<DetectionResultRecord>> GetByMessageIdAsync(long messageId)
     {
-        var results = await _context.DetectionResults
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var results = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.MessageId == messageId)
-            .Join(_context.Messages,
+            .Join(context.Messages,
                 dr => dr.MessageId,
                 m => m.MessageId,
                 (dr, m) => new { DetectionResult = dr, Message = m })
@@ -102,9 +105,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
     public async Task<List<DetectionResultRecord>> GetRecentAsync(int limit = 100)
     {
-        var results = await _context.DetectionResults
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var results = await context.DetectionResults
             .AsNoTracking()
-            .Join(_context.Messages,
+            .Join(context.Messages,
                 dr => dr.MessageId,
                 m => m.MessageId,
                 (dr, m) => new { DetectionResult = dr, Message = m })
@@ -135,14 +139,15 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
     public async Task<List<(string MessageText, bool IsSpam)>> GetTrainingSamplesAsync()
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Phase 2.6: Only use high-quality training samples
         // - Manual admin decisions (always training-worthy)
         // - Confident OpenAI results (85%+, marked as used_for_training = true)
         // This prevents low-quality auto-detections from polluting training data
-        var results = await _context.DetectionResults
+        var results = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.UsedForTraining == true)
-            .Join(_context.Messages,
+            .Join(context.Messages,
                 dr => dr.MessageId,
                 m => m.MessageId,
                 (dr, m) => new { Message = m, dr.IsSpam })
@@ -160,11 +165,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
     public async Task<List<string>> GetSpamSamplesForSimilarityAsync(int limit = 1000)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Phase 2.6: Only use high-quality training samples for similarity matching
-        var results = await _context.DetectionResults
+        var results = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.IsSpam == true && dr.UsedForTraining == true)
-            .Join(_context.Messages,
+            .Join(context.Messages,
                 dr => dr.MessageId,
                 m => m.MessageId,
                 (dr, m) => new { dr.DetectedAt, m.MessageText })
@@ -183,10 +189,11 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
     public async Task<bool> IsUserTrustedAsync(long userId, long? chatId = null)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Check for active 'trust' action
         // All trusts are global now (no chat_ids column)
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var isTrusted = await _context.UserActions
+        var isTrusted = await context.UserActions
             .AsNoTracking()
             .AnyAsync(ua => ua.UserId == userId
                 && ua.ActionType == DataModels.UserActionType.Trust
@@ -205,8 +212,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
     public async Task<DetectionStats> GetStatsAsync()
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Overall stats
-        var allDetections = await _context.DetectionResults
+        var allDetections = await context.DetectionResults
             .AsNoTracking()
             .Select(dr => new { dr.IsSpam, dr.Confidence })
             .ToListAsync();
@@ -219,7 +227,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
         // Last 24h stats
         var since24h = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeSeconds();
-        var recentDetections = await _context.DetectionResults
+        var recentDetections = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.DetectedAt >= since24h)
             .Select(dr => dr.IsSpam)
@@ -242,9 +250,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
     public async Task<int> DeleteOlderThanAsync(long timestamp)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Note: Per CLAUDE.md, detection_results should be permanent
         // This method exists for completeness but should rarely be used
-        var toDelete = await _context.DetectionResults
+        var toDelete = await context.DetectionResults
             .Where(dr => dr.DetectedAt < timestamp)
             .ToListAsync();
 
@@ -252,8 +261,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
         if (deleted > 0)
         {
-            _context.DetectionResults.RemoveRange(toDelete);
-            await _context.SaveChangesAsync();
+            context.DetectionResults.RemoveRange(toDelete);
+            await context.SaveChangesAsync();
 
             _logger.LogWarning(
                 "Deleted {Count} old detection results (timestamp < {Timestamp})",

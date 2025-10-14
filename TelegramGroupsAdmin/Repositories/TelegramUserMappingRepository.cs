@@ -5,18 +5,22 @@ using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
+/// <summary>
+/// Uses DbContextFactory to avoid concurrency issues
+/// </summary>
 public class TelegramUserMappingRepository : ITelegramUserMappingRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
 
-    public TelegramUserMappingRepository(AppDbContext context)
+    public TelegramUserMappingRepository(IDbContextFactory<AppDbContext> contextFactory)
     {
-        _context = context;
+        _contextFactory = contextFactory;
     }
 
     public async Task<IEnumerable<TelegramUserMappingRecord>> GetByUserIdAsync(string userId)
     {
-        var entities = await _context.TelegramUserMappings
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entities = await context.TelegramUserMappings
             .AsNoTracking()
             .Where(tum => tum.UserId == userId && tum.IsActive)
             .OrderByDescending(tum => tum.LinkedAt)
@@ -27,7 +31,8 @@ public class TelegramUserMappingRepository : ITelegramUserMappingRepository
 
     public async Task<TelegramUserMappingRecord?> GetByTelegramIdAsync(long telegramId)
     {
-        var entity = await _context.TelegramUserMappings
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.TelegramUserMappings
             .AsNoTracking()
             .FirstOrDefaultAsync(tum => tum.TelegramId == telegramId && tum.IsActive);
 
@@ -36,7 +41,8 @@ public class TelegramUserMappingRepository : ITelegramUserMappingRepository
 
     public async Task<string?> GetUserIdByTelegramIdAsync(long telegramId)
     {
-        var entity = await _context.TelegramUserMappings
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.TelegramUserMappings
             .AsNoTracking()
             .Where(tum => tum.TelegramId == telegramId && tum.IsActive)
             .Select(tum => tum.UserId)
@@ -47,26 +53,29 @@ public class TelegramUserMappingRepository : ITelegramUserMappingRepository
 
     public async Task<long> InsertAsync(TelegramUserMappingRecord mapping)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         var entity = mapping.ToDataModel();
-        _context.TelegramUserMappings.Add(entity);
-        await _context.SaveChangesAsync();
+        context.TelegramUserMappings.Add(entity);
+        await context.SaveChangesAsync();
         return entity.Id;
     }
 
     public async Task<bool> DeactivateAsync(long mappingId)
     {
-        var entity = await _context.TelegramUserMappings.FirstOrDefaultAsync(tum => tum.Id == mappingId);
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.TelegramUserMappings.FirstOrDefaultAsync(tum => tum.Id == mappingId);
         if (entity == null)
             return false;
 
         entity.IsActive = false;
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
         return true;
     }
 
     public async Task<bool> IsTelegramIdLinkedAsync(long telegramId)
     {
-        return await _context.TelegramUserMappings
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        return await context.TelegramUserMappings
             .AsNoTracking()
             .AnyAsync(tum => tum.TelegramId == telegramId && tum.IsActive);
     }

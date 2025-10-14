@@ -8,10 +8,11 @@ namespace TelegramGroupsAdmin.SpamDetection.Repositories;
 
 /// <summary>
 /// Repository implementation for spam detection configurations
+/// Uses DbContextFactory to avoid concurrency issues
 /// </summary>
 public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<SpamDetectionConfigRepository> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -20,9 +21,9 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
         WriteIndented = true
     };
 
-    public SpamDetectionConfigRepository(AppDbContext context, ILogger<SpamDetectionConfigRepository> logger)
+    public SpamDetectionConfigRepository(IDbContextFactory<AppDbContext> contextFactory, ILogger<SpamDetectionConfigRepository> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
@@ -31,9 +32,10 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     /// </summary>
     public async Task<SpamDetectionConfig> GetGlobalConfigAsync(CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var entity = await _context.SpamDetectionConfigs
+            var entity = await context.SpamDetectionConfigs
                 .AsNoTracking()
                 .Where(c => c.ChatId == "0")
                 .OrderByDescending(c => c.LastUpdated)
@@ -66,6 +68,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     /// </summary>
     public async Task<bool> UpdateGlobalConfigAsync(SpamDetectionConfig config, string? updatedBy = null, CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             var configJson = JsonSerializer.Serialize(config, JsonOptions);
@@ -75,7 +78,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
             _logger.LogDebug("Saving global config - StopWords.Enabled: {StopWordsEnabled}, CAS.Enabled: {CasEnabled}, Bayes.Enabled: {BayesEnabled}",
                 config.StopWords.Enabled, config.Cas.Enabled, config.Bayes.Enabled);
 
-            var entity = await _context.SpamDetectionConfigs
+            var entity = await context.SpamDetectionConfigs
                 .FirstOrDefaultAsync(c => c.ChatId == "0", cancellationToken);
 
             if (entity == null)
@@ -88,7 +91,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
                     LastUpdated = timestamp,
                     UpdatedBy = updatedBy
                 };
-                _context.SpamDetectionConfigs.Add(entity);
+                context.SpamDetectionConfigs.Add(entity);
             }
             else
             {
@@ -98,7 +101,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
                 entity.UpdatedBy = updatedBy;
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Updated global spam detection configuration (updated_by: {UpdatedBy})", updatedBy);
             return true;
@@ -116,10 +119,11 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     /// </summary>
     public async Task<SpamDetectionConfig> GetChatConfigAsync(string chatId, CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             // Try to get chat-specific config first
-            var chatEntity = await _context.SpamDetectionConfigs
+            var chatEntity = await context.SpamDetectionConfigs
                 .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
@@ -128,7 +132,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
             // If no chat-specific config, fall back to global
             if (string.IsNullOrEmpty(configJson))
             {
-                var globalEntity = await _context.SpamDetectionConfigs
+                var globalEntity = await context.SpamDetectionConfigs
                     .AsNoTracking()
                     .FirstOrDefaultAsync(c => c.ChatId == "0", cancellationToken);
 
@@ -160,12 +164,13 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     /// </summary>
     public async Task<bool> UpdateChatConfigAsync(string chatId, SpamDetectionConfig config, string? updatedBy = null, CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             var configJson = JsonSerializer.Serialize(config, JsonOptions);
             var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-            var entity = await _context.SpamDetectionConfigs
+            var entity = await context.SpamDetectionConfigs
                 .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
             if (entity == null)
@@ -178,7 +183,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
                     LastUpdated = timestamp,
                     UpdatedBy = updatedBy
                 };
-                _context.SpamDetectionConfigs.Add(entity);
+                context.SpamDetectionConfigs.Add(entity);
             }
             else
             {
@@ -188,7 +193,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
                 entity.UpdatedBy = updatedBy;
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Updated spam detection configuration for chat {ChatId}", chatId);
             return true;
@@ -205,9 +210,10 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     /// </summary>
     public async Task<IEnumerable<ChatConfigInfo>> GetAllChatConfigsAsync(CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var entities = await _context.SpamDetectionConfigs
+            var entities = await context.SpamDetectionConfigs
                 .AsNoTracking()
                 .OrderBy(c => c.ChatId == "0" ? 0 : 1)
                 .ThenBy(c => c.ChatId)
@@ -234,16 +240,17 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     /// </summary>
     public async Task<bool> DeleteChatConfigAsync(string chatId, CancellationToken cancellationToken = default)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var entity = await _context.SpamDetectionConfigs
+            var entity = await context.SpamDetectionConfigs
                 .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
             if (entity == null)
                 return false;
 
-            _context.SpamDetectionConfigs.Remove(entity);
-            await _context.SaveChangesAsync(cancellationToken);
+            context.SpamDetectionConfigs.Remove(entity);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Deleted spam detection configuration for chat {ChatId}", chatId);
             return true;

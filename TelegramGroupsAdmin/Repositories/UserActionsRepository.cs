@@ -6,24 +6,28 @@ using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
+/// <summary>
+/// Uses DbContextFactory to avoid concurrency issues
+/// </summary>
 public class UserActionsRepository : IUserActionsRepository
 {
-    private readonly AppDbContext _context;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<UserActionsRepository> _logger;
 
     public UserActionsRepository(
-        AppDbContext context,
+        IDbContextFactory<AppDbContext> contextFactory,
         ILogger<UserActionsRepository> logger)
     {
-        _context = context;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
     public async Task<long> InsertAsync(UserActionRecord action)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         var entity = action.ToDataModel();
-        _context.UserActions.Add(entity);
-        await _context.SaveChangesAsync();
+        context.UserActions.Add(entity);
+        await context.SaveChangesAsync();
 
         _logger.LogInformation(
             "Inserted user action {ActionType} for user {UserId} (expires: {ExpiresAt})",
@@ -36,7 +40,8 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task<UserActionRecord?> GetByIdAsync(long id)
     {
-        var entity = await _context.UserActions
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.UserActions
             .AsNoTracking()
             .FirstOrDefaultAsync(ua => ua.Id == id);
 
@@ -45,7 +50,8 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task<List<UserActionRecord>> GetByUserIdAsync(long userId)
     {
-        var entities = await _context.UserActions
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entities = await context.UserActions
             .AsNoTracking()
             .Where(ua => ua.UserId == userId)
             .OrderByDescending(ua => ua.IssuedAt)
@@ -56,8 +62,9 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task<List<UserActionRecord>> GetActiveActionsByUserIdAsync(long userId)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var entities = await _context.UserActions
+        var entities = await context.UserActions
             .AsNoTracking()
             .Where(ua => ua.UserId == userId
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
@@ -69,8 +76,9 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task<List<UserActionRecord>> GetActiveBansAsync()
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var entities = await _context.UserActions
+        var entities = await context.UserActions
             .AsNoTracking()
             .Where(ua => ua.ActionType == DataModels.UserActionType.Ban
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
@@ -82,9 +90,10 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task<bool> IsUserBannedAsync(long userId, long? chatId = null)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Check for active ban (all bans are global now)
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var isBanned = await _context.UserActions
+        var isBanned = await context.UserActions
             .AsNoTracking()
             .AnyAsync(ua => ua.UserId == userId
                 && ua.ActionType == DataModels.UserActionType.Ban
@@ -95,9 +104,10 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task<bool> IsUserTrustedAsync(long userId, long? chatId = null)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Check for active 'trust' action (all trusts are global now)
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var isTrusted = await _context.UserActions
+        var isTrusted = await context.UserActions
             .AsNoTracking()
             .AnyAsync(ua => ua.UserId == userId
                 && ua.ActionType == DataModels.UserActionType.Trust
@@ -108,9 +118,10 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task<int> GetWarnCountAsync(long userId, long? chatId = null)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Count active warns for user (all warns are global now)
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var count = await _context.UserActions
+        var count = await context.UserActions
             .AsNoTracking()
             .CountAsync(ua => ua.UserId == userId
                 && ua.ActionType == DataModels.UserActionType.Warn
@@ -121,11 +132,12 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task ExpireActionAsync(long actionId)
     {
-        var entity = await _context.UserActions.FindAsync(actionId);
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.UserActions.FindAsync(actionId);
         if (entity != null)
         {
             entity.ExpiresAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
             _logger.LogDebug("Expired action {ActionId}", actionId);
         }
@@ -133,9 +145,10 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task ExpireBansForUserAsync(long userId, long? chatId = null)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Expire all active bans for user (all bans are global now)
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var bansToExpire = await _context.UserActions
+        var bansToExpire = await context.UserActions
             .Where(ua => ua.UserId == userId
                 && ua.ActionType == DataModels.UserActionType.Ban
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
@@ -146,7 +159,7 @@ public class UserActionsRepository : IUserActionsRepository
             ban.ExpiresAt = now;
         }
 
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
 
         _logger.LogInformation(
             "Expired {Count} bans for user {UserId}",
@@ -156,9 +169,10 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task ExpireTrustsForUserAsync(long userId, long? chatId = null)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Expire all active trusts for user (all trusts are global now)
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var trustsToExpire = await _context.UserActions
+        var trustsToExpire = await context.UserActions
             .Where(ua => ua.UserId == userId
                 && ua.ActionType == DataModels.UserActionType.Trust
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
@@ -169,7 +183,7 @@ public class UserActionsRepository : IUserActionsRepository
             trust.ExpiresAt = now;
         }
 
-        await _context.SaveChangesAsync();
+        await context.SaveChangesAsync();
 
         _logger.LogInformation(
             "Expired {Count} trusts for user {UserId}",
@@ -179,7 +193,8 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task<List<UserActionRecord>> GetRecentAsync(int limit = 100)
     {
-        var entities = await _context.UserActions
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entities = await context.UserActions
             .AsNoTracking()
             .OrderByDescending(ua => ua.IssuedAt)
             .Take(limit)
@@ -190,8 +205,9 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task<int> DeleteOlderThanAsync(long timestamp)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         // Delete old actions (e.g., expired warns older than 1 year)
-        var toDelete = await _context.UserActions
+        var toDelete = await context.UserActions
             .Where(ua => ua.IssuedAt < timestamp
                 && ua.ExpiresAt != null
                 && ua.ExpiresAt < timestamp)
@@ -201,8 +217,8 @@ public class UserActionsRepository : IUserActionsRepository
 
         if (deleted > 0)
         {
-            _context.UserActions.RemoveRange(toDelete);
-            await _context.SaveChangesAsync();
+            context.UserActions.RemoveRange(toDelete);
+            await context.SaveChangesAsync();
 
             _logger.LogInformation(
                 "Deleted {Count} old user actions (issued before {Timestamp})",
@@ -215,9 +231,10 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task<List<UserActionRecord>> GetActiveActionsAsync(long userId, UserActionType actionType)
     {
+        await using var context = await _contextFactory.CreateDbContextAsync();
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var dataActionType = (DataModels.UserActionType)(int)actionType;
-        var entities = await _context.UserActions
+        var entities = await context.UserActions
             .AsNoTracking()
             .Where(ua => ua.UserId == userId
                 && ua.ActionType == dataActionType
@@ -229,11 +246,12 @@ public class UserActionsRepository : IUserActionsRepository
 
     public async Task DeactivateAsync(long actionId)
     {
-        var entity = await _context.UserActions.FindAsync(actionId);
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.UserActions.FindAsync(actionId);
         if (entity != null)
         {
             entity.ExpiresAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            await _context.SaveChangesAsync();
+            await context.SaveChangesAsync();
 
             _logger.LogDebug("Deactivated user action {ActionId}", actionId);
         }
