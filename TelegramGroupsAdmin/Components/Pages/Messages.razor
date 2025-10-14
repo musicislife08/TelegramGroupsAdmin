@@ -15,6 +15,7 @@
 @inject IDialogService DialogService
 @inject IMessageHistoryService MessageHistoryService
 @inject AuthenticationStateProvider AuthStateProvider
+@inject IDetectionResultsRepository DetectionResultsRepository
 @inject ILogger<Messages> Logger
 @attribute [Authorize]
 @implements IDisposable
@@ -76,8 +77,13 @@
             <MessageBubble Message="message"
                            SpamCheck="@GetSpamCheck(message.MessageId)"
                            EditCount="@GetEditCount(message.MessageId)"
+                           ShowSpamActions="@(_userPermissionLevel >= 1)"
+                           DetectionHistory="@GetDetectionHistory(message.MessageId)"
                            OnImageClick="HandleImageClick"
-                           OnViewEdits="HandleViewEdits" />
+                           OnViewEdits="HandleViewEdits"
+                           OnMarkAsSpam="HandleMarkAsSpam"
+                           OnMarkAsHam="HandleMarkAsHam"
+                           OnViewDetections="HandleViewDetections" />
         </MudVirtualize>
     }
     else if (!_loading)
@@ -106,6 +112,7 @@
     private List<MessageRecord> _filteredMessages = new();
     private Dictionary<long, SpamCheckRecord> _spamChecks = new();
     private Dictionary<long, int> _editCounts = new();
+    private Dictionary<long, List<DetectionResultRecord>> _detectionHistory = new();
     private MessageFilterState _filterState = new();
     private bool _loading = true;
     private DateTime _lastUpdate = DateTime.Now;
@@ -175,12 +182,18 @@
             // Load recent messages (last 500)
             _allMessages = await MessageRepository.GetRecentMessagesAsync(500);
 
-            // Load spam checks and edit counts for these messages
+            // Load spam checks, edit counts, and detection history for these messages
             if (_allMessages.Any())
             {
                 var messageIds = _allMessages.Select(m => m.MessageId);
                 _spamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
                 _editCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+
+                // Load detection history for Admin+ users
+                if (_userPermissionLevel >= 1)
+                {
+                    await LoadDetectionHistoryAsync(messageIds);
+                }
             }
 
             _lastUpdate = DateTime.Now;
@@ -217,6 +230,31 @@
     {
         _editCounts.TryGetValue(messageId, out var count);
         return count;
+    }
+
+    private List<DetectionResultRecord>? GetDetectionHistory(long messageId)
+    {
+        _detectionHistory.TryGetValue(messageId, out var history);
+        return history;
+    }
+
+    private async Task LoadDetectionHistoryAsync(IEnumerable<long> messageIds)
+    {
+        try
+        {
+            foreach (var messageId in messageIds)
+            {
+                var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId);
+                if (history.Any())
+                {
+                    _detectionHistory[messageId] = history;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load detection history");
+        }
     }
 
     private async Task ExportToCsvAsync()
@@ -306,5 +344,137 @@
                || _filterState.HasImages.HasValue
                || _filterState.HasLinks.HasValue
                || _filterState.HasEdits.HasValue;
+    }
+
+    // Phase 2.6: Spam/Ham action handlers
+    private async Task HandleMarkAsSpam(MessageRecord message)
+    {
+        try
+        {
+            // Create detection result marked as spam (manual classification)
+            var detectionResult = new DetectionResultRecord
+            {
+                MessageId = message.MessageId,
+                DetectedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                DetectionSource = "manual",
+                DetectionMethod = "Manual",
+                IsSpam = true,
+                Confidence = 100, // Manual classifications are 100% confident
+                Reason = "Manually marked as spam by admin",
+                AddedBy = (await AuthStateProvider.GetAuthenticationStateAsync()).User.Identity?.Name,
+                UsedForTraining = true, // Manual decisions are always training-worthy
+                NetConfidence = null, // Manual classifications don't have net confidence
+                CheckResultsJson = null,
+                EditVersion = 0
+            };
+
+            await DetectionResultsRepository.InsertAsync(detectionResult);
+
+            // Refresh detection history for this message
+            var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
+            _detectionHistory[message.MessageId] = history;
+
+            // Refresh spam check display
+            if (history.Any())
+            {
+                var latest = history.OrderByDescending(h => h.DetectedAt).First();
+                _spamChecks[message.MessageId] = new SpamCheckRecord(
+                    Id: latest.Id,
+                    CheckTimestamp: latest.DetectedAt,
+                    UserId: message.UserId,
+                    ContentHash: null,
+                    IsSpam: latest.IsSpam,
+                    Confidence: latest.Confidence,
+                    Reason: latest.Reason,
+                    CheckType: latest.DetectionMethod,
+                    MatchedMessageId: null
+                );
+            }
+
+            StateHasChanged();
+
+            Logger.LogInformation("Message {MessageId} marked as spam by user", message.MessageId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to mark message {MessageId} as spam", message.MessageId);
+        }
+    }
+
+    private async Task HandleMarkAsHam(MessageRecord message)
+    {
+        try
+        {
+            // Create detection result marked as ham/not spam (manual classification)
+            var detectionResult = new DetectionResultRecord
+            {
+                MessageId = message.MessageId,
+                DetectedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                DetectionSource = "manual",
+                DetectionMethod = "Manual",
+                IsSpam = false, // Mark as NOT spam
+                Confidence = 100, // Manual classifications are 100% confident
+                Reason = "Manually marked as ham (not spam) by admin - false positive correction",
+                AddedBy = (await AuthStateProvider.GetAuthenticationStateAsync()).User.Identity?.Name,
+                UsedForTraining = true, // Manual decisions are always training-worthy
+                NetConfidence = null,
+                CheckResultsJson = null,
+                EditVersion = 0
+            };
+
+            await DetectionResultsRepository.InsertAsync(detectionResult);
+
+            // TODO: Implement unban logic if user was auto-banned (Phase 2.7)
+
+            // Refresh detection history for this message
+            var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
+            _detectionHistory[message.MessageId] = history;
+
+            // Refresh spam check display
+            if (history.Any())
+            {
+                var latest = history.OrderByDescending(h => h.DetectedAt).First();
+                _spamChecks[message.MessageId] = new SpamCheckRecord(
+                    Id: latest.Id,
+                    CheckTimestamp: latest.DetectedAt,
+                    UserId: message.UserId,
+                    ContentHash: null,
+                    IsSpam: latest.IsSpam,
+                    Confidence: latest.Confidence,
+                    Reason: latest.Reason,
+                    CheckType: latest.DetectionMethod,
+                    MatchedMessageId: null
+                );
+            }
+
+            StateHasChanged();
+
+            Logger.LogInformation("Message {MessageId} marked as ham by user", message.MessageId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to mark message {MessageId} as ham", message.MessageId);
+        }
+    }
+
+    private async Task HandleViewDetections(MessageRecord message)
+    {
+        var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
+
+        var parameters = new DialogParameters<DetectionHistoryDialog>
+        {
+            { x => x.Message, message },
+            { x => x.DetectionResults, history }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseButton = true,
+            CloseOnEscapeKey = true
+        };
+
+        await DialogService.ShowAsync<DetectionHistoryDialog>("Detection History", parameters, options);
     }
 }

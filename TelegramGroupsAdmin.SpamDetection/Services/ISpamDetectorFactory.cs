@@ -44,6 +44,12 @@ public record SpamDetectionResult
     public int SpamFlags { get; init; }
 
     /// <summary>
+    /// Phase 2.6: Net confidence from weighted voting
+    /// Sum(spam confidences) - Sum(ham confidences)
+    /// </summary>
+    public int NetConfidence { get; init; }
+
+    /// <summary>
     /// Results from individual checks
     /// </summary>
     public List<SpamCheckResponse> CheckResults { get; init; } = [];

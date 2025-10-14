@@ -765,54 +765,50 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
   - **DTOs:** All 18 tables have proper snake_case DTOs matching database schema exactly
   - **Benefits over MessagePack:** Human-readable, no special attributes, simpler debugging, reflection-friendly
 
-**Phase 2.6: Confidence Aggregation & Training System** 🔄 **IN PROGRESS**
+**Phase 2.6: Confidence Aggregation & Training System** ✅ **COMPLETE**
 **Goal**: Improve spam detection accuracy with weighted voting and comprehensive training data collection
 
 **Confidence Aggregation Strategy:**
 - **Weighted voting system** - Net confidence = (spam votes) - (ham votes)
 - **Asymmetric confidence** - Simple checks have low confidence for "not spam" (absence of evidence ≠ strong evidence)
-  - Simple checks (InvisibleChars, StopWords): 20% confidence when NOT spam
+  - Simple checks (InvisibleChars, StopWords, Spacing): 20% confidence when NOT spam
   - Trained checks (Bayes, Similarity): Full confidence in both directions
 - **Two-tier decision system**:
   - Net > +50: Run OpenAI veto (safety before ban)
-  - Net ≤ +50: Admin review queue (skip OpenAI cost)
+  - Net ≤ +50: Use existing `/reports` page for admin review
   - Net < 0: Allow (no spam detected)
 - **OpenAI confidence handling**:
   - OpenAI 85%+ confident → Trust decision (ban or allow)
-  - OpenAI <85% confident → Admin review queue (uncertain)
+  - OpenAI <85% confident → Use existing `/reports` page for admin review
 
-**Implementation Tasks:**
-- [ ] **Database schema updates**:
-  - [ ] Add `used_for_training` BOOLEAN flag to `detection_results` table
-  - [ ] Add `net_confidence` INT column to store weighted voting result
-  - [ ] Store all spam checks (not just training-worthy) for audit trail
-- [ ] **SpamDetectorFactory updates**:
-  - [ ] Implement `CalculateNetConfidence()` with asymmetric scoring
-  - [ ] Update `AggregateResults()` for two-tier system (>+50 = OpenAI, ≤+50 = review)
-  - [ ] Store all check results to `detection_results` (with `used_for_training` flag)
-  - [ ] Handle OpenAI confidence threshold (85%) for final decision
-- [ ] **Training data collection**:
-  - [ ] Auto-add: OpenAI confident results (85%+) → `used_for_training = true`
-  - [ ] Auto-add: All admin decisions (review queue, /spam, /ham buttons) → `used_for_training = true`
-  - [ ] Update BayesSpamCheck query to filter `WHERE used_for_training = true`
-  - [ ] Update SimilaritySpamCheck query to filter `WHERE used_for_training = true`
-- [ ] **Messages page enhancements**:
-  - [ ] Add "Mark as Spam" button (visible on all messages)
-  - [ ] Add "Mark as Ham" button (visible on spam-flagged messages)
-  - [ ] Implement unban logic for "Mark as Ham" action
-  - [ ] Add spam check history dropdown/expandable UI per message
-  - [ ] Show full detection history with timestamps, results, actions taken
-  - [ ] Update `detection_results` and trigger training data refresh
-- [ ] **Admin review queue** (future):
-  - [ ] New page: `/review` for messages in limbo (net +0 to +50)
-  - [ ] Spam/Ham/Dismiss buttons with training data integration
-  - [ ] Real-time updates when new messages need review
+**Implementation Complete:**
+- [x] **Database schema** - `used_for_training`, `net_confidence`, `check_results`, `edit_version` columns exist
+- [x] **Asymmetric confidence** - StopWords, InvisibleChars, Spacing return 20% when NOT spam
+- [x] **SpamDetectorFactory updates**:
+  - [x] `CalculateNetConfidence()` with asymmetric scoring
+  - [x] `AggregateResults()` for two-tier system (>+50 = OpenAI, ≤+50 = review)
+  - [x] All check results stored to `detection_results` with `used_for_training` flag
+  - [x] OpenAI confidence threshold (85%) handled
+- [x] **Training data collection**:
+  - [x] Auto-add: OpenAI confident (85%+) OR net_confidence >80 → `used_for_training = true`
+  - [x] Auto-add: All admin decisions (manual spam/ham buttons) → `used_for_training = true`
+  - [x] BayesSpamCheck filters `WHERE used_for_training = true`
+  - [x] SimilaritySpamCheck filters `WHERE used_for_training = true`
+- [x] **TelegramAdminBotService** - Automatic spam detection with result storage
+- [x] **Messages page enhancements**:
+  - [x] "Mark as Spam" button (Admin+ only, visible on all messages)
+  - [x] "Mark as Ham" button (Admin+ only, visible on spam-flagged messages)
+  - [x] Detection History dialog with full check results timeline
+  - [x] Individual check breakdowns with JSON parsing
+  - [x] Real-time UI updates after admin actions
 
-**Phase 2.7: Advanced Features** 🔮 **FUTURE**
-- [ ] **Ban appeal workflow** - UI + bot commands
-- [ ] **Join verification** - Rule acceptance on join
-- [ ] **OpenAI-guided setup** - Smart configuration
-- [ ] **Performance monitoring** - Metrics, alerting
+**Phase 2.7: Spam Action Implementation** 🔄 **NEXT**
+- [ ] **Use existing `/reports` page** - Borderline detections (net +0 to +50) create reports
+- [ ] **Auto-ban implementation** - Messages with net >80 after OpenAI veto confirmation
+- [ ] **Unban logic** - "Mark as Ham" button triggers unban if user was auto-banned
+- [ ] **Command actions** - Complete implementation of `/spam`, `/ban`, `/unban`, `/warn` actions
+- [ ] **Cross-chat enforcement** - Bans/warns across all managed groups
+- [ ] **Edit monitoring** - Detect "post innocent, edit to spam" tactic with re-scanning
 
 ### Phase 3: Advanced Multi-Chat Features (FUTURE)
 
@@ -831,56 +827,38 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 
 ## Next Steps (Prioritized for 2025)
 
-### **Immediate Priority: Confidence Aggregation & Training System (Phase 2.6)** 🎯
-**Goal**: Improve spam detection accuracy and reduce false positives through weighted voting
-
-**Why this is important:**
-- Current tg-spam approach flags legitimate messages as spam (e.g., personal finance discussion → Bayes 100% spam)
-- OpenAI must review EVERY potential spam (expensive safety net)
-- Weighted voting allows multiple checks to balance each other
-- Comprehensive training data collection improves all checks over time
+### **Immediate Priority: Spam Action Implementation (Phase 2.7)** 🎯
+**Goal**: Complete the spam detection workflow with automatic actions and cross-chat enforcement
 
 **Implementation Order:**
 
-1. **Database Schema** (Migration 202601091)
-   - Add `used_for_training BOOLEAN DEFAULT true` to `detection_results`
-   - Add `net_confidence INT` to `detection_results`
-   - Update DetectionResultsRepository to store all checks (not just training-worthy)
+1. **Report Queue Integration**
+   - Borderline detections (net +0 to +50) automatically create reports in existing `/reports` page
+   - OpenAI uncertain (<85%) also creates reports
+   - Reports include full detection history and net confidence
 
-2. **Asymmetric Confidence Scoring**
-   - Update simple checks (InvisibleChars, StopWords): Return 20% confidence when NOT spam
-   - Keep trained checks (Bayes, Similarity): Full confidence in both directions
-   - Document reasoning in code comments
+2. **Auto-Ban Implementation**
+   - Messages with net >80 after OpenAI veto (85%+ confident) trigger auto-ban
+   - Store ban action in `user_actions` table
+   - Cross-chat enforcement via TelegramBotClient.BanChatMember API
 
-3. **Weighted Voting Logic**
-   - Implement `CalculateNetConfidence()` in SpamDetectorFactory
-   - Net = Sum(spam check confidences) - Sum(ham check confidences)
-   - Store net_confidence in detection_results for analytics
+3. **Unban Logic**
+   - "Mark as Ham" button checks for active bans in `user_actions`
+   - If found, creates unban action and calls TelegramBotClient.UnbanChatMember
+   - Logs false positive correction for training improvement
 
-4. **Two-Tier Decision System**
-   - Net > +50: Run OpenAI veto
-     - OpenAI 85%+ confident → Ban or Allow
-     - OpenAI <85% confident → Admin review queue
-   - Net ≤ +50: Admin review queue (skip OpenAI cost)
-   - Net < 0: Allow (no spam detected)
+4. **Command Actions Completion**
+   - `/spam` - Delete message, insert detection_result, ban if threshold exceeded
+   - `/ban` - Insert user_actions, call BanChatMember across all managed chats
+   - `/unban` - Remove user_actions, call UnbanChatMember
+   - `/warn` - Insert user_actions with escalation tracking
 
-5. **Messages Page UI**
-   - Add "Mark as Spam" / "Mark as Ham" buttons (always visible)
-   - Add spam check history dropdown (show all detection_results entries)
-   - Implement unban logic for "Mark as Ham"
+5. **Edit Monitoring**
+   - MessageEditedUpdate handler triggers re-scan with new `edit_version`
+   - Stores edit history in `message_edits` table
+   - Takes action if edited content becomes spam
 
-6. **Training Data Integration**
-   - Update BayesSpamCheck: `WHERE used_for_training = true`
-   - Update SimilaritySpamCheck: `WHERE used_for_training = true`
-   - All admin decisions → `used_for_training = true`
-   - Confident OpenAI (85%+) → `used_for_training = true`
-
-### **Next Priority: Admin Review Queue (Phase 2.6 continued)** 🔜
-- New `/review` page for borderline messages (net +0 to +50)
-- Spam/Ham/Dismiss buttons with training integration
-- Real-time updates when new messages need review
-
-### **Future Priority: Command Actions Implementation (Phase 2.4 completion)**
+### **Future Priority: Advanced Multi-Chat Features (Phase 3)**
 - Implement `/spam`, `/ban`, `/unban`, `/warn` actions
 - Cross-chat ban enforcement
 - Edit monitoring and re-scanning

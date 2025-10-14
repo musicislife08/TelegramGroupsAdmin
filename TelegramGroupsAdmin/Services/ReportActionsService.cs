@@ -251,20 +251,25 @@ public class ReportActionsService : IReportActionsService
 
         try
         {
+            // Phase 2.6: For web UI reports, reply to the reported message itself
+            // For Telegram /report command, reply to the command message
+            // This ensures all reports get visible feedback in the chat
+            var replyToMessageId = report.ReportCommandMessageId ?? report.MessageId;
+
             await botClient.SendMessage(
                 chatId: report.ChatId,
                 text: message,
                 parseMode: ParseMode.Markdown,
                 replyParameters: new global::Telegram.Bot.Types.ReplyParameters
                 {
-                    MessageId = report.ReportCommandMessageId
+                    MessageId = replyToMessageId
                 });
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "Failed to send reply to report command message {MessageId} in chat {ChatId}",
-                report.ReportCommandMessageId,
+                "Failed to send reply to message {MessageId} in chat {ChatId}",
+                report.ReportCommandMessageId ?? report.MessageId,
                 report.ChatId);
         }
     }

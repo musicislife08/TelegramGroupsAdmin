@@ -15,6 +15,10 @@ public record DetectionResultRecordDto
     public int confidence { get; init; }
     public string? reason { get; init; }
     public string? added_by { get; init; }
+    public bool used_for_training { get; init; } = true;
+    public int? net_confidence { get; init; }
+    public string? check_results { get; init; }  // Phase 2.6: JSONB stored as string
+    public int edit_version { get; init; }       // Phase 2.6: Message version (0 = original, 1+ = edits)
 
     public DetectionResultRecord ToDetectionResultRecord() => new DetectionResultRecord(
         Id: id,
@@ -25,7 +29,11 @@ public record DetectionResultRecordDto
         IsSpam: is_spam,
         Confidence: confidence,
         Reason: reason,
-        AddedBy: added_by
+        AddedBy: added_by,
+        UsedForTraining: used_for_training,
+        NetConfidence: net_confidence,
+        CheckResultsJson: check_results,
+        EditVersion: edit_version
     );
 }
 
@@ -38,5 +46,9 @@ public record DetectionResultRecord(
     bool IsSpam,
     int Confidence,
     string? Reason,
-    string? AddedBy
+    string? AddedBy,
+    bool UsedForTraining = true,
+    int? NetConfidence = null,
+    string? CheckResultsJson = null,  // Phase 2.6: JSON string for all individual check results
+    int EditVersion = 0                // Phase 2.6: Track message version
 );

@@ -68,12 +68,15 @@ public class InvisibleCharsSpamCheck : ISpamCheck
                 };
             }
 
+            // Phase 2.6: Asymmetric confidence scoring
+            // Simple checks have low confidence when NOT spam (absence of evidence ≠ strong evidence)
+            // 20% confidence in "not spam" result (vs 0% before)
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
                 IsSpam = false,
                 Details = "No invisible characters detected",
-                Confidence = 0
+                Confidence = 20
             };
         }
         catch (Exception ex)

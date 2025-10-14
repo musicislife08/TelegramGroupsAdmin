@@ -32,6 +32,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
 
     /// <summary>
     /// Get all detection results (spam and ham samples)
+    /// Phase 2.6: Only returns training-worthy samples (used_for_training = true)
     /// </summary>
     public async Task<IEnumerable<TrainingSample>> GetAllSamplesAsync(CancellationToken cancellationToken = default)
     {
@@ -47,6 +48,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 FROM detection_results dr
                 JOIN messages m ON dr.message_id = m.message_id
                 LEFT JOIN users u ON dr.added_by = u.id
+                WHERE dr.used_for_training = true
                 ORDER BY dr.detected_at DESC";
 
             var dtos = await connection.QueryAsync<TrainingSampleDto>(sql);
@@ -63,6 +65,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     /// Get only spam detection results (is_spam = true)
     /// Used by Similarity spam check for TF-IDF matching
     /// All spam is global - no per-chat filtering needed
+    /// Phase 2.6: Only returns training-worthy samples (used_for_training = true)
     /// </summary>
     public async Task<IEnumerable<TrainingSample>> GetSpamSamplesAsync(string? chatId = null, CancellationToken cancellationToken = default)
     {
@@ -77,6 +80,7 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
                 FROM detection_results dr
                 JOIN messages m ON dr.message_id = m.message_id
                 WHERE dr.is_spam = true
+                  AND dr.used_for_training = true
                 ORDER BY dr.detected_at DESC";
 
             var dtos = await connection.QueryAsync<TrainingSampleDto>(sql);

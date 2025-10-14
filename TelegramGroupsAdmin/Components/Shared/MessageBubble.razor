@@ -92,6 +92,45 @@
                 View @EditCount @(EditCount == 1 ? "Edit" : "Edits")
             </MudButton>
         }
+
+        @* Phase 2.6: Spam/Ham Action Buttons (Admin+ only) *@
+        @if (ShowSpamActions)
+        {
+            <MudStack Row="true" Spacing="2" Class="mt-3">
+                @if (SpamCheck?.IsSpam != true)
+                {
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Error"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Report"
+                               OnClick="() => OnMarkAsSpam.InvokeAsync(Message)"
+                               Disabled="@_actionInProgress">
+                        Mark as Spam
+                    </MudButton>
+                }
+                @if (SpamCheck?.IsSpam == true)
+                {
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Success"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.CheckCircle"
+                               OnClick="() => OnMarkAsHam.InvokeAsync(Message)"
+                               Disabled="@_actionInProgress">
+                        Mark as Ham (Not Spam)
+                    </MudButton>
+                }
+                @if (DetectionHistory?.Count > 0)
+                {
+                    <MudButton Variant="Variant.Text"
+                               Color="Color.Info"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.History"
+                               OnClick="() => OnViewDetections.InvokeAsync(Message)">
+                        Detection History (@DetectionHistory.Count)
+                    </MudButton>
+                }
+            </MudStack>
+        }
     </MudCardContent>
 </MudCard>
 
@@ -110,6 +149,24 @@
 
     [Parameter]
     public EventCallback<MessageRecord> OnViewEdits { get; set; }
+
+    // Phase 2.6: Spam action parameters
+    [Parameter]
+    public bool ShowSpamActions { get; set; }
+
+    [Parameter]
+    public List<DetectionResultRecord>? DetectionHistory { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnMarkAsSpam { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnMarkAsHam { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnViewDetections { get; set; }
+
+    private bool _actionInProgress = false;
 
     private string GetBubbleClass()
     {

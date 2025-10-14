@@ -191,12 +191,15 @@ public class StopWordsSpamCheck : ISpamCheck
 
     /// <summary>
     /// Calculate confidence score based on stop word matches and message length
+    /// Phase 2.6: Asymmetric confidence - low confidence when NO matches (absence of evidence ≠ strong evidence)
     /// </summary>
     private static int CalculateConfidence(int matchCount, int messageLength)
     {
         if (matchCount == 0)
         {
-            return 0;
+            // Phase 2.6: Simple checks return 20% confidence when NOT spam
+            // (vs 0% before). Absence of stop words doesn't strongly indicate "not spam"
+            return 20;
         }
 
         // Base confidence from match count - more aggressive than before

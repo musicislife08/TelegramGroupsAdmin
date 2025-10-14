@@ -304,6 +304,10 @@ internal static class ModelMappings
             Confidence = data.Confidence,
             Reason = data.Reason,
             AddedBy = data.AddedBy,
+            UsedForTraining = data.UsedForTraining,
+            NetConfidence = data.NetConfidence,
+            CheckResultsJson = data.CheckResultsJson,  // Phase 2.6
+            EditVersion = data.EditVersion,             // Phase 2.6
             UserId = 0, // Will be populated by repository join
             MessageText = null // Will be populated by repository join
         };
@@ -318,7 +322,11 @@ internal static class ModelMappings
         IsSpam: ui.IsSpam,
         Confidence: ui.Confidence,
         Reason: ui.Reason,
-        AddedBy: ui.AddedBy
+        AddedBy: ui.AddedBy,
+        UsedForTraining: ui.UsedForTraining,
+        NetConfidence: ui.NetConfidence,
+        CheckResultsJson: ui.CheckResultsJson,  // Phase 2.6
+        EditVersion: ui.EditVersion              // Phase 2.6
     );
 
     // User Action mappings (all actions are global now)

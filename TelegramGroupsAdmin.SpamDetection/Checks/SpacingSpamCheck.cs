@@ -272,13 +272,15 @@ public class SpacingSpamCheck : ISpamCheck
 
     /// <summary>
     /// Calculate confidence score based on simplified spacing analysis
+    /// Phase 2.6: Asymmetric confidence - returns 20% when NOT suspicious
     /// Reduces confidence for pattern-only detections to minimize false positives
     /// </summary>
     private static int CalculateConfidence(SpacingAnalysis analysis)
     {
         if (!analysis.IsSuspicious)
         {
-            return 0;
+            // Phase 2.6: Simple checks return 20% confidence when NOT spam
+            return 20;
         }
 
         var confidence = 0;

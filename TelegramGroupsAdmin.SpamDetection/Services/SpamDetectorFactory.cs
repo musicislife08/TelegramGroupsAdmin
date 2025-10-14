@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
@@ -160,7 +161,37 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     }
 
     /// <summary>
+    /// Phase 2.6: Calculate net confidence using weighted voting
+    /// Net = Sum(spam check confidences) - Sum(ham check confidences)
+    /// </summary>
+    private int CalculateNetConfidence(List<SpamCheckResponse> checkResults)
+    {
+        var spamVotes = 0;
+        var hamVotes = 0;
+
+        foreach (var check in checkResults)
+        {
+            if (check.IsSpam)
+            {
+                spamVotes += check.Confidence;
+            }
+            else
+            {
+                hamVotes += check.Confidence;
+            }
+        }
+
+        var netConfidence = spamVotes - hamVotes;
+
+        _logger.LogDebug("Net confidence: {Net} (spam votes: {SpamVotes}, ham votes: {HamVotes})",
+            netConfidence, spamVotes, hamVotes);
+
+        return netConfidence;
+    }
+
+    /// <summary>
     /// Aggregate results from multiple spam checks
+    /// Phase 2.6: Uses weighted voting (net confidence) for two-tier decision system
     /// </summary>
     private SpamDetectionResult AggregateResults(List<SpamCheckResponse> checkResults, SpamDetectionConfig config)
     {
@@ -171,16 +202,22 @@ public class SpamDetectorFactory : ISpamDetectorFactory
         var maxConfidence = isSpam ? spamResults.Max(r => r.Confidence) : 0;
         var avgConfidence = isSpam ? (int)spamResults.Average(r => r.Confidence) : 0;
 
-        // Determine recommended action based on confidence thresholds
-        var recommendedAction = DetermineAction(maxConfidence, config);
+        // Phase 2.6: Calculate net confidence using weighted voting
+        var netConfidence = CalculateNetConfidence(checkResults);
+
+        // Phase 2.6: Two-tier decision system based on net confidence
+        // Net > +50: Run OpenAI veto (safety before ban)
+        // Net ≤ +50: Admin review queue (skip OpenAI cost)
+        // Net < 0: Allow (no spam detected)
+        var shouldVeto = netConfidence > 50 && config.OpenAI.VetoMode;
+
+        // Determine recommended action based on net confidence
+        var recommendedAction = DetermineActionFromNetConfidence(netConfidence, config);
 
         // Primary reason is from the highest confidence check
         var primaryReason = isSpam
             ? spamResults.OrderByDescending(r => r.Confidence).First().Details
             : "No spam detected";
-
-        // Should veto if spam detected but confidence is below veto threshold
-        var shouldVeto = isSpam && maxConfidence < config.OpenAI.VetoThreshold && config.OpenAI.VetoMode;
 
         var result = new SpamDetectionResult
         {
@@ -191,11 +228,12 @@ public class SpamDetectorFactory : ISpamDetectorFactory
             CheckResults = checkResults,
             PrimaryReason = primaryReason,
             RecommendedAction = recommendedAction,
-            ShouldVeto = shouldVeto
+            ShouldVeto = shouldVeto,
+            NetConfidence = netConfidence // Phase 2.6: Store for analytics
         };
 
-        _logger.LogDebug("Aggregated result: IsSpam={IsSpam}, MaxConfidence={MaxConfidence}, SpamFlags={SpamFlags}, Action={Action}",
-            result.IsSpam, result.MaxConfidence, result.SpamFlags, result.RecommendedAction);
+        _logger.LogDebug("Aggregated result: IsSpam={IsSpam}, NetConfidence={NetConfidence}, MaxConfidence={MaxConfidence}, SpamFlags={SpamFlags}, Action={Action}",
+            result.IsSpam, result.NetConfidence, result.MaxConfidence, result.SpamFlags, result.RecommendedAction);
 
         return result;
     }
@@ -205,12 +243,16 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     /// </summary>
     private SpamDetectionResult CreateVetoedResult(List<SpamCheckResponse> checkResults, SpamCheckResponse vetoResult)
     {
+        // Calculate net confidence even for vetoed results (for analytics)
+        var netConfidence = CalculateNetConfidence(checkResults);
+
         return new SpamDetectionResult
         {
             IsSpam = false, // Vetoed by OpenAI
             MaxConfidence = vetoResult.Confidence, // OpenAI's confidence that it's NOT spam
             AvgConfidence = vetoResult.Confidence,
             SpamFlags = 0, // Veto overrides all flags
+            NetConfidence = netConfidence, // Phase 2.6: Store for analytics
             CheckResults = checkResults,
             PrimaryReason = vetoResult.Details,
             RecommendedAction = SpamAction.Allow,
@@ -219,7 +261,7 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     }
 
     /// <summary>
-    /// Determine recommended action based on confidence score
+    /// Determine recommended action based on confidence score (legacy method)
     /// </summary>
     private SpamAction DetermineAction(int confidence, SpamDetectionConfig config)
     {
@@ -231,6 +273,31 @@ public class SpamDetectorFactory : ISpamDetectorFactory
         {
             return SpamAction.ReviewQueue;
         }
+        return SpamAction.Allow;
+    }
+
+    /// <summary>
+    /// Phase 2.6: Determine recommended action based on net confidence (weighted voting)
+    /// Net > +50: Run OpenAI veto (safety before ban)
+    /// Net ≤ +50 AND > 0: Admin review queue (skip OpenAI cost)
+    /// Net ≤ 0: Allow (no spam detected)
+    /// </summary>
+    private SpamAction DetermineActionFromNetConfidence(int netConfidence, SpamDetectionConfig config)
+    {
+        if (netConfidence > 50)
+        {
+            // High confidence spam - pending OpenAI veto check
+            // Will become AutoBan if OpenAI confirms (or if OpenAI disabled)
+            return SpamAction.ReviewQueue; // Will be upgraded to AutoBan after OpenAI veto
+        }
+
+        if (netConfidence > 0)
+        {
+            // Low confidence spam - send to admin review
+            return SpamAction.ReviewQueue;
+        }
+
+        // No spam detected (net confidence ≤ 0)
         return SpamAction.Allow;
     }
 
@@ -313,5 +380,26 @@ public class SpamDetectorFactory : ISpamDetectorFactory
 
         // If >80% of letters are Latin script, likely English/Western European language
         return (double)latinCount / letterCount > 0.8;
+    }
+
+    /// <summary>
+    /// Phase 2.6: Serialize check results to JSON for storage in detection_results.check_results
+    /// Returns compact JSON with minimal field names to save space
+    /// </summary>
+    public static string SerializeCheckResults(List<SpamCheckResponse> checkResults)
+    {
+        var checks = checkResults.Select(c => new
+        {
+            name = c.CheckName,
+            spam = c.IsSpam,
+            conf = c.Confidence,
+            reason = c.Details
+        });
+
+        return JsonSerializer.Serialize(new { checks }, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = false // Compact JSON
+        });
     }
 }

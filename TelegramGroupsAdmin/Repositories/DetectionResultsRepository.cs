@@ -28,10 +28,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         const string sql = """
             INSERT INTO detection_results (
                 message_id, detected_at, detection_source, is_spam,
-                confidence, reason, detection_method, added_by
+                confidence, reason, detection_method, added_by,
+                used_for_training, net_confidence, check_results, edit_version
             ) VALUES (
                 @MessageId, @DetectedAt, @DetectionSource, @IsSpam,
-                @Confidence, @Reason, @DetectionMethod, @AddedBy
+                @Confidence, @Reason, @DetectionMethod, @AddedBy,
+                @UsedForTraining, @NetConfidence, @CheckResultsJson::jsonb, @EditVersion
             );
             """;
 
@@ -44,14 +46,21 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             result.Confidence,
             result.Reason,
             result.DetectionMethod,
-            result.AddedBy
+            result.AddedBy,
+            result.UsedForTraining,
+            result.NetConfidence,
+            result.CheckResultsJson,
+            result.EditVersion
         });
 
         _logger.LogDebug(
-            "Inserted detection result for message {MessageId}: {IsSpam} (confidence: {Confidence})",
+            "Inserted detection result for message {MessageId}: {IsSpam} (confidence: {Confidence}, net: {NetConfidence}, training: {UsedForTraining}, edit_version: {EditVersion})",
             result.MessageId,
             result.IsSpam ? "spam" : "ham",
-            result.Confidence);
+            result.Confidence,
+            result.NetConfidence,
+            result.UsedForTraining,
+            result.EditVersion);
     }
 
     public async Task<DetectionResultRecord?> GetByIdAsync(long id)
@@ -62,6 +71,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             SELECT dr.id, dr.message_id, dr.detected_at,
                    dr.detection_source, dr.detection_method,
                    dr.is_spam, dr.confidence, dr.reason, dr.added_by,
+                   dr.used_for_training, dr.net_confidence,
+                   dr.check_results, dr.edit_version,
                    m.user_id, m.message_text
             FROM detection_results dr
             JOIN messages m ON dr.message_id = m.message_id
@@ -97,6 +108,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             SELECT dr.id, dr.message_id, dr.detected_at,
                    dr.detection_source, dr.detection_method,
                    dr.is_spam, dr.confidence, dr.reason, dr.added_by,
+                   dr.used_for_training, dr.net_confidence,
+                   dr.check_results, dr.edit_version,
                    m.user_id, m.message_text
             FROM detection_results dr
             JOIN messages m ON dr.message_id = m.message_id
@@ -117,6 +130,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             Confidence = (int)(r.confidence ?? 0),
             Reason = r.reason as string,
             AddedBy = r.added_by as string,
+            UsedForTraining = (bool)(r.used_for_training ?? true),
+            NetConfidence = r.net_confidence as int?,
+            CheckResultsJson = r.check_results as string,
+            EditVersion = (int)(r.edit_version ?? 0),
             UserId = (long)r.user_id,
             MessageText = r.message_text as string
         }).ToList();
@@ -130,6 +147,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             SELECT dr.id, dr.message_id, dr.detected_at,
                    dr.detection_source, dr.detection_method,
                    dr.is_spam, dr.confidence, dr.reason, dr.added_by,
+                   dr.used_for_training, dr.net_confidence,
+                   dr.check_results, dr.edit_version,
                    m.user_id, m.message_text
             FROM detection_results dr
             JOIN messages m ON dr.message_id = m.message_id
@@ -150,6 +169,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             Confidence = (int)(r.confidence ?? 0),
             Reason = r.reason as string,
             AddedBy = r.added_by as string,
+            UsedForTraining = (bool)(r.used_for_training ?? true),
+            NetConfidence = r.net_confidence as int?,
+            CheckResultsJson = r.check_results as string,
+            EditVersion = (int)(r.edit_version ?? 0),
             UserId = (long)r.user_id,
             MessageText = r.message_text as string
         }).ToList();
@@ -159,30 +182,24 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     {
         await using var connection = new NpgsqlConnection(_connectionString);
 
-        // Bounded query: all manual samples + recent 10k auto samples
-        // This prevents unbounded growth while preserving human-verified data
+        // Phase 2.6: Only use high-quality training samples
+        // - Manual admin decisions (always training-worthy)
+        // - Confident OpenAI results (85%+, marked as used_for_training = true)
+        // This prevents low-quality auto-detections from polluting training data
         const string sql = """
             SELECT m.message_text, dr.is_spam
             FROM detection_results dr
             JOIN messages m ON dr.message_id = m.message_id
             WHERE m.message_text IS NOT NULL
               AND m.message_text != ''
-              AND (
-                  dr.detection_source = 'manual'
-                  OR dr.id IN (
-                      SELECT id FROM detection_results
-                      WHERE detection_source = 'auto'
-                      ORDER BY detected_at DESC
-                      LIMIT 10000
-                  )
-              )
+              AND dr.used_for_training = true
             ORDER BY dr.detected_at DESC;
             """;
 
         var results = await connection.QueryAsync<(string message_text, bool is_spam)>(sql);
 
         _logger.LogDebug(
-            "Retrieved {Count} training samples for Bayes classifier",
+            "Retrieved {Count} training samples for Bayes classifier (used_for_training = true)",
             results.Count());
 
         return results.Select(r => (r.message_text, r.is_spam)).ToList();
@@ -192,11 +209,13 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     {
         await using var connection = new NpgsqlConnection(_connectionString);
 
+        // Phase 2.6: Only use high-quality training samples for similarity matching
         const string sql = """
             SELECT m.message_text
             FROM detection_results dr
             JOIN messages m ON dr.message_id = m.message_id
             WHERE dr.is_spam = true
+              AND dr.used_for_training = true
               AND m.message_text IS NOT NULL
               AND m.message_text != ''
             ORDER BY dr.detected_at DESC
@@ -206,7 +225,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         var results = await connection.QueryAsync<string>(sql, new { Limit = limit });
 
         _logger.LogDebug(
-            "Retrieved {Count} spam samples for similarity check",
+            "Retrieved {Count} spam samples for similarity check (used_for_training = true)",
             results.Count());
 
         return results.ToList();

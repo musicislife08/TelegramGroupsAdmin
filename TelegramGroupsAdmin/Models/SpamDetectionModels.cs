@@ -42,21 +42,23 @@ public record StopWord(
 );
 
 /// <summary>
-/// Report record for UI display (user-submitted reports from /report command)
+/// Report record for UI display (user-submitted reports from /report command OR web UI)
+/// Phase 2.6: Supports both Telegram /report command and web UI "Flag for Review" button
 /// </summary>
 public record Report(
     long Id,
     int MessageId,
     long ChatId,
-    int ReportCommandMessageId,
-    long ReportedByUserId,
+    int? ReportCommandMessageId,      // NULL for web UI reports, populated for Telegram /report
+    long? ReportedByUserId,            // NULL if user has no Telegram link, populated if they do
     string? ReportedByUserName,
     long ReportedAt,
     ReportStatus Status,
     string? ReviewedBy,
     long? ReviewedAt,
     string? ActionTaken,
-    string? AdminNotes
+    string? AdminNotes,
+    string? WebUserId = null           // Phase 2.6: Web user ID (always populated for web UI reports)
 );
 
 /// <summary>

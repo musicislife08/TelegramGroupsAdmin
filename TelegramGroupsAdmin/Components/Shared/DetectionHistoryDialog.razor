@@ -1,0 +1,181 @@
+@using TelegramGroupsAdmin.Models
+@using System.Text.Json
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-4">Spam Detection History</MudText>
+
+        @if (DetectionResults?.Any() == true)
+        {
+            <MudTimeline TimelineOrientation="TimelineOrientation.Vertical" TimelinePosition="TimelinePosition.Start">
+                @foreach (var result in DetectionResults.OrderByDescending(r => r.DetectedAt))
+                {
+                    <MudTimelineItem Color="@(result.IsSpam ? Color.Error : Color.Success)" Size="Size.Small">
+                        <ItemOpposite>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @FormatTimestamp(result.DetectedAt)
+                            </MudText>
+                        </ItemOpposite>
+                        <ItemContent>
+                            <MudCard Elevation="2" Class="pa-3">
+                                <MudStack Spacing="2">
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                        <MudChip T="string"
+                                                 Size="Size.Small"
+                                                 Color="@(result.IsSpam ? Color.Error : Color.Success)">
+                                            @(result.IsSpam ? "SPAM" : "HAM")
+                                        </MudChip>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">
+                                            Net: @result.NetConfidence
+                                        </MudChip>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">
+                                            @result.DetectionSource
+                                        </MudChip>
+                                    </MudStack>
+
+                                    <MudText Typo="Typo.body2">
+                                        <strong>Method:</strong> @result.DetectionMethod
+                                    </MudText>
+
+                                    @if (!string.IsNullOrEmpty(result.Reason))
+                                    {
+                                        <MudText Typo="Typo.body2">
+                                            <strong>Reason:</strong> @result.Reason
+                                        </MudText>
+                                    }
+
+                                    <MudStack Row="true" Spacing="1">
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                                            Confidence: @result.Confidence%
+                                        </MudChip>
+                                        @if (result.UsedForTraining)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.School">
+                                                Training Sample
+                                            </MudChip>
+                                        }
+                                        @if (result.EditVersion > 0)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Edit">
+                                                Edit v@result.EditVersion
+                                            </MudChip>
+                                        }
+                                    </MudStack>
+
+                                    @* Individual Check Results *@
+                                    @if (!string.IsNullOrEmpty(result.CheckResultsJson))
+                                    {
+                                        <MudExpansionPanels Dense="true" Class="mt-2">
+                                            <MudExpansionPanel Text="Individual Check Results">
+                                                @try
+                                                {
+                                                    var checkResults = ParseCheckResults(result.CheckResultsJson);
+                                                    @if (checkResults?.Any() == true)
+                                                    {
+                                                        <MudSimpleTable Dense="true" Hover="true" Style="font-size: 0.85rem;">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Check</th>
+                                                                    <th>Result</th>
+                                                                    <th>Confidence</th>
+                                                                    <th>Details</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @foreach (var check in checkResults)
+                                                                {
+                                                                    <tr>
+                                                                        <td><strong>@check.Name</strong></td>
+                                                                        <td>
+                                                                            <MudChip T="string" Size="Size.Small"
+                                                                                     Color="@(check.IsSpam ? Color.Error : Color.Success)">
+                                                                                @(check.IsSpam ? "Spam" : "Ham")
+                                                                            </MudChip>
+                                                                        </td>
+                                                                        <td>@check.Confidence%</td>
+                                                                        <td>@check.Reason</td>
+                                                                    </tr>
+                                                                }
+                                                            </tbody>
+                                                        </MudSimpleTable>
+                                                    }
+                                                }
+                                                catch
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Error">
+                                                        Failed to parse check results
+                                                    </MudText>
+                                                }
+                                            </MudExpansionPanel>
+                                        </MudExpansionPanels>
+                                    }
+                                </MudStack>
+                            </MudCard>
+                        </ItemContent>
+                    </MudTimelineItem>
+                }
+            </MudTimeline>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info">No detection history available for this message.</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public MessageRecord Message { get; set; } = default!;
+
+    [Parameter]
+    public List<DetectionResultRecord>? DetectionResults { get; set; }
+
+    private void Close() => MudDialog.Close();
+
+    private string FormatTimestamp(long timestamp)
+    {
+        var dt = DateTimeOffset.FromUnixTimeSeconds(timestamp).ToLocalTime();
+        return dt.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    private List<CheckResult>? ParseCheckResults(string json)
+    {
+        try
+        {
+            var doc = JsonDocument.Parse(json);
+            var checksArray = doc.RootElement.GetProperty("checks");
+
+            var results = new List<CheckResult>();
+            foreach (var check in checksArray.EnumerateArray())
+            {
+                results.Add(new CheckResult
+                {
+                    Name = check.GetProperty("name").GetString() ?? "Unknown",
+                    IsSpam = check.GetProperty("spam").GetBoolean(),
+                    Confidence = check.GetProperty("conf").GetInt32(),
+                    Reason = check.GetProperty("reason").GetString() ?? ""
+                });
+            }
+            return results;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private record CheckResult
+    {
+        public required string Name { get; init; }
+        public required bool IsSpam { get; init; }
+        public required int Confidence { get; init; }
+        public required string Reason { get; init; }
+    }
+}

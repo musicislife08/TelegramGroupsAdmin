@@ -147,14 +147,15 @@ public record StopWord(
 /// <summary>
 /// DTO for Dapper mapping from PostgreSQL (snake_case column names)
 /// Public to allow cross-assembly repository usage
+/// Phase 2.6: Supports both Telegram /report and web UI "Flag for Review"
 /// </summary>
 public record ReportDto
 {
     public long id { get; init; }
     public int message_id { get; init; }
     public long chat_id { get; init; }
-    public int report_command_message_id { get; init; }
-    public long reported_by_user_id { get; init; }
+    public int? report_command_message_id { get; init; }  // Phase 2.6: Nullable for web reports
+    public long? reported_by_user_id { get; init; }       // Phase 2.6: Nullable for web reports
     public string? reported_by_user_name { get; init; }
     public long reported_at { get; init; }
     public int status { get; init; }
@@ -162,6 +163,7 @@ public record ReportDto
     public long? reviewed_at { get; init; }
     public string? action_taken { get; init; }
     public string? admin_notes { get; init; }
+    public string? web_user_id { get; init; }             // Phase 2.6: Web user ID
 
     public Report ToReport() => new Report(
         Id: id,
@@ -175,26 +177,29 @@ public record ReportDto
         ReviewedBy: reviewed_by,
         ReviewedAt: reviewed_at,
         ActionTaken: action_taken,
-        AdminNotes: admin_notes
+        AdminNotes: admin_notes,
+        WebUserId: web_user_id
     );
 }
 
 /// <summary>
 /// Public domain model for reports
+/// Phase 2.6: Supports both Telegram /report and web UI "Flag for Review"
 /// </summary>
 public record Report(
     long Id,
     int MessageId,
     long ChatId,
-    int ReportCommandMessageId,
-    long ReportedByUserId,
+    int? ReportCommandMessageId,      // NULL for web UI reports
+    long? ReportedByUserId,            // NULL if user has no Telegram link
     string? ReportedByUserName,
     long ReportedAt,
     ReportStatus Status,
     string? ReviewedBy,
     long? ReviewedAt,
     string? ActionTaken,
-    string? AdminNotes
+    string? AdminNotes,
+    string? WebUserId = null           // Phase 2.6: Web user ID (FK to users table)
 );
 
 /// <summary>

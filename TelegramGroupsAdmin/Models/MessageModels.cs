@@ -100,6 +100,10 @@ public class DetectionResultRecord
     public string? AddedBy { get; set; }
     public long UserId { get; set; }
     public string? MessageText { get; set; }
+    public bool UsedForTraining { get; set; } = true;
+    public int? NetConfidence { get; set; }
+    public string? CheckResultsJson { get; set; }  // Phase 2.6: JSON string with all check results
+    public int EditVersion { get; set; }            // Phase 2.6: Message version (0 = original, 1+ = edits)
 }
 
 /// <summary>

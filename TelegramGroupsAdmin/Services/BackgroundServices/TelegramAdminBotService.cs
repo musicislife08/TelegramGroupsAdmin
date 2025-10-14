@@ -307,43 +307,77 @@ public partial class TelegramAdminBotService(
                 }
             }
 
-            // TODO: Queue spam detection check using orchestrator (Phase 2.5)
-            // The orchestrator handles trust/admin checks + spam detection in one place
-            // For now, spam detection is only triggered manually via /spam command or via the test UI
+            // Phase 2.6: Automatic spam detection with detection result storage
+            // Skip spam detection for command messages (already processed by CommandRouter)
+            if (commandResult == null && !string.IsNullOrWhiteSpace(text))
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        using var scope = serviceProvider.CreateScope();
+                        var orchestrator = scope.ServiceProvider.GetRequiredService<ISpamCheckOrchestrator>();
+                        var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
+                        var spamDetectorFactory = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.SpamDetection.Services.ISpamDetectorFactory>();
 
-            // Example of how to use the orchestrator when we implement auto spam detection:
-            // using (var scope = serviceProvider.CreateScope())
-            // {
-            //     var orchestrator = scope.ServiceProvider.GetRequiredService<ISpamCheckOrchestrator>();
-            //     var configRepo = scope.ServiceProvider.GetRequiredService<ISpamDetectionConfigRepository>();
-            //     var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
-            //
-            //     var request = new SpamCheckRequest
-            //     {
-            //         Message = text ?? "",
-            //         UserId = message.From.Id.ToString(),
-            //         UserName = message.From.Username,
-            //         ChatId = message.Chat.Id.ToString()
-            //     };
-            //     var result = await orchestrator.CheckAsync(request);
-            //
-            //     if (!result.SpamCheckSkipped && result.SpamResult?.IsSpam == true)
-            //     {
-            //         var config = await configRepo.GetChatConfigAsync(message.Chat.Id.ToString());
-            //
-            //         // Training mode: send to review queue instead of auto-ban
-            //         if (config.TrainingMode || result.SpamResult.Confidence < config.AutoBanThreshold)
-            //         {
-            //             // Create report for admin review
-            //             await reportsRepo.CreateReportAsync(new ReportRecord { ... });
-            //         }
-            //         else if (result.SpamResult.Confidence >= config.AutoBanThreshold)
-            //         {
-            //             // Auto-ban (only if NOT in training mode)
-            //             // Delete message, ban user, create detection_result
-            //         }
-            //     }
-            // }
+                        var request = new TelegramGroupsAdmin.SpamDetection.Models.SpamCheckRequest
+                        {
+                            Message = text,
+                            UserId = message.From?.Id.ToString() ?? "",
+                            UserName = message.From?.Username,
+                            ChatId = message.Chat.Id.ToString()
+                            // TODO: Add ImageData stream for image spam detection (Phase 2.7)
+                        };
+
+                        var result = await orchestrator.CheckAsync(request);
+
+                        // Store detection result (spam or ham) for analytics and training
+                        // Only store if spam detection actually ran (not skipped for trusted/admin users)
+                        if (!result.SpamCheckSkipped && result.SpamResult != null)
+                        {
+                            var detectionResult = new Models.DetectionResultRecord
+                            {
+                                MessageId = message.MessageId,
+                                DetectedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                                DetectionSource = "auto",
+                                DetectionMethod = result.SpamResult.CheckResults.Count > 0
+                                    ? string.Join(", ", result.SpamResult.CheckResults.Select(c => c.CheckName))
+                                    : "Unknown",
+                                IsSpam = result.SpamResult.IsSpam,
+                                Confidence = result.SpamResult.MaxConfidence,
+                                Reason = result.SpamResult.PrimaryReason,
+                                AddedBy = null, // Auto-detection
+                                UsedForTraining = DetermineIfTrainingWorthy(result.SpamResult),
+                                NetConfidence = result.SpamResult.NetConfidence,
+                                CheckResultsJson = spamDetectorFactory.GetType()
+                                    .GetMethod("SerializeCheckResults", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                                    ?.Invoke(null, new object[] { result.SpamResult.CheckResults }) as string,
+                                EditVersion = 0
+                            };
+
+                            await detectionResultsRepo.InsertAsync(detectionResult);
+
+                            logger.LogInformation(
+                                "Stored detection result for message {MessageId}: {IsSpam} (net: {NetConfidence}, training: {UsedForTraining})",
+                                message.MessageId,
+                                result.SpamResult.IsSpam ? "spam" : "ham",
+                                result.SpamResult.NetConfidence,
+                                detectionResult.UsedForTraining);
+
+                            // TODO (Phase 2.7): Handle spam actions based on net confidence
+                            // - Net > +50: Queue for OpenAI veto (already done in SpamDetectorFactory)
+                            // - After OpenAI veto:
+                            //   - OpenAI confident (85%+) & spam -> Auto-ban
+                            //   - OpenAI uncertain (<85%) -> Admin review queue
+                            // - Net ≤ +50 AND > 0: Admin review queue
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to run spam detection for message {MessageId}", message.MessageId);
+                    }
+                }, CancellationToken.None);
+            }
         }
         catch (Exception ex)
         {
@@ -918,5 +952,29 @@ public partial class TelegramAdminBotService(
         {
             logger.LogError(ex, "Failed to refresh health for all chats");
         }
+    }
+
+    /// <summary>
+    /// Phase 2.6: Determine if detection result should be used for training
+    /// High-quality samples only: Confident OpenAI results (85%+) or manual admin decisions
+    /// Low-confidence auto-detections are NOT training-worthy
+    /// </summary>
+    private static bool DetermineIfTrainingWorthy(TelegramGroupsAdmin.SpamDetection.Services.SpamDetectionResult result)
+    {
+        // Manual admin decisions are always training-worthy (will be set when admin uses Mark as Spam/Ham)
+        // For auto-detections, only confident results are training-worthy
+
+        // Check if OpenAI was involved and was confident (85%+ confidence)
+        var openAIResult = result.CheckResults.FirstOrDefault(c => c.CheckName == "OpenAI");
+        if (openAIResult != null)
+        {
+            // OpenAI confident (85%+) = training-worthy
+            return openAIResult.Confidence >= 85;
+        }
+
+        // No OpenAI veto = borderline/uncertain detection
+        // Only use for training if net confidence is very high (>80)
+        // This prevents low-quality auto-detections from polluting training data
+        return result.NetConfidence > 80;
     }
 }
