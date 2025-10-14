@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Models;
+using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
@@ -49,15 +50,15 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 MessageId = x.DetectionResult.MessageId,
                 DetectedAt = x.DetectionResult.DetectedAt,
                 DetectionSource = x.DetectionResult.DetectionSource,
-                DetectionMethod = x.DetectionResult.DetectionMethod ?? "Unknown",
+                DetectionMethod = x.DetectionResult.DetectionMethod,
                 IsSpam = x.DetectionResult.IsSpam,
-                Confidence = x.DetectionResult.Confidence ?? 0,
+                Confidence = x.DetectionResult.Confidence,
                 Reason = x.DetectionResult.Reason,
                 AddedBy = x.DetectionResult.AddedBy,
-                UsedForTraining = x.DetectionResult.UsedForTraining ?? true,
+                UsedForTraining = x.DetectionResult.UsedForTraining,
                 NetConfidence = x.DetectionResult.NetConfidence,
-                CheckResultsJson = x.DetectionResult.CheckResults,
-                EditVersion = x.DetectionResult.EditVersion ?? 0,
+                CheckResultsJson = x.DetectionResult.CheckResultsJson,
+                EditVersion = x.DetectionResult.EditVersion,
                 UserId = x.Message.UserId,
                 MessageText = x.Message.MessageText
             })
@@ -82,15 +83,15 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 MessageId = x.DetectionResult.MessageId,
                 DetectedAt = x.DetectionResult.DetectedAt,
                 DetectionSource = x.DetectionResult.DetectionSource,
-                DetectionMethod = x.DetectionResult.DetectionMethod ?? "Unknown",
+                DetectionMethod = x.DetectionResult.DetectionMethod,
                 IsSpam = x.DetectionResult.IsSpam,
-                Confidence = x.DetectionResult.Confidence ?? 0,
+                Confidence = x.DetectionResult.Confidence,
                 Reason = x.DetectionResult.Reason,
                 AddedBy = x.DetectionResult.AddedBy,
-                UsedForTraining = x.DetectionResult.UsedForTraining ?? true,
+                UsedForTraining = x.DetectionResult.UsedForTraining,
                 NetConfidence = x.DetectionResult.NetConfidence,
-                CheckResultsJson = x.DetectionResult.CheckResults,
-                EditVersion = x.DetectionResult.EditVersion ?? 0,
+                CheckResultsJson = x.DetectionResult.CheckResultsJson,
+                EditVersion = x.DetectionResult.EditVersion,
                 UserId = x.Message.UserId,
                 MessageText = x.Message.MessageText
             })
@@ -115,15 +116,15 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 MessageId = x.DetectionResult.MessageId,
                 DetectedAt = x.DetectionResult.DetectedAt,
                 DetectionSource = x.DetectionResult.DetectionSource,
-                DetectionMethod = x.DetectionResult.DetectionMethod ?? "Unknown",
+                DetectionMethod = x.DetectionResult.DetectionMethod,
                 IsSpam = x.DetectionResult.IsSpam,
-                Confidence = x.DetectionResult.Confidence ?? 0,
+                Confidence = x.DetectionResult.Confidence,
                 Reason = x.DetectionResult.Reason,
                 AddedBy = x.DetectionResult.AddedBy,
-                UsedForTraining = x.DetectionResult.UsedForTraining ?? true,
+                UsedForTraining = x.DetectionResult.UsedForTraining,
                 NetConfidence = x.DetectionResult.NetConfidence,
-                CheckResultsJson = x.DetectionResult.CheckResults,
-                EditVersion = x.DetectionResult.EditVersion ?? 0,
+                CheckResultsJson = x.DetectionResult.CheckResultsJson,
+                EditVersion = x.DetectionResult.EditVersion,
                 UserId = x.Message.UserId,
                 MessageText = x.Message.MessageText
             })
@@ -188,7 +189,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         var isTrusted = await _context.UserActions
             .AsNoTracking()
             .AnyAsync(ua => ua.UserId == userId
-                && ua.ActionType == Models.UserActionType.Trust
+                && ua.ActionType == DataModels.UserActionType.Trust
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now));
 
         if (isTrusted)
@@ -213,7 +214,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         var total = allDetections.Count;
         var spam = allDetections.Count(d => d.IsSpam);
         var avgConfidence = allDetections.Any()
-            ? allDetections.Average(d => (double)(d.Confidence ?? 0))
+            ? allDetections.Average(d => (double)d.Confidence)
             : 0.0;
 
         // Last 24h stats

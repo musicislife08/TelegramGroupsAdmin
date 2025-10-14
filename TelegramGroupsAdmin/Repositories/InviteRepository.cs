@@ -48,8 +48,8 @@ public class InviteRepository
             CreatedBy = createdBy,
             CreatedAt = now,
             ExpiresAt = expiresAt,
-            PermissionLevel = (UiModels.PermissionLevel)permissionLevel,
-            Status = UiModels.InviteStatus.Pending,
+            PermissionLevel = (DataModels.PermissionLevel)permissionLevel,
+            Status = DataModels.InviteStatus.Pending,
             ModifiedAt = null,
             UsedBy = null
         };
@@ -77,7 +77,7 @@ public class InviteRepository
         if (entity == null) return;
 
         entity.UsedBy = usedBy;
-        entity.Status = UiModels.InviteStatus.Used;
+        entity.Status = DataModels.InviteStatus.Used;
         entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         await _context.SaveChangesAsync();
@@ -101,7 +101,7 @@ public class InviteRepository
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         var expiredInvites = await _context.Invites
-            .Where(i => i.ExpiresAt <= now && i.Status == UiModels.InviteStatus.Pending)
+            .Where(i => i.ExpiresAt <= now && i.Status == DataModels.InviteStatus.Pending)
             .ToListAsync();
 
         if (expiredInvites.Count > 0)
@@ -120,7 +120,7 @@ public class InviteRepository
 
         if (filter != DataModels.InviteFilter.All)
         {
-            var status = (UiModels.InviteStatus)(int)filter;
+            var status = (DataModels.InviteStatus)(int)filter;
             query = query.Where(i => i.Status == status);
         }
 
@@ -135,11 +135,15 @@ public class InviteRepository
             .Join(_context.Users,
                 invite => invite.CreatedBy,
                 user => user.Id,
-                (invite, user) => new { Invite = invite, CreatorEmail = user.Email });
+                (invite, user) => new { Invite = invite, CreatorEmail = user.Email })
+            .GroupJoin(_context.Users,
+                x => x.Invite.UsedBy,
+                user => user.Id,
+                (x, usedByUsers) => new { x.Invite, x.CreatorEmail, UsedByEmail = usedByUsers.Select(u => u.Email).FirstOrDefault() });
 
         if (filter != DataModels.InviteFilter.All)
         {
-            var status = (UiModels.InviteStatus)(int)filter;
+            var status = (DataModels.InviteStatus)(int)filter;
             query = query.Where(x => x.Invite.Status == status);
         }
 
@@ -148,25 +152,26 @@ public class InviteRepository
         return results.Select(r => new UiModels.InviteWithCreator(
             Token: r.Invite.Token,
             CreatedBy: r.Invite.CreatedBy,
+            CreatedByEmail: r.CreatorEmail,
             CreatedAt: r.Invite.CreatedAt,
             ExpiresAt: r.Invite.ExpiresAt,
             UsedBy: r.Invite.UsedBy,
-            PermissionLevel: r.Invite.PermissionLevel,
-            Status: r.Invite.Status,
-            ModifiedAt: r.Invite.ModifiedAt,
-            CreatorEmail: r.CreatorEmail
+            UsedByEmail: r.UsedByEmail,
+            PermissionLevel: (UiModels.PermissionLevel)r.Invite.PermissionLevel,
+            Status: (UiModels.InviteStatus)r.Invite.Status,
+            ModifiedAt: r.Invite.ModifiedAt
         )).ToList();
     }
 
     public async Task<bool> RevokeAsync(string token, CancellationToken ct = default)
     {
         var entity = await _context.Invites
-            .FirstOrDefaultAsync(i => i.Token == token && i.Status == UiModels.InviteStatus.Pending, ct);
+            .FirstOrDefaultAsync(i => i.Token == token && i.Status == DataModels.InviteStatus.Pending, ct);
 
         if (entity == null)
             return false;
 
-        entity.Status = UiModels.InviteStatus.Revoked;
+        entity.Status = DataModels.InviteStatus.Revoked;
         entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         await _context.SaveChangesAsync(ct);

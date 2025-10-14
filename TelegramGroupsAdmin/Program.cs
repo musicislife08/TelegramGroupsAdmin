@@ -1,6 +1,6 @@
-using FluentMigrator.Runner;
 using TelegramGroupsAdmin;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Data.Extensions;
 using TelegramGroupsAdmin.SpamDetection.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -36,10 +36,10 @@ builder.Services.AddApplicationConfiguration(builder.Configuration);
 // HTTP clients with rate limiting
 builder.Services.AddHttpClients(builder.Configuration);
 
-// PostgreSQL connection
+// Data layer services (Dapper, EF Core, FluentMigrator)
 var connectionString = builder.Configuration.GetConnectionString("PostgreSQL")
     ?? throw new InvalidOperationException("PostgreSQL connection string not configured");
-builder.Services.AddNpgsqlDataSource(connectionString);
+builder.Services.AddDataServices(connectionString);
 
 // Telegram services and bot commands
 builder.Services.AddTelegramServices();
@@ -49,15 +49,6 @@ builder.Services.AddRepositories();
 
 // Spam Detection library
 builder.Services.AddSpamDetection();
-
-// FluentMigrator for database migrations
-builder.Services
-    .AddFluentMigratorCore()
-    .ConfigureRunner(rb => rb
-        .AddPostgres()
-        .WithGlobalConnectionString(connectionString)
-        .ScanIn(typeof(TelegramGroupsAdmin.Data.Migrations.InitialSchema).Assembly).For.Migrations())
-    .AddLogging(lb => lb.AddFluentMigratorConsole());
 
 var app = builder.Build();
 

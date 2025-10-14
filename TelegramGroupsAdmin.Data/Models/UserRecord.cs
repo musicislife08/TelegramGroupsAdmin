@@ -4,11 +4,81 @@ using TelegramGroupsAdmin.Data.Attributes;
 
 namespace TelegramGroupsAdmin.Data.Models;
 
+/// <summary>
+/// User permission level (Data layer - stored as INT in database)
+/// </summary>
+public enum PermissionLevel
+{
+    ReadOnly = 0,
+    Admin = 1,
+    Owner = 2
+}
+
+/// <summary>
+/// User status (Data layer - stored as INT in database)
+/// </summary>
+public enum UserStatus
+{
+    Pending = 0,
+    Active = 1,
+    Disabled = 2,
+    Deleted = 3
+}
+
+/// <summary>
+/// Invite status (Data layer - stored as INT in database)
+/// </summary>
 public enum InviteStatus
 {
     Pending = 0,
     Used = 1,
     Revoked = 2
+}
+
+/// <summary>
+/// Audit event type (Data layer - stored as INT in database)
+/// </summary>
+public enum AuditEventType
+{
+    // Data Operations
+    DataExported = 0,
+    MessageExported = 1,
+
+    // System Events
+    SystemConfigChanged = 2,
+
+    // User Authentication
+    UserEmailVerificationSent = 3,
+    UserEmailVerified = 4,
+    UserLogin = 5,
+    UserLoginFailed = 6,
+    UserLogout = 7,
+    UserPasswordReset = 8,
+    UserPasswordResetRequested = 9,
+
+    // User Invites
+    UserInviteCreated = 10,
+    UserInviteRevoked = 11,
+
+    // User Lifecycle
+    UserDeleted = 12,
+    UserRegistered = 13,
+    UserStatusChanged = 14,
+
+    // User Profile Changes
+    UserEmailChanged = 15,
+    UserPasswordChanged = 16,
+    UserPermissionChanged = 17,
+    UserTotpReset = 18,
+    UserTotpEnabled = 19,
+
+    // Settings Changes (20-29 reserved for settings)
+    SpamDetectionConfigChanged = 20,
+    GeneralSettingsChanged = 21,
+    TelegramSettingsChanged = 22,
+    NotificationSettingsChanged = 23,
+    SecuritySettingsChanged = 24,
+    IntegrationSettingsChanged = 25
 }
 
 /// <summary>
@@ -41,7 +111,7 @@ public class UserRecord
     public string SecurityStamp { get; set; } = string.Empty;
 
     [Column("permission_level")]
-    public int PermissionLevel { get; set; }
+    public PermissionLevel PermissionLevel { get; set; }
 
     [Column("invited_by")]
     public string? InvitedBy { get; set; }
@@ -66,7 +136,7 @@ public class UserRecord
     public long? LastLoginAt { get; set; }
 
     [Column("status")]
-    public int Status { get; set; }
+    public UserStatus Status { get; set; }
 
     [Column("modified_by")]
     public string? ModifiedBy { get; set; }
@@ -105,10 +175,10 @@ public class UserRecord
     public int PermissionLevelInt => (int)PermissionLevel;
 
     [NotMapped]
-    public bool CanLogin => Status == (int)UserStatus.Active && EmailVerified;
+    public bool CanLogin => Status == UserStatus.Active && EmailVerified;
 
     [NotMapped]
-    public bool IsPending => Status == (int)UserStatus.Pending;
+    public bool IsPending => Status == UserStatus.Pending;
 }
 
 /// <summary>
@@ -162,10 +232,10 @@ public class InviteRecord
     public string? UsedBy { get; set; }
 
     [Column("permission_level")]
-    public int PermissionLevel { get; set; }
+    public PermissionLevel PermissionLevel { get; set; }
 
     [Column("status")]
-    public int Status { get; set; }
+    public InviteStatus Status { get; set; }
 
     [Column("modified_at")]
     public long? ModifiedAt { get; set; }
@@ -199,7 +269,7 @@ public class AuditLogRecord
     public long Id { get; set; }
 
     [Column("event_type")]
-    public int EventType { get; set; }
+    public AuditEventType EventType { get; set; }
 
     [Column("timestamp")]
     public long Timestamp { get; set; }

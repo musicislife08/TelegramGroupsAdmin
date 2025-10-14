@@ -33,13 +33,13 @@ public static class ServiceCollectionExtensions
 
         // Identity-related repositories and services
         services.AddSingleton<ITotpProtectionService, TotpProtectionService>();
-        services.AddSingleton<UserRepository>();
-        services.AddSingleton<InviteRepository>();
-        services.AddSingleton<AuditLogRepository>();
-        services.AddSingleton<VerificationTokenRepository>();
+        services.AddScoped<UserRepository>();
+        services.AddScoped<InviteRepository>();
+        services.AddScoped<AuditLogRepository>();
+        services.AddScoped<VerificationTokenRepository>();
 
         // Message history repository (read-only for Web UI)
-        services.AddSingleton<MessageHistoryRepository>();
+        services.AddScoped<MessageHistoryRepository>();
 
         return services;
     }

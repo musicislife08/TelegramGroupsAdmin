@@ -100,7 +100,7 @@ public class StopWord
 // ============================================================================
 
 /// <summary>
-/// Report status enum
+/// Report status (Data layer - stored as INT in database)
 /// </summary>
 public enum ReportStatus
 {
@@ -140,7 +140,7 @@ public class Report
     public long ReportedAt { get; set; }
 
     [Column("status")]
-    public int Status { get; set; }
+    public ReportStatus Status { get; set; }
 
     [Column("reviewed_by")]
     public string? ReviewedBy { get; set; }

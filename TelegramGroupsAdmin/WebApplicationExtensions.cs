@@ -1,7 +1,8 @@
-using FluentMigrator.Runner;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Endpoints;
 
 namespace TelegramGroupsAdmin;
@@ -47,22 +48,18 @@ public static class WebApplicationExtensions
     }
 
     /// <summary>
-    /// Runs database migrations
+    /// Runs database migrations using EF Core
     /// </summary>
-    public static Task RunDatabaseMigrationsAsync(this WebApplication app, string connectionString)
+    public static async Task RunDatabaseMigrationsAsync(this WebApplication app, string connectionString)
     {
-        var migrationAssembly = typeof(TelegramGroupsAdmin.Data.Migrations.InitialSchema).Assembly;
-
-        app.Logger.LogInformation("Running PostgreSQL database migrations");
+        app.Logger.LogInformation("Running PostgreSQL database migrations (EF Core)");
 
         using var scope = app.Services.CreateScope();
-        var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        runner.MigrateUp();
+        await context.Database.MigrateAsync();
 
         app.Logger.LogInformation("PostgreSQL database migration complete");
-
-        return Task.CompletedTask;
     }
 
     /// <summary>

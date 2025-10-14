@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// Bot status in a managed chat (Data layer enum - stored as INT in database)
+/// Bot status in a managed chat (Data layer - stored as INT in database)
 /// </summary>
 public enum BotChatStatus
 {
@@ -15,7 +15,7 @@ public enum BotChatStatus
 }
 
 /// <summary>
-/// Chat type categories (Data layer enum - stored as INT in database)
+/// Chat type categories (Data layer - stored as INT in database)
 /// </summary>
 public enum ManagedChatType
 {
@@ -39,10 +39,10 @@ public class ManagedChatRecord
     public string? ChatName { get; set; }
 
     [Column("chat_type")]
-    public int ChatType { get; set; }
+    public ManagedChatType ChatType { get; set; }
 
     [Column("bot_status")]
-    public int BotStatus { get; set; }
+    public BotChatStatus BotStatus { get; set; }
 
     [Column("is_admin")]
     public bool IsAdmin { get; set; }

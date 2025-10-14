@@ -87,16 +87,16 @@ public class AppDbContext : DbContext
             .HasForeignKey(ua => ua.MessageId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // Users → Invites created (one-to-many) - no navigation property needed, just FK
+        // Users → Invites created (one-to-many) - Creator navigation property
         modelBuilder.Entity<InviteRecord>()
-            .HasOne<UserRecord>()
+            .HasOne(i => i.Creator)
             .WithMany()
             .HasForeignKey(i => i.CreatedBy)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Users → Invites used (one-to-many) - no navigation property needed, just FK
+        // Users → Invites used (one-to-many) - UsedByUser navigation property
         modelBuilder.Entity<InviteRecord>()
-            .HasOne<UserRecord>()
+            .HasOne(i => i.UsedByUser)
             .WithMany()
             .HasForeignKey(i => i.UsedBy)
             .OnDelete(DeleteBehavior.SetNull);

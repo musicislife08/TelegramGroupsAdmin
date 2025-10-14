@@ -14,7 +14,7 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0-rc.1.25451.107" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0-rc.1.25451.107" />
     <PackageReference Include="Dapper" Version="2.1.66" />
-    <PackageReference Include="Npgsql" Version="9.0.4" />
+    <PackageReference Include="Npgsql" Version="10.0.0-rc.1" />
   </ItemGroup>
 
   <ItemGroup>

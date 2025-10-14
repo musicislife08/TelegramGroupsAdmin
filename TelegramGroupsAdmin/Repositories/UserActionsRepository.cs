@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Models;
+using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
@@ -71,7 +72,7 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var entities = await _context.UserActions
             .AsNoTracking()
-            .Where(ua => ua.ActionType == Models.UserActionType.Ban
+            .Where(ua => ua.ActionType == DataModels.UserActionType.Ban
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
             .OrderByDescending(ua => ua.IssuedAt)
             .ToListAsync();
@@ -86,7 +87,7 @@ public class UserActionsRepository : IUserActionsRepository
         var isBanned = await _context.UserActions
             .AsNoTracking()
             .AnyAsync(ua => ua.UserId == userId
-                && ua.ActionType == Models.UserActionType.Ban
+                && ua.ActionType == DataModels.UserActionType.Ban
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now));
 
         return isBanned;
@@ -99,7 +100,7 @@ public class UserActionsRepository : IUserActionsRepository
         var isTrusted = await _context.UserActions
             .AsNoTracking()
             .AnyAsync(ua => ua.UserId == userId
-                && ua.ActionType == Models.UserActionType.Trust
+                && ua.ActionType == DataModels.UserActionType.Trust
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now));
 
         return isTrusted;
@@ -112,7 +113,7 @@ public class UserActionsRepository : IUserActionsRepository
         var count = await _context.UserActions
             .AsNoTracking()
             .CountAsync(ua => ua.UserId == userId
-                && ua.ActionType == Models.UserActionType.Warn
+                && ua.ActionType == DataModels.UserActionType.Warn
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now));
 
         return count;
@@ -136,7 +137,7 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var bansToExpire = await _context.UserActions
             .Where(ua => ua.UserId == userId
-                && ua.ActionType == Models.UserActionType.Ban
+                && ua.ActionType == DataModels.UserActionType.Ban
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
             .ToListAsync();
 
@@ -159,7 +160,7 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var trustsToExpire = await _context.UserActions
             .Where(ua => ua.UserId == userId
-                && ua.ActionType == Models.UserActionType.Trust
+                && ua.ActionType == DataModels.UserActionType.Trust
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
             .ToListAsync();
 
@@ -215,10 +216,11 @@ public class UserActionsRepository : IUserActionsRepository
     public async Task<List<UserActionRecord>> GetActiveActionsAsync(long userId, UserActionType actionType)
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var dataActionType = (DataModels.UserActionType)(int)actionType;
         var entities = await _context.UserActions
             .AsNoTracking()
             .Where(ua => ua.UserId == userId
-                && ua.ActionType == actionType
+                && ua.ActionType == dataActionType
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
             .ToListAsync();
 

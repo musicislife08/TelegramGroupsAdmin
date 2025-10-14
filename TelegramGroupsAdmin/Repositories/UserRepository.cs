@@ -28,7 +28,7 @@ public class UserRepository
 
         var entity = await _context.Users
             .AsNoTracking()
-            .Where(u => u.NormalizedEmail == normalizedEmail && u.Status != (int)UiModels.UserStatus.Deleted)
+            .Where(u => u.NormalizedEmail == normalizedEmail && u.Status != DataModels.UserStatus.Deleted)
             .FirstOrDefaultAsync(ct);
 
         return entity?.ToUiModel();
@@ -212,7 +212,7 @@ public class UserRepository
         if (entity == null) return;
 
         entity.UsedBy = userId;
-        entity.Status = (int)UiModels.InviteStatus.Used;
+        entity.Status = DataModels.InviteStatus.Used;
         entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         await _context.SaveChangesAsync(ct);
@@ -245,7 +245,7 @@ public class UserRepository
         var entity = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
         if (entity == null) return;
 
-        entity.PermissionLevel = permissionLevel;
+        entity.PermissionLevel = (DataModels.PermissionLevel)permissionLevel;
         entity.ModifiedBy = modifiedBy;
         entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
@@ -270,7 +270,7 @@ public class UserRepository
         var entity = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
         if (entity == null) return;
 
-        entity.Status = (int)newStatus;
+        entity.Status = (DataModels.UserStatus)(int)newStatus;
         entity.IsActive = newStatus == UiModels.UserStatus.Active;
         entity.ModifiedBy = modifiedBy;
         entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -290,13 +290,13 @@ public class UserRepository
         entity.NormalizedEmail = user.NormalizedEmail;
         entity.PasswordHash = user.PasswordHash;
         entity.SecurityStamp = user.SecurityStamp;
-        entity.PermissionLevel = (int)user.PermissionLevel;
+        entity.PermissionLevel = (DataModels.PermissionLevel)(int)user.PermissionLevel;
         entity.InvitedBy = user.InvitedBy;
         entity.IsActive = user.IsActive;
         entity.TotpSecret = user.TotpSecret;
         entity.TotpEnabled = user.TotpEnabled;
         entity.LastLoginAt = user.LastLoginAt;
-        entity.Status = (int)user.Status;
+        entity.Status = (DataModels.UserStatus)(int)user.Status;
         entity.ModifiedBy = user.ModifiedBy;
         entity.ModifiedAt = user.ModifiedAt;
         entity.EmailVerified = user.EmailVerified;

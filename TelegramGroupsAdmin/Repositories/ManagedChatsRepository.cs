@@ -27,8 +27,8 @@ public class ManagedChatsRepository : IManagedChatsRepository
         {
             // Update existing record
             existing.ChatName = chat.ChatName;
-            existing.ChatType = chat.ChatType;
-            existing.BotStatus = chat.BotStatus;
+            existing.ChatType = (Data.Models.ManagedChatType)(int)chat.ChatType;
+            existing.BotStatus = (Data.Models.BotChatStatus)(int)chat.BotStatus;
             existing.IsAdmin = chat.IsAdmin;
             existing.IsActive = chat.IsActive;
             existing.LastSeenAt = chat.LastSeenAt;
@@ -125,8 +125,8 @@ public class ManagedChatsRepository : IManagedChatsRepository
             {
                 ChatId = chatId,
                 ChatName = "Unknown",
-                ChatType = ChatType.Private,
-                BotStatus = BotStatus.Member,
+                ChatType = Data.Models.ManagedChatType.Private,
+                BotStatus = Data.Models.BotChatStatus.Member,
                 IsAdmin = false,
                 AddedAt = timestamp,
                 IsActive = true,

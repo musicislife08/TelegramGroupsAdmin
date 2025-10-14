@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// User action type enum (Data layer - stored as INT in database)
+/// User action type (Data layer - stored as INT in database)
 /// </summary>
 public enum UserActionType
 {
@@ -30,7 +30,7 @@ public class UserActionRecord
     public long UserId { get; set; }
 
     [Column("action_type")]
-    public int ActionType { get; set; }
+    public UserActionType ActionType { get; set; }
 
     [Column("message_id")]
     public long? MessageId { get; set; }

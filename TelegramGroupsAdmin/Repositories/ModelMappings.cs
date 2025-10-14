@@ -60,29 +60,30 @@ internal static class ModelMappings
         PasswordResetTokenExpiresAt: data.PasswordResetTokenExpiresAt
     );
 
-    public static DataModels.UserRecord ToDataModel(this UiModels.UserRecord ui) => new(
-        Id: ui.Id,
-        Email: ui.Email,
-        NormalizedEmail: ui.NormalizedEmail,
-        PasswordHash: ui.PasswordHash,
-        SecurityStamp: ui.SecurityStamp,
-        PermissionLevel: (int)ui.PermissionLevel,
-        InvitedBy: ui.InvitedBy,
-        IsActive: ui.IsActive,
-        TotpSecret: ui.TotpSecret,
-        TotpEnabled: ui.TotpEnabled,
-        TotpSetupStartedAt: ui.TotpSetupStartedAt,
-        CreatedAt: ui.CreatedAt,
-        LastLoginAt: ui.LastLoginAt,
-        Status: (DataModels.UserStatus)ui.Status,
-        ModifiedBy: ui.ModifiedBy,
-        ModifiedAt: ui.ModifiedAt,
-        EmailVerified: ui.EmailVerified,
-        EmailVerificationToken: ui.EmailVerificationToken,
-        EmailVerificationTokenExpiresAt: ui.EmailVerificationTokenExpiresAt,
-        PasswordResetToken: ui.PasswordResetToken,
-        PasswordResetTokenExpiresAt: ui.PasswordResetTokenExpiresAt
-    );
+    public static DataModels.UserRecord ToDataModel(this UiModels.UserRecord ui) => new()
+    {
+        Id = ui.Id,
+        Email = ui.Email,
+        NormalizedEmail = ui.NormalizedEmail,
+        PasswordHash = ui.PasswordHash,
+        SecurityStamp = ui.SecurityStamp,
+        PermissionLevel = (DataModels.PermissionLevel)(int)ui.PermissionLevel,
+        InvitedBy = ui.InvitedBy,
+        IsActive = ui.IsActive,
+        TotpSecret = ui.TotpSecret,
+        TotpEnabled = ui.TotpEnabled,
+        TotpSetupStartedAt = ui.TotpSetupStartedAt,
+        CreatedAt = ui.CreatedAt,
+        LastLoginAt = ui.LastLoginAt,
+        Status = (DataModels.UserStatus)(int)ui.Status,
+        ModifiedBy = ui.ModifiedBy,
+        ModifiedAt = ui.ModifiedAt,
+        EmailVerified = ui.EmailVerified,
+        EmailVerificationToken = ui.EmailVerificationToken,
+        EmailVerificationTokenExpiresAt = ui.EmailVerificationTokenExpiresAt,
+        PasswordResetToken = ui.PasswordResetToken,
+        PasswordResetTokenExpiresAt = ui.PasswordResetTokenExpiresAt
+    };
 
     // Recovery Code mappings
     public static UiModels.RecoveryCodeRecord ToUiModel(this DataModels.RecoveryCodeRecord data) => new(
@@ -147,24 +148,25 @@ internal static class ModelMappings
         DeletionSource: data.DeletionSource
     );
 
-    public static DataModels.MessageRecord ToDataModel(this UiModels.MessageRecord ui) => new(
-        MessageId: ui.MessageId,
-        UserId: ui.UserId,
-        UserName: ui.UserName,
-        ChatId: ui.ChatId,
-        Timestamp: ui.Timestamp,
-        MessageText: ui.MessageText,
-        PhotoFileId: ui.PhotoFileId,
-        PhotoFileSize: ui.PhotoFileSize,
-        Urls: ui.Urls,
-        EditDate: ui.EditDate,
-        ContentHash: ui.ContentHash,
-        ChatName: ui.ChatName,
-        PhotoLocalPath: ui.PhotoLocalPath,
-        PhotoThumbnailPath: ui.PhotoThumbnailPath,
-        DeletedAt: ui.DeletedAt,
-        DeletionSource: ui.DeletionSource
-    );
+    public static DataModels.MessageRecord ToDataModel(this UiModels.MessageRecord ui) => new()
+    {
+        MessageId = ui.MessageId,
+        UserId = ui.UserId,
+        UserName = ui.UserName,
+        ChatId = ui.ChatId,
+        Timestamp = ui.Timestamp,
+        MessageText = ui.MessageText,
+        PhotoFileId = ui.PhotoFileId,
+        PhotoFileSize = ui.PhotoFileSize,
+        Urls = ui.Urls,
+        EditDate = ui.EditDate,
+        ContentHash = ui.ContentHash,
+        ChatName = ui.ChatName,
+        PhotoLocalPath = ui.PhotoLocalPath,
+        PhotoThumbnailPath = ui.PhotoThumbnailPath,
+        DeletedAt = ui.DeletedAt,
+        DeletionSource = ui.DeletionSource
+    };
 
     // Note: PhotoMessageRecord, HistoryStats, SpamCheckRecord are UI-only models
     // They are constructed directly in repositories (MessageHistoryRepository), not mapped from database entities
@@ -179,26 +181,28 @@ internal static class ModelMappings
         NewContentHash: data.NewContentHash
     );
 
-    public static DataModels.MessageEditRecord ToDataModel(this UiModels.MessageEditRecord ui) => new(
-        Id: ui.Id,
-        MessageId: ui.MessageId,
-        EditDate: ui.EditDate,
-        OldText: ui.OldText,
-        NewText: ui.NewText,
-        OldContentHash: ui.OldContentHash,
-        NewContentHash: ui.NewContentHash
-    );
+    public static DataModels.MessageEditRecord ToDataModel(this UiModels.MessageEditRecord ui) => new()
+    {
+        Id = ui.Id,
+        MessageId = ui.MessageId,
+        EditDate = ui.EditDate,
+        OldText = ui.OldText,
+        NewText = ui.NewText,
+        OldContentHash = ui.OldContentHash,
+        NewContentHash = ui.NewContentHash
+    };
 
-    public static DataModels.InviteRecord ToDataModel(this UiModels.InviteRecord ui) => new(
-        Token: ui.Token,
-        CreatedBy: ui.CreatedBy,
-        CreatedAt: ui.CreatedAt,
-        ExpiresAt: ui.ExpiresAt,
-        UsedBy: ui.UsedBy,
-        PermissionLevel: (int)ui.PermissionLevel,
-        Status: (DataModels.InviteStatus)ui.Status,
-        ModifiedAt: ui.ModifiedAt
-    );
+    public static DataModels.InviteRecord ToDataModel(this UiModels.InviteRecord ui) => new()
+    {
+        Token = ui.Token,
+        CreatedBy = ui.CreatedBy,
+        CreatedAt = ui.CreatedAt,
+        ExpiresAt = ui.ExpiresAt,
+        UsedBy = ui.UsedBy,
+        PermissionLevel = (DataModels.PermissionLevel)(int)ui.PermissionLevel,
+        Status = (DataModels.InviteStatus)(int)ui.Status,
+        ModifiedAt = ui.ModifiedAt
+    };
 
     // Spam Detection mappings
     public static UiModels.TrainingSample ToUiModel(this DataModels.TrainingSample data) => new(
@@ -208,7 +212,7 @@ internal static class ModelMappings
         AddedDate: data.AddedDate,
         Source: data.Source,
         ConfidenceWhenAdded: data.ConfidenceWhenAdded,
-        ChatIds: data.ChatIds,
+        ChatIds: data.ChatIds ?? [],
         AddedBy: data.AddedBy,
         DetectionCount: data.DetectionCount,
         LastDetectedDate: data.LastDetectedDate
@@ -244,16 +248,17 @@ internal static class ModelMappings
         UsedAt: data.UsedAt
     );
 
-    public static DataModels.VerificationToken ToDataModel(this UiModels.VerificationToken ui) => new(
-        Id: ui.Id,
-        UserId: ui.UserId,
-        TokenType: (DataModels.TokenType)ui.TokenType,
-        Token: ui.Token,
-        Value: ui.Value,
-        ExpiresAt: ui.ExpiresAt,
-        CreatedAt: ui.CreatedAt,
-        UsedAt: ui.UsedAt
-    );
+    public static DataModels.VerificationToken ToDataModel(this UiModels.VerificationToken ui) => new()
+    {
+        Id = ui.Id,
+        UserId = ui.UserId,
+        TokenType = (DataModels.TokenType)(int)ui.TokenType,
+        Token = ui.Token,
+        Value = ui.Value,
+        ExpiresAt = ui.ExpiresAt,
+        CreatedAt = ui.CreatedAt,
+        UsedAt = ui.UsedAt
+    };
 
     // Detection Result mappings
     public static UiModels.DetectionResultRecord ToUiModel(this DataModels.DetectionResultRecord data)
@@ -278,21 +283,22 @@ internal static class ModelMappings
         };
     }
 
-    public static DataModels.DetectionResultRecord ToDataModel(this UiModels.DetectionResultRecord ui) => new(
-        Id: ui.Id,
-        MessageId: ui.MessageId,
-        DetectedAt: ui.DetectedAt,
-        DetectionSource: ui.DetectionSource,
-        DetectionMethod: ui.DetectionMethod,
-        IsSpam: ui.IsSpam,
-        Confidence: ui.Confidence,
-        Reason: ui.Reason,
-        AddedBy: ui.AddedBy,
-        UsedForTraining: ui.UsedForTraining,
-        NetConfidence: ui.NetConfidence,
-        CheckResultsJson: ui.CheckResultsJson,  // Phase 2.6
-        EditVersion: ui.EditVersion              // Phase 2.6
-    );
+    public static DataModels.DetectionResultRecord ToDataModel(this UiModels.DetectionResultRecord ui) => new()
+    {
+        Id = ui.Id,
+        MessageId = ui.MessageId,
+        DetectedAt = ui.DetectedAt,
+        DetectionSource = ui.DetectionSource,
+        DetectionMethod = ui.DetectionMethod,
+        IsSpam = ui.IsSpam,
+        Confidence = ui.Confidence,
+        Reason = ui.Reason,
+        AddedBy = ui.AddedBy,
+        UsedForTraining = ui.UsedForTraining,
+        NetConfidence = ui.NetConfidence,
+        CheckResultsJson = ui.CheckResultsJson,  // Phase 2.6
+        EditVersion = ui.EditVersion              // Phase 2.6
+    };
 
     // User Action mappings (all actions are global now)
     public static UiModels.UserActionRecord ToUiModel(this DataModels.UserActionRecord data) => new(
@@ -306,16 +312,17 @@ internal static class ModelMappings
         Reason: data.Reason
     );
 
-    public static DataModels.UserActionRecord ToDataModel(this UiModels.UserActionRecord ui) => new(
-        Id: ui.Id,
-        UserId: ui.UserId,
-        ActionType: (int)ui.ActionType,
-        MessageId: ui.MessageId,
-        IssuedBy: ui.IssuedBy,
-        IssuedAt: ui.IssuedAt,
-        ExpiresAt: ui.ExpiresAt,
-        Reason: ui.Reason
-    );
+    public static DataModels.UserActionRecord ToDataModel(this UiModels.UserActionRecord ui) => new()
+    {
+        Id = ui.Id,
+        UserId = ui.UserId,
+        ActionType = (DataModels.UserActionType)(int)ui.ActionType,
+        MessageId = ui.MessageId,
+        IssuedBy = ui.IssuedBy,
+        IssuedAt = ui.IssuedAt,
+        ExpiresAt = ui.ExpiresAt,
+        Reason = ui.Reason
+    };
 
     // Managed Chat mappings
     public static UiModels.ManagedChatRecord ToUiModel(this DataModels.ManagedChatRecord data) => new(
@@ -330,17 +337,18 @@ internal static class ModelMappings
         SettingsJson: data.SettingsJson
     );
 
-    public static DataModels.ManagedChatRecord ToDataModel(this UiModels.ManagedChatRecord ui) => new(
-        ChatId: ui.ChatId,
-        ChatName: ui.ChatName,
-        ChatType: (int)ui.ChatType,
-        BotStatus: (int)ui.BotStatus,
-        IsAdmin: ui.IsAdmin,
-        AddedAt: ui.AddedAt,
-        IsActive: ui.IsActive,
-        LastSeenAt: ui.LastSeenAt,
-        SettingsJson: ui.SettingsJson
-    );
+    public static DataModels.ManagedChatRecord ToDataModel(this UiModels.ManagedChatRecord ui) => new()
+    {
+        ChatId = ui.ChatId,
+        ChatName = ui.ChatName,
+        ChatType = (DataModels.ManagedChatType)(int)ui.ChatType,
+        BotStatus = (DataModels.BotChatStatus)(int)ui.BotStatus,
+        IsAdmin = ui.IsAdmin,
+        AddedAt = ui.AddedAt,
+        IsActive = ui.IsActive,
+        LastSeenAt = ui.LastSeenAt,
+        SettingsJson = ui.SettingsJson
+    };
 
     // TelegramUserMapping mappings
     public static UiModels.TelegramUserMappingRecord ToUiModel(this DataModels.TelegramUserMappingRecord data) => new(
@@ -398,18 +406,19 @@ internal static class ModelMappings
         AdminNotes: data.AdminNotes
     );
 
-    public static DataModels.Report ToDataModel(this UiModels.Report ui) => new(
-        Id: ui.Id,
-        MessageId: ui.MessageId,
-        ChatId: ui.ChatId,
-        ReportCommandMessageId: ui.ReportCommandMessageId,
-        ReportedByUserId: ui.ReportedByUserId,
-        ReportedByUserName: ui.ReportedByUserName,
-        ReportedAt: ui.ReportedAt,
-        Status: (DataModels.ReportStatus)ui.Status,
-        ReviewedBy: ui.ReviewedBy,
-        ReviewedAt: ui.ReviewedAt,
-        ActionTaken: ui.ActionTaken,
-        AdminNotes: ui.AdminNotes
-    );
+    public static DataModels.Report ToDataModel(this UiModels.Report ui) => new()
+    {
+        Id = ui.Id,
+        MessageId = ui.MessageId,
+        ChatId = ui.ChatId,
+        ReportCommandMessageId = ui.ReportCommandMessageId,
+        ReportedByUserId = ui.ReportedByUserId,
+        ReportedByUserName = ui.ReportedByUserName,
+        ReportedAt = ui.ReportedAt,
+        Status = (DataModels.ReportStatus)ui.Status,
+        ReviewedBy = ui.ReviewedBy,
+        ReviewedAt = ui.ReviewedAt,
+        ActionTaken = ui.ActionTaken,
+        AdminNotes = ui.AdminNotes
+    };
 }

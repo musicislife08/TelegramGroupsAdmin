@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Models;
+using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
@@ -63,7 +64,7 @@ public class ReportsRepository : IReportsRepository
 
         if (status.HasValue)
         {
-            query = query.Where(r => r.Status == status.Value);
+            query = query.Where(r => r.Status == (DataModels.ReportStatus)(int)status.Value);
         }
 
         var entities = await query
@@ -88,7 +89,7 @@ public class ReportsRepository : IReportsRepository
         {
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-            entity.Status = status;
+            entity.Status = (DataModels.ReportStatus)(int)status;
             entity.ReviewedBy = reviewedBy;
             entity.ReviewedAt = now;
             entity.ActionTaken = actionTaken;
@@ -108,7 +109,7 @@ public class ReportsRepository : IReportsRepository
     public async Task<int> GetPendingCountAsync(long? chatId = null)
     {
         var query = _context.Reports.AsNoTracking()
-            .Where(r => r.Status == ReportStatus.Pending);
+            .Where(r => r.Status == DataModels.ReportStatus.Pending);
 
         if (chatId.HasValue)
         {
@@ -122,7 +123,7 @@ public class ReportsRepository : IReportsRepository
     {
         var toDelete = await _context.Reports
             .Where(r => r.ReportedAt < olderThanTimestamp
-                && r.Status != ReportStatus.Pending)
+                && r.Status != DataModels.ReportStatus.Pending)
             .ToListAsync();
 
         var deleted = toDelete.Count;

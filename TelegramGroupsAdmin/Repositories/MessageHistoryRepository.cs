@@ -215,7 +215,7 @@ public class MessageHistoryRepository
                 UserId: r.UserId,
                 ContentHash: r.ContentHash,
                 IsSpam: r.IsSpam,
-                Confidence: r.Confidence ?? 0,
+                Confidence: r.Confidence,
                 Reason: r.Reason,
                 CheckType: r.CheckType,
                 MatchedMessageId: r.MatchedMessageId))
@@ -326,7 +326,7 @@ public class MessageHistoryRepository
         var total = allDetections.Count;
         var spam = allDetections.Count(d => d.IsSpam);
         var avgConfidence = allDetections.Any()
-            ? allDetections.Average(d => (double)(d.Confidence ?? 0))
+            ? allDetections.Average(d => (double)d.Confidence)
             : 0.0;
 
         // Last 24h stats
@@ -384,7 +384,7 @@ public class MessageHistoryRepository
             DetectionSource = r.DetectionSource,
             DetectionMethod = r.DetectionMethod ?? "Unknown",
             IsSpam = r.IsSpam,
-            Confidence = r.Confidence ?? 0,
+            Confidence = r.Confidence,
             Reason = r.Reason,
             UserId = r.UserId,
             MessageText = r.MessageText
