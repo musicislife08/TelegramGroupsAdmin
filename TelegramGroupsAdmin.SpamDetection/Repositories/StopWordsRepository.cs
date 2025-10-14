@@ -1,20 +1,21 @@
-using Dapper;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Npgsql;
+using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.SpamDetection.Repositories;
 
 /// <summary>
-/// Repository implementation for stop words management
+/// Repository implementation for stop words management (EF Core)
 /// </summary>
 public class StopWordsRepository : IStopWordsRepository
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly AppDbContext _context;
     private readonly ILogger<StopWordsRepository> _logger;
 
-    public StopWordsRepository(NpgsqlDataSource dataSource, ILogger<StopWordsRepository> logger)
+    public StopWordsRepository(AppDbContext context, ILogger<StopWordsRepository> logger)
     {
-        _dataSource = dataSource;
+        _context = context;
         _logger = logger;
     }
 
@@ -25,10 +26,12 @@ public class StopWordsRepository : IStopWordsRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = "SELECT word FROM stop_words WHERE enabled = true ORDER BY word";
-            var words = await connection.QueryAsync<string>(sql);
-            return words;
+            return await _context.StopWords
+                .AsNoTracking()
+                .Where(sw => sw.Enabled)
+                .OrderBy(sw => sw.Word)
+                .Select(sw => sw.Word)
+                .ToListAsync(cancellationToken);
         }
         catch (Exception ex)
         {
@@ -44,22 +47,20 @@ public class StopWordsRepository : IStopWordsRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = @"
-                INSERT INTO stop_words (word, enabled, added_date, added_by, notes)
-                VALUES (@Word, true, @AddedDate, @AddedBy, @Notes)
-                RETURNING id";
-
-            var id = await connection.QuerySingleAsync<long>(sql, new
+            var stopWord = new StopWord
             {
                 Word = word.ToLowerInvariant(),
+                Enabled = true,
                 AddedDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 AddedBy = addedBy,
                 Notes = notes
-            });
+            };
 
-            _logger.LogInformation("Added stop word: {Word} (ID: {Id})", word, id);
-            return id;
+            _context.StopWords.Add(stopWord);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Added stop word: {Word} (ID: {Id})", word, stopWord.Id);
+            return stopWord.Id;
         }
         catch (Exception ex)
         {
@@ -75,17 +76,17 @@ public class StopWordsRepository : IStopWordsRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = "UPDATE stop_words SET enabled = @Enabled WHERE id = @Id";
-            var rowsAffected = await connection.ExecuteAsync(sql, new { Id = id, Enabled = enabled });
-
-            if (rowsAffected > 0)
+            var stopWord = await _context.StopWords.FindAsync([id], cancellationToken);
+            if (stopWord == null)
             {
-                _logger.LogInformation("Updated stop word {Id} enabled status to {Enabled}", id, enabled);
-                return true;
+                return false;
             }
 
-            return false;
+            stopWord.Enabled = enabled;
+            await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Updated stop word {Id} enabled status to {Enabled}", id, enabled);
+            return true;
         }
         catch (Exception ex)
         {
@@ -101,10 +102,9 @@ public class StopWordsRepository : IStopWordsRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = "SELECT COUNT(*) FROM stop_words WHERE word = @Word";
-            var count = await connection.QuerySingleAsync<int>(sql, new { Word = word.ToLowerInvariant() });
-            return count > 0;
+            return await _context.StopWords
+                .AsNoTracking()
+                .AnyAsync(sw => sw.Word == word.ToLowerInvariant(), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -120,16 +120,25 @@ public class StopWordsRepository : IStopWordsRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = @"
-                SELECT s.id, s.word, s.enabled, s.added_date,
-                       COALESCE(u.email, 'Unknown') as added_by,
-                       s.notes
-                FROM stop_words s
-                LEFT JOIN users u ON s.added_by = u.id
-                ORDER BY s.word";
+            // Query with LEFT JOIN to users table (similar to original Dapper query)
+            var stopWords = await _context.StopWords
+                .AsNoTracking()
+                .GroupJoin(
+                    _context.Users,
+                    sw => sw.AddedBy,
+                    u => u.Id,
+                    (sw, users) => new
+                    {
+                        sw.Id,
+                        sw.Word,
+                        sw.Enabled,
+                        sw.AddedDate,
+                        AddedBy = users.Select(u => u.Email).FirstOrDefault() ?? "Unknown",
+                        sw.Notes
+                    })
+                .OrderBy(sw => sw.Word)
+                .ToListAsync(cancellationToken);
 
-            var stopWords = await connection.QueryAsync(sql);
             return stopWords;
         }
         catch (Exception ex)
@@ -146,17 +155,17 @@ public class StopWordsRepository : IStopWordsRepository
     {
         try
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            const string sql = "UPDATE stop_words SET notes = @Notes WHERE id = @Id";
-            var rowsAffected = await connection.ExecuteAsync(sql, new { Id = id, Notes = notes });
-
-            if (rowsAffected > 0)
+            var stopWord = await _context.StopWords.FindAsync([id], cancellationToken);
+            if (stopWord == null)
             {
-                _logger.LogInformation("Updated stop word {Id} notes", id);
-                return true;
+                return false;
             }
 
-            return false;
+            stopWord.Notes = notes;
+            await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Updated stop word {Id} notes", id);
+            return true;
         }
         catch (Exception ex)
         {
