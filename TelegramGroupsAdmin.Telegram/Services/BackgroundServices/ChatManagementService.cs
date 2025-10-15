@@ -288,6 +288,15 @@ public class ChatManagementService(
             health.IsReachable = true;
             chatName = chat.Title ?? chat.Username ?? $"Chat {chatId}";
 
+            // Skip health check for private chats (only relevant for groups)
+            if (chat.Type == ChatType.Private)
+            {
+                health.Status = "N/A";
+                health.Warnings.Add("Health checks not applicable to private chats");
+                logger.LogDebug("Skipping health check for private chat {ChatId}", chatId);
+                return (health, chatName);
+            }
+
             // Get bot's member status
             var botMember = await botClient.GetChatMember(chatId, botClient.BotId);
             health.BotStatus = botMember.Status.ToString();
@@ -302,7 +311,7 @@ public class ChatManagementService(
                 health.CanInviteUsers = admin.CanInviteUsers;
             }
 
-            // Get admin count
+            // Get admin count (only for groups/supergroups)
             var admins = await botClient.GetChatAdministrators(chatId);
             health.AdminCount = admins.Length;
 
