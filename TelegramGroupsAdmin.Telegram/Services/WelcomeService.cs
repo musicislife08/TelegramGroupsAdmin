@@ -75,6 +75,18 @@ public class WelcomeService : IWelcomeService
 
         try
         {
+            // Check if user is an admin/owner - skip welcome for admins
+            var chatMember = await botClient.GetChatMember(chatMemberUpdate.Chat.Id, user.Id, cancellationToken);
+            if (chatMember.Status == ChatMemberStatus.Administrator || chatMember.Status == ChatMemberStatus.Creator)
+            {
+                _logger.LogInformation(
+                    "Skipping welcome for admin/owner: User {UserId} (@{Username}) in chat {ChatId}",
+                    user.Id,
+                    user.Username,
+                    chatMemberUpdate.Chat.Id);
+                return;
+            }
+
             // Step 1: Restrict user permissions (mute on join)
             await RestrictUserPermissionsAsync(botClient, chatMemberUpdate.Chat.Id, user.Id, cancellationToken);
 
@@ -127,22 +139,70 @@ public class WelcomeService : IWelcomeService
             user.Id,
             chatId);
 
+        // Parse callback data (format: "welcome_accept:123456" or "welcome_deny:123456")
+        var parts = data.Split(':');
+        if (parts.Length != 2 || !long.TryParse(parts[1], out var targetUserId))
+        {
+            _logger.LogWarning("Invalid callback data format: {Data}", data);
+            return;
+        }
+
+        var action = parts[0];
+
+        // Validate that the clicking user is the target user
+        if (user.Id != targetUserId)
+        {
+            _logger.LogWarning(
+                "Wrong user clicked button: User {ClickerId} clicked button for user {TargetUserId}",
+                user.Id,
+                targetUserId);
+
+            // Send temporary warning message
+            try
+            {
+                var warningMsg = await botClient.SendMessage(
+                    chatId: chatId,
+                    text: "⚠️ This button is not for you. Only the mentioned user can respond.",
+                    cancellationToken: cancellationToken);
+
+                // Delete warning after 10 seconds
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(10));
+                    try
+                    {
+                        await botClient.DeleteMessage(chatId: chatId, messageId: warningMsg.MessageId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to delete warning message {MessageId}", warningMsg.MessageId);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to send warning message");
+            }
+
+            return;
+        }
+
         // TODO: Load welcome config from database (Phase 4.4 continuation)
         var config = WelcomeConfig.Default;
 
         try
         {
-            if (data == "welcome_accept")
+            if (action == "welcome_accept")
             {
                 await HandleAcceptAsync(botClient, chatId, user, message.MessageId, config, cancellationToken);
             }
-            else if (data == "welcome_deny")
+            else if (action == "welcome_deny")
             {
                 await HandleDenyAsync(botClient, chatId, user, message.MessageId, cancellationToken);
             }
             else
             {
-                _logger.LogWarning("Unknown callback data: {Data}", data);
+                _logger.LogWarning("Unknown callback action: {Action}", action);
             }
         }
         catch (Exception ex)
@@ -166,12 +226,13 @@ public class WelcomeService : IWelcomeService
         var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
         var messageText = config.ChatWelcomeTemplate.Replace("{username}", username);
 
+        // Encode user ID in callback data for validation
         var keyboard = new InlineKeyboardMarkup(new[]
         {
             new[]
             {
-                InlineKeyboardButton.WithCallbackData(config.AcceptButtonText, "welcome_accept"),
-                InlineKeyboardButton.WithCallbackData(config.DenyButtonText, "welcome_deny")
+                InlineKeyboardButton.WithCallbackData(config.AcceptButtonText, $"welcome_accept:{user.Id}"),
+                InlineKeyboardButton.WithCallbackData(config.DenyButtonText, $"welcome_deny:{user.Id}")
             }
         });
 
@@ -246,6 +307,17 @@ public class WelcomeService : IWelcomeService
     {
         try
         {
+            // Check if user is admin/owner - can't modify their permissions
+            var chatMember = await botClient.GetChatMember(chatId, userId, cancellationToken);
+            if (chatMember.Status == ChatMemberStatus.Administrator || chatMember.Status == ChatMemberStatus.Creator)
+            {
+                _logger.LogDebug(
+                    "Skipping permission restore for admin/owner: User {UserId} in chat {ChatId}",
+                    userId,
+                    chatId);
+                return;
+            }
+
             var permissions = new ChatPermissions
             {
                 CanSendMessages = true,
