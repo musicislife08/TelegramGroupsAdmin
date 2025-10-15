@@ -181,12 +181,20 @@ public class ChatManagementService(
     }
 
     /// <summary>
-    /// Refresh admin list for a specific chat
+    /// Refresh admin list for a specific chat (groups/supergroups only)
     /// </summary>
     public async Task RefreshChatAdminsAsync(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken)
     {
         try
         {
+            // Check if this is a group chat (only groups/supergroups have administrators)
+            var chat = await botClient.GetChat(chatId, cancellationToken);
+            if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
+            {
+                logger.LogDebug("Skipping admin refresh for non-group chat {ChatId} (type: {Type})", chatId, chat.Type);
+                return;
+            }
+
             // Get all administrators from Telegram
             var admins = await botClient.GetChatAdministrators(chatId, cancellationToken);
 

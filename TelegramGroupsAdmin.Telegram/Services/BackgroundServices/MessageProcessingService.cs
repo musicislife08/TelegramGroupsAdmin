@@ -37,10 +37,37 @@ public partial class MessageProcessingService(
 
     /// <summary>
     /// Handle new messages: save to database, execute commands, run spam detection
+    /// Only processes group/supergroup messages - private DMs are handled by commands only
     /// </summary>
     public async Task HandleNewMessageAsync(ITelegramBotClient botClient, Message message)
     {
-        // Process messages from all chats where bot is added
+        // Skip private chats - only process group messages for history/spam detection
+        if (message.Chat.Type == ChatType.Private)
+        {
+            // Private DMs are only for bot commands (/start, /help, etc)
+            // Execute command if present, but don't save to message history
+            if (commandRouter.IsCommand(message))
+            {
+                try
+                {
+                    var commandResult = await commandRouter.RouteCommandAsync(botClient, message);
+                    if (commandResult?.Response != null)
+                    {
+                        await botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: commandResult.Response,
+                            parseMode: ParseMode.Markdown);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error executing command in private chat {ChatId}", message.Chat.Id);
+                }
+            }
+            return; // Don't process private messages further
+        }
+
+        // Process messages from all group chats where bot is added
         try
         {
             var now = DateTimeOffset.UtcNow;
@@ -55,17 +82,25 @@ public partial class MessageProcessingService(
 
                 await managedChatsRepository.UpdateLastSeenAsync(message.Chat.Id, now);
 
-                // If this is a newly discovered chat, refresh its admin cache
+                // If this is a newly discovered chat, refresh its admin cache (only for groups/supergroups)
                 if (isNewChat)
                 {
-                    logger.LogInformation("Discovered new chat {ChatId}, refreshing admin cache", message.Chat.Id);
-                    try
+                    // Only refresh admin cache for group chats (not private DMs)
+                    if (message.Chat.Type == ChatType.Group || message.Chat.Type == ChatType.Supergroup)
                     {
-                        await chatManagementService.RefreshChatAdminsAsync(botClient, message.Chat.Id, default);
+                        logger.LogInformation("Discovered new chat {ChatId}, refreshing admin cache", message.Chat.Id);
+                        try
+                        {
+                            await chatManagementService.RefreshChatAdminsAsync(botClient, message.Chat.Id, default);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogWarning(ex, "Failed to refresh admins for newly discovered chat {ChatId}", message.Chat.Id);
+                        }
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        logger.LogWarning(ex, "Failed to refresh admins for newly discovered chat {ChatId}", message.Chat.Id);
+                        logger.LogDebug("Discovered new private chat {ChatId}, skipping admin cache refresh", message.Chat.Id);
                     }
                 }
             }
