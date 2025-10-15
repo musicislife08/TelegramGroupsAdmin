@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
@@ -28,21 +29,18 @@ public class WelcomeService : IWelcomeService
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<WelcomeService> _logger;
     private readonly TelegramOptions _telegramOptions;
-    private readonly IConfigService _configService;
-    private readonly ITimeTickerManager<TimeTicker> _timeTickerManager;
+    private readonly IServiceProvider _serviceProvider;
 
     public WelcomeService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<WelcomeService> logger,
         IOptions<TelegramOptions> telegramOptions,
-        IConfigService configService,
-        ITimeTickerManager<TimeTicker> timeTickerManager)
+        IServiceProvider serviceProvider)
     {
         _contextFactory = contextFactory;
         _logger = logger;
         _telegramOptions = telegramOptions.Value;
-        _configService = configService;
-        _timeTickerManager = timeTickerManager;
+        _serviceProvider = serviceProvider;
     }
 
     public async Task HandleChatMemberUpdateAsync(
@@ -84,7 +82,10 @@ public class WelcomeService : IWelcomeService
             chatMemberUpdate.Chat.Id);
 
         // Load welcome config from database (chat-specific or global fallback)
-        var config = await _configService.GetEffectiveAsync<WelcomeConfig>("welcome", chatMemberUpdate.Chat.Id)
+        // Must create scope because WelcomeService is singleton but IConfigService is scoped
+        using var scope = _serviceProvider.CreateScope();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var config = await configService.GetEffectiveAsync<WelcomeConfig>("welcome", chatMemberUpdate.Chat.Id)
                      ?? WelcomeConfig.Default;
 
         if (!config.Enabled)
@@ -150,7 +151,10 @@ public class WelcomeService : IWelcomeService
                 welcomeMessage.MessageId
             );
 
-            await _timeTickerManager.AddAsync(new TimeTicker
+            // Get TickerQ manager from scope (it's scoped, we're singleton)
+            using var tickerScope = _serviceProvider.CreateScope();
+            var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+            await timeTickerManager.AddAsync(new TimeTicker
             {
                 Function = "WelcomeTimeout",
                 ExecutionTime = DateTime.UtcNow.AddSeconds(config.TimeoutSeconds),
@@ -274,7 +278,9 @@ public class WelcomeService : IWelcomeService
                     "wrong_user_warning"
                 );
 
-                await _timeTickerManager.AddAsync(new TimeTicker
+                using var tickerScope2 = _serviceProvider.CreateScope();
+                var timeTickerManager2 = tickerScope2.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+                await timeTickerManager2.AddAsync(new TimeTicker
                 {
                     Function = "DeleteMessage",
                     ExecutionTime = DateTime.UtcNow.AddSeconds(10),
@@ -291,7 +297,10 @@ public class WelcomeService : IWelcomeService
         }
 
         // Load welcome config from database (chat-specific or global fallback)
-        var config = await _configService.GetEffectiveAsync<WelcomeConfig>("welcome", chatId)
+        // Must create scope because WelcomeService is singleton but IConfigService is scoped
+        using var scope = _serviceProvider.CreateScope();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var config = await configService.GetEffectiveAsync<WelcomeConfig>("welcome", chatId)
                      ?? WelcomeConfig.Default;
 
         try
@@ -833,7 +842,9 @@ public class WelcomeService : IWelcomeService
                     "fallback_rules"
                 );
 
-                await _timeTickerManager.AddAsync(new TimeTicker
+                using var tickerScope3 = _serviceProvider.CreateScope();
+                var timeTickerManager3 = tickerScope3.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+                await timeTickerManager3.AddAsync(new TimeTicker
                 {
                     Function = "DeleteMessage",
                     ExecutionTime = DateTime.UtcNow.AddSeconds(30),

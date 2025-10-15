@@ -1,7 +1,10 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
+using Microsoft.Extensions.Options;
 using TickerQ.Utilities.Base;
+using Telegram.Bot;
 using TickerQ.Utilities.Models;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Telegram.Services.Telegram;
 
 namespace TelegramGroupsAdmin.Telegram.Jobs;
 
@@ -12,10 +15,12 @@ namespace TelegramGroupsAdmin.Telegram.Jobs;
 /// </summary>
 public class DeleteMessageJob(
     ILogger<DeleteMessageJob> logger,
-    ITelegramBotClient botClient)
+    TelegramBotClientFactory botClientFactory,
+    IOptions<TelegramOptions> telegramOptions)
 {
     private readonly ILogger<DeleteMessageJob> _logger = logger;
-    private readonly ITelegramBotClient _botClient = botClient;
+    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
 
     /// <summary>
     /// Payload for delete message job
@@ -46,9 +51,12 @@ public class DeleteMessageJob(
             payload.ChatId,
             payload.Reason);
 
+        // Get bot client from factory
+        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+
         try
         {
-            await _botClient.DeleteMessage(
+            await botClient.DeleteMessage(
                 chatId: payload.ChatId,
                 messageId: payload.MessageId,
                 cancellationToken: cancellationToken);

@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
+using Microsoft.Extensions.Options;
 using TickerQ.Utilities.Base;
+using Telegram.Bot;
 using TickerQ.Utilities.Models;
+using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Telegram.Services.Telegram;
 
 namespace TelegramGroupsAdmin.Telegram.Jobs;
 
@@ -15,11 +18,13 @@ namespace TelegramGroupsAdmin.Telegram.Jobs;
 public class WelcomeTimeoutJob(
     ILogger<WelcomeTimeoutJob> logger,
     IDbContextFactory<AppDbContext> contextFactory,
-    ITelegramBotClient botClient)
+    TelegramBotClientFactory botClientFactory,
+    IOptions<TelegramOptions> telegramOptions)
 {
     private readonly ILogger<WelcomeTimeoutJob> _logger = logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
-    private readonly ITelegramBotClient _botClient = botClient;
+    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
 
     /// <summary>
     /// Payload for welcome timeout job
@@ -49,6 +54,9 @@ public class WelcomeTimeoutJob(
             payload.UserId,
             payload.ChatId);
 
+        // Get bot client from factory
+        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+
         try
         {
             // Check if user has responded
@@ -76,11 +84,11 @@ public class WelcomeTimeoutJob(
             // Kick user for timeout (ban then immediately unban)
             try
             {
-                await _botClient.BanChatMember(
+                await botClient.BanChatMember(
                     chatId: payload.ChatId,
                     userId: payload.UserId,
                     cancellationToken: cancellationToken);
-                await _botClient.UnbanChatMember(
+                await botClient.UnbanChatMember(
                     chatId: payload.ChatId,
                     userId: payload.UserId,
                     cancellationToken: cancellationToken);
@@ -103,7 +111,7 @@ public class WelcomeTimeoutJob(
             // Delete welcome message
             try
             {
-                await _botClient.DeleteMessage(
+                await botClient.DeleteMessage(
                     chatId: payload.ChatId,
                     messageId: payload.WelcomeMessageId,
                     cancellationToken: cancellationToken);
