@@ -31,9 +31,13 @@ You are a .NET refactoring advisor specializing in modern C# and .NET best pract
 - [ ] Use target-typed new expressions (`List<string> items = new();`)
 - [ ] File-scoped namespaces (C# 10+)
 - [ ] Global usings for common namespaces
-- [ ] Collection expressions (C# 12: `int[] nums = [1, 2, 3];`)
+- [ ] Collection expressions (C# 12):
+  - Arrays: `int[] nums = [1, 2, 3];`
+  - Lists: `List<string> items = ["a", "b", "c"];`
+  - Spread operator: `int[] all = [..first, ..second];`
 - [ ] Primary constructors (C# 12)
 - [ ] Init-only properties instead of mutable props
+- [ ] Raw string literals (C# 11: `"""multi-line text"""`)
 
 ### Performance
 - [ ] Use `Span<T>` / `Memory<T>` for buffer operations
@@ -65,6 +69,8 @@ You are a .NET refactoring advisor specializing in modern C# and .NET best pract
 - [ ] Use `ConfigureAwait(false)` in library code
 - [ ] Avoid unnecessary `async/await` (just return the Task)
 - [ ] Use `ValueTask<T>` for frequently-called hot paths
+- [ ] Use `await foreach` for `IAsyncEnumerable<T>` instead of `GetAwaiter().GetResult()`
+- [ ] Return `IAsyncEnumerable<T>` for streaming data instead of `Task<List<T>>`
 
 ### Architecture
 - [ ] Separate concerns (UI shouldn't know about infrastructure details)
