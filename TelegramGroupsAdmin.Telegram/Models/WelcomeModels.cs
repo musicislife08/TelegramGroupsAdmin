@@ -44,10 +44,10 @@ public record WelcomeConfig(
 )
 {
     /// <summary>
-    /// Default configuration
+    /// Default configuration (enabled for testing Phase 4.4)
     /// </summary>
     public static WelcomeConfig Default => new(
-        Enabled: false,
+        Enabled: true,
         TimeoutSeconds: 60,
         ChatWelcomeTemplate: "Welcome {username}! Please read and accept our rules to continue.",
         DmTemplate: "Welcome to {chat_name}! Here are our rules:\n\n{rules_text}",
