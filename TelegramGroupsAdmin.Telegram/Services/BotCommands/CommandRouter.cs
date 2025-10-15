@@ -86,8 +86,8 @@ public partial class CommandRouter
             using var scope = _serviceProvider.CreateScope();
             var command = (IBotCommand)scope.ServiceProvider.GetRequiredService(commandType);
 
-            // Special case: /link command is always accessible (doesn't require linking)
-            var permissionLevel = commandName == "link"
+            // Special cases: /link and /start commands are always accessible (don't require linking)
+            var permissionLevel = (commandName == "link" || commandName == "start")
                 ? 0
                 : await GetPermissionLevelAsync(botClient, message.Chat.Id, message.From.Id);
 

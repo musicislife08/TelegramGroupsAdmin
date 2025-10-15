@@ -128,11 +128,21 @@ public class ManagedChatsRepository : IManagedChatsRepository
         else
         {
             // UPSERT: Insert if chat doesn't exist (with minimal default values)
+            // Infer chat type from chat ID format:
+            // - Positive ID = Private chat (user ID)
+            // - Negative ID without 100 prefix = Group
+            // - Negative ID with 100 prefix (-100xxxxxxxxx) = Supergroup
+            var chatType = chatId > 0
+                ? Data.Models.ManagedChatType.Private
+                : (chatId.ToString().StartsWith("-100")
+                    ? Data.Models.ManagedChatType.Supergroup
+                    : Data.Models.ManagedChatType.Group);
+
             var newChat = new Data.Models.ManagedChatRecordDto
             {
                 ChatId = chatId,
                 ChatName = "Unknown",
-                ChatType = Data.Models.ManagedChatType.Private,
+                ChatType = chatType,
                 BotStatus = Data.Models.BotChatStatus.Member,
                 IsAdmin = false,
                 AddedAt = timestamp,
@@ -141,6 +151,11 @@ public class ManagedChatsRepository : IManagedChatsRepository
                 SettingsJson = null
             };
             context.ManagedChats.Add(newChat);
+
+            _logger.LogDebug(
+                "Auto-created managed chat {ChatId} with inferred type {ChatType}",
+                chatId,
+                chatType);
         }
 
         await context.SaveChangesAsync();
