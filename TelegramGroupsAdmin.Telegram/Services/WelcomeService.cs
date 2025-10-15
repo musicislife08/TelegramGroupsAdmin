@@ -228,13 +228,21 @@ public class WelcomeService : IWelcomeService
         var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
         var messageText = config.ChatWelcomeTemplate.Replace("{username}", username);
 
-        // Encode user ID in callback data for validation
+        // Get bot username for deep link
+        var botInfo = await botClient.GetMe(cancellationToken);
+        var deepLink = $"https://t.me/{botInfo.Username}?start=welcome_{chatId}_{user.Id}";
+
+        // Encode user ID in callback data for validation + deep link button for DM
         var keyboard = new InlineKeyboardMarkup(new[]
         {
             new[]
             {
                 InlineKeyboardButton.WithCallbackData(config.AcceptButtonText, $"welcome_accept:{user.Id}"),
                 InlineKeyboardButton.WithCallbackData(config.DenyButtonText, $"welcome_deny:{user.Id}")
+            },
+            new[]
+            {
+                InlineKeyboardButton.WithUrl("📩 Get Rules via DM", deepLink)
             }
         });
 
@@ -245,10 +253,11 @@ public class WelcomeService : IWelcomeService
             cancellationToken: cancellationToken);
 
         _logger.LogInformation(
-            "Sent welcome message {MessageId} to user {UserId} in chat {ChatId}",
+            "Sent welcome message {MessageId} to user {UserId} in chat {ChatId} with deep link: {DeepLink}",
             message.MessageId,
             user.Id,
-            chatId);
+            chatId,
+            deepLink);
 
         return message;
     }

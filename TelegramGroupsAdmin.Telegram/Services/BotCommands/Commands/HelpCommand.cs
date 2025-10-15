@@ -14,6 +14,7 @@ public class HelpCommand : IBotCommand
     // Static metadata for all commands (avoids reflection complexity with DI)
     private static readonly List<CommandMetadata> _commandMetadata = new()
     {
+        new("start", "Start conversation with bot", 0),
         new("report", "Report message for admin review", 0),
         new("link", "Link your Telegram account to web app", 0),
         new("spam", "Mark message as spam and delete it", 1),
@@ -84,6 +85,7 @@ public class HelpCommand : IBotCommand
     private static string GetCommandEmoji(string commandName) => commandName switch
     {
         "help" => "📋",
+        "start" => "👋",
         "report" => "📢",
         "spam" => "🚫",
         "ban" => "⛔",

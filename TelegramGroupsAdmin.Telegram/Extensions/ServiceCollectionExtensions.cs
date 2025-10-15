@@ -49,6 +49,8 @@ public static class ServiceCollectionExtensions
         // Commands are Scoped (to allow injecting Scoped services like ModerationActionService)
         // CommandRouter is Singleton (creates scopes internally when executing commands)
         // Register both as interface and concrete type for CommandRouter resolution
+        services.AddScoped<StartCommand>();
+        services.AddScoped<IBotCommand, StartCommand>(sp => sp.GetRequiredService<StartCommand>());
         services.AddScoped<HelpCommand>();
         services.AddScoped<IBotCommand, HelpCommand>(sp => sp.GetRequiredService<HelpCommand>());
         services.AddScoped<LinkCommand>();
