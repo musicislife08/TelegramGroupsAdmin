@@ -29,12 +29,21 @@ public class ChatManagementService(
 
     /// <summary>
     /// Handle MyChatMember updates (bot added/removed, admin promotion/demotion)
+    /// Only tracks groups/supergroups - private chats are not managed
     /// </summary>
     public async Task HandleMyChatMemberUpdateAsync(ChatMemberUpdated myChatMember)
     {
         try
         {
             var chat = myChatMember.Chat;
+
+            // Skip private chats - only manage groups/supergroups
+            if (chat.Type == ChatType.Private)
+            {
+                logger.LogDebug("Skipping MyChatMember update for private chat {ChatId}", chat.Id);
+                return;
+            }
+
             var oldStatus = myChatMember.OldChatMember.Status;
             var newStatus = myChatMember.NewChatMember.Status;
             var isAdmin = newStatus == ChatMemberStatus.Administrator;
