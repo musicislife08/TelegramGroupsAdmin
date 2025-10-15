@@ -39,7 +39,7 @@ public class AppDbContext : DbContext
 
     // Spam detection tables
     public DbSet<StopWordDto> StopWords => Set<StopWordDto>();
-    public DbSet<TrainingSampleDto> TrainingSamples => Set<TrainingSampleDto>();
+    // NOTE: TrainingSamples removed in Phase 2.2 - training data comes from detection_results.used_for_training
     public DbSet<SpamDetectionConfigRecordDto> SpamDetectionConfigs => Set<SpamDetectionConfigRecordDto>();
     public DbSet<SpamCheckConfigRecordDto> SpamCheckConfigs => Set<SpamCheckConfigRecordDto>();
 

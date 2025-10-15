@@ -61,4 +61,37 @@ public interface IDetectionResultsRepository
     /// (Used for cleanup - though per CLAUDE.md, detection_results are permanent)
     /// </summary>
     Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp);
+
+    // ====================================================================================
+    // Training Data Management Methods (for TrainingData.razor UI)
+    // ====================================================================================
+
+    /// <summary>
+    /// Get all training data records (detection_results WHERE used_for_training = true)
+    /// with JOIN to messages for full details
+    /// </summary>
+    Task<List<DetectionResultRecord>> GetAllTrainingDataAsync();
+
+    /// <summary>
+    /// Get training data statistics (spam vs ham counts, sources breakdown)
+    /// </summary>
+    Task<TrainingDataStats> GetTrainingDataStatsAsync();
+
+    /// <summary>
+    /// Update a detection result's spam classification and training flag
+    /// Used when editing training samples
+    /// </summary>
+    Task UpdateDetectionResultAsync(long id, bool isSpam, bool usedForTraining);
+
+    /// <summary>
+    /// Delete a detection result (hard delete)
+    /// Used when removing bad training samples
+    /// </summary>
+    Task DeleteDetectionResultAsync(long id);
+
+    /// <summary>
+    /// Add a manual training sample (creates message with chat_id=0, user_id=0 + detection_result)
+    /// Returns the ID of the created detection_result
+    /// </summary>
+    Task<long> AddManualTrainingSampleAsync(string messageText, bool isSpam, string source, int? confidence, string? addedBy);
 }

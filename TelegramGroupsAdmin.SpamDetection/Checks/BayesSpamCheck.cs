@@ -1,9 +1,8 @@
-using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
-using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
-using TelegramGroupsAdmin.SpamDetection.Repositories;
 using TelegramGroupsAdmin.SpamDetection.Services;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
@@ -14,9 +13,10 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 /// </summary>
 public class BayesSpamCheck : ISpamCheck
 {
+    private const int MAX_TRAINING_SAMPLES = 10_000;
+
     private readonly ILogger<BayesSpamCheck> _logger;
-    private readonly ISpamDetectionConfigRepository _configRepository;
-    private readonly ITrainingSamplesRepository _trainingSamplesRepository;
+    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly ITokenizerService _tokenizerService;
     private BayesClassifier? _classifier;
     private DateTime _lastTrainingUpdate = DateTime.MinValue;
@@ -26,13 +26,11 @@ public class BayesSpamCheck : ISpamCheck
 
     public BayesSpamCheck(
         ILogger<BayesSpamCheck> logger,
-        ISpamDetectionConfigRepository configRepository,
-        ITrainingSamplesRepository trainingSamplesRepository,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ITokenizerService tokenizerService)
     {
         _logger = logger;
-        _configRepository = configRepository;
-        _trainingSamplesRepository = trainingSamplesRepository;
+        _dbContextFactory = dbContextFactory;
         _tokenizerService = tokenizerService;
     }
 
@@ -52,59 +50,48 @@ public class BayesSpamCheck : ISpamCheck
     }
 
     /// <summary>
-    /// Execute Bayes spam check with database training
+    /// Execute Bayes spam check with strongly-typed request
+    /// Config values come from request - check loads training data from DB with guardrails
     /// </summary>
-    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
+    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequestBase request)
     {
+        var req = (BayesCheckRequest)request;
+
         try
         {
-            // Load config from database
-            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
-
-            // Check if this check is enabled
-            if (!config.Bayes.Enabled)
-            {
-                return new SpamCheckResponse
-                {
-                    CheckName = CheckName,
-                    IsSpam = false,
-                    Details = "Check disabled",
-                    Confidence = 0
-                };
-            }
-
             // Check message length
-            if (request.Message.Length < config.MinMessageLength)
+            if (req.Message.Length < req.MinMessageLength)
             {
                 return new SpamCheckResponse
                 {
                     CheckName = CheckName,
-                    IsSpam = false,
-                    Details = $"Message too short (< {config.MinMessageLength} chars)",
+                    Result = SpamCheckResultType.Clean,
+                    Details = $"Message too short (< {req.MinMessageLength} chars)",
                     Confidence = 0
                 };
             }
 
             // Ensure classifier is trained with latest data
-            await EnsureClassifierTrainedAsync(cancellationToken);
+            await EnsureClassifierTrainedAsync(req.CancellationToken);
 
             if (_classifier == null)
             {
                 return new SpamCheckResponse
                 {
                     CheckName = CheckName,
-                    IsSpam = false,
+                    Result = SpamCheckResultType.Clean,
                     Details = "Classifier not trained - insufficient data",
                     Confidence = 0
                 };
             }
 
             // Preprocess message using shared tokenizer
-            var processedMessage = _tokenizerService.RemoveEmojis(request.Message);
+            var processedMessage = _tokenizerService.RemoveEmojis(req.Message);
             var (spamProbability, details, certainty) = _classifier.ClassifyMessage(processedMessage);
 
             var spamProbabilityPercent = spamProbability * 100;
-            var isSpam = spamProbabilityPercent >= config.Bayes.MinSpamProbability;
+            var isSpam = spamProbabilityPercent >= req.MinSpamProbability;
+            var result = isSpam ? SpamCheckResultType.Spam : SpamCheckResultType.Clean;
 
             // Calculate confidence based on certainty and how far from threshold
             // If spam: confidence = spamProbability * certainty
@@ -113,24 +100,21 @@ public class BayesSpamCheck : ISpamCheck
                 ? (int)(spamProbabilityPercent * certainty)
                 : (int)((100 - spamProbabilityPercent) * certainty);
 
-            _logger.LogDebug("Bayes check for user {UserId}: SpamProbability={SpamProbability:F3}, Certainty={Certainty:F3}, Threshold={Threshold}, IsSpam={IsSpam}",
-                request.UserId, spamProbabilityPercent, certainty, config.Bayes.MinSpamProbability, isSpam);
-
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = isSpam,
+                Result = result,
                 Details = $"{details} (certainty: {certainty:F3})",
                 Confidence = confidence
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Bayes check failed for user {UserId}", request.UserId);
+            _logger.LogError(ex, "Bayes check failed for user {UserId}", req.UserId);
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false, // Fail open
+                Result = SpamCheckResultType.Clean, // Fail open
                 Details = "Bayes check failed due to error",
                 Confidence = 0,
                 Error = ex
@@ -140,6 +124,7 @@ public class BayesSpamCheck : ISpamCheck
 
     /// <summary>
     /// Ensure classifier is trained with latest data from database
+    /// Uses DbContextFactory directly with MAX_TRAINING_SAMPLES guardrail
     /// </summary>
     private async Task EnsureClassifierTrainedAsync(CancellationToken cancellationToken)
     {
@@ -151,26 +136,34 @@ public class BayesSpamCheck : ISpamCheck
 
         try
         {
-            // Bounded training query: Use recent 10k samples + all manual samples
-            // This prevents unbounded growth while preserving curated training data
-            const int maxAutoSamples = 10000;
+            // Load training data from detection_results (Phase 2.2: normalized architecture)
+            // Training data = detection_results WHERE used_for_training = true
+            await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
 
-            var allSamples = await _trainingSamplesRepository.GetAllSamplesAsync(cancellationToken);
-            var samplesList = allSamples.ToList();
+            // Query detection_results + JOIN messages to get message text
+            // Separate manual vs auto based on detection_source
+            var manualSamples = await (
+                from dr in dbContext.DetectionResults
+                join m in dbContext.Messages on dr.MessageId equals m.MessageId
+                where dr.UsedForTraining && (dr.DetectionSource == "manual" || dr.DetectionSource == "Manual")
+                orderby dr.DetectedAt descending
+                select new { m.MessageText, dr.IsSpam, dr.DetectionSource }
+            ).AsNoTracking().ToListAsync(cancellationToken);
 
-            // Separate manual samples from automatic detections
-            var manualSamples = samplesList.Where(s => s.Source == "Manual" || s.Source == "manual").ToList();
-            var autoSamples = samplesList.Where(s => s.Source != "Manual" && s.Source != "manual")
-                .OrderByDescending(s => s.AddedDate)
-                .Take(maxAutoSamples)
-                .ToList();
+            var autoSamples = await (
+                from dr in dbContext.DetectionResults
+                join m in dbContext.Messages on dr.MessageId equals m.MessageId
+                where dr.UsedForTraining && dr.DetectionSource != "manual" && dr.DetectionSource != "Manual"
+                orderby dr.DetectedAt descending
+                select new { m.MessageText, dr.IsSpam, dr.DetectionSource }
+            ).AsNoTracking().Take(MAX_TRAINING_SAMPLES).ToListAsync(cancellationToken);
 
-            // Combine: all manual + recent 10k auto
+            // Combine: all manual + recent MAX_TRAINING_SAMPLES auto
             var trainingSet = manualSamples.Concat(autoSamples).ToList();
 
             if (!trainingSet.Any())
             {
-                _logger.LogWarning("No training samples available for Bayes classifier");
+                _logger.LogWarning("No training samples available for Bayes classifier (detection_results.used_for_training = true)");
                 return;
             }
 
@@ -200,25 +193,6 @@ public class BayesSpamCheck : ISpamCheck
         }
     }
 
-    /// <summary>
-    /// Add training sample for continuous learning (call from spam detection pipeline)
-    /// </summary>
-    public async Task AddTrainingSampleAsync(string messageText, bool isSpam, string source, int? confidence = null, string? groupId = null, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            await _trainingSamplesRepository.AddSampleAsync(messageText, isSpam, source, confidence, groupId, addedBy: "auto_learning", cancellationToken);
-
-            // Force retraining on next check to incorporate new sample
-            _lastTrainingUpdate = DateTime.MinValue;
-
-            _logger.LogDebug("Added training sample: {Type} from {Source}", isSpam ? "SPAM" : "HAM", source);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to add training sample for continuous learning");
-        }
-    }
 }
 
 /// <summary>

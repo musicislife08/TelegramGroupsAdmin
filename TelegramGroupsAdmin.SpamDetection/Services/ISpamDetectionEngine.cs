@@ -3,17 +3,20 @@ using TelegramGroupsAdmin.SpamDetection.Models;
 namespace TelegramGroupsAdmin.SpamDetection.Services;
 
 /// <summary>
-/// Factory for creating spam detectors and orchestrating spam detection checks
+/// Core spam detection engine that orchestrates all spam checks
+/// Loads configuration once, builds strongly-typed requests, and aggregates results
 /// </summary>
-public interface ISpamDetectorFactory
+public interface ISpamDetectionEngine
 {
     /// <summary>
     /// Run all applicable spam checks on a message and return aggregated results
+    /// Loads config once, determines enabled checks, builds typed requests for each
     /// </summary>
     Task<SpamDetectionResult> CheckMessageAsync(SpamCheckRequest request, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Run only non-OpenAI checks to determine if message should be vetoed by OpenAI
+    /// Used internally for two-tier decision system (veto mode)
     /// </summary>
     Task<SpamDetectionResult> CheckMessageWithoutOpenAIAsync(SpamCheckRequest request, CancellationToken cancellationToken = default);
 }

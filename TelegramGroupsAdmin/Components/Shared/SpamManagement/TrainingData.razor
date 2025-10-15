@@ -1,11 +1,9 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Auth
-@using TelegramGroupsAdmin.SpamDetection.Repositories
-@using TelegramGroupsAdmin.SpamDetection.Models
-@using DataModels = TelegramGroupsAdmin.Data.Models
-@using UiModels = TelegramGroupsAdmin.Models
-@inject ITrainingSamplesRepository TrainingSamplesRepository
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@inject IDetectionResultsRepository DetectionResultsRepository
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -110,13 +108,11 @@
                          Dense="true">
                     <HeaderContent>
                         <MudTh>Type</MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<TrainingSample, object>(x => x.MessageText)">Message Text</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<TrainingSample, object>(x => x.Source)">Source</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<TrainingSample, object>(x => x.DetectionCount)">Detections</MudTableSortLabel></MudTh>
-                        <MudTh>Last Detected</MudTh>
-                        <MudTh>Chats</MudTh>
+                        <MudTh>Message Text</MudTh>
+                        <MudTh>Source</MudTh>
+                        <MudTh>Method</MudTh>
                         <MudTh>Confidence</MudTh>
-                        <MudTh><MudTableSortLabel SortBy="new Func<TrainingSample, object>(x => x.AddedDate)">Added Date</MudTableSortLabel></MudTh>
+                        <MudTh>Detected At</MudTh>
                         <MudTh>Added By</MudTh>
                         <MudTh>Actions</MudTh>
                     </HeaderContent>
@@ -135,53 +131,16 @@
                         </MudTd>
                         <MudTd DataLabel="Source">
                             <MudChip T="string" Size="Size.Small" Color="Color.Info">
-                                @context.Source
+                                @context.DetectionSource
                             </MudChip>
                         </MudTd>
-                        <MudTd DataLabel="Detections">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudText Typo="Typo.body2">@context.DetectionCount</MudText>
-                                @if (context.DetectionCount > 0)
-                                {
-                                    <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Small" Color="@(context.IsSpam ? Color.Success : Color.Warning)" />
-                                }
-                            </MudStack>
-                        </MudTd>
-                        <MudTd DataLabel="Last Detected">
-                            @if (context.LastDetectedDate.HasValue)
-                            {
-                                <MudText Typo="Typo.body2">@context.LastDetectedDate.Value.ToString("MM/dd HH:mm")</MudText>
-                            }
-                            else
-                            {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">Never</MudText>
-                            }
-                        </MudTd>
-                        <MudTd DataLabel="Chats">
-                            @if (context.ChatIds?.Any() == true)
-                            {
-                                <MudTooltip Text="@string.Join(", ", context.ChatIds)">
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Secondary">
-                                        @context.ChatIds.Length chat@(context.ChatIds.Length != 1 ? "s" : "")
-                                    </MudChip>
-                                </MudTooltip>
-                            }
-                            else
-                            {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">-</MudText>
-                            }
+                        <MudTd DataLabel="Method">
+                            <MudText Typo="Typo.body2">@context.DetectionMethod</MudText>
                         </MudTd>
                         <MudTd DataLabel="Confidence">
-                            @if (context.ConfidenceWhenAdded.HasValue)
-                            {
-                                <MudText Typo="Typo.body2">@context.ConfidenceWhenAdded%</MudText>
-                            }
-                            else
-                            {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary">-</MudText>
-                            }
+                            <MudText Typo="Typo.body2">@context.Confidence%</MudText>
                         </MudTd>
-                        <MudTd DataLabel="Added Date">@context.AddedDate.ToString("yyyy-MM-dd HH:mm")</MudTd>
+                        <MudTd DataLabel="Detected At">@context.DetectedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
                         <MudTd DataLabel="Added By">@(context.AddedBy ?? "System")</MudTd>
                         <MudTd DataLabel="Actions">
                             <MudStack Row="true" Spacing="1">
@@ -217,9 +176,9 @@
 </MudContainer>
 
 @code {
-    private List<TrainingSample> _allSamples = new();
-    private IEnumerable<TrainingSample> _filteredSamples = new List<TrainingSample>();
-    private TrainingStats? _stats;
+    private List<DetectionResultRecord> _allSamples = new();
+    private IEnumerable<DetectionResultRecord> _filteredSamples = new List<DetectionResultRecord>();
+    private TrainingDataStats? _stats;
     private bool _loading = true;
     private string _searchText = string.Empty;
     private string _typeFilter = "all";
@@ -238,8 +197,8 @@
         _loading = true;
         try
         {
-            var samplesTask = TrainingSamplesRepository.GetAllSamplesAsync();
-            var statsTask = TrainingSamplesRepository.GetStatsAsync();
+            var samplesTask = DetectionResultsRepository.GetAllTrainingDataAsync();
+            var statsTask = DetectionResultsRepository.GetTrainingDataStatsAsync();
 
             await Task.WhenAll(samplesTask, statsTask);
 
@@ -265,8 +224,8 @@
         if (!string.IsNullOrEmpty(_searchText))
         {
             filtered = filtered.Where(s =>
-                s.MessageText.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
-                s.Source.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                (s.MessageText != null && s.MessageText.Contains(_searchText, StringComparison.OrdinalIgnoreCase)) ||
+                s.DetectionSource.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
                 (!string.IsNullOrEmpty(s.AddedBy) && s.AddedBy.Contains(_searchText, StringComparison.OrdinalIgnoreCase)));
         }
 
@@ -281,7 +240,7 @@
         // Filter by source
         if (_sourceFilter != "all")
         {
-            filtered = filtered.Where(s => s.Source == _sourceFilter);
+            filtered = filtered.Where(s => s.DetectionSource == _sourceFilter);
         }
 
         _filteredSamples = filtered;
@@ -301,12 +260,11 @@
         {
             try
             {
-                await TrainingSamplesRepository.AddSampleAsync(
+                await DetectionResultsRepository.AddManualTrainingSampleAsync(
                     data.MessageText,
                     data.IsSpam,
                     data.Source,
                     data.Confidence,
-                    null,
                     _currentUserId);
 
                 Snackbar.Add("Training sample added successfully", Severity.Success);
@@ -319,7 +277,7 @@
         }
     }
 
-    private async Task EditTrainingSample(TrainingSample sample)
+    private async Task EditTrainingSample(DetectionResultRecord sample)
     {
         var parameters = new DialogParameters<EditTrainingSampleDialog>
         {
@@ -333,12 +291,10 @@
         {
             try
             {
-                await TrainingSamplesRepository.UpdateSampleAsync(
+                await DetectionResultsRepository.UpdateDetectionResultAsync(
                     data.Id,
-                    data.MessageText,
                     data.IsSpam,
-                    data.Source,
-                    data.Confidence);
+                    usedForTraining: true);
 
                 Snackbar.Add("Training sample updated successfully", Severity.Success);
                 await LoadData();
@@ -350,18 +306,19 @@
         }
     }
 
-    private async Task DeleteTrainingSample(TrainingSample sample)
+    private async Task DeleteTrainingSample(DetectionResultRecord sample)
     {
+        var messagePreview = sample.MessageText ?? "";
         var confirmed = await DialogService.ShowMessageBox(
             "Confirm Delete",
-            $"Are you sure you want to delete this {(sample.IsSpam ? "SPAM" : "HAM")} training sample?\n\n\"{sample.MessageText[..Math.Min(sample.MessageText.Length, 100)]}{(sample.MessageText.Length > 100 ? "..." : "")}\"",
+            $"Are you sure you want to delete this {(sample.IsSpam ? "SPAM" : "HAM")} training sample?\n\n\"{messagePreview[..Math.Min(messagePreview.Length, 100)]}{(messagePreview.Length > 100 ? "..." : "")}\"",
             yesText: "Delete", cancelText: "Cancel");
 
         if (confirmed == true)
         {
             try
             {
-                await TrainingSamplesRepository.DeleteSampleAsync(sample.Id);
+                await DetectionResultsRepository.DeleteDetectionResultAsync(sample.Id);
                 Snackbar.Add("Training sample deleted successfully", Severity.Success);
                 await LoadData();
             }

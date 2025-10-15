@@ -2,12 +2,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
-using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
-using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
@@ -18,24 +14,18 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public class ImageSpamCheck : ISpamCheck
 {
     private readonly ILogger<ImageSpamCheck> _logger;
-    private readonly ISpamDetectionConfigRepository _configRepository;
-    private readonly OpenAIOptions _openAIOptions;
     private readonly HttpClient _httpClient;
 
     public string CheckName => "ImageSpam";
 
     public ImageSpamCheck(
         ILogger<ImageSpamCheck> logger,
-        ISpamDetectionConfigRepository configRepository,
-        IOptions<OpenAIOptions> openAIOptions,
         IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
-        _configRepository = configRepository;
-        _openAIOptions = openAIOptions.Value;
         _httpClient = httpClientFactory.CreateClient();
 
-        // Configure HTTP client - will be updated from config in CheckAsync
+        // Configure HTTP client
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
     }
 
@@ -51,74 +41,61 @@ public class ImageSpamCheck : ISpamCheck
     /// <summary>
     /// Execute image spam check using OpenAI Vision
     /// </summary>
-    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
+    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequestBase request)
     {
-        // Load config from database
-        var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
-
-        // Check if this check is enabled
-        if (!config.ImageSpam.Enabled)
-        {
-            return new SpamCheckResponse
-            {
-                CheckName = CheckName,
-                IsSpam = false,
-                Details = "Check disabled",
-                Confidence = 0
-            };
-        }
-
-        // Check if we're using OpenAI Vision
-        if (!config.ImageSpam.UseOpenAIVision)
-        {
-            return new SpamCheckResponse
-            {
-                CheckName = CheckName,
-                IsSpam = false,
-                Details = "OpenAI Vision not enabled",
-                Confidence = 0
-            };
-        }
-
-        if (request.ImageData == null)
-        {
-            return new SpamCheckResponse
-            {
-                CheckName = CheckName,
-                IsSpam = false,
-                Details = "No image data provided",
-                Confidence = 0
-            };
-        }
-
-        // Update HTTP client timeout from config
-        _httpClient.Timeout = config.ImageSpam.Timeout;
+        var req = (ImageCheckRequest)request;
 
         try
         {
-            if (string.IsNullOrEmpty(_openAIOptions.ApiKey))
+            if (string.IsNullOrEmpty(req.ApiKey))
             {
                 _logger.LogWarning("OpenAI API key not configured for image spam detection");
                 return new SpamCheckResponse
                 {
                     CheckName = CheckName,
-                    IsSpam = false,
+                    Result = SpamCheckResultType.Clean,
                     Details = "OpenAI API key not configured",
                     Confidence = 0,
                     Error = new InvalidOperationException("OpenAI API key not configured")
                 };
             }
 
-            // Convert image to base64
-            using var ms = new MemoryStream();
-            await request.ImageData.CopyToAsync(ms, cancellationToken);
-            var base64Image = Convert.ToBase64String(ms.ToArray());
+            // Build image URL - either use provided PhotoUrl or construct from PhotoFileId
+            string imageUrl;
+            if (!string.IsNullOrEmpty(req.PhotoUrl))
+            {
+                // Use direct URL if provided
+                imageUrl = req.PhotoUrl;
+            }
+            else if (!string.IsNullOrEmpty(req.PhotoFileId))
+            {
+                // For Telegram file IDs, we'd need to download the image first
+                // This should be handled by the caller, so log a warning
+                _logger.LogWarning("PhotoFileId provided but no PhotoUrl - image cannot be processed");
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    Result = SpamCheckResultType.Clean,
+                    Details = "No image URL provided",
+                    Confidence = 0
+                };
+            }
+            else
+            {
+                return new SpamCheckResponse
+                {
+                    CheckName = CheckName,
+                    Result = SpamCheckResultType.Clean,
+                    Details = "No image data provided",
+                    Confidence = 0
+                };
+            }
 
-            var prompt = BuildPrompt(request.Message, config);
+            var prompt = BuildPrompt(req.Message, req.CustomPrompt);
 
             var apiRequest = new
             {
-                model = _openAIOptions.Model,
+                model = "gpt-4o-mini",
                 messages = new[]
                 {
                     new
@@ -132,27 +109,27 @@ public class ImageSpamCheck : ISpamCheck
                                 type = "image_url",
                                 image_url = new
                                 {
-                                    url = $"data:image/jpeg;base64,{base64Image}",
+                                    url = imageUrl,
                                     detail = "high"
                                 }
                             }
                         }
                     }
                 },
-                max_tokens = _openAIOptions.MaxTokens,
+                max_tokens = 300,
                 temperature = 0.1
             };
 
             _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_openAIOptions.ApiKey}");
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {req.ApiKey}");
 
             _logger.LogDebug("ImageSpam check for user {UserId}: Calling OpenAI Vision API",
-                request.UserId);
+                req.UserId);
 
             var response = await _httpClient.PostAsJsonAsync(
                 "https://api.openai.com/v1/chat/completions",
                 apiRequest,
-                cancellationToken);
+                req.CancellationToken);
 
             // Handle rate limiting
             if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
@@ -163,7 +140,7 @@ public class ImageSpamCheck : ISpamCheck
                 return new SpamCheckResponse
                 {
                     CheckName = CheckName,
-                    IsSpam = false, // Fail open during rate limits
+                    Result = SpamCheckResultType.Clean, // Fail open during rate limits
                     Details = $"OpenAI rate limited, retry after {retryAfter}s",
                     Confidence = 0,
                     Error = new HttpRequestException($"OpenAI API rate limited")
@@ -172,44 +149,44 @@ public class ImageSpamCheck : ISpamCheck
 
             if (!response.IsSuccessStatusCode)
             {
-                var error = await response.Content.ReadAsStringAsync(cancellationToken);
+                var error = await response.Content.ReadAsStringAsync(req.CancellationToken);
                 _logger.LogError("OpenAI Vision API error: {StatusCode} - {Error}", response.StatusCode, error);
 
                 return new SpamCheckResponse
                 {
                     CheckName = CheckName,
-                    IsSpam = false, // Fail open
+                    Result = SpamCheckResultType.Clean, // Fail open
                     Details = $"OpenAI API error: {response.StatusCode}",
                     Confidence = 0,
                     Error = new HttpRequestException($"OpenAI API error: {response.StatusCode}")
                 };
             }
 
-            var result = await response.Content.ReadFromJsonAsync<OpenAIVisionApiResponse>(cancellationToken: cancellationToken);
+            var result = await response.Content.ReadFromJsonAsync<OpenAIVisionApiResponse>(cancellationToken: req.CancellationToken);
             var content = result?.Choices?[0]?.Message?.Content;
 
             if (string.IsNullOrWhiteSpace(content))
             {
-                _logger.LogWarning("Empty response from OpenAI Vision for user {UserId}", request.UserId);
+                _logger.LogWarning("Empty response from OpenAI Vision for user {UserId}", req.UserId);
                 return new SpamCheckResponse
                 {
                     CheckName = CheckName,
-                    IsSpam = false,
+                    Result = SpamCheckResultType.Clean,
                     Details = "Empty OpenAI response",
                     Confidence = 0,
                     Error = new InvalidOperationException("Empty OpenAI response")
                 };
             }
 
-            return ParseSpamResponse(content, request.UserId);
+            return ParseSpamResponse(content, req.UserId ?? "unknown");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Image spam check failed for user {UserId}", request.UserId);
+            _logger.LogError(ex, "Image spam check failed for user {UserId}", req.UserId);
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false, // Fail open
+                Result = SpamCheckResultType.Clean, // Fail open
                 Details = "Image spam check failed due to error",
                 Confidence = 0,
                 Error = ex
@@ -221,10 +198,10 @@ public class ImageSpamCheck : ISpamCheck
     /// Build prompt for OpenAI Vision analysis
     /// Uses configurable system prompt if provided, otherwise uses default
     /// </summary>
-    private static string BuildPrompt(string? messageText, SpamDetectionConfig config)
+    private static string BuildPrompt(string? messageText, string? customPrompt)
     {
         // Use custom prompt if provided, otherwise use default
-        var systemPrompt = config.OpenAI.SystemPrompt ?? GetDefaultImagePrompt();
+        var systemPrompt = customPrompt ?? GetDefaultImagePrompt();
 
         var messageContext = messageText != null
             ? $"Message text: \"{messageText}\""
@@ -278,7 +255,7 @@ public class ImageSpamCheck : ISpamCheck
                 return new SpamCheckResponse
                 {
                     CheckName = CheckName,
-                    IsSpam = false,
+                    Result = SpamCheckResultType.Clean,
                     Details = "Failed to parse OpenAI response",
                     Confidence = 0,
                     Error = new InvalidOperationException("Failed to parse OpenAI response")
@@ -294,10 +271,12 @@ public class ImageSpamCheck : ISpamCheck
                 details += $" (Patterns: {string.Join(", ", response.PatternsDetected)})";
             }
 
+            var result = response.Spam ? SpamCheckResultType.Spam : SpamCheckResultType.Clean;
+
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = response.Spam,
+                Result = result,
                 Details = details,
                 Confidence = response.Confidence
             };
@@ -309,7 +288,7 @@ public class ImageSpamCheck : ISpamCheck
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false,
+                Result = SpamCheckResultType.Clean,
                 Details = "Failed to parse spam analysis",
                 Confidence = 0,
                 Error = ex

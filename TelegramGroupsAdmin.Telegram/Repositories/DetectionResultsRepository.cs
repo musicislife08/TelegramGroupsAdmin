@@ -315,4 +315,152 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
         return deleted;
     }
+
+    // ====================================================================================
+    // Training Data Management Methods (for TrainingData.razor UI)
+    // ====================================================================================
+
+    public async Task<List<DetectionResultRecord>> GetAllTrainingDataAsync()
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var results = await context.DetectionResults
+            .AsNoTracking()
+            .Where(dr => dr.UsedForTraining == true)
+            .Join(context.Messages,
+                dr => dr.MessageId,
+                m => m.MessageId,
+                (dr, m) => new { DetectionResult = dr, Message = m })
+            .OrderByDescending(x => x.DetectionResult.DetectedAt)
+            .Select(x => new DetectionResultRecord
+            {
+                Id = x.DetectionResult.Id,
+                MessageId = x.DetectionResult.MessageId,
+                DetectedAt = x.DetectionResult.DetectedAt,
+                DetectionSource = x.DetectionResult.DetectionSource,
+                DetectionMethod = x.DetectionResult.DetectionMethod,
+                IsSpam = x.DetectionResult.IsSpam,
+                Confidence = x.DetectionResult.Confidence,
+                Reason = x.DetectionResult.Reason,
+                AddedBy = x.DetectionResult.AddedBy,
+                UsedForTraining = x.DetectionResult.UsedForTraining,
+                NetConfidence = x.DetectionResult.NetConfidence,
+                CheckResultsJson = x.DetectionResult.CheckResultsJson,
+                EditVersion = x.DetectionResult.EditVersion,
+                UserId = x.Message.UserId,
+                MessageText = x.Message.MessageText
+            })
+            .ToListAsync();
+
+        _logger.LogDebug("Retrieved {Count} training data records (used_for_training = true)", results.Count);
+        return results;
+    }
+
+    public async Task<TrainingDataStats> GetTrainingDataStatsAsync()
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var trainingData = await context.DetectionResults
+            .AsNoTracking()
+            .Where(dr => dr.UsedForTraining == true)
+            .Select(dr => new { dr.IsSpam, dr.DetectionSource })
+            .ToListAsync();
+
+        var total = trainingData.Count;
+        var spam = trainingData.Count(d => d.IsSpam);
+        var ham = total - spam;
+
+        var sourceGroups = trainingData
+            .GroupBy(d => d.DetectionSource)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        return new TrainingDataStats
+        {
+            TotalSamples = total,
+            SpamSamples = spam,
+            HamSamples = ham,
+            SpamPercentage = total > 0 ? (double)spam / total * 100 : 0,
+            SamplesBySource = sourceGroups
+        };
+    }
+
+    public async Task UpdateDetectionResultAsync(long id, bool isSpam, bool usedForTraining)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.DetectionResults.FindAsync(id);
+        if (entity == null)
+        {
+            throw new InvalidOperationException($"Detection result {id} not found");
+        }
+
+        entity.IsSpam = isSpam;
+        entity.UsedForTraining = usedForTraining;
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Updated detection result {Id}: IsSpam={IsSpam}, UsedForTraining={UsedForTraining}",
+            id, isSpam, usedForTraining);
+    }
+
+    public async Task DeleteDetectionResultAsync(long id)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entity = await context.DetectionResults.FindAsync(id);
+        if (entity == null)
+        {
+            throw new InvalidOperationException($"Detection result {id} not found");
+        }
+
+        context.DetectionResults.Remove(entity);
+        await context.SaveChangesAsync();
+
+        _logger.LogWarning("Deleted detection result {Id}", id);
+    }
+
+    public async Task<long> AddManualTrainingSampleAsync(string messageText, bool isSpam, string source, int? confidence, string? addedBy)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        // Create message record (chat_id=0, user_id=0 pattern for manual samples)
+        var message = new DataModels.MessageRecordDto
+        {
+            ChatId = 0,
+            UserId = 0,
+            UserName = "Manual Training",
+            MessageText = messageText,
+            Timestamp = DateTimeOffset.UtcNow,
+            ContentHash = null
+        };
+
+        context.Messages.Add(message);
+        await context.SaveChangesAsync(); // Save to get message_id
+
+        // Create detection_result record linked to the message
+        var detectionResult = new DataModels.DetectionResultRecordDto
+        {
+            MessageId = message.MessageId,
+            DetectedAt = DateTimeOffset.UtcNow,
+            DetectionSource = source,
+            DetectionMethod = "Manual",
+            IsSpam = isSpam,
+            Confidence = confidence ?? 100,
+            Reason = "Manually added training sample",
+            AddedBy = addedBy,
+            UsedForTraining = true,
+            NetConfidence = null,
+            CheckResultsJson = null,
+            EditVersion = 0
+        };
+
+        context.DetectionResults.Add(detectionResult);
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Added manual training sample: message_id={MessageId}, detection_result_id={Id}, is_spam={IsSpam}, source={Source}, added_by={AddedBy}",
+            message.MessageId,
+            detectionResult.Id,
+            isSpam,
+            source,
+            addedBy ?? "System");
+
+        return detectionResult.Id;
+    }
 }

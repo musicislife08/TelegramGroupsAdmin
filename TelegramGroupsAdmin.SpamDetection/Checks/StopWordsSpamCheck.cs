@@ -1,8 +1,8 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
-using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
-using TelegramGroupsAdmin.SpamDetection.Repositories;
 using TelegramGroupsAdmin.SpamDetection.Services;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
@@ -10,29 +10,25 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 /// <summary>
 /// Spam check that looks for stop words in message text, username, and userID
 /// Enhanced version based on tg-spam with database storage and emoji preprocessing
+/// Engine orchestrates config loading - check manages its own DB access with guardrails
 /// </summary>
 public class StopWordsSpamCheck : ISpamCheck
 {
-    private readonly ILogger<StopWordsSpamCheck> _logger;
-    private readonly ISpamDetectionConfigRepository _configRepository;
-    private readonly IStopWordsRepository _stopWordsRepository;
-    private readonly ITokenizerService _tokenizerService;
-    private HashSet<string>? _cachedStopWords;
-    private DateTime _lastCacheUpdate = DateTime.MinValue;
-    private readonly TimeSpan _cacheRefreshInterval = TimeSpan.FromMinutes(5);
+    private const int MAX_STOP_WORDS = 10_000; // Guardrail: cap stop words query
 
+    private readonly ILogger<StopWordsSpamCheck> _logger;
+    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
+    private readonly ITokenizerService _tokenizerService;
 
     public string CheckName => "StopWords";
 
     public StopWordsSpamCheck(
         ILogger<StopWordsSpamCheck> logger,
-        ISpamDetectionConfigRepository configRepository,
-        IStopWordsRepository stopWordsRepository,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ITokenizerService tokenizerService)
     {
         _logger = logger;
-        _configRepository = configRepository;
-        _stopWordsRepository = stopWordsRepository;
+        _dbContextFactory = dbContextFactory;
         _tokenizerService = tokenizerService;
     }
 
@@ -52,119 +48,85 @@ public class StopWordsSpamCheck : ISpamCheck
     }
 
     /// <summary>
-    /// Execute stop words spam check on message, username, and userID
+    /// Execute stop words spam check with strongly-typed request
+    /// Config comes from request - check loads stop words from DB with guardrails
     /// </summary>
-    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
+    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequestBase request)
     {
+        var req = (StopWordsCheckRequest)request;
+
         try
         {
-            // Load config from database
-            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+            // Load stop words from database with guardrail
+            await using var dbContext = await _dbContextFactory.CreateDbContextAsync(req.CancellationToken);
+            var stopWords = await dbContext.StopWords
+                .AsNoTracking()
+                .Where(w => w.Enabled)
+                .Take(MAX_STOP_WORDS) // ← Guardrail
+                .Select(w => w.Word)
+                .ToListAsync(req.CancellationToken);
 
-            // Check if this check is enabled
-            if (!config.StopWords.Enabled)
+            if (stopWords.Count == 0)
             {
                 return new SpamCheckResponse
                 {
                     CheckName = CheckName,
-                    IsSpam = false,
-                    Details = "Check disabled",
-                    Confidence = 0
-                };
-            }
-
-            // Get stop words from database (with caching)
-            var stopWords = await GetStopWordsAsync(cancellationToken);
-            if (!stopWords.Any())
-            {
-                return new SpamCheckResponse
-                {
-                    CheckName = CheckName,
-                    IsSpam = false,
+                    Result = SpamCheckResultType.Clean,
                     Details = "No stop words configured",
                     Confidence = 0
                 };
             }
 
+            var stopWordsSet = new HashSet<string>(stopWords, StringComparer.OrdinalIgnoreCase);
             var foundMatches = new List<string>();
 
             // Check message text (with emoji preprocessing)
-            var processedMessage = _tokenizerService.RemoveEmojis(request.Message ?? "");
-            var messageMatches = CheckTextForStopWords(processedMessage, stopWords, "message");
+            var processedMessage = _tokenizerService.RemoveEmojis(req.Message);
+            var messageMatches = CheckTextForStopWords(processedMessage, stopWordsSet, "message");
             foundMatches.AddRange(messageMatches);
 
             // Check username
-            if (!string.IsNullOrWhiteSpace(request.UserName))
+            if (!string.IsNullOrWhiteSpace(req.UserName))
             {
-                var usernameMatches = CheckTextForStopWords(request.UserName, stopWords, "username");
+                var usernameMatches = CheckTextForStopWords(req.UserName, stopWordsSet, "username");
                 foundMatches.AddRange(usernameMatches);
             }
 
-            // Check userID (convert to string for checking)
-            if (!string.IsNullOrWhiteSpace(request.UserId))
+            // Check userID
+            if (!string.IsNullOrWhiteSpace(req.UserId))
             {
-                var userIdMatches = CheckTextForStopWords(request.UserId, stopWords, "userID");
+                var userIdMatches = CheckTextForStopWords(req.UserId, stopWordsSet, "userID");
                 foundMatches.AddRange(userIdMatches);
             }
 
             // Calculate confidence based on matches
-            var confidence = CalculateConfidence(foundMatches.Count, request.Message?.Length ?? 0);
-            var isSpam = confidence >= config.StopWords.ConfidenceThreshold;
+            var confidence = CalculateConfidence(foundMatches.Count, req.Message.Length);
+            var result = confidence >= req.ConfidenceThreshold ? SpamCheckResultType.Spam : SpamCheckResultType.Clean;
 
             var details = foundMatches.Any()
                 ? $"Found stop words: {string.Join(", ", foundMatches.Take(3))}" + (foundMatches.Count > 3 ? $" (+{foundMatches.Count - 3} more)" : "")
                 : "No stop words detected";
 
-            _logger.LogDebug("StopWords check for user {UserId}: Found {MatchCount} matches, confidence {Confidence}%",
-                request.UserId, foundMatches.Count, confidence);
-
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = isSpam,
+                Result = result,
                 Details = details,
                 Confidence = confidence
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "StopWords check failed for user {UserId}", request.UserId);
+            _logger.LogError(ex, "StopWords check failed for user {UserId}", req.UserId);
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false, // Fail open
+                Result = SpamCheckResultType.Clean, // Fail open
                 Details = "StopWords check failed due to error",
                 Confidence = 0,
                 Error = ex
             };
         }
-    }
-
-    /// <summary>
-    /// Get stop words from database with caching
-    /// </summary>
-    private async Task<HashSet<string>> GetStopWordsAsync(CancellationToken cancellationToken)
-    {
-        // Check if cache needs refresh
-        if (_cachedStopWords == null || DateTime.UtcNow - _lastCacheUpdate > _cacheRefreshInterval)
-        {
-            try
-            {
-                var words = await _stopWordsRepository.GetEnabledStopWordsAsync(cancellationToken);
-                _cachedStopWords = new HashSet<string>(words, StringComparer.OrdinalIgnoreCase);
-                _lastCacheUpdate = DateTime.UtcNow;
-
-                _logger.LogDebug("Refreshed stop words cache with {Count} words", _cachedStopWords.Count);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to refresh stop words cache");
-                // Return existing cache or empty set if no cache exists
-                return _cachedStopWords ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            }
-        }
-
-        return _cachedStopWords ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>

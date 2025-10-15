@@ -1,6 +1,28 @@
 namespace TelegramGroupsAdmin.SpamDetection.Models;
 
 /// <summary>
+/// Result type for spam checks
+/// </summary>
+public enum SpamCheckResultType
+{
+    /// <summary>
+    /// Message is clean (not spam)
+    /// </summary>
+    Clean = 0,
+
+    /// <summary>
+    /// Message is spam
+    /// </summary>
+    Spam = 1,
+
+    /// <summary>
+    /// Message needs human review (uncertain classification)
+    /// Only used by AI-based checks (OpenAI, future ML checks)
+    /// </summary>
+    Review = 2
+}
+
+/// <summary>
 /// Response from individual spam check, based on tg-spam's Response model
 /// </summary>
 public record SpamCheckResponse
@@ -11,9 +33,9 @@ public record SpamCheckResponse
     public required string CheckName { get; init; }
 
     /// <summary>
-    /// Whether the message is considered spam by this check
+    /// Classification result (Clean, Spam, or Review)
     /// </summary>
-    public bool IsSpam { get; init; } = false;
+    public SpamCheckResultType Result { get; init; } = SpamCheckResultType.Clean;
 
     /// <summary>
     /// Human-readable explanation of the decision

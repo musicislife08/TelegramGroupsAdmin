@@ -3,9 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
-using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
-using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
@@ -16,7 +14,6 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public partial class SeoScrapingSpamCheck : ISpamCheck
 {
     private readonly ILogger<SeoScrapingSpamCheck> _logger;
-    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly HttpClient _httpClient;
 
     private static readonly Regex UrlRegex = CompiledUrlRegex();
@@ -53,14 +50,12 @@ public partial class SeoScrapingSpamCheck : ISpamCheck
 
     public SeoScrapingSpamCheck(
         ILogger<SeoScrapingSpamCheck> logger,
-        ISpamDetectionConfigRepository configRepository,
         IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
-        _configRepository = configRepository;
         _httpClient = httpClientFactory.CreateClient();
 
-        // Configure HTTP client - will be updated from config in CheckAsync
+        // Configure HTTP client
         _httpClient.Timeout = TimeSpan.FromSeconds(10);
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (TelegramGroupsAdmin/1.0)");
     }
@@ -83,32 +78,17 @@ public partial class SeoScrapingSpamCheck : ISpamCheck
     /// <summary>
     /// Execute SEO scraping spam check
     /// </summary>
-    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
+    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequestBase request)
     {
-        // Load config from database
-        var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+        var req = (SeoScrapingCheckRequest)request;
 
-        // Check if this check is enabled
-        if (!config.SeoScraping.Enabled)
-        {
-            return new SpamCheckResponse
-            {
-                CheckName = CheckName,
-                IsSpam = false,
-                Details = "Check disabled",
-                Confidence = 0
-            };
-        }
-
-        // Update HTTP client timeout from config
-        _httpClient.Timeout = config.SeoScraping.Timeout;
         try
         {
-            var urls = ExtractUrls(request.Message);
+            var urls = ExtractUrls(req.Message);
 
             foreach (var url in urls)
             {
-                var preview = await GetSeoPreviewAsync(url, cancellationToken);
+                var preview = await GetSeoPreviewAsync(url, req.CancellationToken);
                 if (preview == null)
                 {
                     continue;
@@ -124,36 +104,36 @@ public partial class SeoScrapingSpamCheck : ISpamCheck
                 if (LooksSuspicious(combinedText))
                 {
                     _logger.LogDebug("SeoScraping check for user {UserId}: Suspicious content in {Url}",
-                        request.UserId, url);
+                        req.UserId, url);
 
                     return new SpamCheckResponse
                     {
                         CheckName = CheckName,
-                        IsSpam = true,
+                        Result = SpamCheckResultType.Spam,
                         Details = $"Suspicious content detected in webpage: {url}",
-                        Confidence = 75
+                        Confidence = req.ConfidenceThreshold
                     };
                 }
             }
 
             _logger.LogDebug("SeoScraping check for user {UserId}: No suspicious content found for {UrlCount} URLs",
-                request.UserId, urls.Count);
+                req.UserId, urls.Count);
 
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false,
+                Result = SpamCheckResultType.Clean,
                 Details = $"No suspicious content found for {urls.Count} URLs",
                 Confidence = 0
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "SeoScraping check failed for user {UserId}", request.UserId);
+            _logger.LogError(ex, "SeoScraping check failed for user {UserId}", req.UserId);
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false, // Fail open
+                Result = SpamCheckResultType.Clean, // Fail open
                 Details = "SEO scraping check failed due to error",
                 Confidence = 0,
                 Error = ex

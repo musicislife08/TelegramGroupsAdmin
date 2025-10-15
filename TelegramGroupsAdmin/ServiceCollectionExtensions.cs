@@ -225,7 +225,6 @@ public static class ServiceCollectionExtensions
     {
         // Spam Detection repositories (from SpamDetection library)
         services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.IStopWordsRepository, TelegramGroupsAdmin.SpamDetection.Repositories.StopWordsRepository>();
-        services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.ITrainingSamplesRepository, TelegramGroupsAdmin.SpamDetection.Repositories.TrainingSamplesRepository>();
         services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.ISpamDetectionConfigRepository, TelegramGroupsAdmin.SpamDetection.Repositories.SpamDetectionConfigRepository>();
 
         // Report Actions Service (uses repositories from Telegram library)

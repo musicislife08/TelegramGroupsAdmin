@@ -49,6 +49,21 @@ public record SpamCheckRequest
     /// Image file name or type (optional)
     /// </summary>
     public string? ImageFileName { get; init; }
+
+    /// <summary>
+    /// List of URLs extracted from the message (for URL-based checks)
+    /// </summary>
+    public List<string> Urls { get; init; } = [];
+
+    /// <summary>
+    /// Telegram photo file ID (for image spam detection)
+    /// </summary>
+    public string? PhotoFileId { get; init; }
+
+    /// <summary>
+    /// Photo URL (for image spam detection)
+    /// </summary>
+    public string? PhotoUrl { get; init; }
 }
 
 /// <summary>

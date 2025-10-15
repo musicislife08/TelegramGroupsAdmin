@@ -18,20 +18,19 @@ public static class ServiceCollectionExtensions
     /// <returns>Service collection for chaining</returns>
     public static IServiceCollection AddSpamDetection(this IServiceCollection services)
     {
-        // Register main spam detector factory (loads config from repository dynamically)
-        services.AddScoped<ISpamDetectorFactory, SpamDetectorFactory>();
+        // Register main spam detection engine (loads config from repository dynamically)
+        services.AddScoped<ISpamDetectionEngine, SpamDetectionEngine>();
 
         // Register core services
         services.AddScoped<ITokenizerService, TokenizerService>();
         services.AddScoped<IOpenAITranslationService, OpenAITranslationService>();
         // NOTE: IMessageHistoryService is registered by the main app (TelegramAdminBotService implements it)
 
-        // Register repositories
-        services.AddScoped<IStopWordsRepository, StopWordsRepository>();
-        services.AddScoped<ITrainingSamplesRepository, TrainingSamplesRepository>();
+        // Register repositories (needed by engine for config)
+        services.AddScoped<ISpamDetectionConfigRepository, SpamDetectionConfigRepository>();
 
         // Register individual spam checks
-        // NOTE: Translation happens in SpamDetectorFactory preprocessing, not as a spam check
+        // NOTE: Translation happens in SpamDetectionEngine preprocessing, not as a spam check
         services.AddScoped<ISpamCheck, Checks.InvisibleCharsSpamCheck>();  // Runs FIRST on original message
         services.AddScoped<ISpamCheck, Checks.StopWordsSpamCheck>();
         services.AddScoped<ISpamCheck, Checks.CasSpamCheck>();

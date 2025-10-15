@@ -4,6 +4,9 @@ namespace TelegramGroupsAdmin.SpamDetection.Abstractions;
 
 /// <summary>
 /// Interface for individual spam detection checks
+/// Each check receives a strongly-typed request with exactly the config/data it needs
+/// Engine decides if check should run - if CheckAsync is called, the check executes
+/// Checks manage their own database access with appropriate TAKE() limits as guardrails
 /// </summary>
 public interface ISpamCheck
 {
@@ -13,18 +16,19 @@ public interface ISpamCheck
     string CheckName { get; }
 
     /// <summary>
-    /// Execute the spam check on the provided request
+    /// Execute the spam check with a strongly-typed request
+    /// Request contains message data and check-specific configuration
+    /// Checks load database data themselves using injected services with guardrails
     /// </summary>
-    /// <param name="request">The spam check request</param>
-    /// <param name="cancellationToken">Cancellation token</param>
+    /// <param name="request">Strongly-typed request with all data needed for this check</param>
     /// <returns>The result of this spam check</returns>
-    Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default);
+    Task<SpamCheckResponse> CheckAsync(SpamCheckRequestBase request);
 
     /// <summary>
     /// Whether this check should be executed for the given request
-    /// Used to skip checks based on message length, configuration, etc.
+    /// Used by engine to determine if check is applicable (e.g., message length, has URLs)
     /// </summary>
-    /// <param name="request">The spam check request</param>
+    /// <param name="request">The original spam check request</param>
     /// <returns>True if this check should run</returns>
     bool ShouldExecute(SpamCheckRequest request);
 }

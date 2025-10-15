@@ -1,3 +1,5 @@
+@using TelegramGroupsAdmin.Models.Dialogs
+
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
@@ -10,19 +12,13 @@
                          Lines="4"
                          HelperText="The message text that will be used for training the Bayes classifier" />
 
-            <MudRadioGroup T="bool" @bind-Value="_isSpam" Required="true">
-                <MudText Typo="Typo.body1" Class="mb-2">Classification:</MudText>
+            <MudText Typo="Typo.body1" Class="mb-2">Classification:</MudText>
+            <MudRadioGroup T="bool" @bind-Value="_isSpam" Required="true" Class="ml-4">
                 <MudRadio T="bool" Value="true" Color="Color.Error">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
-                        <span>SPAM - This message is spam/unwanted</span>
-                    </MudStack>
+                    SPAM - This message is spam/unwanted
                 </MudRadio>
                 <MudRadio T="bool" Value="false" Color="Color.Success">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
-                        <span>HAM - This message is legitimate/wanted</span>
-                    </MudStack>
+                    HAM - This message is legitimate/wanted
                 </MudRadio>
             </MudRadioGroup>
 

@@ -26,66 +26,15 @@ public class SpamDetector : ISpamDetector
 
     /// <summary>
     /// Execute all configured spam checks for the given request
+    /// LEGACY: This class is obsolete and no longer compatible with the new typed request system
     /// </summary>
-    public async Task<SpamCheckResult> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
+    public Task<SpamCheckResult> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
     {
-        var startTime = DateTime.UtcNow;
-        var responses = new List<SpamCheckResponse>();
-        var allExtraDeleteIds = new List<int>();
-
-        _logger.LogDebug("Starting spam detection for user {UserId} in chat {ChatId}, message length: {MessageLength}",
-            request.UserId, request.ChatId, request.Message.Length);
-
-        // Run all applicable spam checks
-        foreach (var check in _spamChecks)
-        {
-            if (!check.ShouldExecute(request))
-            {
-                _logger.LogDebug("Skipping check {CheckName} for user {UserId}", check.CheckName, request.UserId);
-                continue;
-            }
-
-            try
-            {
-                var checkStartTime = DateTime.UtcNow;
-                var response = await check.CheckAsync(request, cancellationToken);
-                var processingTime = (DateTime.UtcNow - checkStartTime).TotalMilliseconds;
-
-                // Update processing time
-                response = response with { ProcessingTimeMs = (long)processingTime };
-
-                responses.Add(response);
-                allExtraDeleteIds.AddRange(response.ExtraDeleteIds);
-
-                _logger.LogDebug("Check {CheckName} completed: IsSpam={IsSpam}, Confidence={Confidence}, Time={ProcessingTimeMs}ms",
-                    check.CheckName, response.IsSpam, response.Confidence, response.ProcessingTimeMs);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error running spam check {CheckName} for user {UserId}", check.CheckName, request.UserId);
-
-                // Add error response
-                responses.Add(new SpamCheckResponse
-                {
-                    CheckName = check.CheckName,
-                    IsSpam = false,
-                    Details = "Check failed due to error",
-                    Confidence = 0,
-                    Error = ex
-                });
-            }
-        }
-
-        // Calculate overall result
-        var result = CalculateOverallResult(responses, allExtraDeleteIds);
-
-        var totalTime = (DateTime.UtcNow - startTime).TotalMilliseconds;
-        result = result with { TotalProcessingTimeMs = (long)totalTime };
-
-        _logger.LogInformation("Spam detection completed for user {UserId}: IsSpam={IsSpam}, Confidence={OverallConfidence}, Action={RecommendedAction}, Time={TotalProcessingTimeMs}ms",
-            request.UserId, result.IsSpam, result.OverallConfidence, result.RecommendedAction, result.TotalProcessingTimeMs);
-
-        return result;
+        // Legacy SpamDetector is incompatible with new typed request system
+        _logger.LogError("LEGACY CODE: SpamDetector should not be used. Use ISpamDetectionEngine instead.");
+        throw new NotSupportedException(
+            "SpamDetector is a legacy class and cannot be used with the new typed request system. " +
+            "Use ISpamDetectionEngine instead.");
     }
 
     /// <summary>
@@ -118,7 +67,7 @@ public class SpamDetector : ISpamDetector
 
         // Calculate weighted confidence score
         // For now, use simple maximum confidence from any check that flagged as spam
-        var spamResponses = responses.Where(r => r.IsSpam && r.Error == null).ToList();
+        var spamResponses = responses.Where(r => r.Result == SpamCheckResultType.Spam && r.Error == null).ToList();
         var maxConfidence = spamResponses.Any() ? spamResponses.Max(r => r.Confidence) : 0;
 
         // Determine if overall result is spam
@@ -154,7 +103,7 @@ public class SpamDetector : ISpamDetector
     /// </summary>
     private static string GenerateSummary(List<SpamCheckResponse> responses, int maxConfidence, SpamAction action)
     {
-        var spamChecks = responses.Where(r => r.IsSpam && r.Error == null).ToList();
+        var spamChecks = responses.Where(r => r.Result == SpamCheckResultType.Spam && r.Error == null).ToList();
         var errorChecks = responses.Where(r => r.Error != null).ToList();
 
         if (!spamChecks.Any())

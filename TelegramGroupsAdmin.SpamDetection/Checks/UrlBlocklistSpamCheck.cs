@@ -4,9 +4,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
-using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
-using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
@@ -17,7 +15,6 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public partial class UrlBlocklistSpamCheck : ISpamCheck
 {
     private readonly ILogger<UrlBlocklistSpamCheck> _logger;
-    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
 
@@ -32,12 +29,10 @@ public partial class UrlBlocklistSpamCheck : ISpamCheck
 
     public UrlBlocklistSpamCheck(
         ILogger<UrlBlocklistSpamCheck> logger,
-        ISpamDetectionConfigRepository configRepository,
         IHttpClientFactory httpClientFactory,
         IMemoryCache cache)
     {
         _logger = logger;
-        _configRepository = configRepository;
         _httpClient = httpClientFactory.CreateClient();
         _cache = cache;
 
@@ -63,28 +58,13 @@ public partial class UrlBlocklistSpamCheck : ISpamCheck
     /// <summary>
     /// Execute URL blocklist spam check
     /// </summary>
-    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
+    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequestBase request)
     {
+        var req = (UrlBlocklistCheckRequest)request;
+
         try
         {
-            // Load config from database
-            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
-
-            // Check if this check is enabled
-            if (!config.UrlBlocklist.Enabled)
-            {
-                return new SpamCheckResponse
-                {
-                    CheckName = CheckName,
-                    IsSpam = false,
-                    Details = "Check disabled",
-                    Confidence = 0
-                };
-            }
-
-            var allUrls = ExtractUrlsAndDomains(request.Message);
-
-            foreach (var url in allUrls)
+            foreach (var url in req.Urls)
             {
                 var domain = ExtractDomain(url);
 
@@ -96,7 +76,7 @@ public partial class UrlBlocklistSpamCheck : ISpamCheck
                         async entry =>
                         {
                             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(24);
-                            return await FetchBlocklistEntriesAsync(listName, cancellationToken);
+                            return await FetchBlocklistEntriesAsync(listName, req.CancellationToken);
                         });
 
                     var match = entries?.FirstOrDefault(entry =>
@@ -106,37 +86,37 @@ public partial class UrlBlocklistSpamCheck : ISpamCheck
                     if (match is not null)
                     {
                         _logger.LogDebug("URL blocklist match for user {UserId}: Domain {Domain} blocked by list {ListName}",
-                            request.UserId, domain, listName);
+                            req.UserId, domain, listName);
 
                         return new SpamCheckResponse
                         {
                             CheckName = CheckName,
-                            IsSpam = true,
+                            Result = SpamCheckResultType.Spam,
                             Details = $"Domain '{domain}' blocked by '{listName}' list (matched: {match})",
-                            Confidence = 95 // High confidence for blocklist matches
+                            Confidence = req.ConfidenceThreshold
                         };
                     }
                 }
             }
 
             _logger.LogDebug("URL blocklist check for user {UserId}: No matches found for {UrlCount} URLs",
-                request.UserId, allUrls.Count);
+                req.UserId, req.Urls.Count);
 
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false,
-                Details = $"No blocklist matches for {allUrls.Count} URLs",
+                Result = SpamCheckResultType.Clean,
+                Details = $"No blocklist matches for {req.Urls.Count} URLs",
                 Confidence = 0
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "URL blocklist check failed for user {UserId}", request.UserId);
+            _logger.LogError(ex, "URL blocklist check failed for user {UserId}", req.UserId);
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false,
+                Result = SpamCheckResultType.Clean,
                 Details = "URL blocklist check failed due to error",
                 Confidence = 0,
                 Error = ex

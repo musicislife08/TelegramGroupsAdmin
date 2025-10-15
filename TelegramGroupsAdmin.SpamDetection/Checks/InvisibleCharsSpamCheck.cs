@@ -1,8 +1,6 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
-using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
-using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
@@ -13,14 +11,12 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public class InvisibleCharsSpamCheck : ISpamCheck
 {
     private readonly ILogger<InvisibleCharsSpamCheck> _logger;
-    private readonly ISpamDetectionConfigRepository _configRepository;
 
     public string CheckName => "InvisibleChars";
 
-    public InvisibleCharsSpamCheck(ILogger<InvisibleCharsSpamCheck> logger, ISpamDetectionConfigRepository configRepository)
+    public InvisibleCharsSpamCheck(ILogger<InvisibleCharsSpamCheck> logger)
     {
         _logger = logger;
-        _configRepository = configRepository;
     }
 
     public bool ShouldExecute(SpamCheckRequest request)
@@ -34,62 +30,50 @@ public class InvisibleCharsSpamCheck : ISpamCheck
         return true;
     }
 
-    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
+    public Task<SpamCheckResponse> CheckAsync(SpamCheckRequestBase request)
     {
+        var req = (InvisibleCharsCheckRequest)request;
+
         try
         {
-            // Load config to check if enabled
-            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
-
-            if (!config.InvisibleChars.Enabled)
-            {
-                return new SpamCheckResponse
-                {
-                    CheckName = CheckName,
-                    IsSpam = false,
-                    Details = "Check disabled",
-                    Confidence = 0
-                };
-            }
-
-            var count = CountInvisibleCharacters(request.Message);
+            var count = CountInvisibleCharacters(req.Message);
 
             if (count > 0)
             {
                 _logger.LogDebug("InvisibleChars check for user {UserId}: Found {Count} invisible characters",
-                    request.UserId, count);
+                    req.UserId, count);
 
-                return new SpamCheckResponse
+                return Task.FromResult(new SpamCheckResponse
                 {
                     CheckName = CheckName,
-                    IsSpam = true,
+                    Result = SpamCheckResultType.Spam,
                     Details = $"Contains {count} invisible/hidden characters",
                     Confidence = 90
-                };
+                });
             }
 
             // Phase 2.6: Asymmetric confidence scoring
             // Simple checks have low confidence when NOT spam (absence of evidence ≠ strong evidence)
             // 20% confidence in "not spam" result (vs 0% before)
-            return new SpamCheckResponse
+            return Task.FromResult(new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false,
+                Result = SpamCheckResultType.Clean,
                 Details = "No invisible characters detected",
                 Confidence = 20
-            };
+            });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "InvisibleChars check failed for user {UserId}", request.UserId);
-            return new SpamCheckResponse
+            _logger.LogError(ex, "InvisibleChars check failed for user {UserId}", req.UserId);
+            return Task.FromResult(new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false,
+                Result = SpamCheckResultType.Clean,
                 Details = "Check failed due to error",
                 Confidence = 0,
                 Error = ex
-            };
+            });
         }
     }
 

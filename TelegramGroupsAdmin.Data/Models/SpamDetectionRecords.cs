@@ -7,61 +7,9 @@ namespace TelegramGroupsAdmin.Data.Models;
 // which is a separate assembly. This is acceptable as they are just data containers.
 
 // ============================================================================
-// Training Samples
+// OBSOLETE: Training Samples table was removed in Phase 2.2
+// Training data now comes from detection_results.used_for_training = true
 // ============================================================================
-
-/// <summary>
-/// EF Core entity for training_samples table
-/// Public to allow cross-assembly repository usage
-/// </summary>
-[Table("training_samples")]
-public class TrainingSampleDto
-{
-    [Key]
-    [Column("id")]
-    public long Id { get; set; }
-
-    [Column("message_text")]
-    [Required]
-    public string MessageText { get; set; } = string.Empty;
-
-    [Column("is_spam")]
-    public bool IsSpam { get; set; }
-
-    [Column("added_date")]
-    public DateTimeOffset AddedDate { get; set; }
-
-    [Column("source")]
-    [Required]
-    public string Source { get; set; } = string.Empty;
-
-    [Column("confidence_when_added")]
-    public int? ConfidenceWhenAdded { get; set; }
-
-    [Column("chat_ids")]
-    public long[]? ChatIds { get; set; }
-
-    [Column("added_by")]
-    public string? AddedBy { get; set; }
-
-    [Column("detection_count")]
-    public int DetectionCount { get; set; }
-
-    [Column("last_detected_date")]
-    public DateTimeOffset? LastDetectedDate { get; set; }
-}
-
-/// <summary>
-/// Public domain model for training statistics
-/// </summary>
-public class TrainingStatsDto
-{
-    public int TotalSamples { get; set; }
-    public int SpamSamples { get; set; }
-    public int HamSamples { get; set; }
-    public double SpamPercentage { get; set; }
-    public Dictionary<string, int> SamplesBySource { get; set; } = new();
-}
 
 // ============================================================================
 // Stop Words

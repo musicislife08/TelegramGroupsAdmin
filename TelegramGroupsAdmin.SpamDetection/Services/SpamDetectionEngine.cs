@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
 using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
@@ -8,25 +10,32 @@ using TelegramGroupsAdmin.SpamDetection.Repositories;
 namespace TelegramGroupsAdmin.SpamDetection.Services;
 
 /// <summary>
-/// Factory implementation that orchestrates all spam detection checks
+/// Core spam detection engine that orchestrates all spam detection checks
+/// Loads configuration once, builds strongly-typed requests for each check, and aggregates results
 /// </summary>
-public class SpamDetectorFactory : ISpamDetectorFactory
+public class SpamDetectionEngine : ISpamDetectionEngine
 {
-    private readonly ILogger<SpamDetectorFactory> _logger;
+    private readonly ILogger<SpamDetectionEngine> _logger;
     private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly IEnumerable<ISpamCheck> _spamChecks;
     private readonly IOpenAITranslationService _translationService;
+    private readonly OpenAIOptions _openAIOptions;
+    private readonly SpamDetectionOptions _spamDetectionOptions;
 
-    public SpamDetectorFactory(
-        ILogger<SpamDetectorFactory> logger,
+    public SpamDetectionEngine(
+        ILogger<SpamDetectionEngine> logger,
         ISpamDetectionConfigRepository configRepository,
         IEnumerable<ISpamCheck> spamChecks,
-        IOpenAITranslationService translationService)
+        IOpenAITranslationService translationService,
+        IOptions<OpenAIOptions> openAIOptions,
+        IOptions<SpamDetectionOptions> spamDetectionOptions)
     {
         _logger = logger;
         _configRepository = configRepository;
         _spamChecks = spamChecks;
         _translationService = translationService;
+        _openAIOptions = openAIOptions.Value;
+        _spamDetectionOptions = spamDetectionOptions.Value;
     }
 
     private async Task<SpamDetectionConfig> GetConfigAsync(SpamCheckRequest request, CancellationToken cancellationToken)
@@ -46,6 +55,182 @@ public class SpamDetectorFactory : ISpamDetectorFactory
             _logger.LogError(ex, "Failed to load spam detection config, using default");
             return new SpamDetectionConfig();
         }
+    }
+
+    /// <summary>
+    /// Build strongly-typed request for a specific check
+    /// Engine decides which checks run and builds the exact request each check needs
+    /// </summary>
+    private SpamCheckRequestBase BuildRequestForCheck(
+        ISpamCheck check,
+        SpamCheckRequest originalRequest,
+        SpamDetectionConfig config,
+        CancellationToken cancellationToken)
+    {
+        return check.CheckName switch
+        {
+            "StopWords" => new StopWordsCheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
+                ConfidenceThreshold = config.StopWords.ConfidenceThreshold,
+                CancellationToken = cancellationToken
+            },
+
+            "Bayes" => new BayesCheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
+                MinMessageLength = config.MinMessageLength,
+                MinSpamProbability = (int)config.Bayes.MinSpamProbability,
+                CancellationToken = cancellationToken
+            },
+
+            "CAS" => new CasCheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
+                ApiUrl = config.Cas.ApiUrl,
+                Timeout = config.Cas.Timeout,
+                UserAgent = config.Cas.UserAgent,
+                CancellationToken = cancellationToken
+            },
+
+            "Similarity" => new SimilarityCheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
+                MinMessageLength = config.MinMessageLength,
+                SimilarityThreshold = config.Similarity.Threshold,
+                ConfidenceThreshold = 75, // No config property, using default
+                CancellationToken = cancellationToken
+            },
+
+            "Spacing" => new SpacingCheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
+                ConfidenceThreshold = 70, // No config property, using default
+                SuspiciousRatioThreshold = config.Spacing.ShortWordRatioThreshold,
+                CancellationToken = cancellationToken
+            },
+
+            "InvisibleChars" => new InvisibleCharsCheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
+                ConfidenceThreshold = 80, // No config property, using default
+                CancellationToken = cancellationToken
+            },
+
+            "OpenAI" => new OpenAICheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
+                VetoMode = config.OpenAI.VetoMode,
+                SystemPrompt = config.OpenAI.SystemPrompt,
+                HasSpamFlags = originalRequest.HasSpamFlags,
+                MinMessageLength = config.MinMessageLength,
+                CheckShortMessages = config.OpenAI.CheckShortMessages,
+                ApiKey = _openAIOptions.ApiKey,
+                Model = _openAIOptions.Model,
+                MaxTokens = _openAIOptions.MaxTokens,
+                CancellationToken = cancellationToken
+            },
+
+            "ThreatIntel" => new ThreatIntelCheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
+                Urls = originalRequest.Urls ?? [],
+                VirusTotalApiKey = _spamDetectionOptions.ApiKey,
+                ConfidenceThreshold = 85, // No config property, using default
+                CancellationToken = cancellationToken
+            },
+
+            "UrlBlocklist" => new UrlBlocklistCheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
+                Urls = originalRequest.Urls ?? [],
+                ConfidenceThreshold = 90, // No config property, using default
+                CancellationToken = cancellationToken
+            },
+
+            "SeoScraping" => new SeoScrapingCheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
+                ConfidenceThreshold = 75, // No config property, using default
+                CancellationToken = cancellationToken
+            },
+
+            "Image" => new ImageCheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
+                PhotoFileId = originalRequest.PhotoFileId ?? "",
+                PhotoUrl = originalRequest.PhotoUrl,
+                CustomPrompt = null, // No config property
+                ConfidenceThreshold = 80, // No config property, using default
+                ApiKey = _openAIOptions.ApiKey,
+                CancellationToken = cancellationToken
+            },
+
+            _ => throw new InvalidOperationException($"Unknown check type: {check.CheckName}")
+        };
+    }
+
+    /// <summary>
+    /// Determine if a check should run based on config and request properties
+    /// Engine makes all orchestration decisions - checks no longer decide if they run
+    /// </summary>
+    private bool ShouldRunCheck(ISpamCheck check, SpamCheckRequest request, SpamDetectionConfig config)
+    {
+        // First check if enabled in config
+        var enabled = check.CheckName switch
+        {
+            "StopWords" => config.StopWords.Enabled,
+            "Bayes" => config.Bayes.Enabled,
+            "CAS" => config.Cas.Enabled,
+            "Similarity" => config.Similarity.Enabled,
+            "Spacing" => config.Spacing.Enabled,
+            "InvisibleChars" => config.InvisibleChars.Enabled,
+            "OpenAI" => config.OpenAI.Enabled && (!config.OpenAI.VetoMode || request.HasSpamFlags),
+            "ThreatIntel" => config.ThreatIntel.Enabled && request.Urls.Any(),
+            "UrlBlocklist" => config.UrlBlocklist.Enabled && request.Urls.Any(),
+            "SeoScraping" => config.SeoScraping.Enabled,
+            "Image" => config.ImageSpam.Enabled && !string.IsNullOrEmpty(request.PhotoFileId),
+            _ => false
+        };
+
+        if (!enabled)
+            return false;
+
+        // Then check if check's ShouldExecute allows it
+        return check.ShouldExecute(request);
     }
 
     /// <summary>
@@ -77,17 +262,25 @@ public class SpamDetectorFactory : ISpamDetectorFactory
                 // Update request to indicate other checks found spam
                 var vetoRequest = request with { HasSpamFlags = true };
 
-                if (openAICheck.ShouldExecute(vetoRequest))
+                if (ShouldRunCheck(openAICheck, vetoRequest, config))
                 {
-                    var vetoResult = await openAICheck.CheckAsync(vetoRequest, cancellationToken);
+                    var checkRequest = BuildRequestForCheck(openAICheck, vetoRequest, config, cancellationToken);
+                    var vetoResult = await openAICheck.CheckAsync(checkRequest);
                     checkResults.Add(vetoResult);
 
                     // If OpenAI vetoes the spam detection (says it's not spam), override the result
-                    if (!vetoResult.IsSpam)
+                    // If OpenAI says "Review", pass through for human review
+                    if (vetoResult.Result == SpamCheckResultType.Clean)
                     {
                         _logger.LogInformation("OpenAI vetoed spam detection for user {UserId} with {Confidence}% confidence",
                             request.UserId, vetoResult.Confidence);
                         return CreateVetoedResult(checkResults, vetoResult);
+                    }
+                    else if (vetoResult.Result == SpamCheckResultType.Review)
+                    {
+                        _logger.LogInformation("OpenAI flagged message for human review for user {UserId}",
+                            request.UserId);
+                        return CreateReviewResult(checkResults, vetoResult);
                     }
                 }
             }
@@ -111,15 +304,13 @@ public class SpamDetectorFactory : ISpamDetectorFactory
         // Phase 2: Translate, then run all other checks on translated message
 
         var invisibleCharsCheck = _spamChecks.FirstOrDefault(check => check.CheckName == "InvisibleChars");
-        if (invisibleCharsCheck != null && invisibleCharsCheck.ShouldExecute(request))
+        if (invisibleCharsCheck != null && ShouldRunCheck(invisibleCharsCheck, request, config))
         {
             try
             {
-                _logger.LogDebug("Running InvisibleChars on original message for user {UserId}", request.UserId);
-                var result = await invisibleCharsCheck.CheckAsync(request, cancellationToken);
+                var checkRequest = BuildRequestForCheck(invisibleCharsCheck, request, config, cancellationToken);
+                var result = await invisibleCharsCheck.CheckAsync(checkRequest);
                 checkResults.Add(result);
-                _logger.LogDebug("InvisibleChars result: IsSpam={IsSpam}, Confidence={Confidence}",
-                    result.IsSpam, result.Confidence);
             }
             catch (Exception ex)
             {
@@ -135,20 +326,14 @@ public class SpamDetectorFactory : ISpamDetectorFactory
 
         foreach (var check in checks)
         {
-            if (!check.ShouldExecute(processedRequest))
-            {
-                _logger.LogDebug("Skipping {CheckName} for user {UserId} - conditions not met", check.CheckName, processedRequest.UserId);
+            if (!ShouldRunCheck(check, processedRequest, config))
                 continue;
-            }
 
             try
             {
-                _logger.LogDebug("Running {CheckName} for user {UserId}", check.CheckName, processedRequest.UserId);
-                var result = await check.CheckAsync(processedRequest, cancellationToken);
+                var checkRequest = BuildRequestForCheck(check, processedRequest, config, cancellationToken);
+                var result = await check.CheckAsync(checkRequest);
                 checkResults.Add(result);
-
-                _logger.LogDebug("{CheckName} result: IsSpam={IsSpam}, Confidence={Confidence}",
-                    check.CheckName, result.IsSpam, result.Confidence);
             }
             catch (Exception ex)
             {
@@ -163,6 +348,7 @@ public class SpamDetectorFactory : ISpamDetectorFactory
     /// <summary>
     /// Phase 2.6: Calculate net confidence using weighted voting
     /// Net = Sum(spam check confidences) - Sum(ham check confidences)
+    /// Review results are not included in net confidence calculation
     /// </summary>
     private int CalculateNetConfidence(List<SpamCheckResponse> checkResults)
     {
@@ -171,31 +357,29 @@ public class SpamDetectorFactory : ISpamDetectorFactory
 
         foreach (var check in checkResults)
         {
-            if (check.IsSpam)
+            if (check.Result == SpamCheckResultType.Spam)
             {
                 spamVotes += check.Confidence;
             }
-            else
+            else if (check.Result == SpamCheckResultType.Clean)
             {
                 hamVotes += check.Confidence;
             }
+            // Review results don't contribute to net confidence
         }
 
         var netConfidence = spamVotes - hamVotes;
-
-        _logger.LogDebug("Net confidence: {Net} (spam votes: {SpamVotes}, ham votes: {HamVotes})",
-            netConfidence, spamVotes, hamVotes);
-
         return netConfidence;
     }
 
     /// <summary>
     /// Aggregate results from multiple spam checks
     /// Phase 2.6: Uses weighted voting (net confidence) for two-tier decision system
+    /// Phase 4.5: Handles Review result type from AI-based checks
     /// </summary>
     private SpamDetectionResult AggregateResults(List<SpamCheckResponse> checkResults, SpamDetectionConfig config)
     {
-        var spamResults = checkResults.Where(r => r.IsSpam).ToList();
+        var spamResults = checkResults.Where(r => r.Result == SpamCheckResultType.Spam).ToList();
         var isSpam = spamResults.Any();
         var spamFlags = spamResults.Count;
 
@@ -205,11 +389,11 @@ public class SpamDetectorFactory : ISpamDetectorFactory
         // Phase 2.6: Calculate net confidence using weighted voting
         var netConfidence = CalculateNetConfidence(checkResults);
 
-        // Phase 2.6: Two-tier decision system based on net confidence
-        // Net > +50: Run OpenAI veto (safety before ban)
-        // Net ≤ +50: Admin review queue (skip OpenAI cost)
-        // Net < 0: Allow (no spam detected)
-        var shouldVeto = netConfidence > 50 && config.OpenAI.VetoMode;
+        // Phase 2.6: Two-tier decision system based on net confidence OR high individual confidence
+        // Veto if: (Net > +50) OR (any check >85% spam) - safety before ban
+        // Review queue: Net ≤ +50 but > 0 (low confidence spam)
+        // Allow: Net ≤ 0 (no spam detected)
+        var shouldVeto = (netConfidence > 50 || maxConfidence > 85) && config.OpenAI.VetoMode;
 
         // Determine recommended action based on net confidence
         var recommendedAction = DetermineActionFromNetConfidence(netConfidence, config);
@@ -232,7 +416,7 @@ public class SpamDetectorFactory : ISpamDetectorFactory
             NetConfidence = netConfidence // Phase 2.6: Store for analytics
         };
 
-        _logger.LogDebug("Aggregated result: IsSpam={IsSpam}, NetConfidence={NetConfidence}, MaxConfidence={MaxConfidence}, SpamFlags={SpamFlags}, Action={Action}",
+        _logger.LogInformation("Spam check complete: IsSpam={IsSpam}, Net={NetConfidence}, Max={MaxConfidence}, Flags={SpamFlags}, Action={Action}",
             result.IsSpam, result.NetConfidence, result.MaxConfidence, result.SpamFlags, result.RecommendedAction);
 
         return result;
@@ -257,6 +441,28 @@ public class SpamDetectorFactory : ISpamDetectorFactory
             PrimaryReason = vetoResult.Details,
             RecommendedAction = SpamAction.Allow,
             ShouldVeto = false // Veto already executed
+        };
+    }
+
+    /// <summary>
+    /// Phase 4.5: Create result when OpenAI flags message for human review
+    /// </summary>
+    private SpamDetectionResult CreateReviewResult(List<SpamCheckResponse> checkResults, SpamCheckResponse reviewResult)
+    {
+        // Calculate net confidence for analytics
+        var netConfidence = CalculateNetConfidence(checkResults);
+
+        return new SpamDetectionResult
+        {
+            IsSpam = false, // Don't auto-ban on review
+            MaxConfidence = reviewResult.Confidence,
+            AvgConfidence = reviewResult.Confidence,
+            SpamFlags = 0, // Review means uncertain, not spam
+            NetConfidence = netConfidence,
+            CheckResults = checkResults,
+            PrimaryReason = reviewResult.Details,
+            RecommendedAction = SpamAction.ReviewQueue, // Always send to review queue
+            ShouldVeto = false
         };
     }
 
@@ -384,6 +590,7 @@ public class SpamDetectorFactory : ISpamDetectorFactory
 
     /// <summary>
     /// Phase 2.6: Serialize check results to JSON for storage in detection_results.check_results
+    /// Phase 4.5: Updated to use Result enum instead of IsSpam boolean
     /// Returns compact JSON with minimal field names to save space
     /// </summary>
     public static string SerializeCheckResults(List<SpamCheckResponse> checkResults)
@@ -391,7 +598,7 @@ public class SpamDetectorFactory : ISpamDetectorFactory
         var checks = checkResults.Select(c => new
         {
             name = c.CheckName,
-            spam = c.IsSpam,
+            result = c.Result.ToString().ToLowerInvariant(), // "spam", "clean", or "review"
             conf = c.Confidence,
             reason = c.Details
         });

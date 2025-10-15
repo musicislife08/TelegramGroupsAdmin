@@ -68,7 +68,25 @@ public class SpamActionService(
             var openAIConfident = openAIResult != null && openAIResult.Confidence >= 85;
 
             // Decision logic based on net confidence and OpenAI involvement
-            if (spamResult.NetConfidence > 50 && openAIConfident && openAIResult!.IsSpam)
+            // Phase 4.5: Skip auto-ban if OpenAI flagged for review
+            if (openAIResult?.Result == TelegramGroupsAdmin.SpamDetection.Models.SpamCheckResultType.Review)
+            {
+                // OpenAI uncertain - send to admin review instead of auto-ban
+                await CreateBorderlineReportAsync(
+                    reportsRepo,
+                    message,
+                    spamResult,
+                    detectionResult,
+                    $"OpenAI flagged for review - Net: {spamResult.NetConfidence}");
+
+                logger.LogInformation(
+                    "Created admin review report for message {MessageId} in chat {ChatId}: OpenAI flagged for human review",
+                    message.MessageId,
+                    message.Chat.Id);
+                return; // Early return - don't auto-ban
+            }
+
+            if (spamResult.NetConfidence > 50 && openAIConfident && openAIResult!.Result == TelegramGroupsAdmin.SpamDetection.Models.SpamCheckResultType.Spam)
             {
                 // High confidence + OpenAI confirmed = auto-ban across all managed chats
                 logger.LogInformation(

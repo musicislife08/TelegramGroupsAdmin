@@ -5,24 +5,25 @@ using TelegramGroupsAdmin.SpamDetection.Services;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Orchestrates the complete spam checking workflow including user trust/admin checks and spam detection.
-/// This centralizes all spam checking logic so it's consistent between the bot and UI.
+/// Coordinates spam checking workflow by filtering trusted/admin users before spam detection
+/// Centralizes spam checking logic so it's consistent between bot and UI
 /// </summary>
-public interface ISpamCheckOrchestrator
+public interface ISpamCheckCoordinator
 {
     /// <summary>
     /// Run complete spam check workflow: trust check → admin check → spam detection
+    /// Trusted users and admins skip spam detection entirely
     /// </summary>
     /// <param name="request">Spam check request with message, user info, optional image</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Orchestrated result with trust/admin status and spam detection results</returns>
-    Task<SpamCheckOrchestratorResult> CheckAsync(SpamLibRequest request, CancellationToken cancellationToken = default);
+    /// <returns>Coordinated result with trust/admin status and spam detection results</returns>
+    Task<SpamCheckCoordinatorResult> CheckAsync(SpamLibRequest request, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
 /// Complete spam check result including user trust/admin status and spam detection
 /// </summary>
-public record SpamCheckOrchestratorResult
+public record SpamCheckCoordinatorResult
 {
     /// <summary>
     /// Whether user is explicitly trusted (bypasses all spam checks)

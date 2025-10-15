@@ -36,8 +36,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<TelegramBotClientFactory>();
         services.AddScoped<ITelegramImageService, TelegramImageService>();
 
-        // Spam check orchestration
-        services.AddScoped<ISpamCheckOrchestrator, SpamCheckOrchestrator>();
+        // Spam check coordination (filters trusted/admin users before spam detection)
+        services.AddScoped<ISpamCheckCoordinator, SpamCheckCoordinator>();
 
         // Moderation and user management services
         services.AddScoped<ModerationActionService>();

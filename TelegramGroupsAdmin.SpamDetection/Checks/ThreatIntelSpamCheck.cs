@@ -3,9 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
-using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
-using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
@@ -17,7 +15,6 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public partial class ThreatIntelSpamCheck : ISpamCheck
 {
     private readonly ILogger<ThreatIntelSpamCheck> _logger;
-    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly IHttpClientFactory _httpClientFactory;
 
     private static readonly Regex UrlRegex = CompiledUrlRegex();
@@ -26,11 +23,9 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
 
     public ThreatIntelSpamCheck(
         ILogger<ThreatIntelSpamCheck> logger,
-        ISpamDetectionConfigRepository configRepository,
         IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
-        _configRepository = configRepository;
         _httpClientFactory = httpClientFactory;
     }
 
@@ -52,67 +47,52 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
     /// <summary>
     /// Execute threat intelligence spam check
     /// </summary>
-    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
+    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequestBase request)
     {
-        // Load config from database
-        var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
-
-        // Check if this check is enabled
-        if (!config.ThreatIntel.Enabled)
-        {
-            return new SpamCheckResponse
-            {
-                CheckName = CheckName,
-                IsSpam = false,
-                Details = "Check disabled",
-                Confidence = 0
-            };
-        }
+        var req = (ThreatIntelCheckRequest)request;
 
         try
         {
-            var urls = ExtractUrls(request.Message);
-
-            foreach (var url in urls)
+            foreach (var url in req.Urls)
             {
-                // Check VirusTotal if enabled
-                if (config.ThreatIntel.UseVirusTotal)
+                // Check VirusTotal if API key is provided
+                if (!string.IsNullOrEmpty(req.VirusTotalApiKey))
                 {
-                    var virusTotalResult = await CheckVirusTotalAsync(url, cancellationToken);
+                    var virusTotalResult = await CheckVirusTotalAsync(url, req.VirusTotalApiKey, req.CancellationToken);
                     if (virusTotalResult.IsThreat)
                     {
                         _logger.LogDebug("ThreatIntel check for user {UserId}: VirusTotal flagged {Url}",
-                            request.UserId, url);
+                            req.UserId, url);
 
                         return new SpamCheckResponse
                         {
                             CheckName = CheckName,
-                            IsSpam = true,
+                            Result = SpamCheckResultType.Spam,
                             Details = $"VirusTotal flagged URL as malicious: {url}",
-                            Confidence = 90
+                            Confidence = req.ConfidenceThreshold
                         };
                     }
                 }
             }
 
             _logger.LogDebug("ThreatIntel check for user {UserId}: No threats found for {UrlCount} URLs",
-                request.UserId, urls.Count);
+                req.UserId, req.Urls.Count);
 
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false,
-                Details = $"No threats detected for {urls.Count} URLs",
+                Result = SpamCheckResultType.Clean,
+                Details = $"No threats detected for {req.Urls.Count} URLs",
                 Confidence = 0
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "ThreatIntel check failed for user {UserId}", request.UserId);
+            _logger.LogError(ex, "ThreatIntel check failed for user {UserId}", req.UserId);
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false, // Fail open
+                Result = SpamCheckResultType.Clean, // Fail open
                 Details = "ThreatIntel check failed due to error",
                 Confidence = 0,
                 Error = ex
@@ -121,14 +101,18 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
     }
 
     /// <summary>
-    /// Check URL against VirusTotal using named HttpClient configured in Program.cs
+    /// Check URL against VirusTotal
     /// </summary>
-    private async Task<ThreatResult> CheckVirusTotalAsync(string url, CancellationToken ct)
+    private async Task<ThreatResult> CheckVirusTotalAsync(string url, string apiKey, CancellationToken ct)
     {
         try
         {
-            // Use named client "VirusTotal" - API key already configured in headers via Program.cs
+            // Use named client "VirusTotal" - will configure API key in headers
             var client = _httpClientFactory.CreateClient("VirusTotal");
+
+            // Add API key to headers
+            client.DefaultRequestHeaders.Clear();
+            client.DefaultRequestHeaders.Add("x-apikey", apiKey);
 
             // Base64 encode URL for VirusTotal API
             var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(url))
@@ -190,21 +174,6 @@ public partial class ThreatIntelSpamCheck : ISpamCheck
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// Extract URLs from message text
-    /// </summary>
-    private static List<string> ExtractUrls(string message)
-    {
-        var urls = new List<string>();
-
-        foreach (Match match in UrlRegex.Matches(message))
-        {
-            urls.Add(match.Value);
-        }
-
-        return urls;
     }
 
     [GeneratedRegex(@"https?://[^\s\]\)\>]+", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]

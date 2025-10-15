@@ -1,10 +1,9 @@
-using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
-using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
-using TelegramGroupsAdmin.SpamDetection.Repositories;
 using TelegramGroupsAdmin.SpamDetection.Services;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
@@ -12,16 +11,31 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 /// <summary>
 /// Enhanced spam check using cosine similarity with database-stored patterns and early exit
 /// Based on tg-spam's similarity detection using TF-IDF vectors with optimizations
+/// Engine orchestrates config loading - check manages its own DB access with guardrails
 /// </summary>
 public class SimilaritySpamCheck : ISpamCheck
 {
+    private const int MAX_SIMILARITY_SAMPLES = 5_000; // Guardrail: cap similarity query
+
     private readonly ILogger<SimilaritySpamCheck> _logger;
-    private readonly ISpamDetectionConfigRepository _configRepository;
-    private readonly ITrainingSamplesRepository _trainingSamplesRepository;
+    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly ITokenizerService _tokenizerService;
 
-
     public string CheckName => "Similarity";
+
+    // Internal training sample record (used only by this check, loaded from detection_results)
+    private record TrainingSample(
+        long Id,
+        string MessageText,
+        bool IsSpam,
+        DateTimeOffset AddedDate,
+        string Source,
+        int ConfidenceWhenAdded,
+        long[] ChatIds,
+        string? AddedBy,
+        int DetectionCount,
+        DateTimeOffset? LastDetectedDate
+    );
 
     // Cached spam samples and vectors
     private List<TrainingSample>? _cachedSamples;
@@ -32,13 +46,11 @@ public class SimilaritySpamCheck : ISpamCheck
 
     public SimilaritySpamCheck(
         ILogger<SimilaritySpamCheck> logger,
-        ISpamDetectionConfigRepository configRepository,
-        ITrainingSamplesRepository trainingSamplesRepository,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ITokenizerService tokenizerService)
     {
         _logger = logger;
-        _configRepository = configRepository;
-        _trainingSamplesRepository = trainingSamplesRepository;
+        _dbContextFactory = dbContextFactory;
         _tokenizerService = tokenizerService;
     }
 
@@ -58,41 +70,29 @@ public class SimilaritySpamCheck : ISpamCheck
     }
 
     /// <summary>
-    /// Execute similarity spam check with database samples and early exit
+    /// Execute similarity spam check with strongly-typed request
+    /// Config values come from request - check loads spam samples from DB with guardrails
     /// </summary>
-    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
+    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequestBase request)
     {
+        var req = (SimilarityCheckRequest)request;
+
         try
         {
-            // Load config from database
-            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
-
-            // Check if this check is enabled
-            if (!config.Similarity.Enabled)
-            {
-                return new SpamCheckResponse
-                {
-                    CheckName = CheckName,
-                    IsSpam = false,
-                    Details = "Check disabled",
-                    Confidence = 0
-                };
-            }
-
             // Check message length
-            if (request.Message.Length < config.MinMessageLength)
+            if (req.Message.Length < req.MinMessageLength)
             {
                 return new SpamCheckResponse
                 {
                     CheckName = CheckName,
-                    IsSpam = false,
-                    Details = $"Message too short (< {config.MinMessageLength} chars)",
+                    Result = SpamCheckResultType.Clean,
+                    Details = $"Message too short (< {req.MinMessageLength} chars)",
                     Confidence = 0
                 };
             }
 
             // Get cached spam samples and vectors
-            await RefreshCacheIfNeededAsync(request.ChatId, cancellationToken);
+            await RefreshCacheIfNeededAsync(req.ChatId, req.CancellationToken);
 
             if (_cachedSamples == null || !_cachedSamples.Any() || _cachedVectors == null || _cachedVocabulary == null)
             {
@@ -101,14 +101,14 @@ public class SimilaritySpamCheck : ISpamCheck
                 return new SpamCheckResponse
                 {
                     CheckName = CheckName,
-                    IsSpam = false,
+                    Result = SpamCheckResultType.Clean,
                     Details = $"No spam samples available for comparison (loaded: {_cachedSamples?.Count ?? 0})",
                     Confidence = 0
                 };
             }
 
             // Preprocess message using shared tokenizer
-            var processedMessage = _tokenizerService.RemoveEmojis(request.Message);
+            var processedMessage = _tokenizerService.RemoveEmojis(req.Message);
             var messageVector = ComputeTfIdfVector(processedMessage, _cachedVocabulary);
 
             // Calculate similarity with early exit optimization
@@ -135,21 +135,16 @@ public class SimilaritySpamCheck : ISpamCheck
 
                 // Early exit: if we found a high-confidence match, stop checking
                 if (similarity >= 0.9) // Very high similarity threshold for early exit
-                {
-                    _logger.LogDebug("Early exit after checking {CheckedCount}/{TotalCount} samples", checkedCount, sortedSamples.Count);
                     break;
-                }
 
                 // Early exit: if we've checked enough samples and have a decent match
-                if (checkedCount >= 20 && maxSimilarity >= config.Similarity.Threshold)
-                {
-                    _logger.LogDebug("Early exit after checking {CheckedCount} samples with threshold match", checkedCount);
+                if (checkedCount >= 20 && maxSimilarity >= req.SimilarityThreshold)
                     break;
-                }
             }
 
             // Determine if message is spam based on similarity threshold
-            var isSpam = maxSimilarity >= config.Similarity.Threshold;
+            var isSpam = maxSimilarity >= req.SimilarityThreshold;
+            var result = isSpam ? SpamCheckResultType.Spam : SpamCheckResultType.Clean;
 
             // Calculate confidence based on similarity and spam decision
             // If spam: confidence = similarity * 100 (how similar to known spam)
@@ -159,33 +154,32 @@ public class SimilaritySpamCheck : ISpamCheck
                 : (int)((1.0 - maxSimilarity) * 100);
 
             // Update detection count for matched sample
+            // Note: Detection count tracking removed in normalized schema (detection_results table)
+            // This is now a no-op for backward compatibility - keeping the code structure but removing the fire-and-forget
             if (isSpam && matchedSampleId > 0)
             {
-                _ = Task.Run(() => _trainingSamplesRepository.IncrementDetectionCountAsync(matchedSampleId, CancellationToken.None), CancellationToken.None);
+                _logger.LogDebug("Similarity match found for sample {SampleId} (detection count tracking removed in normalized schema)", matchedSampleId);
             }
 
             var details = isSpam
                 ? $"High similarity ({maxSimilarity:F3}) to spam sample (checked {checkedCount}/{sortedSamples.Count})"
                 : $"Low similarity ({maxSimilarity:F3}) to spam samples (checked {checkedCount}/{sortedSamples.Count})";
 
-            _logger.LogDebug("Similarity check for user {UserId}: MaxSimilarity={MaxSimilarity:F3}, Threshold={Threshold}, Checked={CheckedCount}, IsSpam={IsSpam}",
-                request.UserId, maxSimilarity, config.Similarity.Threshold, checkedCount, isSpam);
-
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = isSpam,
+                Result = result,
                 Details = details,
                 Confidence = confidence
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Similarity check failed for user {UserId}", request.UserId);
+            _logger.LogError(ex, "Similarity check failed for user {UserId}", req.UserId);
             return new SpamCheckResponse
             {
                 CheckName = CheckName,
-                IsSpam = false, // Fail open
+                Result = SpamCheckResultType.Clean, // Fail open
                 Details = "Similarity check failed due to error",
                 Confidence = 0,
                 Error = ex
@@ -195,6 +189,7 @@ public class SimilaritySpamCheck : ISpamCheck
 
     /// <summary>
     /// Refresh cache if needed
+    /// Uses DbContextFactory directly with MAX_SIMILARITY_SAMPLES guardrail
     /// </summary>
     private async Task RefreshCacheIfNeededAsync(string? chatId, CancellationToken cancellationToken)
     {
@@ -203,10 +198,32 @@ public class SimilaritySpamCheck : ISpamCheck
             try
             {
                 _logger.LogInformation("Refreshing similarity cache for chat {ChatId}...", chatId ?? "global");
-                var samples = await _trainingSamplesRepository.GetSpamSamplesAsync(chatId, cancellationToken);
-                _cachedSamples = samples.ToList();
 
-                _logger.LogInformation("Loaded {Count} spam samples from repository", _cachedSamples.Count);
+                // Load spam samples from database with guardrail
+                await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+                var samples = await dbContext.DetectionResults
+                    .AsNoTracking()
+                    .Include(dr => dr.Message)
+                    .Where(dr => dr.IsSpam && dr.UsedForTraining)
+                    .OrderByDescending(dr => dr.DetectedAt)
+                    .Take(MAX_SIMILARITY_SAMPLES) // Guardrail
+                    .Select(dr => new TrainingSample(
+                        dr.Id,
+                        dr.Message!.MessageText!,
+                        dr.IsSpam,
+                        dr.DetectedAt,
+                        dr.DetectionSource,
+                        dr.Confidence,
+                        new long[] { dr.Message!.ChatId },
+                        dr.AddedBy,
+                        0, // DetectionCount removed in normalized schema
+                        null // LastDetectedDate removed in normalized schema
+                    ))
+                    .ToListAsync(cancellationToken);
+
+                _cachedSamples = samples;
+
+                _logger.LogInformation("Loaded {Count} spam samples from database", _cachedSamples.Count);
 
                 // Build vocabulary from all samples
                 _cachedVocabulary = BuildVocabulary(_cachedSamples.Select(s => s.MessageText).ToArray());

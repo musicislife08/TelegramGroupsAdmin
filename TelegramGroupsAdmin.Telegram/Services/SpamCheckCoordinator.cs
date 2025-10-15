@@ -8,26 +8,26 @@ using TelegramGroupsAdmin.SpamDetection.Services;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Orchestrates the complete spam checking workflow including user trust/admin checks and spam detection.
-/// This centralizes all spam checking logic so it's consistent between the bot and UI.
+/// Coordinates spam checking workflow by filtering trusted/admin users before spam detection
+/// Centralizes spam checking logic so it's consistent between bot and UI
 /// </summary>
-public class SpamCheckOrchestrator : ISpamCheckOrchestrator
+public class SpamCheckCoordinator : ISpamCheckCoordinator
 {
-    private readonly ISpamDetectorFactory _spamDetectorFactory;
+    private readonly ISpamDetectionEngine _spamDetectionEngine;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ILogger<SpamCheckOrchestrator> _logger;
+    private readonly ILogger<SpamCheckCoordinator> _logger;
 
-    public SpamCheckOrchestrator(
-        ISpamDetectorFactory spamDetectorFactory,
+    public SpamCheckCoordinator(
+        ISpamDetectionEngine spamDetectionEngine,
         IServiceProvider serviceProvider,
-        ILogger<SpamCheckOrchestrator> logger)
+        ILogger<SpamCheckCoordinator> logger)
     {
-        _spamDetectorFactory = spamDetectorFactory;
+        _spamDetectionEngine = spamDetectionEngine;
         _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
-    public async Task<SpamCheckOrchestratorResult> CheckAsync(
+    public async Task<SpamCheckCoordinatorResult> CheckAsync(
         SpamLibRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -66,7 +66,7 @@ public class SpamCheckOrchestrator : ISpamCheckOrchestrator
                 request.ChatId ?? "N/A",
                 skipReason);
 
-            return new SpamCheckOrchestratorResult
+            return new SpamCheckCoordinatorResult
             {
                 IsUserTrusted = isUserTrusted,
                 IsUserAdmin = isUserAdmin,
@@ -82,9 +82,9 @@ public class SpamCheckOrchestrator : ISpamCheckOrchestrator
             request.UserId ?? "N/A",
             request.ChatId ?? "N/A");
 
-        var spamResult = await _spamDetectorFactory.CheckMessageAsync(request, cancellationToken);
+        var spamResult = await _spamDetectionEngine.CheckMessageAsync(request, cancellationToken);
 
-        return new SpamCheckOrchestratorResult
+        return new SpamCheckCoordinatorResult
         {
             IsUserTrusted = false,
             IsUserAdmin = false,

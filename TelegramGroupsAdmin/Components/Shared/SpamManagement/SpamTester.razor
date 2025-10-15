@@ -1,7 +1,8 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.SpamDetection.Models
 @using Microsoft.JSInterop
-@inject ISpamCheckOrchestrator SpamCheckOrchestrator
+@using TelegramGroupsAdmin.Telegram.Services
+@inject ISpamCheckCoordinator SpamCheckOrchestrator
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
 @implements IDisposable
@@ -148,13 +149,17 @@
                 <RowTemplate>
                     <MudTd>@context.CheckName</MudTd>
                     <MudTd>
-                        @if (context.IsSpam)
+                        @switch (context.Result)
                         {
-                            <MudChip T="string" Color="Color.Error" Size="Size.Small">SPAM</MudChip>
-                        }
-                        else
-                        {
-                            <MudChip T="string" Color="Color.Success" Size="Size.Small">OK</MudChip>
+                            case TelegramGroupsAdmin.SpamDetection.Models.SpamCheckResultType.Spam:
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small">SPAM</MudChip>
+                                break;
+                            case TelegramGroupsAdmin.SpamDetection.Models.SpamCheckResultType.Review:
+                                <MudChip T="string" Color="Color.Warning" Size="Size.Small">REVIEW</MudChip>
+                                break;
+                            default:
+                                <MudChip T="string" Color="Color.Success" Size="Size.Small">OK</MudChip>
+                                break;
                         }
                     </MudTd>
                     <MudTd>@context.Confidence%</MudTd>
@@ -173,7 +178,7 @@
     private IBrowserFile? _selectedImage;
     private byte[]? _pastedImageData;
     private bool _isRunning;
-    private SpamCheckOrchestratorResult? _result;
+    private SpamCheckCoordinatorResult? _result;
     private DotNetObjectReference<SpamTester>? _dotNetHelper;
     private bool _pasteListenerSetup = false;
 

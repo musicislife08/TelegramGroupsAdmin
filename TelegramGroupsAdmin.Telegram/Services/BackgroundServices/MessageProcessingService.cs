@@ -471,9 +471,9 @@ public partial class MessageProcessingService(
         try
         {
             using var scope = serviceProvider.CreateScope();
-            var orchestrator = scope.ServiceProvider.GetRequiredService<ISpamCheckOrchestrator>();
+            var coordinator = scope.ServiceProvider.GetRequiredService<ISpamCheckCoordinator>();
             var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
-            var spamDetectorFactory = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.SpamDetection.Services.ISpamDetectorFactory>();
+            var spamDetectionEngine = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.SpamDetection.Services.ISpamDetectionEngine>();
 
             var request = new TelegramGroupsAdmin.SpamDetection.Models.SpamCheckRequest
             {
@@ -483,7 +483,7 @@ public partial class MessageProcessingService(
                 ChatId = message.Chat.Id.ToString()
             };
 
-            var result = await orchestrator.CheckAsync(request);
+            var result = await coordinator.CheckAsync(request);
 
             // Store detection result (spam or ham) for analytics and training
             // Only store if spam detection actually ran (not skipped for trusted/admin users)
@@ -505,7 +505,7 @@ public partial class MessageProcessingService(
                     AddedBy = null, // Auto-detection
                     UsedForTraining = SpamActionService.DetermineIfTrainingWorthy(result.SpamResult),
                     NetConfidence = result.SpamResult.NetConfidence,
-                    CheckResultsJson = spamDetectorFactory.GetType()
+                    CheckResultsJson = spamDetectionEngine.GetType()
                         .GetMethod("SerializeCheckResults", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
                         ?.Invoke(null, new object[] { result.SpamResult.CheckResults }) as string,
                     EditVersion = editVersion

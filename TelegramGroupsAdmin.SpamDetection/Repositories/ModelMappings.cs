@@ -19,25 +19,5 @@ internal static class ModelMappings
         Notes: dto.StopWord.Notes
     );
 
-    // TrainingSample mappings
-    public static DomainModels.TrainingSample ToModel(this DataModels.TrainingSampleDto dto) => new(
-        Id: dto.Id,
-        MessageText: dto.MessageText,
-        IsSpam: dto.IsSpam,
-        AddedDate: dto.AddedDate,
-        Source: dto.Source,
-        ConfidenceWhenAdded: dto.ConfidenceWhenAdded,
-        ChatIds: dto.ChatIds ?? Array.Empty<long>(),
-        AddedBy: dto.AddedBy,
-        DetectionCount: dto.DetectionCount,
-        LastDetectedDate: dto.LastDetectedDate
-    );
-
-    public static DomainModels.TrainingStats ToModel(this DataModels.TrainingStatsDto dto) => new(
-        TotalSamples: dto.TotalSamples,
-        SpamSamples: dto.SpamSamples,
-        HamSamples: dto.HamSamples,
-        SpamPercentage: dto.SpamPercentage,
-        SamplesBySource: dto.SamplesBySource
-    );
+    // NOTE: TrainingSample mappings removed - training data comes from detection_results.used_for_training
 }

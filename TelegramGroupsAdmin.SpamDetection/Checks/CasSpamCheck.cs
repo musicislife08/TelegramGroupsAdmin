@@ -2,9 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.SpamDetection.Abstractions;
-using TelegramGroupsAdmin.SpamDetection.Configuration;
 using TelegramGroupsAdmin.SpamDetection.Models;
-using TelegramGroupsAdmin.SpamDetection.Repositories;
 
 namespace TelegramGroupsAdmin.SpamDetection.Checks;
 
@@ -15,7 +13,6 @@ namespace TelegramGroupsAdmin.SpamDetection.Checks;
 public class CasSpamCheck : ISpamCheck
 {
     private readonly ILogger<CasSpamCheck> _logger;
-    private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _cache;
 
@@ -23,12 +20,10 @@ public class CasSpamCheck : ISpamCheck
 
     public CasSpamCheck(
         ILogger<CasSpamCheck> logger,
-        ISpamDetectionConfigRepository configRepository,
         IHttpClientFactory httpClientFactory,
         IMemoryCache cache)
     {
         _logger = logger;
-        _configRepository = configRepository;
         _httpClient = httpClientFactory.CreateClient();
         _cache = cache;
     }
@@ -44,63 +39,52 @@ public class CasSpamCheck : ISpamCheck
             return false;
         }
 
-        // Check if enabled is done in CheckAsync since we need to load config from DB
         return true;
     }
 
     /// <summary>
-    /// Execute CAS spam check
+    /// Execute CAS spam check with strongly-typed request
+    /// Config comes from request - no database access needed
     /// </summary>
-    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequest request, CancellationToken cancellationToken = default)
+    public async Task<SpamCheckResponse> CheckAsync(SpamCheckRequestBase request)
     {
+        var req = (CasCheckRequest)request;
+
         try
         {
-            // Load config from database
-            var config = await _configRepository.GetGlobalConfigAsync(cancellationToken);
-
-            // Check if this check is enabled
-            if (!config.Cas.Enabled)
-            {
-                return new SpamCheckResponse
-                {
-                    CheckName = CheckName,
-                    IsSpam = false,
-                    Details = "Check disabled",
-                    Confidence = 0
-                };
-            }
-
-            // Configure HTTP client with latest config
-            _httpClient.Timeout = config.Cas.Timeout;
-            if (!string.IsNullOrEmpty(config.Cas.UserAgent))
-            {
-                _httpClient.DefaultRequestHeaders.Clear();
-                _httpClient.DefaultRequestHeaders.Add("User-Agent", config.Cas.UserAgent);
-            }
-
-            var cacheKey = $"cas_check_{request.UserId}";
+            var cacheKey = $"cas_check_{req.UserId}";
 
             // Check cache first
             if (_cache.TryGetValue(cacheKey, out CasResponse? cachedResponse) && cachedResponse != null)
             {
-                _logger.LogDebug("CAS check for user {UserId}: Using cached result", request.UserId);
+                _logger.LogDebug("CAS check for user {UserId}: Using cached result", req.UserId);
                 return CreateResponse(cachedResponse, fromCache: true);
             }
 
-            // Make API request to CAS
-            var apiUrl = $"{config.Cas.ApiUrl.TrimEnd('/')}/check?user_id={request.UserId}";
-            _logger.LogDebug("CAS check for user {UserId}: Calling {ApiUrl}", request.UserId, apiUrl);
+            // Make API request to CAS with timeout
+            var apiUrl = $"{req.ApiUrl.TrimEnd('/')}/check?user_id={req.UserId}";
+            _logger.LogDebug("CAS check for user {UserId}: Calling {ApiUrl}", req.UserId, apiUrl);
 
-            using var response = await _httpClient.GetAsync(apiUrl, cancellationToken);
+            // Create cancellation token with timeout (can't modify HttpClient.Timeout after first use)
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(req.CancellationToken);
+            timeoutCts.CancelAfter(req.Timeout);
+
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+            if (!string.IsNullOrEmpty(req.UserAgent))
+            {
+                httpRequest.Headers.Add("User-Agent", req.UserAgent);
+            }
+
+            using var response = await _httpClient.SendAsync(httpRequest, timeoutCts.Token);
 
             // Fail open on any error
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("CAS API returned {StatusCode} for user {UserId}", response.StatusCode, request.UserId);
+                _logger.LogWarning("CAS API returned {StatusCode} for user {UserId}", response.StatusCode, req.UserId);
                 return CreateFailResponse("CAS API error");
             }
 
-            var jsonContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            var jsonContent = await response.Content.ReadAsStringAsync(req.CancellationToken);
             var casResponse = JsonSerializer.Deserialize<CasResponse>(jsonContent, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
@@ -108,7 +92,7 @@ public class CasSpamCheck : ISpamCheck
 
             if (casResponse == null)
             {
-                _logger.LogWarning("Failed to parse CAS API response for user {UserId}", request.UserId);
+                _logger.LogWarning("Failed to parse CAS API response for user {UserId}", req.UserId);
                 return CreateFailResponse("Failed to parse CAS response");
             }
 
@@ -119,7 +103,7 @@ public class CasSpamCheck : ISpamCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "CAS check failed for user {UserId}", request.UserId);
+            _logger.LogError(ex, "CAS check failed for user {UserId}", req.UserId);
             return CreateFailResponse("CAS check failed due to error", ex);
         }
     }
@@ -130,6 +114,7 @@ public class CasSpamCheck : ISpamCheck
     private SpamCheckResponse CreateResponse(CasResponse casResponse, bool fromCache)
     {
         var isSpam = casResponse.Ok && casResponse.Result?.IsBanned == true;
+        var result = isSpam ? SpamCheckResultType.Spam : SpamCheckResultType.Clean;
         var confidence = isSpam ? 95 : 0; // High confidence if CAS says user is banned
 
         var details = isSpam
@@ -142,7 +127,7 @@ public class CasSpamCheck : ISpamCheck
         return new SpamCheckResponse
         {
             CheckName = CheckName,
-            IsSpam = isSpam,
+            Result = result,
             Details = details,
             Confidence = confidence
         };
@@ -156,7 +141,7 @@ public class CasSpamCheck : ISpamCheck
         return new SpamCheckResponse
         {
             CheckName = CheckName,
-            IsSpam = false, // Fail open
+            Result = SpamCheckResultType.Clean, // Fail open
             Details = details,
             Confidence = 0,
             Error = error
