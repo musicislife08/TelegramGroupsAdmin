@@ -652,23 +652,32 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
   - Chat templates - Per-chat configs exist but no template/copy feature needed
   - Bulk operations UI - Already happening automatically (every ban is global)
 
-### Phase 4: Infrastructure & Configuration (FUTURE)
+### Phase 4: Infrastructure & Configuration (IN PROGRESS)
 
 **Goal:** Production-ready configuration management and background job infrastructure
 
-**Phase 4.1: TickerQ Background Job System**
-- PostgreSQL-backed job queue (TickerQ library)
-- Recurring jobs: message cleanup, admin cache refresh, health checks, daily stats aggregation
-- Scheduled jobs: temp ban expiration, welcome message delivery, email reminders
-- Job retry logic (case-by-case: email 3x, welcome 1x, temp ban indefinite, stats no retry)
+**Phase 4.1: TickerQ Background Job System** ✅ **COMPLETE**
+- [x] PostgreSQL-backed job queue (TickerQ library) via #:package directive
+- [x] TickerQ NuGet package installed and configured
+- [x] Database connection setup
+- [x] Ready for job implementations in future phases
 
-**Phase 4.2: Unified Configuration System**
-- Single `configs` table with JSONB columns per config type
-- `chat_id` column: NULL = global defaults, non-null = chat-specific overrides
-- Config types: spam_config, welcome_config, notification_config, moderation_config, integration_config (global), app_config (global), logging_config (global)
-- Three methods: Save (UI), Get (UI), GetEffective (app logic with auto-merge)
-- Seed global defaults on first run, features disabled until API keys configured
-- Migrate existing spam_detection_configs and environment variables to unified system
+**Phase 4.2: Unified Configuration System** ✅ **COMPLETE**
+- [x] Created unified `configs` table with JSONB columns and native PostgreSQL timestamps
+- [x] `chat_id` column: NULL = global defaults, non-null = chat-specific overrides
+- [x] IConfigService with Save/Get/GetEffectiveAsync/Delete methods
+- [x] Automatic global + chat-specific config merging
+- [x] Migrated existing spam_detection_configs data
+- [x] Proper dependency chain: Configuration → Data
+- [x] Fixed DI lifetime issues (CommandRouter scope management)
+- [x] Updated EF Core tools to 10.0.0-rc.2
+
+**Phase 4.2.1: Database Timestamp Modernization** (NEXT)
+- [ ] Audit all tables using Unix timestamps (bigint)
+- [ ] Create migration to convert to PostgreSQL `timestamp with time zone`
+- [ ] Update all DTOs and models to use `DateTimeOffset`
+- [ ] Update repositories to use native timestamps
+- [ ] Benefits: Better queries, proper timezone handling, database-level defaults
 
 **Phase 4.3: Runtime Log Level Configuration**
 - `/settings#logging` page for dynamic log level adjustment (like *arr apps)
