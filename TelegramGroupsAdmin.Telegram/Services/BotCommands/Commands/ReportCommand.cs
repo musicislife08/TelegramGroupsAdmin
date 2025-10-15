@@ -21,6 +21,7 @@ public class ReportCommand : IBotCommand
     public int MinPermissionLevel => 0; // Anyone can report
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => false; // Keep visible for confirmation
+    public int? DeleteResponseAfterSeconds => null;
 
     public ReportCommand(
         ILogger<ReportCommand> logger,

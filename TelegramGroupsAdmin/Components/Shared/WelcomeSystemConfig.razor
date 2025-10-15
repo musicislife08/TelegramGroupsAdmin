@@ -3,11 +3,14 @@
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
 
-<MudPaper Class="pa-4" Elevation="0">
-    <MudText Typo="Typo.h6" GutterBottom="true">Welcome Message System</MudText>
-    <MudText Typo="Typo.body2" Class="mb-4">
-        Configure automatic welcome messages for new members joining your Telegram groups.
-    </MudText>
+<MudPaper Class="pa-4" Elevation="@(ChatId.HasValue ? 0 : 1)">
+    @if (!ChatId.HasValue)
+    {
+        <MudText Typo="Typo.h6" GutterBottom="true">Welcome Message System</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Configure automatic welcome messages for new members joining your Telegram groups.
+        </MudText>
+    }
 
     @if (_loading)
     {
@@ -72,28 +75,31 @@
                                   HelperText="Text shown on the deny button" />
                 </MudItem>
 
-                <MudItem xs="12" Class="d-flex justify-space-between">
-                    <MudButton Variant="Variant.Filled"
-                               Color="Color.Primary"
-                               OnClick="SaveConfig"
-                               Disabled="!_isValid || _saving">
-                        @if (_saving)
-                        {
-                            <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
-                            <span>Saving...</span>
-                        }
-                        else
-                        {
-                            <span>Save Configuration</span>
-                        }
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Secondary"
-                               OnClick="LoadDefaults"
-                               Disabled="_saving">
-                        Reset to Defaults
-                    </MudButton>
-                </MudItem>
+                @if (!ChatId.HasValue)
+                {
+                    <MudItem xs="12" Class="d-flex justify-space-between">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="SaveConfig"
+                                   Disabled="!_isValid || _saving">
+                            @if (_saving)
+                            {
+                                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                                <span>Saving...</span>
+                            }
+                            else
+                            {
+                                <span>Save Configuration</span>
+                            }
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Secondary"
+                                   OnClick="LoadDefaults"
+                                   Disabled="_saving">
+                            Reset to Defaults
+                        </MudButton>
+                    </MudItem>
+                }
             </MudGrid>
         </MudForm>
 
@@ -115,6 +121,18 @@
 </MudPaper>
 
 @code {
+    /// <summary>
+    /// Optional chat ID for per-chat configuration. If null, uses global configuration.
+    /// </summary>
+    [Parameter]
+    public long? ChatId { get; set; }
+
+    /// <summary>
+    /// Optional callback when configuration is saved (for per-chat mode)
+    /// </summary>
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
     private MudForm? _form;
     private bool _isValid = true;
     private bool _loading = true;
@@ -131,8 +149,8 @@
         _loading = true;
         try
         {
-            // Load global config (chatId = null for global settings)
-            _config = await ConfigService.GetAsync<WelcomeConfig>("welcome", null)
+            // Load config - uses chatId if provided for per-chat config, otherwise global
+            _config = await ConfigService.GetEffectiveAsync<WelcomeConfig>("welcome", ChatId)
                       ?? WelcomeConfig.Default;
         }
         catch (Exception ex)
@@ -145,6 +163,11 @@
         }
     }
 
+    public async Task SaveConfiguration()
+    {
+        await SaveConfig();
+    }
+
     private async Task SaveConfig()
     {
         if (_config == null || !_isValid) return;
@@ -152,8 +175,15 @@
         _saving = true;
         try
         {
-            await ConfigService.SaveAsync("welcome", null, _config);
-            Snackbar.Add("Welcome configuration saved successfully", Severity.Success);
+            await ConfigService.SaveAsync("welcome", ChatId, _config);
+            var scope = ChatId.HasValue ? $"for chat {ChatId}" : "globally";
+            Snackbar.Add($"Welcome configuration saved {scope}", Severity.Success);
+
+            // Invoke callback if provided
+            if (OnSaved.HasDelegate)
+            {
+                await OnSaved.InvokeAsync();
+            }
         }
         catch (Exception ex)
         {

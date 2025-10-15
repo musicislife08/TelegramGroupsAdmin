@@ -26,22 +26,75 @@ public interface IWelcomeService
 
 public class WelcomeService : IWelcomeService
 {
-    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<WelcomeService> _logger;
     private readonly TelegramOptions _telegramOptions;
     private readonly IServiceProvider _serviceProvider;
 
     public WelcomeService(
-        IDbContextFactory<AppDbContext> contextFactory,
         ILogger<WelcomeService> logger,
         IOptions<TelegramOptions> telegramOptions,
         IServiceProvider serviceProvider)
     {
-        _contextFactory = contextFactory;
         _logger = logger;
         _telegramOptions = telegramOptions.Value;
         _serviceProvider = serviceProvider;
     }
+
+    private async Task<T> WithRepositoryAsync<T>(Func<IWelcomeResponsesRepository, Task<T>> action)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
+        return await action(repository);
+    }
+
+    private async Task WithRepositoryAsync(Func<IWelcomeResponsesRepository, Task> action)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IWelcomeResponsesRepository>();
+        await action(repository);
+    }
+
+    /// <summary>
+    /// Creates restricted permissions (all false) for new users awaiting welcome acceptance
+    /// </summary>
+    private static ChatPermissions CreateRestrictedPermissions() => new()
+    {
+        CanSendMessages = false,
+        CanSendAudios = false,
+        CanSendDocuments = false,
+        CanSendPhotos = false,
+        CanSendVideos = false,
+        CanSendVideoNotes = false,
+        CanSendVoiceNotes = false,
+        CanSendPolls = false,
+        CanSendOtherMessages = false,
+        CanAddWebPagePreviews = false,
+        CanChangeInfo = false,
+        CanInviteUsers = false,
+        CanPinMessages = false,
+        CanManageTopics = false
+    };
+
+    /// <summary>
+    /// Creates default permissions for accepted users (messaging enabled, admin features restricted)
+    /// </summary>
+    private static ChatPermissions CreateDefaultPermissions() => new()
+    {
+        CanSendMessages = true,
+        CanSendAudios = true,
+        CanSendDocuments = true,
+        CanSendPhotos = true,
+        CanSendVideos = true,
+        CanSendVideoNotes = true,
+        CanSendVoiceNotes = true,
+        CanSendPolls = true,
+        CanSendOtherMessages = true,
+        CanAddWebPagePreviews = true,
+        CanChangeInfo = false,      // Admin feature - restricted
+        CanInviteUsers = true,
+        CanPinMessages = false,     // Admin feature - restricted
+        CanManageTopics = false     // Admin feature - restricted
+    };
 
     public async Task HandleChatMemberUpdateAsync(
         ITelegramBotClient botClient,
@@ -120,29 +173,21 @@ public class WelcomeService : IWelcomeService
                 cancellationToken);
 
             // Step 3: Create welcome response record (pending state)
-            await using (var context = await _contextFactory.CreateDbContextAsync(cancellationToken))
-            {
-                var entity = new Data.Models.WelcomeResponseDto
-                {
-                    ChatId = chatMemberUpdate.Chat.Id,
-                    UserId = user.Id,
-                    Username = user.Username,
-                    WelcomeMessageId = welcomeMessage.MessageId,
-                    Response = "pending",
-                    RespondedAt = DateTimeOffset.UtcNow,
-                    DmSent = false,
-                    DmFallback = false,
-                    CreatedAt = DateTimeOffset.UtcNow
-                };
+            var welcomeResponse = new WelcomeResponse(
+                Id: 0, // Will be set by database
+                ChatId: chatMemberUpdate.Chat.Id,
+                UserId: user.Id,
+                Username: user.Username,
+                WelcomeMessageId: welcomeMessage.MessageId,
+                Response: WelcomeResponseType.Pending,
+                RespondedAt: DateTimeOffset.UtcNow,
+                DmSent: false,
+                DmFallback: false,
+                CreatedAt: DateTimeOffset.UtcNow,
+                TimeoutJobId: null // Will be set after scheduling job
+            );
 
-                context.WelcomeResponses.Add(entity);
-                await context.SaveChangesAsync(cancellationToken);
-
-                _logger.LogDebug(
-                    "Created welcome response record for user {UserId} in chat {ChatId}",
-                    user.Id,
-                    chatMemberUpdate.Chat.Id);
-            }
+            var responseId = await WithRepositoryAsync(repo => repo.InsertAsync(welcomeResponse));
 
             // Step 4: Schedule timeout via TickerQ (replaces fire-and-forget Task.Run)
             var payload = new WelcomeTimeoutPayload(
@@ -185,6 +230,9 @@ public class WelcomeService : IWelcomeService
                 {
                     throw result.Exception ?? new InvalidOperationException("TickerQ AddAsync failed without exception");
                 }
+
+                // Store the job ID in the welcome response record
+                await WithRepositoryAsync(repo => repo.SetTimeoutJobIdAsync(responseId, result.Result?.Id));
 
                 _logger.LogInformation(
                     "Successfully scheduled welcome timeout for user {UserId} in chat {ChatId} (timeout: {Timeout}s, JobId: {JobId})",
@@ -442,28 +490,10 @@ public class WelcomeService : IWelcomeService
     {
         try
         {
-            var permissions = new ChatPermissions
-            {
-                CanSendMessages = false,
-                CanSendAudios = false,
-                CanSendDocuments = false,
-                CanSendPhotos = false,
-                CanSendVideos = false,
-                CanSendVideoNotes = false,
-                CanSendVoiceNotes = false,
-                CanSendPolls = false,
-                CanSendOtherMessages = false,
-                CanAddWebPagePreviews = false,
-                CanChangeInfo = false,
-                CanInviteUsers = false,
-                CanPinMessages = false,
-                CanManageTopics = false
-            };
-
             await botClient.RestrictChatMember(
                 chatId: chatId,
                 userId: userId,
-                permissions: permissions,
+                permissions: CreateRestrictedPermissions(),
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
@@ -501,28 +531,10 @@ public class WelcomeService : IWelcomeService
                 return;
             }
 
-            var permissions = new ChatPermissions
-            {
-                CanSendMessages = true,
-                CanSendAudios = true,
-                CanSendDocuments = true,
-                CanSendPhotos = true,
-                CanSendVideos = true,
-                CanSendVideoNotes = true,
-                CanSendVoiceNotes = true,
-                CanSendPolls = true,
-                CanSendOtherMessages = true,
-                CanAddWebPagePreviews = true,
-                CanChangeInfo = false,
-                CanInviteUsers = true,
-                CanPinMessages = false,
-                CanManageTopics = false
-            };
-
             await botClient.RestrictChatMember(
                 chatId: chatId,
                 userId: userId,
-                permissions: permissions,
+                permissions: CreateDefaultPermissions(),
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
@@ -584,12 +596,39 @@ public class WelcomeService : IWelcomeService
             chatId);
 
         // Step 1: Check if user already responded (from pending record created on join)
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var existingResponse = await context.WelcomeResponses
-            .Where(r => r.ChatId == chatId && r.UserId == user.Id && r.WelcomeMessageId == welcomeMessageId)
-            .FirstOrDefaultAsync(cancellationToken);
+        var existingResponse = await WithRepositoryAsync(repo => repo.GetByUserAndChatAsync(user.Id, chatId));
 
-        // Step 2: Try to send rules via DM (or fallback to chat)
+        // Step 2: Cancel timeout job if it exists
+        if (existingResponse?.TimeoutJobId.HasValue == true)
+        {
+            try
+            {
+                using var tickerScope = _serviceProvider.CreateScope();
+                var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+
+                await timeTickerManager.DeleteAsync(existingResponse.TimeoutJobId.Value);
+
+                _logger.LogInformation(
+                    "Cancelled timeout job {JobId} for user {UserId} in chat {ChatId}",
+                    existingResponse.TimeoutJobId.Value,
+                    user.Id,
+                    chatId);
+
+                // Clear the job ID since it's been cancelled
+                await WithRepositoryAsync(repo => repo.SetTimeoutJobIdAsync(existingResponse.Id, null));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to cancel timeout job {JobId} for user {UserId}",
+                    existingResponse.TimeoutJobId.Value,
+                    user.Id);
+                // Non-fatal - continue with acceptance flow
+            }
+        }
+
+        // Step 3: Try to send rules via DM (or fallback to chat)
         // Always attempt this - previous DM sent via /start may have been deleted by user
         var (dmSent, dmFallback) = await SendRulesAsync(botClient, chatId, user, config, cancellationToken);
 
@@ -599,10 +638,10 @@ public class WelcomeService : IWelcomeService
             dmSent,
             dmFallback);
 
-        // Step 3: Restore user permissions
+        // Step 4: Restore user permissions
         await RestoreUserPermissionsAsync(botClient, chatId, user.Id, cancellationToken);
 
-        // Step 4: Delete welcome message
+        // Step 5: Delete welcome message
         try
         {
             await botClient.DeleteMessage(chatId: chatId, messageId: welcomeMessageId, cancellationToken: cancellationToken);
@@ -612,36 +651,30 @@ public class WelcomeService : IWelcomeService
             _logger.LogWarning(ex, "Failed to delete welcome message {MessageId}", welcomeMessageId);
         }
 
-        // Step 5: Update or create response record
+        // Step 6: Update or create response record
         if (existingResponse != null)
         {
-            // Update existing record (from /start deep link flow)
-            existingResponse.Response = "accepted";
-            existingResponse.RespondedAt = DateTimeOffset.UtcNow;
+            // Update existing record
+            await WithRepositoryAsync(repo => repo.UpdateResponseAsync(existingResponse.Id, WelcomeResponseType.Accepted, dmSent, dmFallback));
         }
         else
         {
-            // Create new record (direct accept without /start)
-            var entity = new Data.Models.WelcomeResponseDto
-            {
-                ChatId = chatId,
-                UserId = user.Id,
-                Username = user.Username,
-                WelcomeMessageId = welcomeMessageId,
-                Response = "accepted",
-                RespondedAt = DateTimeOffset.UtcNow,
-                DmSent = dmSent,
-                DmFallback = dmFallback,
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-            context.WelcomeResponses.Add(entity);
+            // Create new record (shouldn't happen normally, but handle it)
+            var newResponse = new WelcomeResponse(
+                Id: 0,
+                ChatId: chatId,
+                UserId: user.Id,
+                Username: user.Username,
+                WelcomeMessageId: welcomeMessageId,
+                Response: WelcomeResponseType.Accepted,
+                RespondedAt: DateTimeOffset.UtcNow,
+                DmSent: dmSent,
+                DmFallback: dmFallback,
+                CreatedAt: DateTimeOffset.UtcNow,
+                TimeoutJobId: null
+            );
+            await WithRepositoryAsync(repo => repo.InsertAsync(newResponse));
         }
-
-        await context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation(
-            "Recorded welcome response: User {UserId} (@{Username}) in chat {ChatId} - Accepted (DM: {DmSent}, Fallback: {DmFallback})",
-            user.Id, user.Username, chatId, dmSent, dmFallback);
     }
 
     private async Task HandleDenyAsync(
@@ -657,10 +690,40 @@ public class WelcomeService : IWelcomeService
             user.Username,
             chatId);
 
-        // Step 1: Kick user
+        // Step 1: Cancel timeout job if it exists
+        var existingResponse = await WithRepositoryAsync(repo => repo.GetByUserAndChatAsync(user.Id, chatId));
+        if (existingResponse?.TimeoutJobId.HasValue == true)
+        {
+            try
+            {
+                using var tickerScope = _serviceProvider.CreateScope();
+                var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+
+                await timeTickerManager.DeleteAsync(existingResponse.TimeoutJobId.Value);
+
+                _logger.LogInformation(
+                    "Cancelled timeout job {JobId} for user {UserId} in chat {ChatId}",
+                    existingResponse.TimeoutJobId.Value,
+                    user.Id,
+                    chatId);
+
+                await WithRepositoryAsync(repo => repo.SetTimeoutJobIdAsync(existingResponse.Id, null));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to cancel timeout job {JobId} for user {UserId}",
+                    existingResponse.TimeoutJobId.Value,
+                    user.Id);
+                // Non-fatal - continue with deny flow
+            }
+        }
+
+        // Step 2: Kick user
         await KickUserAsync(botClient, chatId, user.Id, cancellationToken);
 
-        // Step 2: Delete welcome message
+        // Step 3: Delete welcome message
         try
         {
             await botClient.DeleteMessage(chatId: chatId, messageId: welcomeMessageId, cancellationToken: cancellationToken);
@@ -670,27 +733,28 @@ public class WelcomeService : IWelcomeService
             _logger.LogWarning(ex, "Failed to delete welcome message {MessageId}", welcomeMessageId);
         }
 
-        // Step 3: Record response
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = new Data.Models.WelcomeResponseDto
+        // Step 4: Update or create response record
+        if (existingResponse != null)
         {
-            ChatId = chatId,
-            UserId = user.Id,
-            Username = user.Username,
-            WelcomeMessageId = welcomeMessageId,
-            Response = "denied",
-            RespondedAt = DateTimeOffset.UtcNow,
-            DmSent = false,
-            DmFallback = false,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-
-        context.WelcomeResponses.Add(entity);
-        await context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation(
-            "Recorded welcome response: User {UserId} (@{Username}) in chat {ChatId} - Denied",
-            user.Id, user.Username, chatId);
+            await WithRepositoryAsync(repo => repo.UpdateResponseAsync(existingResponse.Id, WelcomeResponseType.Denied));
+        }
+        else
+        {
+            var newResponse = new WelcomeResponse(
+                Id: 0,
+                ChatId: chatId,
+                UserId: user.Id,
+                Username: user.Username,
+                WelcomeMessageId: welcomeMessageId,
+                Response: WelcomeResponseType.Denied,
+                RespondedAt: DateTimeOffset.UtcNow,
+                DmSent: false,
+                DmFallback: false,
+                CreatedAt: DateTimeOffset.UtcNow,
+                TimeoutJobId: null
+            );
+            await WithRepositoryAsync(repo => repo.InsertAsync(newResponse));
+        }
     }
 
     private async Task HandleDmAcceptAsync(
@@ -729,12 +793,8 @@ public class WelcomeService : IWelcomeService
             // Non-fatal - continue with acceptance flow
         }
 
-        // Step 2: Find the welcome message in database
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var welcomeResponse = await context.WelcomeResponses
-            .Where(r => r.ChatId == groupChatId && r.UserId == user.Id)
-            .OrderByDescending(r => r.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+        // Step 2: Find the welcome response record
+        var welcomeResponse = await WithRepositoryAsync(repo => repo.GetByUserAndChatAsync(user.Id, groupChatId));
 
         if (welcomeResponse == null)
         {
@@ -751,7 +811,36 @@ public class WelcomeService : IWelcomeService
             return;
         }
 
-        // Step 3: Restore user permissions in group
+        // Step 3: Cancel timeout job if it exists
+        if (welcomeResponse.TimeoutJobId.HasValue)
+        {
+            try
+            {
+                using var tickerScope = _serviceProvider.CreateScope();
+                var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+
+                await timeTickerManager.DeleteAsync(welcomeResponse.TimeoutJobId.Value);
+
+                _logger.LogInformation(
+                    "Cancelled timeout job {JobId} for user {UserId} in chat {ChatId}",
+                    welcomeResponse.TimeoutJobId.Value,
+                    user.Id,
+                    groupChatId);
+
+                await WithRepositoryAsync(repo => repo.SetTimeoutJobIdAsync(welcomeResponse.Id, null));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to cancel timeout job {JobId} for user {UserId}",
+                    welcomeResponse.TimeoutJobId.Value,
+                    user.Id);
+                // Non-fatal - continue with acceptance flow
+            }
+        }
+
+        // Step 4: Restore user permissions in group
         try
         {
             await RestoreUserPermissionsAsync(botClient, groupChatId, user.Id, cancellationToken);
@@ -772,7 +861,7 @@ public class WelcomeService : IWelcomeService
             return;
         }
 
-        // Step 4: Delete welcome message in group
+        // Step 5: Delete welcome message in group
         try
         {
             await botClient.DeleteMessage(
@@ -795,19 +884,8 @@ public class WelcomeService : IWelcomeService
             // Non-fatal - continue with response update
         }
 
-        // Step 5: Update welcome response record (mark as accepted)
-        welcomeResponse.Response = "accepted";
-        welcomeResponse.RespondedAt = DateTimeOffset.UtcNow;
-        welcomeResponse.DmSent = true;
-        welcomeResponse.DmFallback = false;
-
-        await context.SaveChangesAsync(cancellationToken);
-
-        _logger.LogInformation(
-            "Updated welcome response: User {UserId} (@{Username}) in chat {ChatId} - Accepted via DM",
-            user.Id,
-            user.Username,
-            groupChatId);
+        // Step 6: Update welcome response record (mark as accepted via DM)
+        await WithRepositoryAsync(repo => repo.UpdateResponseAsync(welcomeResponse.Id, WelcomeResponseType.Accepted, dmSent: true, dmFallback: false));
 
         // Step 6: Send confirmation to user in DM
         try
@@ -961,15 +1039,10 @@ public class WelcomeService : IWelcomeService
 
         try
         {
-            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
             // Find any pending welcome response for this user
-            var response = await context.WelcomeResponses
-                .Where(r => r.ChatId == chatId && r.UserId == userId && r.Response == "pending")
-                .OrderByDescending(r => r.CreatedAt)
-                .FirstOrDefaultAsync(cancellationToken);
+            var response = await WithRepositoryAsync(repo => repo.GetByUserAndChatAsync(userId, chatId));
 
-            if (response == null)
+            if (response == null || response.Response != WelcomeResponseType.Pending)
             {
                 _logger.LogDebug(
                     "No pending welcome response found for user {UserId} in chat {ChatId}",
@@ -978,17 +1051,42 @@ public class WelcomeService : IWelcomeService
                 return;
             }
 
+            // Cancel timeout job if it exists
+            if (response.TimeoutJobId.HasValue)
+            {
+                try
+                {
+                    using var tickerScope = _serviceProvider.CreateScope();
+                    var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+
+                    await timeTickerManager.DeleteAsync(response.TimeoutJobId.Value);
+
+                    _logger.LogInformation(
+                        "Cancelled timeout job {JobId} for user {UserId} who left chat {ChatId}",
+                        response.TimeoutJobId.Value,
+                        userId,
+                        chatId);
+
+                    await WithRepositoryAsync(repo => repo.SetTimeoutJobIdAsync(response.Id, null));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to cancel timeout job {JobId} for user {UserId} who left",
+                        response.TimeoutJobId.Value,
+                        userId);
+                    // Non-fatal - continue with marking as left
+                }
+            }
+
             // Mark as left
-            response.Response = "left";
-            response.RespondedAt = DateTimeOffset.UtcNow;
-            await context.SaveChangesAsync(cancellationToken);
+            await WithRepositoryAsync(repo => repo.UpdateResponseAsync(response.Id, WelcomeResponseType.Left));
 
             _logger.LogInformation(
                 "Recorded welcome response 'left' for user {UserId} in chat {ChatId}",
                 userId,
                 chatId);
-
-            // Note: Timeout job will automatically skip when it sees response != "pending"
         }
         catch (Exception ex)
         {

@@ -9,6 +9,9 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 public interface IWelcomeResponsesRepository
 {
     Task<long> InsertAsync(WelcomeResponse response);
+    Task<WelcomeResponse?> GetByUserAndChatAsync(long userId, long chatId);
+    Task UpdateResponseAsync(long id, WelcomeResponseType responseType, bool dmSent = false, bool dmFallback = false);
+    Task SetTimeoutJobIdAsync(long id, Guid? jobId);
     Task<List<WelcomeResponse>> GetByChatIdAsync(long chatId, int limit = 100);
     Task<WelcomeStats> GetStatsAsync(long? chatId = null, DateTimeOffset? since = null);
 }
@@ -35,15 +38,72 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
         await context.SaveChangesAsync();
 
         _logger.LogInformation(
-            "Recorded welcome response: User {UserId} (@{Username}) in chat {ChatId} - {Response} (DM: {DmSent}, Fallback: {DmFallback})",
+            "Recorded welcome response: User {UserId} (@{Username}) in chat {ChatId} - {Response} (DM: {DmSent}, Fallback: {DmFallback}, JobId: {JobId})",
             response.UserId,
             response.Username,
             response.ChatId,
             response.Response,
             response.DmSent,
-            response.DmFallback);
+            response.DmFallback,
+            response.TimeoutJobId);
 
         return entity.Id;
+    }
+
+    public async Task<WelcomeResponse?> GetByUserAndChatAsync(long userId, long chatId)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var entity = await context.WelcomeResponses
+            .AsNoTracking()
+            .Where(wr => wr.UserId == userId && wr.ChatId == chatId)
+            .OrderByDescending(wr => wr.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        return entity?.ToUiModel();
+    }
+
+    public async Task UpdateResponseAsync(long id, WelcomeResponseType responseType, bool dmSent = false, bool dmFallback = false)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var entity = await context.WelcomeResponses.FindAsync(id);
+        if (entity == null)
+        {
+            _logger.LogWarning("Attempted to update non-existent welcome response ID {Id}", id);
+            return;
+        }
+
+        entity.Response = responseType.ToString().ToLowerInvariant();
+        entity.RespondedAt = DateTimeOffset.UtcNow;
+        entity.DmSent = dmSent;
+        entity.DmFallback = dmFallback;
+
+        await context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Updated welcome response {Id}: {Response} (DM: {DmSent}, Fallback: {DmFallback})",
+            id,
+            responseType,
+            dmSent,
+            dmFallback);
+    }
+
+    public async Task SetTimeoutJobIdAsync(long id, Guid? jobId)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var entity = await context.WelcomeResponses.FindAsync(id);
+        if (entity == null)
+        {
+            _logger.LogWarning("Attempted to set timeout job ID for non-existent welcome response ID {Id}", id);
+            return;
+        }
+
+        entity.TimeoutJobId = jobId;
+        await context.SaveChangesAsync();
+
+        _logger.LogDebug("Set timeout job ID for welcome response {Id}: {JobId}", id, jobId);
     }
 
     public async Task<List<WelcomeResponse>> GetByChatIdAsync(long chatId, int limit = 100)

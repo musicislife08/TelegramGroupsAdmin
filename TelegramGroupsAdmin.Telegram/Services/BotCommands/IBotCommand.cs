@@ -39,6 +39,11 @@ public interface IBotCommand
     bool DeleteCommandMessage { get; }
 
     /// <summary>
+    /// Auto-delete the bot's response after this many seconds (null = don't delete)
+    /// </summary>
+    int? DeleteResponseAfterSeconds { get; }
+
+    /// <summary>
     /// Execute the command
     /// </summary>
     /// <param name="botClient">Telegram bot client for API calls</param>

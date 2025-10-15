@@ -23,6 +23,7 @@ public class SpamCommand : IBotCommand
     public int MinPermissionLevel => 1; // Admin required
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => true; // Clean up moderation command
+    public int? DeleteResponseAfterSeconds => null;
 
     public SpamCommand(
         ILogger<SpamCommand> logger,

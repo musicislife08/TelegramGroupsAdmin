@@ -23,6 +23,7 @@ public class WarnCommand : IBotCommand
     public int MinPermissionLevel => 1; // Admin required
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => false; // Keep visible as public warning
+    public int? DeleteResponseAfterSeconds => null;
 
     public WarnCommand(
         ILogger<WarnCommand> logger,

@@ -1,11 +1,10 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -14,14 +13,14 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 /// </summary>
 public class StartCommand : IBotCommand
 {
-    private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IWelcomeResponsesRepository _welcomeResponsesRepository;
     private readonly IServiceProvider _serviceProvider;
 
     public StartCommand(
-        IDbContextFactory<AppDbContext> contextFactory,
+        IWelcomeResponsesRepository welcomeResponsesRepository,
         IServiceProvider serviceProvider)
     {
-        _contextFactory = contextFactory;
+        _welcomeResponsesRepository = welcomeResponsesRepository;
         _serviceProvider = serviceProvider;
     }
 
@@ -31,6 +30,7 @@ public class StartCommand : IBotCommand
     public int MinPermissionLevel => 0; // Everyone can use
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => false;
+    public int? DeleteResponseAfterSeconds => null;
 
     public async Task<string> ExecuteAsync(
         ITelegramBotClient botClient,
@@ -120,17 +120,15 @@ public class StartCommand : IBotCommand
             cancellationToken: cancellationToken);
 
         // Mark as DM sent in database (update the welcome response record)
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var welcomeResponse = await context.WelcomeResponses
-            .Where(r => r.ChatId == chatId && r.UserId == targetUserId)
-            .OrderByDescending(r => r.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+        var welcomeResponse = await _welcomeResponsesRepository.GetByUserAndChatAsync(targetUserId, chatId);
 
         if (welcomeResponse != null)
         {
-            welcomeResponse.DmSent = true;
-            welcomeResponse.DmFallback = false;
-            await context.SaveChangesAsync(cancellationToken);
+            await _welcomeResponsesRepository.UpdateResponseAsync(
+                welcomeResponse.Id,
+                welcomeResponse.Response, // Keep existing response status
+                dmSent: true,
+                dmFallback: false);
         }
 
         // Don't return a message - the Accept button will trigger the final confirmation

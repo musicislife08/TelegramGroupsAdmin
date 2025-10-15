@@ -22,6 +22,7 @@ public class TrustCommand : IBotCommand
     public int MinPermissionLevel => 1; // Admin required
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => false; // Keep visible for confirmation
+    public int? DeleteResponseAfterSeconds => null;
 
     public TrustCommand(
         ILogger<TrustCommand> logger,

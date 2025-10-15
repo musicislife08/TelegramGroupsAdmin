@@ -206,11 +206,21 @@ public partial class MessageProcessingService(
                         // Send response if there is one (and it's not empty)
                         if (commandResult.Response != null && !string.IsNullOrWhiteSpace(commandResult.Response))
                         {
-                            await botClient.SendMessage(
+                            var responseMessage = await botClient.SendMessage(
                                 chatId: message.Chat.Id,
                                 text: commandResult.Response,
                                 parseMode: ParseMode.Markdown,
                                 replyParameters: new ReplyParameters { MessageId = message.MessageId });
+
+                            // Schedule auto-delete if requested
+                            if (commandResult.DeleteResponseAfterSeconds.HasValue)
+                            {
+                                await ScheduleMessageDeleteAsync(
+                                    message.Chat.Id,
+                                    responseMessage.MessageId,
+                                    commandResult.DeleteResponseAfterSeconds.Value,
+                                    "command_response");
+                            }
                         }
                     }
                 }
@@ -652,5 +662,56 @@ public partial class MessageProcessingService(
         using var sha256 = System.Security.Cryptography.SHA256.Create();
         var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(normalized));
         return Convert.ToHexString(hashBytes);
+    }
+
+    /// <summary>
+    /// Schedule a message for deletion via TickerQ
+    /// </summary>
+    private async Task ScheduleMessageDeleteAsync(long chatId, int messageId, int delaySeconds, string reason)
+    {
+        try
+        {
+            var deletePayload = new TelegramGroupsAdmin.Telegram.Abstractions.Jobs.DeleteMessagePayload(
+                chatId,
+                messageId,
+                reason
+            );
+
+            using var scope = serviceProvider.CreateScope();
+            var timeTickerManager = scope.ServiceProvider.GetRequiredService<TickerQ.Utilities.Interfaces.Managers.ITimeTickerManager<TickerQ.Utilities.Models.Ticker.TimeTicker>>();
+
+            var result = await timeTickerManager.AddAsync(new TickerQ.Utilities.Models.Ticker.TimeTicker
+            {
+                Function = "DeleteMessage",
+                ExecutionTime = DateTime.UtcNow.AddSeconds(delaySeconds),
+                Request = TickerQ.Utilities.TickerHelper.CreateTickerRequest(deletePayload),
+                Retries = 0 // Don't retry - message may have been manually deleted
+            });
+
+            if (!result.IsSucceded)
+            {
+                logger.LogWarning(
+                    "Failed to schedule message delete for message {MessageId} in chat {ChatId}: {Error}",
+                    messageId,
+                    chatId,
+                    result.Exception?.Message ?? "Unknown error");
+            }
+            else
+            {
+                logger.LogDebug(
+                    "Scheduled delete for message {MessageId} in chat {ChatId} after {Delay}s (JobId: {JobId})",
+                    messageId,
+                    chatId,
+                    delaySeconds,
+                    result.Result?.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Error scheduling message delete for message {MessageId} in chat {ChatId}",
+                messageId,
+                chatId);
+        }
     }
 }

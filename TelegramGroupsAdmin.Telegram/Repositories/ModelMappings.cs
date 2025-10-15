@@ -409,7 +409,8 @@ public static class ModelMappings
         RespondedAt: data.RespondedAt,
         DmSent: data.DmSent,
         DmFallback: data.DmFallback,
-        CreatedAt: data.CreatedAt
+        CreatedAt: data.CreatedAt,
+        TimeoutJobId: data.TimeoutJobId
     );
 
     public static DataModels.WelcomeResponseDto ToDataModel(this UiModels.WelcomeResponse ui) => new()
@@ -423,6 +424,7 @@ public static class ModelMappings
         RespondedAt = ui.RespondedAt,
         DmSent = ui.DmSent,
         DmFallback = ui.DmFallback,
-        CreatedAt = ui.CreatedAt
+        CreatedAt = ui.CreatedAt,
+        TimeoutJobId = ui.TimeoutJobId
     };
 }

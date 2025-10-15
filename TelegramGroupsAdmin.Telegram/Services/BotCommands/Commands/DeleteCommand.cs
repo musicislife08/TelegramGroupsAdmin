@@ -20,6 +20,7 @@ public class DeleteCommand : IBotCommand
     public int MinPermissionLevel => 1; // Admin required
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => true; // Clean up command message
+    public int? DeleteResponseAfterSeconds => null;
 
     public DeleteCommand(
         ILogger<DeleteCommand> logger,

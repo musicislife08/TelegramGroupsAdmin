@@ -17,6 +17,7 @@ public class LinkCommand : IBotCommand
     public int MinPermissionLevel => 0; // Anyone can link
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => true; // Delete for security (contains token)
+    public int? DeleteResponseAfterSeconds => null;
 
     public LinkCommand(
         ILogger<LinkCommand> logger,

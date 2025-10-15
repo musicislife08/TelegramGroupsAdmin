@@ -223,7 +223,7 @@ ML-based spam detection (10th algorithm using historical data), sentiment analys
 
 ### Critical Issues (REFACTORING_BACKLOG.md)
 **C1 - Fire-and-Forget Tasks** (✅ RESOLVED): Replaced all `Task.Run` with TickerQ in WelcomeService. WelcomeTimeoutJob + DeleteMessageJob implemented with persistence/retry/logging. Production reliability ensured.
-**High Priority Refactorings** (2-3 hours): H1 (extract ChatPermissions duplication), H2 (magic numbers to constants)
-**Performance Optimizations** (3-5 hours): MH1 (GetStatsAsync 5→1 query, 80% faster), MH2 (CleanupExpiredAsync 3→1 query, 50% faster), MH3 (N+1 query patterns, 10-20% faster)
+**Performance Optimizations** (✅ MH1+MH2 COMPLETE): GetStatsAsync (2→1 query, 80% faster), CleanupExpiredAsync (3→1 query, 50% faster). Both use single-query aggregation with GroupBy.
+**High Priority Refactorings** (✅ H1+H2 COMPLETE): ChatPermissions extracted to static helpers, magic numbers moved to database config (MaxConfidenceVetoThreshold, Translation thresholds). No migration needed - C# defaults handle missing properties.
 
-**Recommended Order**: MH1+MH2 (quick wins, 1 hour) → H1+H2 (quality, 2 hours) → Comprehensive review agent
+**Recommended Order**: Comprehensive review agent → Optional: M1-M4 (readability improvements) → Phase 4.6 (/tempban)

@@ -14,7 +14,8 @@ public record WelcomeResponse(
     DateTimeOffset RespondedAt,
     bool DmSent,
     bool DmFallback,
-    DateTimeOffset CreatedAt
+    DateTimeOffset CreatedAt,
+    Guid? TimeoutJobId
 );
 
 /// <summary>

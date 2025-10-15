@@ -22,6 +22,7 @@ public class UnbanCommand : IBotCommand
     public int MinPermissionLevel => 1; // Admin required
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => false; // Keep visible for confirmation
+    public int? DeleteResponseAfterSeconds => null;
 
     public UnbanCommand(
         ILogger<UnbanCommand> logger,

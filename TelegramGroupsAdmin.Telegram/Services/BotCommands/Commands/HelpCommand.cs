@@ -38,6 +38,7 @@ public class HelpCommand : IBotCommand
     public int MinPermissionLevel => 0; // Everyone can see help
     public bool RequiresReply => false;
     public bool DeleteCommandMessage => false; // Keep visible for reference
+    public int? DeleteResponseAfterSeconds => 30; // Auto-delete help response after 30 seconds
 
     public Task<string> ExecuteAsync(
         ITelegramBotClient botClient,

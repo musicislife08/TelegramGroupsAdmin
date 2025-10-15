@@ -68,8 +68,12 @@ public class AdminMentionHandler
                 if (admin.TelegramId == botClient.BotId)
                     continue;
 
-                // Create HTML text mention: <a href="tg://user?id=123">Admin</a>
-                mentionsList.Add($"<a href=\"tg://user?id={admin.TelegramId}\">Admin</a>");
+                // Create HTML text mention with username or fallback to generic name
+                // Format: <a href="tg://user?id=123">@username</a> or <a href="tg://user?id=123">Admin</a>
+                var displayName = !string.IsNullOrWhiteSpace(admin.Username)
+                    ? $"@{admin.Username}"
+                    : "Admin";
+                mentionsList.Add($"<a href=\"tg://user?id={admin.TelegramId}\">{displayName}</a>");
             }
 
             if (mentionsList.Count == 0)

@@ -10,7 +10,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
 /// <summary>
 /// Result of executing a bot command
 /// </summary>
-public record CommandResult(string? Response, bool DeleteCommandMessage);
+public record CommandResult(string? Response, bool DeleteCommandMessage, int? DeleteResponseAfterSeconds = null);
 
 /// <summary>
 /// Routes bot commands to appropriate handlers with permission checking
@@ -86,8 +86,8 @@ public partial class CommandRouter
             using var scope = _serviceProvider.CreateScope();
             var command = (IBotCommand)scope.ServiceProvider.GetRequiredService(commandType);
 
-            // Special cases: /link and /start commands are always accessible (don't require linking)
-            var permissionLevel = (commandName == "link" || commandName == "start")
+            // Special cases: /link, /start, /help, and /report commands are always accessible (don't require linking)
+            var permissionLevel = (commandName == "link" || commandName == "start" || commandName == "help" || commandName == "report")
                 ? 0
                 : await GetPermissionLevelAsync(botClient, message.Chat.Id, message.From.Id);
 
@@ -98,14 +98,25 @@ public partial class CommandRouter
                     "User {UserId} (@{Username}) attempted to use command /{Command} without sufficient permissions (has {UserLevel}, needs {RequiredLevel})",
                     message.From.Id, message.From.Username ?? "none", commandName, permissionLevel, command.MinPermissionLevel);
 
-                var permissionMessage = permissionLevel == -1
-                    ? $"❌ You don't have permission to use this command.\n\n" +
-                      $"• Telegram group admins can use admin commands automatically\n" +
-                      $"• Or link your web app account: /link <token>\n" +
-                      $"  (Generate token at: Profile → Linked Telegram Accounts)"
-                    : $"❌ Insufficient permissions. This command requires {GetPermissionName(command.MinPermissionLevel)} level.";
+                // Build appropriate message based on permission level and required level
+                string permissionMessage;
+                if (permissionLevel == -1 && command.MinPermissionLevel >= 1)
+                {
+                    // Regular user trying to use admin command
+                    permissionMessage = "❌ This command is only available to group administrators.";
+                }
+                else if (permissionLevel == -1)
+                {
+                    // Regular user trying to use a regular command (shouldn't happen with /help, /report exceptions)
+                    permissionMessage = "❌ You don't have permission to use this command.";
+                }
+                else
+                {
+                    // Linked user without sufficient permission level
+                    permissionMessage = $"❌ Insufficient permissions. This command requires {GetPermissionName(command.MinPermissionLevel)} level.";
+                }
 
-                return new CommandResult(permissionMessage, false);
+                return new CommandResult(permissionMessage, true); // Auto-delete permission denied messages
             }
 
             // Check reply requirement
@@ -121,7 +132,7 @@ public partial class CommandRouter
 
             var response = await command.ExecuteAsync(botClient, message, args, permissionLevel, cancellationToken);
 
-            return new CommandResult(response, command.DeleteCommandMessage);
+            return new CommandResult(response, command.DeleteCommandMessage, command.DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {

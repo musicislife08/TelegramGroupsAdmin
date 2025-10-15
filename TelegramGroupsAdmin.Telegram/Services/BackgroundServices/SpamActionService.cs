@@ -103,6 +103,15 @@ public class SpamActionService(
                     message,
                     spamResult,
                     openAIResult);
+
+                // Delete the spam message from the chat
+                var moderationActionService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
+                await moderationActionService.DeleteMessageAsync(message.MessageId, message.Chat.Id);
+
+                logger.LogInformation(
+                    "Deleted spam message {MessageId} from chat {ChatId} (auto-ban)",
+                    message.MessageId,
+                    message.Chat.Id);
             }
             else if (spamResult.NetConfidence > 0)
             {

@@ -256,38 +256,47 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     public async Task<DetectionStats> GetStatsAsync()
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        // Overall stats
-        var allDetections = await context.DetectionResults
-            .AsNoTracking()
-            .Select(dr => new { dr.IsSpam, dr.Confidence })
-            .ToListAsync();
 
-        var total = allDetections.Count;
-        var spam = allDetections.Count(d => d.IsSpam);
-        var avgConfidence = allDetections.Any()
-            ? allDetections.Average(d => (double)d.Confidence)
-            : 0.0;
-
-        // Last 24h stats
+        // MH1: Single query optimization - calculate all stats in one database round-trip
         var since24h = DateTimeOffset.UtcNow.AddDays(-1);
-        var recentDetections = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => dr.DetectedAt >= since24h)
-            .Select(dr => dr.IsSpam)
-            .ToListAsync();
 
-        var recentTotal = recentDetections.Count;
-        var recentSpam = recentDetections.Count(s => s);
+        var stats = await context.DetectionResults
+            .AsNoTracking()
+            .GroupBy(dr => 1) // Group all rows together for aggregation
+            .Select(g => new
+            {
+                TotalDetections = g.Count(),
+                SpamDetected = g.Count(dr => dr.IsSpam),
+                AverageConfidence = g.Average(dr => (double)dr.Confidence),
+                Last24hDetections = g.Count(dr => dr.DetectedAt >= since24h),
+                Last24hSpam = g.Count(dr => dr.DetectedAt >= since24h && dr.IsSpam)
+            })
+            .FirstOrDefaultAsync();
+
+        // Handle empty table case
+        if (stats == null)
+        {
+            return new DetectionStats
+            {
+                TotalDetections = 0,
+                SpamDetected = 0,
+                SpamPercentage = 0,
+                AverageConfidence = 0,
+                Last24hDetections = 0,
+                Last24hSpam = 0,
+                Last24hSpamPercentage = 0
+            };
+        }
 
         return new DetectionStats
         {
-            TotalDetections = total,
-            SpamDetected = spam,
-            SpamPercentage = total > 0 ? (double)spam / total * 100 : 0,
-            AverageConfidence = avgConfidence,
-            Last24hDetections = recentTotal,
-            Last24hSpam = recentSpam,
-            Last24hSpamPercentage = recentTotal > 0 ? (double)recentSpam / recentTotal * 100 : 0
+            TotalDetections = stats.TotalDetections,
+            SpamDetected = stats.SpamDetected,
+            SpamPercentage = stats.TotalDetections > 0 ? (double)stats.SpamDetected / stats.TotalDetections * 100 : 0,
+            AverageConfidence = stats.AverageConfidence,
+            Last24hDetections = stats.Last24hDetections,
+            Last24hSpam = stats.Last24hSpam,
+            Last24hSpamPercentage = stats.Last24hDetections > 0 ? (double)stats.Last24hSpam / stats.Last24hDetections * 100 : 0
         };
     }
 

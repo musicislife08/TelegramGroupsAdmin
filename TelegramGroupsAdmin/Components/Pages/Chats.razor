@@ -5,6 +5,7 @@
 @inject TelegramAdminBotService BotService
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject ISpamDetectionConfigRepository SpamConfigRepository
+@inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @attribute [Authorize]
@@ -141,11 +142,16 @@
                     IsReachable = true
                 };
 
+                // Check if this chat has a custom welcome config
+                var configRecord = await ConfigRepository.GetAsync(chat.ChatId);
+                var hasWelcomeConfig = !string.IsNullOrEmpty(configRecord?.WelcomeConfig);
+
                 _chats.Add(new ManagedChatInfo
                 {
                     Chat = chat,
                     HealthStatus = health,
-                    HasCustomSpamConfig = customConfigChatIds.Contains(chat.ChatId)
+                    HasCustomSpamConfig = customConfigChatIds.Contains(chat.ChatId),
+                    HasCustomWelcomeConfig = hasWelcomeConfig
                 });
             }
         }

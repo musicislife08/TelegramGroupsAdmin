@@ -36,6 +36,13 @@ public class SpamDetectionConfig
     public int ReviewQueueThreshold { get; set; } = 50;
 
     /// <summary>
+    /// Maximum individual check confidence to trigger OpenAI veto (0-100)
+    /// Veto runs if: (NetConfidence > ReviewQueueThreshold) OR (MaxConfidence > this value)
+    /// Default: 85 (catches high-confidence outliers that might be outvoted)
+    /// </summary>
+    public int MaxConfidenceVetoThreshold { get; set; } = 85;
+
+    /// <summary>
     /// Training mode - forces all spam detections into review queue instead of auto-banning
     /// Use this to validate spam detection is working correctly before enabling auto-ban
     /// </summary>
@@ -201,6 +208,19 @@ public class TranslationConfig
     /// Whether to run spam checks on translated content
     /// </summary>
     public bool CheckTranslatedContent { get; set; } = true;
+
+    /// <summary>
+    /// Minimum message length to trigger translation (characters)
+    /// Messages shorter than this skip expensive OpenAI translation
+    /// </summary>
+    public int MinMessageLength { get; set; } = 20;
+
+    /// <summary>
+    /// Latin script threshold for skipping translation (0.0 - 1.0)
+    /// If >= this ratio of characters are Latin script, skip expensive translation
+    /// Default: 0.8 (80% Latin = likely English/Western European language)
+    /// </summary>
+    public double LatinScriptThreshold { get; set; } = 0.8;
 }
 
 /// <summary>

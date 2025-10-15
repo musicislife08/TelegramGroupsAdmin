@@ -60,50 +60,48 @@ public class MessageHistoryRepository
         // Retention: Keep messages from last 30 days OR messages with detection_results (training data)
         var retentionCutoff = DateTimeOffset.UtcNow.AddDays(-30);
 
-        // First, get image paths for messages that will be deleted
-        var expiredImages = await context.Messages
-            .AsNoTracking()
+        // MH2: Single query optimization - get all expired message data in one query
+        var expiredData = await context.Messages
             .Where(m => m.Timestamp < retentionCutoff
                 && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId))
-            .Where(m => m.PhotoLocalPath != null || m.PhotoThumbnailPath != null)
-            .Select(m => new { m.PhotoLocalPath, m.PhotoThumbnailPath })
+            .GroupJoin(
+                context.MessageEdits,
+                m => m.MessageId,
+                e => e.MessageId,
+                (m, edits) => new { Message = m, Edits = edits })
+            .Select(x => new
+            {
+                x.Message,
+                EditCount = x.Edits.Count(),
+                Edits = x.Edits.ToList()
+            })
             .ToListAsync();
 
-        // Collect all image paths
+        if (expiredData.Count == 0)
+        {
+            return (0, new List<string>());
+        }
+
+        // Collect image paths
         var imagePaths = new List<string>();
-        foreach (var img in expiredImages)
+        foreach (var data in expiredData)
         {
-            if (!string.IsNullOrEmpty(img.PhotoLocalPath))
-                imagePaths.Add(img.PhotoLocalPath);
-            if (!string.IsNullOrEmpty(img.PhotoThumbnailPath))
-                imagePaths.Add(img.PhotoThumbnailPath);
+            if (!string.IsNullOrEmpty(data.Message.PhotoLocalPath))
+                imagePaths.Add(data.Message.PhotoLocalPath);
+            if (!string.IsNullOrEmpty(data.Message.PhotoThumbnailPath))
+                imagePaths.Add(data.Message.PhotoThumbnailPath);
         }
 
-        // Get messages that will be deleted
-        var expiredMessages = await context.Messages
-            .Where(m => m.Timestamp < retentionCutoff
-                && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId))
-            .ToListAsync();
-
-        if (expiredMessages.Count == 0)
-        {
-            return (0, imagePaths);
-        }
-
-        var expiredMessageIds = expiredMessages.Select(m => m.MessageId).ToList();
-
-        // Delete message edits for expired messages (will cascade delete via FK, but doing explicitly for logging)
-        var editsToDelete = await context.MessageEdits
-            .Where(e => expiredMessageIds.Contains(e.MessageId))
-            .ToListAsync();
+        // Delete edits and messages
+        var editsToDelete = expiredData.SelectMany(x => x.Edits).ToList();
+        var messagesToDelete = expiredData.Select(x => x.Message).ToList();
         var deletedEdits = editsToDelete.Count;
-        context.MessageEdits.RemoveRange(editsToDelete);
 
-        // Delete expired messages (EF Core will handle cascade)
-        context.Messages.RemoveRange(expiredMessages);
+        context.MessageEdits.RemoveRange(editsToDelete);
+        context.Messages.RemoveRange(messagesToDelete);
 
         await context.SaveChangesAsync();
-        var deleted = expiredMessages.Count;
+        var deleted = messagesToDelete.Count;
 
         if (deleted > 0)
         {
@@ -126,6 +124,7 @@ public class MessageHistoryRepository
         await using var context = await _contextFactory.CreateDbContextAsync();
         var results = await context.Messages
             .AsNoTracking()
+            .Where(m => m.DeletedAt == null) // Exclude soft-deleted messages
             .GroupJoin(
                 context.ManagedChats,
                 m => m.ChatId,

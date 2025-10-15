@@ -390,10 +390,11 @@ public class SpamDetectionEngine : ISpamDetectionEngine
         var netConfidence = CalculateNetConfidence(checkResults);
 
         // Phase 2.6: Two-tier decision system based on net confidence OR high individual confidence
-        // Veto if: (Net > +50) OR (any check >85% spam) - safety before ban
-        // Review queue: Net ≤ +50 but > 0 (low confidence spam)
+        // Veto if: (Net > ReviewQueueThreshold) OR (any check > MaxConfidenceVetoThreshold) - safety before ban
+        // Review queue: Net ≤ ReviewQueueThreshold but > 0 (low confidence spam)
         // Allow: Net ≤ 0 (no spam detected)
-        var shouldVeto = (netConfidence > 50 || maxConfidence > 85) && config.OpenAI.VetoMode;
+        var shouldVeto = (netConfidence > config.ReviewQueueThreshold || maxConfidence > config.MaxConfidenceVetoThreshold)
+            && config.OpenAI.VetoMode;
 
         // Determine recommended action based on net confidence
         var recommendedAction = DetermineActionFromNetConfidence(netConfidence, config);
@@ -484,13 +485,13 @@ public class SpamDetectionEngine : ISpamDetectionEngine
 
     /// <summary>
     /// Phase 2.6: Determine recommended action based on net confidence (weighted voting)
-    /// Net > +50: Run OpenAI veto (safety before ban)
-    /// Net ≤ +50 AND > 0: Admin review queue (skip OpenAI cost)
+    /// Net > ReviewQueueThreshold: Run OpenAI veto (safety before ban)
+    /// Net ≤ ReviewQueueThreshold AND > 0: Admin review queue (skip OpenAI cost)
     /// Net ≤ 0: Allow (no spam detected)
     /// </summary>
     private SpamAction DetermineActionFromNetConfidence(int netConfidence, SpamDetectionConfig config)
     {
-        if (netConfidence > 50)
+        if (netConfidence > config.ReviewQueueThreshold)
         {
             // High confidence spam - pending OpenAI veto check
             // Will become AutoBan if OpenAI confirms (or if OpenAI disabled)
@@ -517,10 +518,11 @@ public class SpamDetectionEngine : ISpamDetectionEngine
         CancellationToken cancellationToken)
     {
         // Translate foreign language to English if enabled
-        if (config.Translation.Enabled && !string.IsNullOrWhiteSpace(request.Message) && request.Message.Length >= 20)
+        if (config.Translation.Enabled && !string.IsNullOrWhiteSpace(request.Message)
+            && request.Message.Length >= config.Translation.MinMessageLength)
         {
             // Quick check: if message is mostly Latin script, likely English - skip expensive OpenAI translation
-            if (IsLikelyLatinScript(request.Message))
+            if (IsLikelyLatinScript(request.Message, config.Translation.LatinScriptThreshold))
             {
                 _logger.LogDebug("Message is primarily Latin script for user {UserId} - skipping translation", request.UserId);
             }
@@ -555,7 +557,9 @@ public class SpamDetectionEngine : ISpamDetectionEngine
     /// <summary>
     /// Check if message is primarily Latin/ASCII script (likely English) to avoid unnecessary OpenAI translation
     /// </summary>
-    private static bool IsLikelyLatinScript(string message)
+    /// <param name="message">Message to analyze</param>
+    /// <param name="threshold">Latin script ratio threshold (0.0-1.0, default from config)</param>
+    private static bool IsLikelyLatinScript(string message, double threshold)
     {
         if (string.IsNullOrWhiteSpace(message))
             return true;
@@ -584,8 +588,8 @@ public class SpamDetectionEngine : ISpamDetectionEngine
         if (letterCount == 0)
             return true;
 
-        // If >80% of letters are Latin script, likely English/Western European language
-        return (double)latinCount / letterCount > 0.8;
+        // If >= threshold of letters are Latin script, likely English/Western European language
+        return (double)latinCount / letterCount > threshold;
     }
 
     /// <summary>

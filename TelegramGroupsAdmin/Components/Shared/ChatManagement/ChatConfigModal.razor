@@ -2,6 +2,7 @@
 @using TelegramGroupsAdmin.SpamDetection.Repositories
 @using TelegramGroupsAdmin.SpamDetection.Configuration
 @using TelegramGroupsAdmin.Components.Shared.SpamManagement
+@using TelegramGroupsAdmin.Components.Shared
 @using global::Telegram.Bot
 @inject TelegramAdminBotService BotService
 @inject ISnackbar Snackbar
@@ -10,6 +11,7 @@
 @inject IChatAdminsRepository ChatAdminsRepository
 @inject ITelegramUserMappingRepository TelegramMappingsRepository
 @inject IUserManagementService UserManagementService
+@inject TelegramGroupsAdmin.Configuration.Services.IConfigService ConfigService
 
 <MudDialog>
     <DialogContent>
@@ -137,6 +139,54 @@
                 </MudStack>
             </MudTabPanel>
 
+            <!-- Welcome System Tab -->
+            <MudTabPanel Text="Welcome System" Icon="@Icons.Material.Filled.Handshake">
+                <MudStack Spacing="3">
+                    <!-- Configuration Mode Selection -->
+                    <MudPaper Elevation="1" Class="pa-4">
+                        <MudText Typo="Typo.h6" GutterBottom="true">Configuration Mode</MudText>
+                        <MudRadioGroup @bind-Value="_useCustomWelcomeConfig" @bind-Value:after="OnWelcomeConfigModeChanged" T="bool">
+                            <MudRadio Value="false" T="bool">Use Global Configuration</MudRadio>
+                            <MudRadio Value="true" T="bool">Use Custom Configuration for this Chat</MudRadio>
+                        </MudRadioGroup>
+
+                        @if (!_useCustomWelcomeConfig && ChatInfo.HasCustomWelcomeConfig)
+                        {
+                            <MudAlert Severity="Severity.Info" Class="mt-2">
+                                This chat currently has a custom welcome configuration. Switching to global will delete the custom settings.
+                            </MudAlert>
+                        }
+                    </MudPaper>
+
+                    @if (_useCustomWelcomeConfig)
+                    {
+                        <!-- Reusable WelcomeSystemConfig component for per-chat configuration -->
+                        <WelcomeSystemConfig @ref="_welcomeConfigComponent" ChatId="@ChatInfo.Chat.ChatId" OnSaved="OnWelcomeConfigSaved" />
+
+                        <!-- Save Button -->
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                  OnClick="SaveWelcomeConfigAsync" Disabled="@_savingWelcomeConfig" FullWidth="true">
+                            @if (_savingWelcomeConfig)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                <MudText Class="ms-2">Saving...</MudText>
+                            }
+                            else
+                            {
+                                <span>Save Configuration</span>
+                            }
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">
+                            This chat is using the global welcome system configuration.
+                            To customize settings for this chat specifically, enable "Use Custom Configuration" above.
+                        </MudAlert>
+                    }
+                </MudStack>
+            </MudTabPanel>
+
             <!-- Admins Tab -->
             <MudTabPanel Text="Admins" Icon="@Icons.Material.Filled.AdminPanelSettings">
                 @if (_loadingAdmins)
@@ -233,6 +283,11 @@
     private bool _useCustomConfig;
     private SpamManagement.SpamDetectionConfig? _spamConfigComponent;
 
+    // Welcome System Config
+    private bool _savingWelcomeConfig;
+    private bool _useCustomWelcomeConfig;
+    private WelcomeSystemConfig? _welcomeConfigComponent;
+
     // Admins Tab
     private bool _loadingAdmins = true;
     private List<ChatAdmin>? _admins;
@@ -242,6 +297,7 @@
     {
         _healthStatus = ChatInfo.HealthStatus;
         _useCustomConfig = ChatInfo.HasCustomSpamConfig;
+        _useCustomWelcomeConfig = ChatInfo.HasCustomWelcomeConfig;
         await LoadAdminsAsync();
     }
 
@@ -331,6 +387,55 @@
         finally
         {
             _savingConfig = false;
+        }
+    }
+
+    private async Task OnWelcomeConfigModeChanged()
+    {
+        if (!_useCustomWelcomeConfig && ChatInfo.HasCustomWelcomeConfig)
+        {
+            // User switched from custom to global - delete custom config
+            await SaveWelcomeConfigModeAsync();
+        }
+    }
+
+    private async Task SaveWelcomeConfigAsync()
+    {
+        if (_welcomeConfigComponent != null)
+        {
+            _savingWelcomeConfig = true;
+            await _welcomeConfigComponent.SaveConfiguration();
+            _savingWelcomeConfig = false;
+        }
+    }
+
+    private Task OnWelcomeConfigSaved()
+    {
+        // Config was saved by WelcomeSystemConfig component
+        ChatInfo.HasCustomWelcomeConfig = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveWelcomeConfigModeAsync()
+    {
+        _savingWelcomeConfig = true;
+        try
+        {
+            if (!_useCustomWelcomeConfig && ChatInfo.HasCustomWelcomeConfig)
+            {
+                // Delete custom config (revert to global)
+                await ConfigService.DeleteAsync("welcome", ChatInfo.Chat.ChatId);
+                ChatInfo.HasCustomWelcomeConfig = false;
+                Snackbar.Add("Reverted to global welcome configuration", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save welcome config: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _savingWelcomeConfig = false;
         }
     }
 
