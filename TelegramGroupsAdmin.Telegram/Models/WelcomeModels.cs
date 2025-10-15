@@ -49,10 +49,10 @@ public record WelcomeConfig(
     public static WelcomeConfig Default => new(
         Enabled: true,
         TimeoutSeconds: 60,
-        ChatWelcomeTemplate: "Welcome {username}! Please accept our rules to participate.\n\n💡 Tip: Use \"Open Bot for Rules\" to receive them privately.",
-        DmTemplate: "Welcome to {chat_name}! Here are our rules:\n\n{rules_text}",
+        ChatWelcomeTemplate: "👋 Welcome {username}!\n\nTo participate in this chat, please read and accept our rules.\n\n📖 Click \"Read Rules\" below to view them privately, then come back here to accept.",
+        DmTemplate: "Welcome to {chat_name}! Here are our rules:\n\n{rules_text}\n\n✅ After reading, return to the chat and click \"Accept Rules\" to start participating!",
         ChatFallbackTemplate: "Thanks for accepting! Here are our rules:\n\n{rules_text}",
-        AcceptButtonText: "✅ Accept Rules",
+        AcceptButtonText: "✅ I Accept",
         DenyButtonText: "❌ Decline",
         RulesText: "1. Be respectful\n2. No spam\n3. Stay on topic"
     );

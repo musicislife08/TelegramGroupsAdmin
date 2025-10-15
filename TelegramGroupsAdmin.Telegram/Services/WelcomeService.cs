@@ -233,16 +233,17 @@ public class WelcomeService : IWelcomeService
         var deepLink = $"https://t.me/{botInfo.Username}?start=welcome_{chatId}_{user.Id}";
 
         // Encode user ID in callback data for validation + deep link button for DM
+        // DM button on top to encourage private rules delivery
         var keyboard = new InlineKeyboardMarkup(new[]
         {
             new[]
             {
-                InlineKeyboardButton.WithCallbackData(config.AcceptButtonText, $"welcome_accept:{user.Id}"),
-                InlineKeyboardButton.WithCallbackData(config.DenyButtonText, $"welcome_deny:{user.Id}")
+                InlineKeyboardButton.WithUrl("📖 Read Rules (Opens Bot Chat)", deepLink)
             },
             new[]
             {
-                InlineKeyboardButton.WithUrl("💬 Open Bot for Rules (DM)", deepLink)
+                InlineKeyboardButton.WithCallbackData(config.AcceptButtonText, $"welcome_accept:{user.Id}"),
+                InlineKeyboardButton.WithCallbackData(config.DenyButtonText, $"welcome_deny:{user.Id}")
             }
         });
 
