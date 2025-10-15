@@ -98,10 +98,99 @@ public class WelcomeService : IWelcomeService
                 config,
                 cancellationToken);
 
-            // Step 3: Schedule timeout job (TickerQ integration - Phase 4.4 continuation)
-            // TODO: Schedule timeout job to auto-kick if no response
-            _logger.LogDebug(
-                "TODO: Schedule timeout job for user {UserId} in chat {ChatId} (timeout: {Timeout}s)",
+            // Step 3: Create welcome response record (pending state)
+            await using (var context = await _contextFactory.CreateDbContextAsync(cancellationToken))
+            {
+                var entity = new Data.Models.WelcomeResponseDto
+                {
+                    ChatId = chatMemberUpdate.Chat.Id,
+                    UserId = user.Id,
+                    Username = user.Username,
+                    WelcomeMessageId = welcomeMessage.MessageId,
+                    Response = "pending",
+                    RespondedAt = DateTimeOffset.UtcNow,
+                    DmSent = false,
+                    DmFallback = false,
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+
+                context.WelcomeResponses.Add(entity);
+                await context.SaveChangesAsync(cancellationToken);
+
+                _logger.LogDebug(
+                    "Created welcome response record for user {UserId} in chat {ChatId}",
+                    user.Id,
+                    chatMemberUpdate.Chat.Id);
+            }
+
+            // Step 4: Schedule timeout (background task)
+            var chatId = chatMemberUpdate.Chat.Id;
+            var userId = user.Id;
+            var messageId = welcomeMessage.MessageId;
+            var timeoutSeconds = config.TimeoutSeconds;
+
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(timeoutSeconds));
+
+                try
+                {
+                    // Check if user has responded
+                    await using var context = await _contextFactory.CreateDbContextAsync();
+                    var response = await context.WelcomeResponses
+                        .Where(r => r.ChatId == chatId && r.UserId == userId && r.WelcomeMessageId == messageId)
+                        .FirstOrDefaultAsync();
+
+                    if (response == null || response.Response != "pending")
+                    {
+                        _logger.LogDebug(
+                            "User {UserId} already responded to welcome in chat {ChatId}, skipping timeout",
+                            userId,
+                            chatId);
+                        return;
+                    }
+
+                    _logger.LogInformation(
+                        "Welcome timeout: User {UserId} did not respond in {Timeout}s in chat {ChatId}",
+                        userId,
+                        timeoutSeconds,
+                        chatId);
+
+                    // Kick user for timeout
+                    await KickUserAsync(botClient, chatId, userId, default);
+
+                    // Delete welcome message
+                    try
+                    {
+                        await botClient.DeleteMessage(chatId: chatId, messageId: messageId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete welcome message {MessageId}", messageId);
+                    }
+
+                    // Update response record
+                    response.Response = "timeout";
+                    response.RespondedAt = DateTimeOffset.UtcNow;
+                    await context.SaveChangesAsync();
+
+                    _logger.LogInformation(
+                        "Recorded welcome timeout for user {UserId} in chat {ChatId}",
+                        userId,
+                        chatId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Failed to process welcome timeout for user {UserId} in chat {ChatId}",
+                        userId,
+                        chatId);
+                }
+            });
+
+            _logger.LogInformation(
+                "Scheduled welcome timeout for user {UserId} in chat {ChatId} (timeout: {Timeout}s)",
                 user.Id,
                 chatMemberUpdate.Chat.Id,
                 config.TimeoutSeconds);
@@ -139,23 +228,64 @@ public class WelcomeService : IWelcomeService
             user.Id,
             chatId);
 
-        // Parse callback data (format: "welcome_accept:123456" or "welcome_deny:123456")
+        // Parse callback data
+        // Format: "welcome_accept:123456", "welcome_deny:123456", or "dm_accept:chatId:userId"
         var parts = data.Split(':');
-        if (parts.Length != 2 || !long.TryParse(parts[1], out var targetUserId))
+        var action = parts[0];
+
+        // Handle dm_accept separately (3-part format: dm_accept:groupChatId:userId)
+        if (action == "dm_accept")
+        {
+            if (parts.Length != 3 || !long.TryParse(parts[1], out var groupChatId) || !long.TryParse(parts[2], out var targetUserId))
+            {
+                _logger.LogWarning("Invalid dm_accept callback data format: {Data}", data);
+                return;
+            }
+
+            // Validate that the clicking user is the target user
+            if (user.Id != targetUserId)
+            {
+                _logger.LogWarning(
+                    "Wrong user clicked DM accept button: User {ClickerId} clicked button for user {TargetUserId}",
+                    user.Id,
+                    targetUserId);
+                await botClient.AnswerCallbackQuery(
+                    callbackQueryId: callbackQuery.Id,
+                    text: "⚠️ This button is not for you.",
+                    showAlert: true,
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            try
+            {
+                await HandleDmAcceptAsync(botClient, groupChatId, user, message.Chat.Id, message.MessageId, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to handle dm_accept for user {UserId} in group {ChatId}",
+                    user.Id,
+                    groupChatId);
+            }
+            return;
+        }
+
+        // Handle welcome_accept and welcome_deny (2-part format)
+        if (parts.Length != 2 || !long.TryParse(parts[1], out var targetUserIdForGroup))
         {
             _logger.LogWarning("Invalid callback data format: {Data}", data);
             return;
         }
 
-        var action = parts[0];
-
         // Validate that the clicking user is the target user
-        if (user.Id != targetUserId)
+        if (user.Id != targetUserIdForGroup)
         {
             _logger.LogWarning(
                 "Wrong user clicked button: User {ClickerId} clicked button for user {TargetUserId}",
                 user.Id,
-                targetUserId);
+                targetUserIdForGroup);
 
             // Send temporary warning message tagged to the wrong user
             try
@@ -412,13 +542,26 @@ public class WelcomeService : IWelcomeService
             user.Username,
             chatId);
 
-        // Step 1: Restore user permissions
-        await RestoreUserPermissionsAsync(botClient, chatId, user.Id, cancellationToken);
+        // Step 1: Check if user already responded (from pending record created on join)
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var existingResponse = await context.WelcomeResponses
+            .Where(r => r.ChatId == chatId && r.UserId == user.Id && r.WelcomeMessageId == welcomeMessageId)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        // Step 2: Try to send rules via DM
+        // Step 2: Try to send rules via DM (or fallback to chat)
+        // Always attempt this - previous DM sent via /start may have been deleted by user
         var (dmSent, dmFallback) = await SendRulesAsync(botClient, chatId, user, config, cancellationToken);
 
-        // Step 3: Delete welcome message
+        _logger.LogInformation(
+            "Rules delivery for user {UserId}: DM sent: {DmSent}, Fallback: {DmFallback}",
+            user.Id,
+            dmSent,
+            dmFallback);
+
+        // Step 3: Restore user permissions
+        await RestoreUserPermissionsAsync(botClient, chatId, user.Id, cancellationToken);
+
+        // Step 4: Delete welcome message
         try
         {
             await botClient.DeleteMessage(chatId: chatId, messageId: welcomeMessageId, cancellationToken: cancellationToken);
@@ -428,22 +571,31 @@ public class WelcomeService : IWelcomeService
             _logger.LogWarning(ex, "Failed to delete welcome message {MessageId}", welcomeMessageId);
         }
 
-        // Step 4: Record response
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = new Data.Models.WelcomeResponseDto
+        // Step 5: Update or create response record
+        if (existingResponse != null)
         {
-            ChatId = chatId,
-            UserId = user.Id,
-            Username = user.Username,
-            WelcomeMessageId = welcomeMessageId,
-            Response = "accepted",
-            RespondedAt = DateTimeOffset.UtcNow,
-            DmSent = dmSent,
-            DmFallback = dmFallback,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
+            // Update existing record (from /start deep link flow)
+            existingResponse.Response = "accepted";
+            existingResponse.RespondedAt = DateTimeOffset.UtcNow;
+        }
+        else
+        {
+            // Create new record (direct accept without /start)
+            var entity = new Data.Models.WelcomeResponseDto
+            {
+                ChatId = chatId,
+                UserId = user.Id,
+                Username = user.Username,
+                WelcomeMessageId = welcomeMessageId,
+                Response = "accepted",
+                RespondedAt = DateTimeOffset.UtcNow,
+                DmSent = dmSent,
+                DmFallback = dmFallback,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            context.WelcomeResponses.Add(entity);
+        }
 
-        context.WelcomeResponses.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
@@ -500,6 +652,145 @@ public class WelcomeService : IWelcomeService
             user.Id, user.Username, chatId);
     }
 
+    private async Task HandleDmAcceptAsync(
+        ITelegramBotClient botClient,
+        long groupChatId,
+        User user,
+        long dmChatId,
+        int buttonMessageId,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "User {UserId} (@{Username}) accepted rules via DM for chat {ChatId}",
+            user.Id,
+            user.Username,
+            groupChatId);
+
+        // Step 1: Delete the Accept button message in DM (separate message from rules)
+        try
+        {
+            await botClient.DeleteMessage(
+                chatId: dmChatId,
+                messageId: buttonMessageId,
+                cancellationToken: cancellationToken);
+
+            _logger.LogDebug(
+                "Deleted DM Accept button message {MessageId} for user {UserId}",
+                buttonMessageId,
+                user.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to delete DM Accept button message {MessageId}",
+                buttonMessageId);
+            // Non-fatal - continue with acceptance flow
+        }
+
+        // Step 2: Find the welcome message in database
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var welcomeResponse = await context.WelcomeResponses
+            .Where(r => r.ChatId == groupChatId && r.UserId == user.Id)
+            .OrderByDescending(r => r.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (welcomeResponse == null)
+        {
+            _logger.LogWarning(
+                "No welcome response found for user {UserId} in chat {ChatId}",
+                user.Id,
+                groupChatId);
+
+            // Send error to user in DM
+            await botClient.SendMessage(
+                chatId: user.Id,
+                text: "❌ Could not find your welcome record. Please try accepting in the group chat instead.",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        // Step 3: Restore user permissions in group
+        try
+        {
+            await RestoreUserPermissionsAsync(botClient, groupChatId, user.Id, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to restore permissions for user {UserId} in chat {ChatId}",
+                user.Id,
+                groupChatId);
+
+            // Send error to user in DM
+            await botClient.SendMessage(
+                chatId: user.Id,
+                text: "❌ Failed to restore your permissions. Please contact an admin.",
+                cancellationToken: cancellationToken);
+            return;
+        }
+
+        // Step 4: Delete welcome message in group
+        try
+        {
+            await botClient.DeleteMessage(
+                chatId: groupChatId,
+                messageId: welcomeResponse.WelcomeMessageId,
+                cancellationToken: cancellationToken);
+
+            _logger.LogInformation(
+                "Deleted welcome message {MessageId} in chat {ChatId}",
+                welcomeResponse.WelcomeMessageId,
+                groupChatId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to delete welcome message {MessageId} in chat {ChatId}",
+                welcomeResponse.WelcomeMessageId,
+                groupChatId);
+            // Non-fatal - continue with response update
+        }
+
+        // Step 5: Update welcome response record (mark as accepted)
+        welcomeResponse.Response = "accepted";
+        welcomeResponse.RespondedAt = DateTimeOffset.UtcNow;
+        welcomeResponse.DmSent = true;
+        welcomeResponse.DmFallback = false;
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Updated welcome response: User {UserId} (@{Username}) in chat {ChatId} - Accepted via DM",
+            user.Id,
+            user.Username,
+            groupChatId);
+
+        // Step 6: Send confirmation to user in DM
+        try
+        {
+            var chat = await botClient.GetChat(groupChatId, cancellationToken);
+            var chatName = chat.Title ?? "the chat";
+
+            await botClient.SendMessage(
+                chatId: user.Id,
+                text: $"✅ Welcome! You can now participate in {chatName}.",
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send confirmation to user {UserId}", user.Id);
+        }
+
+        // TODO: Cancel timeout job (TickerQ not yet implemented - Phase 4.4 continuation)
+        _logger.LogDebug(
+            "TODO: Cancel timeout job for user {UserId} in chat {ChatId}",
+            user.Id,
+            groupChatId);
+    }
+
     private async Task<(bool DmSent, bool DmFallback)> SendRulesAsync(
         ITelegramBotClient botClient,
         long chatId,
@@ -508,9 +799,10 @@ public class WelcomeService : IWelcomeService
         CancellationToken cancellationToken)
     {
         var chatName = "this chat"; // TODO: Get actual chat name from cache (Phase 4.4 continuation)
-        var dmText = config.DmTemplate
-            .Replace("{chat_name}", chatName)
-            .Replace("{rules_text}", config.RulesText);
+
+        // Send rules without button instructions (user already accepted in group)
+        // Just show the rules text, no action needed
+        var dmText = $"Welcome to {chatName}! Here are our rules:\n\n{config.RulesText}\n\n✅ You're all set! You can now participate in the chat.";
 
         try
         {
@@ -534,17 +826,44 @@ public class WelcomeService : IWelcomeService
                 "Failed to send rules DM to user {UserId}, falling back to chat message",
                 user.Id);
 
-            // Fallback: Send rules in chat
+            // Fallback: Send rules in chat with auto-delete after 30 seconds
             try
             {
                 var fallbackText = config.ChatFallbackTemplate.Replace("{rules_text}", config.RulesText);
                 var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
-                var message = $"{username}, {fallbackText}";
+                var messageText = $"{username}, {fallbackText}";
 
-                await botClient.SendMessage(
+                var fallbackMessage = await botClient.SendMessage(
                     chatId: chatId,
-                    text: message,
+                    text: messageText,
                     cancellationToken: cancellationToken);
+
+                _logger.LogInformation(
+                    "Sent fallback rules in chat {ChatId} for user {UserId}, will delete in 30 seconds",
+                    chatId,
+                    user.Id);
+
+                // Auto-delete fallback message after 30 seconds
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(30));
+                    try
+                    {
+                        await botClient.DeleteMessage(chatId: chatId, messageId: fallbackMessage.MessageId);
+                        _logger.LogDebug(
+                            "Deleted fallback rules message {MessageId} in chat {ChatId}",
+                            fallbackMessage.MessageId,
+                            chatId);
+                    }
+                    catch (Exception deleteEx)
+                    {
+                        _logger.LogWarning(
+                            deleteEx,
+                            "Failed to delete fallback rules message {MessageId} in chat {ChatId}",
+                            fallbackMessage.MessageId,
+                            chatId);
+                    }
+                });
 
                 return (DmSent: false, DmFallback: true);
             }

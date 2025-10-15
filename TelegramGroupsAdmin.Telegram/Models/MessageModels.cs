@@ -18,6 +18,7 @@ public record MessageRecord(
     string? ChatName,
     string? PhotoLocalPath,
     string? PhotoThumbnailPath,
+    string? ChatIconPath,
     DateTimeOffset? DeletedAt,
     string? DeletionSource
 );
@@ -167,7 +168,8 @@ public record ManagedChatRecord(
     DateTimeOffset AddedAt,
     bool IsActive,
     DateTimeOffset? LastSeenAt,
-    string? SettingsJson
+    string? SettingsJson,
+    string? ChatIconPath
 );
 
 /// <summary>

@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
 
@@ -37,6 +39,12 @@ public class StartCommand : IBotCommand
         int userPermissionLevel,
         CancellationToken cancellationToken = default)
     {
+        // Only respond to /start in private DMs, ignore in group chats
+        if (message.Chat.Type != ChatType.Private)
+        {
+            return string.Empty; // Silently ignore /start in group chats
+        }
+
         // Check if this is a deep link for welcome system
         if (args.Length > 0 && args[0].StartsWith("welcome_"))
         {
@@ -82,16 +90,33 @@ public class StartCommand : IBotCommand
         // Get welcome config (using default for now - TODO: load from database)
         var config = WelcomeConfig.Default;
 
-        // Send rules via DM
+        // Send rules text (without button)
         var chatName = chat.Title ?? "the chat";
         var rulesText = config.DmTemplate
             .Replace("{chat_name}", chatName)
             .Replace("{rules_text}", config.RulesText);
 
-        // Send rules
         await botClient.SendMessage(
             chatId: message.Chat.Id,
             text: rulesText,
+            cancellationToken: cancellationToken);
+
+        // Send Accept button in separate message (will be deleted after click)
+        // Format: dm_accept:chatId:userId
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[]
+            {
+                InlineKeyboardButton.WithCallbackData(
+                    "✅ I Accept These Rules",
+                    $"dm_accept:{chatId}:{targetUserId}")
+            }
+        });
+
+        await botClient.SendMessage(
+            chatId: message.Chat.Id,
+            text: "👇 Click below to accept the rules:",
+            replyMarkup: keyboard,
             cancellationToken: cancellationToken);
 
         // Mark as DM sent in database (update the welcome response record)
@@ -101,14 +126,14 @@ public class StartCommand : IBotCommand
             .OrderByDescending(r => r.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (welcomeResponse != null && welcomeResponse.Response == "accepted")
+        if (welcomeResponse != null)
         {
             welcomeResponse.DmSent = true;
             welcomeResponse.DmFallback = false;
             await context.SaveChangesAsync(cancellationToken);
         }
 
-        return "✅ Rules sent! You can now participate in the chat.\n\n" +
-               "If you have any questions, feel free to ask the admins.";
+        // Don't return a message - the Accept button will trigger the final confirmation
+        return string.Empty;
     }
 }

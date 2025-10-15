@@ -1,7 +1,10 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Telegram.Bot;
+using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Services.Telegram;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -16,6 +19,8 @@ public class ModerationActionService
     private readonly MessageHistoryRepository _messageHistoryRepository;
     private readonly IManagedChatsRepository _managedChatsRepository;
     private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
+    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly TelegramOptions _telegramOptions;
     private readonly ILogger<ModerationActionService> _logger;
 
     public ModerationActionService(
@@ -24,6 +29,8 @@ public class ModerationActionService
         MessageHistoryRepository messageHistoryRepository,
         IManagedChatsRepository managedChatsRepository,
         ITelegramUserMappingRepository telegramUserMappingRepository,
+        TelegramBotClientFactory botClientFactory,
+        IOptions<TelegramOptions> telegramOptions,
         ILogger<ModerationActionService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;
@@ -31,6 +38,8 @@ public class ModerationActionService
         _messageHistoryRepository = messageHistoryRepository;
         _managedChatsRepository = managedChatsRepository;
         _telegramUserMappingRepository = telegramUserMappingRepository;
+        _botClientFactory = botClientFactory;
+        _telegramOptions = telegramOptions.Value;
         _logger = logger;
     }
 
@@ -131,6 +140,21 @@ public class ModerationActionService
             _logger.LogError(ex, "Failed to execute spam and ban action for user {UserId}", userId);
             return new ModerationResult { Success = false, ErrorMessage = ex.Message };
         }
+    }
+
+    /// <summary>
+    /// UI-friendly overload: Mark message as spam without requiring bot client parameter
+    /// </summary>
+    public async Task<ModerationResult> MarkAsSpamAndBanAsync(
+        long messageId,
+        long userId,
+        long chatId,
+        string? executorId,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        return await MarkAsSpamAndBanAsync(botClient, messageId, userId, chatId, executorId, reason, cancellationToken);
     }
 
     /// <summary>
@@ -333,6 +357,62 @@ public class ModerationActionService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to unban user {UserId}", userId);
+            return new ModerationResult { Success = false, ErrorMessage = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// UI-friendly overload: Unban user without requiring bot client parameter
+    /// </summary>
+    public async Task<ModerationResult> UnbanUserAsync(
+        long userId,
+        string? executorId,
+        string reason,
+        bool restoreTrust = false,
+        CancellationToken cancellationToken = default)
+    {
+        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        return await UnbanUserAsync(botClient, userId, executorId, reason, restoreTrust, cancellationToken);
+    }
+
+    /// <summary>
+    /// Delete a message from Telegram and mark as deleted in database
+    /// Used by: Messages.razor "Delete" button
+    /// </summary>
+    public async Task<ModerationResult> DeleteMessageAsync(
+        long messageId,
+        long chatId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = new ModerationResult();
+
+            // Get bot client from factory (singleton instance)
+            var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+
+            // 1. Delete the message from Telegram
+            try
+            {
+                await botClient.DeleteMessage(chatId, (int)messageId, cancellationToken);
+                result.MessageDeleted = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete message {MessageId} in chat {ChatId} (may already be deleted)", messageId, chatId);
+            }
+
+            // 2. Mark message as deleted in database
+            await _messageHistoryRepository.MarkMessageAsDeletedAsync(messageId, "manual_ui_delete");
+
+            _logger.LogInformation("Deleted message {MessageId} from chat {ChatId} via UI", messageId, chatId);
+
+            result.Success = true;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete message {MessageId}", messageId);
             return new ModerationResult { Success = false, ErrorMessage = ex.Message };
         }
     }

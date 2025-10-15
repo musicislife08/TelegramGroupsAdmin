@@ -128,8 +128,11 @@ public static class ModelMappings
         Value: data.Value
     );
 
-    // Message mappings
-    public static UiModels.MessageRecord ToUiModel(this DataModels.MessageRecordDto data) => new(
+    // Message mappings (requires chat info from managed_chats JOIN)
+    public static UiModels.MessageRecord ToUiModel(
+        this DataModels.MessageRecordDto data,
+        string? chatName,
+        string? chatIconPath) => new(
         MessageId: data.MessageId,
         UserId: data.UserId,
         UserName: data.UserName,
@@ -141,9 +144,10 @@ public static class ModelMappings
         Urls: data.Urls,
         EditDate: data.EditDate,
         ContentHash: data.ContentHash,
-        ChatName: data.ChatName,
+        ChatName: chatName,
         PhotoLocalPath: data.PhotoLocalPath,
         PhotoThumbnailPath: data.PhotoThumbnailPath,
+        ChatIconPath: chatIconPath,
         DeletedAt: data.DeletedAt,
         DeletionSource: data.DeletionSource
     );
@@ -161,7 +165,6 @@ public static class ModelMappings
         Urls = ui.Urls,
         EditDate = ui.EditDate,
         ContentHash = ui.ContentHash,
-        ChatName = ui.ChatName,
         PhotoLocalPath = ui.PhotoLocalPath,
         PhotoThumbnailPath = ui.PhotoThumbnailPath,
         DeletedAt = ui.DeletedAt,
@@ -302,7 +305,8 @@ public static class ModelMappings
         AddedAt: data.AddedAt,
         IsActive: data.IsActive,
         LastSeenAt: data.LastSeenAt,
-        SettingsJson: data.SettingsJson
+        SettingsJson: data.SettingsJson,
+        ChatIconPath: data.ChatIconPath
     );
 
     public static DataModels.ManagedChatRecordDto ToDataModel(this UiModels.ManagedChatRecord ui) => new()
@@ -315,7 +319,8 @@ public static class ModelMappings
         AddedAt = ui.AddedAt,
         IsActive = ui.IsActive,
         LastSeenAt = ui.LastSeenAt,
-        SettingsJson = ui.SettingsJson
+        SettingsJson = ui.SettingsJson,
+        ChatIconPath = ui.ChatIconPath
     };
 
     // TelegramUserMapping mappings

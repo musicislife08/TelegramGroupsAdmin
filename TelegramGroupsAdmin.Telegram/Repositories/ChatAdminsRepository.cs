@@ -181,4 +181,14 @@ public class ChatAdminsRepository : IChatAdminsRepository
             await context.SaveChangesAsync();
         }
     }
+
+    /// <inheritdoc/>
+    public async Task<int> GetAdminCountAsync(long chatId)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        return await context.ChatAdmins
+            .Where(ca => ca.ChatId == chatId && ca.IsActive)
+            .CountAsync();
+    }
 }

@@ -48,4 +48,9 @@ public interface IChatAdminsRepository
     /// Refresh all admin records for a chat (mark existing as verified, used during startup)
     /// </summary>
     Task UpdateLastVerifiedAsync(long chatId, long telegramId);
+
+    /// <summary>
+    /// Get the number of active admins cached for a chat (used to detect empty cache)
+    /// </summary>
+    Task<int> GetAdminCountAsync(long chatId);
 }

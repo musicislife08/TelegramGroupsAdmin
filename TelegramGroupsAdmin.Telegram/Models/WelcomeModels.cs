@@ -22,10 +22,11 @@ public record WelcomeResponse(
 /// </summary>
 public enum WelcomeResponseType
 {
-    Accepted = 0,
-    Denied = 1,
-    Timeout = 2,
-    Left = 3
+    Pending = 0,
+    Accepted = 1,
+    Denied = 2,
+    Timeout = 3,
+    Left = 4
 }
 
 /// <summary>
@@ -49,8 +50,8 @@ public record WelcomeConfig(
     public static WelcomeConfig Default => new(
         Enabled: true,
         TimeoutSeconds: 60,
-        ChatWelcomeTemplate: "👋 Welcome {username}!\n\nTo participate in this chat, please read and accept our rules.\n\n📖 Click \"Read Rules\" below to view them privately, then come back here to accept.",
-        DmTemplate: "Welcome to {chat_name}! Here are our rules:\n\n{rules_text}\n\n✅ After reading, return to the chat and click \"Accept Rules\" to start participating!",
+        ChatWelcomeTemplate: "👋 Welcome {username}!\n\nTo participate in this chat, please read and accept our rules.\n\n📖 Click \"Read Rules\" below, then click the START button to receive the rules privately.",
+        DmTemplate: "Welcome to {chat_name}! Here are our rules:\n\n{rules_text}\n\n✅ Click \"I Accept\" below, or return to the chat to accept there.",
         ChatFallbackTemplate: "Thanks for accepting! Here are our rules:\n\n{rules_text}",
         AcceptButtonText: "✅ I Accept",
         DenyButtonText: "❌ Decline",

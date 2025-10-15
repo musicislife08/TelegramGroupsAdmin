@@ -124,26 +124,40 @@ public class MessageHistoryRepository
     public async Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var entities = await context.Messages
+        var results = await context.Messages
             .AsNoTracking()
-            .OrderByDescending(m => m.Timestamp)
+            .GroupJoin(
+                context.ManagedChats,
+                m => m.ChatId,
+                c => c.ChatId,
+                (m, chats) => new { Message = m, Chat = chats.FirstOrDefault() })
+            .OrderByDescending(x => x.Message.Timestamp)
             .Take(limit)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return results.Select(x => x.Message.ToUiModel(
+            chatName: x.Chat?.ChatName,
+            chatIconPath: x.Chat?.ChatIconPath)).ToList();
     }
 
     public async Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var entities = await context.Messages
+        var results = await context.Messages
             .AsNoTracking()
             .Where(m => m.ChatId == chatId)
-            .OrderByDescending(m => m.Timestamp)
+            .GroupJoin(
+                context.ManagedChats,
+                m => m.ChatId,
+                c => c.ChatId,
+                (m, chats) => new { Message = m, Chat = chats.FirstOrDefault() })
+            .OrderByDescending(x => x.Message.Timestamp)
             .Take(limit)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return results.Select(x => x.Message.ToUiModel(
+            chatName: x.Chat?.ChatName,
+            chatIconPath: x.Chat?.ChatIconPath)).ToList();
     }
 
     public async Task<List<UiModels.MessageRecord>> GetMessagesByDateRangeAsync(
@@ -152,14 +166,21 @@ public class MessageHistoryRepository
         int limit = 1000)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var entities = await context.Messages
+        var results = await context.Messages
             .AsNoTracking()
             .Where(m => m.Timestamp >= startTimestamp && m.Timestamp <= endTimestamp)
-            .OrderByDescending(m => m.Timestamp)
+            .GroupJoin(
+                context.ManagedChats,
+                m => m.ChatId,
+                c => c.ChatId,
+                (m, chats) => new { Message = m, Chat = chats.FirstOrDefault() })
+            .OrderByDescending(x => x.Message.Timestamp)
             .Take(limit)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return results.Select(x => x.Message.ToUiModel(
+            chatName: x.Chat?.ChatName,
+            chatIconPath: x.Chat?.ChatIconPath)).ToList();
     }
 
     public async Task<UiModels.HistoryStats> GetStatsAsync()
@@ -274,11 +295,19 @@ public class MessageHistoryRepository
     public async Task<UiModels.MessageRecord?> GetMessageAsync(long messageId)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = await context.Messages
+        var result = await context.Messages
             .AsNoTracking()
-            .FirstOrDefaultAsync(m => m.MessageId == messageId);
+            .Where(m => m.MessageId == messageId)
+            .GroupJoin(
+                context.ManagedChats,
+                m => m.ChatId,
+                c => c.ChatId,
+                (m, chats) => new { Message = m, Chat = chats.FirstOrDefault() })
+            .FirstOrDefaultAsync();
 
-        return entity?.ToUiModel();
+        return result?.Message.ToUiModel(
+            chatName: result.Chat?.ChatName,
+            chatIconPath: result.Chat?.ChatIconPath);
     }
 
     public async Task UpdateMessageAsync(UiModels.MessageRecord message)
@@ -319,10 +348,11 @@ public class MessageHistoryRepository
     public async Task<List<string>> GetDistinctChatNamesAsync()
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var chatNames = await context.Messages
+        // Query from managed_chats table instead of messages
+        var chatNames = await context.ManagedChats
             .AsNoTracking()
-            .Where(m => m.ChatName != null && m.ChatName != "")
-            .Select(m => m.ChatName!)
+            .Where(c => c.ChatName != null && c.ChatName != "")
+            .Select(c => c.ChatName!)
             .Distinct()
             .OrderBy(c => c)
             .ToListAsync();

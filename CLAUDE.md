@@ -657,6 +657,28 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [x] Edit monitoring with re-scanning
 - [x] **Major refactoring**: Split TelegramAdminBotService (1,243 lines → 4 focused services)
 
+**Phase 2.8: UI Enhancements & Service Message Filtering** ✅ **COMPLETE**
+- [x] **Chat icons** - Fetch and display group profile pictures from Telegram
+  - TelegramPhotoService with ImageSharp (64x64 icons, cached on disk)
+  - Auto-refresh during admin cache refresh
+  - Stored in `managed_chats.chat_icon_path` (properly normalized)
+- [x] **Messages UI improvements** - Better multi-chat visibility
+  - Reversed hierarchy: Chat name prominent (top, bold, primary color), username secondary (smaller, gray)
+  - 24px chat icon displayed first, fallback group icon when no photo
+  - Inline filter buttons (filter by user/chat with single click)
+  - Quick filters (always visible) + collapsible advanced filters
+- [x] **Service message filtering** - Auto-delete Telegram clutter
+  - Property-based detection (NewChatMembers, LeftChatMember, NewChatPhoto, DeleteChatPhoto, etc.)
+  - Prevents empty messages in database (e.g., "User updated group photo")
+- [x] **Delete message button** - Admin+ can delete messages from UI
+  - Confirmation dialog before deletion
+  - Deletes from Telegram + soft-deletes in database
+  - Proper architecture: UI calls ModerationActionService (no bot client in UI)
+- [x] **Architecture cleanup** - Service layer handles bot client internally
+  - ModerationActionService injects TelegramBotClientFactory via DI
+  - UI-friendly overloads (no bot client parameter needed)
+  - UI completely decoupled from Telegram infrastructure
+
 ### Phase 3: Advanced Multi-Chat Features ✅ **COMPLETE**
 
 - [x] **Cross-chat spam detection** - All bans are global across all managed chats (ModerationActionService)
@@ -805,6 +827,27 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - ML-based spam detection algorithm (10th spam check using historical data)
 - Sentiment analysis for toxicity detection (shelved - too many false positives, `/report` sufficient)
 - API for third-party integrations (not needed currently)
+
+## Future Enhancements (Pending Admin Feedback)
+
+### Cross-Group Welcome Exemption
+**Problem:** Users who join multiple managed groups must complete welcome flow for each group separately.
+
+**Proposed Solution:** Auto-deleting rules notification for already-trusted users
+- User joins Group B (already accepted in Group A)
+- Bot detects prior acceptance in another group
+- Send tagged message: "@username, welcome! Here are the rules for this group: [rules]"
+- Auto-delete after X seconds (configurable, e.g., 30-60s)
+- No restrictions, no buttons, no action required
+- User can participate immediately
+
+**Benefits:**
+- Zero friction for legitimate users
+- Rules still visible (respects group differences)
+- Clean chat (auto-delete)
+- Maintains trust transfer across groups
+
+**Decision Pending:** Awaiting feedback from other group admins on whether auto-trust is appropriate or if per-group vetting is preferred.
 
 ## Next Steps (Prioritized for 2025)
 

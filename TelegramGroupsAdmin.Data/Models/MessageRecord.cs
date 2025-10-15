@@ -44,9 +44,6 @@ public class MessageRecordDto
     [MaxLength(64)]
     public string? ContentHash { get; set; }
 
-    [Column("chat_name")]
-    public string? ChatName { get; set; }
-
     [Column("photo_local_path")]
     public string? PhotoLocalPath { get; set; }
 

@@ -55,4 +55,10 @@ public interface IManagedChatsRepository
     /// Get all active managed chats (alias for GetActiveChatsAsync)
     /// </summary>
     Task<List<ManagedChatRecord>> GetAllAsync();
+
+    /// <summary>
+    /// Delete a managed chat record
+    /// Used when Group is migrated to Supergroup (old chat ID becomes invalid)
+    /// </summary>
+    Task DeleteAsync(long chatId);
 }

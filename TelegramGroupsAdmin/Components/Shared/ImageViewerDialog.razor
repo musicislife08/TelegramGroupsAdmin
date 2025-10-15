@@ -100,8 +100,14 @@
         if (string.IsNullOrEmpty(path))
             return string.Empty;
 
-        // Convert file system path to web path
-        return $"/images/{Path.GetFileName(path)}";
+        // Path may already include subdirectory (e.g., "chat_icons/file.jpg" or "thumbnails/file.jpg")
+        // or just filename for legacy messages (e.g., "file.jpg")
+        // If it contains a directory separator, preserve it; otherwise just use filename
+        var relativePath = path.Contains('/') || path.Contains('\\')
+            ? path.Replace('\\', '/')  // Normalize path separators
+            : Path.GetFileName(path);   // Legacy: just filename
+
+        return $"/images/{relativePath}";
     }
 
     private string FormatFileSize(long bytes)

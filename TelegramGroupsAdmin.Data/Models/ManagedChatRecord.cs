@@ -59,6 +59,9 @@ public class ManagedChatRecordDto
     [Column("settings_json")]
     public string? SettingsJson { get; set; }
 
+    [Column("chat_icon_path")]
+    public string? ChatIconPath { get; set; }
+
     // Navigation properties
     public virtual ICollection<ChatAdminRecordDto> ChatAdmins { get; set; } = [];
 }

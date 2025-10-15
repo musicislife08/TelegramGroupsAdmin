@@ -1,15 +1,55 @@
 
 <MudCard Class="@GetBubbleClass()" Elevation="1">
     <MudCardContent Class="pa-3">
-        @* User Info Header *@
+        @* Chat and User Info Header *@
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                <MudAvatar Color="Color.Primary" Size="Size.Small">
-                    @GetUserInitials()
-                </MudAvatar>
-                <MudText Typo="Typo.body2" Style="font-weight: 600;">
-                    @(Message.UserName ?? $"User {Message.UserId}")
-                </MudText>
+                @* Chat icon - larger (24px) *@
+                @if (!string.IsNullOrEmpty(Message.ChatIconPath))
+                {
+                    <img src="@GetImagePath(Message.ChatIconPath)"
+                         alt="Chat icon"
+                         style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover;"
+                         title="@Message.ChatName" />
+                }
+                else
+                {
+                    @* Fallback avatar for chat when no icon *@
+                    <MudAvatar Color="Color.Info" Size="Size.Small" Style="width: 24px; height: 24px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
+                    </MudAvatar>
+                }
+
+                <MudStack Spacing="0">
+                    @* Chat name - primary (larger, bold) *@
+                    @if (!string.IsNullOrEmpty(Message.ChatName))
+                    {
+                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.body2" Style="font-weight: 600; color: var(--mud-palette-primary);">
+                                @Message.ChatName
+                            </MudText>
+                            <MudIconButton Icon="@Icons.Material.Filled.FilterAlt"
+                                           Size="Size.Small"
+                                           Color="Color.Primary"
+                                           title="Filter by this chat"
+                                           OnClick="@(() => OnFilterByChat.InvokeAsync(Message.ChatId))"
+                                           Style="width: 20px; height: 20px; padding: 0;" />
+                        </MudStack>
+                    }
+
+                    @* User name - secondary (smaller, lighter) *@
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @(Message.UserName ?? $"User {Message.UserId}")
+                        </MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.FilterAlt"
+                                       Size="Size.Small"
+                                       Color="Color.Default"
+                                       title="Filter by this user"
+                                       OnClick="@(() => OnFilterByUser.InvokeAsync(Message.UserId))"
+                                       Style="width: 16px; height: 16px; padding: 0; font-size: 12px;" />
+                    </MudStack>
+                </MudStack>
                 @if (Message.EditDate.HasValue)
                 {
                     <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text" Icon="@Icons.Material.Filled.Edit">
@@ -128,6 +168,15 @@
                         Detection History (@DetectionHistory.Count)
                     </MudButton>
                 }
+                @* Delete message button *@
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Error"
+                           Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Delete"
+                           OnClick="() => OnDeleteMessage.InvokeAsync(Message)"
+                           Disabled="@_actionInProgress">
+                    Delete Message
+                </MudButton>
             </MudStack>
         }
     </MudCardContent>
@@ -164,6 +213,15 @@
 
     [Parameter]
     public EventCallback<MessageRecord> OnViewDetections { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnFilterByUser { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnFilterByChat { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnDeleteMessage { get; set; }
 
     private bool _actionInProgress = false;
 
@@ -218,8 +276,13 @@
         if (string.IsNullOrEmpty(path))
             return string.Empty;
 
-        // Convert file system path to web path
-        // Assuming images are served from /images endpoint
-        return $"/images/{Path.GetFileName(path)}";
+        // Path may already include subdirectory (e.g., "chat_icons/file.jpg" or "thumbnails/file.jpg")
+        // or just filename for legacy messages (e.g., "file.jpg")
+        // If it contains a directory separator, preserve it; otherwise just use filename
+        var relativePath = path.Contains('/') || path.Contains('\\')
+            ? path.Replace('\\', '/')  // Normalize path separators
+            : Path.GetFileName(path);   // Legacy: just filename
+
+        return $"/images/{relativePath}";
     }
 }

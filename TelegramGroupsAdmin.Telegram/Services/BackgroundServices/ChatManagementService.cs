@@ -78,7 +78,8 @@ public class ChatManagementService(
                 AddedAt: DateTimeOffset.UtcNow,
                 IsActive: isActive,
                 LastSeenAt: DateTimeOffset.UtcNow,
-                SettingsJson: null
+                SettingsJson: null,
+                ChatIconPath: null
             );
 
             using (var scope = serviceProvider.CreateScope())
@@ -125,6 +126,22 @@ public class ChatManagementService(
                 }
             }
 
+            // If bot was just promoted to admin, refresh admin cache for this chat
+            var botWasAdmin = oldStatus == ChatMemberStatus.Administrator;
+            var botIsNowAdmin = newStatus == ChatMemberStatus.Administrator;
+
+            if (!botWasAdmin && botIsNowAdmin)
+            {
+                logger.LogInformation(
+                    "🎉 Bot promoted to admin in {ChatId} ({ChatName}), refreshing admin cache",
+                    chat.Id,
+                    chat.Title ?? chat.Username ?? "Unknown");
+
+                // Note: Can't call RefreshChatAdminsAsync here because botClient not available
+                // Will be refreshed on next message or by background health check
+                // TODO: Consider passing botClient to this method for immediate refresh
+            }
+
             if (isActive)
             {
                 logger.LogInformation(
@@ -151,6 +168,47 @@ public class ChatManagementService(
             logger.LogError(ex,
                 "Error handling MyChatMember update for chat {ChatId}",
                 myChatMember.Chat.Id);
+        }
+    }
+
+    /// <summary>
+    /// Handle Group → Supergroup migration
+    /// When a Group is upgraded to Supergroup (e.g., granting admin), Telegram:
+    /// 1. Creates a new Supergroup with different chat ID
+    /// 2. Old Group becomes inaccessible (invalid chat ID)
+    /// We delete the old chat record since the ID is now invalid
+    /// </summary>
+    public async Task HandleChatMigrationAsync(long oldChatId, long newChatId)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+
+            // Delete old chat record (the old chat ID is now invalid)
+            var oldChat = await managedChatsRepository.GetByChatIdAsync(oldChatId);
+            if (oldChat != null)
+            {
+                await managedChatsRepository.DeleteAsync(oldChatId);
+
+                logger.LogInformation(
+                    "Deleted old Group {OldChatId} record (migrated to Supergroup {NewChatId})",
+                    oldChatId,
+                    newChatId);
+            }
+
+            // The new Supergroup will be added automatically via HandleMyChatMemberUpdateAsync
+            logger.LogInformation(
+                "Chat migration handled: {OldChatId} → {NewChatId}. New chat will be added automatically.",
+                oldChatId,
+                newChatId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to handle chat migration from {OldChatId} to {NewChatId}",
+                oldChatId,
+                newChatId);
         }
     }
 
@@ -226,6 +284,32 @@ public class ChatManagementService(
                 admins.Length,
                 chatId,
                 string.Join(", ", adminNames));
+
+            // Fetch and cache chat icon (always fetch to keep icon up-to-date)
+            try
+            {
+                var photoService = scope.ServiceProvider.GetRequiredService<TelegramPhotoService>();
+                var iconPath = await photoService.GetChatIconAsync(botClient, chatId);
+
+                if (iconPath != null)
+                {
+                    // Save icon path to database
+                    var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+                    var existingChat = await managedChatsRepository.GetByChatIdAsync(chatId);
+
+                    if (existingChat != null)
+                    {
+                        var updatedChat = existingChat with { ChatIconPath = iconPath };
+                        await managedChatsRepository.UpsertAsync(updatedChat);
+                        logger.LogInformation("✅ Cached chat icon for {ChatId}: {IconPath}", chatId, iconPath);
+                    }
+                }
+            }
+            catch (Exception photoEx)
+            {
+                logger.LogWarning(photoEx, "Failed to fetch chat icon for {ChatId} (non-fatal, continuing)", chatId);
+                // Non-fatal - continue even if icon fetch fails
+            }
         }
         catch (Exception ex)
         {

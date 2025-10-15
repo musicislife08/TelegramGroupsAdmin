@@ -38,6 +38,11 @@ public class ManagedChatsRepository : IManagedChatsRepository
             {
                 existing.SettingsJson = chat.SettingsJson;
             }
+            // Update icon path if provided
+            if (chat.ChatIconPath != null)
+            {
+                existing.ChatIconPath = chat.ChatIconPath;
+            }
         }
         else
         {
@@ -176,5 +181,28 @@ public class ManagedChatsRepository : IManagedChatsRepository
     public async Task<List<ManagedChatRecord>> GetAllAsync()
     {
         return await GetActiveChatsAsync();
+    }
+
+    public async Task DeleteAsync(long chatId)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var chat = await context.ManagedChats.FirstOrDefaultAsync(mc => mc.ChatId == chatId);
+
+        if (chat != null)
+        {
+            context.ManagedChats.Remove(chat);
+            await context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Deleted managed chat {ChatId} ({ChatName})",
+                chatId,
+                chat.ChatName);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Cannot delete chat {ChatId} - not found in database",
+                chatId);
+        }
     }
 }

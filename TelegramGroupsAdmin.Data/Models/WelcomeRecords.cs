@@ -29,7 +29,7 @@ public class WelcomeResponseDto
     public int WelcomeMessageId { get; set; }
 
     /// <summary>
-    /// Response type: 'accepted', 'denied', 'timeout', 'left'
+    /// Response type: 'pending', 'accepted', 'denied', 'timeout', 'left'
     /// </summary>
     [Column("response")]
     [MaxLength(20)]
@@ -59,8 +59,9 @@ public class WelcomeResponseDto
 /// </summary>
 public enum WelcomeResponseType
 {
-    Accepted = 0,
-    Denied = 1,
-    Timeout = 2,
-    Left = 3
+    Pending = 0,
+    Accepted = 1,
+    Denied = 2,
+    Timeout = 3,
+    Left = 4
 }

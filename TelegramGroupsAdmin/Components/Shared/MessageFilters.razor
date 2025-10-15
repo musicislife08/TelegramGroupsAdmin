@@ -2,133 +2,95 @@
 @inject MessageHistoryRepository MessageRepository
 @inject ILogger<MessageFilters> Logger
 
-<MudPaper Class="pa-4 mb-4" Elevation="2">
-    <MudGrid>
-        @* Text Search *@
-        <MudItem xs="12" md="4">
-            <MudTextField @bind-Value="Filters.SearchText"
-                          Label="Search messages"
-                          Placeholder="Search text..."
-                          Immediate="true"
-                          Clearable="true"
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search"
-                          DebounceInterval="300"
-                          OnDebounceIntervalElapsed="() => OnFiltersChanged.InvokeAsync()" />
-        </MudItem>
+<MudPaper Class="pa-3 mb-4" Elevation="2">
+    @* Quick Filters (Always Visible) *@
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+        @* Chat Filter Dropdown *@
+        <MudAutocomplete T="string"
+                         Value="Filters.ChatName"
+                         Label="Chat"
+                         Placeholder="All Chats"
+                         SearchFunc="SearchChatNames"
+                         Clearable="true"
+                         Adornment="Adornment.Start"
+                         AdornmentIcon="@Icons.Material.Filled.Chat"
+                         DebounceInterval="300"
+                         ResetValueOnEmptyText="true"
+                         CoerceText="false"
+                         CoerceValue="false"
+                         Variant="Variant.Outlined"
+                         Dense="true"
+                         Style="min-width: 200px;"
+                         ValueChanged="async (string value) => { Filters.ChatName = value; await OnFiltersChanged.InvokeAsync(); }" />
 
-        @* User Filter *@
-        <MudItem xs="12" md="3">
-            <MudAutocomplete T="string"
-                             Value="Filters.UserName"
-                             Label="User"
-                             Placeholder="Filter by user..."
-                             SearchFunc="SearchUserNames"
-                             Clearable="true"
-                             Adornment="Adornment.Start"
-                             AdornmentIcon="@Icons.Material.Filled.Person"
-                             DebounceInterval="300"
-                             ResetValueOnEmptyText="true"
-                             CoerceText="false"
-                             CoerceValue="false"
-                             ValueChanged="async (string value) => { Filters.UserName = value; await OnFiltersChanged.InvokeAsync(); }" />
-        </MudItem>
+        @* Spam Status Buttons *@
+        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+            <MudButton Color="@(Filters.SpamFilter == SpamFilterOption.All ? Color.Primary : Color.Default)"
+                       OnClick="async () => { Filters.SpamFilter = SpamFilterOption.All; await OnFiltersChanged.InvokeAsync(); }">
+                All
+            </MudButton>
+            <MudButton Color="@(Filters.SpamFilter == SpamFilterOption.SpamOnly ? Color.Error : Color.Default)"
+                       OnClick="async () => { Filters.SpamFilter = SpamFilterOption.SpamOnly; await OnFiltersChanged.InvokeAsync(); }">
+                Spam
+            </MudButton>
+            <MudButton Color="@(Filters.SpamFilter == SpamFilterOption.CleanOnly ? Color.Success : Color.Default)"
+                       OnClick="async () => { Filters.SpamFilter = SpamFilterOption.CleanOnly; await OnFiltersChanged.InvokeAsync(); }">
+                Clean
+            </MudButton>
+        </MudButtonGroup>
 
-        @* Chat Filter *@
-        <MudItem xs="12" md="3">
-            <MudAutocomplete T="string"
-                             Value="Filters.ChatName"
-                             Label="Chat"
-                             Placeholder="Filter by chat..."
-                             SearchFunc="SearchChatNames"
-                             Clearable="true"
-                             Adornment="Adornment.Start"
-                             AdornmentIcon="@Icons.Material.Filled.Chat"
-                             DebounceInterval="300"
-                             ResetValueOnEmptyText="true"
-                             CoerceText="false"
-                             CoerceValue="false"
-                             ValueChanged="async (string value) => { Filters.ChatName = value; await OnFiltersChanged.InvokeAsync(); }" />
-        </MudItem>
+        @* Content Type Quick Filters *@
+        <MudChip T="string"
+                 Size="Size.Small"
+                 Variant="@(Filters.HasImages == true ? Variant.Filled : Variant.Outlined)"
+                 Color="@(Filters.HasImages == true ? Color.Primary : Color.Default)"
+                 Icon="@Icons.Material.Filled.Image"
+                 OnClick="async () => { Filters.HasImages = Filters.HasImages == true ? null : true; await OnFiltersChanged.InvokeAsync(); }">
+            Images
+        </MudChip>
+        <MudChip T="string"
+                 Size="Size.Small"
+                 Variant="@(Filters.HasLinks == true ? Variant.Filled : Variant.Outlined)"
+                 Color="@(Filters.HasLinks == true ? Color.Primary : Color.Default)"
+                 Icon="@Icons.Material.Filled.Link"
+                 OnClick="async () => { Filters.HasLinks = Filters.HasLinks == true ? null : true; await OnFiltersChanged.InvokeAsync(); }">
+            Links
+        </MudChip>
+        <MudChip T="string"
+                 Size="Size.Small"
+                 Variant="@(Filters.HasEdits == true ? Variant.Filled : Variant.Outlined)"
+                 Color="@(Filters.HasEdits == true ? Color.Primary : Color.Default)"
+                 Icon="@Icons.Material.Filled.Edit"
+                 OnClick="async () => { Filters.HasEdits = Filters.HasEdits == true ? null : true; await OnFiltersChanged.InvokeAsync(); }">
+            Edited
+        </MudChip>
 
-        @* Spam Filter *@
-        <MudItem xs="12" md="2">
-            <MudSelect @bind-Value="Filters.SpamFilter"
-                       @bind-Value:after="() => OnFiltersChanged.InvokeAsync()"
-                       Label="Spam Status"
-                       T="SpamFilterOption"
-                       Variant="Variant.Outlined"
-                       Dense="true">
-                <MudSelectItem Value="SpamFilterOption.All">All Messages</MudSelectItem>
-                <MudSelectItem Value="SpamFilterOption.SpamOnly">Spam Only</MudSelectItem>
-                <MudSelectItem Value="SpamFilterOption.CleanOnly">Clean Only</MudSelectItem>
-                <MudSelectItem Value="SpamFilterOption.Unchecked">Unchecked</MudSelectItem>
-            </MudSelect>
-        </MudItem>
+        <MudSpacer />
 
-        @* Date Range *@
-        <MudItem xs="12" md="6">
-            <MudStack Row="true" Spacing="2">
-                <MudDatePicker @bind-Date="Filters.StartDate"
-                               @bind-Date:after="() => OnFiltersChanged.InvokeAsync()"
-                               Label="From Date"
-                               Clearable="true"
-                               MaxDate="DateTime.Today"
-                               DateFormat="yyyy-MM-dd" />
-                <MudDatePicker @bind-Date="Filters.EndDate"
-                               @bind-Date:after="() => OnFiltersChanged.InvokeAsync()"
-                               Label="To Date"
-                               Clearable="true"
-                               MaxDate="DateTime.Today"
-                               DateFormat="yyyy-MM-dd" />
-            </MudStack>
-        </MudItem>
+        @* Advanced Filters Toggle *@
+        <MudButton Variant="Variant.Text"
+                   Size="Size.Small"
+                   StartIcon="@(_showAdvanced ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                   OnClick="() => _showAdvanced = !_showAdvanced">
+            Advanced
+        </MudButton>
 
-        @* Content Type Filters *@
-        <MudItem xs="12" md="4">
-            <MudStack Row="true" Spacing="2">
-                <MudCheckBox @bind-Value="Filters.HasImages"
-                             @bind-Value:after="() => OnFiltersChanged.InvokeAsync()"
-                             Label="Images"
-                             Dense="true"
-                             T="bool?"
-                             TriState="true" />
-                <MudCheckBox @bind-Value="Filters.HasLinks"
-                             @bind-Value:after="() => OnFiltersChanged.InvokeAsync()"
-                             Label="Links"
-                             Dense="true"
-                             T="bool?"
-                             TriState="true" />
-                <MudCheckBox @bind-Value="Filters.HasEdits"
-                             @bind-Value:after="() => OnFiltersChanged.InvokeAsync()"
-                             Label="Edited"
-                             Dense="true"
-                             T="bool?"
-                             TriState="true" />
-            </MudStack>
-        </MudItem>
+        @* Clear All Button *@
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Secondary"
+                   Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Clear"
+                   OnClick="ClearFilters"
+                   Disabled="!HasActiveFilters()">
+            Clear
+        </MudButton>
+    </MudStack>
 
-        @* Actions *@
-        <MudItem xs="12" md="2">
-            <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
-                <MudButton Variant="Variant.Outlined"
-                           Color="Color.Secondary"
-                           StartIcon="@Icons.Material.Filled.Clear"
-                           OnClick="ClearFilters">
-                    Clear
-                </MudButton>
-            </MudStack>
-        </MudItem>
-    </MudGrid>
-
-    @* Active Filters Summary *@
+    @* Active Filters Summary (Chips) *@
     @if (HasActiveFilters())
     {
-        <MudDivider Class="my-3" />
+        <MudDivider Class="my-2" />
         <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
-            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="align-self-center">
-                Active filters:
-            </MudText>
             @if (!string.IsNullOrEmpty(Filters.SearchText))
             {
                 <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.SearchText = null; await OnFiltersChanged.InvokeAsync(); }">
@@ -147,12 +109,6 @@
                     Chat: @Filters.ChatName
                 </MudChip>
             }
-            @if (Filters.SpamFilter != SpamFilterOption.All)
-            {
-                <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.SpamFilter = SpamFilterOption.All; await OnFiltersChanged.InvokeAsync(); }">
-                    Spam: @Filters.SpamFilter
-                </MudChip>
-            }
             @if (Filters.StartDate.HasValue)
             {
                 <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.StartDate = null; await OnFiltersChanged.InvokeAsync(); }">
@@ -167,6 +123,65 @@
             }
         </MudStack>
     }
+
+    @* Advanced Filters (Collapsible) *@
+    <MudCollapse Expanded="_showAdvanced">
+        <MudDivider Class="my-3" />
+        <MudGrid Spacing="2">
+            @* Text Search *@
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="Filters.SearchText"
+                              Label="Search messages"
+                              Placeholder="Search text..."
+                              Immediate="true"
+                              Clearable="true"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Variant="Variant.Outlined"
+                              DebounceInterval="300"
+                              OnDebounceIntervalElapsed="() => OnFiltersChanged.InvokeAsync()" />
+            </MudItem>
+
+            @* User Filter *@
+            <MudItem xs="12" md="6">
+                <MudAutocomplete T="string"
+                                 Value="Filters.UserName"
+                                 Label="User"
+                                 Placeholder="Filter by user..."
+                                 SearchFunc="SearchUserNames"
+                                 Clearable="true"
+                                 Adornment="Adornment.Start"
+                                 AdornmentIcon="@Icons.Material.Filled.Person"
+                                 Variant="Variant.Outlined"
+                                 Dense="true"
+                                 DebounceInterval="300"
+                                 ResetValueOnEmptyText="true"
+                                 CoerceText="false"
+                                 CoerceValue="false"
+                                 ValueChanged="async (string value) => { Filters.UserName = value; await OnFiltersChanged.InvokeAsync(); }" />
+            </MudItem>
+
+            @* Date Range *@
+            <MudItem xs="12" md="6">
+                <MudDatePicker @bind-Date="Filters.StartDate"
+                               @bind-Date:after="() => OnFiltersChanged.InvokeAsync()"
+                               Label="From Date"
+                               Clearable="true"
+                               Variant="Variant.Outlined"
+                               MaxDate="DateTime.Today"
+                               DateFormat="yyyy-MM-dd" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudDatePicker @bind-Date="Filters.EndDate"
+                               @bind-Date:after="() => OnFiltersChanged.InvokeAsync()"
+                               Label="To Date"
+                               Clearable="true"
+                               Variant="Variant.Outlined"
+                               MaxDate="DateTime.Today"
+                               DateFormat="yyyy-MM-dd" />
+            </MudItem>
+        </MudGrid>
+    </MudCollapse>
 </MudPaper>
 
 @code {
@@ -178,6 +193,7 @@
 
     private List<string> _userNames = new();
     private List<string> _chatNames = new();
+    private bool _showAdvanced = false;
 
     protected override async Task OnInitializedAsync()
     {

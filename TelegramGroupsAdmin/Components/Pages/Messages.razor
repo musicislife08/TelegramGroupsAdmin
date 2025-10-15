@@ -1,10 +1,7 @@
 @page "/messages"
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
-@using Microsoft.Extensions.Options
 @using Microsoft.JSInterop
-@using global::Telegram.Bot
-@using global::Telegram.Bot.Requests
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Components.Shared
@@ -16,8 +13,6 @@
 @inject IMessageHistoryService MessageHistoryService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDetectionResultsRepository DetectionResultsRepository
-@inject TelegramBotClientFactory BotClientFactory
-@inject IOptions<Configuration.TelegramOptions> TelegramOptions
 @inject ModerationActionService ModerationService
 @inject ILogger<Messages> Logger
 @attribute [Authorize]
@@ -86,7 +81,10 @@
                            OnViewEdits="HandleViewEdits"
                            OnMarkAsSpam="HandleMarkAsSpam"
                            OnMarkAsHam="HandleMarkAsHam"
-                           OnViewDetections="HandleViewDetections" />
+                           OnViewDetections="HandleViewDetections"
+                           OnFilterByUser="HandleFilterByUser"
+                           OnFilterByChat="HandleFilterByChat"
+                           OnDeleteMessage="HandleDeleteMessage" />
         </MudVirtualize>
     }
     else if (!_loading)
@@ -358,12 +356,8 @@
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             var executorId = authState.User.Identity?.Name;
 
-            // Get bot client
-            var botClient = BotClientFactory.GetOrCreate(TelegramOptions.Value.BotToken);
-
             // Call moderation service (deletes message, bans user globally, creates detection result)
             var result = await ModerationService.MarkAsSpamAndBanAsync(
-                botClient,
                 message.MessageId,
                 message.UserId,
                 message.ChatId,
@@ -439,9 +433,7 @@
             await DetectionResultsRepository.InsertAsync(detectionResult);
 
             // 2. Unban user and restore trust (false positive correction)
-            var botClient = BotClientFactory.GetOrCreate(TelegramOptions.Value.BotToken);
             var unbanResult = await ModerationService.UnbanUserAsync(
-                botClient,
                 message.UserId,
                 executorId,
                 "False positive correction - message marked as ham by admin via UI",
@@ -506,5 +498,80 @@
         };
 
         await DialogService.ShowAsync<DetectionHistoryDialog>("Detection History", parameters, options);
+    }
+
+    private void HandleFilterByUser(long userId)
+    {
+        // Set user filter
+        var user = _allMessages.FirstOrDefault(m => m.UserId == userId);
+        if (user != null)
+        {
+            _filterState.UserName = user.UserName ?? $"User {userId}";
+            ApplyFilters();
+            StateHasChanged();
+        }
+    }
+
+    private void HandleFilterByChat(long chatId)
+    {
+        // Set chat filter
+        var message = _allMessages.FirstOrDefault(m => m.ChatId == chatId);
+        if (message != null && !string.IsNullOrEmpty(message.ChatName))
+        {
+            _filterState.ChatName = message.ChatName;
+            ApplyFilters();
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleDeleteMessage(MessageRecord message)
+    {
+        // Confirm deletion
+        bool? confirm = await DialogService.ShowMessageBox(
+            "Delete Message",
+            $"Are you sure you want to delete this message? This will remove it from Telegram (if still present) and mark it as deleted in the database.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirm != true)
+            return;
+
+        try
+        {
+            // Call moderation service to delete the message (service handles bot client internally)
+            var result = await ModerationService.DeleteMessageAsync(
+                message.MessageId,
+                message.ChatId);
+
+            if (result.Success)
+            {
+                // Remove from UI
+                _allMessages.Remove(message);
+                ApplyFilters();
+                StateHasChanged();
+
+                Logger.LogInformation(
+                    "Message {MessageId} deleted successfully, removed from UI",
+                    message.MessageId);
+            }
+            else
+            {
+                Logger.LogError("Failed to delete message {MessageId}: {Error}", message.MessageId, result.ErrorMessage);
+
+                await DialogService.ShowMessageBox(
+                    "Error",
+                    $"Failed to delete message: {result.ErrorMessage}",
+                    yesText: "OK");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting message {MessageId}", message.MessageId);
+
+            await DialogService.ShowMessageBox(
+                "Error",
+                $"Failed to delete message: {ex.Message}",
+                yesText: "OK");
+        }
     }
 }

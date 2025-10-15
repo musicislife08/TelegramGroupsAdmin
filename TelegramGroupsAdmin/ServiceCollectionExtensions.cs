@@ -134,6 +134,9 @@ public static class ServiceCollectionExtensions
         // Message history adapter for spam detection library
         services.AddScoped<TelegramGroupsAdmin.SpamDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
 
+        // Telegram photo service (chat icons, user profile photos)
+        services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.TelegramPhotoService>();
+
         return services;
     }
 

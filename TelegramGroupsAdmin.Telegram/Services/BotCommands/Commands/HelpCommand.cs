@@ -12,9 +12,9 @@ public class HelpCommand : IBotCommand
     private readonly IServiceProvider _serviceProvider;
 
     // Static metadata for all commands (avoids reflection complexity with DI)
+    // Note: /start is excluded - it's only for deep links and DMs
     private static readonly List<CommandMetadata> _commandMetadata = new()
     {
-        new("start", "Start conversation with bot", 0),
         new("report", "Report message for admin review", 0),
         new("link", "Link your Telegram account to web app", 0),
         new("spam", "Mark message as spam and delete it", 1),
