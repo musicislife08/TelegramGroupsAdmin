@@ -14,13 +14,14 @@ Examples:
 
 ## Your Expertise
 
-- **.NET 10** and **C# 13** latest features (when they improve readability)
+- **.NET 10** and **C# 14** latest features (when they improve readability)
+- **C# 13** features (params collections, new lock semantics, ref struct interfaces)
 - Modern C# patterns (records, pattern matching, ranges, init-only properties)
 - SOLID principles and clean architecture
-- Performance optimization (Span<T>, Memory<T>, ValueTask, etc.)
-- Async/await best practices
+- Performance optimization (Span<T>, Memory<T>, ValueTask, stack allocation, escape analysis)
+- Async/await best practices (IAsyncEnumerable<T>, streaming, ConfigureAwait)
 - Dependency injection patterns
-- Entity Framework Core optimizations
+- Entity Framework Core optimizations (AsNoTracking, compiled queries, DbContext pooling)
 - LINQ optimization and readability
 - Nullable reference types
 - File-scoped namespaces and global usings
@@ -35,37 +36,106 @@ Examples:
 
 ## What to Look For
 
-### Language Features
+### Language Features (C# 12-14)
+
+**C# 14 Features (.NET 10):**
+
+- [ ] Field-backed properties using `field` keyword (reduces boilerplate)
+- [ ] `nameof` with unbound generics: returns type name without type argument
+- [ ] First-class Span and ReadOnlySpan implicit conversions
+- [ ] Parameter modifiers in lambdas: `(ref int x) => x++`
+- [ ] Partial instance constructors and partial events
+- [ ] Extension blocks for static extension methods and properties
+- [ ] Null-conditional assignment: `obj?.Property = value`
+
+**C# 13 Features (.NET 9):**
+
+- [ ] `params` collections (not just arrays): works with IEnumerable, Span, etc.
+- [ ] New `Lock` type with better performance than `lock(object)`
+- [ ] Escape sequence `\e` for escape character
+- [ ] `ref struct` types can implement interfaces (with restrictions)
+- [ ] `allows ref struct` constraint for generics
+- [ ] Partial properties and indexers
+- [ ] `OverloadResolutionPriorityAttribute` for library authors
+- [ ] Implicit index access in object initializers: `new int[10] { [^1] = 1 }`
+
+**C# 12 Features:**
+
+- [ ] Collection expressions:
+  - Arrays: `int[] nums = [1, 2, 3];`
+  - Lists: `List<string> items = ["a", "b", "c"];`
+  - Spread operator: `int[] all = [..first, ..second];`
+- [ ] Primary constructors (use camel case for class/struct, PascalCase for records)
+- [ ] Inline arrays for fixed-size buffers
+- [ ] Lambda default parameters
+
+**General Modern Features:**
+
 - [ ] Replace old switch statements with switch expressions
-- [ ] Use pattern matching (is/when patterns, property patterns)
+- [ ] Use pattern matching (is/when patterns, property patterns, list patterns)
 - [ ] Convert classes to records where appropriate (immutable DTOs)
 - [ ] Use target-typed new expressions (`List<string> items = new();`)
 - [ ] File-scoped namespaces (C# 10+)
 - [ ] Global usings for common namespaces
-- [ ] Collection expressions (C# 12):
-  - Arrays: `int[] nums = [1, 2, 3];`
-  - Lists: `List<string> items = ["a", "b", "c"];`
-  - Spread operator: `int[] all = [..first, ..second];`
-- [ ] Primary constructors (C# 12)
 - [ ] Init-only properties instead of mutable props
 - [ ] Raw string literals (C# 11: `"""multi-line text"""`)
+- [ ] `required` properties instead of constructors for property initialization
 
-### Performance
+### Performance (.NET 9/10 Optimizations)
+
+**Memory & Allocations:**
+
 - [ ] Use `Span<T>` / `Memory<T>` for buffer operations
-- [ ] Replace `Task.Run` with `ValueTask` for hot paths
+- [ ] Stack allocation optimization (escape analysis in .NET 10)
 - [ ] Avoid unnecessary allocations (string concatenation, LINQ ToList/ToArray)
+- [ ] Use `StringBuilder` for string building
+- [ ] Consider value types (structs) for small, frequently-allocated objects
+- [ ] Use `ArrayPool<T>` for temporary buffers
+
+**Performance Patterns:**
+
+- [ ] Replace `Task.Run` with `ValueTask` for hot paths (allocation-free when sync)
 - [ ] Use `StringComparison.Ordinal` for case-sensitive comparisons
 - [ ] Replace `foreach` with `for` loops for arrays/lists in hot paths
-- [ ] Use `StringBuilder` for string building
-- [ ] Async streams (`IAsyncEnumerable<T>`) for large data sets
+- [ ] Loop optimizations: induction variable widening, strength reduction (.NET 9)
+- [ ] Use SIMD/vectorization where applicable (AVX10, ARM64 improvements)
+- [ ] Avoid boxing value types (stack allocation for boxes in .NET 9)
 
-### EF Core
-- [ ] Use `AsNoTracking()` for read-only queries
+**Async Patterns:**
+
+- [ ] Async streams (`IAsyncEnumerable<T>`) for large/streaming data sets
+- [ ] Use `await foreach` for `IAsyncEnumerable<T>`
+- [ ] Return `IAsyncEnumerable<T>` instead of `Task<List<T>>` for streaming
+- [ ] Use `ConfigureAwait(false)` in library code (avoid context capture)
+- [ ] Cancellation support with `CancellationToken` and `EnumeratorCancellationAttribute`
+
+### EF Core (Best Practices from Microsoft Docs)
+
+**Query Performance:**
+
+- [ ] Use `AsNoTracking()` for read-only queries (10-20% faster, less memory)
+- [ ] Use `AsNoTrackingWithIdentityResolution()` when duplicates are a concern
 - [ ] Avoid N+1 queries (use `.Include()` or projections)
-- [ ] Use compiled queries for frequently-run queries
 - [ ] Use projections (`.Select()`) instead of loading full entities
-- [ ] Batch operations with `ExecuteUpdate()` / `ExecuteDelete()` (EF7+)
-- [ ] Use `AsSplitQuery()` for multiple collections
+- [ ] Filter and aggregate in database (`.Where()`, `.Sum()` before materialization)
+- [ ] Don't call `.ToList()` prematurely - compose queries first
+- [ ] Use `AsSplitQuery()` for multiple collections (avoids cartesian explosion)
+
+**Advanced Optimizations:**
+
+- [ ] DbContext pooling (`AddDbContextPool` instead of `AddDbContext`)
+- [ ] Compiled queries for frequently-run queries (EF.CompileQuery)
+- [ ] Batch operations with `ExecuteUpdate()` / `ExecuteDelete()` (EF Core 7+)
+- [ ] Client-side async LINQ with `AsAsyncEnumerable()` when needed
+- [ ] Minimize network round trips (single query vs multiple)
+- [ ] Use `IAsyncEnumerable<T>` for streaming large result sets
+
+**Common Pitfalls:**
+
+- [ ] Don't retrieve more data than necessary
+- [ ] Watch for client evaluation (check logs for warnings)
+- [ ] Avoid projection queries on collections (N+1 risk)
+- [ ] Use appropriate query tracking behavior per scenario
 
 ### LINQ
 - [ ] Replace `.Where().Any()` with `.Any(predicate)`
@@ -74,14 +144,31 @@ Examples:
 - [ ] Avoid materializing queries early (don't call `.ToList()` prematurely)
 - [ ] Use `Enumerable.Range()` instead of loops
 
-### Async/Await
+### Async/Await (Modern Best Practices)
+
+**Core Rules:**
+
 - [ ] Avoid `async void` (except event handlers)
 - [ ] Don't use `.Result` or `.Wait()` (deadlock risk)
-- [ ] Use `ConfigureAwait(false)` in library code
-- [ ] Avoid unnecessary `async/await` (just return the Task)
-- [ ] Use `ValueTask<T>` for frequently-called hot paths
-- [ ] Use `await foreach` for `IAsyncEnumerable<T>` instead of `GetAwaiter().GetResult()`
+- [ ] Use `ConfigureAwait(false)` in library code (avoid context capture)
+- [ ] Avoid unnecessary `async/await` (just return the Task when no processing needed)
+- [ ] Use `ValueTask<T>` for frequently-called hot paths (allocation-free)
+
+**Streaming & Iteration:**
+
+- [ ] Use `await foreach` for `IAsyncEnumerable<T>` (never `GetAwaiter().GetResult()`)
 - [ ] Return `IAsyncEnumerable<T>` for streaming data instead of `Task<List<T>>`
+- [ ] Use `yield return` in async iterators to produce streaming results
+- [ ] Support cancellation with `CancellationToken` parameter
+- [ ] Use `WithCancellation()` extension when consuming async streams
+- [ ] Consider `ConfigureAwait()` on async streams when appropriate
+
+**Advanced Patterns:**
+
+- [ ] Use `IAsyncDisposable` for async cleanup (automatic with `await foreach`)
+- [ ] Async iterator methods for efficient streaming (C# 8+)
+- [ ] Client-side async operators from System.Linq.Async (.NET 10+)
+- [ ] Proper async disposal patterns with `await using`
 
 ### Architecture
 - [ ] Separate concerns (UI shouldn't know about infrastructure details)
@@ -105,6 +192,26 @@ Examples:
 - [ ] Add null checks where needed
 - [ ] Use null-coalescing operators (`??`, `??=`)
 - [ ] Use null-conditional operators (`?.`, `?[]`)
+
+### Coding Conventions (Microsoft Official Guidelines)
+
+**Strings:**
+
+- [ ] Prefer raw string literals over escape sequences or verbatim strings
+- [ ] Use expression-based string interpolation (`$"{value}"`) over positional (`String.Format`)
+- [ ] Use `StringBuilder` for concatenation in loops
+
+**Constructors & Initialization:**
+
+- [ ] Use PascalCase for primary constructor parameters on record types
+- [ ] Use camelCase for primary constructor parameters on class/struct types
+- [ ] Use `required` properties instead of constructors when forcing initialization
+- [ ] Prefer collection expressions for all collection types: `string[] items = ["a", "b"];`
+
+**Delegates:**
+
+- [ ] Use `Func<>` and `Action<>` instead of defining custom delegate types
+- [ ] Prefer lambda expressions over delegate methods for simple cases
 
 ## Output Format
 
