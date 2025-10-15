@@ -205,10 +205,13 @@ public class OpenAISpamCheck : ISpamCheck
 
     /// <summary>
     /// Create enhanced OpenAI API request with history context and JSON response format
+    /// Phase 4.5: Uses modular prompt building system
     /// </summary>
     private async Task<OpenAIRequest> CreateOpenAIRequestAsync(OpenAICheckRequest req)
     {
-        var systemPrompt = req.SystemPrompt ?? GetDefaultSystemPrompt(req.VetoMode);
+        // Phase 4.5: Use modular prompt builder
+        // Custom prompt (if provided) replaces the default rules section only
+        var systemPrompt = BuildSystemPrompt(req.VetoMode, req.SystemPrompt);
 
         // Get message history for context
         var history = await _messageHistoryService.GetRecentMessagesAsync(req.ChatId ?? "unknown", 5, req.CancellationToken);
@@ -245,60 +248,122 @@ public class OpenAISpamCheck : ISpamCheck
     }
 
     /// <summary>
-    /// Get default system prompt based on mode (enhanced with JSON format)
+    /// Phase 4.5: Get technical base prompt (unchangeable by users)
+    /// Defines JSON format and result types
     /// </summary>
-    private static string GetDefaultSystemPrompt(bool vetoMode)
+    private static string GetBaseTechnicalPrompt()
+    {
+        return """
+            You must respond with valid JSON in this exact format:
+            {
+              "result": "spam" | "clean" | "review",
+              "reason": "clear explanation of your decision",
+              "confidence": 0.0-1.0
+            }
+
+            Result types:
+            - "spam": Message is definitely spam/scam/unwanted
+            - "clean": Message is legitimate conversation
+            - "review": Uncertain - requires human review
+            """;
+    }
+
+    /// <summary>
+    /// Phase 4.5: Get default spam/legitimate content rules
+    /// Can be overridden by chat-specific custom prompts
+    /// </summary>
+    private static string GetDefaultRulesPrompt()
+    {
+        return """
+            SPAM indicators (mark as "spam"):
+            - Personal testimonials promoting paid services/individuals ("X transformed my life/trading/income")
+            - Direct solicitation or selling of services
+            - Get-rich-quick schemes or unrealistic profit promises
+            - Requests to contact someone for trading/investment advice
+            - Scam signals: "fee-free", "guaranteed profits", "no tricks", success stories
+            - Unsolicited financial advice with calls-to-action
+            - Adult content, obvious scams, repetitive spam patterns
+
+            LEGITIMATE content (mark as "clean"):
+            - Genuine discussion about crypto, trading, AI, or technology topics
+            - Educational content, tutorials, or proof-of-concepts being shared
+            - News articles, research, or analysis
+            - Questions and answers about topics
+            - Sharing legitimate tools, resources, or links for discussion
+            - Normal conversation about markets, technology, or current events
+
+            Key distinction: Sharing knowledge/discussion = legitimate. Promoting services/testimonials = spam.
+            """;
+    }
+
+    /// <summary>
+    /// Phase 4.5: Get mode-specific guidance (veto vs detection)
+    /// </summary>
+    private static string GetModeGuidancePrompt(bool vetoMode)
     {
         if (vetoMode)
         {
             return """
-                You are a spam verification system. Other filters have flagged this message as potential spam,
-                and you need to verify if it's actually spam or a false positive.
+                MODE: Spam Verification (Veto)
+                Other filters have flagged this message as potential spam. Your job is to verify if it's actually spam or a false positive.
 
-                Consider the message context, user history, and conversation flow.
+                Return "spam" (confirm spam) if:
+                - The message clearly matches spam indicators above
+                - Contains personal testimonials, solicitation, or promotional content
+                - You agree with the other filters' assessment
 
-                SPAM indicators (confirm as spam):
-                - Personal testimonials promoting paid services/individuals ("X transformed my life/trading/income")
-                - Direct solicitation or selling of services
-                - Get-rich-quick schemes or unrealistic profit promises
-                - Requests to contact someone for trading/investment advice
-                - Scam signals: "fee-free", "guaranteed profits", "no tricks", success stories
-                - Unsolicited financial advice with calls-to-action
-                - Adult content, obvious scams, repetitive spam patterns
-
-                LEGITIMATE content (veto as NOT spam):
-                - Genuine discussion about crypto, trading, AI, or technology topics
-                - Educational content, tutorials, or proof-of-concepts being shared
-                - News articles, research, or analysis
-                - Questions and answers about topics
-                - Sharing legitimate tools, resources, or links for discussion
-                - Normal conversation about markets, technology, or current events
-
-                Key distinction: Sharing knowledge/discussion = legitimate. Promoting services/testimonials = spam.
-
-                Only veto (mark NOT spam) if:
+                Return "clean" (veto/override) if:
                 - The message is educational, informational, or conversational in nature
                 - No direct solicitation or testimonial promoting paid services
                 - Legitimate sharing of resources, tools, or ideas for group discussion
+                - You disagree with the other filters (false positive)
 
-                Confirm spam if the message contains personal testimonials, solicitation, or promotional content.
-                Provide clear reasoning for your decision.
+                Return "review" if:
+                - You're uncertain whether it's spam or legitimate
+                - The message is borderline or context-dependent
+                - Human judgment would be more reliable
 
-                Always respond with valid JSON format.
+                Be cautious with vetoes - only override if you're confident it's a false positive.
                 """;
         }
 
         return """
-            You are a spam detection system for a Telegram group. Analyze the message and determine if it's spam.
+            MODE: Spam Detection
+            Analyze this message and determine if it's spam.
 
-            Consider the conversation context and user behavior patterns.
+            Return "spam" if:
+            - Message clearly matches spam indicators above
+            - Promotional, solicitation, or scam content
 
-            Spam indicators: promotional content, scams, cryptocurrency schemes, adult content, gambling,
-            fake opportunities, suspicious links, or content that violates group rules.
+            Return "clean" if:
+            - Legitimate conversation or discussion
+            - When in doubt, lean toward "clean" to preserve conversation
 
-            Be conservative - when in doubt, choose NOT spam to preserve legitimate conversation.
-            Provide clear reasoning for your decision.
+            Return "review" if:
+            - Uncertain or borderline case
+            - Requires human judgment
 
+            Be conservative - false positives (blocking legitimate messages) are worse than false negatives.
+            """;
+    }
+
+    /// <summary>
+    /// Phase 4.5: Build complete system prompt from modular components
+    /// </summary>
+    private static string BuildSystemPrompt(bool vetoMode, string? customRulesPrompt = null)
+    {
+        var baseTechnical = GetBaseTechnicalPrompt();
+        var rules = customRulesPrompt ?? GetDefaultRulesPrompt();
+        var modeGuidance = GetModeGuidancePrompt(vetoMode);
+
+        return $"""
+            {baseTechnical}
+
+            {rules}
+
+            {modeGuidance}
+
+            Consider the message context, user history, and conversation flow when making your decision.
             Always respond with valid JSON format.
             """;
     }
