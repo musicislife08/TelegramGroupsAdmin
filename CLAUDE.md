@@ -672,25 +672,26 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [x] Fixed DI lifetime issues (CommandRouter scope management)
 - [x] Updated EF Core tools to 10.0.0-rc.2
 
-**Phase 4.2.1: Database Timestamp Modernization** (NEXT)
-- [ ] Audit all tables using Unix timestamps (bigint)
-- [ ] Create migration to convert to PostgreSQL `timestamp with time zone`
-- [ ] Update all DTOs and models to use `DateTimeOffset`
-- [ ] Update repositories to use native timestamps
-- [ ] Benefits: Better queries, proper timezone handling, database-level defaults
+**Phase 4.2.1: Database Timestamp Modernization** ✅ **COMPLETE**
+- [x] Audited 36 timestamp columns across 19 tables
+- [x] Created migration to convert bigint → PostgreSQL `timestamp with time zone`
+- [x] Updated all DTOs and UI models to use `DateTimeOffset`
+- [x] Updated all repositories, services, and Blazor components
+- [x] Added TickerQ entity configurations and tables migration
+- [x] Suppressed PendingModelChangesWarning (EF Core 9+ behavior)
+- [x] Data integrity verified: 228 messages preserved with correct date ranges
+- [x] Build: 0 errors, 0 warnings maintained
 
-**Phase 4.3: Runtime Log Level Configuration**
-- `/settings#logging` page for dynamic log level adjustment (like *arr apps)
-- Per-namespace configuration stored in logging_config JSONB
-- Immediate application via ILoggerFactory (no restart required)
+**Phase 4.3: Telegram Services Library** (NEXT)
+- Extract all Telegram-related code to `TelegramGroupsAdmin.Telegram` class library
+- Services: TelegramAdminBotService, CommandRouter, all bot commands, message processing
+- Models: Telegram-specific DTOs and response types
+- Extension method: `AddTelegramServices()`
+- Benefits: Clean separation, reusable across projects, easier testing
+- Reorganize: Services/BotCommands/ → Telegram library
+- Update: ServiceCollectionExtensions to use new library
 
-**Phase 4.4: Temporary Ban System**
-- `/tempban` command with three presets: Quick (5min), Medium (1hr), Long (24hr)
-- Telegram RestrictChatMember with until_date (auto-unrestricts, no TickerQ needed)
-- Record in user_actions table for audit trail
-- UI integration in Reports and Messages pages
-
-**Phase 4.5: Welcome Message System**
+**Phase 4.4: Welcome Message System**
 - Rule acceptance enforcement before user can post (ChatMemberUpdated event triggers flow)
 - Two-stage message system: consent in chat, detailed info via DM (fallback to chat if DM fails)
 - User flow: restrict permissions on join → post welcome with inline buttons → timeout if no response (default 60s)
@@ -706,13 +707,24 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - Three templates: chat_welcome (consent), dm_template (preferred), chat_fallback (if DM fails)
 - UI: `/settings#telegram` tab for template editing and timeout configuration
 
-**Phase 4.6: Settings UI Completion**
+**Phase 4.5: Temporary Ban System**
+- `/tempban` command with three presets: Quick (5min), Medium (1hr), Long (24hr)
+- Telegram RestrictChatMember with until_date (auto-unrestricts, no TickerQ needed)
+- Record in user_actions table for audit trail
+- UI integration in Reports and Messages pages
+
+**Phase 4.6: Runtime Log Level Configuration**
+- `/settings#logging` page for dynamic log level adjustment (like *arr apps)
+- Per-namespace configuration stored in configs table (JSONB)
+- Immediate application via ILoggerFactory (no restart required)
+
+**Phase 4.7: Settings UI Completion**
 - `/settings#general` - App config (retention, timezone, session timeout, password policy)
 - `/settings#integrations` - API keys (encrypted storage, masked display, test connection buttons, feature status indicators)
 - `/settings#telegram` - Bot token, managed chats list, welcome message config
 - `/settings#notifications` - Email/Telegram toggles, spam wave thresholds, quiet hours
 - `/settings#security` - Password requirements, session timeout, login limits, audit retention
-- `/settings#logging` - Dynamic log level controls
+- `/settings#logging` - Dynamic log level controls (from Phase 4.6)
 
 ### Phase 5: Analytics & Data Aggregation (FUTURE)
 
