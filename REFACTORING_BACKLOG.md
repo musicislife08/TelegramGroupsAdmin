@@ -402,3 +402,78 @@ private bool TryParseCallbackData(string? data, out CallbackData? result, out Dm
 - Modern C# features only suggested when they improve clarity
 - Focus on high-impact changes over novelty
 - Team discussion required for primary constructors (L3)
+
+---
+
+## Data Architecture Analysis (2025-10-15)
+
+**Agent Task:** Analyze UI/Data model separation pattern (MessageHistoryRepository, DetectionResultsRepository)
+
+**Overall Assessment:** 🏆 **9.5/10** - Architecture is production-ready
+
+### ✅ Strengths
+
+1. **Clean Architecture Boundaries**
+   - UI models completely decoupled from Data DTOs
+   - Repositories handle ALL conversion (no Data references in UI)
+   - Compile-time type safety prevents layer violations
+
+2. **Proper EF Core Usage**
+   - `IDbContextFactory` pattern (thread-safe)
+   - `AsNoTracking()` on all read queries (10-20% performance gain)
+   - Efficient projections (avoid fetching unnecessary columns)
+   - Smart use of `GroupJoin` for LEFT JOIN with managed_chats
+
+3. **Smart Data Normalization**
+   - Removed denormalized `chat_name` from messages table
+   - Single JOIN query pattern: `messages ⟕ managed_chats`
+   - Nullable chat metadata handled gracefully
+
+4. **Conversion Layer Design**
+   - Extension methods: `ToUiModel()` / `ToDataModel()`
+   - Context-aware conversions for JOINs (accept chatName, chatIconPath)
+   - Consistent naming and discoverability
+
+### ⚠️ Minor Improvements
+
+**DA1. Extract Projection Helper (DetectionResultsRepository)** - MEDIUM
+- **Issue:** 13-line projection duplicated 4 times (52 lines total)
+- **Solution:** Extract to `Expression<Func<...>>` for reuse
+- **Effort:** 1-2 hours
+- **Impact:** Eliminates 39 lines of duplication
+
+**DA2. Add Extension Method for Complex JOINs (ModelMappings.cs)** - LOW
+- **Issue:** Inline projections vs extension methods inconsistent
+- **Solution:** Add `ToUiModelWithMessage(userId, messageText)` extension
+- **Effort:** 1 hour
+- **Impact:** Consistency across repositories
+
+**DA3. Simplify Cleanup Cascade Logic (MessageHistoryRepository)** - MEDIUM
+- **Issue:** Explicitly deletes `message_edits` despite cascade delete
+- **Solution:** Trust EF Core cascades, just use `CountAsync` for logging
+- **Effort:** 30 minutes
+- **Impact:** Fewer DB queries, cleaner code
+
+**DA4. Make Retention Configurable (MessageHistoryRepository)** - LOW
+- **Issue:** 30-day retention hardcoded
+- **Solution:** Extract to parameter or IOptions
+- **Effort:** 30 minutes
+- **Impact:** Testability, deployment flexibility
+
+### Findings Summary
+
+| Item | Priority | Effort | Impact |
+|------|----------|--------|--------|
+| DA1 | Medium | 1-2 hours | Code quality (reduce duplication) |
+| DA2 | Low | 1 hour | Consistency |
+| DA3 | Medium | 30 min | Performance (fewer queries) |
+| DA4 | Low | 30 min | Testability |
+
+**Total Effort:** 3-4 hours
+**Recommended:** DA1 + DA3 (highest ROI)
+
+### Conclusion
+
+The data architecture is **excellent**. The UI/Data separation is properly enforced with clean patterns. EF Core is used correctly with performance optimizations. Only minor refactorings needed for code quality (not functionality).
+
+**Key Validation:** The recent Dapper → EF Core migration was **the right choice**. The codebase demonstrates mature EF Core patterns and is production-ready.
