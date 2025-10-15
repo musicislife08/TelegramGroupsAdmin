@@ -2,6 +2,7 @@ using TelegramGroupsAdmin;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data.Extensions;
 using TelegramGroupsAdmin.SpamDetection.Extensions;
+using TelegramGroupsAdmin.Telegram.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 

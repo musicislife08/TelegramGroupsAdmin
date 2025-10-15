@@ -28,10 +28,17 @@ ASP.NET Core 10.0 Blazor Server + Minimal API. Telegram spam detection (text + i
 - Shared across all projects for consistent configuration
 
 **TelegramGroupsAdmin.Data** (data access layer)
-- Database models and DTOs
-- FluentMigrator migrations
+- EF Core DbContext and entity models
+- Database migrations
 - Data Protection services
 - Internal to repositories - UI uses UI models instead
+
+**TelegramGroupsAdmin.Telegram** (Telegram bot services library)
+- All Telegram bot services and background workers
+- Bot command system (9 commands: /help, /report, /spam, /ban, /trust, /unban, /warn, /delete, /link)
+- Telegram-related repositories and models
+- Moderation and spam orchestration services
+- `AddTelegramServices()` extension method
 
 **TelegramGroupsAdmin.SpamDetection** (spam detection library)
 - 9 spam detection algorithms
@@ -682,14 +689,19 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [x] Data integrity verified: 228 messages preserved with correct date ranges
 - [x] Build: 0 errors, 0 warnings maintained
 
-**Phase 4.3: Telegram Services Library** (NEXT)
-- Extract all Telegram-related code to `TelegramGroupsAdmin.Telegram` class library
-- Services: TelegramAdminBotService, CommandRouter, all bot commands, message processing
-- Models: Telegram-specific DTOs and response types
-- Extension method: `AddTelegramServices()`
-- Benefits: Clean separation, reusable across projects, easier testing
-- Reorganize: Services/BotCommands/ → Telegram library
-- Update: ServiceCollectionExtensions to use new library
+**Phase 4.3: Telegram Services Library** ✅ **COMPLETE**
+- [x] Created `TelegramGroupsAdmin.Telegram` class library with proper dependency hierarchy
+- [x] Moved 6 model files (MessageModels, SpamDetectionModels, ChatAdminModels, UserModels, etc.)
+- [x] Moved 13 repositories (MessageHistory, DetectionResults, UserActions, ManagedChats, etc.)
+- [x] Moved all Telegram services (ModerationActionService, SpamCheckOrchestrator, UserAutoTrustService)
+- [x] Moved bot command system (9 commands + CommandRouter + IBotCommand interface)
+- [x] Moved 4 background services (TelegramAdminBotService, MessageProcessingService, ChatManagementService, SpamActionService)
+- [x] Created `AddTelegramServices()` extension method for centralized DI registration
+- [x] Made ModelMappings public for cross-assembly usage
+- [x] Fixed `[DatabaseGenerated]` attribute on ReportDto.Id for proper EF Core auto-increment
+- [x] Clean downward dependency flow: Main App → Telegram → Data/Config/SpamDetection
+- [x] Updated 100+ using statements across main app
+- [x] Build: 0 errors, 0 warnings
 
 **Phase 4.4: Welcome Message System**
 - Rule acceptance enforcement before user can post (ChatMemberUpdated event triggers flow)

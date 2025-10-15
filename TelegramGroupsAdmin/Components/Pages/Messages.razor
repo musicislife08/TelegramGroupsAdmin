@@ -3,13 +3,10 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.Extensions.Options
 @using Microsoft.JSInterop
-@using Telegram.Bot
-@using Telegram.Bot.Requests
+@using global::Telegram.Bot
+@using global::Telegram.Bot.Requests
 @using TelegramGroupsAdmin.Auth
-@using TelegramGroupsAdmin.Models
-@using TelegramGroupsAdmin.Repositories
 @using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.Services.BackgroundServices
 @using TelegramGroupsAdmin.Components.Shared
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
 @inject MessageHistoryRepository MessageRepository
@@ -19,7 +16,7 @@
 @inject IMessageHistoryService MessageHistoryService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDetectionResultsRepository DetectionResultsRepository
-@inject Services.Telegram.TelegramBotClientFactory BotClientFactory
+@inject TelegramBotClientFactory BotClientFactory
 @inject IOptions<Configuration.TelegramOptions> TelegramOptions
 @inject ModerationActionService ModerationService
 @inject ILogger<Messages> Logger

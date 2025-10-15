@@ -1,7 +1,8 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Models;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Auth;
 using TelegramGroupsAdmin.Services.Email;

@@ -1,4 +1,5 @@
-using TelegramGroupsAdmin.Models;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Services;

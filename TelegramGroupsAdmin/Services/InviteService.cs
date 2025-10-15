@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Models;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Repositories;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 

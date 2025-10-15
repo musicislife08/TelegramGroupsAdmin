@@ -12,13 +12,11 @@ using Polly.RateLimiting;
 using TickerQ.DependencyInjection;
 using TickerQ.EntityFrameworkCore.DependencyInjection;
 using TelegramGroupsAdmin.Data.Services;
-using TelegramGroupsAdmin.Repositories;
+using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Services;
-using TelegramGroupsAdmin.Services.BackgroundServices;
-using TelegramGroupsAdmin.Services.BotCommands;
-using TelegramGroupsAdmin.Services.Telegram;
 using TelegramGroupsAdmin.Services.Vision;
-using Commands = TelegramGroupsAdmin.Services.BotCommands.Commands;
 
 namespace TelegramGroupsAdmin;
 
@@ -35,13 +33,10 @@ public static class ServiceCollectionExtensions
 
         // Identity-related repositories and services
         services.AddSingleton<ITotpProtectionService, TotpProtectionService>();
-        services.AddScoped<UserRepository>();
-        services.AddScoped<InviteRepository>();
-        services.AddScoped<AuditLogRepository>();
-        services.AddScoped<VerificationTokenRepository>();
+        services.AddScoped<Repositories.InviteRepository>();
+        services.AddScoped<Repositories.VerificationTokenRepository>();
 
-        // Message history repository (read-only for Web UI)
-        services.AddScoped<MessageHistoryRepository>();
+        // Note: UserRepository, AuditLogRepository, MessageHistoryRepository are registered in TelegramGroupsAdmin.Telegram.Extensions.AddTelegramServices()
 
         return services;
     }
@@ -136,8 +131,8 @@ public static class ServiceCollectionExtensions
         // Email service (SendGrid)
         services.AddScoped<TelegramGroupsAdmin.Services.Email.IEmailService, TelegramGroupsAdmin.Services.Email.SendGridEmailService>();
 
-        // Moderation service (shared by bot commands and UI)
-        services.AddScoped<ModerationActionService>();
+        // Message history adapter for spam detection library
+        services.AddScoped<TelegramGroupsAdmin.SpamDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
 
         return services;
     }
@@ -216,75 +211,22 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>
-    /// Adds Telegram bot services and commands
-    /// </summary>
-    public static IServiceCollection AddTelegramServices(this IServiceCollection services)
-    {
-        services.AddSingleton<TelegramBotClientFactory>();
-        services.AddScoped<ITelegramImageService, TelegramImageService>();
-
-        // Bot command system
-        // Commands are Scoped (to allow injecting Scoped services like ModerationActionService)
-        // CommandRouter is Singleton (creates scopes internally when executing commands)
-        // Register both as interface and concrete type for CommandRouter resolution
-        services.AddScoped<Commands.HelpCommand>();
-        services.AddScoped<IBotCommand, Commands.HelpCommand>(sp => sp.GetRequiredService<Commands.HelpCommand>());
-        services.AddScoped<Commands.LinkCommand>();
-        services.AddScoped<IBotCommand, Commands.LinkCommand>(sp => sp.GetRequiredService<Commands.LinkCommand>());
-        services.AddScoped<Commands.SpamCommand>();
-        services.AddScoped<IBotCommand, Commands.SpamCommand>(sp => sp.GetRequiredService<Commands.SpamCommand>());
-        services.AddScoped<Commands.BanCommand>();
-        services.AddScoped<IBotCommand, Commands.BanCommand>(sp => sp.GetRequiredService<Commands.BanCommand>());
-        services.AddScoped<Commands.TrustCommand>();
-        services.AddScoped<IBotCommand, Commands.TrustCommand>(sp => sp.GetRequiredService<Commands.TrustCommand>());
-        services.AddScoped<Commands.UnbanCommand>();
-        services.AddScoped<IBotCommand, Commands.UnbanCommand>(sp => sp.GetRequiredService<Commands.UnbanCommand>());
-        services.AddScoped<Commands.WarnCommand>();
-        services.AddScoped<IBotCommand, Commands.WarnCommand>(sp => sp.GetRequiredService<Commands.WarnCommand>());
-        services.AddScoped<Commands.ReportCommand>();
-        services.AddScoped<IBotCommand, Commands.ReportCommand>(sp => sp.GetRequiredService<Commands.ReportCommand>());
-        services.AddScoped<Commands.DeleteCommand>();
-        services.AddScoped<IBotCommand, Commands.DeleteCommand>(sp => sp.GetRequiredService<Commands.DeleteCommand>());
-        services.AddSingleton<CommandRouter>();
-
-        // Background services (refactored into smaller services)
-        services.AddSingleton<SpamActionService>();
-        services.AddSingleton<ChatManagementService>();
-        services.AddSingleton<MessageProcessingService>();
-        services.AddScoped<UserAutoTrustService>();
-        services.AddSingleton<TelegramAdminBotService>();
-        services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());
-        services.AddScoped<TelegramGroupsAdmin.SpamDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
-        services.AddHostedService(sp => sp.GetRequiredService<TelegramAdminBotService>());
-        services.AddHostedService<CleanupBackgroundService>();
-
-        return services;
-    }
+    // NOTE: AddTelegramServices() is now in TelegramGroupsAdmin.Telegram.Extensions
+    // Call services.AddTelegramServices() to register all Telegram-related services
 
     /// <summary>
-    /// Adds all repositories
+    /// Adds remaining application repositories (non-Telegram)
+    /// NOTE: Telegram repositories are registered via AddTelegramServices()
     /// </summary>
     public static IServiceCollection AddRepositories(this IServiceCollection services)
     {
-        // Spam Detection repositories
+        // Spam Detection repositories (from SpamDetection library)
         services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.IStopWordsRepository, TelegramGroupsAdmin.SpamDetection.Repositories.StopWordsRepository>();
         services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.ITrainingSamplesRepository, TelegramGroupsAdmin.SpamDetection.Repositories.TrainingSamplesRepository>();
         services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.ISpamDetectionConfigRepository, TelegramGroupsAdmin.SpamDetection.Repositories.SpamDetectionConfigRepository>();
 
-        // Detection Results and User Actions repositories
-        services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>();
-        services.AddScoped<IUserActionsRepository, UserActionsRepository>();
-        services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
-        services.AddScoped<ITelegramUserMappingRepository, TelegramUserMappingRepository>();
-        services.AddScoped<ITelegramLinkTokenRepository, TelegramLinkTokenRepository>();
-        services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
-        services.AddScoped<IReportsRepository, ReportsRepository>();
-
-        // Spam Check Orchestrator
-        services.AddScoped<ISpamCheckOrchestrator, SpamCheckOrchestrator>();
+        // Report Actions Service (uses repositories from Telegram library)
         services.AddScoped<IReportActionsService, ReportActionsService>();
-        services.AddScoped<AdminMentionHandler>();
 
         return services;
     }

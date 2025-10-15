@@ -1,4 +1,4 @@
-using TelegramGroupsAdmin.Repositories;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using SpamDetectionServices = TelegramGroupsAdmin.SpamDetection.Services;
 
 namespace TelegramGroupsAdmin.Services;

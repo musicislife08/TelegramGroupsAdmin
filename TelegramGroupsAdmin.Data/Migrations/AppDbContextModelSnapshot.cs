@@ -53,7 +53,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("audit_log");
+                    b.ToTable("audit_log", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ChatAdminRecordDto", b =>
@@ -99,7 +99,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("TelegramId");
 
-                    b.ToTable("chat_admins");
+                    b.ToTable("chat_admins", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ChatPromptRecordDto", b =>
@@ -139,7 +139,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("chat_prompts");
+                    b.ToTable("chat_prompts", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ConfigRecordDto", b =>
@@ -186,7 +186,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                     b.HasIndex("ChatId")
                         .IsUnique();
 
-                    b.ToTable("configs");
+                    b.ToTable("configs", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.DetectionResultRecordDto", b =>
@@ -257,7 +257,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("UsedForTraining");
 
-                    b.ToTable("detection_results");
+                    b.ToTable("detection_results", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.InviteRecordDto", b =>
@@ -307,7 +307,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("UserRecordDtoId");
 
-                    b.ToTable("invites");
+                    b.ToTable("invites", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ManagedChatRecordDto", b =>
@@ -353,7 +353,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasKey("ChatId");
 
-                    b.ToTable("managed_chats");
+                    b.ToTable("managed_chats", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.MessageEditRecordDto", b =>
@@ -395,7 +395,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("MessageId");
 
-                    b.ToTable("message_edits");
+                    b.ToTable("message_edits", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.MessageRecordDto", b =>
@@ -478,7 +478,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("messages");
+                    b.ToTable("messages", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.RecoveryCodeRecordDto", b =>
@@ -508,7 +508,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("recovery_codes");
+                    b.ToTable("recovery_codes", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ReportDto", b =>
@@ -572,7 +572,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("WebUserId");
 
-                    b.ToTable("reports");
+                    b.ToTable("reports", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.SpamCheckConfigRecordDto", b =>
@@ -616,7 +616,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("spam_check_configs");
+                    b.ToTable("spam_check_configs", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.SpamDetectionConfigRecordDto", b =>
@@ -647,7 +647,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("spam_detection_configs");
+                    b.ToTable("spam_detection_configs", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.StopWordDto", b =>
@@ -682,7 +682,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("stop_words");
+                    b.ToTable("stop_words", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramLinkTokenRecordDto", b =>
@@ -722,7 +722,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("UserRecordDtoId");
 
-                    b.ToTable("telegram_link_tokens");
+                    b.ToTable("telegram_link_tokens", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramUserMappingRecordDto", b =>
@@ -762,7 +762,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("telegram_user_mappings");
+                    b.ToTable("telegram_user_mappings", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TrainingSampleDto", b =>
@@ -814,7 +814,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("training_samples");
+                    b.ToTable("training_samples", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UserActionRecordDto", b =>
@@ -862,7 +862,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("user_actions");
+                    b.ToTable("user_actions", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UserRecordDto", b =>
@@ -970,7 +970,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                     b.HasIndex("NormalizedEmail")
                         .IsUnique();
 
-                    b.ToTable("users");
+                    b.ToTable("users", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.VerificationTokenDto", b =>
@@ -1019,7 +1019,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("verification_tokens");
+                    b.ToTable("verification_tokens", (string)null);
                 });
 
             modelBuilder.Entity("TickerQ.EntityFrameworkCore.Entities.CronTickerEntity", b =>

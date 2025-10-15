@@ -3,9 +3,10 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Models;
-using TelegramGroupsAdmin.Repositories;
-using TelegramGroupsAdmin.Services.Telegram;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Telegram;
 
 namespace TelegramGroupsAdmin.Services;
 
