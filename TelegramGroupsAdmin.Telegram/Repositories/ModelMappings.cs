@@ -389,4 +389,35 @@ public static class ModelMappings
         ActionTaken = ui.ActionTaken,
         AdminNotes = ui.AdminNotes
     };
+
+    // ============================================================================
+    // Welcome Response Mappings (Phase 4.4)
+    // ============================================================================
+
+    public static UiModels.WelcomeResponse ToUiModel(this DataModels.WelcomeResponseDto data) => new(
+        Id: data.Id,
+        ChatId: data.ChatId,
+        UserId: data.UserId,
+        Username: data.Username,
+        WelcomeMessageId: data.WelcomeMessageId,
+        Response: (UiModels.WelcomeResponseType)Enum.Parse(typeof(UiModels.WelcomeResponseType), data.Response, ignoreCase: true),
+        RespondedAt: data.RespondedAt,
+        DmSent: data.DmSent,
+        DmFallback: data.DmFallback,
+        CreatedAt: data.CreatedAt
+    );
+
+    public static DataModels.WelcomeResponseDto ToDataModel(this UiModels.WelcomeResponse ui) => new()
+    {
+        Id = ui.Id,
+        ChatId = ui.ChatId,
+        UserId = ui.UserId,
+        Username = ui.Username,
+        WelcomeMessageId = ui.WelcomeMessageId,
+        Response = ui.Response.ToString().ToLowerInvariant(),
+        RespondedAt = ui.RespondedAt,
+        DmSent = ui.DmSent,
+        DmFallback = ui.DmFallback,
+        CreatedAt = ui.CreatedAt
+    };
 }

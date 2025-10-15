@@ -161,7 +161,8 @@ ASP.NET Core 10.0 Blazor Server + Minimal API. Telegram spam detection (text + i
 ## Database Schema (PostgreSQL)
 
 **Single PostgreSQL database:** `telegram_groups_admin`
-**Single consolidated migration:** `202601100_InitialSchema.cs` (18 tables, validated against known good schema)
+**Initial migration:** `202601100_InitialSchema.cs` (18 tables, validated against known good schema)
+**Latest migration:** `AddWelcomeResponsesTable` (Phase 4.4 - welcome system tracking)
 
 ### Core Tables (Normalized Design)
 
@@ -230,21 +231,23 @@ ASP.NET Core 10.0 Blazor Server + Minimal API. Telegram spam detection (text + i
   - Revocable if spam detected (compromised account protection)
   - Logged to audit_log as UserAutoWhitelisted event
 
-#### **welcome_analytics** - Welcome system tracking
+#### **welcome_responses** - Welcome system tracking (Phase 4.4)
 **Columns:**
 - id (BIGSERIAL) - Auto-increment primary key
-- user_id (BIGINT) - Telegram user ID
 - chat_id (BIGINT) - Telegram chat ID
-- joined_at (BIGINT) - Unix timestamp when user joined
-- response_type (TEXT) - 'accepted', 'denied', 'timeout', or 'left'
-- responded_at (BIGINT) - Unix timestamp when user responded (NULL if timeout/left)
+- user_id (BIGINT) - Telegram user ID
+- username (TEXT) - Cached Telegram username (nullable)
+- welcome_message_id (INT) - Telegram message ID of the welcome message
+- response (TEXT) - 'accepted', 'denied', 'timeout', or 'left'
+- responded_at (TIMESTAMPTZ) - When user responded (clicked button, left, or timed out)
 - dm_sent (BOOLEAN) - Did DM succeed after acceptance?
-- kicked (BOOLEAN) - Was user kicked (denied/timeout)?
-- created_at (BIGINT) - Record creation timestamp
+- dm_fallback (BOOLEAN) - Did we fall back to chat message because DM failed?
+- created_at (TIMESTAMPTZ) - Record creation timestamp
 
 **Purpose:** Track welcome system effectiveness and user behavior
-- Analytics: acceptance rate per chat, average response time, kick rate
+- Analytics: acceptance rate per chat, DM success rate, timeout rates
 - Spam correlation: users who accept then spam quickly may indicate compromised accounts
+- Performance monitoring: Track DM delivery success across Telegram's privacy settings
 **Retention:** Permanent (analytics data)
 
 ### Configuration Tables
@@ -708,21 +711,28 @@ The codebase has achieved **0 errors, 0 warnings** through systematic modernizat
 - [x] Updated 100+ using statements across main app
 - [x] Build: 0 errors, 0 warnings
 
-**Phase 4.4: Welcome Message System**
+**Phase 4.4: Welcome Message System** ⏳ **IN PROGRESS**
+- [x] Database schema: welcome_responses table (acceptance rate, DM success tracking)
+- [x] WelcomeService: ChatMember event handler, inline button callbacks, permission management
+- [x] Repository: WelcomeResponsesRepository with analytics (GetStatsAsync)
+- [x] Bot integration: Wire up ChatMember and CallbackQuery event handlers
+- [ ] TODO: Configuration system (load WelcomeConfig from database instead of hardcoded defaults)
+- [ ] TODO: Chat name caching (replace "this chat" placeholder with actual chat name)
+- [ ] TODO: TickerQ timeout job (auto-kick if no response within configured timeout)
+- [ ] TODO: Callback validation (only tagged user can click their buttons)
+- [ ] TODO: User leaves before timeout handling (cancel job, delete welcome)
+- [ ] TODO: UI - `/settings#telegram` tab for template editing and timeout configuration
+
+**Implementation Details:**
 - Rule acceptance enforcement before user can post (ChatMemberUpdated event triggers flow)
 - Two-stage message system: consent in chat, detailed info via DM (fallback to chat if DM fails)
 - User flow: restrict permissions on join → post welcome with inline buttons → timeout if no response (default 60s)
 - Accept: restore permissions, delete welcome, DM rules (or post in chat if DM blocked)
 - Deny/timeout: kick user (ban + immediate unban), delete welcome
 - Returning members: show welcome again (simpler, rules may have changed)
-- Callback validation: only tagged user can click their buttons (others get 10s auto-delete warning)
-- Wrong user clicks: temporary warning message deleted after 10s
-- User leaves before timeout: cancel job, delete welcome
-- Analytics tracking: welcome_responses table (acceptance rate, DM success, spam correlation)
-- Configuration in welcome_config JSONB (timeout, templates, button text)
-- Templates support variables: {chat_name}, {username}, {rules_text}, {helpful_info}
+- Configuration in WelcomeConfig (timeout, templates, button text)
+- Templates support variables: {chat_name}, {username}, {rules_text}
 - Three templates: chat_welcome (consent), dm_template (preferred), chat_fallback (if DM fails)
-- UI: `/settings#telegram` tab for template editing and timeout configuration
 
 **Phase 4.5: Temporary Ban System**
 - `/tempban` command with three presets: Quick (5min), Medium (1hr), Long (24hr)

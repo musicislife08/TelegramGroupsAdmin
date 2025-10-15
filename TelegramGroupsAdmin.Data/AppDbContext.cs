@@ -46,6 +46,9 @@ public class AppDbContext : DbContext
     // Configuration table
     public DbSet<ConfigRecordDto> Configs => Set<ConfigRecordDto>();
 
+    // Welcome system (Phase 4.4)
+    public DbSet<WelcomeResponseDto> WelcomeResponses => Set<WelcomeResponseDto>();
+
     // TickerQ entities (background job system)
     public DbSet<TimeTickerEntity> TimeTickers => Set<TimeTickerEntity>();
     public DbSet<CronTickerEntity> CronTickers => Set<CronTickerEntity>();

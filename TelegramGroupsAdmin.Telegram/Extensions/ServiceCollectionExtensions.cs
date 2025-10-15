@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITelegramLinkTokenRepository, TelegramLinkTokenRepository>();
         services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
         services.AddScoped<IReportsRepository, ReportsRepository>();
+        services.AddScoped<IWelcomeResponsesRepository, WelcomeResponsesRepository>();
         services.AddScoped<AuditLogRepository>();
         services.AddScoped<UserRepository>();
         services.AddScoped<MessageHistoryRepository>();
@@ -42,6 +43,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ModerationActionService>();
         services.AddScoped<UserAutoTrustService>();
         services.AddScoped<AdminMentionHandler>();
+        services.AddSingleton<IWelcomeService, WelcomeService>();
 
         // Bot command system
         // Commands are Scoped (to allow injecting Scoped services like ModerationActionService)

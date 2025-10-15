@@ -22,6 +22,7 @@ public class TelegramAdminBotService(
     CommandRouter commandRouter,
     MessageProcessingService messageProcessingService,
     ChatManagementService chatManagementService,
+    IWelcomeService welcomeService,
     ILogger<TelegramAdminBotService> logger)
     : BackgroundService, IMessageHistoryService
 {
@@ -148,24 +149,14 @@ public class TelegramAdminBotService(
         // Handle user joins/leaves (for welcome system - Phase 4.4)
         if (update.ChatMember is { } chatMember)
         {
-            // TODO Phase 4.4: Implement welcome message system
-            // await welcomeService.HandleChatMemberUpdateAsync(botClient, chatMember);
-            logger.LogDebug("ChatMember event received: User {UserId} in chat {ChatId} (status: {NewStatus})",
-                chatMember.NewChatMember.User.Id,
-                chatMember.Chat.Id,
-                chatMember.NewChatMember.Status);
+            await welcomeService.HandleChatMemberUpdateAsync(botClient, chatMember, cancellationToken);
             return;
         }
 
         // Handle callback queries from inline buttons (for welcome accept/deny - Phase 4.4)
         if (update.CallbackQuery is { } callbackQuery)
         {
-            // TODO Phase 4.4: Implement welcome button callbacks
-            // await welcomeService.HandleCallbackQueryAsync(botClient, callbackQuery);
-            logger.LogDebug("CallbackQuery received: {Data} from user {UserId} in chat {ChatId}",
-                callbackQuery.Data,
-                callbackQuery.From.Id,
-                callbackQuery.Message?.Chat.Id);
+            await welcomeService.HandleCallbackQueryAsync(botClient, callbackQuery, cancellationToken);
 
             // Always answer callback queries to remove loading state
             await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: cancellationToken);
