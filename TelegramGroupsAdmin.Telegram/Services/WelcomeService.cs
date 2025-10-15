@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -26,11 +27,11 @@ public class WelcomeService : IWelcomeService
     public WelcomeService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<WelcomeService> logger,
-        TelegramOptions telegramOptions)
+        IOptions<TelegramOptions> telegramOptions)
     {
         _contextFactory = contextFactory;
         _logger = logger;
-        _telegramOptions = telegramOptions;
+        _telegramOptions = telegramOptions.Value;
     }
 
     public async Task HandleChatMemberUpdateAsync(
