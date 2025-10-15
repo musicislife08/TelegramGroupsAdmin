@@ -24,8 +24,4 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0-rc.1" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\TelegramGroupsAdmin.Configuration\TelegramGroupsAdmin.Configuration.csproj" />
-  </ItemGroup>
-
 </Project>

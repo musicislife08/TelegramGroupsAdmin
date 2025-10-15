@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Configuration.Services;
 
 namespace TelegramGroupsAdmin.Configuration;
 
@@ -19,6 +21,10 @@ public static class ConfigurationExtensions
         services.Configure<SpamDetectionOptions>(configuration.GetSection("SpamDetection"));
         services.Configure<MessageHistoryOptions>(configuration.GetSection("MessageHistory"));
         services.Configure<TelegramGroupsAdmin.Services.Email.SendGridOptions>(configuration.GetSection("SendGrid"));
+
+        // Unified configuration service (database-driven config with global/chat-specific merging)
+        services.AddScoped<IConfigRepository, ConfigRepository>();
+        services.AddScoped<IConfigService, ConfigService>();
 
         return services;
     }

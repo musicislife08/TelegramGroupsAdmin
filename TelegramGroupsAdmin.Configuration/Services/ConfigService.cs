@@ -1,8 +1,8 @@
 using System.Text.Json;
 using TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.Repositories;
+using TelegramGroupsAdmin.Configuration.Repositories;
 
-namespace TelegramGroupsAdmin.Services;
+namespace TelegramGroupsAdmin.Configuration.Services;
 
 /// <summary>
 /// Service for managing unified configuration storage with automatic global/chat merging
@@ -28,8 +28,8 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         {
             record = new ConfigRecordDto
             {
-                ChatId = chatId,
-                CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                ChatId = chatId
+                // CreatedAt will be set by database default (NOW())
             };
         }
 

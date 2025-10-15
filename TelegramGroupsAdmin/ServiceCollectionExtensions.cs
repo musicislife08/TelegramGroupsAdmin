@@ -139,9 +139,6 @@ public static class ServiceCollectionExtensions
         // Moderation service (shared by bot commands and UI)
         services.AddScoped<ModerationActionService>();
 
-        // Configuration service (unified config storage)
-        services.AddScoped<IConfigService, ConfigService>();
-
         return services;
     }
 
@@ -228,15 +225,17 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITelegramImageService, TelegramImageService>();
 
         // Bot command system
-        services.AddSingleton<IBotCommand, Commands.HelpCommand>();
-        services.AddSingleton<IBotCommand, Commands.LinkCommand>();
-        services.AddSingleton<IBotCommand, Commands.SpamCommand>();
-        services.AddSingleton<IBotCommand, Commands.BanCommand>();
-        services.AddSingleton<IBotCommand, Commands.TrustCommand>();
-        services.AddSingleton<IBotCommand, Commands.UnbanCommand>();
-        services.AddSingleton<IBotCommand, Commands.WarnCommand>();
-        services.AddSingleton<IBotCommand, Commands.ReportCommand>();
-        services.AddSingleton<IBotCommand, Commands.DeleteCommand>();
+        // Commands are Scoped (to allow injecting Scoped services like ModerationActionService)
+        // CommandRouter is Singleton (creates scopes internally when executing commands)
+        services.AddScoped<IBotCommand, Commands.HelpCommand>();
+        services.AddScoped<IBotCommand, Commands.LinkCommand>();
+        services.AddScoped<IBotCommand, Commands.SpamCommand>();
+        services.AddScoped<IBotCommand, Commands.BanCommand>();
+        services.AddScoped<IBotCommand, Commands.TrustCommand>();
+        services.AddScoped<IBotCommand, Commands.UnbanCommand>();
+        services.AddScoped<IBotCommand, Commands.WarnCommand>();
+        services.AddScoped<IBotCommand, Commands.ReportCommand>();
+        services.AddScoped<IBotCommand, Commands.DeleteCommand>();
         services.AddSingleton<CommandRouter>();
 
         // Background services (refactored into smaller services)
@@ -271,7 +270,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITelegramLinkTokenRepository, TelegramLinkTokenRepository>();
         services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
         services.AddScoped<IReportsRepository, ReportsRepository>();
-        services.AddScoped<IConfigRepository, ConfigRepository>();
 
         // Spam Check Orchestrator
         services.AddScoped<ISpamCheckOrchestrator, SpamCheckOrchestrator>();

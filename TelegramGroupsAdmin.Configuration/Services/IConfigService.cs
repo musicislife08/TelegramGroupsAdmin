@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Services;
+namespace TelegramGroupsAdmin.Configuration.Services;
 
 /// <summary>
 /// Service for managing unified configuration storage

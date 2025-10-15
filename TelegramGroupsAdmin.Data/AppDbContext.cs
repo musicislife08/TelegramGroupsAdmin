@@ -249,23 +249,15 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ConfigRecordDto>()
             .HasKey(c => c.Id);
 
+        // Set database default for created_at (dynamic, set by PostgreSQL)
+        modelBuilder.Entity<ConfigRecordDto>()
+            .Property(c => c.CreatedAt)
+            .HasDefaultValueSql("NOW()")
+            .ValueGeneratedOnAdd();
+
         // Create unique index on chat_id (allows one NULL for global config)
         modelBuilder.Entity<ConfigRecordDto>()
             .HasIndex(c => c.ChatId)
             .IsUnique();
-
-        // Seed global config row (chat_id = NULL)
-        modelBuilder.Entity<ConfigRecordDto>()
-            .HasData(new ConfigRecordDto
-            {
-                Id = 1,
-                ChatId = null,
-                SpamDetectionConfig = null,
-                WelcomeConfig = null,
-                LogConfig = null,
-                ModerationConfig = null,
-                CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                UpdatedAt = null
-            });
     }
 }

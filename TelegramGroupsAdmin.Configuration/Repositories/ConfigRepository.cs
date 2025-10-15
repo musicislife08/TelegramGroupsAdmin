@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 
-namespace TelegramGroupsAdmin.Repositories;
+namespace TelegramGroupsAdmin.Configuration.Repositories;
 
 /// <summary>
 /// Repository for managing configs table (unified configuration storage)
@@ -48,12 +48,11 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
             existing.WelcomeConfig = config.WelcomeConfig;
             existing.LogConfig = config.LogConfig;
             existing.ModerationConfig = config.ModerationConfig;
-            existing.UpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            existing.UpdatedAt = DateTimeOffset.UtcNow;
         }
         else
         {
-            // Insert new record
-            config.CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            // Insert new record (CreatedAt will be set by database default)
             config.UpdatedAt = null;
             await _context.Configs.AddAsync(config);
         }

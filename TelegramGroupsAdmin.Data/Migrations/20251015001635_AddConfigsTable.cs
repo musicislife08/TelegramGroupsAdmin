@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
@@ -6,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace TgSpam_PreFilterApi.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class UnifiedConfigsTable : Migration
+    public partial class AddConfigsTable : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -22,24 +23,35 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                     welcome_config = table.Column<string>(type: "jsonb", nullable: true),
                     log_config = table.Column<string>(type: "jsonb", nullable: true),
                     moderation_config = table.Column<string>(type: "jsonb", nullable: true),
-                    created_at = table.Column<long>(type: "bigint", nullable: false),
-                    updated_at = table.Column<long>(type: "bigint", nullable: true)
+                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()"),
+                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_configs", x => x.id);
                 });
 
-            migrationBuilder.InsertData(
-                table: "configs",
-                columns: new[] { "id", "chat_id", "created_at", "log_config", "moderation_config", "spam_detection_config", "updated_at", "welcome_config" },
-                values: new object[] { 1L, null, 1760484666L, null, null, null, null, null });
-
             migrationBuilder.CreateIndex(
                 name: "IX_configs_chat_id",
                 table: "configs",
                 column: "chat_id",
                 unique: true);
+
+            // Migrate existing spam_detection_configs data to new unified configs table
+            migrationBuilder.Sql(@"
+                INSERT INTO configs (chat_id, spam_detection_config, created_at, updated_at)
+                SELECT
+                    CASE
+                        WHEN chat_id = '0' THEN NULL  -- Convert '0' to NULL for global config
+                        ELSE chat_id::bigint          -- Convert text to bigint for chat-specific
+                    END as chat_id,
+                    config_json::jsonb as spam_detection_config,  -- Cast text to jsonb
+                    to_timestamp(last_updated) as created_at,
+                    to_timestamp(last_updated) as updated_at
+                FROM spam_detection_configs
+                WHERE EXISTS (SELECT 1 FROM spam_detection_configs)  -- Only if table exists
+                ON CONFLICT (chat_id) DO NOTHING;
+            ");
         }
 
         /// <inheritdoc />

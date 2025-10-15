@@ -49,15 +49,15 @@ public class ConfigRecordDto
     public string? ModerationConfig { get; set; }
 
     /// <summary>
-    /// When this config was created (Unix timestamp)
+    /// When this config was created (UTC timestamp)
     /// </summary>
     [Column("created_at")]
     [Required]
-    public long CreatedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 
     /// <summary>
-    /// When this config was last updated (Unix timestamp)
+    /// When this config was last updated (UTC timestamp)
     /// </summary>
     [Column("updated_at")]
-    public long? UpdatedAt { get; set; }
+    public DateTimeOffset? UpdatedAt { get; set; }
 }

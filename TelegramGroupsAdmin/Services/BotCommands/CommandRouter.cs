@@ -16,7 +16,7 @@ public record CommandResult(string? Response, bool DeleteCommandMessage);
 public partial class CommandRouter
 {
     private readonly ILogger<CommandRouter> _logger;
-    private readonly Dictionary<string, IBotCommand> _commands;
+    private readonly Dictionary<string, Type> _commandTypes;
     private readonly IServiceProvider _serviceProvider;
 
     [GeneratedRegex(@"^/(\w+)(?:@\w+)?(?:\s+(.*))?$", RegexOptions.Compiled)]
@@ -24,12 +24,18 @@ public partial class CommandRouter
 
     public CommandRouter(
         ILogger<CommandRouter> logger,
-        IEnumerable<IBotCommand> commands,
         IServiceProvider serviceProvider)
     {
         _logger = logger;
-        _commands = commands.ToDictionary(c => c.Name.ToLowerInvariant(), c => c);
         _serviceProvider = serviceProvider;
+
+        // Resolve commands from a temporary scope to discover their types and names
+        // (we can't inject IEnumerable<IBotCommand> because commands are Scoped and router is Singleton)
+        using var scope = serviceProvider.CreateScope();
+        var commands = scope.ServiceProvider.GetServices<IBotCommand>();
+        _commandTypes = commands.ToDictionary(
+            c => c.Name.ToLowerInvariant(),
+            c => c.GetType());
     }
 
     /// <summary>
@@ -40,7 +46,7 @@ public partial class CommandRouter
         if (message.Text == null) return false;
 
         var match = CommandPattern().Match(message.Text);
-        return match.Success && _commands.ContainsKey(match.Groups[1].Value.ToLowerInvariant());
+        return match.Success && _commandTypes.ContainsKey(match.Groups[1].Value.ToLowerInvariant());
     }
 
     /// <summary>
@@ -67,13 +73,17 @@ public partial class CommandRouter
             ? match.Groups[2].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries)
             : Array.Empty<string>();
 
-        if (!_commands.TryGetValue(commandName, out var command))
+        if (!_commandTypes.TryGetValue(commandName, out var commandType))
         {
             return new CommandResult("❌ Unknown command. Use /help to see available commands.", false);
         }
 
         try
         {
+            // Create a scope to resolve the command (commands are Scoped to allow injecting Scoped services)
+            using var scope = _serviceProvider.CreateScope();
+            var command = (IBotCommand)scope.ServiceProvider.GetRequiredService(commandType);
+
             // Special case: /link command is always accessible (doesn't require linking)
             var permissionLevel = commandName == "link"
                 ? 0
@@ -123,9 +133,20 @@ public partial class CommandRouter
     /// </summary>
     public IEnumerable<IBotCommand> GetAvailableCommands(int permissionLevel)
     {
-        return _commands.Values
-            .Where(c => c.MinPermissionLevel <= permissionLevel)
-            .OrderBy(c => c.Name);
+        // Create a scope to resolve commands (they're Scoped)
+        using var scope = _serviceProvider.CreateScope();
+
+        var commands = new List<IBotCommand>();
+        foreach (var commandType in _commandTypes.Values)
+        {
+            var command = (IBotCommand)scope.ServiceProvider.GetRequiredService(commandType);
+            if (command.MinPermissionLevel <= permissionLevel)
+            {
+                commands.Add(command);
+            }
+        }
+
+        return commands.OrderBy(c => c.Name);
     }
 
     /// <summary>
