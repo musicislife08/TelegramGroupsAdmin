@@ -157,12 +157,14 @@ public class WelcomeService : IWelcomeService
                 user.Id,
                 targetUserId);
 
-            // Send temporary warning message
+            // Send temporary warning message tagged to the wrong user
             try
             {
+                var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
                 var warningMsg = await botClient.SendMessage(
                     chatId: chatId,
-                    text: "⚠️ This button is not for you. Only the mentioned user can respond.",
+                    text: $"{username}, ⚠️ this button is not for you. Only the mentioned user can respond.",
+                    replyParameters: new ReplyParameters { MessageId = message.MessageId },
                     cancellationToken: cancellationToken);
 
                 // Delete warning after 10 seconds
