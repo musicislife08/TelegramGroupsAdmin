@@ -242,7 +242,7 @@ public class WelcomeService : IWelcomeService
             },
             new[]
             {
-                InlineKeyboardButton.WithUrl("📩 Get Rules via DM", deepLink)
+                InlineKeyboardButton.WithUrl("💬 Open Bot for Rules (DM)", deepLink)
             }
         });
 
