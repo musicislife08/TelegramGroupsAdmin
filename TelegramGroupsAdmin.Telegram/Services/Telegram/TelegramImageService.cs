@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Telegram;
 

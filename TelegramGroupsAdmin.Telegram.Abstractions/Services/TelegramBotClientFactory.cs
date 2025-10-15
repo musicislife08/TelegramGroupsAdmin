@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Telegram.Bot;
 
-namespace TelegramGroupsAdmin.Telegram.Services.Telegram;
+namespace TelegramGroupsAdmin.Telegram.Abstractions.Services;
 
 public class TelegramBotClientFactory
 {

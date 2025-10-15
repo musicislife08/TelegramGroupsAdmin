@@ -4,7 +4,7 @@ using Telegram.Bot;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
-using TelegramGroupsAdmin.Telegram.Services.Telegram;
+using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 

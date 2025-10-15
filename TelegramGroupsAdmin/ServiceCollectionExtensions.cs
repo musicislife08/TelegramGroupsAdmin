@@ -265,7 +265,7 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Adds TickerQ background job system with PostgreSQL backend
+    /// Adds TickerQ background job system with PostgreSQL backend and job registrations
     /// </summary>
     public static IServiceCollection AddTickerQBackgroundJobs(this IServiceCollection services)
     {
@@ -288,6 +288,8 @@ public static class ServiceCollectionExtensions
 
         // Register job classes (TickerQ discovers [TickerFunction] methods via source generators)
         services.AddScoped<Jobs.TestJob>();
+        services.AddScoped<Jobs.WelcomeTimeoutJob>();
+        services.AddScoped<Jobs.DeleteMessageJob>();
 
         return services;
     }

@@ -8,6 +8,21 @@ This document tracks refactoring opportunities identified by automated analysis 
 
 ## Recent Fixes (2025-10-15)
 
+### ✅ Fixed: C1 - Fire-and-Forget Tasks (Phase 4.4 Complete)
+
+**Issue**: WelcomeService used fire-and-forget `Task.Run` for timeout and message deletion (3 locations), causing silent failures, no retry logic, and job loss on app restarts. Critical production reliability issue.
+
+**Solution**: Replaced all Task.Run with TickerQ persistent background jobs:
+- Created `WelcomeTimeoutJob` (kicks user after timeout)
+- Created `DeleteMessageJob` (deletes warning/fallback messages)
+- Job implementations in main app `/Jobs` (TickerQ v2.5.3 source generator limitation)
+- Job payload types in `Telegram.Abstractions/Jobs/JobPayloads.cs` (avoids circular dependencies)
+- Added `TickerResult` validation to catch silent failures
+
+**Impact**: Production-ready reliability - jobs persist to database, survive restarts, have retry logic, proper error logging. Successfully tested end-to-end: user join → 60s timeout → auto-kick.
+
+**Effort**: 6 hours (architecture iteration due to TickerQ multi-assembly limitation)
+
 ### ✅ Fixed: OpenAI Veto Not Triggering for High-Confidence Individual Checks
 
 **Issue**: OpenAI veto only ran when net confidence > 50, missing cases where one check (e.g., Bayes 99% spam) had high confidence but was outvoted by multiple low-confidence ham checks.

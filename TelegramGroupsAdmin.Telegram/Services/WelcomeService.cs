@@ -12,7 +12,7 @@ using TickerQ.Utilities.Models.Ticker;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Telegram.Jobs;
+using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -145,29 +145,63 @@ public class WelcomeService : IWelcomeService
             }
 
             // Step 4: Schedule timeout via TickerQ (replaces fire-and-forget Task.Run)
-            var payload = new WelcomeTimeoutJob.TimeoutPayload(
+            var payload = new WelcomeTimeoutPayload(
                 chatMemberUpdate.Chat.Id,
                 user.Id,
                 welcomeMessage.MessageId
             );
 
-            // Get TickerQ manager from scope (it's scoped, we're singleton)
-            using var tickerScope = _serviceProvider.CreateScope();
-            var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
-            await timeTickerManager.AddAsync(new TimeTicker
+            try
             {
-                Function = "WelcomeTimeout",
-                ExecutionTime = DateTime.UtcNow.AddSeconds(config.TimeoutSeconds),
-                Request = TickerHelper.CreateTickerRequest(payload),
-                Retries = 1,
-                RetryIntervals = [30] // Retry once after 30s if it fails
-            });
+                _logger.LogDebug(
+                    "Attempting to schedule TickerQ job for user {UserId} in chat {ChatId}",
+                    user.Id,
+                    chatMemberUpdate.Chat.Id);
 
-            _logger.LogInformation(
-                "Scheduled welcome timeout for user {UserId} in chat {ChatId} (timeout: {Timeout}s)",
-                user.Id,
-                chatMemberUpdate.Chat.Id,
-                config.TimeoutSeconds);
+                // Get TickerQ manager from scope (it's scoped, we're singleton)
+                using var tickerScope = _serviceProvider.CreateScope();
+                var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+
+                var executionTime = DateTime.UtcNow.AddSeconds(config.TimeoutSeconds);
+                var request = TickerHelper.CreateTickerRequest(payload);
+
+                _logger.LogDebug(
+                    "TickerQ job details - Function: WelcomeTimeout, ExecutionTime: {ExecutionTime}, Payload: ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}",
+                    executionTime,
+                    payload.ChatId,
+                    payload.UserId,
+                    payload.WelcomeMessageId);
+
+                var result = await timeTickerManager.AddAsync(new TimeTicker
+                {
+                    Function = "WelcomeTimeout",
+                    ExecutionTime = executionTime,
+                    Request = request,
+                    Retries = 1,
+                    RetryIntervals = [30] // Retry once after 30s if it fails
+                });
+
+                if (!result.IsSucceded)
+                {
+                    throw result.Exception ?? new InvalidOperationException("TickerQ AddAsync failed without exception");
+                }
+
+                _logger.LogInformation(
+                    "Successfully scheduled welcome timeout for user {UserId} in chat {ChatId} (timeout: {Timeout}s, JobId: {JobId})",
+                    user.Id,
+                    chatMemberUpdate.Chat.Id,
+                    config.TimeoutSeconds,
+                    result.Result?.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to schedule TickerQ timeout job for user {UserId} in chat {ChatId}",
+                    user.Id,
+                    chatMemberUpdate.Chat.Id);
+                // Don't throw - we want to continue even if scheduling fails
+            }
         }
         catch (Exception ex)
         {
@@ -272,21 +306,47 @@ public class WelcomeService : IWelcomeService
                     cancellationToken: cancellationToken);
 
                 // Delete warning after 10 seconds via TickerQ
-                var deletePayload = new DeleteMessageJob.DeletePayload(
+                var deletePayload = new DeleteMessagePayload(
                     chatId,
                     warningMsg.MessageId,
                     "wrong_user_warning"
                 );
 
-                using var tickerScope2 = _serviceProvider.CreateScope();
-                var timeTickerManager2 = tickerScope2.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
-                await timeTickerManager2.AddAsync(new TimeTicker
+                try
                 {
-                    Function = "DeleteMessage",
-                    ExecutionTime = DateTime.UtcNow.AddSeconds(10),
-                    Request = TickerHelper.CreateTickerRequest(deletePayload),
-                    Retries = 0 // Don't retry - message may have been manually deleted
-                });
+                    _logger.LogDebug(
+                        "Scheduling delete for warning message {MessageId} in chat {ChatId}",
+                        warningMsg.MessageId,
+                        chatId);
+
+                    using var tickerScope2 = _serviceProvider.CreateScope();
+                    var timeTickerManager2 = tickerScope2.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+                    var deleteResult = await timeTickerManager2.AddAsync(new TimeTicker
+                    {
+                        Function = "DeleteMessage",
+                        ExecutionTime = DateTime.UtcNow.AddSeconds(10),
+                        Request = TickerHelper.CreateTickerRequest(deletePayload),
+                        Retries = 0 // Don't retry - message may have been manually deleted
+                    });
+
+                    if (!deleteResult.IsSucceded)
+                    {
+                        throw deleteResult.Exception ?? new InvalidOperationException("TickerQ AddAsync failed for delete job");
+                    }
+
+                    _logger.LogDebug(
+                        "Successfully scheduled delete for warning message {MessageId} (JobId: {JobId})",
+                        warningMsg.MessageId,
+                        deleteResult.Result?.Id);
+                }
+                catch (Exception deleteEx)
+                {
+                    _logger.LogError(
+                        deleteEx,
+                        "Failed to schedule delete for warning message {MessageId} in chat {ChatId}",
+                        warningMsg.MessageId,
+                        chatId);
+                }
             }
             catch (Exception ex)
             {
@@ -836,21 +896,47 @@ public class WelcomeService : IWelcomeService
                     user.Id);
 
                 // Auto-delete fallback message after 30 seconds via TickerQ
-                var fallbackDeletePayload = new DeleteMessageJob.DeletePayload(
+                var fallbackDeletePayload = new DeleteMessagePayload(
                     chatId,
                     fallbackMessage.MessageId,
                     "fallback_rules"
                 );
 
-                using var tickerScope3 = _serviceProvider.CreateScope();
-                var timeTickerManager3 = tickerScope3.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
-                await timeTickerManager3.AddAsync(new TimeTicker
+                try
                 {
-                    Function = "DeleteMessage",
-                    ExecutionTime = DateTime.UtcNow.AddSeconds(30),
-                    Request = TickerHelper.CreateTickerRequest(fallbackDeletePayload),
-                    Retries = 0 // Don't retry - message may have been manually deleted
-                });
+                    _logger.LogDebug(
+                        "Scheduling delete for fallback message {MessageId} in chat {ChatId}",
+                        fallbackMessage.MessageId,
+                        chatId);
+
+                    using var tickerScope3 = _serviceProvider.CreateScope();
+                    var timeTickerManager3 = tickerScope3.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+                    var fallbackDeleteResult = await timeTickerManager3.AddAsync(new TimeTicker
+                    {
+                        Function = "DeleteMessage",
+                        ExecutionTime = DateTime.UtcNow.AddSeconds(30),
+                        Request = TickerHelper.CreateTickerRequest(fallbackDeletePayload),
+                        Retries = 0 // Don't retry - message may have been manually deleted
+                    });
+
+                    if (!fallbackDeleteResult.IsSucceded)
+                    {
+                        throw fallbackDeleteResult.Exception ?? new InvalidOperationException("TickerQ AddAsync failed for fallback delete job");
+                    }
+
+                    _logger.LogDebug(
+                        "Successfully scheduled delete for fallback message {MessageId} (JobId: {JobId})",
+                        fallbackMessage.MessageId,
+                        fallbackDeleteResult.Result?.Id);
+                }
+                catch (Exception deleteEx)
+                {
+                    _logger.LogError(
+                        deleteEx,
+                        "Failed to schedule delete for fallback message {MessageId} in chat {ChatId}",
+                        fallbackMessage.MessageId,
+                        chatId);
+                }
 
                 return (DmSent: false, DmFallback: true);
             }

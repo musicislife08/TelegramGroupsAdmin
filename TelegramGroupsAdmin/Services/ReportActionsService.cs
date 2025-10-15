@@ -6,7 +6,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
-using TelegramGroupsAdmin.Telegram.Services.Telegram;
+using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 
 namespace TelegramGroupsAdmin.Services;
 

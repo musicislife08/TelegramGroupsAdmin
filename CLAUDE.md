@@ -8,10 +8,11 @@ ASP.NET Core 10.0 Blazor Server + Minimal API. Telegram spam detection (text + i
 ## Solution Structure
 
 ### Projects
-- **TelegramGroupsAdmin** - Main app (Blazor + API), 108-line Program.cs, extension method architecture
+- **TelegramGroupsAdmin** - Main app (Blazor + API), extension method architecture, TickerQ jobs (3 jobs in `/Jobs`)
 - **TelegramGroupsAdmin.Configuration** - Config option classes, `AddApplicationConfiguration()` extension
 - **TelegramGroupsAdmin.Data** - EF Core DbContext, migrations, Data Protection, internal to repositories
 - **TelegramGroupsAdmin.Telegram** - Bot services/workers, 9 commands, repos, orchestrators, `AddTelegramServices()`
+- **TelegramGroupsAdmin.Telegram.Abstractions** - Shared abstractions (TelegramBotClientFactory, job payloads), breaks circular dependencies
 - **TelegramGroupsAdmin.SpamDetection** - 9 spam algorithms, self-contained, database-driven
 
 ### Extension Methods
@@ -143,7 +144,7 @@ Not implemented (not needed): Chat delegation, templates, bulk UI (already autom
 **4.2** ✅: Unified configs table (JSONB, chat_id NULL=global), IConfigService (Save/Get/GetEffective/Delete), auto-merging, migrated spam_detection_configs, dependency chain fixed, DI lifetime fixed
 **4.2.1** ✅: 36 timestamps bigint → timestamptz, all DTOs → DateTimeOffset, repos/services/Blazor updated, TickerQ entity configs, 228 messages preserved
 **4.3** ✅: TelegramGroupsAdmin.Telegram library, moved 6 models + 13 repos + all services + 9 commands + 4 background services, AddTelegramServices() extension, ModelMappings public, clean dependency flow, 100+ using updates
-**4.4** ✅: Welcome system complete - DB schema, WelcomeService, Repository, bot integration, config from DB, chat name caching, TickerQ timeout job (WelcomeTimeoutJob), TickerQ delete message job (DeleteMessageJob), callback validation, user leaves handling, /settings#telegram UI. **C1 CRITICAL RESOLVED**: All fire-and-forget Task.Run replaced with persistent TickerQ jobs (retry logic, logging, survives restarts). Flow: restrict on join → welcome + buttons → timeout auto-kick (60s default) → accept (restore + DM/fallback) → deny/timeout (kick). Templates: chat_welcome, dm_template, chat_fallback. Variables: {chat_name}, {username}, {rules_text}. WelcomeConfig converted from record to class for Blazor binding
+**4.4** ✅: Welcome system complete - DB schema, WelcomeService, Repository, bot integration, config from DB, chat name caching, TickerQ timeout job (WelcomeTimeoutJob in `/Jobs`), TickerQ delete message job (DeleteMessageJob in `/Jobs`), callback validation, user leaves handling, /settings#telegram UI. **C1 CRITICAL RESOLVED**: All fire-and-forget Task.Run replaced with persistent TickerQ jobs (retry logic, logging, survives restarts, proper error handling with TickerResult validation). **TickerQ Architecture**: Job implementations in main app (`/Jobs`) for source generator discovery (TickerQ v2.5.3 limitation), job payload types in Telegram.Abstractions (`/Jobs/JobPayloads.cs`) to avoid circular dependencies. Flow: restrict on join → welcome + buttons → timeout auto-kick (60s default) → accept (restore + DM/fallback) → deny/timeout (kick). Templates: chat_welcome, dm_template, chat_fallback. Variables: {chat_name}, {username}, {rules_text}. WelcomeConfig converted from record to class for Blazor binding. Successfully tested end-to-end: user join → 60s timeout → auto-kick.
 **4.5** ✅: OpenAI tri-state result system (spam/clean/review), SpamCheckResultType enum refactor, modular prompt building (technical base + custom rules + mode guidance), review queue integration, UI display updates. Prompt architecture: GetBaseTechnicalPrompt() (JSON format, unchangeable), GetDefaultRulesPrompt() (spam/legitimate indicators, user-overridable), GetModeGuidancePrompt() (veto vs detection logic), BuildSystemPrompt() factory. Custom prompts replace rules section only while preserving technical requirements and mode behavior. Tested: testimonial spam detection (95% confirm) vs legitimate crypto discussion (90% veto).
 **4.6**: /tempban (5min/1hr/24hr presets, Telegram until_date auto-unrestrict, user_actions audit, UI integration)
 **4.7**: /settings#logging (dynamic log levels like *arr apps, configs JSONB storage, ILoggerFactory immediate application)

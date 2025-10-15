@@ -4,9 +4,10 @@ using TickerQ.Utilities.Base;
 using Telegram.Bot;
 using TickerQ.Utilities.Models;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Telegram.Services.Telegram;
+using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 
-namespace TelegramGroupsAdmin.Telegram.Jobs;
+namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
 /// TickerQ job to handle delayed message deletion
@@ -23,20 +24,11 @@ public class DeleteMessageJob(
     private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
 
     /// <summary>
-    /// Payload for delete message job
-    /// </summary>
-    public record DeletePayload(
-        long ChatId,
-        int MessageId,
-        string Reason
-    );
-
-    /// <summary>
     /// Execute delayed message deletion
     /// Scheduled via TickerQ with configurable delay
     /// </summary>
     [TickerFunction(functionName: "DeleteMessage")]
-    public async Task ExecuteAsync(TickerFunctionContext<DeletePayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(TickerFunctionContext<DeleteMessagePayload> context, CancellationToken cancellationToken)
     {
         var payload = context.Request;
         if (payload == null)

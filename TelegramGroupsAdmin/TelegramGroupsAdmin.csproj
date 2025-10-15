@@ -50,6 +50,7 @@
       <ProjectReference Include="..\TelegramGroupsAdmin.SpamDetection\TelegramGroupsAdmin.SpamDetection.csproj" />
       <ProjectReference Include="..\TelegramGroupsAdmin.Configuration\TelegramGroupsAdmin.Configuration.csproj" />
       <ProjectReference Include="..\TelegramGroupsAdmin.Telegram\TelegramGroupsAdmin.Telegram.csproj" />
+      <ProjectReference Include="..\TelegramGroupsAdmin.Telegram.Abstractions\TelegramGroupsAdmin.Telegram.Abstractions.csproj" />
     </ItemGroup>
 
 </Project>

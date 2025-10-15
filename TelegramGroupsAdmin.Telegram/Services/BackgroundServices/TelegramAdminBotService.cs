@@ -8,7 +8,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
-using TelegramGroupsAdmin.Telegram.Services.Telegram;
+using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 

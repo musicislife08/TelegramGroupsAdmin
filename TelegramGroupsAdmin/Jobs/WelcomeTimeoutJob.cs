@@ -6,9 +6,10 @@ using Telegram.Bot;
 using TickerQ.Utilities.Models;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Telegram.Services.Telegram;
+using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 
-namespace TelegramGroupsAdmin.Telegram.Jobs;
+namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
 /// TickerQ job to handle welcome message timeout
@@ -27,20 +28,11 @@ public class WelcomeTimeoutJob(
     private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
 
     /// <summary>
-    /// Payload for welcome timeout job
-    /// </summary>
-    public record TimeoutPayload(
-        long ChatId,
-        long UserId,
-        int WelcomeMessageId
-    );
-
-    /// <summary>
     /// Execute welcome timeout - kicks user if they haven't responded
     /// Scheduled via TickerQ with configurable delay (default 60s)
     /// </summary>
     [TickerFunction(functionName: "WelcomeTimeout")]
-    public async Task ExecuteAsync(TickerFunctionContext<TimeoutPayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(TickerFunctionContext<WelcomeTimeoutPayload> context, CancellationToken cancellationToken)
     {
         var payload = context.Request;
         if (payload == null)

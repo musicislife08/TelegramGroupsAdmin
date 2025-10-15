@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -174,7 +175,7 @@ public class SpamActionService(
         {
             var userActionsRepo = scopedServiceProvider.GetRequiredService<IUserActionsRepository>();
             var managedChatsRepo = scopedServiceProvider.GetRequiredService<IManagedChatsRepository>();
-            var botFactory = scopedServiceProvider.GetRequiredService<Services.Telegram.TelegramBotClientFactory>();
+            var botFactory = scopedServiceProvider.GetRequiredService<TelegramBotClientFactory>();
             var telegramOptions = scopedServiceProvider.GetRequiredService<IOptions<TelegramOptions>>().Value;
 
             var botClient = botFactory.GetOrCreate(telegramOptions.BotToken);
