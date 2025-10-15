@@ -105,7 +105,13 @@ public class TelegramAdminBotService(
 
         var receiverOptions = new ReceiverOptions
         {
-            AllowedUpdates = [UpdateType.Message, UpdateType.EditedMessage, UpdateType.MyChatMember],
+            AllowedUpdates = [
+                UpdateType.Message,           // New messages (commands, text, photos)
+                UpdateType.EditedMessage,     // Message edits (spam tactic detection)
+                UpdateType.MyChatMember,      // Bot added/removed from chats
+                UpdateType.ChatMember,        // User joins/leaves chat (for welcome system)
+                UpdateType.CallbackQuery      // Inline button clicks (for welcome accept/deny)
+            ],
             DropPendingUpdates = true
         };
 
@@ -136,6 +142,33 @@ public class TelegramAdminBotService(
         if (update.MyChatMember is { } myChatMember)
         {
             await chatManagementService.HandleMyChatMemberUpdateAsync(myChatMember);
+            return;
+        }
+
+        // Handle user joins/leaves (for welcome system - Phase 4.4)
+        if (update.ChatMember is { } chatMember)
+        {
+            // TODO Phase 4.4: Implement welcome message system
+            // await welcomeService.HandleChatMemberUpdateAsync(botClient, chatMember);
+            logger.LogDebug("ChatMember event received: User {UserId} in chat {ChatId} (status: {NewStatus})",
+                chatMember.NewChatMember.User.Id,
+                chatMember.Chat.Id,
+                chatMember.NewChatMember.Status);
+            return;
+        }
+
+        // Handle callback queries from inline buttons (for welcome accept/deny - Phase 4.4)
+        if (update.CallbackQuery is { } callbackQuery)
+        {
+            // TODO Phase 4.4: Implement welcome button callbacks
+            // await welcomeService.HandleCallbackQueryAsync(botClient, callbackQuery);
+            logger.LogDebug("CallbackQuery received: {Data} from user {UserId} in chat {ChatId}",
+                callbackQuery.Data,
+                callbackQuery.From.Id,
+                callbackQuery.Message?.Chat.Id);
+
+            // Always answer callback queries to remove loading state
+            await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: cancellationToken);
             return;
         }
 

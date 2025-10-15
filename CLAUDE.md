@@ -337,7 +337,12 @@ ASP.NET Core 10.0 Blazor Server + Minimal API. Telegram spam detection (text + i
 **Composition Pattern** - Services separated by responsibility for maintainability:
 
 1. **TelegramAdminBotService.cs** (208 lines) - Core bot lifecycle
-   - Bot polling and update routing
+   - Bot polling and update routing (5 event types):
+     - `Message` - New messages (commands, text, photos)
+     - `EditedMessage` - Message edits (spam tactic detection)
+     - `MyChatMember` - Bot added/removed from chats
+     - `ChatMember` - User joins/leaves chat (Phase 4.4 ready)
+     - `CallbackQuery` - Inline button clicks (Phase 4.4 ready)
    - Command registration with Telegram
    - Event forwarding from child services
    - Implements `IMessageHistoryService` interface
