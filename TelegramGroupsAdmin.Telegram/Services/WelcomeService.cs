@@ -5,8 +5,13 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TickerQ.Utilities;
+using TickerQ.Utilities.Interfaces.Managers;
+using TickerQ.Utilities.Models.Ticker;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Telegram.Jobs;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -23,15 +28,21 @@ public class WelcomeService : IWelcomeService
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<WelcomeService> _logger;
     private readonly TelegramOptions _telegramOptions;
+    private readonly IConfigService _configService;
+    private readonly ITimeTickerManager<TimeTicker> _timeTickerManager;
 
     public WelcomeService(
         IDbContextFactory<AppDbContext> contextFactory,
         ILogger<WelcomeService> logger,
-        IOptions<TelegramOptions> telegramOptions)
+        IOptions<TelegramOptions> telegramOptions,
+        IConfigService configService,
+        ITimeTickerManager<TimeTicker> timeTickerManager)
     {
         _contextFactory = contextFactory;
         _logger = logger;
         _telegramOptions = telegramOptions.Value;
+        _configService = configService;
+        _timeTickerManager = timeTickerManager;
     }
 
     public async Task HandleChatMemberUpdateAsync(
@@ -43,6 +54,14 @@ public class WelcomeService : IWelcomeService
         var oldStatus = chatMemberUpdate.OldChatMember.Status;
         var newStatus = chatMemberUpdate.NewChatMember.Status;
         var user = chatMemberUpdate.NewChatMember.User;
+
+        // Handle user leaving (Member/Restricted → Left)
+        if ((oldStatus == ChatMemberStatus.Member || oldStatus == ChatMemberStatus.Restricted) &&
+            (newStatus == ChatMemberStatus.Left || newStatus == ChatMemberStatus.Kicked))
+        {
+            await HandleUserLeftAsync(chatMemberUpdate.Chat.Id, user.Id, cancellationToken);
+            return;
+        }
 
         // Only handle new joins (Left/Kicked → Member)
         if (newStatus != ChatMemberStatus.Member ||
@@ -64,8 +83,9 @@ public class WelcomeService : IWelcomeService
             user.Username,
             chatMemberUpdate.Chat.Id);
 
-        // TODO: Load welcome config from database (Phase 4.4 continuation)
-        var config = WelcomeConfig.Default;
+        // Load welcome config from database (chat-specific or global fallback)
+        var config = await _configService.GetEffectiveAsync<WelcomeConfig>("welcome", chatMemberUpdate.Chat.Id)
+                     ?? WelcomeConfig.Default;
 
         if (!config.Enabled)
         {
@@ -123,70 +143,20 @@ public class WelcomeService : IWelcomeService
                     chatMemberUpdate.Chat.Id);
             }
 
-            // Step 4: Schedule timeout (background task)
-            var chatId = chatMemberUpdate.Chat.Id;
-            var userId = user.Id;
-            var messageId = welcomeMessage.MessageId;
-            var timeoutSeconds = config.TimeoutSeconds;
+            // Step 4: Schedule timeout via TickerQ (replaces fire-and-forget Task.Run)
+            var payload = new WelcomeTimeoutJob.TimeoutPayload(
+                chatMemberUpdate.Chat.Id,
+                user.Id,
+                welcomeMessage.MessageId
+            );
 
-            _ = Task.Run(async () =>
+            await _timeTickerManager.AddAsync(new TimeTicker
             {
-                await Task.Delay(TimeSpan.FromSeconds(timeoutSeconds));
-
-                try
-                {
-                    // Check if user has responded
-                    await using var context = await _contextFactory.CreateDbContextAsync();
-                    var response = await context.WelcomeResponses
-                        .Where(r => r.ChatId == chatId && r.UserId == userId && r.WelcomeMessageId == messageId)
-                        .FirstOrDefaultAsync();
-
-                    if (response == null || response.Response != "pending")
-                    {
-                        _logger.LogDebug(
-                            "User {UserId} already responded to welcome in chat {ChatId}, skipping timeout",
-                            userId,
-                            chatId);
-                        return;
-                    }
-
-                    _logger.LogInformation(
-                        "Welcome timeout: User {UserId} did not respond in {Timeout}s in chat {ChatId}",
-                        userId,
-                        timeoutSeconds,
-                        chatId);
-
-                    // Kick user for timeout
-                    await KickUserAsync(botClient, chatId, userId, default);
-
-                    // Delete welcome message
-                    try
-                    {
-                        await botClient.DeleteMessage(chatId: chatId, messageId: messageId);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to delete welcome message {MessageId}", messageId);
-                    }
-
-                    // Update response record
-                    response.Response = "timeout";
-                    response.RespondedAt = DateTimeOffset.UtcNow;
-                    await context.SaveChangesAsync();
-
-                    _logger.LogInformation(
-                        "Recorded welcome timeout for user {UserId} in chat {ChatId}",
-                        userId,
-                        chatId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(
-                        ex,
-                        "Failed to process welcome timeout for user {UserId} in chat {ChatId}",
-                        userId,
-                        chatId);
-                }
+                Function = "WelcomeTimeout",
+                ExecutionTime = DateTime.UtcNow.AddSeconds(config.TimeoutSeconds),
+                Request = TickerHelper.CreateTickerRequest(payload),
+                Retries = 1,
+                RetryIntervals = [30] // Retry once after 30s if it fails
             });
 
             _logger.LogInformation(
@@ -297,18 +267,19 @@ public class WelcomeService : IWelcomeService
                     replyParameters: new ReplyParameters { MessageId = message.MessageId },
                     cancellationToken: cancellationToken);
 
-                // Delete warning after 10 seconds
-                _ = Task.Run(async () =>
+                // Delete warning after 10 seconds via TickerQ
+                var deletePayload = new DeleteMessageJob.DeletePayload(
+                    chatId,
+                    warningMsg.MessageId,
+                    "wrong_user_warning"
+                );
+
+                await _timeTickerManager.AddAsync(new TimeTicker
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(10));
-                    try
-                    {
-                        await botClient.DeleteMessage(chatId: chatId, messageId: warningMsg.MessageId);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogDebug(ex, "Failed to delete warning message {MessageId}", warningMsg.MessageId);
-                    }
+                    Function = "DeleteMessage",
+                    ExecutionTime = DateTime.UtcNow.AddSeconds(10),
+                    Request = TickerHelper.CreateTickerRequest(deletePayload),
+                    Retries = 0 // Don't retry - message may have been manually deleted
                 });
             }
             catch (Exception ex)
@@ -319,8 +290,9 @@ public class WelcomeService : IWelcomeService
             return;
         }
 
-        // TODO: Load welcome config from database (Phase 4.4 continuation)
-        var config = WelcomeConfig.Default;
+        // Load welcome config from database (chat-specific or global fallback)
+        var config = await _configService.GetEffectiveAsync<WelcomeConfig>("welcome", chatId)
+                     ?? WelcomeConfig.Default;
 
         try
         {
@@ -784,11 +756,22 @@ public class WelcomeService : IWelcomeService
             _logger.LogWarning(ex, "Failed to send confirmation to user {UserId}", user.Id);
         }
 
-        // TODO: Cancel timeout job (TickerQ not yet implemented - Phase 4.4 continuation)
-        _logger.LogDebug(
-            "TODO: Cancel timeout job for user {UserId} in chat {ChatId}",
-            user.Id,
-            groupChatId);
+        // Note: Timeout job will automatically skip when it sees response != "pending"
+        // No need to explicitly cancel - TickerQ job checks database state first
+    }
+
+    private async Task<string> GetChatNameAsync(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var chat = await botClient.GetChat(chatId, cancellationToken);
+            return chat.Title ?? "this chat";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get chat name for chat {ChatId}", chatId);
+            return "this chat";
+        }
     }
 
     private async Task<(bool DmSent, bool DmFallback)> SendRulesAsync(
@@ -798,7 +781,7 @@ public class WelcomeService : IWelcomeService
         WelcomeConfig config,
         CancellationToken cancellationToken)
     {
-        var chatName = "this chat"; // TODO: Get actual chat name from cache (Phase 4.4 continuation)
+        var chatName = await GetChatNameAsync(botClient, chatId, cancellationToken);
 
         // Send rules without button instructions (user already accepted in group)
         // Just show the rules text, no action needed
@@ -843,26 +826,19 @@ public class WelcomeService : IWelcomeService
                     chatId,
                     user.Id);
 
-                // Auto-delete fallback message after 30 seconds
-                _ = Task.Run(async () =>
+                // Auto-delete fallback message after 30 seconds via TickerQ
+                var fallbackDeletePayload = new DeleteMessageJob.DeletePayload(
+                    chatId,
+                    fallbackMessage.MessageId,
+                    "fallback_rules"
+                );
+
+                await _timeTickerManager.AddAsync(new TimeTicker
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(30));
-                    try
-                    {
-                        await botClient.DeleteMessage(chatId: chatId, messageId: fallbackMessage.MessageId);
-                        _logger.LogDebug(
-                            "Deleted fallback rules message {MessageId} in chat {ChatId}",
-                            fallbackMessage.MessageId,
-                            chatId);
-                    }
-                    catch (Exception deleteEx)
-                    {
-                        _logger.LogWarning(
-                            deleteEx,
-                            "Failed to delete fallback rules message {MessageId} in chat {ChatId}",
-                            fallbackMessage.MessageId,
-                            chatId);
-                    }
+                    Function = "DeleteMessage",
+                    ExecutionTime = DateTime.UtcNow.AddSeconds(30),
+                    Request = TickerHelper.CreateTickerRequest(fallbackDeletePayload),
+                    Retries = 0 // Don't retry - message may have been manually deleted
                 });
 
                 return (DmSent: false, DmFallback: true);
@@ -876,6 +852,54 @@ public class WelcomeService : IWelcomeService
 
                 return (DmSent: false, DmFallback: false);
             }
+        }
+    }
+
+    private async Task HandleUserLeftAsync(long chatId, long userId, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "User {UserId} left chat {ChatId}, recording welcome response if pending",
+            userId,
+            chatId);
+
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+            // Find any pending welcome response for this user
+            var response = await context.WelcomeResponses
+                .Where(r => r.ChatId == chatId && r.UserId == userId && r.Response == "pending")
+                .OrderByDescending(r => r.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (response == null)
+            {
+                _logger.LogDebug(
+                    "No pending welcome response found for user {UserId} in chat {ChatId}",
+                    userId,
+                    chatId);
+                return;
+            }
+
+            // Mark as left
+            response.Response = "left";
+            response.RespondedAt = DateTimeOffset.UtcNow;
+            await context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Recorded welcome response 'left' for user {UserId} in chat {ChatId}",
+                userId,
+                chatId);
+
+            // Note: Timeout job will automatically skip when it sees response != "pending"
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to handle user left for user {UserId} in chat {ChatId}",
+                userId,
+                chatId);
         }
     }
 }

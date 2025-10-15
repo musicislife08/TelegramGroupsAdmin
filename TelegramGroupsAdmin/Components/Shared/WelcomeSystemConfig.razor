@@ -1,0 +1,178 @@
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Configuration.Services
+@inject IConfigService ConfigService
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="0">
+    <MudText Typo="Typo.h6" GutterBottom="true">Welcome Message System</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        Configure automatic welcome messages for new members joining your Telegram groups.
+    </MudText>
+
+    @if (_loading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_config != null)
+    {
+        <MudForm @ref="_form" @bind-IsValid="@_isValid">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudSwitch @bind-Value="_config.Enabled" Color="Color.Primary" Label="Enable Welcome System" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        When enabled, new members will be restricted until they accept the rules
+                    </MudText>
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="_config.TimeoutSeconds"
+                                     Label="Timeout (seconds)"
+                                     Min="10"
+                                     Max="300"
+                                     HelperText="Time before auto-kicking non-responsive users (10-300s)" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_config.ChatWelcomeTemplate"
+                                  Label="Chat Welcome Message Template"
+                                  Lines="4"
+                                  HelperText="Supports {username} variable. Shown in group chat." />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_config.DmTemplate"
+                                  Label="DM Template"
+                                  Lines="4"
+                                  HelperText="Supports {chat_name} and {rules_text} variables. Sent via direct message." />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_config.ChatFallbackTemplate"
+                                  Label="Chat Fallback Template"
+                                  Lines="4"
+                                  HelperText="Supports {rules_text} variable. Shown if DM fails (auto-deletes after 30s)." />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_config.RulesText"
+                                  Label="Rules Text"
+                                  Lines="6"
+                                  HelperText="Your group rules. Will be inserted into {rules_text} in templates." />
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_config.AcceptButtonText"
+                                  Label="Accept Button Text"
+                                  HelperText="Text shown on the accept button" />
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_config.DenyButtonText"
+                                  Label="Deny Button Text"
+                                  HelperText="Text shown on the deny button" />
+                </MudItem>
+
+                <MudItem xs="12" Class="d-flex justify-space-between">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               OnClick="SaveConfig"
+                               Disabled="!_isValid || _saving">
+                        @if (_saving)
+                        {
+                            <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <span>Save Configuration</span>
+                        }
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Secondary"
+                               OnClick="LoadDefaults"
+                               Disabled="_saving">
+                        Reset to Defaults
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+
+        <MudDivider Class="my-4" />
+
+        <MudText Typo="Typo.subtitle2" GutterBottom="true">Preview</MudText>
+        <MudPaper Class="pa-3 mud-background-gray" Elevation="0">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">Chat Welcome Message:</MudText>
+            <MudText Typo="Typo.body2" Class="mb-3">@GetPreviewText(_config.ChatWelcomeTemplate, "@testuser")</MudText>
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">Rules (sent via DM or fallback):</MudText>
+            <MudText Typo="Typo.body2" Style="white-space: pre-wrap">@_config.RulesText</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Error">Failed to load configuration</MudAlert>
+    }
+</MudPaper>
+
+@code {
+    private MudForm? _form;
+    private bool _isValid = true;
+    private bool _loading = true;
+    private bool _saving = false;
+    private WelcomeConfig? _config;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfig();
+    }
+
+    private async Task LoadConfig()
+    {
+        _loading = true;
+        try
+        {
+            // Load global config (chatId = null for global settings)
+            _config = await ConfigService.GetAsync<WelcomeConfig>("welcome", null)
+                      ?? WelcomeConfig.Default;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveConfig()
+    {
+        if (_config == null || !_isValid) return;
+
+        _saving = true;
+        try
+        {
+            await ConfigService.SaveAsync("welcome", null, _config);
+            Snackbar.Add("Welcome configuration saved successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void LoadDefaults()
+    {
+        _config = WelcomeConfig.Default;
+        Snackbar.Add("Defaults loaded. Click 'Save Configuration' to apply.", Severity.Info);
+    }
+
+    private string GetPreviewText(string template, string username)
+    {
+        return template.Replace("{username}", username);
+    }
+}

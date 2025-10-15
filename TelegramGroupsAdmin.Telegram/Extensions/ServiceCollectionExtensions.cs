@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using TelegramGroupsAdmin.Telegram.Jobs;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
@@ -78,6 +79,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<TelegramAdminBotService>();
         services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());
         services.AddHostedService(sp => sp.GetRequiredService<TelegramAdminBotService>());
+
+        // TickerQ jobs for welcome system (Phase 4.4 - replaces fire-and-forget Task.Run)
+        services.AddScoped<WelcomeTimeoutJob>();
+        services.AddScoped<DeleteMessageJob>();
 
         return services;
     }

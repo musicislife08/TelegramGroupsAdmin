@@ -143,7 +143,7 @@ Not implemented (not needed): Chat delegation, templates, bulk UI (already autom
 **4.2** ✅: Unified configs table (JSONB, chat_id NULL=global), IConfigService (Save/Get/GetEffective/Delete), auto-merging, migrated spam_detection_configs, dependency chain fixed, DI lifetime fixed
 **4.2.1** ✅: 36 timestamps bigint → timestamptz, all DTOs → DateTimeOffset, repos/services/Blazor updated, TickerQ entity configs, 228 messages preserved
 **4.3** ✅: TelegramGroupsAdmin.Telegram library, moved 6 models + 13 repos + all services + 9 commands + 4 background services, AddTelegramServices() extension, ModelMappings public, clean dependency flow, 100+ using updates
-**4.4** ⏳: Welcome system - DB schema ✅, WelcomeService ✅, Repository ✅, bot integration ✅. TODO: config from DB, chat name caching, TickerQ timeout job, callback validation, user leaves handling, /settings#telegram UI. Flow: restrict on join → welcome + buttons → timeout auto-kick (60s default) → accept (restore + DM/fallback) → deny/timeout (kick). Templates: chat_welcome, dm_template, chat_fallback. Variables: {chat_name}, {username}, {rules_text}
+**4.4** ✅: Welcome system complete - DB schema, WelcomeService, Repository, bot integration, config from DB, chat name caching, TickerQ timeout job (WelcomeTimeoutJob), TickerQ delete message job (DeleteMessageJob), callback validation, user leaves handling, /settings#telegram UI. **C1 CRITICAL RESOLVED**: All fire-and-forget Task.Run replaced with persistent TickerQ jobs (retry logic, logging, survives restarts). Flow: restrict on join → welcome + buttons → timeout auto-kick (60s default) → accept (restore + DM/fallback) → deny/timeout (kick). Templates: chat_welcome, dm_template, chat_fallback. Variables: {chat_name}, {username}, {rules_text}. WelcomeConfig converted from record to class for Blazor binding
 **4.5** ✅: OpenAI tri-state result system (spam/clean/review), SpamCheckResultType enum refactor, modular prompt building (technical base + custom rules + mode guidance), review queue integration, UI display updates. Prompt architecture: GetBaseTechnicalPrompt() (JSON format, unchangeable), GetDefaultRulesPrompt() (spam/legitimate indicators, user-overridable), GetModeGuidancePrompt() (veto vs detection logic), BuildSystemPrompt() factory. Custom prompts replace rules section only while preserving technical requirements and mode behavior. Tested: testimonial spam detection (95% confirm) vs legitimate crypto discussion (90% veto).
 **4.6**: /tempban (5min/1hr/24hr presets, Telegram until_date auto-unrestrict, user_actions audit, UI integration)
 **4.7**: /settings#logging (dynamic log levels like *arr apps, configs JSONB storage, ILoggerFactory immediate application)
@@ -202,11 +202,11 @@ ML-based spam detection (10th algorithm using historical data), sentiment analys
 ## Current Status (October 2025)
 
 ### Completion Metrics
-**Overall**: ~75% complete, ~95% core features
+**Overall**: ~80% complete, ~95% core features
 **Phase 1**: 100% ✅
 **Phase 2**: 100% ✅ (2.1-2.8 all complete)
 **Phase 3**: 100% ✅
-**Phase 4**: 60% (4.1-4.3 complete, 4.4 in progress, 4.5-4.7 pending)
+**Phase 4**: 67% (4.1-4.5 complete, 4.6-4.8 pending)
 **Phases 5-7**: 0% (future/optional)
 
 ### Production Readiness
@@ -215,14 +215,14 @@ ML-based spam detection (10th algorithm using historical data), sentiment analys
 **System Ready For**: Fresh DB init (`dotnet run --migrate-only`), cross-machine backup/restore with TOTP preservation, production deployment
 
 ### Next Steps (Prioritized)
-**Immediate** (this week): Complete Phase 4.4 welcome system (4-6 hours - config from DB, TickerQ timeout job, UI)
-**Short Term** (next 2 weeks): Phase 4.5 temporary ban system (2-3 hours)
-**Medium Term** (next month): Phase 4.6-4.7 (runtime log config + settings UI completion, 8-12 hours)
+**Immediate** (this week): Phase 4.6 temporary ban system (2-3 hours)
+**Short Term** (next 2 weeks): Phase 4.7 runtime log config (4-6 hours)
+**Medium Term** (next month): Phase 4.8 settings UI completion (4-6 hours)
 **Post Phase 4**: Comprehensive refactoring review (dotnet-refactor-advisor agent), then optionally Phase 5-6 (analytics + ML insights)
 
 ### Critical Issues (REFACTORING_BACKLOG.md)
-**C1 - Fire-and-Forget Tasks** (🔴 CRITICAL, 4-6 hours): Replace `Task.Run` with TickerQ in WelcomeService (lines 132-190, 301-312, 847-866). Problem: Lost on restarts, no retry, silent failures, memory leaks. Solution: WelcomeTimeoutJob + DeleteMessageJob classes with persistence/retry/logging. Impact: Production reliability, prevents data loss.
+**C1 - Fire-and-Forget Tasks** (✅ RESOLVED): Replaced all `Task.Run` with TickerQ in WelcomeService. WelcomeTimeoutJob + DeleteMessageJob implemented with persistence/retry/logging. Production reliability ensured.
 **High Priority Refactorings** (2-3 hours): H1 (extract ChatPermissions duplication), H2 (magic numbers to constants)
 **Performance Optimizations** (3-5 hours): MH1 (GetStatsAsync 5→1 query, 80% faster), MH2 (CleanupExpiredAsync 3→1 query, 50% faster), MH3 (N+1 query patterns, 10-20% faster)
 
-**Recommended Order**: C1 (critical) → MH1+MH2 (quick wins, 1 hour) → H1+H2 (quality, 2 hours) → Comprehensive review agent
+**Recommended Order**: MH1+MH2 (quick wins, 1 hour) → H1+H2 (quality, 2 hours) → Comprehensive review agent

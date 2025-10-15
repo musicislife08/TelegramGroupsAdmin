@@ -43,128 +43,23 @@ This document tracks refactoring opportunities identified by automated analysis 
 
 **Impact**: Reduced log verbosity by ~90% while maintaining visibility into spam detection results and preserving error logging for troubleshooting.
 
----
+### ✅ Fixed: Fire-and-Forget Tasks Replaced with TickerQ Jobs
 
-## Critical Issues (Do Immediately)
+**Issue**: WelcomeService used `Task.Run` with fire-and-forget pattern for delayed execution (welcome timeout, message cleanup). Tasks were lost on app restart, had no retry logic, and exceptions went unhandled.
 
-### C1. Replace Fire-and-Forget Tasks with TickerQ Scheduled Jobs
+**Fix**: Implemented TickerQ scheduled jobs (Phase 4.4):
+- Created `WelcomeTimeoutJob` - Handles user timeout with database state checking
+- Created `DeleteMessageJob` - Reusable delayed message deletion
+- Updated `WelcomeService` to schedule via `ITimeTickerManager<TimeTicker>`
+- Jobs persist to PostgreSQL with configurable retry logic
 
-**File:** `TelegramGroupsAdmin.Telegram/Services/WelcomeService.cs`
-**Lines:** 132-190, 301-312, 847-866
-**Severity:** 🔴 **CRITICAL** - Production Risk
+**Files Modified:**
+- `TelegramGroupsAdmin.Telegram/Jobs/WelcomeTimeoutJob.cs` (NEW)
+- `TelegramGroupsAdmin.Telegram/Jobs/DeleteMessageJob.cs` (NEW)
+- `TelegramGroupsAdmin.Telegram/Services/WelcomeService.cs` (UPDATED)
+- `TelegramGroupsAdmin.Telegram/Extensions/ServiceCollectionExtensions.cs` (UPDATED)
 
-**Problem:**
-Currently using `Task.Run` with fire-and-forget pattern (`_ = Task.Run(...)`) for delayed execution:
-1. **Welcome timeout handling** (line 132) - waits X seconds then kicks user if no response
-2. **Warning message deletion** (line 301) - waits 10s then deletes warning
-3. **Fallback message deletion** (line 847) - waits 30s then deletes fallback message
-
-**Why This Is Bad:**
-- ❌ **Unhandled exceptions** - If task fails, exception goes to threadpool (no logging, silent failure)
-- ❌ **No persistence** - If app restarts, all pending tasks are lost (users not kicked, messages not deleted)
-- ❌ **No retry logic** - Telegram API failures = permanent failure
-- ❌ **Memory leaks** - Tasks not tracked, can't cancel on shutdown
-- ❌ **Ignores TickerQ** - We have TickerQ installed but aren't using it!
-
-**Current Code Example:**
-```csharp
-// Line 132 - Welcome timeout (WRONG)
-_ = Task.Run(async () =>
-{
-    await Task.Delay(TimeSpan.FromSeconds(timeoutSeconds));
-
-    try
-    {
-        // Kick user if they didn't respond
-        await KickUserAsync(botClient, chatId, userId, default);
-        // Delete welcome message
-        await botClient.DeleteMessage(chatId: chatId, messageId: messageId);
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Failed to process welcome timeout...");
-    }
-});
-```
-
-**Correct Solution - Use TickerQ:**
-```csharp
-// Create TickerQ job class
-public class WelcomeTimeoutJob(
-    IDbContextFactory<AppDbContext> contextFactory,
-    TelegramBotClientFactory botClientFactory,
-    IOptions<TelegramOptions> telegramOptions,
-    ILogger<WelcomeTimeoutJob> logger)
-{
-    [TickerFunction(functionName: "ProcessWelcomeTimeout")]
-    public async Task ProcessTimeoutAsync(
-        TickerFunctionContext<WelcomeTimeoutData> context,
-        CancellationToken cancellationToken)
-    {
-        var data = context.Payload;
-        var botClient = botClientFactory.GetOrCreate(telegramOptions.Value.BotToken);
-
-        await using var dbContext = await contextFactory.CreateDbContextAsync(cancellationToken);
-
-        // Check if user already responded
-        var response = await dbContext.WelcomeResponses
-            .FirstOrDefaultAsync(r => r.UserId == data.UserId && r.GroupChatId == data.ChatId, cancellationToken);
-
-        if (response != null)
-        {
-            logger.LogDebug("User {UserId} already responded, skipping timeout", data.UserId);
-            return;
-        }
-
-        // Kick user
-        try
-        {
-            await botClient.BanChatMember(chatId: data.ChatId, userId: data.UserId, cancellationToken: cancellationToken);
-            await botClient.UnbanChatMember(chatId: data.ChatId, userId: data.UserId, onlyIfBanned: true, cancellationToken: cancellationToken);
-            logger.LogInformation("Kicked user {UserId} from chat {ChatId} due to welcome timeout", data.UserId, data.ChatId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to kick user {UserId}", data.UserId);
-        }
-
-        // Delete welcome message
-        try
-        {
-            await botClient.DeleteMessage(chatId: data.ChatId, messageId: data.WelcomeMessageId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to delete welcome message {MessageId}", data.WelcomeMessageId);
-        }
-    }
-}
-
-public record WelcomeTimeoutData(long UserId, long ChatId, int WelcomeMessageId);
-
-// Schedule in WelcomeService instead of Task.Run
-await _tickerScheduler.ScheduleAsync(
-    functionName: "ProcessWelcomeTimeout",
-    payload: new WelcomeTimeoutData(userId, chatId, messageId),
-    runAt: DateTimeOffset.UtcNow.AddSeconds(timeoutSeconds),
-    cancellationToken: cancellationToken);
-```
-
-**Benefits:**
-- ✅ **Persistence** - Survives app restarts (TickerQ uses database)
-- ✅ **Retry logic** - TickerQ automatically retries failed jobs
-- ✅ **Logging** - All exceptions properly logged
-- ✅ **Testable** - Can unit test job logic
-- ✅ **Monitoring** - Can query pending/failed jobs from database
-- ✅ **Cancellation** - Proper cancellation token support
-
-**Tasks to Create:**
-1. `WelcomeTimeoutJob` - Kick user if no response within timeout
-2. `DeleteMessageJob` - Delete messages after delay (reusable for warnings + fallback)
-3. Update `WelcomeService` to schedule TickerQ jobs instead of `Task.Run`
-
-**Effort:** Medium (4-6 hours with testing)
-**Impact:** 🔥 **HIGH** - Prevents data loss, improves reliability
+**Impact**: Production reliability ensured - jobs survive restarts, proper error handling, retry logic configured.
 
 ---
 
@@ -420,18 +315,17 @@ private bool TryParseCallbackData(string? data, out CallbackData? result, out Dm
 
 | Priority | Count | Est. Effort | Impact |
 |----------|-------|-------------|--------|
-| Critical | 1 | 4-6 hours | Production reliability |
-| High | 2 | 2-3 hours | Maintainability |
-| Medium | 4 | 7-10 hours | Code quality |
-| Low | 3 | 30 minutes | Style consistency |
+| High | 6 | 4-6 hours | Performance + Maintainability |
+| Medium | 6 | 8-13 hours | Code quality |
+| Low | 6 | 1 hour | Style consistency |
 
-**Total Estimated Effort:** 13-19 hours
+**Total Estimated Effort:** 13-20 hours
 
 **Recommended Execution Order:**
-1. **C1** (TickerQ tasks) - Prevents production issues
-2. **H1** (ChatPermissions) + **H2** (Magic numbers) - Quick wins
-3. **M1-M4** - Quality improvements (can be done incrementally)
-4. **L1-L3** - Polish (optional, low ROI)
+1. **MH1** + **MH2** (Query optimization) - Quick wins, massive performance gains (1 hour)
+2. **H1** (ChatPermissions) + **H2** (Magic numbers) - Code quality (2-3 hours)
+3. **MH3-MH6** + **M1-M4** - Quality improvements (can be done incrementally)
+4. **L1-L3** + **MH7-MH9** - Polish (optional, low ROI)
 
 ---
 
