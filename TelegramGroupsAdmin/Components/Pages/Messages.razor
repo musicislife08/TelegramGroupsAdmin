@@ -425,7 +425,7 @@
             var detectionResult = new DetectionResultRecord
             {
                 MessageId = message.MessageId,
-                DetectedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "manual",
                 DetectionMethod = "Manual",
                 IsSpam = false, // Mark as NOT spam

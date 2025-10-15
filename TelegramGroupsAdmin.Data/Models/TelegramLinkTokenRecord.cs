@@ -20,13 +20,13 @@ public class TelegramLinkTokenRecordDto
     public string UserId { get; set; } = string.Empty;
 
     [Column("created_at")]
-    public long CreatedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 
     [Column("expires_at")]
-    public long ExpiresAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 
     [Column("used_at")]
-    public long? UsedAt { get; set; }
+    public DateTimeOffset? UsedAt { get; set; }
 
     [Column("used_by_telegram_id")]
     public long? UsedByTelegramId { get; set; }

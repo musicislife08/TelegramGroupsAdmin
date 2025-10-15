@@ -68,7 +68,7 @@ public class ModerationActionService
             var detectionResult = new DetectionResultRecord
             {
                 MessageId = messageId,
-                DetectedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "manual",
                 DetectionMethod = "Manual",
                 IsSpam = true,
@@ -112,7 +112,7 @@ public class ModerationActionService
                 ActionType: UserActionType.Ban,
                 MessageId: messageId,
                 IssuedBy: executorId,
-                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Permanent ban
                 Reason: reason
             );
@@ -177,7 +177,7 @@ public class ModerationActionService
                 ActionType: UserActionType.Ban,
                 MessageId: messageId,
                 IssuedBy: executorId,
-                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null,
                 Reason: reason
             );
@@ -213,7 +213,7 @@ public class ModerationActionService
                 ActionType: UserActionType.Warn,
                 MessageId: messageId,
                 IssuedBy: executorId,
-                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null,
                 Reason: reason
             );
@@ -247,7 +247,7 @@ public class ModerationActionService
                 ActionType: UserActionType.Trust,
                 MessageId: null,
                 IssuedBy: executorId,
-                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null,
                 Reason: reason
             );
@@ -309,7 +309,7 @@ public class ModerationActionService
                 ActionType: UserActionType.Unban,
                 MessageId: null,
                 IssuedBy: executorId,
-                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null,
                 Reason: reason
             );

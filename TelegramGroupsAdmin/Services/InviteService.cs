@@ -34,8 +34,8 @@ public class InviteService : IInviteService
         var invite = new InviteRecord(
             Token: token,
             CreatedBy: createdBy,
-            CreatedAt: createdAt.ToUnixTimeSeconds(),
-            ExpiresAt: expiresAt.ToUnixTimeSeconds(),
+            CreatedAt: createdAt,
+            ExpiresAt: expiresAt,
             UsedBy: null,
             PermissionLevel: 0, // Default to ReadOnly
             Status: InviteStatus.Pending,
@@ -61,15 +61,15 @@ public class InviteService : IInviteService
     public async Task<List<InviteListItem>> GetUserInvitesAsync(string userId, CancellationToken ct = default)
     {
         var invites = await _inviteRepository.GetByCreatorAsync(userId, ct);
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = DateTimeOffset.UtcNow;
 
         return invites.Select(i => new InviteListItem(
             Token: i.Token,
-            CreatedAt: DateTimeOffset.FromUnixTimeSeconds(i.CreatedAt),
-            ExpiresAt: DateTimeOffset.FromUnixTimeSeconds(i.ExpiresAt),
+            CreatedAt: i.CreatedAt,
+            ExpiresAt: i.ExpiresAt,
             UsedBy: i.UsedBy,
             UsedAt: i.ModifiedAt.HasValue && i.Status == InviteStatus.Used
-                ? DateTimeOffset.FromUnixTimeSeconds(i.ModifiedAt.Value)
+                ? i.ModifiedAt.Value
                 : null,
             IsExpired: i.ExpiresAt < now && i.Status == InviteStatus.Pending,
             IsUsed: i.Status == InviteStatus.Used

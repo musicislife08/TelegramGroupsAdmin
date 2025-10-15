@@ -41,12 +41,12 @@ public class TelegramLinkTokenRepository : ITelegramLinkTokenRepository
         var entity = await context.TelegramLinkTokens.FirstOrDefaultAsync(tlt => tlt.Token == token);
         if (entity == null) return;
 
-        entity.UsedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        entity.UsedAt = DateTimeOffset.UtcNow;
         entity.UsedByTelegramId = telegramId;
         await context.SaveChangesAsync();
     }
 
-    public async Task DeleteExpiredTokensAsync(long beforeTimestamp)
+    public async Task DeleteExpiredTokensAsync(DateTimeOffset beforeTimestamp)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
         var expiredTokens = await context.TelegramLinkTokens
@@ -63,7 +63,7 @@ public class TelegramLinkTokenRepository : ITelegramLinkTokenRepository
     public async Task<IEnumerable<TelegramLinkTokenRecord>> GetActiveTokensForUserAsync(string userId)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = DateTimeOffset.UtcNow;
 
         var entities = await context.TelegramLinkTokens
             .AsNoTracking()

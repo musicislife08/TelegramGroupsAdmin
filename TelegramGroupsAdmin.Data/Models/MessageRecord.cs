@@ -23,7 +23,7 @@ public class MessageRecordDto
     public long ChatId { get; set; }
 
     [Column("timestamp")]
-    public long Timestamp { get; set; }
+    public DateTimeOffset Timestamp { get; set; }
 
     [Column("message_text")]
     public string? MessageText { get; set; }
@@ -38,7 +38,7 @@ public class MessageRecordDto
     public string? Urls { get; set; }
 
     [Column("edit_date")]
-    public long? EditDate { get; set; }
+    public DateTimeOffset? EditDate { get; set; }
 
     [Column("content_hash")]
     [MaxLength(64)]
@@ -54,7 +54,7 @@ public class MessageRecordDto
     public string? PhotoThumbnailPath { get; set; }
 
     [Column("deleted_at")]
-    public long? DeletedAt { get; set; }
+    public DateTimeOffset? DeletedAt { get; set; }
 
     [Column("deletion_source")]
     public string? DeletionSource { get; set; }
@@ -79,7 +79,7 @@ public class MessageEditRecordDto
     public long MessageId { get; set; }
 
     [Column("edit_date")]
-    public long EditDate { get; set; }
+    public DateTimeOffset EditDate { get; set; }
 
     [Column("old_text")]
     public string? OldText { get; set; }

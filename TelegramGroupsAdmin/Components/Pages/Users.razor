@@ -325,7 +325,7 @@
 
                 var token = await InviteService.CreateInviteWithPermissionAsync(_currentUserId, permissionLevel, validDays);
                 var inviteLink = $"{Navigation.BaseUri}register?invite={token}";
-                var expiresAt = DateTimeOffset.UtcNow.AddDays(validDays).ToUnixTimeSeconds();
+                var expiresAt = DateTimeOffset.UtcNow.AddDays(validDays);
 
                 // Show the invite link in a new dialog
                 var linkParameters = new DialogParameters<CreateInviteDialog>();
@@ -448,10 +448,9 @@
         await dialog.Result;
     }
 
-    private static string FormatDate(long? timestamp)
+    private static string FormatDate(DateTimeOffset? timestamp)
     {
         if (!timestamp.HasValue) return "Never";
-        var date = DateTimeOffset.FromUnixTimeSeconds(timestamp.Value);
-        return date.ToString("yyyy-MM-dd HH:mm");
+        return timestamp.Value.ToString("yyyy-MM-dd HH:mm");
     }
 }

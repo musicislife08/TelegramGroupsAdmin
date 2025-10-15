@@ -29,7 +29,7 @@ public class AuditLogRepository
         var entity = new DataModels.AuditLogRecordDto
         {
             EventType = eventType,
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            Timestamp = DateTimeOffset.UtcNow,
             ActorUserId = actorUserId,
             TargetUserId = targetUserId,
             Value = value

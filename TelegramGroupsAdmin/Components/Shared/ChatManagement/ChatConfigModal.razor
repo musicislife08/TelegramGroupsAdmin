@@ -154,7 +154,7 @@
                 {
                     <MudStack Spacing="2">
                         <MudText Typo="Typo.body1">
-                            This chat has <strong>@_admins.Count admin(s)</strong> cached. Last refresh: @FormatTimestamp(ChatInfo.Chat.LastSeenAt ?? 0)
+                            This chat has <strong>@_admins.Count admin(s)</strong> cached. Last refresh: @FormatTimestamp(ChatInfo.Chat.LastSeenAt ?? DateTimeOffset.MinValue)
                         </MudText>
 
                         <MudTable Items="@_admins" Dense="true" Hover="true">
@@ -280,11 +280,10 @@
         }
     }
 
-    private string FormatTimestamp(long timestamp)
+    private string FormatTimestamp(DateTimeOffset? timestamp)
     {
-        if (timestamp == 0) return "Never";
-        var dt = DateTimeOffset.FromUnixTimeSeconds(timestamp);
-        return dt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        if (!timestamp.HasValue || timestamp.Value == DateTimeOffset.MinValue) return "Never";
+        return timestamp.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
     }
 
     private async Task OnConfigModeChanged()

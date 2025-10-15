@@ -128,13 +128,13 @@ public class UserRecordDto
     public bool TotpEnabled { get; set; }
 
     [Column("totp_setup_started_at")]
-    public long? TotpSetupStartedAt { get; set; }
+    public DateTimeOffset? TotpSetupStartedAt { get; set; }
 
     [Column("created_at")]
-    public long CreatedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 
     [Column("last_login_at")]
-    public long? LastLoginAt { get; set; }
+    public DateTimeOffset? LastLoginAt { get; set; }
 
     [Column("status")]
     public UserStatus Status { get; set; }
@@ -143,7 +143,7 @@ public class UserRecordDto
     public string? ModifiedBy { get; set; }
 
     [Column("modified_at")]
-    public long? ModifiedAt { get; set; }
+    public DateTimeOffset? ModifiedAt { get; set; }
 
     [Column("email_verified")]
     public bool EmailVerified { get; set; }
@@ -152,13 +152,13 @@ public class UserRecordDto
     public string? EmailVerificationToken { get; set; }
 
     [Column("email_verification_token_expires_at")]
-    public long? EmailVerificationTokenExpiresAt { get; set; }
+    public DateTimeOffset? EmailVerificationTokenExpiresAt { get; set; }
 
     [Column("password_reset_token")]
     public string? PasswordResetToken { get; set; }
 
     [Column("password_reset_token_expires_at")]
-    public long? PasswordResetTokenExpiresAt { get; set; }
+    public DateTimeOffset? PasswordResetTokenExpiresAt { get; set; }
 
     // Navigation properties
     [ForeignKey(nameof(InvitedBy))]
@@ -201,7 +201,7 @@ public class RecoveryCodeRecordDto
     public string CodeHash { get; set; } = string.Empty;
 
     [Column("used_at")]
-    public long? UsedAt { get; set; }
+    public DateTimeOffset? UsedAt { get; set; }
 
     // Navigation property
     [ForeignKey(nameof(UserId))]
@@ -224,10 +224,10 @@ public class InviteRecordDto
     public string CreatedBy { get; set; } = string.Empty;
 
     [Column("created_at")]
-    public long CreatedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 
     [Column("expires_at")]
-    public long ExpiresAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 
     [Column("used_by")]
     public string? UsedBy { get; set; }
@@ -239,7 +239,7 @@ public class InviteRecordDto
     public InviteStatus Status { get; set; }
 
     [Column("modified_at")]
-    public long? ModifiedAt { get; set; }
+    public DateTimeOffset? ModifiedAt { get; set; }
 
     // Navigation properties
     [ForeignKey(nameof(CreatedBy))]
@@ -274,7 +274,7 @@ public class AuditLogRecordDto
     public AuditEventType EventType { get; set; }
 
     [Column("timestamp")]
-    public long Timestamp { get; set; }
+    public DateTimeOffset Timestamp { get; set; }
 
     [Column("actor_user_id")]
     public string? ActorUserId { get; set; }        // Who performed the action (null for system events)

@@ -73,7 +73,7 @@ public class MessageExportService(AuthenticationStateProvider authStateProvider)
         foreach (var message in messages)
         {
             var spamCheck = spamChecks.GetValueOrDefault(message.MessageId);
-            var timestamp = DateTimeOffset.FromUnixTimeSeconds(message.Timestamp);
+            var timestamp = message.Timestamp;
 
             csv.WriteField(message.MessageId);
             csv.WriteField(message.Timestamp);
@@ -108,7 +108,7 @@ public class MessageExportService(AuthenticationStateProvider authStateProvider)
         var exportData = messages.Select(message =>
         {
             var spamCheck = spamChecks.GetValueOrDefault(message.MessageId);
-            var timestamp = DateTimeOffset.FromUnixTimeSeconds(message.Timestamp);
+            var timestamp = message.Timestamp;
 
             return new
             {

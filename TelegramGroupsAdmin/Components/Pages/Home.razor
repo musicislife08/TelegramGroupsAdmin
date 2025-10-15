@@ -125,8 +125,8 @@
         if (_stats == null || !_stats.OldestTimestamp.HasValue || !_stats.NewestTimestamp.HasValue)
             return "N/A";
 
-        var oldest = DateTimeOffset.FromUnixTimeSeconds(_stats.OldestTimestamp.Value);
-        var newest = DateTimeOffset.FromUnixTimeSeconds(_stats.NewestTimestamp.Value);
+        var oldest = _stats.OldestTimestamp.Value;
+        var newest = _stats.NewestTimestamp.Value;
         var span = newest - oldest;
 
         if (span.TotalHours < 1)

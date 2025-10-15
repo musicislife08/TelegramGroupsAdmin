@@ -39,10 +39,10 @@ public class UserActionRecordDto
     public string? IssuedBy { get; set; }
 
     [Column("issued_at")]
-    public long IssuedAt { get; set; }
+    public DateTimeOffset IssuedAt { get; set; }
 
     [Column("expires_at")]
-    public long? ExpiresAt { get; set; }
+    public DateTimeOffset? ExpiresAt { get; set; }
 
     [Column("reason")]
     public string? Reason { get; set; }

@@ -8,17 +8,17 @@ public record MessageRecord(
     long UserId,
     string? UserName,
     long ChatId,
-    long Timestamp,
+    DateTimeOffset Timestamp,
     string? MessageText,
     string? PhotoFileId,
     int? PhotoFileSize,
     string? Urls,
-    long? EditDate,
+    DateTimeOffset? EditDate,
     string? ContentHash,
     string? ChatName,
     string? PhotoLocalPath,
     string? PhotoThumbnailPath,
-    long? DeletedAt,
+    DateTimeOffset? DeletedAt,
     string? DeletionSource
 );
 
@@ -28,7 +28,7 @@ public record MessageRecord(
 public record PhotoMessageRecord(
     string FileId,
     string? MessageText,
-    long Timestamp
+    DateTimeOffset Timestamp
 );
 
 /// <summary>
@@ -38,8 +38,8 @@ public record HistoryStats(
     int TotalMessages,
     int UniqueUsers,
     int PhotoCount,
-    long? OldestTimestamp,
-    long? NewestTimestamp
+    DateTimeOffset? OldestTimestamp,
+    DateTimeOffset? NewestTimestamp
 );
 
 /// <summary>
@@ -50,7 +50,7 @@ public record MessageEditRecord(
     long MessageId,
     string? OldText,
     string? NewText,
-    long EditDate,
+    DateTimeOffset EditDate,
     string? OldContentHash,
     string? NewContentHash
 );
@@ -60,7 +60,7 @@ public record MessageEditRecord(
 /// </summary>
 public record SpamCheckRecord(
     long Id,
-    long CheckTimestamp,
+    DateTimeOffset CheckTimestamp,
     long UserId,
     string? ContentHash,
     bool IsSpam,
@@ -91,7 +91,7 @@ public class DetectionResultRecord
 {
     public long Id { get; set; }
     public long MessageId { get; set; }
-    public long DetectedAt { get; set; }
+    public DateTimeOffset DetectedAt { get; set; }
     public string DetectionSource { get; set; } = string.Empty;
     public string DetectionMethod { get; set; } = string.Empty;
     public bool IsSpam { get; set; }
@@ -116,8 +116,8 @@ public record UserActionRecord(
     UserActionType ActionType,
     long? MessageId,
     string? IssuedBy,
-    long IssuedAt,
-    long? ExpiresAt,
+    DateTimeOffset IssuedAt,
+    DateTimeOffset? ExpiresAt,
     string? Reason
 );
 
@@ -164,9 +164,9 @@ public record ManagedChatRecord(
     ManagedChatType ChatType,
     BotChatStatus BotStatus,
     bool IsAdmin,
-    long AddedAt,
+    DateTimeOffset AddedAt,
     bool IsActive,
-    long? LastSeenAt,
+    DateTimeOffset? LastSeenAt,
     string? SettingsJson
 );
 

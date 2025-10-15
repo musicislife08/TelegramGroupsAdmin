@@ -227,15 +227,25 @@ public static class ServiceCollectionExtensions
         // Bot command system
         // Commands are Scoped (to allow injecting Scoped services like ModerationActionService)
         // CommandRouter is Singleton (creates scopes internally when executing commands)
-        services.AddScoped<IBotCommand, Commands.HelpCommand>();
-        services.AddScoped<IBotCommand, Commands.LinkCommand>();
-        services.AddScoped<IBotCommand, Commands.SpamCommand>();
-        services.AddScoped<IBotCommand, Commands.BanCommand>();
-        services.AddScoped<IBotCommand, Commands.TrustCommand>();
-        services.AddScoped<IBotCommand, Commands.UnbanCommand>();
-        services.AddScoped<IBotCommand, Commands.WarnCommand>();
-        services.AddScoped<IBotCommand, Commands.ReportCommand>();
-        services.AddScoped<IBotCommand, Commands.DeleteCommand>();
+        // Register both as interface and concrete type for CommandRouter resolution
+        services.AddScoped<Commands.HelpCommand>();
+        services.AddScoped<IBotCommand, Commands.HelpCommand>(sp => sp.GetRequiredService<Commands.HelpCommand>());
+        services.AddScoped<Commands.LinkCommand>();
+        services.AddScoped<IBotCommand, Commands.LinkCommand>(sp => sp.GetRequiredService<Commands.LinkCommand>());
+        services.AddScoped<Commands.SpamCommand>();
+        services.AddScoped<IBotCommand, Commands.SpamCommand>(sp => sp.GetRequiredService<Commands.SpamCommand>());
+        services.AddScoped<Commands.BanCommand>();
+        services.AddScoped<IBotCommand, Commands.BanCommand>(sp => sp.GetRequiredService<Commands.BanCommand>());
+        services.AddScoped<Commands.TrustCommand>();
+        services.AddScoped<IBotCommand, Commands.TrustCommand>(sp => sp.GetRequiredService<Commands.TrustCommand>());
+        services.AddScoped<Commands.UnbanCommand>();
+        services.AddScoped<IBotCommand, Commands.UnbanCommand>(sp => sp.GetRequiredService<Commands.UnbanCommand>());
+        services.AddScoped<Commands.WarnCommand>();
+        services.AddScoped<IBotCommand, Commands.WarnCommand>(sp => sp.GetRequiredService<Commands.WarnCommand>());
+        services.AddScoped<Commands.ReportCommand>();
+        services.AddScoped<IBotCommand, Commands.ReportCommand>(sp => sp.GetRequiredService<Commands.ReportCommand>());
+        services.AddScoped<Commands.DeleteCommand>();
+        services.AddScoped<IBotCommand, Commands.DeleteCommand>(sp => sp.GetRequiredService<Commands.DeleteCommand>());
         services.AddSingleton<CommandRouter>();
 
         // Background services (refactored into smaller services)

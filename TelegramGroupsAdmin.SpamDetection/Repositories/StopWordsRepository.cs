@@ -54,7 +54,7 @@ public class StopWordsRepository : IStopWordsRepository
             {
                 Word = word.ToLowerInvariant(),
                 Enabled = true,
-                AddedDate = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                AddedDate = DateTimeOffset.UtcNow,
                 AddedBy = addedBy,
                 Notes = notes
             };

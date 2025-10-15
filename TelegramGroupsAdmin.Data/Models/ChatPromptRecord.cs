@@ -26,7 +26,7 @@ public class ChatPromptRecordDto
     public bool Enabled { get; set; }
 
     [Column("added_date")]
-    public long AddedDate { get; set; }
+    public DateTimeOffset AddedDate { get; set; }
 
     [Column("added_by")]
     public string? AddedBy { get; set; }

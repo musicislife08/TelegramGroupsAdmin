@@ -31,7 +31,7 @@ public class TotpService(
         bool setupExpired = false;
         if (user.TotpSetupStartedAt.HasValue)
         {
-            var setupStartedAt = DateTimeOffset.FromUnixTimeSeconds(user.TotpSetupStartedAt.Value);
+            var setupStartedAt = user.TotpSetupStartedAt.Value;
             var expiryTime = setupStartedAt.AddMinutes(setupExpiryMinutes);
             setupExpired = DateTimeOffset.UtcNow > expiryTime;
 

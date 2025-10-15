@@ -22,7 +22,7 @@ public class SpamDetectionConfigRecordDto
     public string ConfigJson { get; set; } = string.Empty;
 
     [Column("last_updated")]
-    public long LastUpdated { get; set; }
+    public DateTimeOffset LastUpdated { get; set; }
 
     [Column("updated_by")]
     public string? UpdatedBy { get; set; }

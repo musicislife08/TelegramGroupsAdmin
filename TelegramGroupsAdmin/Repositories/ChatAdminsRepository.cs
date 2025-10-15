@@ -84,7 +84,7 @@ public class ChatAdminsRepository : IChatAdminsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = DateTimeOffset.UtcNow;
 
         var existing = await context.ChatAdmins
             .FirstOrDefaultAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId);
@@ -124,7 +124,7 @@ public class ChatAdminsRepository : IChatAdminsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = DateTimeOffset.UtcNow;
 
         var admins = await context.ChatAdmins
             .Where(ca => ca.ChatId == chatId && ca.TelegramId == telegramId)
@@ -170,7 +170,7 @@ public class ChatAdminsRepository : IChatAdminsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = DateTimeOffset.UtcNow;
 
         var admin = await context.ChatAdmins
             .FirstOrDefaultAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId);

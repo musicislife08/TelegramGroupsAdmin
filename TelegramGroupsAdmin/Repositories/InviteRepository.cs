@@ -35,15 +35,15 @@ public class InviteRepository
         await context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Created invite {Token} by user {CreatedBy}, expires at {ExpiresAt}, permission level {PermissionLevel}",
-            invite.Token, invite.CreatedBy, DateTimeOffset.FromUnixTimeSeconds(invite.ExpiresAt), invite.PermissionLevel);
+            invite.Token, invite.CreatedBy, invite.ExpiresAt, invite.PermissionLevel);
     }
 
     public async Task<string> CreateAsync(string createdBy, int validDays = 7, int permissionLevel = 0, CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
         var token = Guid.NewGuid().ToString();
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        var expiresAt = now + (validDays * 24 * 3600);
+        var now = DateTimeOffset.UtcNow;
+        var expiresAt = now.AddDays(validDays);
 
         var entity = new DataModels.InviteRecordDto
         {
@@ -69,7 +69,7 @@ public class InviteRepository
         };
 
         _logger.LogInformation("Created invite {Token} by user {CreatedBy}, expires at {ExpiresAt}, permission level {PermissionLevel}",
-            token, createdBy, DateTimeOffset.FromUnixTimeSeconds(expiresAt), permissionName);
+            token, createdBy, expiresAt, permissionName);
 
         return token;
     }
@@ -82,7 +82,7 @@ public class InviteRepository
 
         entity.UsedBy = usedBy;
         entity.Status = DataModels.InviteStatus.Used;
-        entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        entity.ModifiedAt = DateTimeOffset.UtcNow;
 
         await context.SaveChangesAsync();
 
@@ -104,7 +104,7 @@ public class InviteRepository
     public async Task<int> CleanupExpiredAsync()
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = DateTimeOffset.UtcNow;
 
         var expiredInvites = await context.Invites
             .Where(i => i.ExpiresAt <= now && i.Status == DataModels.InviteStatus.Pending)
@@ -190,7 +190,7 @@ public class InviteRepository
             return false;
 
         entity.Status = DataModels.InviteStatus.Revoked;
-        entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        entity.ModifiedAt = DateTimeOffset.UtcNow;
 
         await context.SaveChangesAsync(ct);
 

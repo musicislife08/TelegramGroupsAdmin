@@ -14,17 +14,17 @@ public record UserRecord(
     bool IsActive,
     string? TotpSecret,
     bool TotpEnabled,
-    long? TotpSetupStartedAt,
-    long CreatedAt,
-    long? LastLoginAt,
+    DateTimeOffset? TotpSetupStartedAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? LastLoginAt,
     UserStatus Status,
     string? ModifiedBy,
-    long? ModifiedAt,
+    DateTimeOffset? ModifiedAt,
     bool EmailVerified,
     string? EmailVerificationToken,
-    long? EmailVerificationTokenExpiresAt,
+    DateTimeOffset? EmailVerificationTokenExpiresAt,
     string? PasswordResetToken,
-    long? PasswordResetTokenExpiresAt
+    DateTimeOffset? PasswordResetTokenExpiresAt
 )
 {
     public bool CanLogin => Status == UserStatus.Active && EmailVerified;
@@ -39,7 +39,7 @@ public record RecoveryCodeRecord(
     long Id,
     string UserId,
     string CodeHash,
-    long? UsedAt
+    DateTimeOffset? UsedAt
 );
 
 /// <summary>
@@ -48,15 +48,15 @@ public record RecoveryCodeRecord(
 public record InviteRecord(
     string Token,
     string CreatedBy,
-    long CreatedAt,
-    long ExpiresAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset ExpiresAt,
     string? UsedBy,
     PermissionLevel PermissionLevel,
     InviteStatus Status,
-    long? ModifiedAt
+    DateTimeOffset? ModifiedAt
 )
 {
-    public bool IsExpired => ExpiresAt < DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    public bool IsExpired => ExpiresAt < DateTimeOffset.UtcNow;
     public bool IsValid => Status == InviteStatus.Pending && !IsExpired;
 }
 
@@ -67,16 +67,16 @@ public record InviteWithCreator(
     string Token,
     string CreatedBy,
     string CreatedByEmail,
-    long CreatedAt,
-    long ExpiresAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset ExpiresAt,
     string? UsedBy,
     string? UsedByEmail,
     PermissionLevel PermissionLevel,
     InviteStatus Status,
-    long? ModifiedAt
+    DateTimeOffset? ModifiedAt
 )
 {
-    public bool IsExpired => ExpiresAt < DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    public bool IsExpired => ExpiresAt < DateTimeOffset.UtcNow;
     public bool IsValid => Status == InviteStatus.Pending && !IsExpired;
 }
 
@@ -86,7 +86,7 @@ public record InviteWithCreator(
 public record AuditLogRecord(
     long Id,
     AuditEventType EventType,
-    long Timestamp,
+    DateTimeOffset Timestamp,
     string? ActorUserId,
     string? TargetUserId,
     string? Value

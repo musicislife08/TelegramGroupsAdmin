@@ -46,7 +46,7 @@ public class MessageHistoryRepository
 
         _logger.LogDebug(
             "Found photo {FileId} for user {UserId} in chat {ChatId} from {Timestamp}",
-            entity.PhotoFileId, userId, chatId, DateTimeOffset.FromUnixTimeSeconds(entity.Timestamp));
+            entity.PhotoFileId, userId, chatId, entity.Timestamp);
 
         return new UiModels.PhotoMessageRecord(
             FileId: entity.PhotoFileId!,
@@ -58,7 +58,7 @@ public class MessageHistoryRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
         // Retention: Keep messages from last 30 days OR messages with detection_results (training data)
-        var retentionCutoff = DateTimeOffset.UtcNow.AddDays(-30).ToUnixTimeSeconds();
+        var retentionCutoff = DateTimeOffset.UtcNow.AddDays(-30);
 
         // First, get image paths for messages that will be deleted
         var expiredImages = await context.Messages
@@ -147,8 +147,8 @@ public class MessageHistoryRepository
     }
 
     public async Task<List<UiModels.MessageRecord>> GetMessagesByDateRangeAsync(
-        long startTimestamp,
-        long endTimestamp,
+        DateTimeOffset startTimestamp,
+        DateTimeOffset endTimestamp,
         int limit = 1000)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
@@ -169,8 +169,8 @@ public class MessageHistoryRepository
         var uniqueUsers = await context.Messages.Select(m => m.UserId).Distinct().CountAsync();
         var photoCount = await context.Messages.CountAsync(m => m.PhotoFileId != null);
 
-        long oldestTimestamp = 0;
-        long newestTimestamp = 0;
+        DateTimeOffset? oldestTimestamp = null;
+        DateTimeOffset? newestTimestamp = null;
 
         if (totalMessages > 0)
         {
@@ -182,8 +182,8 @@ public class MessageHistoryRepository
             TotalMessages: totalMessages,
             UniqueUsers: uniqueUsers,
             PhotoCount: photoCount,
-            OldestTimestamp: oldestTimestamp > 0 ? oldestTimestamp : null,
-            NewestTimestamp: newestTimestamp > 0 ? newestTimestamp : null);
+            OldestTimestamp: oldestTimestamp,
+            NewestTimestamp: newestTimestamp);
 
         return result;
     }
@@ -346,7 +346,7 @@ public class MessageHistoryRepository
             : 0.0;
 
         // Last 24h stats
-        var since24h = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeSeconds();
+        var since24h = DateTimeOffset.UtcNow.AddDays(-1);
         var recentDetections = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.DetectedAt >= since24h)
@@ -418,8 +418,7 @@ public class MessageHistoryRepository
 
         if (entity != null)
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            entity.DeletedAt = now;
+            entity.DeletedAt = DateTimeOffset.UtcNow;
             entity.DeletionSource = deletionSource;
 
             await context.SaveChangesAsync();

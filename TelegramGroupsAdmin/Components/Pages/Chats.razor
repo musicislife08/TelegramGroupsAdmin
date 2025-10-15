@@ -84,7 +84,7 @@
                 <MudTd DataLabel="Last Seen">
                     @if (context.Chat.LastSeenAt.HasValue)
                     {
-                        @DateTimeOffset.FromUnixTimeSeconds(context.Chat.LastSeenAt.Value).ToString("g")
+                        @context.Chat.LastSeenAt.Value.ToString("g")
                     }
                     else
                     {

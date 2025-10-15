@@ -42,7 +42,7 @@ public class MessageHistoryAdapter : SpamDetectionServices.IMessageHistoryServic
                 UserId = m.UserId.ToString(),
                 UserName = m.UserName ?? "Unknown",
                 Message = m.MessageText ?? string.Empty,
-                Timestamp = DateTimeOffset.FromUnixTimeSeconds(m.Timestamp).UtcDateTime,
+                Timestamp = m.Timestamp.UtcDateTime,
                 WasSpam = false // TODO: Join with detection_results table to populate this
             }).ToList();
         }

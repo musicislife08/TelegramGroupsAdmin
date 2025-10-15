@@ -506,11 +506,10 @@
         _ => "Unknown"
     };
 
-    private static string FormatDate(long? timestamp)
+    private static string FormatDate(DateTimeOffset? timestamp)
     {
         if (!timestamp.HasValue) return "Never";
-        var date = DateTimeOffset.FromUnixTimeSeconds(timestamp.Value);
-        return date.ToString("yyyy-MM-dd HH:mm");
+        return timestamp.Value.ToString("yyyy-MM-dd HH:mm");
     }
 
     private async Task LoadLinkedAccountsAsync()
@@ -550,8 +549,8 @@
                 .Replace("=", "")
                 .Substring(0, 12); // 12 character token
 
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var expiresAt = now + (15 * 60); // 15 minutes
+            var now = DateTimeOffset.UtcNow;
+            var expiresAt = now.AddMinutes(15); // 15 minutes
 
             var tokenRecord = new TelegramLinkTokenRecord(
                 Token: token,

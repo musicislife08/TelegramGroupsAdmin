@@ -23,7 +23,7 @@ public interface ITelegramLinkTokenRepository
     /// <summary>
     /// Delete expired tokens (cleanup)
     /// </summary>
-    Task DeleteExpiredTokensAsync(long beforeTimestamp);
+    Task DeleteExpiredTokensAsync(DateTimeOffset beforeTimestamp);
 
     /// <summary>
     /// Get active tokens for a user (for UI display)

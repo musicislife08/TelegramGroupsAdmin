@@ -29,7 +29,7 @@ public class TrainingSampleDto
     public bool IsSpam { get; set; }
 
     [Column("added_date")]
-    public long AddedDate { get; set; }
+    public DateTimeOffset AddedDate { get; set; }
 
     [Column("source")]
     [Required]
@@ -48,7 +48,7 @@ public class TrainingSampleDto
     public int DetectionCount { get; set; }
 
     [Column("last_detected_date")]
-    public long? LastDetectedDate { get; set; }
+    public DateTimeOffset? LastDetectedDate { get; set; }
 }
 
 /// <summary>
@@ -86,7 +86,7 @@ public class StopWordDto
     public bool Enabled { get; set; }
 
     [Column("added_date")]
-    public long AddedDate { get; set; }
+    public DateTimeOffset AddedDate { get; set; }
 
     [Column("added_by")]
     public string? AddedBy { get; set; }
@@ -147,7 +147,7 @@ public class ReportDto
     public string? ReportedByUserName { get; set; }
 
     [Column("reported_at")]
-    public long ReportedAt { get; set; }
+    public DateTimeOffset ReportedAt { get; set; }
 
     [Column("status")]
     public ReportStatus Status { get; set; }
@@ -156,7 +156,7 @@ public class ReportDto
     public string? ReviewedBy { get; set; }
 
     [Column("reviewed_at")]
-    public long? ReviewedAt { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
 
     [Column("action_taken")]
     public string? ActionTaken { get; set; }

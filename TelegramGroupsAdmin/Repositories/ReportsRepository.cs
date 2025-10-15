@@ -95,7 +95,7 @@ public class ReportsRepository : IReportsRepository
 
         if (entity != null)
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var now = DateTimeOffset.UtcNow;
 
             entity.Status = (DataModels.ReportStatus)(int)status;
             entity.ReviewedBy = reviewedBy;
@@ -129,7 +129,7 @@ public class ReportsRepository : IReportsRepository
         return await query.CountAsync();
     }
 
-    public async Task DeleteOldReportsAsync(long olderThanTimestamp)
+    public async Task DeleteOldReportsAsync(DateTimeOffset olderThanTimestamp)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 

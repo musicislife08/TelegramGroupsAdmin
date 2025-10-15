@@ -151,7 +151,7 @@
                         <MudTd DataLabel="Last Detected">
                             @if (context.LastDetectedDate.HasValue)
                             {
-                                <MudText Typo="Typo.body2">@DateTimeOffset.FromUnixTimeSeconds(context.LastDetectedDate.Value).ToString("MM/dd HH:mm")</MudText>
+                                <MudText Typo="Typo.body2">@context.LastDetectedDate.Value.ToString("MM/dd HH:mm")</MudText>
                             }
                             else
                             {
@@ -182,7 +182,7 @@
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary">-</MudText>
                             }
                         </MudTd>
-                        <MudTd DataLabel="Added Date">@DateTimeOffset.FromUnixTimeSeconds(context.AddedDate).ToString("yyyy-MM-dd HH:mm")</MudTd>
+                        <MudTd DataLabel="Added Date">@context.AddedDate.ToString("yyyy-MM-dd HH:mm")</MudTd>
                         <MudTd DataLabel="Added By">@(context.AddedBy ?? "System")</MudTd>
                         <MudTd DataLabel="Actions">
                             <MudStack Row="true" Spacing="1">

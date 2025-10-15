@@ -25,7 +25,7 @@ public class TelegramUserMappingRecordDto
     public string UserId { get; set; } = string.Empty;
 
     [Column("linked_at")]
-    public long LinkedAt { get; set; }
+    public DateTimeOffset LinkedAt { get; set; }
 
     [Column("is_active")]
     public bool IsActive { get; set; }

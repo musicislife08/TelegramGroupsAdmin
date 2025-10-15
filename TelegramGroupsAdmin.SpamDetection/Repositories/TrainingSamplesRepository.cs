@@ -125,12 +125,12 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
 
             try
             {
-                var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var timestamp = DateTimeOffset.UtcNow;
                 var chatIdLong = chatId != null ? long.Parse(chatId) : -1; // -1 for unknown chat
 
-                // Step 1: Try to find existing message by text and timestamp
+                // Step 1: Try to find existing message by text (don't match on timestamp - too precise)
                 var existingMessage = await context.Messages
-                    .FirstOrDefaultAsync(m => m.MessageText == messageText && m.Timestamp == timestamp, cancellationToken);
+                    .FirstOrDefaultAsync(m => m.MessageText == messageText, cancellationToken);
 
                 long messageId;
                 if (existingMessage != null)
@@ -241,13 +241,13 @@ public class TrainingSamplesRepository : ITrainingSamplesRepository
     /// NOTE: In normalized schema, we generally keep all detection_results for analytics
     /// This should rarely be used
     /// </summary>
-    public async Task<int> DeleteOldSamplesAsync(long olderThanUnixTime, CancellationToken cancellationToken = default)
+    public async Task<int> DeleteOldSamplesAsync(DateTimeOffset olderThan, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             var oldResults = await context.DetectionResults
-                .Where(dr => dr.DetectedAt < olderThanUnixTime)
+                .Where(dr => dr.DetectedAt < olderThan)
                 .ToListAsync(cancellationToken);
 
             var deletedCount = oldResults.Count;

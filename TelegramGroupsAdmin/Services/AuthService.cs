@@ -202,7 +202,7 @@ public class AuthService(
                     throw new ArgumentOutOfRangeException();
             }
 
-            if (invite.ExpiresAt < DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+            if (invite.ExpiresAt < DateTimeOffset.UtcNow)
             {
                 return new RegisterResult(false, null, "Invite token expired");
             }
@@ -234,7 +234,7 @@ public class AuthService(
                 TotpSecret = null,
                 TotpEnabled = false,
                 ModifiedBy = existing.Id,
-                ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                ModifiedAt = DateTimeOffset.UtcNow,
                 EmailVerified = isFirstRun, // First user is auto-verified
                 EmailVerificationToken = null, // Deprecated - using verification_tokens table
                 EmailVerificationTokenExpiresAt = null
@@ -267,8 +267,8 @@ public class AuthService(
                         TokenType: TokenType.EmailVerification,
                         Token: tokenString,
                         Value: null,
-                        ExpiresAt: DateTimeOffset.UtcNow.AddHours(24).ToUnixTimeSeconds(),
-                        CreatedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                        ExpiresAt: DateTimeOffset.UtcNow.AddHours(24),
+                        CreatedAt: DateTimeOffset.UtcNow,
                         UsedAt: null
                     );
 
@@ -331,7 +331,7 @@ public class AuthService(
             TotpSecret: null,
             TotpEnabled: false,
             TotpSetupStartedAt: null,
-            CreatedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            CreatedAt: DateTimeOffset.UtcNow,
             LastLoginAt: null,
             Status: UserStatus.Active,
             ModifiedBy: null,
@@ -370,8 +370,8 @@ public class AuthService(
                     TokenType: TokenType.EmailVerification,
                     Token: tokenString,
                     Value: null,
-                    ExpiresAt: DateTimeOffset.UtcNow.AddHours(24).ToUnixTimeSeconds(),
-                    CreatedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    ExpiresAt: DateTimeOffset.UtcNow.AddHours(24),
+                    CreatedAt: DateTimeOffset.UtcNow,
                     UsedAt: null
                 );
 
@@ -503,7 +503,7 @@ public class AuthService(
             PasswordHash = newPasswordHash,
             SecurityStamp = Guid.NewGuid().ToString(),
             ModifiedBy = userId,
-            ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            ModifiedAt = DateTimeOffset.UtcNow
         };
 
         await userRepository.UpdateAsync(updatedUser, ct);
@@ -548,8 +548,8 @@ public class AuthService(
                 TokenType: TokenType.EmailVerification,
                 Token: tokenString,
                 Value: null,
-                ExpiresAt: DateTimeOffset.UtcNow.AddHours(24).ToUnixTimeSeconds(),
-                CreatedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                ExpiresAt: DateTimeOffset.UtcNow.AddHours(24),
+                CreatedAt: DateTimeOffset.UtcNow,
                 UsedAt: null
             );
 
@@ -601,8 +601,8 @@ public class AuthService(
             TokenType: TokenType.PasswordReset,
             Token: tokenString,
             Value: null,
-            ExpiresAt: DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds(), // 1 hour expiry for password reset
-            CreatedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            ExpiresAt: DateTimeOffset.UtcNow.AddHours(1), // 1 hour expiry for password reset
+            CreatedAt: DateTimeOffset.UtcNow,
             UsedAt: null
         );
 
@@ -667,7 +667,7 @@ public class AuthService(
             PasswordHash = newPasswordHash,
             SecurityStamp = Guid.NewGuid().ToString(),
             ModifiedBy = user.Id,
-            ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            ModifiedAt = DateTimeOffset.UtcNow
         };
 
         await userRepository.UpdateAsync(updatedUser, ct);

@@ -11,7 +11,7 @@ public class ChatAdmin
     public long TelegramId { get; init; }
     public string? Username { get; init; }
     public bool IsCreator { get; init; }
-    public long PromotedAt { get; init; }
-    public long LastVerifiedAt { get; init; }
+    public DateTimeOffset PromotedAt { get; init; }
+    public DateTimeOffset LastVerifiedAt { get; init; }
     public bool IsActive { get; init; }
 }

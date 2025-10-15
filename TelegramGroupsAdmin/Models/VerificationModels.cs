@@ -9,12 +9,12 @@ public record VerificationToken(
     TokenType TokenType,
     string Token,
     string? Value,
-    long ExpiresAt,
-    long CreatedAt,
-    long? UsedAt
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? UsedAt
 )
 {
-    public bool IsExpired => DateTimeOffset.UtcNow.ToUnixTimeSeconds() > ExpiresAt;
+    public bool IsExpired => DateTimeOffset.UtcNow > ExpiresAt;
     public bool IsUsed => UsedAt.HasValue;
     public bool IsValid => !IsExpired && !IsUsed;
 }

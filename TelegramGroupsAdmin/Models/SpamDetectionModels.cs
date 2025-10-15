@@ -11,10 +11,10 @@ public record Report(
     int? ReportCommandMessageId,      // NULL for web UI reports, populated for Telegram /report
     long? ReportedByUserId,            // NULL if user has no Telegram link, populated if they do
     string? ReportedByUserName,
-    long ReportedAt,
+    DateTimeOffset ReportedAt,
     ReportStatus Status,
     string? ReviewedBy,
-    long? ReviewedAt,
+    DateTimeOffset? ReviewedAt,
     string? ActionTaken,
     string? AdminNotes,
     string? WebUserId = null           // Phase 2.6: Web user ID (always populated for web UI reports)

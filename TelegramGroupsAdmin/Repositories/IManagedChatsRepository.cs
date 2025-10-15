@@ -44,7 +44,7 @@ public interface IManagedChatsRepository
     /// Update last_seen_at timestamp for a chat
     /// Called when receiving messages from the chat
     /// </summary>
-    Task UpdateLastSeenAsync(long chatId, long timestamp);
+    Task UpdateLastSeenAsync(long chatId, DateTimeOffset timestamp);
 
     /// <summary>
     /// Get all chats (active and inactive)

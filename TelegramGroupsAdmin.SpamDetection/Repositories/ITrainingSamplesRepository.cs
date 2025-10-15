@@ -34,7 +34,7 @@ public interface ITrainingSamplesRepository
     /// <summary>
     /// Delete training samples older than specified date
     /// </summary>
-    Task<int> DeleteOldSamplesAsync(long olderThanUnixTime, CancellationToken cancellationToken = default);
+    Task<int> DeleteOldSamplesAsync(DateTimeOffset olderThan, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Update a training sample

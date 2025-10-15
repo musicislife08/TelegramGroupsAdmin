@@ -114,7 +114,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
         }
     }
 
-    public async Task UpdateLastSeenAsync(long chatId, long timestamp)
+    public async Task UpdateLastSeenAsync(long chatId, DateTimeOffset timestamp)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
         var existing = await context.ManagedChats

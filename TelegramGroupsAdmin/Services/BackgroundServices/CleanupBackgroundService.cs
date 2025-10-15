@@ -66,7 +66,7 @@ public class CleanupBackgroundService : BackgroundService
                     stats.UniqueUsers,
                     stats.PhotoCount,
                     stats.OldestTimestamp.HasValue
-                        ? DateTimeOffset.FromUnixTimeSeconds(stats.OldestTimestamp.Value).ToString("g")
+                        ? stats.OldestTimestamp.Value.ToString("g")
                         : "none");
             }
             catch (OperationCanceledException)

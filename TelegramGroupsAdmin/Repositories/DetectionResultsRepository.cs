@@ -192,7 +192,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         await using var context = await _contextFactory.CreateDbContextAsync();
         // Check for active 'trust' action
         // All trusts are global now (no chat_ids column)
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = DateTimeOffset.UtcNow;
         var isTrusted = await context.UserActions
             .AsNoTracking()
             .AnyAsync(ua => ua.UserId == userId
@@ -269,7 +269,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             : 0.0;
 
         // Last 24h stats
-        var since24h = DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeSeconds();
+        var since24h = DateTimeOffset.UtcNow.AddDays(-1);
         var recentDetections = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.DetectedAt >= since24h)
@@ -291,7 +291,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         };
     }
 
-    public async Task<int> DeleteOlderThanAsync(long timestamp)
+    public async Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
         // Note: Per CLAUDE.md, detection_results should be permanent

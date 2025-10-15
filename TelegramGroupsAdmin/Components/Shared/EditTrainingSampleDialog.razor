@@ -44,7 +44,7 @@
                             HelperText="Confidence level when this sample was added (0-100%)" />
 
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                <MudText Typo="Typo.body2"><strong>Added:</strong> @DateTimeOffset.FromUnixTimeSeconds(Sample.AddedDate).ToString("yyyy-MM-dd HH:mm")</MudText>
+                <MudText Typo="Typo.body2"><strong>Added:</strong> @Sample.AddedDate.ToString("yyyy-MM-dd HH:mm")</MudText>
                 <MudText Typo="Typo.body2"><strong>By:</strong> @(Sample.AddedBy ?? "System")</MudText>
                 <MudText Typo="Typo.body2"><strong>Original Type:</strong> @(Sample.IsSpam ? "SPAM" : "HAM")</MudText>
             </MudStack>

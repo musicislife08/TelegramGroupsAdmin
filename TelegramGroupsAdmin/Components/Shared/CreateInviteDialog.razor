@@ -72,7 +72,7 @@
     public string? InviteLink { get; set; }
 
     [Parameter]
-    public long? ExpiresAt { get; set; }
+    public DateTimeOffset? ExpiresAt { get; set; }
 
     [Parameter]
     public int MaxPermissionLevel { get; set; } = 2; // Default to Owner if not specified
@@ -89,7 +89,7 @@
             _inviteLink = InviteLink;
             if (ExpiresAt.HasValue)
             {
-                _expiresAt = DateTimeOffset.FromUnixTimeSeconds(ExpiresAt.Value).ToString("yyyy-MM-dd HH:mm");
+                _expiresAt = ExpiresAt.Value.ToString("yyyy-MM-dd HH:mm");
             }
         }
 

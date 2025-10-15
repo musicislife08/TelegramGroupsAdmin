@@ -61,7 +61,7 @@ public class LinkCommand : IBotCommand
         }
 
         // Check if token is expired
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = DateTimeOffset.UtcNow;
         if (tokenRecord.ExpiresAt < now)
         {
             return "❌ Token expired. Please generate a new token from the web app.";

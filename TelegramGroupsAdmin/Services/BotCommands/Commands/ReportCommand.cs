@@ -53,7 +53,7 @@ public class ReportCommand : IBotCommand
         using var scope = _serviceProvider.CreateScope();
         var reportsRepository = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = DateTimeOffset.UtcNow;
 
         var report = new Report(
             Id: 0, // Will be assigned by database

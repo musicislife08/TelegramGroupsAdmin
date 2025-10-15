@@ -185,9 +185,9 @@
         return name.Length >= 2 ? name.Substring(0, 2).ToUpper() : name.ToUpper();
     }
 
-    private string FormatTimestamp(long timestamp)
+    private string FormatTimestamp(DateTimeOffset timestamp)
     {
-        var dt = DateTimeOffset.FromUnixTimeSeconds(timestamp).ToLocalTime();
+        var dt = timestamp.ToLocalTime();
         var now = DateTimeOffset.Now;
 
         if (dt.Date == now.Date)

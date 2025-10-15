@@ -7,7 +7,7 @@ public record StopWord(
     long Id,
     string Word,
     bool Enabled,
-    long AddedDate,
+    DateTimeOffset AddedDate,
     string? AddedBy,
     string? Notes
 );

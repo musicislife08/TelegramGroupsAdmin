@@ -53,7 +53,7 @@ public class VerificationTokenRepository
             _ => throw new ArgumentException($"Unknown token type: {tokenType}")
         };
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = DateTimeOffset.UtcNow;
 
         var entity = await context.VerificationTokens
             .AsNoTracking()
@@ -73,7 +73,7 @@ public class VerificationTokenRepository
         var entity = await context.VerificationTokens.FirstOrDefaultAsync(vt => vt.Token == token, ct);
         if (entity == null) return;
 
-        entity.UsedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        entity.UsedAt = DateTimeOffset.UtcNow;
         await context.SaveChangesAsync(ct);
 
         _logger.LogDebug("Marked verification token as used: {Token}", token);
@@ -83,7 +83,7 @@ public class VerificationTokenRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = DateTimeOffset.UtcNow;
 
         var expiredTokens = await context.VerificationTokens
             .Where(vt => vt.ExpiresAt <= now)

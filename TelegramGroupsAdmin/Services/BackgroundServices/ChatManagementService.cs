@@ -64,9 +64,9 @@ public class ChatManagementService(
                 ChatType: chatType,
                 BotStatus: botStatus,
                 IsAdmin: isAdmin,
-                AddedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                AddedAt: DateTimeOffset.UtcNow,
                 IsActive: isActive,
-                LastSeenAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                LastSeenAt: DateTimeOffset.UtcNow,
                 SettingsJson: null
             );
 

@@ -32,7 +32,7 @@ public class SpamCheckConfigRecordDto
     public string? ConfigurationJson { get; set; }
 
     [Column("modified_date")]
-    public long ModifiedDate { get; set; }
+    public DateTimeOffset ModifiedDate { get; set; }
 
     [Column("modified_by")]
     public string? ModifiedBy { get; set; }

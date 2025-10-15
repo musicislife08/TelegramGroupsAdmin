@@ -8,7 +8,7 @@ public record TelegramUserMappingRecord(
     long TelegramId,
     string? TelegramUsername,
     string UserId,
-    long LinkedAt,
+    DateTimeOffset LinkedAt,
     bool IsActive
 );
 
@@ -18,8 +18,8 @@ public record TelegramUserMappingRecord(
 public record TelegramLinkTokenRecord(
     string Token,
     string UserId,
-    long CreatedAt,
-    long ExpiresAt,
-    long? UsedAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset? UsedAt,
     long? UsedByTelegramId
 );

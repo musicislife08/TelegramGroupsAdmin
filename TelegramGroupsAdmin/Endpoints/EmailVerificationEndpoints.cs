@@ -56,7 +56,7 @@ public static class EmailVerificationEndpoints
         {
             EmailVerified = true,
             ModifiedBy = user.Id,
-            ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+            ModifiedAt = DateTimeOffset.UtcNow
         };
 
         await userRepository.UpdateAsync(updatedUser, ct);

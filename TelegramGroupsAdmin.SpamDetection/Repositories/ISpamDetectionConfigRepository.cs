@@ -45,7 +45,7 @@ public record ChatConfigInfo
 {
     public string ChatId { get; init; } = string.Empty;
     public string? ChatName { get; init; }
-    public long LastUpdated { get; init; }
+    public DateTimeOffset LastUpdated { get; init; }
     public string? UpdatedBy { get; init; }
     public bool HasCustomConfig { get; init; }
 }

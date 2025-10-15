@@ -79,7 +79,7 @@ public class UserRepository
         var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
         if (entity == null) return;
 
-        entity.LastLoginAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        entity.LastLoginAt = DateTimeOffset.UtcNow;
         await context.SaveChangesAsync(ct);
     }
 
@@ -100,7 +100,7 @@ public class UserRepository
         if (entity == null) return;
 
         entity.TotpSecret = totpSecret;
-        entity.TotpSetupStartedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        entity.TotpSetupStartedAt = DateTimeOffset.UtcNow;
         await context.SaveChangesAsync(ct);
     }
 
@@ -207,7 +207,7 @@ public class UserRepository
         if (entity == null)
             return false;
 
-        entity.UsedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        entity.UsedAt = DateTimeOffset.UtcNow;
         await context.SaveChangesAsync(ct);
 
         return true;
@@ -231,7 +231,7 @@ public class UserRepository
 
         entity.UsedBy = userId;
         entity.Status = DataModels.InviteStatus.Used;
-        entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        entity.ModifiedAt = DateTimeOffset.UtcNow;
 
         await context.SaveChangesAsync(ct);
 
@@ -268,7 +268,7 @@ public class UserRepository
 
         entity.PermissionLevel = (DataModels.PermissionLevel)permissionLevel;
         entity.ModifiedBy = modifiedBy;
-        entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        entity.ModifiedAt = DateTimeOffset.UtcNow;
 
         await context.SaveChangesAsync(ct);
 
@@ -296,7 +296,7 @@ public class UserRepository
         entity.Status = (DataModels.UserStatus)(int)newStatus;
         entity.IsActive = newStatus == UiModels.UserStatus.Active;
         entity.ModifiedBy = modifiedBy;
-        entity.ModifiedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        entity.ModifiedAt = DateTimeOffset.UtcNow;
 
         await context.SaveChangesAsync(ct);
 

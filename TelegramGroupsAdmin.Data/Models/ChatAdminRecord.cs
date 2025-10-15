@@ -27,10 +27,10 @@ public class ChatAdminRecordDto
     public bool IsCreator { get; set; }
 
     [Column("promoted_at")]
-    public long PromotedAt { get; set; }
+    public DateTimeOffset PromotedAt { get; set; }
 
     [Column("last_verified_at")]
-    public long LastVerifiedAt { get; set; }
+    public DateTimeOffset LastVerifiedAt { get; set; }
 
     [Column("is_active")]
     public bool IsActive { get; set; }

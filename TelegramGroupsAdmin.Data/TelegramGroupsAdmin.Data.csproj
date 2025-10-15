@@ -22,6 +22,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0-rc.1.25451.107" />
     <PackageReference Include="Npgsql.DependencyInjection" Version="10.0.0-rc.1" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0-rc.1" />
+    <PackageReference Include="TickerQ.EntityFrameworkCore" Version="2.5.3" />
   </ItemGroup>
 
 </Project>

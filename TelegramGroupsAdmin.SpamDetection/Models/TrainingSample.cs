@@ -7,13 +7,13 @@ public record TrainingSample(
     long Id,
     string MessageText,
     bool IsSpam,
-    long AddedDate,
+    DateTimeOffset AddedDate,
     string Source,
     int? ConfidenceWhenAdded,
     long[] ChatIds,
     string? AddedBy,
     int DetectionCount,
-    long? LastDetectedDate
+    DateTimeOffset? LastDetectedDate
 );
 
 /// <summary>

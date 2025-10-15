@@ -49,5 +49,5 @@ public interface IReportsRepository
     /// <summary>
     /// Delete old reports (cleanup)
     /// </summary>
-    Task DeleteOldReportsAsync(long olderThanTimestamp);
+    Task DeleteOldReportsAsync(DateTimeOffset olderThanTimestamp);
 }

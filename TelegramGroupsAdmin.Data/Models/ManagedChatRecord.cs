@@ -48,13 +48,13 @@ public class ManagedChatRecordDto
     public bool IsAdmin { get; set; }
 
     [Column("added_at")]
-    public long AddedAt { get; set; }
+    public DateTimeOffset AddedAt { get; set; }
 
     [Column("is_active")]
     public bool IsActive { get; set; }
 
     [Column("last_seen_at")]
-    public long? LastSeenAt { get; set; }
+    public DateTimeOffset? LastSeenAt { get; set; }
 
     [Column("settings_json")]
     public string? SettingsJson { get; set; }

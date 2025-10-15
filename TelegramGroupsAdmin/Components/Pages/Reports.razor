@@ -324,10 +324,10 @@
         };
     }
 
-    private string FormatDate(long? timestamp)
+    private string FormatDate(DateTimeOffset? timestamp)
     {
         if (!timestamp.HasValue) return "N/A";
-        var date = DateTimeOffset.FromUnixTimeSeconds(timestamp.Value);
+        var date = timestamp.Value;
         var now = DateTimeOffset.UtcNow;
         var diff = now - date;
 

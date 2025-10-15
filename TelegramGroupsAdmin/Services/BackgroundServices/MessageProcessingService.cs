@@ -41,7 +41,7 @@ public partial class MessageProcessingService(
         // Process messages from all chats where bot is added
         try
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var now = DateTimeOffset.UtcNow;
 
             // Update last_seen_at for this chat (also auto-adds chat if it doesn't exist)
             // Then refresh admin cache for newly discovered chats
@@ -161,7 +161,7 @@ public partial class MessageProcessingService(
                 photoFileId,
                 photoFileSize,
                 urlsJson != "" ? urlsJson : null,
-                EditDate: message.EditDate.HasValue ? new DateTimeOffset(message.EditDate.Value, TimeSpan.Zero).ToUnixTimeSeconds() : null,
+                EditDate: message.EditDate.HasValue ? new DateTimeOffset(message.EditDate.Value, TimeSpan.Zero) : null,
                 ContentHash: contentHash,
                 ChatName: message.Chat.Title ?? message.Chat.Username,
                 PhotoLocalPath: photoLocalPath,
@@ -258,8 +258,8 @@ public partial class MessageProcessingService(
             }
 
             var editDate = editedMessage.EditDate.HasValue
-                ? new DateTimeOffset(editedMessage.EditDate.Value, TimeSpan.Zero).ToUnixTimeSeconds()
-                : DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                ? new DateTimeOffset(editedMessage.EditDate.Value, TimeSpan.Zero)
+                : DateTimeOffset.UtcNow;
 
             // Extract URLs and calculate content hashes
             var oldUrls = oldText != null ? ExtractUrls(oldText) : null;
@@ -363,7 +363,7 @@ public partial class MessageProcessingService(
                 var detectionResult = new DetectionResultRecord
                 {
                     MessageId = message.MessageId,
-                    DetectedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    DetectedAt = DateTimeOffset.UtcNow,
                     DetectionSource = "auto",
                     DetectionMethod = result.SpamResult.CheckResults.Count > 0
                         ? string.Join(", ", result.SpamResult.CheckResults.Select(c => c.CheckName))

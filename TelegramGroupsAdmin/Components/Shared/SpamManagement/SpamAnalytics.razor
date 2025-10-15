@@ -151,7 +151,7 @@
                             <MudTd>
                                 @if (context.LastDetectedDate.HasValue)
                                 {
-                                    @DateTimeOffset.FromUnixTimeSeconds(context.LastDetectedDate.Value).ToString("MM/dd HH:mm")
+                                    @context.LastDetectedDate.Value.ToString("MM/dd HH:mm")
                                 }
                                 else
                                 {
@@ -186,7 +186,7 @@
                             <MudTh>User</MudTh>
                         </HeaderContent>
                         <RowTemplate>
-                            <MudTd>@DateTimeOffset.FromUnixTimeSeconds(context.CheckTimestamp).ToString("MM/dd HH:mm:ss")</MudTd>
+                            <MudTd>@context.CheckTimestamp.ToString("MM/dd HH:mm:ss")</MudTd>
                             <MudTd>
                                 <MudChip T="string" Size="Size.Small" Color="@(context.IsSpam ? Color.Error : Color.Success)">
                                     @(context.IsSpam ? "SPAM" : "HAM")

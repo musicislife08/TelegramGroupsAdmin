@@ -60,5 +60,5 @@ public interface IDetectionResultsRepository
     /// Delete detection results older than specified date
     /// (Used for cleanup - though per CLAUDE.md, detection_results are permanent)
     /// </summary>
-    Task<int> DeleteOlderThanAsync(long timestamp);
+    Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp);
 }

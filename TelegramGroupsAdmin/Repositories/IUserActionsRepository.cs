@@ -81,5 +81,5 @@ public interface IUserActionsRepository
     /// <summary>
     /// Delete actions older than specified timestamp
     /// </summary>
-    Task<int> DeleteOlderThanAsync(long timestamp);
+    Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp);
 }

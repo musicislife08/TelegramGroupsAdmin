@@ -72,7 +72,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
         try
         {
             var configJson = JsonSerializer.Serialize(config, JsonOptions);
-            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var timestamp = DateTimeOffset.UtcNow;
 
             // Debug logging to verify what we're saving
             _logger.LogDebug("Saving global config - StopWords.Enabled: {StopWordsEnabled}, CAS.Enabled: {CasEnabled}, Bayes.Enabled: {BayesEnabled}",
@@ -168,7 +168,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
         try
         {
             var configJson = JsonSerializer.Serialize(config, JsonOptions);
-            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var timestamp = DateTimeOffset.UtcNow;
 
             var entity = await context.SpamDetectionConfigs
                 .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);

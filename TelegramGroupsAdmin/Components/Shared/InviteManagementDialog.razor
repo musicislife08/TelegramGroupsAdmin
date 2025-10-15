@@ -62,7 +62,7 @@
                         {
                             <MudChip T="string" Size="Size.Small" Color="Color.Dark">Revoked</MudChip>
                         }
-                        else if (context.ExpiresAt < DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+                        else if (context.ExpiresAt < DateTimeOffset.UtcNow)
                         {
                             <MudChip T="string" Size="Size.Small" Color="Color.Error">Expired</MudChip>
                         }
@@ -224,9 +224,8 @@
         _ => Color.Error
     };
 
-    private static string FormatDate(long timestamp)
+    private static string FormatDate(DateTimeOffset timestamp)
     {
-        var date = DateTimeOffset.FromUnixTimeSeconds(timestamp);
-        return date.ToString("yyyy-MM-dd HH:mm");
+        return timestamp.ToString("yyyy-MM-dd HH:mm");
     }
 }

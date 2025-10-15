@@ -129,7 +129,7 @@ public class SpamActionService(
             ReportCommandMessageId: null, // Auto-generated report (not from /report command)
             ReportedByUserId: null, // System-generated (not user-reported)
             ReportedByUserName: "Auto-Detection",
-            ReportedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            ReportedAt: DateTimeOffset.UtcNow,
             Status: ReportStatus.Pending,
             ReviewedBy: null,
             ReviewedAt: null,
@@ -166,7 +166,7 @@ public class SpamActionService(
                 ActionType: UserActionType.Ban,
                 MessageId: message.MessageId,
                 IssuedBy: "Auto-Detection",
-                IssuedAt: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Permanent ban
                 Reason: $"Auto-ban: High confidence spam (Net: {spamResult.NetConfidence}, OpenAI: {openAIResult.Confidence}%)"
             );

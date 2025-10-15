@@ -326,15 +326,13 @@
         _ => Color.Default
     };
 
-    private static string FormatDate(long timestamp)
+    private static string FormatDate(DateTimeOffset timestamp)
     {
-        var date = DateTimeOffset.FromUnixTimeSeconds(timestamp);
-        return date.ToString("yyyy-MM-dd");
+        return timestamp.ToString("yyyy-MM-dd");
     }
 
-    private static string FormatTime(long timestamp)
+    private static string FormatTime(DateTimeOffset timestamp)
     {
-        var date = DateTimeOffset.FromUnixTimeSeconds(timestamp);
-        return date.ToString("HH:mm:ss");
+        return timestamp.ToString("HH:mm:ss");
     }
 }

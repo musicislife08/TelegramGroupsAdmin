@@ -38,13 +38,13 @@ public class VerificationTokenDto
     public string? Value { get; set; }
 
     [Column("expires_at")]
-    public long ExpiresAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 
     [Column("created_at")]
-    public long CreatedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 
     [Column("used_at")]
-    public long? UsedAt { get; set; }
+    public DateTimeOffset? UsedAt { get; set; }
 
     // Navigation property
     [ForeignKey(nameof(UserId))]
@@ -65,7 +65,7 @@ public class VerificationTokenDto
     }
 
     [NotMapped]
-    public bool IsExpired => DateTimeOffset.UtcNow.ToUnixTimeSeconds() > ExpiresAt;
+    public bool IsExpired => DateTimeOffset.UtcNow > ExpiresAt;
 
     [NotMapped]
     public bool IsUsed => UsedAt.HasValue;

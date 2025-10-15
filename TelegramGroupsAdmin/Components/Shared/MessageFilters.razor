@@ -316,7 +316,7 @@
             }
 
             // Date range
-            var messageDate = DateTimeOffset.FromUnixTimeSeconds(message.Timestamp).Date;
+            var messageDate = message.Timestamp.Date;
             if (StartDate.HasValue && messageDate < StartDate.Value.Date)
                 return false;
             if (EndDate.HasValue && messageDate > EndDate.Value.Date)
