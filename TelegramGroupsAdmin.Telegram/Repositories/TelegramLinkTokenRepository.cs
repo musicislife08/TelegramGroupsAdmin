@@ -20,7 +20,7 @@ public class TelegramLinkTokenRepository : ITelegramLinkTokenRepository
     public async Task InsertAsync(TelegramLinkTokenRecord token)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = token.ToDataModel();
+        var entity = token.ToDto();
         context.TelegramLinkTokens.Add(entity);
         await context.SaveChangesAsync();
     }
@@ -32,7 +32,7 @@ public class TelegramLinkTokenRepository : ITelegramLinkTokenRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(tlt => tlt.Token == token);
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task MarkAsUsedAsync(string token, long telegramId)
@@ -73,7 +73,7 @@ public class TelegramLinkTokenRepository : ITelegramLinkTokenRepository
             .OrderByDescending(tlt => tlt.CreatedAt)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel());
+        return entities.Select(e => e.ToModel());
     }
 
     public async Task RevokeUnusedTokensForUserAsync(string userId)

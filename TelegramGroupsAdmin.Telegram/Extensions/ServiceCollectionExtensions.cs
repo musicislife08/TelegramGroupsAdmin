@@ -45,6 +45,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<UserAutoTrustService>();
         services.AddScoped<AdminMentionHandler>();
         services.AddSingleton<IWelcomeService, WelcomeService>();
+        services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
 
         // Bot command system
         // Commands are Scoped (to allow injecting Scoped services like ModerationActionService)

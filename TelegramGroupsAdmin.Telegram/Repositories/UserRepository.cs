@@ -33,7 +33,7 @@ public class UserRepository
             .Where(u => u.NormalizedEmail == normalizedEmail && u.Status != DataModels.UserStatus.Deleted)
             .FirstOrDefaultAsync(ct);
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task<UiModels.UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken ct = default)
@@ -46,7 +46,7 @@ public class UserRepository
             .Where(u => u.NormalizedEmail == normalizedEmail)
             .FirstOrDefaultAsync(ct);
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task<UiModels.UserRecord?> GetByIdAsync(string userId, CancellationToken ct = default)
@@ -56,13 +56,13 @@ public class UserRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId, ct);
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task<string> CreateAsync(UiModels.UserRecord user, CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = user.ToDataModel();
+        var entity = user.ToDto();
         entity.NormalizedEmail = user.Email.ToUpperInvariant();
 
         context.Users.Add(entity);
@@ -165,7 +165,7 @@ public class UserRepository
             .Where(rc => rc.UserId == userId && rc.UsedAt == null)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task AddRecoveryCodesAsync(string userId, List<string> codeHashes)
@@ -220,7 +220,7 @@ public class UserRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(i => i.Token == token, ct);
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task UseInviteAsync(string token, string userId, CancellationToken ct = default)
@@ -246,7 +246,7 @@ public class UserRepository
             .OrderByDescending(u => u.CreatedAt)
             .ToListAsync(ct);
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<List<UiModels.UserRecord>> GetAllIncludingDeletedAsync(CancellationToken ct = default)
@@ -257,7 +257,7 @@ public class UserRepository
             .OrderByDescending(u => u.CreatedAt)
             .ToListAsync(ct);
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken ct = default)

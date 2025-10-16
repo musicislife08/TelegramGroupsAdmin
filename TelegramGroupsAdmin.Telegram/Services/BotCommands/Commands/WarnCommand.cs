@@ -67,14 +67,16 @@ public class WarnCommand : IBotCommand
 
         try
         {
-            // Map executor Telegram ID to web app user ID
-            string? executorUserId = await _moderationService.GetExecutorUserIdAsync(message.From?.Id);
+            // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
+            string executorId = await _moderationService.GetExecutorIdentifierAsync(
+                message.From!.Id,
+                message.From.Username);
 
             // Execute warn action using service
             var result = await _moderationService.WarnUserAsync(
                 userId: targetUser.Id,
                 messageId: message.ReplyToMessage.MessageId,
-                executorId: executorUserId,
+                executorId: executorId,
                 reason: reason
             );
 

@@ -19,5 +19,15 @@ internal static class ModelMappings
         Notes: dto.StopWord.Notes
     );
 
+    public static DataModels.StopWordDto ToDto(this DomainModels.StopWord model) => new()
+    {
+        Id = model.Id,
+        Word = model.Word,
+        Enabled = model.Enabled,
+        AddedDate = model.AddedDate,
+        AddedBy = model.AddedBy,
+        Notes = model.Notes
+    };
+
     // NOTE: TrainingSample mappings removed - training data comes from detection_results.used_for_training
 }

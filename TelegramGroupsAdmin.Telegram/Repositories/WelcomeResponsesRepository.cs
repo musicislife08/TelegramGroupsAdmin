@@ -33,7 +33,7 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        var entity = response.ToDataModel();
+        var entity = response.ToDto();
         context.WelcomeResponses.Add(entity);
         await context.SaveChangesAsync();
 
@@ -60,7 +60,7 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
             .OrderByDescending(wr => wr.CreatedAt)
             .FirstOrDefaultAsync();
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task UpdateResponseAsync(long id, WelcomeResponseType responseType, bool dmSent = false, bool dmFallback = false)
@@ -117,7 +117,7 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
             .Take(limit)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<WelcomeStats> GetStatsAsync(long? chatId = null, DateTimeOffset? since = null)

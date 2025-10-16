@@ -1,0 +1,263 @@
+@* Telegram-authentic message bubble design *@
+
+<div class="@GetBubbleClass()" @onclick:stopPropagation="true">
+    @* Compact Header: Chat Avatar, Chat Name, User Photo + User Name, Timestamp *@
+    <div class="tg-header">
+        @* Chat/Group avatar (large, main avatar) *@
+        @if (!string.IsNullOrEmpty(Message.ChatIconPath))
+        {
+            <img src="@GetImagePath(Message.ChatIconPath)" alt="@Message.ChatName" class="tg-avatar" />
+        }
+        else
+        {
+            <div class="tg-avatar tg-avatar-fallback">
+                <svg viewBox="0 0 24 24" class="tg-icon">
+                    <path fill="currentColor" d="M16,13C15.71,13 15.38,13 15.03,13.05C16.19,13.89 17,15 17,16.5V19H23V16.5C23,14.17 18.33,13 16,13M8,13C5.67,13 1,14.17 1,16.5V19H15V16.5C15,14.17 10.33,13 8,13M8,11A3,3 0 0,0 11,8A3,3 0 0,0 8,5A3,3 0 0,0 5,8A3,3 0 0,0 8,11M16,11A3,3 0 0,0 19,8A3,3 0 0,0 16,5A3,3 0 0,0 13,8A3,3 0 0,0 16,11Z" />
+                </svg>
+            </div>
+        }
+
+        @* Names and timestamp *@
+        <div class="tg-info">
+            <div class="tg-title-row">
+                <span class="tg-chat-name" @onclick="() => OnFilterByChat.InvokeAsync(Message.ChatId)" title="Filter by this chat">
+                    @Message.ChatName
+                </span>
+                <span class="tg-timestamp local-timestamp" data-utc="@Message.Timestamp.ToString("o")">
+                    @FormatTimestamp(Message.Timestamp)
+                </span>
+            </div>
+            <div class="tg-subtitle-row">
+                @* User photo (small, inline with username) *@
+                @if (!string.IsNullOrEmpty(Message.UserPhotoPath))
+                {
+                    <img src="@GetImagePath(Message.UserPhotoPath)" alt="@Message.UserName" class="tg-user-photo" />
+                }
+                else
+                {
+                    <div class="tg-user-photo tg-user-photo-fallback">
+                        <svg viewBox="0 0 24 24" class="tg-user-icon">
+                            <path fill="currentColor" d="M12,4A4,4 0 0,1 16,8A4,4 0 0,1 12,12A4,4 0 0,1 8,8A4,4 0 0,1 12,4M12,14C16.42,14 20,15.79 20,18V20H4V18C4,15.79 7.58,14 12,14Z" />
+                        </svg>
+                    </div>
+                }
+                <span class="tg-user-name" @onclick="() => OnFilterByUser.InvokeAsync(Message.UserId)" title="Filter by this user">
+                    @(Message.UserName ?? $"User {Message.UserId}")
+                </span>
+                @if (Message.EditDate.HasValue)
+                {
+                    <span class="tg-edited">edited</span>
+                }
+                @if (SpamCheck != null)
+                {
+                    <span class="tg-badge tg-badge-@(SpamCheck.IsSpam ? "spam" : "ham")">
+                        @(SpamCheck.IsSpam ? "spam" : "ham") @SpamCheck.Confidence%
+                    </span>
+                }
+            </div>
+        </div>
+    </div>
+
+    @* Content *@
+    <div class="tg-content">
+        @* Image Thumbnail *@
+        @if (!string.IsNullOrEmpty(Message.PhotoThumbnailPath))
+        {
+            <img src="@GetImagePath(Message.PhotoThumbnailPath)"
+                 alt="Message image"
+                 class="tg-image"
+                 @onclick="() => OnImageClick.InvokeAsync(Message)" />
+        }
+
+        @* Message Text *@
+        @if (!string.IsNullOrEmpty(Message.MessageText))
+        {
+            <div class="tg-text">@Message.MessageText</div>
+        }
+
+        @* URLs *@
+        @if (!string.IsNullOrEmpty(Message.Urls))
+        {
+            <div class="tg-urls">
+                @foreach (var url in GetUrls())
+                {
+                    <div class="tg-url" title="@url">🔗 @TruncateUrl(url)</div>
+                }
+            </div>
+        }
+    </div>
+
+    @* Actions (Admin+ only, hover-revealed) *@
+    @if (ShowSpamActions)
+    {
+        <div class="tg-actions">
+            @if (EditCount > 0)
+            {
+                <button class="tg-btn tg-btn-subtle" @onclick="() => OnViewEdits.InvokeAsync(Message)" title="View edit history">
+                    <svg viewBox="0 0 24 24" class="tg-btn-icon">
+                        <path fill="currentColor" d="M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3A9,9 0 0,0 4,12H1L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3" />
+                    </svg>
+                    @EditCount
+                </button>
+            }
+
+            @if (DetectionHistory?.Count > 0)
+            {
+                <button class="tg-btn tg-btn-subtle" @onclick="() => OnViewDetections.InvokeAsync(Message)" title="Detection history">
+                    <svg viewBox="0 0 24 24" class="tg-btn-icon">
+                        <path fill="currentColor" d="M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M16.59,7.58L10,14.17L7.41,11.59L6,13L10,17L18,9L16.59,7.58Z" />
+                    </svg>
+                    History
+                </button>
+            }
+
+            @* Only show Mark as Spam for other users' messages (not your own) *@
+            @if (SpamCheck?.IsSpam != true && !IsCurrentUser)
+            {
+                <button class="tg-btn tg-btn-spam" @onclick="() => OnMarkAsSpam.InvokeAsync(Message)" disabled="@_actionInProgress" title="Mark as spam">
+                    <svg viewBox="0 0 24 24" class="tg-btn-icon">
+                        <path fill="currentColor" d="M13,14H11V10H13M13,18H11V16H13M1,21H23L12,2L1,21Z" />
+                    </svg>
+                    Spam
+                </button>
+            }
+
+            @if (!IsManuallyMarkedAsHam())
+            {
+                <button class="tg-btn tg-btn-ham" @onclick="() => OnMarkAsHam.InvokeAsync(Message)" disabled="@_actionInProgress" title="Mark as ham (not spam)">
+                    <svg viewBox="0 0 24 24" class="tg-btn-icon">
+                        <path fill="currentColor" d="M12,2C6.5,2 2,6.5 2,12C2,17.5 6.5,22 12,22C17.5,22 22,17.5 22,12C22,6.5 17.5,2 12,2M10,17L5,12L6.41,10.59L10,14.17L17.59,6.58L19,8L10,17Z" />
+                    </svg>
+                    Ham
+                </button>
+            }
+
+            <button class="tg-btn tg-btn-delete" @onclick="() => OnDeleteMessage.InvokeAsync(Message)" disabled="@_actionInProgress" title="Delete message">
+                <svg viewBox="0 0 24 24" class="tg-btn-icon">
+                    <path fill="currentColor" d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" />
+                </svg>
+                Delete
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public MessageRecord Message { get; set; } = default!;
+
+    [Parameter]
+    public SpamCheckRecord? SpamCheck { get; set; }
+
+    [Parameter]
+    public int EditCount { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnImageClick { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnViewEdits { get; set; }
+
+    [Parameter]
+    public bool ShowSpamActions { get; set; }
+
+    [Parameter]
+    public List<DetectionResultRecord>? DetectionHistory { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnMarkAsSpam { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnMarkAsHam { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnViewDetections { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnFilterByUser { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnFilterByChat { get; set; }
+
+    [Parameter]
+    public EventCallback<MessageRecord> OnDeleteMessage { get; set; }
+
+    [Parameter]
+    public bool IsCurrentUser { get; set; }
+
+    private bool _actionInProgress = false;
+
+    private string GetBubbleClass()
+    {
+        var baseClass = "tg-bubble";
+
+        // Add spam/ham/neutral class
+        if (SpamCheck != null)
+        {
+            if (SpamCheck.IsSpam)
+                baseClass += " tg-bubble-spam";
+            else
+                baseClass += " tg-bubble-ham";
+        }
+        else
+        {
+            baseClass += " tg-bubble-neutral";
+        }
+
+        // Add current user class for right alignment
+        if (IsCurrentUser)
+            baseClass += " tg-bubble-current-user";
+
+        return baseClass;
+    }
+
+    private string FormatTimestamp(DateTimeOffset timestamp)
+    {
+        var dt = timestamp.ToLocalTime();
+        var now = DateTimeOffset.Now;
+
+        if (dt.Date == now.Date)
+            return dt.ToString("h:mm tt"); // 12-hour format with AM/PM
+        if (dt.Date == now.AddDays(-1).Date)
+            return $"Yesterday {dt:h:mm tt}";
+        if (dt.Year == now.Year)
+            return dt.ToString("MMM dd h:mm tt");
+        return dt.ToString("MMM dd yyyy h:mm tt");
+    }
+
+    private string[] GetUrls()
+    {
+        if (string.IsNullOrEmpty(Message.Urls))
+            return Array.Empty<string>();
+        return Message.Urls.Split(',', StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    private string TruncateUrl(string url)
+    {
+        const int maxLength = 50;
+        if (url.Length <= maxLength)
+            return url;
+        return url.Substring(0, maxLength - 3) + "...";
+    }
+
+    private string GetImagePath(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+            return string.Empty;
+
+        var relativePath = path.Contains('/') || path.Contains('\\')
+            ? path.Replace('\\', '/')
+            : Path.GetFileName(path);
+
+        return $"/images/{relativePath}";
+    }
+
+    private bool IsManuallyMarkedAsHam()
+    {
+        if (DetectionHistory == null || !DetectionHistory.Any())
+            return false;
+
+        var latest = DetectionHistory.OrderByDescending(d => d.DetectedAt).First();
+        return latest.DetectionSource == "manual" && !latest.IsSpam;
+    }
+}

@@ -449,7 +449,15 @@ tg-spam configurations can be imported into the database:
 
 ```csharp
 // Import stop words from tg-spam files
-await _stopWordsRepository.AddStopWordAsync("bitcoin", "import", "Imported from tg-spam");
+var stopWord = new StopWord(
+    Id: 0,
+    Word: "bitcoin",
+    Enabled: true,
+    AddedDate: DateTimeOffset.UtcNow,
+    AddedBy: "import",
+    Notes: "Imported from tg-spam"
+);
+await _stopWordsRepository.AddStopWordAsync(stopWord);
 
 // Import spam samples
 await _samplesRepository.AddSampleAsync(spamText, "tg-spam", groupId: null, "import");

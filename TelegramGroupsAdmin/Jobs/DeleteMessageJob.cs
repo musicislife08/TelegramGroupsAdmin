@@ -61,13 +61,13 @@ public class DeleteMessageJob(
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
+            _logger.LogError(
                 ex,
                 "Failed to delete message {MessageId} in chat {ChatId} (reason: {Reason})",
                 payload.MessageId,
                 payload.ChatId,
                 payload.Reason);
-            // Don't re-throw - message may have already been deleted manually
+            throw; // Re-throw to let TickerQ handle retry logic and record exception
         }
     }
 }

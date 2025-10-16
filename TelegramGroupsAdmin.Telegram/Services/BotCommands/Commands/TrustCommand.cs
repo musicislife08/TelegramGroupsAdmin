@@ -82,8 +82,10 @@ public class TrustCommand : IBotCommand
             return $"ℹ️ User @{targetUser.Username ?? targetUser.Id.ToString()} is already trusted.";
         }
 
-        // Map executor Telegram ID to web app user ID
-        string? executorUserId = await _moderationService.GetExecutorUserIdAsync(message.From?.Id);
+        // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
+        string executorId = await _moderationService.GetExecutorIdentifierAsync(
+            message.From!.Id,
+            message.From.Username);
 
         // Build reason with chat context
         var chatName = message.Chat.Title ?? message.Chat.Username ?? message.Chat.Id.ToString();
@@ -92,7 +94,7 @@ public class TrustCommand : IBotCommand
         // Execute trust action via centralized service
         var result = await _moderationService.TrustUserAsync(
             userId: targetUser.Id,
-            executorId: executorUserId,
+            executorId: executorId,
             reason: reason);
 
         // Build response based on result

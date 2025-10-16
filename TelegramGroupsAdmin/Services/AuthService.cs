@@ -273,7 +273,7 @@ public class AuthService(
                         UsedAt: null
                     );
 
-                    await verificationTokenRepository.CreateAsync(verificationToken.ToDataModel(), ct);
+                    await verificationTokenRepository.CreateAsync(verificationToken.ToDto(), ct);
 
                     await emailService.SendTemplatedEmailAsync(
                         email,
@@ -376,7 +376,7 @@ public class AuthService(
                     UsedAt: null
                 );
 
-                await verificationTokenRepository.CreateAsync(verificationToken.ToDataModel(), ct);
+                await verificationTokenRepository.CreateAsync(verificationToken.ToDto(), ct);
 
                 await emailService.SendTemplatedEmailAsync(
                     email,
@@ -554,7 +554,7 @@ public class AuthService(
                 UsedAt: null
             );
 
-            await verificationTokenRepository.CreateAsync(verificationToken.ToDataModel(), ct);
+            await verificationTokenRepository.CreateAsync(verificationToken.ToDto(), ct);
 
             await emailService.SendTemplatedEmailAsync(
                 email,
@@ -607,7 +607,7 @@ public class AuthService(
             UsedAt: null
         );
 
-        await verificationTokenRepository.CreateAsync(resetToken.ToDataModel(), ct);
+        await verificationTokenRepository.CreateAsync(resetToken.ToDto(), ct);
 
         // Send password reset email
         try

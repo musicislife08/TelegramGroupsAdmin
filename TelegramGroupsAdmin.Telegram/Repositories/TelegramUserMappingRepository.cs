@@ -26,7 +26,7 @@ public class TelegramUserMappingRepository : ITelegramUserMappingRepository
             .OrderByDescending(tum => tum.LinkedAt)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel());
+        return entities.Select(e => e.ToModel());
     }
 
     public async Task<TelegramUserMappingRecord?> GetByTelegramIdAsync(long telegramId)
@@ -36,7 +36,7 @@ public class TelegramUserMappingRepository : ITelegramUserMappingRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(tum => tum.TelegramId == telegramId && tum.IsActive);
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task<string?> GetUserIdByTelegramIdAsync(long telegramId)
@@ -54,7 +54,7 @@ public class TelegramUserMappingRepository : ITelegramUserMappingRepository
     public async Task<long> InsertAsync(TelegramUserMappingRecord mapping)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = mapping.ToDataModel();
+        var entity = mapping.ToDto();
         context.TelegramUserMappings.Add(entity);
         await context.SaveChangesAsync();
         return entity.Id;

@@ -29,15 +29,18 @@ public class WelcomeService : IWelcomeService
     private readonly ILogger<WelcomeService> _logger;
     private readonly TelegramOptions _telegramOptions;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IBotProtectionService _botProtectionService;
 
     public WelcomeService(
         ILogger<WelcomeService> logger,
         IOptions<TelegramOptions> telegramOptions,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IBotProtectionService botProtectionService)
     {
         _logger = logger;
         _telegramOptions = telegramOptions.Value;
         _serviceProvider = serviceProvider;
+        _botProtectionService = botProtectionService;
     }
 
     private async Task<T> WithRepositoryAsync<T>(Func<IWelcomeResponsesRepository, Task<T>> action)
@@ -121,10 +124,28 @@ public class WelcomeService : IWelcomeService
             return;
         }
 
-        // Skip bots
+        // Phase 6.1: Bot Protection - check if bot should be allowed
         if (user.IsBot)
         {
-            _logger.LogDebug("Skipping welcome for bot user {UserId}", user.Id);
+            var shouldAllow = await _botProtectionService.ShouldAllowBotAsync(
+                chatMemberUpdate.Chat.Id,
+                user,
+                chatMemberUpdate);
+
+            if (!shouldAllow)
+            {
+                // Ban the bot
+                await _botProtectionService.BanBotAsync(
+                    botClient,
+                    chatMemberUpdate.Chat.Id,
+                    user,
+                    "Not whitelisted and not invited by admin",
+                    cancellationToken);
+                return;
+            }
+
+            // Bot is allowed (whitelisted or admin-invited) - skip welcome message
+            _logger.LogDebug("Skipping welcome for allowed bot user {UserId}", user.Id);
             return;
         }
 

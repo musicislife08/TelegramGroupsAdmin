@@ -1,0 +1,379 @@
+/* Telegram-authentic message bubble - compact and minimal */
+
+.tg-bubble {
+    position: relative;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    margin-left: 0;
+    margin-right: auto;
+    max-width: 700px;
+    border-radius: 16px;
+    border-left: 3px solid transparent;
+    background-color: rgba(255, 255, 255, 0.03);
+    transition: background-color 0.1s ease;
+}
+
+.tg-bubble:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.tg-bubble:hover .tg-actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Color variations */
+.tg-bubble-spam {
+    border-left-color: #ef5350;
+    background-color: rgba(239, 83, 80, 0.06);
+}
+
+.tg-bubble-ham {
+    border-left-color: #66bb6a;
+    background-color: rgba(102, 187, 106, 0.06);
+}
+
+.tg-bubble-neutral {
+    border-left-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Current user (right-aligned) styling */
+.tg-bubble-current-user {
+    margin-left: auto;
+    margin-right: 0;
+    border-left: none;
+    border-right: 3px solid #64b5f6;
+    background-color: rgba(100, 181, 246, 0.1);
+}
+
+.tg-bubble-current-user.tg-bubble-spam {
+    border-right-color: #ef5350;
+    background-color: rgba(239, 83, 80, 0.08);
+}
+
+.tg-bubble-current-user.tg-bubble-ham {
+    border-right-color: #66bb6a;
+    background-color: rgba(102, 187, 106, 0.08);
+}
+
+.tg-bubble-current-user .tg-header {
+    flex-direction: row-reverse;
+}
+
+.tg-bubble-current-user .tg-info {
+    text-align: right;
+}
+
+.tg-bubble-current-user .tg-title-row {
+    flex-direction: row-reverse;
+}
+
+.tg-bubble-current-user .tg-subtitle-row {
+    flex-direction: row-reverse;
+}
+
+.tg-bubble-current-user .tg-content {
+    margin-left: 0;
+    margin-right: 42px;
+}
+
+.tg-bubble-current-user .tg-actions {
+    margin-left: 0;
+    margin-right: 42px;
+    flex-direction: row-reverse;
+}
+
+/* Header */
+.tg-header {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+/* Avatar */
+.tg-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
+.tg-avatar-fallback {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tg-icon {
+    width: 18px;
+    height: 18px;
+    color: white;
+}
+
+/* Info section */
+.tg-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.tg-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+
+.tg-subtitle-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* Text elements */
+.tg-chat-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #64b5f6;
+    cursor: pointer;
+    transition: opacity 0.1s;
+}
+
+.tg-chat-name:hover {
+    opacity: 0.8;
+}
+
+/* User photo (small, inline with username) */
+.tg-user-photo {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    object-fit: cover;
+    margin-right: 4px;
+}
+
+.tg-user-photo-fallback {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-right: 4px;
+}
+
+.tg-user-icon {
+    width: 10px;
+    height: 10px;
+    color: white;
+}
+
+.tg-user-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    transition: color 0.1s;
+}
+
+.tg-user-name:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.tg-timestamp {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.45);
+    white-space: nowrap;
+}
+
+.tg-edited {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    font-style: italic;
+}
+
+/* Badge */
+.tg-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: lowercase;
+}
+
+.tg-badge-spam {
+    background-color: rgba(239, 83, 80, 0.2);
+    color: #ef5350;
+}
+
+.tg-badge-ham {
+    background-color: rgba(102, 187, 106, 0.2);
+    color: #66bb6a;
+}
+
+/* Content */
+.tg-content {
+    margin: 6px 0 6px 42px; /* Align with text after avatar */
+}
+
+.tg-text {
+    font-size: 14px;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.9);
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    margin-bottom: 4px;
+}
+
+.tg-image {
+    max-width: 300px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: opacity 0.1s;
+}
+
+.tg-image:hover {
+    opacity: 0.9;
+}
+
+.tg-urls {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 4px;
+}
+
+.tg-url {
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 12px;
+    color: #64b5f6;
+    word-break: break-all;
+}
+
+/* Actions - hidden by default, revealed on hover */
+.tg-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+    margin-left: 42px; /* Align with content */
+    flex-wrap: wrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+}
+
+/* Buttons - Telegram style */
+.tg-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border: none;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.tg-btn:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.tg-btn:active:not(:disabled) {
+    transform: scale(0.96);
+}
+
+.tg-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.tg-btn-icon {
+    width: 14px;
+    height: 14px;
+}
+
+/* Button variants */
+.tg-btn-subtle {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.tg-btn-subtle:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.tg-btn-spam {
+    background-color: rgba(239, 83, 80, 0.15);
+    color: #ef5350;
+}
+
+.tg-btn-spam:hover:not(:disabled) {
+    background-color: rgba(239, 83, 80, 0.25);
+    color: #ff6b68;
+}
+
+.tg-btn-ham {
+    background-color: rgba(102, 187, 106, 0.15);
+    color: #66bb6a;
+}
+
+.tg-btn-ham:hover:not(:disabled) {
+    background-color: rgba(102, 187, 106, 0.25);
+    color: #81c784;
+}
+
+.tg-btn-delete {
+    background-color: rgba(239, 83, 80, 0.12);
+    color: #ef5350;
+}
+
+.tg-btn-delete:hover:not(:disabled) {
+    background-color: rgba(239, 83, 80, 0.2);
+    color: #ff6b68;
+}
+
+/* Responsive - mobile adjustments */
+@media (max-width: 600px) {
+    .tg-bubble {
+        padding: 6px 10px;
+    }
+
+    .tg-content {
+        margin-left: 36px;
+    }
+
+    .tg-actions {
+        margin-left: 36px;
+        gap: 3px;
+    }
+
+    .tg-avatar {
+        width: 28px;
+        height: 28px;
+    }
+
+    .tg-btn {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+
+    .tg-btn-icon {
+        width: 12px;
+        height: 12px;
+    }
+}

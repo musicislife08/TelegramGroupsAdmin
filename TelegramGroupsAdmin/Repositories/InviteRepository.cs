@@ -25,13 +25,13 @@ public class InviteRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(i => i.Token == token, ct);
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task CreateAsync(UiModels.InviteRecord invite, CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = invite.ToDataModel();
+        var entity = invite.ToDto();
         context.Invites.Add(entity);
         await context.SaveChangesAsync(ct);
 
@@ -99,7 +99,7 @@ public class InviteRepository
             .OrderByDescending(i => i.CreatedAt)
             .ToListAsync(ct);
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<int> CleanupExpiredAsync()
@@ -133,7 +133,7 @@ public class InviteRepository
         }
 
         var entities = await query.OrderByDescending(i => i.CreatedAt).ToListAsync(ct);
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<List<UiModels.InviteWithCreator>> GetAllWithCreatorEmailAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken ct = default)

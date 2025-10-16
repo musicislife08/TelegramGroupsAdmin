@@ -61,7 +61,7 @@ public class ChatAdminsRepository : IChatAdminsRepository
             .ThenBy(ca => ca.PromotedAt)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     /// <inheritdoc/>

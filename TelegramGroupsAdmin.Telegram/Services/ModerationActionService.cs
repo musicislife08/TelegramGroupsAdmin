@@ -81,13 +81,13 @@ public class ModerationActionService
                 DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "manual",
                 DetectionMethod = "Manual",
-                IsSpam = true,
-                Confidence = 100,
+                // IsSpam computed from net_confidence (100 = strong spam)
+                Confidence = 100, // 100% spam
                 Reason = reason,
                 AddedBy = executorId,
                 UserId = userId,
                 UsedForTraining = true, // Manual decisions are always training-worthy
-                NetConfidence = null,
+                NetConfidence = 100, // Strong spam signal (manual admin decision)
                 CheckResultsJson = null,
                 EditVersion = 0
             };
@@ -424,6 +424,29 @@ public class ModerationActionService
     {
         if (telegramUserId == null) return null;
         return await _telegramUserMappingRepository.GetUserIdByTelegramIdAsync(telegramUserId.Value);
+    }
+
+    /// <summary>
+    /// Get executor identifier with fallback to Telegram username when no account mapping exists.
+    /// Returns: Web app user ID (GUID) if mapped, otherwise "telegram:@username" or "telegram:userid"
+    /// </summary>
+    public async Task<string> GetExecutorIdentifierAsync(long telegramUserId, string? telegramUsername)
+    {
+        // Try to get mapped web app user ID first
+        var userId = await GetExecutorUserIdAsync(telegramUserId);
+        if (!string.IsNullOrEmpty(userId))
+        {
+            return userId;
+        }
+
+        // Fallback to Telegram username
+        if (!string.IsNullOrEmpty(telegramUsername))
+        {
+            return $"telegram:@{telegramUsername.TrimStart('@')}";
+        }
+
+        // Last resort: Telegram user ID
+        return $"telegram:{telegramUserId}";
     }
 }
 

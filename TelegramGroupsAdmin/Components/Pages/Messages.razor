@@ -14,6 +14,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject ModerationActionService ModerationService
+@inject ITelegramUserMappingRepository TelegramMappingRepository
 @inject ILogger<Messages> Logger
 @attribute [Authorize]
 @implements IDisposable
@@ -72,19 +73,20 @@
     @if (_filteredMessages.Any())
     {
         <MudVirtualize Items="_filteredMessages" Context="message" OverscanCount="10">
-            <MessageBubble Message="message"
-                           SpamCheck="@GetSpamCheck(message.MessageId)"
-                           EditCount="@GetEditCount(message.MessageId)"
-                           ShowSpamActions="@(_userPermissionLevel >= 1)"
-                           DetectionHistory="@GetDetectionHistory(message.MessageId)"
-                           OnImageClick="HandleImageClick"
-                           OnViewEdits="HandleViewEdits"
-                           OnMarkAsSpam="HandleMarkAsSpam"
-                           OnMarkAsHam="HandleMarkAsHam"
-                           OnViewDetections="HandleViewDetections"
-                           OnFilterByUser="HandleFilterByUser"
-                           OnFilterByChat="HandleFilterByChat"
-                           OnDeleteMessage="HandleDeleteMessage" />
+            <MessageBubbleTelegram Message="message"
+                                   SpamCheck="@GetSpamCheck(message.MessageId)"
+                                   EditCount="@GetEditCount(message.MessageId)"
+                                   ShowSpamActions="@(_userPermissionLevel >= 1)"
+                                   DetectionHistory="@GetDetectionHistory(message.MessageId)"
+                                   IsCurrentUser="@IsCurrentUserMessage(message.UserId)"
+                                   OnImageClick="HandleImageClick"
+                                   OnViewEdits="HandleViewEdits"
+                                   OnMarkAsSpam="HandleMarkAsSpam"
+                                   OnMarkAsHam="HandleMarkAsHam"
+                                   OnViewDetections="HandleViewDetections"
+                                   OnFilterByUser="HandleFilterByUser"
+                                   OnFilterByChat="HandleFilterByChat"
+                                   OnDeleteMessage="HandleDeleteMessage" />
         </MudVirtualize>
     }
     else if (!_loading)
@@ -118,18 +120,36 @@
     private bool _loading = true;
     private DateTime _lastUpdate = DateTime.Now;
     private int _userPermissionLevel = 0; // Default to ReadOnly
+    private HashSet<long> _userTelegramIds = new(); // Current user's linked Telegram IDs
 
     protected override async Task OnInitializedAsync()
     {
-        // Get user permission level
+        // Get user permission level and ID
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
+        string? userId = null;
+
         if (user.Identity?.IsAuthenticated == true)
         {
+            userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
             if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
             {
                 _userPermissionLevel = level;
+            }
+        }
+
+        // Load current user's linked Telegram accounts for message alignment
+        if (!string.IsNullOrEmpty(userId))
+        {
+            try
+            {
+                var mappings = await TelegramMappingRepository.GetByUserIdAsync(userId);
+                _userTelegramIds = mappings.Select(m => m.TelegramId).ToHashSet();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to load linked Telegram accounts for user {UserId}", userId);
             }
         }
 
@@ -352,9 +372,9 @@
     {
         try
         {
-            // Get current user for audit trail
+            // Get current user ID for audit trail
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var executorId = authState.User.Identity?.Name;
+            var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
             // Call moderation service (deletes message, bans user globally, creates detection result)
             var result = await ModerationService.MarkAsSpamAndBanAsync(
@@ -380,7 +400,7 @@
                         UserId: message.UserId,
                         ContentHash: null,
                         IsSpam: latest.IsSpam,
-                        Confidence: latest.Confidence,
+                        Confidence: Math.Abs(latest.NetConfidence), // Use absolute net_confidence for display
                         Reason: latest.Reason,
                         CheckType: latest.DetectionMethod,
                         MatchedMessageId: null
@@ -408,36 +428,63 @@
     {
         try
         {
-            // Get current user for audit trail
+            // Get current user ID for audit trail
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var executorId = authState.User.Identity?.Name;
+            var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            // Check if this was previously marked as spam (false positive correction scenario)
+            var wasPreviouslySpam = GetSpamCheck(message.MessageId)?.IsSpam == true;
 
             // 1. Create detection result marked as ham (for training data)
+            var reason = wasPreviouslySpam
+                ? "Manually marked as ham (not spam) by admin - false positive correction"
+                : "Manually added as ham training sample by admin";
+
             var detectionResult = new DetectionResultRecord
             {
                 MessageId = message.MessageId,
                 DetectedAt = DateTimeOffset.UtcNow,
                 DetectionSource = "manual",
                 DetectionMethod = "Manual",
-                IsSpam = false, // Mark as NOT spam
-                Confidence = 100, // Manual classifications are 100% confident
-                Reason = "Manually marked as ham (not spam) by admin - false positive correction",
+                // IsSpam computed from net_confidence (-100 = strong ham)
+                Confidence = 0, // 0% spam (ham)
+                Reason = reason,
                 AddedBy = executorId,
                 UserId = message.UserId,
                 UsedForTraining = true, // Manual decisions are always training-worthy
-                NetConfidence = null,
+                NetConfidence = -100, // Strong ham signal (manual admin decision)
                 CheckResultsJson = null,
                 EditVersion = 0
             };
 
             await DetectionResultsRepository.InsertAsync(detectionResult);
 
-            // 2. Unban user and restore trust (false positive correction)
-            var unbanResult = await ModerationService.UnbanUserAsync(
-                message.UserId,
-                executorId,
-                "False positive correction - message marked as ham by admin via UI",
-                restoreTrust: true); // Restore trust to bypass future spam checks
+            // 2. Only unban and restore trust if this was previously marked as spam (false positive correction)
+            if (wasPreviouslySpam)
+            {
+                var unbanResult = await ModerationService.UnbanUserAsync(
+                    message.UserId,
+                    executorId,
+                    "False positive correction - message marked as ham by admin via UI",
+                    restoreTrust: true); // Restore trust to bypass future spam checks
+
+                if (unbanResult.Success)
+                {
+                    Logger.LogInformation(
+                        "Message {MessageId} marked as ham (false positive correction): user unbanned from {ChatsAffected} chats, trust restored: {TrustRestored}",
+                        message.MessageId, unbanResult.ChatsAffected, unbanResult.TrustRestored);
+                }
+                else
+                {
+                    Logger.LogWarning("Message {MessageId} marked as ham but unban failed: {Error}", message.MessageId, unbanResult.ErrorMessage);
+                }
+            }
+            else
+            {
+                Logger.LogInformation(
+                    "Message {MessageId} marked as ham (training sample): detection result created with net_confidence = -100",
+                    message.MessageId);
+            }
 
             // Refresh detection history for this message
             var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
@@ -453,7 +500,7 @@
                     UserId: message.UserId,
                     ContentHash: null,
                     IsSpam: latest.IsSpam,
-                    Confidence: latest.Confidence,
+                    Confidence: Math.Abs(latest.NetConfidence), // Use absolute net_confidence for display
                     Reason: latest.Reason,
                     CheckType: latest.DetectionMethod,
                     MatchedMessageId: null
@@ -461,17 +508,6 @@
             }
 
             StateHasChanged();
-
-            if (unbanResult.Success)
-            {
-                Logger.LogInformation(
-                    "Message {MessageId} marked as ham: user unbanned from {ChatsAffected} chats, trust restored: {TrustRestored}",
-                    message.MessageId, unbanResult.ChatsAffected, unbanResult.TrustRestored);
-            }
-            else
-            {
-                Logger.LogWarning("Message {MessageId} marked as ham but unban failed: {Error}", message.MessageId, unbanResult.ErrorMessage);
-            }
         }
         catch (Exception ex)
         {
@@ -573,5 +609,11 @@
                 $"Failed to delete message: {ex.Message}",
                 yesText: "OK");
         }
+    }
+
+    private bool IsCurrentUserMessage(long telegramUserId)
+    {
+        // Check if message sender matches any of current user's linked Telegram accounts
+        return _userTelegramIds.Contains(telegramUserId);
     }
 }

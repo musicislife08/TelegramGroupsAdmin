@@ -50,6 +50,9 @@ public class MessageRecordDto
     [Column("photo_thumbnail_path")]
     public string? PhotoThumbnailPath { get; set; }
 
+    [Column("user_photo_path")]
+    public string? UserPhotoPath { get; set; }
+
     [Column("deleted_at")]
     public DateTimeOffset? DeletedAt { get; set; }
 

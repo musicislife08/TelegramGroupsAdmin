@@ -74,8 +74,10 @@ public class SpamCommand : IBotCommand
             return "❌ Cannot mark trusted user messages as spam.";
         }
 
-        // Map executor Telegram ID to web app user ID
-        var executorUserId = await _moderationService.GetExecutorUserIdAsync(message.From?.Id);
+        // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
+        var executorId = await _moderationService.GetExecutorIdentifierAsync(
+            message.From!.Id,
+            message.From.Username);
 
         // Execute spam and ban action via centralized service
         var reason = $"Spam detected via /spam command in chat {message.Chat.Title ?? message.Chat.Id.ToString()}";
@@ -84,7 +86,7 @@ public class SpamCommand : IBotCommand
             spamMessage.MessageId,
             spamUserId.Value,
             message.Chat.Id,
-            executorUserId,
+            executorId,
             reason,
             cancellationToken);
 

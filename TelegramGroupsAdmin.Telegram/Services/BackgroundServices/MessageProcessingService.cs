@@ -25,11 +25,13 @@ public partial class MessageProcessingService(
     CommandRouter commandRouter,
     ChatManagementService chatManagementService,
     SpamActionService spamActionService,
+    TelegramPhotoService telegramPhotoService,
     IServiceProvider serviceProvider,
     ILogger<MessageProcessingService> logger)
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
+    private readonly TelegramPhotoService _photoService = telegramPhotoService;
 
     // Events for real-time UI updates
     public event Action<MessageRecord>? OnNewMessage;
@@ -291,6 +293,7 @@ public partial class MessageProcessingService(
             var chatIconCachedPath = Path.Combine(_historyOptions.ImageStoragePath, "chat_icons", chatIconFileName);
             var chatIconPath = File.Exists(chatIconCachedPath) ? $"chat_icons/{chatIconFileName}" : null;
 
+            // User photo will be fetched asynchronously after message save (non-blocking)
             var messageRecord = new MessageRecord(
                 message.MessageId,
                 message.From!.Id,
@@ -307,6 +310,7 @@ public partial class MessageProcessingService(
                 PhotoLocalPath: photoLocalPath,
                 PhotoThumbnailPath: photoThumbnailPath,
                 ChatIconPath: chatIconPath,
+                UserPhotoPath: null, // Will be populated by background task
                 DeletedAt: null,
                 DeletionSource: null
             );
@@ -344,6 +348,12 @@ public partial class MessageProcessingService(
                 {
                     logger.LogWarning(ex, "Failed to delete command message {MessageId} in chat {ChatId}", message.MessageId, message.Chat.Id);
                 }
+            }
+
+            // Fetch user profile photo via TickerQ (0s delay for instant execution, with persistence/retry)
+            if (message.From?.Id != null)
+            {
+                await ScheduleUserPhotoFetchAsync(message.MessageId, message.From.Id);
             }
 
             // Phase 2.6: Automatic spam detection with detection result storage
@@ -509,7 +519,7 @@ public partial class MessageProcessingService(
                     DetectionMethod = result.SpamResult.CheckResults.Count > 0
                         ? string.Join(", ", result.SpamResult.CheckResults.Select(c => c.CheckName))
                         : "Unknown",
-                    IsSpam = result.SpamResult.IsSpam,
+                    // IsSpam is computed from net_confidence (don't set it here)
                     Confidence = result.SpamResult.MaxConfidence,
                     Reason = $"{reasonPrefix}{result.SpamResult.PrimaryReason}",
                     AddedBy = null, // Auto-detection
@@ -712,6 +722,55 @@ public partial class MessageProcessingService(
                 "Error scheduling message delete for message {MessageId} in chat {ChatId}",
                 messageId,
                 chatId);
+        }
+    }
+
+    /// <summary>
+    /// Schedule user photo fetch via TickerQ with 0s delay (instant execution with persistence/retry)
+    /// </summary>
+    private async Task ScheduleUserPhotoFetchAsync(long messageId, long userId)
+    {
+        try
+        {
+            var photoPayload = new TelegramGroupsAdmin.Telegram.Abstractions.Jobs.FetchUserPhotoPayload(
+                messageId,
+                userId
+            );
+
+            using var scope = serviceProvider.CreateScope();
+            var timeTickerManager = scope.ServiceProvider.GetRequiredService<TickerQ.Utilities.Interfaces.Managers.ITimeTickerManager<TickerQ.Utilities.Models.Ticker.TimeTicker>>();
+
+            var result = await timeTickerManager.AddAsync(new TickerQ.Utilities.Models.Ticker.TimeTicker
+            {
+                Function = "FetchUserPhoto",
+                ExecutionTime = DateTime.UtcNow, // 0s delay for instant execution
+                Request = TickerQ.Utilities.TickerHelper.CreateTickerRequest(photoPayload),
+                Retries = 2 // Retry on Telegram API failures
+            });
+
+            if (!result.IsSucceded)
+            {
+                logger.LogWarning(
+                    "Failed to schedule user photo fetch for user {UserId} (message {MessageId}): {Error}",
+                    userId,
+                    messageId,
+                    result.Exception?.Message ?? "Unknown error");
+            }
+            else
+            {
+                logger.LogDebug(
+                    "Scheduled user photo fetch for user {UserId} (message {MessageId}, JobId: {JobId})",
+                    userId,
+                    messageId,
+                    result.Result?.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Error scheduling user photo fetch for user {UserId} (message {MessageId})",
+                userId,
+                messageId);
         }
     }
 }

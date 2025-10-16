@@ -138,3 +138,100 @@ window.setupPasteListener = (dotNetHelper) => {
         delete window.pasteListenerCleanup;
     };
 }
+
+// Format timestamp in user's local timezone with 12-hour format
+window.formatLocalTimestamp = (utcTimestamp) => {
+    const date = new Date(utcTimestamp);
+    const now = new Date();
+
+    // Check if same day
+    const isSameDay = date.toDateString() === now.toDateString();
+
+    // Check if yesterday
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+
+    // Format time in 12-hour format with AM/PM
+    const timeOptions = {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    };
+    const timeStr = date.toLocaleTimeString('en-US', timeOptions);
+
+    if (isSameDay) {
+        return timeStr; // Just time for today
+    } else if (isYesterday) {
+        return `Yesterday ${timeStr}`;
+    } else if (date.getFullYear() === now.getFullYear()) {
+        // Same year - show month, day, time
+        const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return `${monthDay} ${timeStr}`;
+    } else {
+        // Different year - show full date with time
+        const fullDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        return `${fullDate} ${timeStr}`;
+    }
+}
+
+// Initialize timestamp formatting on page load and after Blazor updates
+function initializeTimestamps() {
+    // Only process timestamps that haven't been formatted yet
+    const timestamps = document.querySelectorAll('.local-timestamp[data-utc]:not([data-formatted])');
+    timestamps.forEach(element => {
+        const utcTimestamp = element.getAttribute('data-utc');
+        if (utcTimestamp) {
+            element.textContent = window.formatLocalTimestamp(utcTimestamp);
+            element.setAttribute('data-formatted', 'true'); // Mark as formatted to avoid reprocessing
+        }
+    });
+}
+
+// Run on initial load
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeTimestamps);
+} else {
+    initializeTimestamps();
+}
+
+// Debounce function to avoid excessive calls
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Re-run after Blazor renders (using MutationObserver for dynamic content)
+// Debounced to avoid performance issues with frequent updates
+const debouncedInitializeTimestamps = debounce(initializeTimestamps, 100);
+
+const observer = new MutationObserver((mutations) => {
+    // Only run if we actually added new nodes with timestamps
+    let hasNewTimestamps = false;
+    for (const mutation of mutations) {
+        if (mutation.addedNodes.length > 0) {
+            hasNewTimestamps = true;
+            break;
+        }
+    }
+
+    if (hasNewTimestamps) {
+        debouncedInitializeTimestamps();
+    }
+});
+
+// Start observing when DOM is ready
+if (document.body) {
+    observer.observe(document.body, { childList: true, subtree: true });
+} else {
+    document.addEventListener('DOMContentLoaded', () => {
+        observer.observe(document.body, { childList: true, subtree: true });
+    });
+}

@@ -19,6 +19,7 @@ public record MessageRecord(
     string? PhotoLocalPath,
     string? PhotoThumbnailPath,
     string? ChatIconPath,
+    string? UserPhotoPath,
     DateTimeOffset? DeletedAt,
     string? DeletionSource
 );
@@ -115,7 +116,7 @@ public class DetectionResultRecord
     public long UserId { get; set; }
     public string? MessageText { get; set; }
     public bool UsedForTraining { get; set; } = true;
-    public int? NetConfidence { get; set; }
+    public int NetConfidence { get; set; }  // Required: computed column is_spam derives from this
     public string? CheckResultsJson { get; set; }  // Phase 2.6: JSON string with all check results
     public int EditVersion { get; set; }            // Phase 2.6: Message version (0 = original, 1+ = edits)
 }

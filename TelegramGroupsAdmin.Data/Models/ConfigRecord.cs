@@ -49,6 +49,13 @@ public class ConfigRecordDto
     public string? ModerationConfig { get; set; }
 
     /// <summary>
+    /// Bot protection configuration (JSONB)
+    /// Phase 6.1: Bot Auto-Ban
+    /// </summary>
+    [Column("bot_protection_config", TypeName = "jsonb")]
+    public string? BotProtectionConfig { get; set; }
+
+    /// <summary>
     /// When this config was created (UTC timestamp)
     /// </summary>
     [Column("created_at")]

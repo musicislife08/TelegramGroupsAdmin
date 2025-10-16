@@ -52,7 +52,7 @@ public class AuditLogRepository
             .Take(limit)
             .ToListAsync(ct);
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<List<UiModels.AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = 100, CancellationToken ct = default)
@@ -66,7 +66,7 @@ public class AuditLogRepository
             .Take(limit)
             .ToListAsync(ct);
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<List<UiModels.AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = 100, CancellationToken ct = default)
@@ -80,7 +80,7 @@ public class AuditLogRepository
             .Take(limit)
             .ToListAsync(ct);
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<List<UiModels.AuditLogRecord>> GetEventsByTypeAsync(DataModels.AuditEventType eventType, int limit = 100, CancellationToken ct = default)
@@ -94,6 +94,6 @@ public class AuditLogRepository
             .Take(limit)
             .ToListAsync(ct);
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 }

@@ -46,7 +46,7 @@
 
                                     <MudStack Row="true" Spacing="1">
                                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
-                                            Confidence: @result.Confidence%
+                                            Confidence: @Math.Abs(result.NetConfidence)%
                                         </MudChip>
                                         @if (result.UsedForTraining)
                                         {

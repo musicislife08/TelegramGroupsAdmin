@@ -39,7 +39,7 @@ public class VerificationTokenRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(vt => vt.Token == token, ct);
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task<UiModels.VerificationToken?> GetValidTokenAsync(string token, DataModels.TokenType tokenType, CancellationToken ct = default)
@@ -64,7 +64,7 @@ public class VerificationTokenRepository
                 && vt.UsedAt == null
                 && vt.ExpiresAt > now, ct);
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task MarkAsUsedAsync(string token, CancellationToken ct = default)

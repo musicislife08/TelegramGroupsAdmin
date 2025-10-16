@@ -1,0 +1,186 @@
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Configuration.Services
+@inject IConfigService ConfigService
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudText Typo="Typo.h6" GutterBottom="true">General Bot Settings</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        Configure general bot behavior and protection settings.
+    </MudText>
+
+    @if (_loading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_config != null)
+    {
+        <MudForm @ref="_form" @bind-IsValid="@_isValid">
+            <MudGrid>
+                <!-- Bot Protection Section -->
+                <MudItem xs="12">
+                    <MudText Typo="Typo.h6" Class="mb-2">Bot Protection</MudText>
+                    <MudDivider Class="mb-3" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudSwitch @bind-Value="_config.Enabled" Color="Color.Primary" Label="Enable Bot Protection" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Master switch for all bot protection features
+                    </MudText>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudSwitch @bind-Value="_config.AutoBanBots"
+                               Color="Color.Primary"
+                               Label="Auto-Ban Unauthorized Bots"
+                               Disabled="!_config.Enabled" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Automatically ban bots that join without admin invitation
+                    </MudText>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudSwitch @bind-Value="_config.AllowAdminInvitedBots"
+                               Color="Color.Primary"
+                               Label="Allow Admin-Invited Bots"
+                               Disabled="!_config.Enabled || !_config.AutoBanBots" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Allow bots that are invited by chat administrators
+                    </MudText>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudSwitch @bind-Value="_config.LogBotEvents"
+                               Color="Color.Primary"
+                               Label="Log Bot Events"
+                               Disabled="!_config.Enabled" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Log all bot join/ban events to the audit trail
+                    </MudText>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Whitelisted Bots</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                        Bots on this list will always be allowed to join (one username per line, with or without @@)
+                    </MudText>
+                    <MudTextField @bind-Value="_whitelistText"
+                                  Label="Whitelisted Bot Usernames"
+                                  Lines="5"
+                                  Variant="Variant.Outlined"
+                                  Disabled="!_config.Enabled || !_config.AutoBanBots"
+                                  HelperText="Example: RoseBot or GroupButlerBot" />
+                </MudItem>
+
+                <MudItem xs="12" Class="d-flex justify-space-between">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               OnClick="SaveConfig"
+                               Disabled="!_isValid || _saving">
+                        @if (_saving)
+                        {
+                            <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <span>Save Configuration</span>
+                        }
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Secondary"
+                               OnClick="LoadDefaults"
+                               Disabled="_saving">
+                        Reset to Defaults
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+
+        <MudDivider Class="my-4" />
+
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            <MudText Typo="Typo.body2">
+                <strong>How Bot Protection Works:</strong><br/>
+                • When a bot attempts to join, it's checked against the whitelist<br/>
+                • If not whitelisted, it checks if the bot was invited by a chat admin<br/>
+                • Unauthorized bots are automatically banned and logged to the audit trail<br/>
+                • This protects against profile-based spam attacks and bot raids
+            </MudText>
+        </MudAlert>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Error">Failed to load configuration</MudAlert>
+    }
+</MudPaper>
+
+@code {
+    private MudForm? _form;
+    private bool _isValid = true;
+    private bool _loading = true;
+    private bool _saving = false;
+    private BotProtectionConfig? _config;
+    private string _whitelistText = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfig();
+    }
+
+    private async Task LoadConfig()
+    {
+        _loading = true;
+        try
+        {
+            _config = await ConfigService.GetEffectiveAsync<BotProtectionConfig>("bot_protection", null)
+                      ?? BotProtectionConfig.Default;
+
+            // Convert whitelist to text (one per line)
+            _whitelistText = string.Join(Environment.NewLine, _config.WhitelistedBots);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveConfig()
+    {
+        if (_config == null || !_isValid) return;
+
+        _saving = true;
+        try
+        {
+            // Parse whitelist text into list (split by newlines, trim, remove empties)
+            _config.WhitelistedBots = _whitelistText
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .ToList();
+
+            await ConfigService.SaveAsync("bot_protection", null, _config);
+            Snackbar.Add("Bot protection configuration saved globally", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void LoadDefaults()
+    {
+        _config = BotProtectionConfig.Default;
+        _whitelistText = "";
+        Snackbar.Add("Defaults loaded. Click 'Save Configuration' to apply.", Severity.Info);
+    }
+}

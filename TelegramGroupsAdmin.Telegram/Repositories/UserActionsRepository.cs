@@ -25,7 +25,7 @@ public class UserActionsRepository : IUserActionsRepository
     public async Task<long> InsertAsync(UserActionRecord action)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = action.ToDataModel();
+        var entity = action.ToDto();
         context.UserActions.Add(entity);
         await context.SaveChangesAsync();
 
@@ -45,7 +45,7 @@ public class UserActionsRepository : IUserActionsRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(ua => ua.Id == id);
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task<List<UserActionRecord>> GetByUserIdAsync(long userId)
@@ -57,7 +57,7 @@ public class UserActionsRepository : IUserActionsRepository
             .OrderByDescending(ua => ua.IssuedAt)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<List<UserActionRecord>> GetActiveActionsByUserIdAsync(long userId)
@@ -71,7 +71,7 @@ public class UserActionsRepository : IUserActionsRepository
             .OrderByDescending(ua => ua.IssuedAt)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<List<UserActionRecord>> GetActiveBansAsync()
@@ -85,7 +85,7 @@ public class UserActionsRepository : IUserActionsRepository
             .OrderByDescending(ua => ua.IssuedAt)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<bool> IsUserBannedAsync(long userId, long? chatId = null)
@@ -200,7 +200,7 @@ public class UserActionsRepository : IUserActionsRepository
             .Take(limit)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp)
@@ -241,7 +241,7 @@ public class UserActionsRepository : IUserActionsRepository
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task DeactivateAsync(long actionId)

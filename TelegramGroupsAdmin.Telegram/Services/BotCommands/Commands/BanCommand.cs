@@ -67,15 +67,17 @@ public class BanCommand : IBotCommand
 
         try
         {
-            // Map executor Telegram ID to web app user ID
-            var executorUserId = await _moderationService.GetExecutorUserIdAsync(message.From?.Id);
+            // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
+            var executorId = await _moderationService.GetExecutorIdentifierAsync(
+                message.From!.Id,
+                message.From.Username);
 
             // Execute ban via ModerationActionService
             var result = await _moderationService.BanUserAsync(
                 botClient,
                 targetUser.Id,
                 message.ReplyToMessage.MessageId,
-                executorUserId,
+                executorId,
                 reason,
                 cancellationToken);
 

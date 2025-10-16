@@ -163,7 +163,15 @@
         {
             try
             {
-                await StopWordsRepository.AddStopWordAsync(data.Word, _currentUserId, data.Notes);
+                var stopWord = new TelegramGroupsAdmin.SpamDetection.Models.StopWord(
+                    Id: 0,
+                    Word: data.Word.ToLowerInvariant(),
+                    Enabled: true,
+                    AddedDate: DateTimeOffset.UtcNow,
+                    AddedBy: _currentUserId,
+                    Notes: data.Notes
+                );
+                await StopWordsRepository.AddStopWordAsync(stopWord);
                 Snackbar.Add("Stop word added successfully", Severity.Success);
                 await LoadStopWords();
             }

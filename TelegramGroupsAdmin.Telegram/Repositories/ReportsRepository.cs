@@ -23,7 +23,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
 
-        var entity = report.ToDataModel();
+        var entity = report.ToDto();
         context.Reports.Add(entity);
         await context.SaveChangesAsync();
 
@@ -45,7 +45,7 @@ public class ReportsRepository : IReportsRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == id);
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task<List<Report>> GetPendingReportsAsync(long? chatId = null)
@@ -79,7 +79,7 @@ public class ReportsRepository : IReportsRepository
             .Take(limit)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task UpdateReportStatusAsync(

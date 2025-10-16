@@ -95,6 +95,11 @@ public class AppDbContext : DbContext
             .HasForeignKey(d => d.MessageId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Configure is_spam as computed column (PostgreSQL: net_confidence > 0)
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .Property(d => d.IsSpam)
+            .HasComputedColumnSql("(net_confidence > 0)", stored: true);
+
         // Messages → MessageEdits (one-to-many)
         modelBuilder.Entity<MessageEditRecordDto>()
             .HasOne(e => e.Message)

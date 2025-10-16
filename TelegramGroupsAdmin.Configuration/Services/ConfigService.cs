@@ -122,6 +122,9 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
             case "moderation":
                 record.ModerationConfig = json;
                 break;
+            case "bot_protection":
+                record.BotProtectionConfig = json;
+                break;
             default:
                 throw new ArgumentException($"Unknown config type: {configType}", nameof(configType));
         }
@@ -135,6 +138,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
             "welcome" => record.WelcomeConfig,
             "log" => record.LogConfig,
             "moderation" => record.ModerationConfig,
+            "bot_protection" => record.BotProtectionConfig,
             _ => throw new ArgumentException($"Unknown config type: {configType}", nameof(configType))
         };
     }
@@ -144,7 +148,8 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         return string.IsNullOrEmpty(record.SpamDetectionConfig)
             && string.IsNullOrEmpty(record.WelcomeConfig)
             && string.IsNullOrEmpty(record.LogConfig)
-            && string.IsNullOrEmpty(record.ModerationConfig);
+            && string.IsNullOrEmpty(record.ModerationConfig)
+            && string.IsNullOrEmpty(record.BotProtectionConfig);
     }
 
     /// <summary>

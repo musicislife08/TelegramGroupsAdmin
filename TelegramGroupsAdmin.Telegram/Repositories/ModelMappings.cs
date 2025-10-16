@@ -10,7 +10,7 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 public static class ModelMappings
 {
     // ChatAdmin mappings
-    public static UiModels.ChatAdmin ToUiModel(this DataModels.ChatAdminRecordDto data) => new()
+    public static UiModels.ChatAdmin ToModel(this DataModels.ChatAdminRecordDto data) => new()
     {
         Id = data.Id,
         ChatId = data.ChatId,
@@ -22,7 +22,7 @@ public static class ModelMappings
         IsActive = data.IsActive
     };
 
-    public static DataModels.ChatAdminRecordDto ToDataModel(this UiModels.ChatAdmin ui) => new()
+    public static DataModels.ChatAdminRecordDto ToDto(this UiModels.ChatAdmin ui) => new()
     {
         Id = ui.Id,
         ChatId = ui.ChatId,
@@ -36,7 +36,7 @@ public static class ModelMappings
 
 
     // User mappings
-    public static UiModels.UserRecord ToUiModel(this DataModels.UserRecordDto data) => new(
+    public static UiModels.UserRecord ToModel(this DataModels.UserRecordDto data) => new(
         Id: data.Id,
         Email: data.Email,
         NormalizedEmail: data.NormalizedEmail,
@@ -60,7 +60,7 @@ public static class ModelMappings
         PasswordResetTokenExpiresAt: data.PasswordResetTokenExpiresAt
     );
 
-    public static DataModels.UserRecordDto ToDataModel(this UiModels.UserRecord ui) => new()
+    public static DataModels.UserRecordDto ToDto(this UiModels.UserRecord ui) => new()
     {
         Id = ui.Id,
         Email = ui.Email,
@@ -86,7 +86,7 @@ public static class ModelMappings
     };
 
     // Recovery Code mappings
-    public static UiModels.RecoveryCodeRecord ToUiModel(this DataModels.RecoveryCodeRecordDto data) => new(
+    public static UiModels.RecoveryCodeRecord ToModel(this DataModels.RecoveryCodeRecordDto data) => new(
         Id: data.Id,
         UserId: data.UserId,
         CodeHash: data.CodeHash,
@@ -94,7 +94,7 @@ public static class ModelMappings
     );
 
     // Invite mappings
-    public static UiModels.InviteRecord ToUiModel(this DataModels.InviteRecordDto data) => new(
+    public static UiModels.InviteRecord ToModel(this DataModels.InviteRecordDto data) => new(
         Token: data.Token,
         CreatedBy: data.CreatedBy,
         CreatedAt: data.CreatedAt,
@@ -105,7 +105,7 @@ public static class ModelMappings
         ModifiedAt: data.ModifiedAt
     );
 
-    public static UiModels.InviteWithCreator ToUiModel(this DataModels.InviteWithCreatorDto data) => new(
+    public static UiModels.InviteWithCreator ToModel(this DataModels.InviteWithCreatorDto data) => new(
         Token: data.Invite.Token,
         CreatedBy: data.Invite.CreatedBy,
         CreatedByEmail: data.CreatorEmail,
@@ -119,7 +119,7 @@ public static class ModelMappings
     );
 
     // Audit Log mappings
-    public static UiModels.AuditLogRecord ToUiModel(this DataModels.AuditLogRecordDto data) => new(
+    public static UiModels.AuditLogRecord ToModel(this DataModels.AuditLogRecordDto data) => new(
         Id: data.Id,
         EventType: (UiModels.AuditEventType)data.EventType,
         Timestamp: data.Timestamp,
@@ -129,7 +129,7 @@ public static class ModelMappings
     );
 
     // Message mappings (requires chat info from managed_chats JOIN)
-    public static UiModels.MessageRecord ToUiModel(
+    public static UiModels.MessageRecord ToModel(
         this DataModels.MessageRecordDto data,
         string? chatName,
         string? chatIconPath) => new(
@@ -148,11 +148,12 @@ public static class ModelMappings
         PhotoLocalPath: data.PhotoLocalPath,
         PhotoThumbnailPath: data.PhotoThumbnailPath,
         ChatIconPath: chatIconPath,
+        UserPhotoPath: data.UserPhotoPath,
         DeletedAt: data.DeletedAt,
         DeletionSource: data.DeletionSource
     );
 
-    public static DataModels.MessageRecordDto ToDataModel(this UiModels.MessageRecord ui) => new()
+    public static DataModels.MessageRecordDto ToDto(this UiModels.MessageRecord ui) => new()
     {
         MessageId = ui.MessageId,
         UserId = ui.UserId,
@@ -167,6 +168,7 @@ public static class ModelMappings
         ContentHash = ui.ContentHash,
         PhotoLocalPath = ui.PhotoLocalPath,
         PhotoThumbnailPath = ui.PhotoThumbnailPath,
+        UserPhotoPath = ui.UserPhotoPath,
         DeletedAt = ui.DeletedAt,
         DeletionSource = ui.DeletionSource
     };
@@ -174,7 +176,7 @@ public static class ModelMappings
     // Note: PhotoMessageRecord, HistoryStats, SpamCheckRecord are UI-only models
     // They are constructed directly in repositories (MessageHistoryRepository), not mapped from database entities
 
-    public static UiModels.MessageEditRecord ToUiModel(this DataModels.MessageEditRecordDto data) => new(
+    public static UiModels.MessageEditRecord ToModel(this DataModels.MessageEditRecordDto data) => new(
         Id: data.Id,
         MessageId: data.MessageId,
         OldText: data.OldText,
@@ -184,7 +186,7 @@ public static class ModelMappings
         NewContentHash: data.NewContentHash
     );
 
-    public static DataModels.MessageEditRecordDto ToDataModel(this UiModels.MessageEditRecord ui) => new()
+    public static DataModels.MessageEditRecordDto ToDto(this UiModels.MessageEditRecord ui) => new()
     {
         Id = ui.Id,
         MessageId = ui.MessageId,
@@ -195,7 +197,7 @@ public static class ModelMappings
         NewContentHash = ui.NewContentHash
     };
 
-    public static DataModels.InviteRecordDto ToDataModel(this UiModels.InviteRecord ui) => new()
+    public static DataModels.InviteRecordDto ToDto(this UiModels.InviteRecord ui) => new()
     {
         Token = ui.Token,
         CreatedBy = ui.CreatedBy,
@@ -208,7 +210,7 @@ public static class ModelMappings
     };
 
     // Verification Token mappings
-    public static UiModels.VerificationToken ToUiModel(this DataModels.VerificationTokenDto data) => new(
+    public static UiModels.VerificationToken ToModel(this DataModels.VerificationTokenDto data) => new(
         Id: data.Id,
         UserId: data.UserId,
         TokenType: (UiModels.TokenType)data.TokenType,
@@ -219,7 +221,7 @@ public static class ModelMappings
         UsedAt: data.UsedAt
     );
 
-    public static DataModels.VerificationTokenDto ToDataModel(this UiModels.VerificationToken ui) => new()
+    public static DataModels.VerificationTokenDto ToDto(this UiModels.VerificationToken ui) => new()
     {
         Id = ui.Id,
         UserId = ui.UserId,
@@ -232,7 +234,7 @@ public static class ModelMappings
     };
 
     // Detection Result mappings
-    public static UiModels.DetectionResultRecord ToUiModel(this DataModels.DetectionResultRecordDto data)
+    public static UiModels.DetectionResultRecord ToModel(this DataModels.DetectionResultRecordDto data)
     {
         return new UiModels.DetectionResultRecord
         {
@@ -254,7 +256,7 @@ public static class ModelMappings
         };
     }
 
-    public static DataModels.DetectionResultRecordDto ToDataModel(this UiModels.DetectionResultRecord ui) => new()
+    public static DataModels.DetectionResultRecordDto ToDto(this UiModels.DetectionResultRecord ui) => new()
     {
         Id = ui.Id,
         MessageId = ui.MessageId,
@@ -272,7 +274,7 @@ public static class ModelMappings
     };
 
     // User Action mappings (all actions are global now)
-    public static UiModels.UserActionRecord ToUiModel(this DataModels.UserActionRecordDto data) => new(
+    public static UiModels.UserActionRecord ToModel(this DataModels.UserActionRecordDto data) => new(
         Id: data.Id,
         UserId: data.UserId,
         ActionType: (UiModels.UserActionType)data.ActionType,
@@ -283,7 +285,7 @@ public static class ModelMappings
         Reason: data.Reason
     );
 
-    public static DataModels.UserActionRecordDto ToDataModel(this UiModels.UserActionRecord ui) => new()
+    public static DataModels.UserActionRecordDto ToDto(this UiModels.UserActionRecord ui) => new()
     {
         Id = ui.Id,
         UserId = ui.UserId,
@@ -296,7 +298,7 @@ public static class ModelMappings
     };
 
     // Managed Chat mappings
-    public static UiModels.ManagedChatRecord ToUiModel(this DataModels.ManagedChatRecordDto data) => new(
+    public static UiModels.ManagedChatRecord ToModel(this DataModels.ManagedChatRecordDto data) => new(
         ChatId: data.ChatId,
         ChatName: data.ChatName,
         ChatType: (UiModels.ManagedChatType)data.ChatType,
@@ -309,7 +311,7 @@ public static class ModelMappings
         ChatIconPath: data.ChatIconPath
     );
 
-    public static DataModels.ManagedChatRecordDto ToDataModel(this UiModels.ManagedChatRecord ui) => new()
+    public static DataModels.ManagedChatRecordDto ToDto(this UiModels.ManagedChatRecord ui) => new()
     {
         ChatId = ui.ChatId,
         ChatName = ui.ChatName,
@@ -324,7 +326,7 @@ public static class ModelMappings
     };
 
     // TelegramUserMapping mappings
-    public static UiModels.TelegramUserMappingRecord ToUiModel(this DataModels.TelegramUserMappingRecordDto data) => new(
+    public static UiModels.TelegramUserMappingRecord ToModel(this DataModels.TelegramUserMappingRecordDto data) => new(
         Id: data.Id,
         TelegramId: data.TelegramId,
         TelegramUsername: data.TelegramUsername,
@@ -333,7 +335,7 @@ public static class ModelMappings
         IsActive: data.IsActive
     );
 
-    public static DataModels.TelegramUserMappingRecordDto ToDataModel(this UiModels.TelegramUserMappingRecord ui) => new()
+    public static DataModels.TelegramUserMappingRecordDto ToDto(this UiModels.TelegramUserMappingRecord ui) => new()
     {
         Id = ui.Id,
         TelegramId = ui.TelegramId,
@@ -344,7 +346,7 @@ public static class ModelMappings
     };
 
     // TelegramLinkToken mappings
-    public static UiModels.TelegramLinkTokenRecord ToUiModel(this DataModels.TelegramLinkTokenRecordDto data) => new(
+    public static UiModels.TelegramLinkTokenRecord ToModel(this DataModels.TelegramLinkTokenRecordDto data) => new(
         Token: data.Token,
         UserId: data.UserId,
         CreatedAt: data.CreatedAt,
@@ -353,7 +355,7 @@ public static class ModelMappings
         UsedByTelegramId: data.UsedByTelegramId
     );
 
-    public static DataModels.TelegramLinkTokenRecordDto ToDataModel(this UiModels.TelegramLinkTokenRecord ui) => new()
+    public static DataModels.TelegramLinkTokenRecordDto ToDto(this UiModels.TelegramLinkTokenRecord ui) => new()
     {
         Token = ui.Token,
         UserId = ui.UserId,
@@ -364,7 +366,7 @@ public static class ModelMappings
     };
 
     // Report mappings
-    public static UiModels.Report ToUiModel(this DataModels.ReportDto data) => new(
+    public static UiModels.Report ToModel(this DataModels.ReportDto data) => new(
         Id: data.Id,
         MessageId: data.MessageId,
         ChatId: data.ChatId,
@@ -379,7 +381,7 @@ public static class ModelMappings
         AdminNotes: data.AdminNotes
     );
 
-    public static DataModels.ReportDto ToDataModel(this UiModels.Report ui) => new()
+    public static DataModels.ReportDto ToDto(this UiModels.Report ui) => new()
     {
         Id = ui.Id,
         MessageId = ui.MessageId,
@@ -399,7 +401,7 @@ public static class ModelMappings
     // Welcome Response Mappings (Phase 4.4)
     // ============================================================================
 
-    public static UiModels.WelcomeResponse ToUiModel(this DataModels.WelcomeResponseDto data) => new(
+    public static UiModels.WelcomeResponse ToModel(this DataModels.WelcomeResponseDto data) => new(
         Id: data.Id,
         ChatId: data.ChatId,
         UserId: data.UserId,
@@ -413,7 +415,7 @@ public static class ModelMappings
         TimeoutJobId: data.TimeoutJobId
     );
 
-    public static DataModels.WelcomeResponseDto ToDataModel(this UiModels.WelcomeResponse ui) => new()
+    public static DataModels.WelcomeResponseDto ToDto(this UiModels.WelcomeResponse ui) => new()
     {
         Id = ui.Id,
         ChatId = ui.ChatId,

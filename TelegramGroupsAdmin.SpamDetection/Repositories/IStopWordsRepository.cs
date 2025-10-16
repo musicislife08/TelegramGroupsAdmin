@@ -13,7 +13,7 @@ public interface IStopWordsRepository
     /// <summary>
     /// Add a new stop word
     /// </summary>
-    Task<long> AddStopWordAsync(string word, string? addedBy = null, string? notes = null, CancellationToken cancellationToken = default);
+    Task<long> AddStopWordAsync(TelegramGroupsAdmin.SpamDetection.Models.StopWord stopWord, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Enable or disable a stop word

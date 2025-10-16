@@ -47,7 +47,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
         else
         {
             // Insert new record
-            var entity = chat.ToDataModel();
+            var entity = chat.ToDto();
             context.ManagedChats.Add(entity);
         }
 
@@ -69,7 +69,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(mc => mc.ChatId == chatId);
 
-        return entity?.ToUiModel();
+        return entity?.ToModel();
     }
 
     public async Task<List<ManagedChatRecord>> GetActiveChatsAsync()
@@ -81,7 +81,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
             .OrderBy(mc => mc.ChatName)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<List<ManagedChatRecord>> GetAdminChatsAsync()
@@ -93,7 +93,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
             .OrderBy(mc => mc.ChatName)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<bool> IsActiveAndAdminAsync(long chatId)
@@ -175,7 +175,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
             .ThenBy(mc => mc.ChatName)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task<List<ManagedChatRecord>> GetAllAsync()

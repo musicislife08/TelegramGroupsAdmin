@@ -29,6 +29,7 @@ public class DetectionResultRecordDto
     public string DetectionMethod { get; set; } = string.Empty;
 
     [Column("is_spam")]
+    [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
     public bool IsSpam { get; set; }
 
     [Column("confidence")]
@@ -44,7 +45,8 @@ public class DetectionResultRecordDto
     public bool UsedForTraining { get; set; } = true;
 
     [Column("net_confidence")]
-    public int? NetConfidence { get; set; }
+    [Required]
+    public int NetConfidence { get; set; }
 
     [Column("check_results_json")]
     public string? CheckResultsJson { get; set; }

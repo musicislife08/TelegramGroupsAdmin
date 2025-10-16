@@ -3,28 +3,34 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
 @inject IAuditService AuditService
 @inject UserRepository UserRepository
+@inject IUserActionsRepository UserActionsRepository
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
+@inject NavigationManager Navigation
 @attribute [Authorize(Roles = "Admin,Owner")]
+@implements IDisposable
 
 <PageTitle>Audit Log - TelegramGroupsAdmin</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
-    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h4">Audit Log</MudText>
-        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-            <MudChip T="string" Icon="@Icons.Material.Filled.Security" Color="Color.Primary">
-                @_events.Count events
-            </MudChip>
-            <MudIconButton Icon="@Icons.Material.Filled.Refresh"
-                          Color="Color.Primary"
-                          OnClick="LoadDataAsync"
-                          title="Refresh Audit Log"
-                          Size="Size.Medium" />
-        </MudStack>
-    </MudStack>
+    <MudText Typo="Typo.h4" Class="mb-4">Audit Log</MudText>
+
+    <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4" ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnTabChanged">
+        <MudTabPanel Text="Web Admin Log" Icon="@Icons.Material.Filled.Security">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+                <MudChip T="string" Icon="@Icons.Material.Filled.Security" Color="Color.Primary">
+                    @_events.Count events
+                </MudChip>
+                <MudIconButton Icon="@Icons.Material.Filled.Refresh"
+                              Color="Color.Primary"
+                              OnClick="LoadWebAdminDataAsync"
+                              title="Refresh Web Admin Log"
+                              Size="Size.Medium" />
+            </MudStack>
 
     @if (_loading)
     {
@@ -150,28 +156,255 @@
             </RowTemplate>
         </MudTable>
     </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Telegram Moderation Log" Icon="@Icons.Material.Filled.SmartToy">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+                <MudChip T="string" Icon="@Icons.Material.Filled.Shield" Color="Color.Primary">
+                    @_userActions.Count actions
+                </MudChip>
+                <MudIconButton Icon="@Icons.Material.Filled.Refresh"
+                              Color="Color.Primary"
+                              OnClick="LoadModerationDataAsync"
+                              title="Refresh Moderation Log"
+                              Size="Size.Medium" />
+            </MudStack>
+
+    @if (_loadingModerationActions)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    <!-- Filters -->
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudSelect T="UserActionType?"
+                          Label="Action Type"
+                          Value="_filterActionType"
+                          ValueChanged="OnActionTypeFilterChanged"
+                          Clearable="true"
+                          AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem T="UserActionType?" Value="null">All Actions</MudSelectItem>
+                    @foreach (UserActionType actionType in Enum.GetValues(typeof(UserActionType)))
+                    {
+                        <MudSelectItem T="UserActionType?" Value="actionType">@GetActionTypeName(actionType)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudTextField T="string"
+                             Label="Telegram User ID"
+                             Value="_filterTelegramUserId"
+                             ValueChanged="OnTelegramUserIdFilterChanged"
+                             Clearable="true"
+                             Placeholder="Enter Telegram ID" />
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudTextField T="string"
+                             Label="Issued By"
+                             Value="_filterIssuedBy"
+                             ValueChanged="OnIssuedByFilterChanged"
+                             Clearable="true"
+                             Placeholder="e.g. system_bot_protection" />
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <!-- Moderation Log Table -->
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudTable Items="@_filteredUserActions"
+                 Hover="true"
+                 Breakpoint="Breakpoint.Sm"
+                 Loading="@_loadingModerationActions"
+                 LoadingProgressColor="Color.Info"
+                 Dense="true">
+            <HeaderContent>
+                <MudTh>Timestamp</MudTh>
+                <MudTh>Action Type</MudTh>
+                <MudTh>Telegram User ID</MudTh>
+                <MudTh>Issued By</MudTh>
+                <MudTh>Reason</MudTh>
+                <MudTh>Expires At</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Timestamp">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2">@FormatDate(context.IssuedAt)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatTime(context.IssuedAt)</MudText>
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Action Type">
+                    <MudChip T="string" Size="Size.Small" Color="@GetActionTypeColor(context.ActionType)">
+                        @GetActionTypeName(context.ActionType)
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Telegram User ID">
+                    <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.UserId</MudText>
+                </MudTd>
+                <MudTd DataLabel="Issued By">
+                    @if (context.IssuedBy == "system_bot_protection")
+                    {
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Shield" Color="Color.Info">
+                            Bot Protection
+                        </MudChip>
+                    }
+                    else if (context.IssuedBy != null && _userEmailCache.ContainsKey(context.IssuedBy))
+                    {
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Person" Color="Color.Primary">
+                            @_userEmailCache[context.IssuedBy]
+                        </MudChip>
+                    }
+                    else if (context.IssuedBy == "Auto-Detection" || context.IssuedBy?.StartsWith("Auto-") == true)
+                    {
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.AutoMode" Color="Color.Secondary">
+                            @context.IssuedBy
+                        </MudChip>
+                    }
+                    else if (context.IssuedBy?.StartsWith("telegram:") == true)
+                    {
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SmartToy" Color="Color.Info">
+                            @context.IssuedBy.Substring("telegram:".Length)
+                        </MudChip>
+                    }
+                    else if (string.IsNullOrEmpty(context.IssuedBy) || context.IssuedBy == "Unknown")
+                    {
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.QuestionMark" Color="Color.Default">
+                            Unknown
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.AdminPanelSettings" Color="Color.Default">
+                            @context.IssuedBy
+                        </MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Reason">
+                    @if (!string.IsNullOrEmpty(context.Reason))
+                    {
+                        <MudText Typo="Typo.body2" Style="font-size: 0.85em;">@context.Reason</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">-</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Expires At">
+                    @if (context.ExpiresAt.HasValue)
+                    {
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.body2">@FormatDate(context.ExpiresAt.Value)</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatTime(context.ExpiresAt.Value)</MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default">Permanent</MudChip>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+        </MudTabPanel>
+    </MudTabs>
 </MudContainer>
 
 @code {
+    // Tab navigation
+    private int _activeTabIndex = 0;
+
+    // Web Admin Log
     private List<AuditLogRecord> _events = new();
     private List<AuditLogRecord> _filteredEvents = new();
     private List<UserRecord> _users = new();
     private bool _loading = true;
 
-    // Filters
+    // Web Admin Filters
     private AuditEventType? _filterEventType;
     private string? _filterActorUserId;
     private string? _filterTargetUserId;
+
+    // Telegram Moderation Log
+    private List<TelegramGroupsAdmin.Telegram.Models.UserActionRecord> _userActions = new();
+    private List<TelegramGroupsAdmin.Telegram.Models.UserActionRecord> _filteredUserActions = new();
+    private bool _loadingModerationActions = true;
+
+    // Moderation Filters
+    private UserActionType? _filterActionType;
+    private string? _filterTelegramUserId;
+    private string? _filterIssuedBy;
 
     // User email cache
     private Dictionary<string, string> _userEmailCache = new();
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadDataAsync();
+        // Parse URL fragment to set initial tab
+        var fragment = new Uri(Navigation.Uri).Fragment.TrimStart('#');
+        _activeTabIndex = fragment switch
+        {
+            "web" => 0,
+            "telegram" => 1,
+            _ => 0
+        };
+
+        Navigation.LocationChanged += OnLocationChanged;
+
+        // Load data for initial tab
+        if (_activeTabIndex == 0)
+        {
+            await LoadWebAdminDataAsync();
+        }
+        else
+        {
+            await LoadModerationDataAsync();
+        }
     }
 
-    private async Task LoadDataAsync()
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        var fragment = new Uri(e.Location).Fragment.TrimStart('#');
+        var newIndex = fragment switch
+        {
+            "web" => 0,
+            "telegram" => 1,
+            _ => -1
+        };
+
+        if (newIndex >= 0 && newIndex != _activeTabIndex)
+        {
+            _activeTabIndex = newIndex;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnTabChanged(int index)
+    {
+        _activeTabIndex = index;
+
+        // Update URL fragment without reload
+        var fragment = index switch
+        {
+            0 => "web",
+            1 => "telegram",
+            _ => "web"
+        };
+
+        Navigation.NavigateTo($"/audit#{fragment}", false);
+
+        // Load data if not already loaded
+        if (index == 0 && _events.Count == 0)
+        {
+            await LoadWebAdminDataAsync();
+        }
+        else if (index == 1 && _userActions.Count == 0)
+        {
+            await LoadModerationDataAsync();
+        }
+    }
+
+    private async Task LoadWebAdminDataAsync()
     {
         _loading = true;
         StateHasChanged();
@@ -203,6 +436,42 @@
             _loading = false;
             StateHasChanged();
         }
+    }
+
+    private async Task LoadModerationDataAsync()
+    {
+        _loadingModerationActions = true;
+        StateHasChanged();
+
+        try
+        {
+            // Load moderation actions (recent 500)
+            _userActions = await UserActionsRepository.GetRecentAsync(limit: 500);
+
+            // Load users for email cache (if not already loaded)
+            if (_users.Count == 0)
+            {
+                _users = await UserRepository.GetAllIncludingDeletedAsync();
+                _userEmailCache = _users.ToDictionary(u => u.Id, u => u.Email);
+            }
+
+            // Apply initial filters (no filters = show all)
+            ApplyModerationFilters();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading moderation log: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loadingModerationActions = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
     }
 
     private void OnEventTypeFilterChanged(AuditEventType? value)
@@ -333,4 +602,70 @@
     {
         return timestamp.ToString("HH:mm:ss");
     }
+
+    // Moderation Log Filter Methods
+    private void OnActionTypeFilterChanged(UserActionType? value)
+    {
+        _filterActionType = value;
+        ApplyModerationFilters();
+    }
+
+    private void OnTelegramUserIdFilterChanged(string? value)
+    {
+        _filterTelegramUserId = value;
+        ApplyModerationFilters();
+    }
+
+    private void OnIssuedByFilterChanged(string? value)
+    {
+        _filterIssuedBy = value;
+        ApplyModerationFilters();
+    }
+
+    private void ApplyModerationFilters()
+    {
+        var filtered = _userActions.AsEnumerable();
+
+        if (_filterActionType.HasValue)
+        {
+            filtered = filtered.Where(a => a.ActionType == _filterActionType.Value);
+        }
+
+        if (!string.IsNullOrEmpty(_filterTelegramUserId))
+        {
+            if (long.TryParse(_filterTelegramUserId, out var userId))
+            {
+                filtered = filtered.Where(a => a.UserId == userId);
+            }
+        }
+
+        if (!string.IsNullOrEmpty(_filterIssuedBy))
+        {
+            filtered = filtered.Where(a => a.IssuedBy != null && a.IssuedBy.Contains(_filterIssuedBy, StringComparison.OrdinalIgnoreCase));
+        }
+
+        _filteredUserActions = filtered.ToList();
+        StateHasChanged();
+    }
+
+    // Action Type Helper Methods
+    private static string GetActionTypeName(UserActionType actionType) => actionType switch
+    {
+        UserActionType.Ban => "Ban",
+        UserActionType.Warn => "Warn",
+        UserActionType.Mute => "Mute",
+        UserActionType.Trust => "Trust",
+        UserActionType.Unban => "Unban",
+        _ => actionType.ToString()
+    };
+
+    private static Color GetActionTypeColor(UserActionType actionType) => actionType switch
+    {
+        UserActionType.Ban => Color.Error,
+        UserActionType.Warn => Color.Warning,
+        UserActionType.Mute => Color.Warning,
+        UserActionType.Trust => Color.Success,
+        UserActionType.Unban => Color.Info,
+        _ => Color.Default
+    };
 }

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TelegramGroupsAdmin.Data;
@@ -11,9 +12,11 @@ using TelegramGroupsAdmin.Data;
 namespace TgSpam_PreFilterApi.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251016155648_AddBotProtectionConfigColumn")]
+    partial class AddBotProtectionConfigColumn
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -234,16 +237,14 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasColumnName("edit_version");
 
                     b.Property<bool>("IsSpam")
-                        .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("boolean")
-                        .HasColumnName("is_spam")
-                        .HasComputedColumnSql("(net_confidence > 0)", true);
+                        .HasColumnName("is_spam");
 
                     b.Property<long>("MessageId")
                         .HasColumnType("bigint")
                         .HasColumnName("message_id");
 
-                    b.Property<int>("NetConfidence")
+                    b.Property<int?>("NetConfidence")
                         .HasColumnType("integer")
                         .HasColumnName("net_confidence");
 
@@ -473,10 +474,6 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                     b.Property<string>("UserName")
                         .HasColumnType("text")
                         .HasColumnName("user_name");
-
-                    b.Property<string>("UserPhotoPath")
-                        .HasColumnType("text")
-                        .HasColumnName("user_photo_path");
 
                     b.HasKey("MessageId");
 

@@ -45,29 +45,21 @@ public class StopWordsRepository : IStopWordsRepository
     /// <summary>
     /// Add a new stop word
     /// </summary>
-    public async Task<long> AddStopWordAsync(string word, string? addedBy = null, string? notes = null, CancellationToken cancellationToken = default)
+    public async Task<long> AddStopWordAsync(Models.StopWord stopWord, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var stopWord = new StopWordDto
-            {
-                Word = word.ToLowerInvariant(),
-                Enabled = true,
-                AddedDate = DateTimeOffset.UtcNow,
-                AddedBy = addedBy,
-                Notes = notes
-            };
-
-            context.StopWords.Add(stopWord);
+            var dto = stopWord.ToDto();
+            context.StopWords.Add(dto);
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Added stop word: {Word} (ID: {Id})", word, stopWord.Id);
-            return stopWord.Id;
+            _logger.LogInformation("Added stop word: {Word} (ID: {Id})", stopWord.Word, dto.Id);
+            return dto.Id;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to add stop word: {Word}", word);
+            _logger.LogError(ex, "Failed to add stop word: {Word}", stopWord.Word);
             throw;
         }
     }

@@ -20,7 +20,7 @@ public class MessageHistoryRepository
     public async Task InsertMessageAsync(UiModels.MessageRecord message)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = message.ToDataModel();
+        var entity = message.ToDto();
         context.Messages.Add(entity);
         await context.SaveChangesAsync();
 
@@ -134,7 +134,7 @@ public class MessageHistoryRepository
             .Take(limit)
             .ToListAsync();
 
-        return results.Select(x => x.Message.ToUiModel(
+        return results.Select(x => x.Message.ToModel(
             chatName: x.Chat?.ChatName,
             chatIconPath: x.Chat?.ChatIconPath)).ToList();
     }
@@ -154,7 +154,7 @@ public class MessageHistoryRepository
             .Take(limit)
             .ToListAsync();
 
-        return results.Select(x => x.Message.ToUiModel(
+        return results.Select(x => x.Message.ToModel(
             chatName: x.Chat?.ChatName,
             chatIconPath: x.Chat?.ChatIconPath)).ToList();
     }
@@ -177,7 +177,7 @@ public class MessageHistoryRepository
             .Take(limit)
             .ToListAsync();
 
-        return results.Select(x => x.Message.ToUiModel(
+        return results.Select(x => x.Message.ToModel(
             chatName: x.Chat?.ChatName,
             chatIconPath: x.Chat?.ChatIconPath)).ToList();
     }
@@ -215,6 +215,8 @@ public class MessageHistoryRepository
 
         // Query detection_results table (spam_checks table was dropped in normalized schema)
         // Map detection_results fields to SpamCheckRecord for backward compatibility
+        // Note: Returns only the LATEST detection result per message for quick display
+        // Full detection history is available via GetByMessageIdAsync in DetectionResultsRepository
         var results = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => messageIdArray.Contains(dr.MessageId))
@@ -224,6 +226,7 @@ public class MessageHistoryRepository
                 (dr, m) => new
                 {
                     dr.Id,
+                    dr.MessageId,
                     CheckTimestamp = dr.DetectedAt,
                     m.UserId,
                     m.ContentHash,
@@ -235,15 +238,36 @@ public class MessageHistoryRepository
                 })
             .ToListAsync();
 
-        // Return dictionary keyed by matched_message_id
-        return results
+        // Group by message ID and take the latest detection result per message (in-memory)
+        var latestResults = results
+            .GroupBy(r => r.MessageId)
+            .Select(g => g.OrderByDescending(r => r.CheckTimestamp).First())
+            .ToList();
+
+        // Get net_confidence values for all these messages (need fresh query to include net_confidence)
+        var latestMessageIds = latestResults.Select(r => r.MessageId).Distinct().ToArray();
+        var netConfidenceResults = await context.DetectionResults
+            .AsNoTracking()
+            .Where(dr => latestMessageIds.Contains(dr.MessageId))
+            .Select(dr => new { dr.MessageId, dr.NetConfidence, dr.DetectedAt })
+            .ToListAsync();
+
+        // Group detection results by message and take latest net_confidence
+        var latestNetConfidence = netConfidenceResults
+            .GroupBy(dr => dr.MessageId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(dr => dr.DetectedAt).First().NetConfidence);
+
+        // Build final result with absolute net_confidence as display confidence
+        return latestResults
             .Select(r => new UiModels.SpamCheckRecord(
                 Id: r.Id,
                 CheckTimestamp: r.CheckTimestamp,
                 UserId: r.UserId,
                 ContentHash: r.ContentHash,
                 IsSpam: r.IsSpam,
-                Confidence: r.Confidence,
+                Confidence: Math.Abs(latestNetConfidence.GetValueOrDefault(r.MessageId, 0)), // Use absolute net_confidence for display
                 Reason: r.Reason,
                 CheckType: r.CheckType,
                 MatchedMessageId: r.MatchedMessageId))
@@ -275,13 +299,13 @@ public class MessageHistoryRepository
             .OrderBy(e => e.EditDate)
             .ToListAsync();
 
-        return entities.Select(e => e.ToUiModel()).ToList();
+        return entities.Select(e => e.ToModel()).ToList();
     }
 
     public async Task InsertMessageEditAsync(UiModels.MessageEditRecord edit)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = edit.ToDataModel();
+        var entity = edit.ToDto();
         context.MessageEdits.Add(entity);
         await context.SaveChangesAsync();
 
@@ -304,7 +328,7 @@ public class MessageHistoryRepository
                 (m, chats) => new { Message = m, Chat = chats.FirstOrDefault() })
             .FirstOrDefaultAsync();
 
-        return result?.Message.ToUiModel(
+        return result?.Message.ToModel(
             chatName: result.Chat?.ChatName,
             chatIconPath: result.Chat?.ChatIconPath);
     }
@@ -320,13 +344,15 @@ public class MessageHistoryRepository
             entity.Urls = message.Urls;
             entity.EditDate = message.EditDate;
             entity.ContentHash = message.ContentHash;
+            entity.UserPhotoPath = message.UserPhotoPath;
 
             await context.SaveChangesAsync();
 
             _logger.LogDebug(
-                "Updated message {MessageId} with new edit date {EditDate}",
+                "Updated message {MessageId} (edit_date: {EditDate}, user_photo: {HasPhoto})",
                 message.MessageId,
-                message.EditDate);
+                message.EditDate,
+                message.UserPhotoPath != null);
         }
     }
 

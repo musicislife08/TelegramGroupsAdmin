@@ -22,7 +22,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     public async Task InsertAsync(DetectionResultRecord result)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = result.ToDataModel();
+        var entity = result.ToDto();
         context.DetectionResults.Add(entity);
         await context.SaveChangesAsync();
 
@@ -400,13 +400,14 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             throw new InvalidOperationException($"Detection result {id} not found");
         }
 
-        entity.IsSpam = isSpam;
+        // IsSpam is computed from net_confidence, so update that instead
+        entity.NetConfidence = isSpam ? 100 : -100;
         entity.UsedForTraining = usedForTraining;
         await context.SaveChangesAsync();
 
         _logger.LogInformation(
-            "Updated detection result {Id}: IsSpam={IsSpam}, UsedForTraining={UsedForTraining}",
-            id, isSpam, usedForTraining);
+            "Updated detection result {Id}: IsSpam={IsSpam} (net_confidence={NetConfidence}), UsedForTraining={UsedForTraining}",
+            id, isSpam, entity.NetConfidence, usedForTraining);
     }
 
     public async Task DeleteDetectionResultAsync(long id)
@@ -449,12 +450,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             DetectedAt = DateTimeOffset.UtcNow,
             DetectionSource = source,
             DetectionMethod = "Manual",
-            IsSpam = isSpam,
+            // IsSpam computed from net_confidence
             Confidence = confidence ?? 100,
             Reason = "Manually added training sample",
             AddedBy = addedBy,
             UsedForTraining = true,
-            NetConfidence = null,
+            NetConfidence = isSpam ? 100 : -100,  // Manual: 100 = spam, -100 = ham
             CheckResultsJson = null,
             EditVersion = 0
         };

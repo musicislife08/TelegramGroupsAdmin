@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TelegramGroupsAdmin.Data;
@@ -11,9 +12,11 @@ using TelegramGroupsAdmin.Data;
 namespace TgSpam_PreFilterApi.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251016173630_MakeIsSpamComputedColumn")]
+    partial class MakeIsSpamComputedColumn
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -473,10 +476,6 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                     b.Property<string>("UserName")
                         .HasColumnType("text")
                         .HasColumnName("user_name");
-
-                    b.Property<string>("UserPhotoPath")
-                        .HasColumnType("text")
-                        .HasColumnName("user_photo_path");
 
                     b.HasKey("MessageId");
 
