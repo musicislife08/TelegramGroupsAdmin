@@ -1,0 +1,244 @@
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="4">
+    <!-- Authentication & Session Management -->
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Authentication & Sessions</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Configure authentication security and session management
+        </MudText>
+
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Success" Dense="true">
+                <strong>Current Security Features:</strong>
+                <ul class="my-2">
+                    <li>Cookie-based authentication with secure HTTPS-only cookies</li>
+                    <li>TOTP 2FA (Time-based One-Time Password) support</li>
+                    <li>Email verification required for new accounts</li>
+                    <li>Intermediate authentication tokens (5min expiry) for TOTP flow</li>
+                    <li>Password reset with secure tokens (24hr expiry)</li>
+                    <li>Abandoned 2FA setup auto-cleanup (15min expiry)</li>
+                </ul>
+            </MudAlert>
+
+            <MudDivider />
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Session Settings (Future)</MudText>
+
+            <MudNumericField @bind-Value="_sessionTimeoutMinutes"
+                           Label="Session Timeout (minutes)"
+                           Variant="Variant.Outlined"
+                           Min="15"
+                           Max="1440"
+                           HelperText="Idle time before automatic logout (default: 480 = 8 hours)"
+                           Disabled="true" />
+
+            <MudSwitch @bind-Value="_requireReauthForSensitive"
+                      Label="Require re-authentication for sensitive actions"
+                      Color="Color.Primary"
+                      Disabled="true" />
+
+            <MudSwitch @bind-Value="_forceTotpForOwners"
+                      Label="Force 2FA for all Owner accounts"
+                      Color="Color.Primary"
+                      Disabled="true" />
+
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Session timeout and re-authentication settings are planned for a future release.
+                Current session timeout is managed by ASP.NET Core cookie authentication (default: sliding expiration).
+            </MudAlert>
+        </MudStack>
+    </MudPaper>
+
+    <!-- Password Policy -->
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Password Policy</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Configure password requirements and rotation
+        </MudText>
+
+        <MudStack Spacing="3">
+            <MudNumericField @bind-Value="_minPasswordLength"
+                           Label="Minimum Password Length"
+                           Variant="Variant.Outlined"
+                           Min="8"
+                           Max="64"
+                           HelperText="Minimum characters required (default: 12)"
+                           Disabled="true" />
+
+            <MudSwitch @bind-Value="_requireSpecialChars"
+                      Label="Require special characters"
+                      Color="Color.Primary"
+                      Disabled="true" />
+
+            <MudSwitch @bind-Value="_requireNumbers"
+                      Label="Require numbers"
+                      Color="Color.Primary"
+                      Disabled="true" />
+
+            <MudSwitch @bind-Value="_requireUppercase"
+                      Label="Require uppercase letters"
+                      Color="Color.Primary"
+                      Disabled="true" />
+
+            <MudNumericField @bind-Value="_passwordExpiryDays"
+                           Label="Password Expiry (days)"
+                           Variant="Variant.Outlined"
+                           Min="0"
+                           Max="365"
+                           HelperText="0 = never expire (default)"
+                           Disabled="true" />
+
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Password policy enforcement is planned for a future release.
+                Current implementation uses ASP.NET Core Identity password hashing (PBKDF2) with secure defaults.
+            </MudAlert>
+        </MudStack>
+    </MudPaper>
+
+    <!-- Audit Log Retention -->
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Audit Log Retention</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Configure how long audit logs are retained
+        </MudText>
+
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Success" Dense="true">
+                <strong>Current Audit Logging:</strong>
+                <ul class="my-2">
+                    <li>All user management actions (create, update, delete, permission changes)</li>
+                    <li>Authentication events (login, logout, 2FA setup/reset)</li>
+                    <li>Invite management (create, revoke, use)</li>
+                    <li>Email verification and password resets</li>
+                    <li>Permanent retention (no automatic cleanup)</li>
+                </ul>
+            </MudAlert>
+
+            <MudDivider />
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Retention Settings (Future)</MudText>
+
+            <MudNumericField @bind-Value="_auditLogRetentionDays"
+                           Label="Audit Log Retention (days)"
+                           Variant="Variant.Outlined"
+                           Min="30"
+                           Max="3650"
+                           HelperText="How long to keep audit logs (0 = forever, default: 365)"
+                           Disabled="true" />
+
+            <MudSwitch @bind-Value="_archiveOldAuditLogs"
+                      Label="Archive old audit logs to long-term storage"
+                      Color="Color.Primary"
+                      Disabled="true" />
+
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Audit log retention policies are planned for a future release.
+                Current implementation retains all audit logs permanently.
+            </MudAlert>
+        </MudStack>
+    </MudPaper>
+
+    <!-- API Security -->
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">API Security</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Configure API access and rate limiting
+        </MudText>
+
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Success" Dense="true">
+                <strong>Current API Security:</strong>
+                <ul class="my-2">
+                    <li>Cookie authentication for all API endpoints</li>
+                    <li>Role-based authorization (ReadOnly, Admin, Owner)</li>
+                    <li>CSRF protection on state-changing operations</li>
+                    <li>Rate limiting on external APIs (VirusTotal: 4 req/min, OpenAI: 429 handling)</li>
+                </ul>
+            </MudAlert>
+
+            <MudDivider />
+
+            <MudText Typo="Typo.subtitle2" Class="mt-2">API Key Management (Future)</MudText>
+
+            <MudSwitch @bind-Value="_enableApiKeys"
+                      Label="Enable API key authentication"
+                      Color="Color.Primary"
+                      Disabled="true" />
+
+            <MudSwitch @bind-Value="_enableRateLimiting"
+                      Label="Enable rate limiting per user/IP"
+                      Color="Color.Primary"
+                      Disabled="true" />
+
+            <MudNumericField @bind-Value="_apiRateLimit"
+                           Label="API Rate Limit (requests per minute)"
+                           Variant="Variant.Outlined"
+                           Min="10"
+                           Max="1000"
+                           HelperText="Maximum requests per minute per user"
+                           Disabled="true" />
+
+            <MudAlert Severity="Severity.Info" Dense="true">
+                API key authentication and per-user rate limiting are planned for Phase 7 (Advanced Features).
+                Current API is internal-use only (no public endpoints).
+            </MudAlert>
+        </MudStack>
+    </MudPaper>
+
+    <!-- Data Protection -->
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Data Protection</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Encryption and data protection settings
+        </MudText>
+
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Success" Dense="true">
+                <strong>Current Data Protection:</strong>
+                <ul class="my-2">
+                    <li>ASP.NET Core Data Protection for TOTP secrets (encrypted at rest)</li>
+                    <li>Password hashing with PBKDF2 (ASP.NET Core Identity)</li>
+                    <li>Secure token generation for email verification and password reset</li>
+                    <li>Data Protection keys stored at: /data/dataprotection-keys</li>
+                </ul>
+            </MudAlert>
+
+            <MudTextField @bind-Value="_dataProtectionKeysPath"
+                         Label="Data Protection Keys Path"
+                         Variant="Variant.Outlined"
+                         HelperText="Location for Data Protection key ring"
+                         Disabled="true" />
+
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Data Protection keys path is configured via environment variable: DATAPROTECTION__KEYSPATH
+            </MudAlert>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    // Session settings (future)
+    private int _sessionTimeoutMinutes = 480; // 8 hours
+    private bool _requireReauthForSensitive = true;
+    private bool _forceTotpForOwners = false;
+
+    // Password policy (future)
+    private int _minPasswordLength = 12;
+    private bool _requireSpecialChars = true;
+    private bool _requireNumbers = true;
+    private bool _requireUppercase = true;
+    private int _passwordExpiryDays = 0; // Never expire
+
+    // Audit log retention (future)
+    private int _auditLogRetentionDays = 365;
+    private bool _archiveOldAuditLogs = false;
+
+    // API security (future)
+    private bool _enableApiKeys = false;
+    private bool _enableRateLimiting = true;
+    private int _apiRateLimit = 100;
+
+    // Data protection
+    private string _dataProtectionKeysPath = "/data/dataprotection-keys";
+}

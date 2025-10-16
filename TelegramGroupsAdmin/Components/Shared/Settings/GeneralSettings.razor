@@ -1,0 +1,110 @@
+@using TelegramGroupsAdmin.Configuration
+@using Microsoft.Extensions.Options
+@inject IOptions<AppOptions> AppOptionsAccessor
+@inject IOptions<MessageHistoryOptions> MessageHistoryOptionsAccessor
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="4">
+    <!-- Application Settings -->
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Application Settings</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Core application configuration
+        </MudText>
+
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_appSettings.BaseUrl"
+                         Label="Base URL"
+                         Variant="Variant.Outlined"
+                         HelperText="Public URL for email links (e.g., https://yourdomain.com)"
+                         Disabled="true" />
+
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Application settings are configured via environment variables and cannot be changed from the UI.
+                Set APP__BASEURL to change the base URL.
+            </MudAlert>
+        </MudStack>
+    </MudPaper>
+
+    <!-- Message History Settings -->
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Message History Settings</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Configure message retention and storage
+        </MudText>
+
+        <MudStack Spacing="3">
+            <MudSwitch Value="_messageHistorySettings.Enabled"
+                      Label="Enable Message History"
+                      Color="Color.Primary"
+                      Disabled="true" />
+
+            <MudNumericField @bind-Value="_retentionDays"
+                           Label="Message Retention (days)"
+                           Variant="Variant.Outlined"
+                           Min="1"
+                           Max="365"
+                           HelperText="How long to keep messages (spam/ham samples kept permanently)"
+                           Disabled="true" />
+
+            <MudNumericField @bind-Value="_cleanupIntervalHours"
+                           Label="Cleanup Interval (hours)"
+                           Variant="Variant.Outlined"
+                           Min="1"
+                           Max="168"
+                           HelperText="How often to run cleanup job (default: 24 hours)"
+                           Disabled="true" />
+
+            <MudTextField Value="_messageHistorySettings.ImageStoragePath"
+                         Label="Image Storage Path"
+                         Variant="Variant.Outlined"
+                         HelperText="Directory for storing downloaded images"
+                         Disabled="true" />
+
+            <MudNumericField Value="_messageHistorySettings.ThumbnailSize"
+                           Label="Thumbnail Size (pixels)"
+                           Variant="Variant.Outlined"
+                           Min="50"
+                           Max="500"
+                           HelperText="Size for image thumbnails (square)"
+                           Disabled="true" />
+
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Message history settings are configured via environment variables:
+                MESSAGEHISTORY__ENABLED, MESSAGEHISTORY__RETENTIONHOURS, MESSAGEHISTORY__CLEANUPINTERVALMINUTES,
+                MESSAGEHISTORY__IMAGESTORAGEPATH, MESSAGEHISTORY__THUMBNAILSIZE
+            </MudAlert>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private AppOptions _appSettings = new();
+    private MessageHistoryOptions _messageHistorySettings = new();
+    private int _retentionDays;
+    private int _cleanupIntervalHours;
+
+    protected override void OnInitialized()
+    {
+        // Load current settings from IOptions
+        _appSettings = new AppOptions
+        {
+            BaseUrl = AppOptionsAccessor.Value.BaseUrl
+        };
+
+        var messageHistory = MessageHistoryOptionsAccessor.Value;
+        _messageHistorySettings = new MessageHistoryOptions
+        {
+            Enabled = messageHistory.Enabled,
+            DatabasePath = messageHistory.DatabasePath,
+            RetentionHours = messageHistory.RetentionHours,
+            CleanupIntervalMinutes = messageHistory.CleanupIntervalMinutes,
+            ImageStoragePath = messageHistory.ImageStoragePath,
+            ThumbnailSize = messageHistory.ThumbnailSize
+        };
+
+        // Convert hours/minutes to user-friendly days/hours
+        _retentionDays = _messageHistorySettings.RetentionHours / 24;
+        _cleanupIntervalHours = _messageHistorySettings.CleanupIntervalMinutes / 60;
+    }
+}

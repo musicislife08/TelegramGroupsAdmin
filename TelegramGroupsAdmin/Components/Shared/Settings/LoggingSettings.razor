@@ -1,0 +1,110 @@
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="4">
+    <!-- Dynamic Log Level Configuration -->
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Dynamic Log Level Configuration</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Adjust log levels at runtime without restarting the application
+        </MudText>
+
+        <MudAlert Severity="Severity.Info" Class="mb-4">
+            <strong>Phase 4.7 - Coming Soon</strong>
+            <br />
+            This tab will enable dynamic log level configuration similar to *arr apps (Sonarr, Radarr, etc.).
+            Changes will be stored in the database and applied immediately without requiring a restart.
+        </MudAlert>
+
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.subtitle2">Planned Features:</MudText>
+            <ul style="margin-left: 20px;">
+                <li>Per-namespace log level configuration</li>
+                <li>Real-time log level updates without restart</li>
+                <li>Database storage for persistence</li>
+                <li>Default log levels with per-namespace overrides</li>
+                <li>ILoggerFactory integration for immediate application</li>
+                <li>Support for: Trace, Debug, Information, Warning, Error, Critical</li>
+            </ul>
+
+            <MudDivider Class="my-3" />
+
+            <MudText Typo="Typo.subtitle2">Current Log Levels (from appsettings.json):</MudText>
+            <MudAlert Severity="Severity.Success" Dense="true">
+                <ul class="my-2" style="margin-left: 20px;">
+                    <li><strong>Microsoft</strong>: Warning</li>
+                    <li><strong>Microsoft.Hosting.Lifetime</strong>: Information</li>
+                    <li><strong>TelegramGroupsAdmin</strong>: Information</li>
+                </ul>
+            </MudAlert>
+
+            <MudText Typo="Typo.body2" Class="mt-2">
+                To change log levels before Phase 4.7 is implemented, modify your appsettings.json or
+                set environment variables like <code>Logging__LogLevel__TelegramGroupsAdmin=Debug</code>
+            </MudText>
+        </MudStack>
+    </MudPaper>
+
+    <!-- Log Output Configuration -->
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Log Output Configuration</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Configure where logs are written
+        </MudText>
+
+        <MudAlert Severity="Severity.Success" Dense="true">
+            <strong>Current Log Output:</strong>
+            <ul class="my-2" style="margin-left: 20px;">
+                <li>Console output (stdout) - captured by Docker logs</li>
+                <li>Structured JSON logging via ASP.NET Core</li>
+                <li>Compatible with log aggregation tools (Loki, ELK, Seq)</li>
+            </ul>
+        </MudAlert>
+
+        <MudText Typo="Typo.subtitle2" Class="mt-3">Future Enhancements (Phase 5+):</MudText>
+        <ul style="margin-left: 20px;">
+            <li>File-based logging with rotation</li>
+            <li>Syslog integration</li>
+            <li>Direct integration with Loki/Grafana</li>
+            <li>Real-time log viewer in web UI</li>
+        </ul>
+    </MudPaper>
+
+    <!-- Debugging & Troubleshooting -->
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Debugging & Troubleshooting</MudText>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Tools for troubleshooting issues
+        </MudText>
+
+        <MudAlert Severity="Severity.Info" Dense="true">
+            <strong>Current Troubleshooting Tools:</strong>
+            <ul class="my-2" style="margin-left: 20px;">
+                <li><strong>/health</strong> - API endpoint for system status and bot stats</li>
+                <li><strong>Docker logs</strong> - View application logs via <code>docker logs telegram-admin</code></li>
+                <li><strong>Audit log page</strong> - Track user actions and authentication events</li>
+                <li><strong>Message history</strong> - Review detection history and spam analysis</li>
+            </ul>
+        </MudAlert>
+
+        <MudText Typo="Typo.subtitle2" Class="mt-3">Useful Log Commands:</MudText>
+        <MudPaper Elevation="0" Class="pa-3 mt-2" Style="background-color: #f5f5f5;">
+            <code># View all logs</code><br />
+            <code>docker logs telegram-admin</code><br /><br />
+            <code># Follow logs in real-time</code><br />
+            <code>docker logs -f telegram-admin</code><br /><br />
+            <code># View last 100 lines</code><br />
+            <code>docker logs --tail 100 telegram-admin</code><br /><br />
+            <code># Search for errors</code><br />
+            <code>docker logs telegram-admin 2>&1 | grep -i error</code>
+        </MudPaper>
+    </MudPaper>
+</MudStack>
+
+@code {
+    // This component is a placeholder for Phase 4.7
+    // Real implementation will include:
+    // - IConfigService integration for storing log levels
+    // - ILoggerFactory manipulation for runtime updates
+    // - Per-namespace log level dropdowns
+    // - Save/Reset functionality
+}
