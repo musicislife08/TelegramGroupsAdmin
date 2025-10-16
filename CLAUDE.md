@@ -149,6 +149,7 @@ Not implemented (not needed): Chat delegation, templates, bulk UI (already autom
 **4.6**: /tempban (5min/1hr/24hr presets, Telegram until_date auto-unrestrict, user_actions audit, UI integration)
 **4.7**: /settings#logging (dynamic log levels like *arr apps, configs JSONB storage, ILoggerFactory immediate application)
 **4.8** ✅: Settings UI completion - All tabs implemented with real functionality. General (App + MessageHistory env display), Integrations (OpenAI/SendGrid/VirusTotal/Telegram status + masked API keys), Notifications (email/Telegram/webhook future features listed), Security (auth/password/audit/API/data protection current + future), Logging (Phase 4.7 placeholder + troubleshooting guide). All settings read-only (env var configured), informational display only. 0 errors, 0 warnings.
+**4.9**: Dynamic bot connection management - Hot-reload bot without restart, IBotLifecycleService interface, ReconnectAsync/DisconnectAsync methods, internal CancellationTokenSource for bot-specific cancellation, BotConnectionManager.razor component with real-time status updates, /settings#bot-connection tab, persist connection state in configs, Owner-only access. Enables bot token hot-swap, maintenance mode, and troubleshooting without app restart.
 
 ### Phase 5: Analytics & Data Aggregation 🔮 FUTURE
 **5.1**: Analytics repo (time-series queries, false positive/negative rates, per-check performance)
