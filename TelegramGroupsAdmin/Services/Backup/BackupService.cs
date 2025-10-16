@@ -476,30 +476,16 @@ public class BackupService : IBackupService
         var properties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
         // Get actual column names from [Column] attributes (skip navigation properties)
-        // Navigation properties are typically: virtual, collections (ICollection, IEnumerable, List), or marked [NotMapped]
+        // Must match the same filter used in ExportTableAsync for consistency
         var columnMappings = properties
-            .Where(p =>
-            {
-                // Skip if marked [NotMapped]
-                if (p.GetCustomAttribute<System.ComponentModel.DataAnnotations.Schema.NotMappedAttribute>() != null)
-                    return false;
-
-                // Skip if it's a collection type (navigation property)
-                if (typeof(System.Collections.IEnumerable).IsAssignableFrom(p.PropertyType) && p.PropertyType != typeof(string))
-                    return false;
-
-                // Skip if it's a virtual complex type without [Column] attribute (likely navigation property)
-                var columnAttr = p.GetCustomAttribute<System.ComponentModel.DataAnnotations.Schema.ColumnAttribute>();
-                if (columnAttr == null && p.PropertyType.IsClass && p.PropertyType != typeof(string) && !p.PropertyType.IsValueType)
-                    return false;
-
-                return true;
-            })
+            .Where(p => !p.GetGetMethod()!.IsVirtual) // Exclude navigation properties
+            .Where(p => p.GetCustomAttribute<NotMappedAttribute>() == null) // Exclude [NotMapped]
+            .Where(p => p.GetCustomAttribute<ColumnAttribute>() != null) // Must have [Column]
+            .Where(p => p.CanWrite) // Must have a setter
             .Select(p =>
             {
-                var columnAttr = p.GetCustomAttribute<System.ComponentModel.DataAnnotations.Schema.ColumnAttribute>();
-                var columnName = columnAttr?.Name ?? ToSnakeCase(p.Name);
-                return new { PropertyName = p.Name, ColumnName = columnName };
+                var columnAttr = p.GetCustomAttribute<ColumnAttribute>();
+                return new { PropertyName = p.Name, ColumnName = columnAttr!.Name };
             }).ToList();
 
         var columnList = string.Join(", ", columnMappings.Select(m => m.ColumnName));
