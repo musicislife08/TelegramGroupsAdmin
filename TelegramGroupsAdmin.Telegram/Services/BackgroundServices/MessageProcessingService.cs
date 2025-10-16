@@ -320,6 +320,24 @@ public partial class MessageProcessingService(
             {
                 var repository = scope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
                 await repository.InsertMessageAsync(messageRecord);
+
+                // Upsert user into telegram_users table (centralized user tracking)
+                var telegramUserRepo = scope.ServiceProvider.GetRequiredService<TelegramUserRepository>();
+                var telegramUser = new TelegramGroupsAdmin.Telegram.Models.TelegramUser(
+                    TelegramUserId: message.From!.Id,
+                    Username: message.From.Username,
+                    FirstName: message.From.FirstName,
+                    LastName: message.From.LastName,
+                    UserPhotoPath: null, // Will be populated by FetchUserPhotoJob
+                    PhotoHash: null,
+                    IsTrusted: false,
+                    WarningPoints: 0,
+                    FirstSeenAt: now,
+                    LastSeenAt: now,
+                    CreatedAt: now,
+                    UpdatedAt: now
+                );
+                await telegramUserRepo.UpsertAsync(telegramUser);
             }
 
             // Raise event for real-time UI updates

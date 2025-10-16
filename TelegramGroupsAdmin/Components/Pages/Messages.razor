@@ -581,13 +581,21 @@
 
             if (result.Success)
             {
-                // Remove from UI
-                _allMessages.Remove(message);
-                ApplyFilters();
-                StateHasChanged();
+                // Update the message in place to show it's deleted (don't remove from UI)
+                var updatedMessage = await MessageRepository.GetMessageAsync(message.MessageId);
+                if (updatedMessage != null)
+                {
+                    var index = _allMessages.FindIndex(m => m.MessageId == message.MessageId);
+                    if (index >= 0)
+                    {
+                        _allMessages[index] = updatedMessage;
+                        ApplyFilters();
+                        StateHasChanged();
+                    }
+                }
 
                 Logger.LogInformation(
-                    "Message {MessageId} deleted successfully, removed from UI",
+                    "Message {MessageId} marked as deleted, showing DELETED badge in UI",
                     message.MessageId);
             }
             else

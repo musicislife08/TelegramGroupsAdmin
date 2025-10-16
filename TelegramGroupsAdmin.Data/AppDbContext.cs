@@ -27,6 +27,7 @@ public class AppDbContext : DbContext
     public DbSet<AuditLogRecordDto> AuditLogs => Set<AuditLogRecordDto>();
 
     // Telegram integration tables
+    public DbSet<TelegramUserDto> TelegramUsers => Set<TelegramUserDto>();
     public DbSet<TelegramUserMappingRecordDto> TelegramUserMappings => Set<TelegramUserMappingRecordDto>();
     public DbSet<TelegramLinkTokenRecordDto> TelegramLinkTokens => Set<TelegramLinkTokenRecordDto>();
     public DbSet<ManagedChatRecordDto> ManagedChats => Set<ManagedChatRecordDto>();
@@ -208,6 +209,14 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<UserRecordDto>()
             .HasIndex(u => u.NormalizedEmail)
             .IsUnique();
+
+        // TelegramUsers indexes
+        modelBuilder.Entity<TelegramUserDto>()
+            .HasIndex(tu => tu.Username);
+        modelBuilder.Entity<TelegramUserDto>()
+            .HasIndex(tu => tu.IsTrusted);
+        modelBuilder.Entity<TelegramUserDto>()
+            .HasIndex(tu => tu.LastSeenAt);
 
         // TelegramUserMappings indexes
         modelBuilder.Entity<TelegramUserMappingRecordDto>()

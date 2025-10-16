@@ -1,0 +1,20 @@
+namespace TelegramGroupsAdmin.Telegram.Models;
+
+/// <summary>
+/// Represents a Telegram user tracked across all managed chats.
+/// Foundation for: profile photos, trust/whitelist, warnings, impersonation detection.
+/// </summary>
+public record TelegramUser(
+    long TelegramUserId,
+    string? Username,
+    string? FirstName,
+    string? LastName,
+    string? UserPhotoPath,
+    string? PhotoHash,
+    bool IsTrusted,
+    int WarningPoints,
+    DateTimeOffset FirstSeenAt,
+    DateTimeOffset LastSeenAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt
+);

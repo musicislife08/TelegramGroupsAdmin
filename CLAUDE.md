@@ -26,11 +26,12 @@
 5. CleanupBackgroundService - Message retention (keeps spam/ham samples)
 
 ## Database (PostgreSQL)
-**DB**: telegram_groups_admin, 18 tables
-**Migrations**: InitialSchema.cs (validated), Latest: AddUserPhotoPathToMessages
+**DB**: telegram_groups_admin, 19 tables
+**Migrations**: InitialSchema.cs (validated), Latest: RemoveUserNameAndPhotoFromMessages (normalized to telegram_users)
 
 **Core Tables**:
-- messages: message_id(PK), chat_id, user_id, user_name, user_photo_path, chat_name, chat_icon_path, timestamp, edit_date, message_text, photo*, urls, content_hash. Retention: 180d (except spam/ham refs)
+- messages: message_id(PK), chat_id, user_id, timestamp, edit_date, message_text, photo*, urls, content_hash. Retention: 180d (except spam/ham refs)
+- telegram_users: telegram_user_id(PK, manually set from Telegram API), username, first_name, last_name, user_photo_path, photo_hash (Phase 4.10), is_trusted (Phase 5.5), warning_points (Phase 4.11), first_seen_at, last_seen_at. **Centralized user metadata** (usernames/photos now via JOIN, not denormalized in messages). user_id=0 = "system" (imported training data)
 - detection_results: id(PK), message_id(FK cascade), detected_at, detection_source(auto/manual), is_spam(computed: net_confidence>0), confidence, net_confidence, reason, detection_method, added_by, used_for_training, check_results_json, edit_version. Retention: permanent
 - message_edits: id(PK), message_id(FK cascade), edit_date, old/new text/hash
 - user_actions: id(PK), user_id, action_type(ban/warn/mute/trust/unban), message_id, issued_by, issued_at, expires_at, reason. Global cross-chat
@@ -104,6 +105,7 @@ Blazor UI, auth+TOTP, user mgmt, invite system, audit, message history+export, e
 **2.6**: Weighted voting (net confidence), asymmetric confidence, two-tier decision (net>50 OR max>85→OpenAI veto, net 0-50→reports, <0→allow), training QC (OpenAI 85%+ or net>80), Messages UI (mark spam/ham, detection history)
 **2.7**: Auto-reports (net +0 to +50), auto-ban (net>50 + OpenAI 85%+), unban logic, Telegram API actions, cross-chat enforcement, edit re-scanning, refactoring (1,243→4 services)
 **2.8**: Photo caching - Chat icons (64x64), user photos (FetchUserPhotoJob via TickerQ, 64x64), MessageBubbleTelegram dual-avatar (large chat icon + small inline user photo), service message filtering, delete button. TickerQ exception pattern (all jobs re-throw)
+**2.9** ✅: User data normalization - Created telegram_users table (single source of truth for usernames/photos/trust/warnings), migrated 10 users from messages, updated all queries to LEFT JOIN telegram_users, renamed user_id=0 "tg-spam-import"→"system", dropped obsolete messages.user_name and messages.user_photo_path columns. Benefits: One update propagates to all user messages, historical messages show current photos/usernames via JOIN, foundation for Phase 4.10/4.11/5.5
 
 ### Phase 3: Advanced Multi-Chat ✅
 Cross-chat spam detection (global bans), shared blacklist (user_actions, stop_words), global auto-apply

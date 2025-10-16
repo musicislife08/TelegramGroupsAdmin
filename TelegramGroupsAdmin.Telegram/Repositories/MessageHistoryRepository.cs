@@ -122,41 +122,62 @@ public class MessageHistoryRepository
     public async Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var results = await context.Messages
-            .AsNoTracking()
-            .Where(m => m.DeletedAt == null) // Exclude soft-deleted messages
-            .GroupJoin(
-                context.ManagedChats,
-                m => m.ChatId,
-                c => c.ChatId,
-                (m, chats) => new { Message = m, Chat = chats.FirstOrDefault() })
-            .OrderByDescending(x => x.Message.Timestamp)
-            .Take(limit)
-            .ToListAsync();
+        var results = await (
+            from m in context.Messages
+            join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
+            from chat in chatGroup.DefaultIfEmpty()
+            join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
+            from user in userGroup.DefaultIfEmpty()
+            orderby m.Timestamp descending
+            select new
+            {
+                Message = m,
+                ChatName = chat != null ? chat.ChatName : null,
+                ChatIconPath = chat != null ? chat.ChatIconPath : null,
+                UserName = user != null ? user.Username : null,
+                UserPhotoPath = user != null ? user.UserPhotoPath : null
+            }
+        )
+        .AsNoTracking()
+        .Take(limit)
+        .ToListAsync();
 
         return results.Select(x => x.Message.ToModel(
-            chatName: x.Chat?.ChatName,
-            chatIconPath: x.Chat?.ChatIconPath)).ToList();
+            chatName: x.ChatName,
+            chatIconPath: x.ChatIconPath,
+            userName: x.UserName,
+            userPhotoPath: x.UserPhotoPath)).ToList();
     }
 
     public async Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var results = await context.Messages
-            .AsNoTracking()
-            .Where(m => m.ChatId == chatId)
-            .GroupJoin(
-                context.ManagedChats,
-                m => m.ChatId,
-                c => c.ChatId,
-                (m, chats) => new { Message = m, Chat = chats.FirstOrDefault() })
-            .OrderByDescending(x => x.Message.Timestamp)
-            .Take(limit)
-            .ToListAsync();
+        var results = await (
+            from m in context.Messages
+            where m.ChatId == chatId
+            join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
+            from chat in chatGroup.DefaultIfEmpty()
+            join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
+            from user in userGroup.DefaultIfEmpty()
+            orderby m.Timestamp descending
+            select new
+            {
+                Message = m,
+                ChatName = chat != null ? chat.ChatName : null,
+                ChatIconPath = chat != null ? chat.ChatIconPath : null,
+                UserName = user != null ? user.Username : null,
+                UserPhotoPath = user != null ? user.UserPhotoPath : null
+            }
+        )
+        .AsNoTracking()
+        .Take(limit)
+        .ToListAsync();
 
         return results.Select(x => x.Message.ToModel(
-            chatName: x.Chat?.ChatName,
-            chatIconPath: x.Chat?.ChatIconPath)).ToList();
+            chatName: x.ChatName,
+            chatIconPath: x.ChatIconPath,
+            userName: x.UserName,
+            userPhotoPath: x.UserPhotoPath)).ToList();
     }
 
     public async Task<List<UiModels.MessageRecord>> GetMessagesByDateRangeAsync(
@@ -165,21 +186,32 @@ public class MessageHistoryRepository
         int limit = 1000)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var results = await context.Messages
-            .AsNoTracking()
-            .Where(m => m.Timestamp >= startTimestamp && m.Timestamp <= endTimestamp)
-            .GroupJoin(
-                context.ManagedChats,
-                m => m.ChatId,
-                c => c.ChatId,
-                (m, chats) => new { Message = m, Chat = chats.FirstOrDefault() })
-            .OrderByDescending(x => x.Message.Timestamp)
-            .Take(limit)
-            .ToListAsync();
+        var results = await (
+            from m in context.Messages
+            where m.Timestamp >= startTimestamp && m.Timestamp <= endTimestamp
+            join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
+            from chat in chatGroup.DefaultIfEmpty()
+            join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
+            from user in userGroup.DefaultIfEmpty()
+            orderby m.Timestamp descending
+            select new
+            {
+                Message = m,
+                ChatName = chat != null ? chat.ChatName : null,
+                ChatIconPath = chat != null ? chat.ChatIconPath : null,
+                UserName = user != null ? user.Username : null,
+                UserPhotoPath = user != null ? user.UserPhotoPath : null
+            }
+        )
+        .AsNoTracking()
+        .Take(limit)
+        .ToListAsync();
 
         return results.Select(x => x.Message.ToModel(
-            chatName: x.Chat?.ChatName,
-            chatIconPath: x.Chat?.ChatIconPath)).ToList();
+            chatName: x.ChatName,
+            chatIconPath: x.ChatIconPath,
+            userName: x.UserName,
+            userPhotoPath: x.UserPhotoPath)).ToList();
     }
 
     public async Task<UiModels.HistoryStats> GetStatsAsync()
@@ -318,19 +350,30 @@ public class MessageHistoryRepository
     public async Task<UiModels.MessageRecord?> GetMessageAsync(long messageId)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var result = await context.Messages
-            .AsNoTracking()
-            .Where(m => m.MessageId == messageId)
-            .GroupJoin(
-                context.ManagedChats,
-                m => m.ChatId,
-                c => c.ChatId,
-                (m, chats) => new { Message = m, Chat = chats.FirstOrDefault() })
-            .FirstOrDefaultAsync();
+        var result = await (
+            from m in context.Messages
+            where m.MessageId == messageId
+            join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
+            from chat in chatGroup.DefaultIfEmpty()
+            join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
+            from user in userGroup.DefaultIfEmpty()
+            select new
+            {
+                Message = m,
+                ChatName = chat != null ? chat.ChatName : null,
+                ChatIconPath = chat != null ? chat.ChatIconPath : null,
+                UserName = user != null ? user.Username : null,
+                UserPhotoPath = user != null ? user.UserPhotoPath : null
+            }
+        )
+        .AsNoTracking()
+        .FirstOrDefaultAsync();
 
         return result?.Message.ToModel(
-            chatName: result.Chat?.ChatName,
-            chatIconPath: result.Chat?.ChatIconPath);
+            chatName: result.ChatName,
+            chatIconPath: result.ChatIconPath,
+            userName: result.UserName,
+            userPhotoPath: result.UserPhotoPath);
     }
 
     public async Task UpdateMessageAsync(UiModels.MessageRecord message)
@@ -344,25 +387,24 @@ public class MessageHistoryRepository
             entity.Urls = message.Urls;
             entity.EditDate = message.EditDate;
             entity.ContentHash = message.ContentHash;
-            entity.UserPhotoPath = message.UserPhotoPath;
 
             await context.SaveChangesAsync();
 
             _logger.LogDebug(
-                "Updated message {MessageId} (edit_date: {EditDate}, user_photo: {HasPhoto})",
+                "Updated message {MessageId} (edit_date: {EditDate})",
                 message.MessageId,
-                message.EditDate,
-                message.UserPhotoPath != null);
+                message.EditDate);
         }
     }
 
     public async Task<List<string>> GetDistinctUserNamesAsync()
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var userNames = await context.Messages
+        // Query from telegram_users table instead of messages
+        var userNames = await context.TelegramUsers
             .AsNoTracking()
-            .Where(m => m.UserName != null && m.UserName != "")
-            .Select(m => m.UserName!)
+            .Where(u => u.Username != null && u.Username != "")
+            .Select(u => u.Username!)
             .Distinct()
             .OrderBy(u => u)
             .ToListAsync();

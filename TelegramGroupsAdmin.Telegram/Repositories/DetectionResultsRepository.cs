@@ -430,11 +430,11 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         await using var context = await _contextFactory.CreateDbContextAsync();
 
         // Create message record (chat_id=0, user_id=0 pattern for manual samples)
+        // user_id=0 maps to "system" user in telegram_users table
         var message = new DataModels.MessageRecordDto
         {
             ChatId = 0,
             UserId = 0,
-            UserName = "Manual Training",
             MessageText = messageText,
             Timestamp = DateTimeOffset.UtcNow,
             ContentHash = null

@@ -32,10 +32,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<AuditLogRepository>();
         services.AddScoped<UserRepository>();
         services.AddScoped<MessageHistoryRepository>();
+        services.AddScoped<TelegramUserRepository>();
 
         // Telegram infrastructure
         services.AddSingleton<TelegramBotClientFactory>();
         services.AddScoped<ITelegramImageService, TelegramImageService>();
+        services.AddSingleton<TelegramPhotoService>();
 
         // Spam check coordination (filters trusted/admin users before spam detection)
         services.AddScoped<ISpamCheckCoordinator, SpamCheckCoordinator>();
@@ -67,6 +69,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBotCommand, UnbanCommand>(sp => sp.GetRequiredService<UnbanCommand>());
         services.AddScoped<WarnCommand>();
         services.AddScoped<IBotCommand, WarnCommand>(sp => sp.GetRequiredService<WarnCommand>());
+        services.AddScoped<TempBanCommand>();
+        services.AddScoped<IBotCommand, TempBanCommand>(sp => sp.GetRequiredService<TempBanCommand>());
+        services.AddScoped<MuteCommand>();
+        services.AddScoped<IBotCommand, MuteCommand>(sp => sp.GetRequiredService<MuteCommand>());
         services.AddScoped<ReportCommand>();
         services.AddScoped<IBotCommand, ReportCommand>(sp => sp.GetRequiredService<ReportCommand>());
         services.AddScoped<DeleteCommand>();

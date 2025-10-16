@@ -418,6 +418,151 @@ public class ModerationActionService
     }
 
     /// <summary>
+    /// Temporarily ban user globally with automatic unrestriction.
+    /// Used by: /tempban command
+    /// </summary>
+    public async Task<ModerationResult> TempBanUserAsync(
+        ITelegramBotClient botClient,
+        long userId,
+        long? messageId,
+        string? executorId,
+        string reason,
+        TimeSpan duration,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = new ModerationResult();
+            var expiresAt = DateTimeOffset.UtcNow.Add(duration);
+
+            // Temp ban globally (Telegram API handles auto-unrestrict via until_date)
+            var allChats = await _managedChatsRepository.GetAllChatsAsync();
+            foreach (var chat in allChats.Where(c => c.IsActive))
+            {
+                try
+                {
+                    await botClient.BanChatMember(
+                        chatId: chat.ChatId,
+                        userId: userId,
+                        untilDate: expiresAt.DateTime,
+                        cancellationToken: cancellationToken);
+                    result.ChatsAffected++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to temp ban user {UserId} from chat {ChatId}", userId, chat.ChatId);
+                }
+            }
+
+            // Record temp ban action
+            var banAction = new UserActionRecord(
+                Id: 0,
+                UserId: userId,
+                ActionType: UserActionType.Ban,
+                MessageId: messageId,
+                IssuedBy: executorId,
+                IssuedAt: DateTimeOffset.UtcNow,
+                ExpiresAt: expiresAt,
+                Reason: reason
+            );
+            await _userActionsRepository.InsertAsync(banAction);
+
+            _logger.LogInformation(
+                "Temp ban action completed: User {UserId} banned from {ChatsAffected} chats until {ExpiresAt}",
+                userId, result.ChatsAffected, expiresAt);
+
+            result.Success = true;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to temp ban user {UserId}", userId);
+            return new ModerationResult { Success = false, ErrorMessage = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// Restrict user (mute) globally with automatic unrestriction.
+    /// Used by: /mute command
+    /// </summary>
+    public async Task<ModerationResult> RestrictUserAsync(
+        ITelegramBotClient botClient,
+        long userId,
+        long? messageId,
+        string? executorId,
+        string reason,
+        TimeSpan duration,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = new ModerationResult();
+            var expiresAt = DateTimeOffset.UtcNow.Add(duration);
+
+            // Restrict user globally (Telegram API handles auto-unrestrict via until_date)
+            var allChats = await _managedChatsRepository.GetAllChatsAsync();
+            foreach (var chat in allChats.Where(c => c.IsActive))
+            {
+                try
+                {
+                    await botClient.RestrictChatMember(
+                        chatId: chat.ChatId,
+                        userId: userId,
+                        permissions: new global::Telegram.Bot.Types.ChatPermissions
+                        {
+                            CanSendMessages = false,
+                            CanSendAudios = false,
+                            CanSendDocuments = false,
+                            CanSendPhotos = false,
+                            CanSendVideos = false,
+                            CanSendVideoNotes = false,
+                            CanSendVoiceNotes = false,
+                            CanSendPolls = false,
+                            CanSendOtherMessages = false,
+                            CanAddWebPagePreviews = false,
+                            CanChangeInfo = false,
+                            CanInviteUsers = false,
+                            CanPinMessages = false,
+                            CanManageTopics = false
+                        },
+                        untilDate: expiresAt.DateTime,
+                        cancellationToken: cancellationToken);
+                    result.ChatsAffected++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to restrict user {UserId} in chat {ChatId}", userId, chat.ChatId);
+                }
+            }
+
+            // Record mute action
+            var muteAction = new UserActionRecord(
+                Id: 0,
+                UserId: userId,
+                ActionType: UserActionType.Mute,
+                MessageId: messageId,
+                IssuedBy: executorId,
+                IssuedAt: DateTimeOffset.UtcNow,
+                ExpiresAt: expiresAt,
+                Reason: reason
+            );
+            await _userActionsRepository.InsertAsync(muteAction);
+
+            _logger.LogInformation(
+                "Mute action completed: User {UserId} restricted in {ChatsAffected} chats until {ExpiresAt}",
+                userId, result.ChatsAffected, expiresAt);
+
+            result.Success = true;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to restrict user {UserId}", userId);
+            return new ModerationResult { Success = false, ErrorMessage = ex.Message };
+        }
+    }
+
+    /// <summary>
     /// Map Telegram user ID to web app user ID (for audit trail)
     /// </summary>
     public async Task<string?> GetExecutorUserIdAsync(long? telegramUserId)

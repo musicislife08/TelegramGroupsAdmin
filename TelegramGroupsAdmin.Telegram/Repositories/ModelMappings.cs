@@ -128,14 +128,16 @@ public static class ModelMappings
         Value: data.Value
     );
 
-    // Message mappings (requires chat info from managed_chats JOIN)
+    // Message mappings (requires chat and user info from JOINs)
     public static UiModels.MessageRecord ToModel(
         this DataModels.MessageRecordDto data,
         string? chatName,
-        string? chatIconPath) => new(
+        string? chatIconPath,
+        string? userName,
+        string? userPhotoPath) => new(
         MessageId: data.MessageId,
         UserId: data.UserId,
-        UserName: data.UserName,
+        UserName: userName,
         ChatId: data.ChatId,
         Timestamp: data.Timestamp,
         MessageText: data.MessageText,
@@ -148,7 +150,7 @@ public static class ModelMappings
         PhotoLocalPath: data.PhotoLocalPath,
         PhotoThumbnailPath: data.PhotoThumbnailPath,
         ChatIconPath: chatIconPath,
-        UserPhotoPath: data.UserPhotoPath,
+        UserPhotoPath: userPhotoPath,
         DeletedAt: data.DeletedAt,
         DeletionSource: data.DeletionSource
     );
@@ -157,7 +159,6 @@ public static class ModelMappings
     {
         MessageId = ui.MessageId,
         UserId = ui.UserId,
-        UserName = ui.UserName,
         ChatId = ui.ChatId,
         Timestamp = ui.Timestamp,
         MessageText = ui.MessageText,
@@ -168,7 +169,6 @@ public static class ModelMappings
         ContentHash = ui.ContentHash,
         PhotoLocalPath = ui.PhotoLocalPath,
         PhotoThumbnailPath = ui.PhotoThumbnailPath,
-        UserPhotoPath = ui.UserPhotoPath,
         DeletedAt = ui.DeletedAt,
         DeletionSource = ui.DeletionSource
     };
@@ -428,5 +428,40 @@ public static class ModelMappings
         DmFallback = ui.DmFallback,
         CreatedAt = ui.CreatedAt,
         TimeoutJobId = ui.TimeoutJobId
+    };
+
+    // ============================================================================
+    // TelegramUser Mappings (User photo centralization + future features)
+    // ============================================================================
+
+    public static UiModels.TelegramUser ToModel(this DataModels.TelegramUserDto data) => new(
+        TelegramUserId: data.TelegramUserId,
+        Username: data.Username,
+        FirstName: data.FirstName,
+        LastName: data.LastName,
+        UserPhotoPath: data.UserPhotoPath,
+        PhotoHash: data.PhotoHash,
+        IsTrusted: data.IsTrusted,
+        WarningPoints: data.WarningPoints,
+        FirstSeenAt: data.FirstSeenAt,
+        LastSeenAt: data.LastSeenAt,
+        CreatedAt: data.CreatedAt,
+        UpdatedAt: data.UpdatedAt
+    );
+
+    public static DataModels.TelegramUserDto ToDto(this UiModels.TelegramUser ui) => new()
+    {
+        TelegramUserId = ui.TelegramUserId,
+        Username = ui.Username,
+        FirstName = ui.FirstName,
+        LastName = ui.LastName,
+        UserPhotoPath = ui.UserPhotoPath,
+        PhotoHash = ui.PhotoHash,
+        IsTrusted = ui.IsTrusted,
+        WarningPoints = ui.WarningPoints,
+        FirstSeenAt = ui.FirstSeenAt,
+        LastSeenAt = ui.LastSeenAt,
+        CreatedAt = ui.CreatedAt,
+        UpdatedAt = ui.UpdatedAt
     };
 }

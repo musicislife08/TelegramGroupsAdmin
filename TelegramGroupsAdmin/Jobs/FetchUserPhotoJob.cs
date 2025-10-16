@@ -12,7 +12,7 @@ using TelegramGroupsAdmin.Telegram.Services;
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// TickerQ job to fetch and cache user profile photos
+/// TickerQ job to fetch and cache user profile photos in telegram_users table
 /// Runs asynchronously after message save with 0s delay for instant execution
 /// Provides persistence, retry logic, and proper error handling (replaces fire-and-forget)
 /// </summary>
@@ -20,17 +20,17 @@ public class FetchUserPhotoJob(
     ILogger<FetchUserPhotoJob> logger,
     TelegramBotClientFactory botClientFactory,
     TelegramPhotoService photoService,
-    MessageHistoryRepository messageHistoryRepository,
+    TelegramUserRepository telegramUserRepository,
     IOptions<TelegramOptions> telegramOptions)
 {
     private readonly ILogger<FetchUserPhotoJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly TelegramPhotoService _photoService = photoService;
-    private readonly MessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
+    private readonly TelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
 
     /// <summary>
-    /// Fetch user profile photo and update message record
+    /// Fetch user profile photo and update telegram_users table
     /// Scheduled via TickerQ with 0s delay for instant execution
     /// </summary>
     [TickerFunction(functionName: "FetchUserPhoto")]
@@ -58,33 +58,23 @@ public class FetchUserPhotoJob(
 
             if (userPhotoPath != null)
             {
-                // Update message record with photo path
-                var message = await _messageHistoryRepository.GetMessageAsync(payload.MessageId);
-                if (message != null)
-                {
-                    var updatedMessage = message with { UserPhotoPath = userPhotoPath };
-                    await _messageHistoryRepository.UpdateMessageAsync(updatedMessage);
+                // Update telegram_users table with photo path (centralized storage)
+                await _telegramUserRepository.UpdateUserPhotoPathAsync(
+                    payload.UserId,
+                    userPhotoPath,
+                    photoHash: null, // TODO: Phase 4.10 - compute pHash for impersonation detection
+                    cancellationToken);
 
-                    _logger.LogInformation(
-                        "Cached user photo for user {UserId} (message {MessageId}): {PhotoPath}",
-                        payload.UserId,
-                        payload.MessageId,
-                        userPhotoPath);
-                }
-                else
-                {
-                    _logger.LogWarning(
-                        "Message {MessageId} not found when updating user photo for user {UserId}",
-                        payload.MessageId,
-                        payload.UserId);
-                }
+                _logger.LogInformation(
+                    "Cached user photo for user {UserId}: {PhotoPath}",
+                    payload.UserId,
+                    userPhotoPath);
             }
             else
             {
                 _logger.LogDebug(
-                    "User {UserId} has no profile photo (message {MessageId})",
-                    payload.UserId,
-                    payload.MessageId);
+                    "User {UserId} has no profile photo",
+                    payload.UserId);
             }
         }
         catch (Exception ex)

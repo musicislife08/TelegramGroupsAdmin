@@ -16,9 +16,6 @@ public class MessageRecordDto
     [Column("user_id")]
     public long UserId { get; set; }
 
-    [Column("user_name")]
-    public string? UserName { get; set; }
-
     [Column("chat_id")]
     public long ChatId { get; set; }
 
@@ -49,9 +46,6 @@ public class MessageRecordDto
 
     [Column("photo_thumbnail_path")]
     public string? PhotoThumbnailPath { get; set; }
-
-    [Column("user_photo_path")]
-    public string? UserPhotoPath { get; set; }
 
     [Column("deleted_at")]
     public DateTimeOffset? DeletedAt { get; set; }

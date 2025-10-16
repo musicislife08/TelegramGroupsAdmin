@@ -44,6 +44,12 @@
                 <span class="tg-user-name" @onclick="() => OnFilterByUser.InvokeAsync(Message.UserId)" title="Filter by this user">
                     @(Message.UserName ?? $"User {Message.UserId}")
                 </span>
+                @if (Message.DeletedAt.HasValue)
+                {
+                    <span class="tg-badge tg-badge-deleted" title="Deleted @Message.DeletedAt.Value.ToString("yyyy-MM-dd HH:mm") UTC (@(Message.DeletionSource ?? "unknown"))">
+                        🗑️ DELETED
+                    </span>
+                }
                 @if (Message.EditDate.HasValue)
                 {
                     <span class="tg-edited">edited</span>

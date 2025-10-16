@@ -219,6 +219,13 @@
     color: #66bb6a;
 }
 
+.tg-badge-deleted {
+    background-color: rgba(255, 152, 0, 0.2);
+    color: #ffa726;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
 /* Content */
 .tg-content {
     margin: 6px 0 6px 42px; /* Align with text after avatar */
