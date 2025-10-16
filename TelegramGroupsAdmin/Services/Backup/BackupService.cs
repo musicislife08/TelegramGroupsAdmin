@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
 using System.IO.Compression;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -68,11 +69,12 @@ public class BackupService : IBackupService
             }
         }
 
-        // Serialize to JSON
+        // Serialize to JSON (exclude [NotMapped] properties to avoid computed property errors)
         var jsonOptions = new JsonSerializerOptions
         {
             WriteIndented = false, // Minimized JSON
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            TypeInfoResolver = new NotMappedPropertiesIgnoringResolver()
         };
 
         var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(backup, jsonOptions);
@@ -713,5 +715,39 @@ public class BackupService : IBackupService
         }
 
         return result.ToString();
+    }
+}
+
+/// <summary>
+/// Custom JSON type info resolver that excludes properties marked with [NotMapped]
+/// This prevents serialization errors from computed properties like TokenType
+/// </summary>
+internal class NotMappedPropertiesIgnoringResolver : System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver
+{
+    public override System.Text.Json.Serialization.Metadata.JsonTypeInfo GetTypeInfo(Type type, JsonSerializerOptions options)
+    {
+        var jsonTypeInfo = base.GetTypeInfo(type, options);
+
+        if (jsonTypeInfo.Kind == System.Text.Json.Serialization.Metadata.JsonTypeInfoKind.Object)
+        {
+            // Remove properties that have [NotMapped] attribute
+            var propertiesToRemove = new List<System.Text.Json.Serialization.Metadata.JsonPropertyInfo>();
+
+            foreach (var property in jsonTypeInfo.Properties)
+            {
+                var propertyInfo = type.GetProperty(property.Name);
+                if (propertyInfo?.GetCustomAttribute<NotMappedAttribute>() != null)
+                {
+                    propertiesToRemove.Add(property);
+                }
+            }
+
+            foreach (var property in propertiesToRemove)
+            {
+                ((System.Collections.Generic.IList<System.Text.Json.Serialization.Metadata.JsonPropertyInfo>)jsonTypeInfo.Properties).Remove(property);
+            }
+        }
+
+        return jsonTypeInfo;
     }
 }
