@@ -195,9 +195,13 @@ public class BackupService : IBackupService
         // Get all properties from DTO using reflection
         var properties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
-        // EF Core models use [Column("snake_case")] attributes - read these for SQL queries
+        // EF Core models: exclude navigation properties (virtual) and [NotMapped] properties
+        // Only include properties with [Column] attribute (actual database columns)
         var columnNames = properties
-            .Select(p => p.GetCustomAttribute<ColumnAttribute>()?.Name ?? p.Name)
+            .Where(p => !p.GetGetMethod()!.IsVirtual) // Exclude navigation properties
+            .Where(p => p.GetCustomAttribute<NotMappedAttribute>() == null) // Exclude [NotMapped]
+            .Where(p => p.GetCustomAttribute<ColumnAttribute>() != null) // Must have [Column]
+            .Select(p => p.GetCustomAttribute<ColumnAttribute>()!.Name)
             .ToList();
 
         var columnList = string.Join(", ", columnNames);
