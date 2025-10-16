@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
 using System.IO.Compression;
 using System.Reflection;
@@ -194,8 +195,10 @@ public class BackupService : IBackupService
         // Get all properties from DTO using reflection
         var properties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
-        // DTOs use snake_case property names that match database columns
-        var columnNames = properties.Select(p => p.Name).ToList();
+        // EF Core models use [Column("snake_case")] attributes - read these for SQL queries
+        var columnNames = properties
+            .Select(p => p.GetCustomAttribute<ColumnAttribute>()?.Name ?? p.Name)
+            .ToList();
 
         var columnList = string.Join(", ", columnNames);
 
