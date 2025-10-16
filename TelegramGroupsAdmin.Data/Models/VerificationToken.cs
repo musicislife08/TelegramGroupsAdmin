@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace TelegramGroupsAdmin.Data.Models;
 
@@ -52,6 +53,7 @@ public class VerificationTokenDto
 
     // Helper properties (not mapped)
     [NotMapped]
+    [JsonIgnore]
     public TokenType TokenType
     {
         get => ParseTokenType(TokenTypeString);
@@ -65,12 +67,15 @@ public class VerificationTokenDto
     }
 
     [NotMapped]
+    [JsonIgnore]
     public bool IsExpired => DateTimeOffset.UtcNow > ExpiresAt;
 
     [NotMapped]
+    [JsonIgnore]
     public bool IsUsed => UsedAt.HasValue;
 
     [NotMapped]
+    [JsonIgnore]
     public bool IsValid => !IsExpired && !IsUsed;
 
     private static TokenType ParseTokenType(string tokenType) => tokenType switch

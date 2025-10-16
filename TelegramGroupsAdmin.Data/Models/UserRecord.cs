@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 using TelegramGroupsAdmin.Data.Attributes;
 
 namespace TelegramGroupsAdmin.Data.Models;
@@ -173,12 +174,15 @@ public class UserRecordDto
 
     // Helper properties (not mapped)
     [NotMapped]
+    [JsonIgnore]
     public int PermissionLevelInt => (int)PermissionLevel;
 
     [NotMapped]
+    [JsonIgnore]
     public bool CanLogin => Status == UserStatus.Active && EmailVerified;
 
     [NotMapped]
+    [JsonIgnore]
     public bool IsPending => Status == UserStatus.Pending;
 }
 
