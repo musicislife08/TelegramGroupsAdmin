@@ -244,11 +244,19 @@ public class BackupService : IBackupService
     {
         var decryptedRecords = new List<object>();
 
+        // Only process properties that are actual database columns (same filter as ExportTableAsync)
+        var writableProperties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => !p.GetGetMethod()!.IsVirtual) // Exclude navigation properties
+            .Where(p => p.GetCustomAttribute<NotMappedAttribute>() == null) // Exclude [NotMapped]
+            .Where(p => p.GetCustomAttribute<ColumnAttribute>() != null) // Must have [Column]
+            .Where(p => p.CanWrite) // Must have a setter
+            .ToList();
+
         foreach (var record in records)
         {
             var recordCopy = Activator.CreateInstance(dtoType)!;
 
-            foreach (var prop in dtoType.GetProperties())
+            foreach (var prop in writableProperties)
             {
                 var value = prop.GetValue(record);
 
@@ -291,16 +299,16 @@ public class BackupService : IBackupService
 
         var encryptedDto = Activator.CreateInstance(dtoType)!;
 
-        foreach (var prop in dtoType.GetProperties())
+        // Only process properties that are actual database columns (same filter as ExportTableAsync)
+        var writableProperties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => !p.GetGetMethod()!.IsVirtual) // Exclude navigation properties
+            .Where(p => p.GetCustomAttribute<NotMappedAttribute>() == null) // Exclude [NotMapped]
+            .Where(p => p.GetCustomAttribute<ColumnAttribute>() != null) // Must have [Column]
+            .Where(p => p.CanWrite) // Must have a setter
+            .ToList();
+
+        foreach (var prop in writableProperties)
         {
-            // Skip properties without a setter (readonly, init-only, or navigation properties)
-            if (!prop.CanWrite || prop.GetSetMethod() == null)
-                continue;
-
-            // Skip navigation properties (collections or complex types without [Column])
-            if (typeof(System.Collections.IEnumerable).IsAssignableFrom(prop.PropertyType) && prop.PropertyType != typeof(string))
-                continue;
-
             var value = prop.GetValue(dto);
 
             // Check if this property has [ProtectedData] attribute and has a value
