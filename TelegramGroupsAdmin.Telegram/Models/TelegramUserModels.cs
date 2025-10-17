@@ -75,10 +75,8 @@ public class TelegramUserDetail
     public List<UserChatMembership> ChatMemberships { get; set; } = new();
     public List<UserActionRecord> Actions { get; set; } = new();  // Warnings, bans, trusts
     public List<DetectionResultRecord> DetectionHistory { get; set; } = new();
-
-    // Future: Notes and tags (Phase 4)
-    // public List<AdminNote> Notes { get; set; } = new();
-    // public List<UserTag> Tags { get; set; } = new();
+    public List<AdminNote> Notes { get; set; } = new();  // Phase 4.12
+    public List<UserTag> Tags { get; set; } = new();  // Phase 4.12
 
     // Display helpers
     public string DisplayName => !string.IsNullOrEmpty(Username) ? $"@{Username}" : FirstName ?? $"User {TelegramUserId}";
@@ -100,7 +98,7 @@ public class TelegramUserDetail
     public bool HasWarnings => Actions.Any(a => a.ActionType == UserActionType.Warn &&
         (a.ExpiresAt == null || a.ExpiresAt > DateTimeOffset.UtcNow));
 
-    public bool IsFlagged => false; // Future: Check notes, tags, borderline spam
+    public bool IsFlagged => Notes.Any() || Tags.Any(); // Phase 4.12: Has notes or tags
 }
 
 /// <summary>
@@ -149,4 +147,30 @@ public class TopActiveUser
     public string? UserPhotoPath { get; set; }
     public int MessageCount { get; set; }
     public string DisplayName => !string.IsNullOrEmpty(Username) ? $"@{Username}" : FirstName ?? $"User {TelegramUserId}";
+}
+
+/// <summary>
+/// Banned user list item with ban-specific details
+/// Used in the Banned tab to show ban context
+/// </summary>
+public class BannedUserListItem
+{
+    public long TelegramUserId { get; set; }
+    public string? Username { get; set; }
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public string? UserPhotoPath { get; set; }
+    public DateTimeOffset LastSeenAt { get; set; }
+    public int WarningCount { get; set; }
+
+    // Ban-specific details (from user_actions JOIN)
+    public DateTimeOffset BanDate { get; set; }
+    public string? BannedBy { get; set; }
+    public string? BanReason { get; set; }
+    public DateTimeOffset? BanExpires { get; set; }
+    public long? TriggerMessageId { get; set; }
+
+    // Display helpers
+    public string DisplayName => !string.IsNullOrEmpty(Username) ? $"@{Username}" : FirstName ?? $"User {TelegramUserId}";
+    public bool IsPermanentBan => BanExpires == null;
 }

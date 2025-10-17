@@ -9,6 +9,55 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 /// </summary>
 public static class ModelMappings
 {
+    // ============================================================================
+    // Actor Conversion Helpers (Phase 4.19)
+    // ============================================================================
+
+    /// <summary>
+    /// Convert database actor columns (exclusive arc) to Actor model
+    /// Exactly one of the three parameters must be non-null (enforced by DB CHECK constraint)
+    /// </summary>
+    public static UiModels.Actor ToActor(
+        string? webUserId,
+        long? telegramUserId,
+        string? systemIdentifier,
+        string? webUserEmail = null,
+        string? telegramUsername = null,
+        string? telegramFirstName = null)
+    {
+        if (webUserId != null)
+        {
+            return UiModels.Actor.FromWebUser(webUserId, webUserEmail);
+        }
+
+        if (telegramUserId != null)
+        {
+            return UiModels.Actor.FromTelegramUser(telegramUserId.Value, telegramUsername, telegramFirstName);
+        }
+
+        if (systemIdentifier != null)
+        {
+            return UiModels.Actor.FromSystem(systemIdentifier);
+        }
+
+        // Should never happen due to CHECK constraint, but handle gracefully
+        return UiModels.Actor.FromSystem("unknown");
+    }
+
+    /// <summary>
+    /// Populate DTO actor columns from Actor model (for ToDto methods)
+    /// </summary>
+    public static void SetActorColumns(
+        UiModels.Actor actor,
+        out string? webUserId,
+        out long? telegramUserId,
+        out string? systemIdentifier)
+    {
+        webUserId = actor.GetWebUserId();
+        telegramUserId = actor.GetTelegramUserId();
+        systemIdentifier = actor.GetSystemIdentifier();
+    }
+
     // ChatAdmin mappings
     public static UiModels.ChatAdmin ToModel(this DataModels.ChatAdminRecordDto data) => new()
     {
@@ -241,8 +290,12 @@ public static class ModelMappings
         UsedAt = ui.UsedAt
     };
 
-    // Detection Result mappings
-    public static UiModels.DetectionResultRecord ToModel(this DataModels.DetectionResultRecordDto data)
+    // Detection Result mappings (Phase 4.19: Actor conversion)
+    public static UiModels.DetectionResultRecord ToModel(
+        this DataModels.DetectionResultRecordDto data,
+        string? webUserEmail = null,
+        string? telegramUsername = null,
+        string? telegramFirstName = null)
     {
         return new UiModels.DetectionResultRecord
         {
@@ -254,7 +307,7 @@ public static class ModelMappings
             IsSpam = data.IsSpam,
             Confidence = data.Confidence,
             Reason = data.Reason,
-            AddedBy = data.AddedBy,
+            AddedBy = ToActor(data.WebUserId, data.TelegramUserId, data.SystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
             UsedForTraining = data.UsedForTraining,
             NetConfidence = data.NetConfidence,
             CheckResultsJson = data.CheckResultsJson,  // Phase 2.6
@@ -264,46 +317,64 @@ public static class ModelMappings
         };
     }
 
-    public static DataModels.DetectionResultRecordDto ToDto(this UiModels.DetectionResultRecord ui) => new()
+    public static DataModels.DetectionResultRecordDto ToDto(this UiModels.DetectionResultRecord ui)
     {
-        Id = ui.Id,
-        MessageId = ui.MessageId,
-        DetectedAt = ui.DetectedAt,
-        DetectionSource = ui.DetectionSource,
-        DetectionMethod = ui.DetectionMethod,
-        IsSpam = ui.IsSpam,
-        Confidence = ui.Confidence,
-        Reason = ui.Reason,
-        AddedBy = ui.AddedBy,
-        UsedForTraining = ui.UsedForTraining,
-        NetConfidence = ui.NetConfidence,
-        CheckResultsJson = ui.CheckResultsJson,  // Phase 2.6
-        EditVersion = ui.EditVersion              // Phase 2.6
-    };
+        SetActorColumns(ui.AddedBy, out var webUserId, out var telegramUserId, out var systemIdentifier);
 
-    // User Action mappings (all actions are global now)
-    public static UiModels.UserActionRecord ToModel(this DataModels.UserActionRecordDto data) => new(
+        return new()
+        {
+            Id = ui.Id,
+            MessageId = ui.MessageId,
+            DetectedAt = ui.DetectedAt,
+            DetectionSource = ui.DetectionSource,
+            DetectionMethod = ui.DetectionMethod,
+            IsSpam = ui.IsSpam,
+            Confidence = ui.Confidence,
+            Reason = ui.Reason,
+            WebUserId = webUserId,
+            TelegramUserId = telegramUserId,
+            SystemIdentifier = systemIdentifier,
+            UsedForTraining = ui.UsedForTraining,
+            NetConfidence = ui.NetConfidence,
+            CheckResultsJson = ui.CheckResultsJson,  // Phase 2.6
+            EditVersion = ui.EditVersion              // Phase 2.6
+        };
+    }
+
+    // User Action mappings (all actions are global now) - Phase 4.19: Actor conversion
+    public static UiModels.UserActionRecord ToModel(
+        this DataModels.UserActionRecordDto data,
+        string? webUserEmail = null,
+        string? telegramUsername = null,
+        string? telegramFirstName = null) => new(
         Id: data.Id,
         UserId: data.UserId,
         ActionType: (UiModels.UserActionType)data.ActionType,
         MessageId: data.MessageId,
-        IssuedBy: data.IssuedBy,
+        IssuedBy: ToActor(data.WebUserId, data.TelegramUserId, data.SystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
         IssuedAt: data.IssuedAt,
         ExpiresAt: data.ExpiresAt,
         Reason: data.Reason
     );
 
-    public static DataModels.UserActionRecordDto ToDto(this UiModels.UserActionRecord ui) => new()
+    public static DataModels.UserActionRecordDto ToDto(this UiModels.UserActionRecord ui)
     {
-        Id = ui.Id,
-        UserId = ui.UserId,
-        ActionType = (DataModels.UserActionType)(int)ui.ActionType,
-        MessageId = ui.MessageId,
-        IssuedBy = ui.IssuedBy,
-        IssuedAt = ui.IssuedAt,
-        ExpiresAt = ui.ExpiresAt,
-        Reason = ui.Reason
-    };
+        SetActorColumns(ui.IssuedBy, out var webUserId, out var telegramUserId, out var systemIdentifier);
+
+        return new()
+        {
+            Id = ui.Id,
+            UserId = ui.UserId,
+            ActionType = (DataModels.UserActionType)(int)ui.ActionType,
+            MessageId = ui.MessageId,
+            WebUserId = webUserId,
+            TelegramUserId = telegramUserId,
+            SystemIdentifier = systemIdentifier,
+            IssuedAt = ui.IssuedAt,
+            ExpiresAt = ui.ExpiresAt,
+            Reason = ui.Reason
+        };
+    }
 
     // Managed Chat mappings
     public static UiModels.ManagedChatRecord ToModel(this DataModels.ManagedChatRecordDto data) => new(
@@ -470,4 +541,78 @@ public static class ModelMappings
         CreatedAt = ui.CreatedAt,
         UpdatedAt = ui.UpdatedAt
     };
+
+    // ============================================================================
+    // Admin Notes Mappings (Phase 4.12, Phase 4.19: Actor conversion)
+    // ============================================================================
+
+    public static UiModels.AdminNote ToModel(
+        this DataModels.AdminNoteDto data,
+        string? webUserEmail = null,
+        string? telegramUsername = null,
+        string? telegramFirstName = null) => new()
+    {
+        Id = data.Id,
+        TelegramUserId = data.TelegramUserId,
+        NoteText = data.NoteText,
+        CreatedBy = ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
+        CreatedAt = data.CreatedAt,
+        UpdatedAt = data.UpdatedAt,
+        IsPinned = data.IsPinned
+    };
+
+    public static DataModels.AdminNoteDto ToDto(this UiModels.AdminNote ui)
+    {
+        SetActorColumns(ui.CreatedBy, out var webUserId, out var telegramUserId, out var systemIdentifier);
+
+        return new()
+        {
+            Id = ui.Id,
+            TelegramUserId = ui.TelegramUserId,
+            NoteText = ui.NoteText,
+            ActorWebUserId = webUserId,
+            ActorTelegramUserId = telegramUserId,
+            ActorSystemIdentifier = systemIdentifier,
+            CreatedAt = ui.CreatedAt,
+            UpdatedAt = ui.UpdatedAt,
+            IsPinned = ui.IsPinned
+        };
+    }
+
+    // ============================================================================
+    // User Tags Mappings (Phase 4.12, Phase 4.19: Actor conversion)
+    // ============================================================================
+
+    public static UiModels.UserTag ToModel(
+        this DataModels.UserTagDto data,
+        string? webUserEmail = null,
+        string? telegramUsername = null,
+        string? telegramFirstName = null) => new()
+    {
+        Id = data.Id,
+        TelegramUserId = data.TelegramUserId,
+        TagType = (UiModels.TagType)data.TagType,
+        TagLabel = data.TagLabel,
+        AddedBy = ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
+        AddedAt = data.AddedAt,
+        ConfidenceModifier = data.ConfidenceModifier
+    };
+
+    public static DataModels.UserTagDto ToDto(this UiModels.UserTag ui)
+    {
+        SetActorColumns(ui.AddedBy, out var webUserId, out var telegramUserId, out var systemIdentifier);
+
+        return new()
+        {
+            Id = ui.Id,
+            TelegramUserId = ui.TelegramUserId,
+            TagType = (DataModels.TagType)(int)ui.TagType,
+            TagLabel = ui.TagLabel,
+            ActorWebUserId = webUserId,
+            ActorTelegramUserId = telegramUserId,
+            ActorSystemIdentifier = systemIdentifier,
+            AddedAt = ui.AddedAt,
+            ConfidenceModifier = ui.ConfidenceModifier
+        };
+    }
 }

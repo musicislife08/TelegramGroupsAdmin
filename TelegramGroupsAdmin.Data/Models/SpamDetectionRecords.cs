@@ -36,8 +36,17 @@ public class StopWordDto
     [Column("added_date")]
     public DateTimeOffset AddedDate { get; set; }
 
-    [Column("added_by")]
-    public string? AddedBy { get; set; }
+    // Exclusive Arc actor system (Phase 4.19) - exactly one must be non-null
+    [Column("web_user_id")]
+    [MaxLength(450)]
+    public string? WebUserId { get; set; }
+
+    [Column("telegram_user_id")]
+    public long? TelegramUserId { get; set; }
+
+    [Column("system_identifier")]
+    [MaxLength(50)]
+    public string? SystemIdentifier { get; set; }
 
     [Column("notes")]
     public string? Notes { get; set; }

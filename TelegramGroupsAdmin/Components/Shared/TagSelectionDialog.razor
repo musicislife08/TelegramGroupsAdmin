@@ -1,0 +1,116 @@
+@using TelegramGroupsAdmin.Telegram.Models
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body1">Select a tag to apply to this user:</MudText>
+
+            <MudSelect @bind-Value="_selectedTagType"
+                       Label="Tag Type"
+                       Variant="Variant.Outlined"
+                       Required="true"
+                       RequiredError="Please select a tag type">
+                @foreach (TagType tagType in Enum.GetValues<TagType>())
+                {
+                    <MudSelectItem Value="@tagType">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudChip T="string" Size="Size.Small" Color="@GetTagColor(tagType)">
+                                @tagType.ToString()
+                            </MudChip>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                @GetTagDescription(tagType)
+                            </MudText>
+                        </MudStack>
+                    </MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (_selectedTagType == TagType.Custom)
+            {
+                <MudTextField @bind-Value="_customLabel"
+                              Label="Custom Label"
+                              Placeholder="Enter custom tag label..."
+                              Variant="Variant.Outlined"
+                              MaxLength="50"
+                              Counter="50"
+                              Required="true"
+                              RequiredError="Custom label is required" />
+            }
+
+            <MudTextField @bind-Value="_confidenceModifier"
+                          Label="Confidence Modifier (Optional)"
+                          Placeholder="e.g., +10 or -20"
+                          Variant="Variant.Outlined"
+                          HelperText="Adjusts spam detection confidence for this user"
+                          T="int?" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@(!IsValid())">Add Tag</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private TagType _selectedTagType = TagType.Suspicious;
+    private string _customLabel = string.Empty;
+    private int? _confidenceModifier;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        var result = new TagSelectionResult
+        {
+            TagType = _selectedTagType,
+            CustomLabel = _selectedTagType == TagType.Custom ? _customLabel.Trim() : null,
+            ConfidenceModifier = _confidenceModifier
+        };
+        MudDialog.Close(DialogResult.Ok(result));
+    }
+
+    private bool IsValid()
+    {
+        if (_selectedTagType == TagType.Custom)
+        {
+            return !string.IsNullOrWhiteSpace(_customLabel);
+        }
+        return true;
+    }
+
+    private static Color GetTagColor(TagType tagType) => tagType switch
+    {
+        TagType.Suspicious => Color.Warning,
+        TagType.VerifiedContributor => Color.Success,
+        TagType.SpamRisk => Color.Error,
+        TagType.SuspectedBot => Color.Info,
+        TagType.Impersonator => Color.Error,
+        TagType.Helpful => Color.Success,
+        TagType.Moderator => Color.Primary,
+        TagType.Custom => Color.Default,
+        _ => Color.Default
+    };
+
+    private static string GetTagDescription(TagType tagType) => tagType switch
+    {
+        TagType.Suspicious => "User shows suspicious behavior",
+        TagType.VerifiedContributor => "High-quality contributor",
+        TagType.SpamRisk => "Shows spam patterns but not banned yet",
+        TagType.SuspectedBot => "May be a bot account (not confirmed)",
+        TagType.Impersonator => "Attempting to impersonate others",
+        TagType.Helpful => "Helpful community member",
+        TagType.Moderator => "Community moderator (not admin)",
+        TagType.Custom => "Custom tag with your own label",
+        _ => string.Empty
+    };
+
+    public class TagSelectionResult
+    {
+        public TagType TagType { get; set; }
+        public string? CustomLabel { get; set; }
+        public int? ConfidenceModifier { get; set; }
+    }
+}

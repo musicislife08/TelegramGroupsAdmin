@@ -557,41 +557,44 @@ public class MessageHistoryRepository
     public async Task<List<UiModels.DetectionResultRecord>> GetRecentDetectionsAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        // Join with messages, users, and telegram_users to get actor display names (Phase 4.19)
         var results = await context.DetectionResults
             .AsNoTracking()
-            .Join(context.Messages,
-                dr => dr.MessageId,
-                m => m.MessageId,
-                (dr, m) => new
-                {
-                    dr.Id,
-                    dr.MessageId,
-                    dr.DetectedAt,
-                    dr.DetectionSource,
-                    dr.DetectionMethod,
-                    dr.IsSpam,
-                    dr.Confidence,
-                    dr.Reason,
-                    m.UserId,
-                    m.MessageText
-                })
-            .OrderByDescending(x => x.DetectedAt)
+            .Join(context.Messages, dr => dr.MessageId, m => m.MessageId, (dr, m) => new { dr, m })
+            .GroupJoin(context.Users, x => x.dr.WebUserId, u => u.Id, (x, users) => new { x.dr, x.m, users })
+            .SelectMany(x => x.users.DefaultIfEmpty(), (x, user) => new { x.dr, x.m, user })
+            .GroupJoin(context.TelegramUsers, x => x.dr.TelegramUserId, tu => tu.TelegramUserId, (x, tgUsers) => new { x.dr, x.m, x.user, tgUsers })
+            .SelectMany(x => x.tgUsers.DefaultIfEmpty(), (x, tgUser) => new
+            {
+                x.dr,
+                x.m,
+                ActorWebEmail = x.user != null ? x.user.Email : null,
+                ActorTelegramUsername = tgUser != null ? tgUser.Username : null,
+                ActorTelegramFirstName = tgUser != null ? tgUser.FirstName : null
+            })
+            .OrderByDescending(x => x.dr.DetectedAt)
             .Take(limit)
+            .Select(x => new UiModels.DetectionResultRecord
+            {
+                Id = x.dr.Id,
+                MessageId = x.dr.MessageId,
+                DetectedAt = x.dr.DetectedAt,
+                DetectionSource = x.dr.DetectionSource,
+                DetectionMethod = x.dr.DetectionMethod ?? "Unknown",
+                IsSpam = x.dr.IsSpam,
+                Confidence = x.dr.Confidence,
+                Reason = x.dr.Reason,
+                AddedBy = ModelMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName),
+                UsedForTraining = x.dr.UsedForTraining,
+                NetConfidence = x.dr.NetConfidence,
+                CheckResultsJson = x.dr.CheckResultsJson,
+                EditVersion = x.dr.EditVersion,
+                UserId = x.m.UserId,
+                MessageText = x.m.MessageText
+            })
             .ToListAsync(cancellationToken);
 
-        return results.Select(r => new UiModels.DetectionResultRecord
-        {
-            Id = r.Id,
-            MessageId = r.MessageId,
-            DetectedAt = r.DetectedAt,
-            DetectionSource = r.DetectionSource,
-            DetectionMethod = r.DetectionMethod ?? "Unknown",
-            IsSpam = r.IsSpam,
-            Confidence = r.Confidence,
-            Reason = r.Reason,
-            UserId = r.UserId,
-            MessageText = r.MessageText
-        }).ToList();
+        return results;
     }
 
     /// <summary>

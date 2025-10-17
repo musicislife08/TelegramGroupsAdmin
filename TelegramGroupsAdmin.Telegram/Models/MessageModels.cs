@@ -104,7 +104,7 @@ public class TrainingDataStats
 }
 
 /// <summary>
-/// Detection result record for UI display
+/// Detection result record for UI display (Phase 4.19: Now uses Actor for attribution)
 /// </summary>
 public class DetectionResultRecord
 {
@@ -116,7 +116,12 @@ public class DetectionResultRecord
     public bool IsSpam { get; set; }
     public int Confidence { get; set; }
     public string? Reason { get; set; }
-    public string? AddedBy { get; set; }
+
+    /// <summary>
+    /// Who added this detection (Phase 4.19: Actor system)
+    /// </summary>
+    public required Actor AddedBy { get; set; }
+
     public long UserId { get; set; }
     public string? MessageText { get; set; }
     public bool UsedForTraining { get; set; } = true;
@@ -128,13 +133,14 @@ public class DetectionResultRecord
 /// <summary>
 /// User action record for UI display (bans, warns, mutes, trusts)
 /// All actions are global - origin chat can be tracked via MessageId
+/// Phase 4.19: Now uses Actor for attribution
 /// </summary>
 public record UserActionRecord(
     long Id,
     long UserId,
     UserActionType ActionType,
     long? MessageId,
-    string? IssuedBy,
+    Actor IssuedBy,
     DateTimeOffset IssuedAt,
     DateTimeOffset? ExpiresAt,
     string? Reason

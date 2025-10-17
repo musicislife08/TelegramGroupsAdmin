@@ -2,8 +2,10 @@
 @attribute [Authorize(Roles = "Admin,Owner")]
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Components.Shared
 @inject TelegramUserManagementService UserManagementService
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 <PageTitle>Users - TelegramGroupsAdmin</PageTitle>
 
@@ -11,14 +13,45 @@
     <MudText Typo="Typo.h4" GutterBottom="true">Telegram Users</MudText>
     <MudText Typo="Typo.body1" Class="mb-4">Manage Telegram users across all monitored chats</MudText>
 
+    @* Search and Filter Bar *@
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_searchText"
+                          Label="Search users"
+                          Placeholder="Search by name, username, or ID..."
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true"
+                          OnKeyUp="@((e) => ApplyFilters())"
+                          Clearable="true"
+                          OnClearButtonClick="@(() => { _searchText = string.Empty; ApplyFilters(); })" />
+
+            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                <MudChip T="string"
+                         Text="@($"Total: {_allUsers.Count}")"
+                         Color="Color.Default"
+                         Size="Size.Small" />
+                @if (!string.IsNullOrWhiteSpace(_searchText))
+                {
+                    <MudChip T="string"
+                             Text="@($"Filtered: {_filteredCount}")"
+                             Color="Color.Primary"
+                             Size="Size.Small"
+                             OnClose="@(() => { _searchText = string.Empty; ApplyFilters(); })"/>
+                }
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
     @if (_loading)
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
     }
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
-        <MudTabPanel Text="All" Icon="@Icons.Material.Filled.People" BadgeData="@_allUsers.Count">
-            <MudTable Items="@_allUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+        <MudTabPanel Text="All" Icon="@Icons.Material.Filled.People" BadgeData="@FilteredAllUsers.Count">
+            <MudTable Items="@FilteredAllUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
                 <HeaderContent>
                     <MudTh>User</MudTh>
                     <MudTh>Status</MudTh>
@@ -81,8 +114,8 @@
             </MudTable>
         </MudTabPanel>
 
-        <MudTabPanel Text="Flagged" Icon="@Icons.Material.Filled.Flag" BadgeData="@_flaggedUsers.Count" BadgeColor="Color.Warning">
-            <MudTable Items="@_flaggedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+        <MudTabPanel Text="Flagged" Icon="@Icons.Material.Filled.Flag" BadgeData="@FilteredFlaggedUsers.Count" BadgeColor="Color.Warning">
+            <MudTable Items="@FilteredFlaggedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
                 <HeaderContent>
                     <MudTh>User</MudTh>
                     <MudTh>Status</MudTh>
@@ -127,8 +160,8 @@
             </MudTable>
         </MudTabPanel>
 
-        <MudTabPanel Text="Trusted" Icon="@Icons.Material.Filled.VerifiedUser" BadgeData="@_trustedUsers.Count" BadgeColor="Color.Success">
-            <MudTable Items="@_trustedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+        <MudTabPanel Text="Trusted" Icon="@Icons.Material.Filled.VerifiedUser" BadgeData="@FilteredTrustedUsers.Count" BadgeColor="Color.Success">
+            <MudTable Items="@FilteredTrustedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
                 <HeaderContent>
                     <MudTh>User</MudTh>
                     <MudTh>Chats</MudTh>
@@ -168,12 +201,15 @@
             </MudTable>
         </MudTabPanel>
 
-        <MudTabPanel Text="Banned" Icon="@Icons.Material.Filled.Block" BadgeData="@_bannedUsers.Count" BadgeColor="Color.Error">
-            <MudTable Items="@_bannedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+        <MudTabPanel Text="Banned" Icon="@Icons.Material.Filled.Block" BadgeData="@FilteredBannedUsersWithDetails.Count" BadgeColor="Color.Error">
+            <MudTable Items="@FilteredBannedUsersWithDetails" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
                 <HeaderContent>
                     <MudTh>User</MudTh>
+                    <MudTh>Ban Date</MudTh>
+                    <MudTh>Banned By</MudTh>
+                    <MudTh>Reason</MudTh>
+                    <MudTh>Expires</MudTh>
                     <MudTh>Warnings</MudTh>
-                    <MudTh>Last Seen</MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -195,12 +231,67 @@
                             </div>
                         </MudStack>
                     </MudTd>
-                    <MudTd DataLabel="Warnings">@context.WarningCount</MudTd>
-                    <MudTd DataLabel="Last Seen">@FormatTimestamp(context.LastSeenAt)</MudTd>
+                    <MudTd DataLabel="Ban Date">
+                        <MudText Typo="Typo.body2">@FormatTimestamp(context.BanDate)</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Banned By">
+                        <MudText Typo="Typo.body2">@context.BannedBy</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Reason">
+                        <MudText Typo="Typo.body2">@(context.BanReason ?? "No reason provided")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Expires">
+                        @if (context.IsPermanentBan)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error">Permanent</MudChip>
+                        }
+                        else if (context.BanExpires.HasValue)
+                        {
+                            var timeRemaining = context.BanExpires.Value - DateTimeOffset.UtcNow;
+                            @if (timeRemaining.TotalDays > 1)
+                            {
+                                <MudText Typo="Typo.body2">@($"{(int)timeRemaining.TotalDays}d {timeRemaining.Hours}h")</MudText>
+                            }
+                            else if (timeRemaining.TotalHours > 1)
+                            {
+                                <MudText Typo="Typo.body2">@($"{(int)timeRemaining.TotalHours}h {timeRemaining.Minutes}m")</MudText>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2">@($"{(int)timeRemaining.TotalMinutes}m")</MudText>
+                            }
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Warnings">
+                        @if (context.WarningCount > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">@context.WarningCount</MudChip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">None</MudText>
+                        }
+                    </MudTd>
                     <MudTd DataLabel="Actions">
+                        <MudTooltip Text="Unban User">
+                            <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
+                                          Size="Size.Small"
+                                          Color="Color.Success"
+                                          OnClick="@(() => UnbanUser(context))" />
+                        </MudTooltip>
                         <MudTooltip Text="View Details">
                             <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" OnClick="@(() => ViewUserDetail(context.TelegramUserId))" />
                         </MudTooltip>
+                        @if (context.TriggerMessageId.HasValue)
+                        {
+                            <MudTooltip Text="View Trigger Message">
+                                <MudIconButton Icon="@Icons.Material.Filled.Message"
+                                              Size="Size.Small"
+                                              Color="Color.Info"
+                                              Href="@($"/messages?messageId={context.TriggerMessageId}")"
+                                              Target="_blank" />
+                            </MudTooltip>
+                        }
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -213,11 +304,62 @@
     private List<TelegramUserListItem> _flaggedUsers = new();
     private List<TelegramUserListItem> _trustedUsers = new();
     private List<TelegramUserListItem> _bannedUsers = new();
+    private List<BannedUserListItem> _bannedUsersWithDetails = new();
     private bool _loading = true;
+
+    // Search and filter state
+    private string _searchText = string.Empty;
+    private int _filteredCount = 0;
+
+    // Filtered lists (computed)
+    private List<TelegramUserListItem> FilteredAllUsers => FilterUsers(_allUsers);
+    private List<TelegramUserListItem> FilteredFlaggedUsers => FilterUsers(_flaggedUsers);
+    private List<TelegramUserListItem> FilteredTrustedUsers => FilterUsers(_trustedUsers);
+    private List<TelegramUserListItem> FilteredBannedUsers => FilterUsers(_bannedUsers);
+    private List<BannedUserListItem> FilteredBannedUsersWithDetails => FilterBannedUsers(_bannedUsersWithDetails);
 
     protected override async Task OnInitializedAsync()
     {
         await LoadUsersAsync();
+    }
+
+    private List<TelegramUserListItem> FilterUsers(List<TelegramUserListItem> users)
+    {
+        if (string.IsNullOrWhiteSpace(_searchText))
+            return users;
+
+        var search = _searchText.Trim().ToLowerInvariant();
+
+        return users.Where(u =>
+            (u.Username?.ToLowerInvariant().Contains(search) ?? false) ||
+            (u.FirstName?.ToLowerInvariant().Contains(search) ?? false) ||
+            (u.LastName?.ToLowerInvariant().Contains(search) ?? false) ||
+            u.TelegramUserId.ToString().Contains(search)
+        ).ToList();
+    }
+
+    private List<BannedUserListItem> FilterBannedUsers(List<BannedUserListItem> users)
+    {
+        if (string.IsNullOrWhiteSpace(_searchText))
+            return users;
+
+        var search = _searchText.Trim().ToLowerInvariant();
+
+        return users.Where(u =>
+            (u.Username?.ToLowerInvariant().Contains(search) ?? false) ||
+            (u.FirstName?.ToLowerInvariant().Contains(search) ?? false) ||
+            (u.LastName?.ToLowerInvariant().Contains(search) ?? false) ||
+            u.TelegramUserId.ToString().Contains(search) ||
+            (u.BannedBy?.ToLowerInvariant().Contains(search) ?? false) ||
+            (u.BanReason?.ToLowerInvariant().Contains(search) ?? false)
+        ).ToList();
+    }
+
+    private void ApplyFilters()
+    {
+        // Update filtered count (use "All" tab as source of truth)
+        _filteredCount = FilteredAllUsers.Count;
+        StateHasChanged();
     }
 
     private async Task LoadUsersAsync()
@@ -232,13 +374,15 @@
             var flaggedTask = UserManagementService.GetFlaggedUsersAsync();
             var trustedTask = UserManagementService.GetTrustedUsersAsync();
             var bannedTask = UserManagementService.GetBannedUsersAsync();
+            var bannedWithDetailsTask = UserManagementService.GetBannedUsersWithDetailsAsync();
 
-            await Task.WhenAll(allUsersTask, flaggedTask, trustedTask, bannedTask);
+            await Task.WhenAll(allUsersTask, flaggedTask, trustedTask, bannedTask, bannedWithDetailsTask);
 
             _allUsers = await allUsersTask;
             _flaggedUsers = await flaggedTask;
             _trustedUsers = await trustedTask;
             _bannedUsers = await bannedTask;
+            _bannedUsersWithDetails = await bannedWithDetailsTask;
         }
         catch (Exception ex)
         {
@@ -274,10 +418,62 @@
         }
     }
 
-    private void ViewUserDetail(long userId)
+    private async Task UnbanUser(BannedUserListItem user)
     {
-        // TODO: Implement user detail modal/page
-        Snackbar.Add($"User detail view for {userId} - Coming soon", Severity.Info);
+        try
+        {
+            // Show confirmation dialog
+            var confirmed = await DialogService.ShowMessageBox(
+                "Confirm Unban",
+                $"Are you sure you want to unban {user.DisplayName}?",
+                yesText: "Unban",
+                cancelText: "Cancel");
+
+            if (confirmed != true)
+                return;
+
+            // Unban the user
+            var success = await UserManagementService.UnbanAsync(user.TelegramUserId, "web_admin", reason: "Unbanned from web interface");
+
+            if (success)
+            {
+                Snackbar.Add($"Successfully unbanned {user.DisplayName}", Severity.Success);
+                await LoadUsersAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to unban {user.DisplayName}. User may not be banned or does not exist.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error unbanning user: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ViewUserDetail(long userId)
+    {
+        var parameters = new DialogParameters<UserDetailDialog>
+        {
+            { x => x.UserId, userId }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<UserDetailDialog>("User Details", parameters, options);
+        var result = await dialog.Result;
+
+        // Reload users if dialog made changes
+        if (result != null && !result.Canceled)
+        {
+            await LoadUsersAsync();
+        }
     }
 
     private static Color GetStatusColor(TelegramUserStatus status) => status switch

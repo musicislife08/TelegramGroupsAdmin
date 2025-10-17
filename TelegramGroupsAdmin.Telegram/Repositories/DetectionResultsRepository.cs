@@ -19,6 +19,47 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         _logger = logger;
     }
 
+    /// <summary>
+    /// Helper to add actor JOINs to detection results query (Phase 4.19)
+    /// Returns queryable with full actor information for display names
+    /// </summary>
+    private static IQueryable<DetectionResultRecord> WithActorJoins(
+        IQueryable<DataModels.DetectionResultRecordDto> detectionResults,
+        AppDbContext context)
+    {
+        return detectionResults
+            .Join(context.Messages, dr => dr.MessageId, m => m.MessageId, (dr, m) => new { dr, m })
+            .GroupJoin(context.Users, x => x.dr.WebUserId, u => u.Id, (x, users) => new { x.dr, x.m, users })
+            .SelectMany(x => x.users.DefaultIfEmpty(), (x, user) => new { x.dr, x.m, user })
+            .GroupJoin(context.TelegramUsers, x => x.dr.TelegramUserId, tu => tu.TelegramUserId, (x, tgUsers) => new { x.dr, x.m, x.user, tgUsers })
+            .SelectMany(x => x.tgUsers.DefaultIfEmpty(), (x, tgUser) => new
+            {
+                x.dr,
+                x.m,
+                ActorWebEmail = x.user != null ? x.user.Email : null,
+                ActorTelegramUsername = tgUser != null ? tgUser.Username : null,
+                ActorTelegramFirstName = tgUser != null ? tgUser.FirstName : null
+            })
+            .Select(x => new DetectionResultRecord
+            {
+                Id = x.dr.Id,
+                MessageId = x.dr.MessageId,
+                DetectedAt = x.dr.DetectedAt,
+                DetectionSource = x.dr.DetectionSource,
+                DetectionMethod = x.dr.DetectionMethod,
+                IsSpam = x.dr.IsSpam,
+                Confidence = x.dr.Confidence,
+                Reason = x.dr.Reason,
+                AddedBy = ModelMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName),
+                UsedForTraining = x.dr.UsedForTraining,
+                NetConfidence = x.dr.NetConfidence,
+                CheckResultsJson = x.dr.CheckResultsJson,
+                EditVersion = x.dr.EditVersion,
+                UserId = x.m.UserId,
+                MessageText = x.m.MessageText
+            });
+    }
+
     public async Task InsertAsync(DetectionResultRecord result, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -39,31 +80,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     public async Task<DetectionResultRecord?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var result = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => dr.Id == id)
-            .Join(context.Messages,
-                dr => dr.MessageId,
-                m => m.MessageId,
-                (dr, m) => new { DetectionResult = dr, Message = m })
-            .Select(x => new DetectionResultRecord
-            {
-                Id = x.DetectionResult.Id,
-                MessageId = x.DetectionResult.MessageId,
-                DetectedAt = x.DetectionResult.DetectedAt,
-                DetectionSource = x.DetectionResult.DetectionSource,
-                DetectionMethod = x.DetectionResult.DetectionMethod,
-                IsSpam = x.DetectionResult.IsSpam,
-                Confidence = x.DetectionResult.Confidence,
-                Reason = x.DetectionResult.Reason,
-                AddedBy = x.DetectionResult.AddedBy,
-                UsedForTraining = x.DetectionResult.UsedForTraining,
-                NetConfidence = x.DetectionResult.NetConfidence,
-                CheckResultsJson = x.DetectionResult.CheckResultsJson,
-                EditVersion = x.DetectionResult.EditVersion,
-                UserId = x.Message.UserId,
-                MessageText = x.Message.MessageText
-            })
+        var result = await WithActorJoins(
+                context.DetectionResults.AsNoTracking().Where(dr => dr.Id == id),
+                context)
             .FirstOrDefaultAsync(cancellationToken);
 
         return result;
@@ -72,32 +91,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     public async Task<List<DetectionResultRecord>> GetByMessageIdAsync(long messageId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var results = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => dr.MessageId == messageId)
-            .Join(context.Messages,
-                dr => dr.MessageId,
-                m => m.MessageId,
-                (dr, m) => new { DetectionResult = dr, Message = m })
-            .OrderByDescending(x => x.DetectionResult.DetectedAt)
-            .Select(x => new DetectionResultRecord
-            {
-                Id = x.DetectionResult.Id,
-                MessageId = x.DetectionResult.MessageId,
-                DetectedAt = x.DetectionResult.DetectedAt,
-                DetectionSource = x.DetectionResult.DetectionSource,
-                DetectionMethod = x.DetectionResult.DetectionMethod,
-                IsSpam = x.DetectionResult.IsSpam,
-                Confidence = x.DetectionResult.Confidence,
-                Reason = x.DetectionResult.Reason,
-                AddedBy = x.DetectionResult.AddedBy,
-                UsedForTraining = x.DetectionResult.UsedForTraining,
-                NetConfidence = x.DetectionResult.NetConfidence,
-                CheckResultsJson = x.DetectionResult.CheckResultsJson,
-                EditVersion = x.DetectionResult.EditVersion,
-                UserId = x.Message.UserId,
-                MessageText = x.Message.MessageText
-            })
+        var results = await WithActorJoins(
+                context.DetectionResults.AsNoTracking().Where(dr => dr.MessageId == messageId),
+                context)
+            .OrderByDescending(x => x.DetectedAt)
             .ToListAsync(cancellationToken);
 
         return results;
@@ -106,32 +103,11 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     public async Task<List<DetectionResultRecord>> GetRecentAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var results = await context.DetectionResults
-            .AsNoTracking()
-            .Join(context.Messages,
-                dr => dr.MessageId,
-                m => m.MessageId,
-                (dr, m) => new { DetectionResult = dr, Message = m })
-            .OrderByDescending(x => x.DetectionResult.DetectedAt)
+        var results = await WithActorJoins(
+                context.DetectionResults.AsNoTracking(),
+                context)
+            .OrderByDescending(x => x.DetectedAt)
             .Take(limit)
-            .Select(x => new DetectionResultRecord
-            {
-                Id = x.DetectionResult.Id,
-                MessageId = x.DetectionResult.MessageId,
-                DetectedAt = x.DetectionResult.DetectedAt,
-                DetectionSource = x.DetectionResult.DetectionSource,
-                DetectionMethod = x.DetectionResult.DetectionMethod,
-                IsSpam = x.DetectionResult.IsSpam,
-                Confidence = x.DetectionResult.Confidence,
-                Reason = x.DetectionResult.Reason,
-                AddedBy = x.DetectionResult.AddedBy,
-                UsedForTraining = x.DetectionResult.UsedForTraining,
-                NetConfidence = x.DetectionResult.NetConfidence,
-                CheckResultsJson = x.DetectionResult.CheckResultsJson,
-                EditVersion = x.DetectionResult.EditVersion,
-                UserId = x.Message.UserId,
-                MessageText = x.Message.MessageText
-            })
             .ToListAsync(cancellationToken);
 
         return results;
@@ -215,33 +191,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Get last N non-spam detection results for this user (global, not per-chat)
         // Used for auto-whitelisting: if user has N consecutive non-spam messages, trust them
-        var results = await context.DetectionResults
-            .AsNoTracking()
-            .Join(context.Messages,
-                dr => dr.MessageId,
-                m => m.MessageId,
-                (dr, m) => new { DetectionResult = dr, Message = m })
-            .Where(x => x.Message.UserId == userId && !x.DetectionResult.IsSpam)
-            .OrderByDescending(x => x.DetectionResult.DetectedAt)
+        var results = await WithActorJoins(
+                context.DetectionResults.AsNoTracking(),
+                context)
+            .Where(x => x.UserId == userId && !x.IsSpam)
+            .OrderByDescending(x => x.DetectedAt)
             .Take(limit)
-            .Select(x => new DetectionResultRecord
-            {
-                Id = x.DetectionResult.Id,
-                MessageId = x.DetectionResult.MessageId,
-                DetectedAt = x.DetectionResult.DetectedAt,
-                DetectionSource = x.DetectionResult.DetectionSource,
-                DetectionMethod = x.DetectionResult.DetectionMethod,
-                IsSpam = x.DetectionResult.IsSpam,
-                Confidence = x.DetectionResult.Confidence,
-                Reason = x.DetectionResult.Reason,
-                AddedBy = x.DetectionResult.AddedBy,
-                UsedForTraining = x.DetectionResult.UsedForTraining,
-                NetConfidence = x.DetectionResult.NetConfidence,
-                CheckResultsJson = x.DetectionResult.CheckResultsJson,
-                EditVersion = x.DetectionResult.EditVersion,
-                UserId = x.Message.UserId,
-                MessageText = x.Message.MessageText
-            })
             .ToListAsync(cancellationToken);
 
         _logger.LogDebug(
@@ -332,32 +287,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     public async Task<List<DetectionResultRecord>> GetAllTrainingDataAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var results = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => dr.UsedForTraining == true)
-            .Join(context.Messages,
-                dr => dr.MessageId,
-                m => m.MessageId,
-                (dr, m) => new { DetectionResult = dr, Message = m })
-            .OrderByDescending(x => x.DetectionResult.DetectedAt)
-            .Select(x => new DetectionResultRecord
-            {
-                Id = x.DetectionResult.Id,
-                MessageId = x.DetectionResult.MessageId,
-                DetectedAt = x.DetectionResult.DetectedAt,
-                DetectionSource = x.DetectionResult.DetectionSource,
-                DetectionMethod = x.DetectionResult.DetectionMethod,
-                IsSpam = x.DetectionResult.IsSpam,
-                Confidence = x.DetectionResult.Confidence,
-                Reason = x.DetectionResult.Reason,
-                AddedBy = x.DetectionResult.AddedBy,
-                UsedForTraining = x.DetectionResult.UsedForTraining,
-                NetConfidence = x.DetectionResult.NetConfidence,
-                CheckResultsJson = x.DetectionResult.CheckResultsJson,
-                EditVersion = x.DetectionResult.EditVersion,
-                UserId = x.Message.UserId,
-                MessageText = x.Message.MessageText
-            })
+        var results = await WithActorJoins(
+                context.DetectionResults.AsNoTracking().Where(dr => dr.UsedForTraining == true),
+                context)
+            .OrderByDescending(x => x.DetectedAt)
             .ToListAsync(cancellationToken);
 
         _logger.LogDebug("Retrieved {Count} training data records (used_for_training = true)", results.Count);
@@ -444,6 +377,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         await context.SaveChangesAsync(cancellationToken); // Save to get message_id
 
         // Create detection_result record linked to the message
+        // Phase 4.19: Actor system - manual samples use SystemIdentifier
         var detectionResult = new DataModels.DetectionResultRecordDto
         {
             MessageId = message.MessageId,
@@ -453,7 +387,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             // IsSpam computed from net_confidence
             Confidence = confidence ?? 100,
             Reason = "Manually added training sample",
-            AddedBy = addedBy,
+            SystemIdentifier = addedBy ?? "System",  // Phase 4.19: Actor system
             UsedForTraining = true,
             NetConfidence = isSpam ? 100 : -100,  // Manual: 100 = spam, -100 = ham
             CheckResultsJson = null,

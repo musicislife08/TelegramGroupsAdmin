@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TelegramGroupsAdmin.Data;
@@ -11,9 +12,11 @@ using TelegramGroupsAdmin.Data;
 namespace TgSpam_PreFilterApi.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251017053850_AddAdminNotesAndUserTagsTables")]
+    partial class AddAdminNotesAndUserTagsTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -30,20 +33,6 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("ActorSystemIdentifier")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("actor_system_identifier");
-
-                    b.Property<long?>("ActorTelegramUserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("actor_telegram_user_id");
-
-                    b.Property<string>("ActorWebUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)")
-                        .HasColumnName("actor_web_user_id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -75,20 +64,13 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ActorTelegramUserId");
-
-                    b.HasIndex("ActorWebUserId");
-
                     b.HasIndex("CreatedAt");
 
                     b.HasIndex("IsPinned");
 
                     b.HasIndex("TelegramUserId");
 
-                    b.ToTable("admin_notes", t =>
-                        {
-                            t.HasCheckConstraint("CK_admin_notes_exclusive_actor", "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1");
-                        });
+                    b.ToTable("admin_notes");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.AuditLogRecordDto", b =>
@@ -320,23 +302,9 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("reason");
 
-                    b.Property<string>("SystemIdentifier")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("system_identifier");
-
-                    b.Property<long?>("TelegramUserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("telegram_user_id");
-
                     b.Property<bool>("UsedForTraining")
                         .HasColumnType("boolean")
                         .HasColumnName("used_for_training");
-
-                    b.Property<string>("WebUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)")
-                        .HasColumnName("web_user_id");
 
                     b.HasKey("Id");
 
@@ -344,16 +312,9 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("MessageId");
 
-                    b.HasIndex("TelegramUserId");
-
                     b.HasIndex("UsedForTraining");
 
-                    b.HasIndex("WebUserId");
-
-                    b.ToTable("detection_results", t =>
-                        {
-                            t.HasCheckConstraint("CK_detection_results_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
-                        });
+                    b.ToTable("detection_results");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.InviteRecordDto", b =>
@@ -773,20 +734,6 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("notes");
 
-                    b.Property<string>("SystemIdentifier")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("system_identifier");
-
-                    b.Property<long?>("TelegramUserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("telegram_user_id");
-
-                    b.Property<string>("WebUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)")
-                        .HasColumnName("web_user_id");
-
                     b.Property<string>("Word")
                         .IsRequired()
                         .HasColumnType("text")
@@ -794,14 +741,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TelegramUserId");
-
-                    b.HasIndex("WebUserId");
-
-                    b.ToTable("stop_words", t =>
-                        {
-                            t.HasCheckConstraint("CK_stop_words_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
-                        });
+                    b.ToTable("stop_words");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramLinkTokenRecordDto", b =>
@@ -979,23 +919,9 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("reason");
 
-                    b.Property<string>("SystemIdentifier")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("system_identifier");
-
-                    b.Property<long?>("TelegramUserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("telegram_user_id");
-
                     b.Property<long>("UserId")
                         .HasColumnType("bigint")
                         .HasColumnName("user_id");
-
-                    b.Property<string>("WebUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)")
-                        .HasColumnName("web_user_id");
 
                     b.HasKey("Id");
 
@@ -1003,16 +929,9 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("MessageId");
 
-                    b.HasIndex("TelegramUserId");
-
                     b.HasIndex("UserId");
 
-                    b.HasIndex("WebUserId");
-
-                    b.ToTable("user_actions", t =>
-                        {
-                            t.HasCheckConstraint("CK_user_actions_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
-                        });
+                    b.ToTable("user_actions");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UserRecordDto", b =>
@@ -1132,20 +1051,6 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<string>("ActorSystemIdentifier")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("actor_system_identifier");
-
-                    b.Property<long?>("ActorTelegramUserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("actor_telegram_user_id");
-
-                    b.Property<string>("ActorWebUserId")
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)")
-                        .HasColumnName("actor_web_user_id");
-
                     b.Property<DateTimeOffset>("AddedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("added_at");
@@ -1175,18 +1080,11 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ActorTelegramUserId");
-
-                    b.HasIndex("ActorWebUserId");
-
                     b.HasIndex("TagType");
 
                     b.HasIndex("TelegramUserId");
 
-                    b.ToTable("user_tags", t =>
-                        {
-                            t.HasCheckConstraint("CK_user_tags_exclusive_actor", "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1");
-                        });
+                    b.ToTable("user_tags");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.VerificationTokenDto", b =>
@@ -1463,16 +1361,6 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.AdminNoteDto", b =>
                 {
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", null)
-                        .WithMany()
-                        .HasForeignKey("ActorTelegramUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", null)
-                        .WithMany()
-                        .HasForeignKey("ActorWebUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", "TelegramUser")
                         .WithMany()
                         .HasForeignKey("TelegramUserId")
@@ -1500,16 +1388,6 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasForeignKey("MessageId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", null)
-                        .WithMany()
-                        .HasForeignKey("TelegramUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", null)
-                        .WithMany()
-                        .HasForeignKey("WebUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Message");
                 });
@@ -1568,19 +1446,6 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                     b.Navigation("WebUser");
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.StopWordDto", b =>
-                {
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", null)
-                        .WithMany()
-                        .HasForeignKey("TelegramUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", null)
-                        .WithMany()
-                        .HasForeignKey("WebUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-                });
-
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramLinkTokenRecordDto", b =>
                 {
                     b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", "User")
@@ -1614,16 +1479,6 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasForeignKey("MessageId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", null)
-                        .WithMany()
-                        .HasForeignKey("TelegramUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", null)
-                        .WithMany()
-                        .HasForeignKey("WebUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("Message");
                 });
 
@@ -1643,16 +1498,6 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UserTagDto", b =>
                 {
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", null)
-                        .WithMany()
-                        .HasForeignKey("ActorTelegramUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", null)
-                        .WithMany()
-                        .HasForeignKey("ActorWebUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", "TelegramUser")
                         .WithMany()
                         .HasForeignKey("TelegramUserId")

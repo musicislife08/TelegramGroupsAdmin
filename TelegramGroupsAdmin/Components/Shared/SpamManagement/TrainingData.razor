@@ -141,7 +141,7 @@
                             <MudText Typo="Typo.body2">@context.Confidence%</MudText>
                         </MudTd>
                         <MudTd DataLabel="Detected At">@context.DetectedAt.ToString("yyyy-MM-dd HH:mm")</MudTd>
-                        <MudTd DataLabel="Added By">@(context.AddedBy ?? "System")</MudTd>
+                        <MudTd DataLabel="Added By">@(context.AddedBy.DisplayName ?? "System")</MudTd>
                         <MudTd DataLabel="Actions">
                             <MudStack Row="true" Spacing="1">
                                 <MudIconButton Icon="@Icons.Material.Filled.Edit"
@@ -226,7 +226,7 @@
             filtered = filtered.Where(s =>
                 (s.MessageText != null && s.MessageText.Contains(_searchText, StringComparison.OrdinalIgnoreCase)) ||
                 s.DetectionSource.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
-                (!string.IsNullOrEmpty(s.AddedBy) && s.AddedBy.Contains(_searchText, StringComparison.OrdinalIgnoreCase)));
+                (s.AddedBy.DisplayName != null && s.AddedBy.DisplayName.Contains(_searchText, StringComparison.OrdinalIgnoreCase)));
         }
 
         // Filter by type

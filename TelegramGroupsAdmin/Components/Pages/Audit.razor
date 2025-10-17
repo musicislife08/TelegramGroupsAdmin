@@ -8,6 +8,7 @@
 @inject IAuditService AuditService
 @inject UserRepository UserRepository
 @inject IUserActionsRepository UserActionsRepository
+@inject TelegramUserRepository TelegramUserRepository
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -222,7 +223,7 @@
             <HeaderContent>
                 <MudTh>Timestamp</MudTh>
                 <MudTh>Action Type</MudTh>
-                <MudTh>Telegram User ID</MudTh>
+                <MudTh>Telegram User</MudTh>
                 <MudTh>Issued By</MudTh>
                 <MudTh>Reason</MudTh>
                 <MudTh>Expires At</MudTh>
@@ -239,44 +240,73 @@
                         @GetActionTypeName(context.ActionType)
                     </MudChip>
                 </MudTd>
-                <MudTd DataLabel="Telegram User ID">
-                    <MudText Typo="Typo.body2" Style="font-family: monospace;">@context.UserId</MudText>
-                </MudTd>
-                <MudTd DataLabel="Issued By">
-                    @if (context.IssuedBy == "system_bot_protection")
+                <MudTd DataLabel="Telegram User">
+                    @if (_telegramUsersCache.TryGetValue(context.UserId, out var telegramUser))
                     {
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Shield" Color="Color.Info">
-                            Bot Protection
-                        </MudChip>
-                    }
-                    else if (context.IssuedBy != null && _userEmailCache.ContainsKey(context.IssuedBy))
-                    {
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Person" Color="Color.Primary">
-                            @_userEmailCache[context.IssuedBy]
-                        </MudChip>
-                    }
-                    else if (context.IssuedBy == "Auto-Detection" || context.IssuedBy?.StartsWith("Auto-") == true)
-                    {
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.AutoMode" Color="Color.Secondary">
-                            @context.IssuedBy
-                        </MudChip>
-                    }
-                    else if (context.IssuedBy?.StartsWith("telegram:") == true)
-                    {
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SmartToy" Color="Color.Info">
-                            @context.IssuedBy.Substring("telegram:".Length)
-                        </MudChip>
-                    }
-                    else if (string.IsNullOrEmpty(context.IssuedBy) || context.IssuedBy == "Unknown")
-                    {
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.QuestionMark" Color="Color.Default">
-                            Unknown
-                        </MudChip>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            @if (!string.IsNullOrEmpty(telegramUser.UserPhotoPath))
+                            {
+                                <img src="@($"/images/{telegramUser.UserPhotoPath}")" alt="@GetTelegramUserDisplayName(telegramUser)" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
+                            }
+                            else
+                            {
+                                <MudAvatar Size="Size.Small" Color="Color.Secondary">
+                                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                                </MudAvatar>
+                            }
+                            <div>
+                                <MudText Typo="Typo.body2">@GetTelegramUserDisplayName(telegramUser)</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-family: monospace;">ID: @context.UserId</MudText>
+                            </div>
+                        </MudStack>
                     }
                     else
                     {
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.AdminPanelSettings" Color="Color.Default">
-                            @context.IssuedBy
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Style="font-family: monospace;">@context.UserId</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Issued By">
+                    @if (context.IssuedBy.Type == TelegramGroupsAdmin.Telegram.Models.ActorType.System)
+                    {
+                        @if (context.IssuedBy.SystemIdentifier == "bot_protection")
+                        {
+                            <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Shield" Color="Color.Info">
+                                Bot Protection
+                            </MudChip>
+                        }
+                        else if (context.IssuedBy.SystemIdentifier?.Contains("auto") == true)
+                        {
+                            <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.AutoMode" Color="Color.Secondary">
+                                @context.IssuedBy.DisplayName
+                            </MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Computer" Color="Color.Default">
+                                @context.IssuedBy.DisplayName
+                            </MudChip>
+                        }
+                    }
+                    else if (context.IssuedBy.Type == TelegramGroupsAdmin.Telegram.Models.ActorType.WebUser)
+                    {
+                        @* Try to show email if we have it cached *@
+                        @if (context.IssuedBy.WebUserId != null && _userEmailCache.ContainsKey(context.IssuedBy.WebUserId))
+                        {
+                            <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Person" Color="Color.Primary">
+                                @_userEmailCache[context.IssuedBy.WebUserId]
+                            </MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Person" Color="Color.Primary">
+                                @context.IssuedBy.DisplayName
+                            </MudChip>
+                        }
+                    }
+                    else if (context.IssuedBy.Type == TelegramGroupsAdmin.Telegram.Models.ActorType.TelegramUser)
+                    {
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SmartToy" Color="Color.Info">
+                            @context.IssuedBy.DisplayName
                         </MudChip>
                     }
                 </MudTd>
@@ -335,8 +365,11 @@
     private string? _filterTelegramUserId;
     private string? _filterIssuedBy;
 
-    // User email cache
+    // User email cache (web admin users)
     private Dictionary<string, string> _userEmailCache = new();
+
+    // Telegram users cache (for display names and photos)
+    private Dictionary<long, TelegramGroupsAdmin.Telegram.Models.TelegramUser> _telegramUsersCache = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -445,14 +478,36 @@
 
         try
         {
-            // Load moderation actions (recent 500)
-            _userActions = await UserActionsRepository.GetRecentAsync(limit: 500);
+            // Load moderation actions, web admin users, and Telegram users in parallel
+            var actionsTask = UserActionsRepository.GetRecentAsync(limit: 500);
+            var webUsersTask = _users.Count == 0 ? UserRepository.GetAllIncludingDeletedAsync() : Task.FromResult(_users);
+            var telegramUsersTask = TelegramUserRepository.GetAllWithStatsAsync();
 
-            // Load users for email cache (if not already loaded)
+            await Task.WhenAll(actionsTask, webUsersTask, telegramUsersTask);
+
+            _userActions = actionsTask.Result;
+
+            // Build web admin user email cache (if not already loaded)
             if (_users.Count == 0)
             {
-                _users = await UserRepository.GetAllIncludingDeletedAsync();
+                _users = webUsersTask.Result;
                 _userEmailCache = _users.ToDictionary(u => u.Id, u => u.Email);
+            }
+
+            // Build Telegram users cache for display names
+            var telegramUsers = telegramUsersTask.Result;
+            _telegramUsersCache = new Dictionary<long, TelegramGroupsAdmin.Telegram.Models.TelegramUser>();
+
+            // We need to fetch full TelegramUser objects, not just list items
+            // Get unique telegram user IDs from user actions
+            var uniqueUserIds = _userActions.Select(a => a.UserId).Distinct().ToList();
+            foreach (var userId in uniqueUserIds)
+            {
+                var user = await TelegramUserRepository.GetByTelegramIdAsync(userId);
+                if (user != null)
+                {
+                    _telegramUsersCache[userId] = user;
+                }
             }
 
             // Apply initial filters (no filters = show all)
@@ -641,7 +696,7 @@
 
         if (!string.IsNullOrEmpty(_filterIssuedBy))
         {
-            filtered = filtered.Where(a => a.IssuedBy != null && a.IssuedBy.Contains(_filterIssuedBy, StringComparison.OrdinalIgnoreCase));
+            filtered = filtered.Where(a => a.IssuedBy.DisplayName != null && a.IssuedBy.DisplayName.Contains(_filterIssuedBy, StringComparison.OrdinalIgnoreCase));
         }
 
         _filteredUserActions = filtered.ToList();
@@ -668,4 +723,14 @@
         UserActionType.Unban => Color.Info,
         _ => Color.Default
     };
+
+    // Telegram User Display Helper
+    private static string GetTelegramUserDisplayName(TelegramGroupsAdmin.Telegram.Models.TelegramUser user)
+    {
+        if (!string.IsNullOrEmpty(user.Username))
+            return $"@{user.Username}";
+        if (!string.IsNullOrEmpty(user.FirstName))
+            return user.FirstName;
+        return $"User {user.TelegramUserId}";
+    }
 }

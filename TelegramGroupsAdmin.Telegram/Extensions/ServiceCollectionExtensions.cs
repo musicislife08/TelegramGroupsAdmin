@@ -29,6 +29,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
         services.AddScoped<IReportsRepository, ReportsRepository>();
         services.AddScoped<IWelcomeResponsesRepository, WelcomeResponsesRepository>();
+        services.AddScoped<IAdminNotesRepository, AdminNotesRepository>(); // Phase 4.12
+        services.AddScoped<IUserTagsRepository, UserTagsRepository>(); // Phase 4.12
         services.AddScoped<AuditLogRepository>();
         services.AddScoped<UserRepository>();
         services.AddScoped<MessageHistoryRepository>();

@@ -215,7 +215,7 @@ public class SimilaritySpamCheck : ISpamCheck
                         dr.DetectionSource,
                         dr.Confidence,
                         new long[] { dr.Message!.ChatId },
-                        dr.AddedBy,
+                        dr.SystemIdentifier ?? "unknown", // Phase 4.19: Actor system (simplified for internal use)
                         0, // DetectionCount removed in normalized schema
                         null // LastDetectedDate removed in normalized schema
                     ))

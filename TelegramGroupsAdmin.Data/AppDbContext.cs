@@ -50,6 +50,10 @@ public class AppDbContext : DbContext
     // Welcome system (Phase 4.4)
     public DbSet<WelcomeResponseDto> WelcomeResponses => Set<WelcomeResponseDto>();
 
+    // User notes and tags (Phase 4.12)
+    public DbSet<AdminNoteDto> AdminNotes => Set<AdminNoteDto>();
+    public DbSet<UserTagDto> UserTags => Set<UserTagDto>();
+
     // TickerQ entities (background job system)
     public DbSet<TimeTickerEntity> TimeTickers => Set<TimeTickerEntity>();
     public DbSet<CronTickerEntity> CronTickers => Set<CronTickerEntity>();
@@ -177,6 +181,126 @@ public class AppDbContext : DbContext
             .WithMany(mc => mc.ChatAdmins)
             .HasForeignKey(ca => ca.ChatId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // TelegramUsers → AdminNotes (one-to-many)
+        modelBuilder.Entity<AdminNoteDto>()
+            .HasOne(an => an.TelegramUser)
+            .WithMany()
+            .HasForeignKey(an => an.TelegramUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // TelegramUsers → UserTags (one-to-many)
+        modelBuilder.Entity<UserTagDto>()
+            .HasOne(ut => ut.TelegramUser)
+            .WithMany()
+            .HasForeignKey(ut => ut.TelegramUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // ============================================================================
+        // Actor System Foreign Keys (Phase 4.19)
+        // Exclusive Arc pattern: Each table has 3 nullable FKs for actor attribution
+        // ============================================================================
+
+        // UserActions actor FKs
+        modelBuilder.Entity<UserActionRecordDto>()
+            .HasOne<UserRecordDto>()
+            .WithMany()
+            .HasForeignKey(ua => ua.WebUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<UserActionRecordDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany()
+            .HasForeignKey(ua => ua.TelegramUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // DetectionResults actor FKs
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .HasOne<UserRecordDto>()
+            .WithMany()
+            .HasForeignKey(dr => dr.WebUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany()
+            .HasForeignKey(dr => dr.TelegramUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // StopWords actor FKs
+        modelBuilder.Entity<StopWordDto>()
+            .HasOne<UserRecordDto>()
+            .WithMany()
+            .HasForeignKey(sw => sw.WebUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<StopWordDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany()
+            .HasForeignKey(sw => sw.TelegramUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // AdminNotes actor FKs
+        modelBuilder.Entity<AdminNoteDto>()
+            .HasOne<UserRecordDto>()
+            .WithMany()
+            .HasForeignKey(an => an.ActorWebUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<AdminNoteDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany()
+            .HasForeignKey(an => an.ActorTelegramUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // UserTags actor FKs
+        modelBuilder.Entity<UserTagDto>()
+            .HasOne<UserRecordDto>()
+            .WithMany()
+            .HasForeignKey(ut => ut.ActorWebUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<UserTagDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany()
+            .HasForeignKey(ut => ut.ActorTelegramUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // ============================================================================
+        // Actor System CHECK Constraints (Phase 4.19)
+        // Enforce exclusive arc: exactly one actor column must be non-null
+        // Added after data backfill to ensure constraint validity
+        // ============================================================================
+
+        // UserActions: Exactly one of (web_user_id, telegram_user_id, system_identifier) must be non-null
+        modelBuilder.Entity<UserActionRecordDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_user_actions_exclusive_actor",
+                "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1"));
+
+        // DetectionResults: Exactly one actor must be non-null
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_detection_results_exclusive_actor",
+                "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1"));
+
+        // StopWords: Exactly one actor must be non-null
+        modelBuilder.Entity<StopWordDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_stop_words_exclusive_actor",
+                "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1"));
+
+        // AdminNotes: Exactly one actor must be non-null
+        modelBuilder.Entity<AdminNoteDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_admin_notes_exclusive_actor",
+                "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1"));
+
+        // UserTags: Exactly one actor must be non-null
+        modelBuilder.Entity<UserTagDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_user_tags_exclusive_actor",
+                "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1"));
     }
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
@@ -230,6 +354,20 @@ public class AppDbContext : DbContext
             .HasIndex(ca => ca.ChatId);
         modelBuilder.Entity<ChatAdminRecordDto>()
             .HasIndex(ca => ca.TelegramId);
+
+        // AdminNotes indexes
+        modelBuilder.Entity<AdminNoteDto>()
+            .HasIndex(an => an.TelegramUserId);
+        modelBuilder.Entity<AdminNoteDto>()
+            .HasIndex(an => an.CreatedAt);
+        modelBuilder.Entity<AdminNoteDto>()
+            .HasIndex(an => an.IsPinned);
+
+        // UserTags indexes
+        modelBuilder.Entity<UserTagDto>()
+            .HasIndex(ut => ut.TelegramUserId);
+        modelBuilder.Entity<UserTagDto>()
+            .HasIndex(ut => ut.TagType);
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)
@@ -269,6 +407,10 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<AuditLogRecordDto>()
             .Property(al => al.EventType)
+            .HasConversion<int>();
+
+        modelBuilder.Entity<UserTagDto>()
+            .Property(ut => ut.TagType)
             .HasConversion<int>();
 
         // VerificationTokenDto stores token_type as string in DB but exposes as enum

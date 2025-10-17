@@ -49,6 +49,15 @@ public class TelegramUserManagementService
     }
 
     /// <summary>
+    /// Get banned users with detailed ban information
+    /// Includes ban date, banned by, reason, expiry, and trigger message
+    /// </summary>
+    public Task<List<BannedUserListItem>> GetBannedUsersWithDetailsAsync(CancellationToken ct = default)
+    {
+        return _userRepository.GetBannedUsersWithDetailsAsync(ct);
+    }
+
+    /// <summary>
     /// Get trusted (whitelisted) users
     /// </summary>
     public Task<List<TelegramUserListItem>> GetTrustedUsersAsync(CancellationToken ct = default)
@@ -106,7 +115,7 @@ public class TelegramUserManagementService
                 UserId: telegramUserId,
                 ActionType: UserActionType.Trust,
                 MessageId: null, // No specific message associated
-                IssuedBy: modifiedBy,
+                IssuedBy: Guid.TryParse(modifiedBy, out _) ? Actor.FromWebUser(modifiedBy) : Actor.FromSystem(modifiedBy),
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Trust doesn't expire
                 Reason: "User manually trusted"
@@ -151,5 +160,53 @@ public class TelegramUserManagementService
     public Task<int> GetActiveWarningCountAsync(long telegramUserId, CancellationToken ct = default)
     {
         return _userActionsRepository.GetWarnCountAsync(telegramUserId);
+    }
+
+    /// <summary>
+    /// Unban a user (expire all active bans and create unban action record)
+    /// Phase 5: Banned users tab enhancements
+    /// </summary>
+    public async Task<bool> UnbanAsync(long telegramUserId, string unbannedBy, string? reason = null, CancellationToken ct = default)
+    {
+        // Verify user exists
+        var user = await _userRepository.GetByTelegramIdAsync(telegramUserId, ct);
+        if (user == null)
+        {
+            _logger.LogWarning("Cannot unban non-existent user {TelegramUserId}", telegramUserId);
+            return false;
+        }
+
+        // Check if user is actually banned
+        var isBanned = await _userActionsRepository.IsUserBannedAsync(telegramUserId, chatId: null, ct);
+        if (!isBanned)
+        {
+            _logger.LogWarning("User {TelegramUserId} is not currently banned", telegramUserId);
+            return false;
+        }
+
+        // Expire all active bans (global - chatId: null)
+        await _userActionsRepository.ExpireBansForUserAsync(telegramUserId, chatId: null, ct);
+
+        // Create unban action record for audit trail
+        var unbanAction = new UserActionRecord(
+            Id: 0, // Will be set by database
+            UserId: telegramUserId,
+            ActionType: UserActionType.Unban,
+            MessageId: null, // No specific message associated
+            IssuedBy: Guid.TryParse(unbannedBy, out _) ? Actor.FromWebUser(unbannedBy) : Actor.FromSystem(unbannedBy),
+            IssuedAt: DateTimeOffset.UtcNow,
+            ExpiresAt: null, // Unban doesn't expire
+            Reason: reason ?? "User manually unbanned from web interface"
+        );
+
+        await _userActionsRepository.InsertAsync(unbanAction, ct);
+
+        _logger.LogInformation(
+            "User {TelegramUserId} unbanned by {UnbannedBy}. Reason: {Reason}",
+            telegramUserId,
+            unbannedBy,
+            reason ?? "Manual unban");
+
+        return true;
     }
 }

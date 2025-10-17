@@ -201,7 +201,7 @@ public class SpamActionService(
                 UserId: message.From!.Id,
                 ActionType: UserActionType.Ban,
                 MessageId: message.MessageId,
-                IssuedBy: "Auto-Detection",
+                IssuedBy: Actor.FromSystem("auto_detection"),
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Permanent ban
                 Reason: $"Auto-ban: High confidence spam (Net: {spamResult.NetConfidence}, OpenAI: {openAIResult.Confidence}%)"

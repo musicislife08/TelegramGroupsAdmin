@@ -118,23 +118,36 @@ public class StopWordsRepository : IStopWordsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            // Query with LEFT JOIN to users table to get email for AddedBy
-            // Convert DTO to domain model before returning (DTO stays internal)
-            var stopWordDtos = await context.StopWords
+            // Query with LEFT JOINs to resolve actor display names (Phase 4.19)
+            var stopWords = await context.StopWords
                 .AsNoTracking()
-                .GroupJoin(
-                    context.Users,
-                    sw => sw.AddedBy,
-                    u => u.Id,
-                    (sw, users) => new StopWordWithEmailDto
-                    {
-                        StopWord = sw,
-                        AddedByEmail = users.Select(u => u.Email).FirstOrDefault()
-                    })
-                .OrderBy(sw => sw.StopWord.Word)
+                .GroupJoin(context.Users, sw => sw.WebUserId, u => u.Id, (sw, users) => new { sw, users })
+                .SelectMany(x => x.users.DefaultIfEmpty(), (x, user) => new { x.sw, user })
+                .GroupJoin(context.TelegramUsers, x => x.sw.TelegramUserId, tu => tu.TelegramUserId, (x, tgUsers) => new { x.sw, x.user, tgUsers })
+                .SelectMany(x => x.tgUsers.DefaultIfEmpty(), (x, tgUser) => new
+                {
+                    x.sw,
+                    ActorWebEmail = x.user != null ? x.user.Email : null,
+                    ActorTelegramUsername = tgUser != null ? tgUser.Username : null,
+                    ActorTelegramFirstName = tgUser != null ? tgUser.FirstName : null
+                })
+                .OrderBy(x => x.sw.Word)
+                .Select(x => new Models.StopWord(
+                    Id: x.sw.Id,
+                    Word: x.sw.Word,
+                    Enabled: x.sw.Enabled,
+                    AddedDate: x.sw.AddedDate,
+                    // Resolve actor display name (Phase 4.19: Actor system)
+                    AddedBy: x.sw.WebUserId != null
+                        ? (x.ActorWebEmail ?? "User " + x.sw.WebUserId.Substring(0, 8) + "...")
+                        : x.sw.TelegramUserId != null
+                            ? (x.ActorTelegramUsername != null ? "@" + x.ActorTelegramUsername : x.ActorTelegramFirstName ?? "User " + x.sw.TelegramUserId.ToString())
+                            : x.sw.SystemIdentifier ?? "System",
+                    Notes: x.sw.Notes
+                ))
                 .ToListAsync(cancellationToken);
 
-            return stopWordDtos.Select(dto => dto.ToModel());
+            return stopWords;
         }
         catch (Exception ex)
         {

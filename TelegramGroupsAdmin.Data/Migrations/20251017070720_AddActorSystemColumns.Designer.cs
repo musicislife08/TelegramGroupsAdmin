@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TelegramGroupsAdmin.Data;
@@ -11,9 +12,11 @@ using TelegramGroupsAdmin.Data;
 namespace TgSpam_PreFilterApi.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251017070720_AddActorSystemColumns")]
+    partial class AddActorSystemColumns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -85,10 +88,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("TelegramUserId");
 
-                    b.ToTable("admin_notes", t =>
-                        {
-                            t.HasCheckConstraint("CK_admin_notes_exclusive_actor", "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1");
-                        });
+                    b.ToTable("admin_notes");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.AuditLogRecordDto", b =>
@@ -350,10 +350,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("WebUserId");
 
-                    b.ToTable("detection_results", t =>
-                        {
-                            t.HasCheckConstraint("CK_detection_results_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
-                        });
+                    b.ToTable("detection_results");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.InviteRecordDto", b =>
@@ -798,10 +795,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("WebUserId");
 
-                    b.ToTable("stop_words", t =>
-                        {
-                            t.HasCheckConstraint("CK_stop_words_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
-                        });
+                    b.ToTable("stop_words");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramLinkTokenRecordDto", b =>
@@ -1009,10 +1003,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("WebUserId");
 
-                    b.ToTable("user_actions", t =>
-                        {
-                            t.HasCheckConstraint("CK_user_actions_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
-                        });
+                    b.ToTable("user_actions");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UserRecordDto", b =>
@@ -1183,10 +1174,7 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("TelegramUserId");
 
-                    b.ToTable("user_tags", t =>
-                        {
-                            t.HasCheckConstraint("CK_user_tags_exclusive_actor", "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1");
-                        });
+                    b.ToTable("user_tags");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.VerificationTokenDto", b =>

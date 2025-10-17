@@ -88,7 +88,7 @@ public class ModerationActionService
                 // IsSpam computed from net_confidence (100 = strong spam)
                 Confidence = 100, // 100% spam
                 Reason = reason,
-                AddedBy = executorId,
+                AddedBy = ConvertToActor(executorId),
                 UserId = userId,
                 UsedForTraining = true, // Manual decisions are always training-worthy
                 NetConfidence = 100, // Strong spam signal (manual admin decision)
@@ -125,7 +125,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Ban,
                 MessageId: messageId,
-                IssuedBy: executorId,
+                IssuedBy: ConvertToActor(executorId),
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Permanent ban
                 Reason: reason
@@ -205,7 +205,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Ban,
                 MessageId: messageId,
-                IssuedBy: executorId,
+                IssuedBy: ConvertToActor(executorId),
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null,
                 Reason: reason
@@ -244,7 +244,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Warn,
                 MessageId: messageId,
-                IssuedBy: executorId,
+                IssuedBy: ConvertToActor(executorId),
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null,
                 Reason: reason
@@ -322,7 +322,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Trust,
                 MessageId: null,
-                IssuedBy: executorId,
+                IssuedBy: ConvertToActor(executorId),
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null,
                 Reason: reason
@@ -384,7 +384,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Unban,
                 MessageId: null,
-                IssuedBy: executorId,
+                IssuedBy: ConvertToActor(executorId),
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null,
                 Reason: reason
@@ -511,7 +511,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Ban,
                 MessageId: messageId,
-                IssuedBy: executorId,
+                IssuedBy: ConvertToActor(executorId),
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: expiresAt,
                 Reason: reason
@@ -592,7 +592,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Mute,
                 MessageId: messageId,
-                IssuedBy: executorId,
+                IssuedBy: ConvertToActor(executorId),
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: expiresAt,
                 Reason: reason
@@ -643,6 +643,55 @@ public class ModerationActionService
 
         // Last resort: Telegram user ID
         return $"telegram:{telegramUserId}";
+    }
+
+    /// <summary>
+    /// Convert legacy executor ID string to Actor object (Phase 4.19)
+    /// </summary>
+    private static Actor ConvertToActor(string? executorId)
+    {
+        if (string.IsNullOrEmpty(executorId))
+        {
+            return Actor.FromSystem("unknown");
+        }
+
+        // System identifiers (format: "system:identifier" or legacy patterns)
+        if (executorId.StartsWith("system:", StringComparison.OrdinalIgnoreCase))
+        {
+            var identifier = executorId.Substring(7); // Remove "system:" prefix
+            return Actor.FromSystem(identifier);
+        }
+
+        // Check if it's a GUID (web user ID)
+        if (Guid.TryParse(executorId, out _))
+        {
+            return Actor.FromWebUser(executorId);
+        }
+
+        // Telegram user identifiers (format: "telegram:@username" or "telegram:userid")
+        if (executorId.StartsWith("telegram:", StringComparison.OrdinalIgnoreCase))
+        {
+            var telegramPart = executorId.Substring(9); // Remove "telegram:" prefix
+            if (telegramPart.StartsWith("@"))
+            {
+                // Username format
+                return Actor.FromSystem(executorId); // Store as system identifier for now
+            }
+            if (long.TryParse(telegramPart, out var telegramUserId))
+            {
+                // User ID format
+                return Actor.FromTelegramUser(telegramUserId);
+            }
+        }
+
+        // Legacy patterns from old system
+        if (executorId == "Auto-Detection" || executorId == "Web Admin")
+        {
+            return Actor.FromSystem(executorId.ToLowerInvariant().Replace(" ", "_"));
+        }
+
+        // Default: treat as system identifier
+        return Actor.FromSystem(executorId);
     }
 }
 

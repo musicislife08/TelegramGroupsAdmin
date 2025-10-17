@@ -35,8 +35,17 @@ public class UserActionRecordDto
     [Column("message_id")]
     public long? MessageId { get; set; }
 
-    [Column("issued_by")]
-    public string? IssuedBy { get; set; }
+    // Exclusive Arc actor system (Phase 4.19) - exactly one must be non-null
+    [Column("web_user_id")]
+    [MaxLength(450)]
+    public string? WebUserId { get; set; }
+
+    [Column("telegram_user_id")]
+    public long? TelegramUserId { get; set; }
+
+    [Column("system_identifier")]
+    [MaxLength(50)]
+    public string? SystemIdentifier { get; set; }
 
     [Column("issued_at")]
     public DateTimeOffset IssuedAt { get; set; }

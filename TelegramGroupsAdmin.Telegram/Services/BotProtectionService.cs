@@ -108,6 +108,26 @@ public class BotProtectionService : IBotProtectionService
     {
         try
         {
+            using var scope = _scopeFactory.CreateScope();
+
+            // First, upsert bot to telegram_users table to capture username/name before banning
+            var telegramUserRepo = scope.ServiceProvider.GetRequiredService<TelegramUserRepository>();
+            var now = DateTimeOffset.UtcNow;
+            var telegramUser = new TelegramUser(
+                TelegramUserId: bot.Id,
+                Username: bot.Username,
+                FirstName: bot.FirstName,
+                LastName: bot.LastName,
+                UserPhotoPath: null, // Bots don't need photo fetching
+                PhotoHash: null,
+                IsTrusted: false,
+                FirstSeenAt: now,
+                LastSeenAt: now,
+                CreatedAt: now,
+                UpdatedAt: now
+            );
+            await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
+
             // Ban the bot
             await botClient.BanChatMember(chatId, bot.Id, cancellationToken: cancellationToken);
 
@@ -115,7 +135,6 @@ public class BotProtectionService : IBotProtectionService
                 bot.Username ?? "unknown", bot.Id, chatId, reason);
 
             // Log to user_actions table for audit trail
-            using var scope = _scopeFactory.CreateScope();
             var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
 
             var action = new UserActionRecord(
@@ -123,7 +142,7 @@ public class BotProtectionService : IBotProtectionService
                 UserId: bot.Id,
                 ActionType: UserActionType.Ban,
                 MessageId: null,
-                IssuedBy: "system_bot_protection",
+                IssuedBy: Actor.FromSystem("bot_protection"),
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Permanent ban
                 Reason: $"Unauthorized bot: {reason}"

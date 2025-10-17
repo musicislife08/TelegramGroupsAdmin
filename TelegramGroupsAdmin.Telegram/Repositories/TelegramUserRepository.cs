@@ -185,8 +185,9 @@ public class TelegramUserRepository
                         && ua.ActionType == DataModels.UserActionType.Warn
                         && (ua.ExpiresAt == null || ua.ExpiresAt > DateTimeOffset.UtcNow)),
 
-                // Note count (future - Phase 4)
-                NoteCount = 0,
+                // Note count (Phase 4.12)
+                NoteCount = context.AdminNotes
+                    .Count(n => n.TelegramUserId == u.TelegramUserId),
 
                 // Is banned
                 IsBanned = context.UserActions
@@ -200,8 +201,9 @@ public class TelegramUserRepository
                         && ua.ActionType == DataModels.UserActionType.Warn
                         && (ua.ExpiresAt == null || ua.ExpiresAt > DateTimeOffset.UtcNow)),
 
-                // Is flagged (future: notes, tags, borderline spam)
-                IsFlagged = false
+                // Is flagged (Phase 4.12: has notes or tags)
+                IsFlagged = context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId)
+                    || context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId)
             }
         )
         .AsNoTracking()
@@ -234,6 +236,60 @@ public class TelegramUserRepository
         return allUsers
             .Where(u => u.IsBanned)
             .ToList();
+    }
+
+    /// <summary>
+    /// Get banned users with full ban details (date, issuer, reason, expiry, trigger message)
+    /// Phase 5: Enhanced banned users tab
+    /// </summary>
+    public async Task<List<UiModels.BannedUserListItem>> GetBannedUsersWithDetailsAsync(CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        // Query with LEFT JOINs to resolve actor display names (Phase 4.19)
+        var bannedUsers = await (
+            from u in context.TelegramUsers
+            join ua in context.UserActions on u.TelegramUserId equals ua.UserId
+            join webUser in context.Users on ua.WebUserId equals webUser.Id into webUsers
+            from webUser in webUsers.DefaultIfEmpty()
+            join tgUser in context.TelegramUsers on ua.TelegramUserId equals tgUser.TelegramUserId into tgUsers
+            from tgUser in tgUsers.DefaultIfEmpty()
+            where ua.ActionType == DataModels.UserActionType.Ban
+                && (ua.ExpiresAt == null || ua.ExpiresAt > DateTimeOffset.UtcNow)
+            orderby ua.IssuedAt descending
+            select new UiModels.BannedUserListItem
+            {
+                TelegramUserId = u.TelegramUserId,
+                Username = u.Username,
+                FirstName = u.FirstName,
+                LastName = u.LastName,
+                UserPhotoPath = u.UserPhotoPath,
+                LastSeenAt = u.LastSeenAt,
+
+                // Active warning count
+                WarningCount = context.UserActions
+                    .Count(w => w.UserId == u.TelegramUserId
+                        && w.ActionType == DataModels.UserActionType.Warn
+                        && (w.ExpiresAt == null || w.ExpiresAt > DateTimeOffset.UtcNow)),
+
+                // Ban details (Phase 4.19: Actor system)
+                BanDate = ua.IssuedAt,
+                BannedBy = ua.WebUserId != null
+                    ? (webUser != null ? webUser.Email ?? "User " + ua.WebUserId!.Substring(0, 8) + "..." : "User " + ua.WebUserId!.Substring(0, 8) + "...")
+                    : ua.TelegramUserId != null
+                        ? (tgUser != null
+                            ? (tgUser.Username != null ? "@" + tgUser.Username : tgUser.FirstName ?? "User " + ua.TelegramUserId.ToString())
+                            : "User " + ua.TelegramUserId.ToString())
+                        : ua.SystemIdentifier ?? "System",
+                BanReason = ua.Reason,
+                BanExpires = ua.ExpiresAt,
+                TriggerMessageId = ua.MessageId
+            }
+        )
+        .AsNoTracking()
+        .ToListAsync(ct);
+
+        return bannedUsers;
     }
 
     /// <summary>
@@ -304,11 +360,14 @@ public class TelegramUserRepository
                 .Distinct()
                 .CountAsync(ct),
 
-            // Flagged count (future: notes, tags)
-            FlaggedCount = 0,
+            // Flagged count (Phase 4.12: users with notes or tags)
+            FlaggedCount = await context.TelegramUsers
+                .Where(u => context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId)
+                    || context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId))
+                .CountAsync(ct),
 
-            // Notes count (future: Phase 4)
-            NotesCount = 0
+            // Notes count (Phase 4.12)
+            NotesCount = await context.AdminNotes.CountAsync(ct)
         };
 
         return stats;
@@ -366,6 +425,21 @@ public class TelegramUserRepository
         .OrderByDescending(dr => dr.DetectedAt)
         .ToListAsync(ct);
 
+        // Get admin notes (Phase 4.12)
+        var notes = await context.AdminNotes
+            .AsNoTracking()
+            .Where(n => n.TelegramUserId == telegramUserId)
+            .OrderByDescending(n => n.IsPinned)
+            .ThenByDescending(n => n.CreatedAt)
+            .ToListAsync(ct);
+
+        // Get user tags (Phase 4.12)
+        var tags = await context.UserTags
+            .AsNoTracking()
+            .Where(t => t.TelegramUserId == telegramUserId)
+            .OrderBy(t => t.TagType)
+            .ToListAsync(ct);
+
         return new UiModels.TelegramUserDetail
         {
             TelegramUserId = user.TelegramUserId,
@@ -379,7 +453,9 @@ public class TelegramUserRepository
             LastSeenAt = user.LastSeenAt,
             ChatMemberships = chatMemberships,
             Actions = actions.Select(a => a.ToModel()).ToList(),
-            DetectionHistory = detectionHistory.Select(d => d.ToModel()).ToList()
+            DetectionHistory = detectionHistory.Select(d => d.ToModel()).ToList(),
+            Notes = notes.Select(n => n.ToModel()).ToList(),
+            Tags = tags.Select(t => t.ToModel()).ToList()
         };
     }
 }

@@ -98,11 +98,20 @@ Comprehensive Telegram user management interface for moderation and community in
 
 #### admin_notes
 ```sql
+-- Phase 4.19 Actor System: Uses exclusive arc pattern (web_user_id/telegram_user_id/system_identifier)
 CREATE TABLE admin_notes (
     id BIGSERIAL PRIMARY KEY,
     telegram_user_id BIGINT NOT NULL REFERENCES telegram_users(telegram_user_id) ON DELETE CASCADE,
     note_text TEXT NOT NULL,
-    created_by VARCHAR(255) NOT NULL, -- web app user ID or telegram:@username
+    -- Actor columns (Phase 4.19 - completed)
+    web_user_id VARCHAR(450) NULL REFERENCES users(id) ON DELETE SET NULL,
+    telegram_user_id_actor BIGINT NULL REFERENCES telegram_users(telegram_user_id) ON DELETE SET NULL,
+    system_identifier VARCHAR(50) NULL,
+    CONSTRAINT admin_notes_actor_check CHECK (
+        (web_user_id IS NOT NULL AND telegram_user_id_actor IS NULL AND system_identifier IS NULL) OR
+        (web_user_id IS NULL AND telegram_user_id_actor IS NOT NULL AND system_identifier IS NULL) OR
+        (web_user_id IS NULL AND telegram_user_id_actor IS NULL AND system_identifier IS NOT NULL)
+    ),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     message_id BIGINT NULL, -- if note came from /note command reply
     chat_id BIGINT NULL
@@ -110,6 +119,8 @@ CREATE TABLE admin_notes (
 
 CREATE INDEX idx_admin_notes_user ON admin_notes(telegram_user_id);
 CREATE INDEX idx_admin_notes_created_at ON admin_notes(created_at DESC);
+CREATE INDEX idx_admin_notes_web_user ON admin_notes(web_user_id) WHERE web_user_id IS NOT NULL;
+CREATE INDEX idx_admin_notes_telegram_user ON admin_notes(telegram_user_id_actor) WHERE telegram_user_id_actor IS NOT NULL;
 ```
 
 #### tag_definitions
@@ -141,19 +152,34 @@ INSERT INTO tag_definitions (tag_name, color, created_by) VALUES
 
 #### user_tags
 ```sql
+-- Phase 4.19 Actor System: Uses exclusive arc pattern (web_user_id/telegram_user_id/system_identifier)
 CREATE TABLE user_tags (
     id BIGSERIAL PRIMARY KEY,
     telegram_user_id BIGINT NOT NULL REFERENCES telegram_users(telegram_user_id) ON DELETE CASCADE,
     tag_id BIGINT NOT NULL REFERENCES tag_definitions(id) ON DELETE RESTRICT,
-    added_by VARCHAR(255) NOT NULL,  -- web app user ID or telegram:@username
+    -- Actor columns (Phase 4.19 - completed)
+    web_user_id VARCHAR(450) NULL REFERENCES users(id) ON DELETE SET NULL,
+    telegram_user_id_actor BIGINT NULL REFERENCES telegram_users(telegram_user_id) ON DELETE SET NULL,
+    system_identifier VARCHAR(50) NULL,
+    CONSTRAINT user_tags_actor_check CHECK (
+        (web_user_id IS NOT NULL AND telegram_user_id_actor IS NULL AND system_identifier IS NULL) OR
+        (web_user_id IS NULL AND telegram_user_id_actor IS NOT NULL AND system_identifier IS NULL) OR
+        (web_user_id IS NULL AND telegram_user_id_actor IS NULL AND system_identifier IS NOT NULL)
+    ),
     added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    removed_at TIMESTAMPTZ NULL
+    removed_at TIMESTAMPTZ NULL,
+    -- Removal actor (when tag is removed)
+    removed_by_web_user_id VARCHAR(450) NULL REFERENCES users(id) ON DELETE SET NULL,
+    removed_by_telegram_user_id BIGINT NULL REFERENCES telegram_users(telegram_user_id) ON DELETE SET NULL,
+    removed_by_system_identifier VARCHAR(50) NULL
 );
 
 CREATE INDEX idx_user_tags_user ON user_tags(telegram_user_id);
 CREATE INDEX idx_user_tags_active ON user_tags(telegram_user_id) WHERE removed_at IS NULL;
 CREATE INDEX idx_user_tags_tag_id ON user_tags(tag_id) WHERE removed_at IS NULL;
 CREATE UNIQUE INDEX idx_user_tags_user_tag_unique ON user_tags(telegram_user_id, tag_id) WHERE removed_at IS NULL;
+CREATE INDEX idx_user_tags_web_user ON user_tags(web_user_id) WHERE web_user_id IS NOT NULL;
+CREATE INDEX idx_user_tags_telegram_user ON user_tags(telegram_user_id_actor) WHERE telegram_user_id_actor IS NOT NULL;
 ```
 
 **Design Notes:**
@@ -162,6 +188,7 @@ CREATE UNIQUE INDEX idx_user_tags_user_tag_unique ON user_tags(telegram_user_id,
 - Soft delete with removed_at (preserves history)
 - ON DELETE RESTRICT prevents deleting tags that are in use
 - No existing data to migrate (user_tags table is currently empty)
+- **Phase 4.19 Complete:** Actor system infrastructure ready for use
 
 ### Existing Tables (Used)
 - `telegram_users` - Base user data

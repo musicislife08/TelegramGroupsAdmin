@@ -10,24 +10,23 @@ namespace TelegramGroupsAdmin.SpamDetection.Repositories;
 internal static class ModelMappings
 {
     // StopWord mappings
-    public static DomainModels.StopWord ToModel(this DataModels.StopWordWithEmailDto dto) => new(
-        Id: dto.StopWord.Id,
-        Word: dto.StopWord.Word,
-        Enabled: dto.StopWord.Enabled,
-        AddedDate: dto.StopWord.AddedDate,
-        AddedBy: dto.AddedByEmail,
-        Notes: dto.StopWord.Notes
-    );
+    // NOTE: ToModel removed - StopWordsRepository now directly constructs domain models with Actor resolution (Phase 4.19)
 
-    public static DataModels.StopWordDto ToDto(this DomainModels.StopWord model) => new()
+    public static DataModels.StopWordDto ToDto(this DomainModels.StopWord model)
     {
-        Id = model.Id,
-        Word = model.Word,
-        Enabled = model.Enabled,
-        AddedDate = model.AddedDate,
-        AddedBy = model.AddedBy,
-        Notes = model.Notes
-    };
+        // Phase 4.19: AddedBy string → Actor system
+        // For ToDto, we can only set system_identifier since we don't have enough info to determine actor type
+        // This is fine since ToDto is only used for AddStopWordAsync which comes from UI with proper actor context
+        return new()
+        {
+            Id = model.Id,
+            Word = model.Word,
+            Enabled = model.Enabled,
+            AddedDate = model.AddedDate,
+            SystemIdentifier = model.AddedBy, // Simplified: treat AddedBy string as system identifier
+            Notes = model.Notes
+        };
+    }
 
     // NOTE: TrainingSample mappings removed - training data comes from detection_results.used_for_training
 }

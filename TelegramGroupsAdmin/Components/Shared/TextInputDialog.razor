@@ -1,0 +1,32 @@
+@using MudBlazor
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_inputText"
+                      Label="@Label"
+                      Variant="Variant.Outlined"
+                      Lines="@Lines"
+                      MaxLength="@MaxLength"
+                      Counter="@MaxLength"
+                      Immediate="true"
+                      AutoFocus="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@string.IsNullOrWhiteSpace(_inputText)">Submit</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string Title { get; set; } = "Input";
+    [Parameter] public string Label { get; set; } = "Text";
+    [Parameter] public int MaxLength { get; set; } = 500;
+    [Parameter] public int Lines { get; set; } = 1;
+
+    private string _inputText = string.Empty;
+
+    private void Cancel() => MudDialog.Cancel();
+    private void Submit() => MudDialog.Close(DialogResult.Ok(_inputText));
+}

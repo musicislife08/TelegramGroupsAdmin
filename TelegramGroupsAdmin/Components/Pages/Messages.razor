@@ -553,7 +553,9 @@
                 // IsSpam computed from net_confidence (-100 = strong ham)
                 Confidence = 0, // 0% spam (ham)
                 Reason = reason,
-                AddedBy = executorId,
+                AddedBy = !string.IsNullOrEmpty(executorId) && Guid.TryParse(executorId, out _)
+                    ? Actor.FromWebUser(executorId)
+                    : Actor.FromSystem("unknown"),
                 UserId = message.UserId,
                 UsedForTraining = true, // Manual decisions are always training-worthy
                 NetConfidence = -100, // Strong ham signal (manual admin decision)
