@@ -118,10 +118,10 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 **4.3** ✅: TelegramGroupsAdmin.Telegram library, moved 6 models+13 repos+services+9 commands+4 background services, AddTelegramServices(), ModelMappings public, clean dependencies
 **4.4** ✅: Welcome system - DB schema, WelcomeService, Repository, bot integration, config from DB, chat name caching, TickerQ jobs (WelcomeTimeoutJob, DeleteMessageJob), callback validation, user leaves, /settings#telegram. C1 RESOLVED: Fire-and-forget Task.Run→TickerQ. TickerQ arch: jobs in main app, payloads in Abstractions. Flow: restrict on join→welcome+buttons→timeout auto-kick (60s)→accept (restore+DM/fallback)→deny/timeout (kick). Templates: chat_welcome, dm_template, chat_fallback. Variables: {chat_name}, {username}, {rules_text}
 **4.5** ✅: OpenAI tri-state (spam/clean/review), SpamCheckResultType enum, modular prompts (technical+custom rules+mode guidance), review queue integration. Prompt arch: GetBaseTechnicalPrompt (JSON, unchangeable), GetDefaultRulesPrompt (spam/legit indicators, user-overridable), GetModeGuidancePrompt (veto vs detection), BuildSystemPrompt factory
+**4.6** ✅: /tempban command - Full implementation with flexible duration parsing (5m/1h/24h/5min/1hr formats), Telegram API `until_date` parameter for automatic unrestriction, cross-chat global temp bans (user_actions with ExpiresAt field), ModerationActionService.TempBanUserAsync(), proper error handling and logging, registered in CommandRouter and dependency injection. Complete implementation.
 **4.8** ✅: Settings UI - All tabs implemented. General (App+MessageHistory env display), Integrations (OpenAI/SendGrid/VirusTotal/Telegram status+masked keys), Notifications (future features), Security (auth/password/audit/API/data protection), Logging (Phase 4.7 placeholder+troubleshooting). Read-only (env configured)
 
 **Pending**:
-**4.6**: /tempban (5min/1hr/24hr presets, Telegram until_date auto-unrestrict, user_actions audit, UI integration)
 **4.7**: /settings#logging (dynamic log levels, configs JSONB, ILoggerFactory immediate application)
 **4.9**: Bot connection management - Hot-reload bot, IBotLifecycleService, ReconnectAsync/DisconnectAsync, CancellationTokenSource, BotConnectionManager.razor, /settings#bot-connection, persist state in configs, Owner-only
 **4.10**: Anti-Impersonation - Name similarity (Levenshtein+visual), photo hash (pHash/ImageSharp), admin/channel name protection, auto-restrict suspicious, review queue /reports, side-by-side comparison, scam patterns (_support, _admin, _official)
@@ -398,7 +398,7 @@ Total: 8-12 days for broad appeal
 - Phase 1: 100% ✅
 - Phase 2: 100% ✅ (2.1-2.9 complete)
 - Phase 3: 100% ✅
-- Phase 4: 55% (4.1-4.5, 4.8, 4.12, 4.19 complete; 4.6-4.7, 4.9-4.11, 4.13-4.15, 4.17-4.18 pending)
+- Phase 4: 58% (4.1-4.6, 4.8, 4.12, 4.19 complete; 4.7, 4.9-4.11, 4.13-4.15, 4.17-4.18 pending)
 - Phase 5: 0% (analytics, optional)
 - Phase 6: 10% (6.1 bot auto-ban complete)
 
@@ -414,8 +414,6 @@ Total: 8-12 days for broad appeal
 
 | Feature | Priority | Estimate | Rationale |
 |---------|----------|----------|-----------|
-| 4.12 Tag Management UI | High | 2h | Final polish for Phase 4.12 |
-| 4.6 /tempban | High | 2-3h | Quick win, extends existing ban logic |
 | 4.7 Runtime Logging | Medium | 4-6h | Config management pattern already established |
 | 4.10 Anti-Impersonation | **Critical** | 24-32h (3-4d) | Name similarity (Levenshtein), photo hash (pHash), review queue UI |
 | 4.11 Warning/Points | **Critical** | 24-32h (3-4d) | Point system, auto-escalation, decay logic, DM notifications, UI |
@@ -578,8 +576,7 @@ Automated recommendations, pattern detection, ML clustering, insights dashboard
 **Actual MVP Requirements:**
 | Feature | Type | Estimate | Notes |
 |---------|------|----------|-------|
-| 4.6 /tempban | Quick win | 3h | Extends existing ban logic |
-| 4.12 Tag Management UI | Polish | 2h | Simple CRUD, enum already works |
+| 4.7 Runtime Logging | Quick win | 1d | Config management pattern established |
 | 4.10 Anti-Impersonation | Core security | 3-4d | Only complex item left |
 | 4.11 Warning/Points | Core moderation | 3-4d | Builds on user_actions pattern |
 
@@ -626,9 +623,9 @@ This 11-day velocity delivering a production-quality platform with 73% completio
 ## Recommended Execution Order
 
 **Week 1-2** (Days 1-10): Core Moderation
-1. 4.6 /tempban (3h) - Extends existing patterns
-2. 4.10 Anti-Impersonation (4d) - Critical security
-3. 4.11 Warning/Points (4d) - Foundational moderation
+1. 4.10 Anti-Impersonation (4d) - Critical security
+2. 4.11 Warning/Points (4d) - Foundational moderation
+3. 4.7 Runtime Logging (1d) - Troubleshooting aid
 
 **Week 3-4** (Days 11-22): Enhanced Features
 5. 4.16 OpenAI-Compatible (2d) - Critical for open source
@@ -655,11 +652,9 @@ This 11-day velocity delivering a production-quality platform with 73% completio
 - 6.4 Scheduled Messages (professional polish)
 
 **Next Steps**:
-Immediate: Start with 4.12 Tag Management UI (2h), then 4.6 /tempban (3h) - both quick wins to build momentum
+Immediate: Start with 4.7 Runtime Logging (1d), then 4.10 Anti-Impersonation (4d)
 
 **Critical Issues**: C1 Fire-and-Forget✅ (Task.Run→TickerQ, WelcomeTimeoutJob+DeleteMessageJob+FetchUserPhotoJob, persistence/retry/logging), MH1+MH2✅ (GetStatsAsync 2→1 query 80% faster, CleanupExpiredAsync 3→1 query 50% faster, single-query GroupBy), H1+H2✅ (ChatPermissions static helpers, magic numbers→database config, no migration needed)
-
-**Recommended Order**: Comprehensive review agent → Optional M1-M4 (readability) → Phase 4.6 (/tempban)
 
 **CRITICAL RULES**:
 - Never run app in normal mode (only one instance allowed, user runs in Rider for debugging)
