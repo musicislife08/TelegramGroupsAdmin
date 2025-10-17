@@ -1,4 +1,5 @@
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Services
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
@@ -150,7 +151,7 @@
         try
         {
             // Load config - uses chatId if provided for per-chat config, otherwise global
-            _config = await ConfigService.GetEffectiveAsync<WelcomeConfig>("welcome", ChatId)
+            _config = await ConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, ChatId)
                       ?? WelcomeConfig.Default;
         }
         catch (Exception ex)
@@ -175,7 +176,7 @@
         _saving = true;
         try
         {
-            await ConfigService.SaveAsync("welcome", ChatId, _config);
+            await ConfigService.SaveAsync(ConfigType.Welcome, ChatId, _config);
             var scope = ChatId.HasValue ? $"for chat {ChatId}" : "globally";
             Snackbar.Add($"Welcome configuration saved {scope}", Severity.Success);
 

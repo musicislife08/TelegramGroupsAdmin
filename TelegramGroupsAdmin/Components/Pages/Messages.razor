@@ -86,8 +86,37 @@
                                    OnViewDetections="HandleViewDetections"
                                    OnFilterByUser="HandleFilterByUser"
                                    OnFilterByChat="HandleFilterByChat"
-                                   OnDeleteMessage="HandleDeleteMessage" />
+                                   OnDeleteMessage="HandleDeleteMessage"
+                                   OnReplyClick="HandleReplyClick" />
         </MudVirtualize>
+
+        @* Load More Button *@
+        @if (_hasMore && !HasActiveFilters())
+        {
+            <MudPaper Class="pa-4 mt-4" Elevation="0">
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               OnClick="LoadNextPageAsync"
+                               Disabled="_loadingMore"
+                               StartIcon="@Icons.Material.Filled.ExpandMore"
+                               FullWidth="true">
+                        @if (_loadingMore)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <text>Loading...</text>
+                        }
+                        else
+                        {
+                            <text>Load More Messages</text>
+                        }
+                    </MudButton>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Showing @_allMessages.Count messages
+                    </MudText>
+                </MudStack>
+            </MudPaper>
+        }
     }
     else if (!_loading)
     {
@@ -118,9 +147,12 @@
     private Dictionary<long, List<DetectionResultRecord>> _detectionHistory = new();
     private MessageFilterState _filterState = new();
     private bool _loading = true;
+    private bool _loadingMore = false;
+    private bool _hasMore = true;
     private DateTime _lastUpdate = DateTime.Now;
     private int _userPermissionLevel = 0; // Default to ReadOnly
     private HashSet<long> _userTelegramIds = new(); // Current user's linked Telegram IDs
+    private const int PageSize = 50;
 
     protected override async Task OnInitializedAsync()
     {
@@ -196,12 +228,22 @@
     private async Task LoadMessagesAsync()
     {
         _loading = true;
+        _hasMore = true;
+        _allMessages.Clear();
+        _spamChecks.Clear();
+        _editCounts.Clear();
+        _detectionHistory.Clear();
         StateHasChanged();
 
         try
         {
-            // Load recent messages (last 500)
-            _allMessages = await MessageRepository.GetRecentMessagesAsync(500);
+            // Load first page of messages (most recent)
+            var firstPage = await MessageRepository.GetMessagesBeforeAsync(
+                beforeTimestamp: null,
+                limit: PageSize);
+
+            _allMessages = firstPage;
+            _hasMore = firstPage.Count >= PageSize; // If we got a full page, there might be more
 
             // Load spam checks, edit counts, and detection history for these messages
             if (_allMessages.Any())
@@ -228,6 +270,68 @@
         finally
         {
             _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadNextPageAsync()
+    {
+        if (!_hasMore || _loadingMore)
+            return;
+
+        _loadingMore = true;
+        StateHasChanged();
+
+        try
+        {
+            // Get the oldest timestamp from current messages
+            var oldestTimestamp = _allMessages.Last().Timestamp;
+
+            // Load next page
+            var nextPage = await MessageRepository.GetMessagesBeforeAsync(
+                beforeTimestamp: oldestTimestamp,
+                limit: PageSize);
+
+            if (nextPage.Any())
+            {
+                // Append to existing messages
+                _allMessages.AddRange(nextPage);
+
+                // Check if there are more pages
+                _hasMore = nextPage.Count >= PageSize;
+
+                // Load metadata for new messages
+                var newMessageIds = nextPage.Select(m => m.MessageId);
+                var newSpamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(newMessageIds);
+                var newEditCounts = await MessageRepository.GetEditCountsForMessagesAsync(newMessageIds);
+
+                // Merge into existing dictionaries
+                foreach (var kvp in newSpamChecks)
+                    _spamChecks[kvp.Key] = kvp.Value;
+                foreach (var kvp in newEditCounts)
+                    _editCounts[kvp.Key] = kvp.Value;
+
+                // Load detection history for Admin+ users
+                if (_userPermissionLevel >= 1)
+                {
+                    await LoadDetectionHistoryAsync(newMessageIds);
+                }
+
+                // Reapply filters to include new messages
+                ApplyFilters();
+            }
+            else
+            {
+                _hasMore = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading more messages");
+        }
+        finally
+        {
+            _loadingMore = false;
             StateHasChanged();
         }
     }
@@ -623,5 +727,43 @@
     {
         // Check if message sender matches any of current user's linked Telegram accounts
         return _userTelegramIds.Contains(telegramUserId);
+    }
+
+    private async Task HandleReplyClick(long targetMessageId)
+    {
+        try
+        {
+            // Check if target message is in the loaded list
+            var targetMessage = _filteredMessages.FirstOrDefault(m => m.MessageId == targetMessageId);
+
+            if (targetMessage == null)
+            {
+                // Message not loaded yet, load it and scroll to it
+                Logger.LogInformation("Target message {MessageId} not in view, loading...", targetMessageId);
+
+                // Load the message from repository
+                var message = await MessageRepository.GetMessageAsync(targetMessageId);
+                if (message == null)
+                {
+                    Logger.LogWarning("Target message {MessageId} not found in database", targetMessageId);
+                    return;
+                }
+
+                // Add to the list if not already there
+                if (!_allMessages.Any(m => m.MessageId == targetMessageId))
+                {
+                    _allMessages.Add(message);
+                    ApplyFilters();
+                    StateHasChanged();
+                }
+            }
+
+            // Use JavaScript to scroll to and highlight the message
+            await JS.InvokeVoidAsync("scrollToMessage", targetMessageId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to scroll to reply target message {MessageId}", targetMessageId);
+        }
     }
 }

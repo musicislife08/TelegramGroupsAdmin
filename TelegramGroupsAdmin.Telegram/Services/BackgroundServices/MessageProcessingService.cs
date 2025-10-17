@@ -297,7 +297,8 @@ public partial class MessageProcessingService(
             var messageRecord = new MessageRecord(
                 message.MessageId,
                 message.From!.Id,
-                message.From.Username ?? message.From.FirstName,
+                message.From.Username,
+                message.From.FirstName,
                 message.Chat.Id,
                 now,
                 text,
@@ -312,7 +313,10 @@ public partial class MessageProcessingService(
                 ChatIconPath: chatIconPath,
                 UserPhotoPath: null, // Will be populated by background task
                 DeletedAt: null,
-                DeletionSource: null
+                DeletionSource: null,
+                ReplyToMessageId: message.ReplyToMessage?.MessageId,
+                ReplyToUser: null, // Populated by repository queries via JOIN
+                ReplyToText: null // Populated by repository queries via JOIN
             );
 
             // Save message to database using a scoped repository
@@ -331,7 +335,6 @@ public partial class MessageProcessingService(
                     UserPhotoPath: null, // Will be populated by FetchUserPhotoJob
                     PhotoHash: null,
                     IsTrusted: false,
-                    WarningPoints: 0,
                     FirstSeenAt: now,
                     LastSeenAt: now,
                     CreatedAt: now,

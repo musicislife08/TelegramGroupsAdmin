@@ -12,7 +12,6 @@ public record TelegramUser(
     string? UserPhotoPath,
     string? PhotoHash,
     bool IsTrusted,
-    int WarningPoints,
     DateTimeOffset FirstSeenAt,
     DateTimeOffset LastSeenAt,
     DateTimeOffset CreatedAt,

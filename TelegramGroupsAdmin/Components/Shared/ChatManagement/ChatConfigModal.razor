@@ -3,6 +3,7 @@
 @using TelegramGroupsAdmin.SpamDetection.Configuration
 @using TelegramGroupsAdmin.Components.Shared.SpamManagement
 @using TelegramGroupsAdmin.Components.Shared
+@using TelegramGroupsAdmin.Configuration
 @using global::Telegram.Bot
 @inject TelegramAdminBotService BotService
 @inject ISnackbar Snackbar
@@ -424,7 +425,7 @@
             if (!_useCustomWelcomeConfig && ChatInfo.HasCustomWelcomeConfig)
             {
                 // Delete custom config (revert to global)
-                await ConfigService.DeleteAsync("welcome", ChatInfo.Chat.ChatId);
+                await ConfigService.DeleteAsync(ConfigType.Welcome, ChatInfo.Chat.ChatId);
                 ChatInfo.HasCustomWelcomeConfig = false;
                 Snackbar.Add("Reverted to global welcome configuration", Severity.Success);
             }

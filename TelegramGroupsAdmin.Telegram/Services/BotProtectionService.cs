@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -53,7 +54,7 @@ public class BotProtectionService : IBotProtectionService
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
         // Get effective config for this chat (chat-specific overrides global)
-        var config = await configService.GetEffectiveAsync<BotProtectionConfig>("bot_protection", chatId)
+        var config = await configService.GetEffectiveAsync<BotProtectionConfig>(ConfigType.BotProtection, chatId)
                     ?? BotProtectionConfig.Default;
 
         // Bot protection disabled - allow all bots

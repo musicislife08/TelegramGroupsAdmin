@@ -18,7 +18,7 @@ public class WarnCommand : IBotCommand
     private readonly ModerationActionService _moderationService;
 
     public string Name => "warn";
-    public string Description => "Issue warning to user";
+    public string Description => "Issue warning to user (auto-ban after threshold)";
     public string Usage => "/warn (reply to message) [reason]";
     public int MinPermissionLevel => 1; // Admin required
     public bool RequiresReply => true;
@@ -77,7 +77,9 @@ public class WarnCommand : IBotCommand
                 userId: targetUser.Id,
                 messageId: message.ReplyToMessage.MessageId,
                 executorId: executorId,
-                reason: reason
+                reason: reason,
+                chatId: message.Chat.Id,
+                cancellationToken: cancellationToken
             );
 
             if (!result.Success)
@@ -86,9 +88,15 @@ public class WarnCommand : IBotCommand
             }
 
             // Build response message
-            var username = targetUser.Username ?? targetUser.Id.ToString();
-            var response = $"⚠️ Warning issued to @{username}\n" +
-                          $"Reason: {reason}";
+            var username = targetUser.Username ?? targetUser.FirstName ?? targetUser.Id.ToString();
+            var response = $"⚠️ Warning issued to {(targetUser.Username != null ? "@" + targetUser.Username : username)}\n" +
+                          $"Reason: {reason}\n" +
+                          $"Total warnings: {result.WarningCount}";
+
+            if (result.AutoBanTriggered)
+            {
+                response += $"\n\n🚫 Auto-ban triggered! User has been banned from {result.ChatsAffected} chat(s).";
+            }
 
             return response;
         }

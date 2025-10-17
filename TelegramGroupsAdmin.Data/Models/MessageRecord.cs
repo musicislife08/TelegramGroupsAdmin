@@ -53,6 +53,9 @@ public class MessageRecordDto
     [Column("deletion_source")]
     public string? DeletionSource { get; set; }
 
+    [Column("reply_to_message_id")]
+    public long? ReplyToMessageId { get; set; }
+
     // Navigation properties
     public virtual ICollection<DetectionResultRecordDto> DetectionResults { get; set; } = [];
     public virtual ICollection<MessageEditRecordDto> MessageEdits { get; set; } = [];

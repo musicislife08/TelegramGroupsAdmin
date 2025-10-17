@@ -7,6 +7,7 @@ public record MessageRecord(
     long MessageId,
     long UserId,
     string? UserName,
+    string? FirstName,
     long ChatId,
     DateTimeOffset Timestamp,
     string? MessageText,
@@ -21,7 +22,10 @@ public record MessageRecord(
     string? ChatIconPath,
     string? UserPhotoPath,
     DateTimeOffset? DeletedAt,
-    string? DeletionSource
+    string? DeletionSource,
+    long? ReplyToMessageId,
+    string? ReplyToUser,
+    string? ReplyToText
 );
 
 /// <summary>

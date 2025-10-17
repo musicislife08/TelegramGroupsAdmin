@@ -1,12 +1,12 @@
 @* Telegram-authentic message bubble design *@
 
-<div class="@GetBubbleClass()" @onclick:stopPropagation="true">
+<div class="@GetBubbleClass()" @onclick:stopPropagation="true" data-message-id="@Message.MessageId">
     @* Compact Header: Chat Avatar, Chat Name, User Photo + User Name, Timestamp *@
     <div class="tg-header">
         @* Chat/Group avatar (large, main avatar) *@
         @if (!string.IsNullOrEmpty(Message.ChatIconPath))
         {
-            <img src="@GetImagePath(Message.ChatIconPath)" alt="@Message.ChatName" class="tg-avatar" />
+            <img src="@GetImagePath(Message.ChatIconPath)" alt="@Message.ChatName" class="tg-avatar" loading="lazy" />
         }
         else
         {
@@ -31,7 +31,7 @@
                 @* User photo (small, inline with username) *@
                 @if (!string.IsNullOrEmpty(Message.UserPhotoPath))
                 {
-                    <img src="@GetImagePath(Message.UserPhotoPath)" alt="@Message.UserName" class="tg-user-photo" />
+                    <img src="@GetImagePath(Message.UserPhotoPath)" alt="@(Message.UserName ?? Message.FirstName ?? $"User {Message.UserId}")" class="tg-user-photo" loading="lazy" />
                 }
                 else
                 {
@@ -42,7 +42,7 @@
                     </div>
                 }
                 <span class="tg-user-name" @onclick="() => OnFilterByUser.InvokeAsync(Message.UserId)" title="Filter by this user">
-                    @(Message.UserName ?? $"User {Message.UserId}")
+                    @(Message.UserName ?? Message.FirstName ?? $"User {Message.UserId}")
                 </span>
                 @if (Message.DeletedAt.HasValue)
                 {
@@ -66,12 +66,19 @@
 
     @* Content *@
     <div class="tg-content">
+        @* Reply Preview *@
+        <ReplyPreview ReplyToMessageId="@Message.ReplyToMessageId"
+                      ReplyToUser="@Message.ReplyToUser"
+                      ReplyToText="@Message.ReplyToText"
+                      OnReplyClick="@OnReplyClick" />
+
         @* Image Thumbnail *@
         @if (!string.IsNullOrEmpty(Message.PhotoThumbnailPath))
         {
             <img src="@GetImagePath(Message.PhotoThumbnailPath)"
                  alt="Message image"
                  class="tg-image"
+                 loading="lazy"
                  @onclick="() => OnImageClick.InvokeAsync(Message)" />
         }
 
@@ -190,6 +197,9 @@
 
     [Parameter]
     public bool IsCurrentUser { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnReplyClick { get; set; }
 
     private bool _actionInProgress = false;
 

@@ -64,13 +64,6 @@ public class TelegramUserDto
     public bool IsTrusted { get; set; } = false;
 
     /// <summary>
-    /// Current warning points for graduated discipline system
-    /// Phase 4.11: Warning/Points System (0-100 scale, no auto-decay)
-    /// </summary>
-    [Column("warning_points")]
-    public int WarningPoints { get; set; } = 0;
-
-    /// <summary>
     /// First time this user was seen in any managed chat
     /// Used for auto-trust eligibility (requires 7 days minimum)
     /// </summary>

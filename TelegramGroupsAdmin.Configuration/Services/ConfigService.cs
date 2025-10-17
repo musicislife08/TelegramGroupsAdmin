@@ -17,7 +17,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         WriteIndented = false
     };
 
-    public async Task SaveAsync<T>(string configType, long? chatId, T config) where T : class
+    public async Task SaveAsync<T>(ConfigType configType, long? chatId, T config) where T : class
     {
         ArgumentNullException.ThrowIfNull(config);
 
@@ -39,7 +39,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         await _configRepository.UpsertAsync(record);
     }
 
-    public async Task<T?> GetAsync<T>(string configType, long? chatId) where T : class
+    public async Task<T?> GetAsync<T>(ConfigType configType, long? chatId) where T : class
     {
         var record = await _configRepository.GetAsync(chatId);
         if (record == null)
@@ -56,7 +56,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         return JsonSerializer.Deserialize<T>(json, JsonOptions);
     }
 
-    public async Task<T?> GetEffectiveAsync<T>(string configType, long? chatId) where T : class
+    public async Task<T?> GetEffectiveAsync<T>(ConfigType configType, long? chatId) where T : class
     {
         // If requesting global config, just return it directly
         if (chatId == null)
@@ -84,7 +84,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         return MergeConfigs(globalConfig, chatConfig);
     }
 
-    public async Task DeleteAsync(string configType, long? chatId)
+    public async Task DeleteAsync(ConfigType configType, long? chatId)
     {
         var record = await _configRepository.GetAsync(chatId);
         if (record == null)
@@ -106,40 +106,40 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         }
     }
 
-    private static void SetConfigColumn(ConfigRecordDto record, string configType, string? json)
+    private static void SetConfigColumn(ConfigRecordDto record, ConfigType configType, string? json)
     {
-        switch (configType.ToLowerInvariant())
+        switch (configType)
         {
-            case "spam_detection":
+            case ConfigType.SpamDetection:
                 record.SpamDetectionConfig = json;
                 break;
-            case "welcome":
+            case ConfigType.Welcome:
                 record.WelcomeConfig = json;
                 break;
-            case "log":
+            case ConfigType.Log:
                 record.LogConfig = json;
                 break;
-            case "moderation":
+            case ConfigType.Moderation:
                 record.ModerationConfig = json;
                 break;
-            case "bot_protection":
+            case ConfigType.BotProtection:
                 record.BotProtectionConfig = json;
                 break;
             default:
-                throw new ArgumentException($"Unknown config type: {configType}", nameof(configType));
+                throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type");
         }
     }
 
-    private static string? GetConfigColumn(ConfigRecordDto record, string configType)
+    private static string? GetConfigColumn(ConfigRecordDto record, ConfigType configType)
     {
-        return configType.ToLowerInvariant() switch
+        return configType switch
         {
-            "spam_detection" => record.SpamDetectionConfig,
-            "welcome" => record.WelcomeConfig,
-            "log" => record.LogConfig,
-            "moderation" => record.ModerationConfig,
-            "bot_protection" => record.BotProtectionConfig,
-            _ => throw new ArgumentException($"Unknown config type: {configType}", nameof(configType))
+            ConfigType.SpamDetection => record.SpamDetectionConfig,
+            ConfigType.Welcome => record.WelcomeConfig,
+            ConfigType.Log => record.LogConfig,
+            ConfigType.Moderation => record.ModerationConfig,
+            ConfigType.BotProtection => record.BotProtectionConfig,
+            _ => throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type")
         };
     }
 

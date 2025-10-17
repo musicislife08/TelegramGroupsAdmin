@@ -190,6 +190,8 @@ public class AppDbContext : DbContext
             .HasIndex(m => m.Timestamp);
         modelBuilder.Entity<MessageRecordDto>()
             .HasIndex(m => m.ContentHash);
+        modelBuilder.Entity<MessageRecordDto>()
+            .HasIndex(m => m.ReplyToMessageId);
 
         // DetectionResults indexes
         modelBuilder.Entity<DetectionResultRecordDto>()

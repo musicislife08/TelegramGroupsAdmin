@@ -1,4 +1,5 @@
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Services
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
@@ -134,7 +135,7 @@
         _loading = true;
         try
         {
-            _config = await ConfigService.GetEffectiveAsync<BotProtectionConfig>("bot_protection", null)
+            _config = await ConfigService.GetEffectiveAsync<BotProtectionConfig>(ConfigType.BotProtection, null)
                       ?? BotProtectionConfig.Default;
 
             // Convert whitelist to text (one per line)
@@ -164,7 +165,7 @@
                 .Where(s => !string.IsNullOrWhiteSpace(s))
                 .ToList();
 
-            await ConfigService.SaveAsync("bot_protection", null, _config);
+            await ConfigService.SaveAsync(ConfigType.BotProtection, null, _config);
             Snackbar.Add("Bot protection configuration saved globally", Severity.Success);
         }
         catch (Exception ex)

@@ -235,3 +235,29 @@ if (document.body) {
         observer.observe(document.body, { childList: true, subtree: true });
     });
 }
+
+// Scroll to a specific message and highlight it
+window.scrollToMessage = (messageId) => {
+    // Find the message element by data-message-id attribute
+    const element = document.querySelector(`[data-message-id="${messageId}"]`);
+
+    if (!element) {
+        console.warn(`Message element with ID ${messageId} not found`);
+        return;
+    }
+
+    // Scroll to the element with smooth animation
+    element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center', // Center the element vertically
+        inline: 'nearest'
+    });
+
+    // Add highlight animation class
+    element.classList.add('message-highlight');
+
+    // Remove the highlight class after animation completes (2 seconds)
+    setTimeout(() => {
+        element.classList.remove('message-highlight');
+    }, 2000);
+}

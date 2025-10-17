@@ -128,6 +128,10 @@ public class MessageHistoryRepository
             from chat in chatGroup.DefaultIfEmpty()
             join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
             from user in userGroup.DefaultIfEmpty()
+            join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
+            from parentMsg in parentGroup.DefaultIfEmpty()
+            join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
+            from parentUserInfo in parentUserGroup.DefaultIfEmpty()
             orderby m.Timestamp descending
             select new
             {
@@ -135,7 +139,10 @@ public class MessageHistoryRepository
                 ChatName = chat != null ? chat.ChatName : null,
                 ChatIconPath = chat != null ? chat.ChatIconPath : null,
                 UserName = user != null ? user.Username : null,
-                UserPhotoPath = user != null ? user.UserPhotoPath : null
+                FirstName = user != null ? user.FirstName : null,
+                UserPhotoPath = user != null ? user.UserPhotoPath : null,
+                ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                ReplyToText = parentMsg != null ? parentMsg.MessageText : null
             }
         )
         .AsNoTracking()
@@ -146,7 +153,57 @@ public class MessageHistoryRepository
             chatName: x.ChatName,
             chatIconPath: x.ChatIconPath,
             userName: x.UserName,
-            userPhotoPath: x.UserPhotoPath)).ToList();
+            firstName: x.FirstName,
+            userPhotoPath: x.UserPhotoPath,
+            replyToUser: x.ReplyToUser,
+            replyToText: x.ReplyToText)).ToList();
+    }
+
+    /// <summary>
+    /// Get messages before a specific timestamp (cursor-based pagination)
+    /// Used for infinite scroll / "Load More" functionality
+    /// </summary>
+    public async Task<List<UiModels.MessageRecord>> GetMessagesBeforeAsync(
+        DateTimeOffset? beforeTimestamp = null,
+        int limit = 50)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var query = from m in context.Messages
+                    join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
+                    from chat in chatGroup.DefaultIfEmpty()
+                    join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
+                    from user in userGroup.DefaultIfEmpty()
+                    join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
+                    from parentMsg in parentGroup.DefaultIfEmpty()
+                    join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
+                    from parentUserInfo in parentUserGroup.DefaultIfEmpty()
+                    where beforeTimestamp == null || m.Timestamp < beforeTimestamp
+                    orderby m.Timestamp descending
+                    select new
+                    {
+                        Message = m,
+                        ChatName = chat != null ? chat.ChatName : null,
+                        ChatIconPath = chat != null ? chat.ChatIconPath : null,
+                        UserName = user != null ? user.Username : null,
+                        FirstName = user != null ? user.FirstName : null,
+                        UserPhotoPath = user != null ? user.UserPhotoPath : null,
+                        ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                        ReplyToText = parentMsg != null ? parentMsg.MessageText : null
+                    };
+
+        var results = await query
+            .AsNoTracking()
+            .Take(limit)
+            .ToListAsync();
+
+        return results.Select(x => x.Message.ToModel(
+            chatName: x.ChatName,
+            chatIconPath: x.ChatIconPath,
+            userName: x.UserName,
+            firstName: x.FirstName,
+            userPhotoPath: x.UserPhotoPath,
+            replyToUser: x.ReplyToUser,
+            replyToText: x.ReplyToText)).ToList();
     }
 
     public async Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10)
@@ -159,6 +216,10 @@ public class MessageHistoryRepository
             from chat in chatGroup.DefaultIfEmpty()
             join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
             from user in userGroup.DefaultIfEmpty()
+            join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
+            from parentMsg in parentGroup.DefaultIfEmpty()
+            join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
+            from parentUserInfo in parentUserGroup.DefaultIfEmpty()
             orderby m.Timestamp descending
             select new
             {
@@ -166,7 +227,10 @@ public class MessageHistoryRepository
                 ChatName = chat != null ? chat.ChatName : null,
                 ChatIconPath = chat != null ? chat.ChatIconPath : null,
                 UserName = user != null ? user.Username : null,
-                UserPhotoPath = user != null ? user.UserPhotoPath : null
+                FirstName = user != null ? user.FirstName : null,
+                UserPhotoPath = user != null ? user.UserPhotoPath : null,
+                ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                ReplyToText = parentMsg != null ? parentMsg.MessageText : null
             }
         )
         .AsNoTracking()
@@ -177,7 +241,10 @@ public class MessageHistoryRepository
             chatName: x.ChatName,
             chatIconPath: x.ChatIconPath,
             userName: x.UserName,
-            userPhotoPath: x.UserPhotoPath)).ToList();
+            firstName: x.FirstName,
+            userPhotoPath: x.UserPhotoPath,
+            replyToUser: x.ReplyToUser,
+            replyToText: x.ReplyToText)).ToList();
     }
 
     public async Task<List<UiModels.MessageRecord>> GetMessagesByDateRangeAsync(
@@ -193,6 +260,10 @@ public class MessageHistoryRepository
             from chat in chatGroup.DefaultIfEmpty()
             join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
             from user in userGroup.DefaultIfEmpty()
+            join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
+            from parentMsg in parentGroup.DefaultIfEmpty()
+            join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
+            from parentUserInfo in parentUserGroup.DefaultIfEmpty()
             orderby m.Timestamp descending
             select new
             {
@@ -200,7 +271,10 @@ public class MessageHistoryRepository
                 ChatName = chat != null ? chat.ChatName : null,
                 ChatIconPath = chat != null ? chat.ChatIconPath : null,
                 UserName = user != null ? user.Username : null,
-                UserPhotoPath = user != null ? user.UserPhotoPath : null
+                FirstName = user != null ? user.FirstName : null,
+                UserPhotoPath = user != null ? user.UserPhotoPath : null,
+                ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                ReplyToText = parentMsg != null ? parentMsg.MessageText : null
             }
         )
         .AsNoTracking()
@@ -211,7 +285,10 @@ public class MessageHistoryRepository
             chatName: x.ChatName,
             chatIconPath: x.ChatIconPath,
             userName: x.UserName,
-            userPhotoPath: x.UserPhotoPath)).ToList();
+            firstName: x.FirstName,
+            userPhotoPath: x.UserPhotoPath,
+            replyToUser: x.ReplyToUser,
+            replyToText: x.ReplyToText)).ToList();
     }
 
     public async Task<UiModels.HistoryStats> GetStatsAsync()
@@ -357,13 +434,20 @@ public class MessageHistoryRepository
             from chat in chatGroup.DefaultIfEmpty()
             join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
             from user in userGroup.DefaultIfEmpty()
+            join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
+            from parentMsg in parentGroup.DefaultIfEmpty()
+            join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
+            from parentUserInfo in parentUserGroup.DefaultIfEmpty()
             select new
             {
                 Message = m,
                 ChatName = chat != null ? chat.ChatName : null,
                 ChatIconPath = chat != null ? chat.ChatIconPath : null,
                 UserName = user != null ? user.Username : null,
-                UserPhotoPath = user != null ? user.UserPhotoPath : null
+                FirstName = user != null ? user.FirstName : null,
+                UserPhotoPath = user != null ? user.UserPhotoPath : null,
+                ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                ReplyToText = parentMsg != null ? parentMsg.MessageText : null
             }
         )
         .AsNoTracking()
@@ -373,7 +457,10 @@ public class MessageHistoryRepository
             chatName: result.ChatName,
             chatIconPath: result.ChatIconPath,
             userName: result.UserName,
-            userPhotoPath: result.UserPhotoPath);
+            firstName: result.FirstName,
+            userPhotoPath: result.UserPhotoPath,
+            replyToUser: result.ReplyToUser,
+            replyToText: result.ReplyToText);
     }
 
     public async Task UpdateMessageAsync(UiModels.MessageRecord message)

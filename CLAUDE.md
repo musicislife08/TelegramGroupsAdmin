@@ -130,6 +130,8 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 **4.13**: Advanced Filter Engine - custom_filters table (pattern regex, action, enabled, hit_count), chat-specific/global, domain blacklist/whitelist, phrase normalization, URL patterns, 12th spam check in SpamDetectorFactory, /spam#filters UI CRUD, confidence weighting integration
 **4.14**: Report Aggregation - Multi-report auto-escalation (3 unique in 1hr→action), reports tracking (message_id, reported_by, timestamp), confidence boost (+15/report), reporter accuracy scoring, false report protection (<60% accuracy→downweight, 10+ false→remove permission), /reports#analytics top reporters
 **4.15**: Appeal System - Welcome requires bot DM start (Accept→bot DM→unrestrict), establishes DM channel, banned users submit appeals via DM, appeals queue /reports#appeals (user history, ban reason, detection, appeal text), approve/deny+reason, max 2 appeals/ban, 30-day expiration, appeals_history verdicts
+**4.17**: Additional Media Types - Support GIFs (animations), stickers, videos, voice messages, audio files, documents, video notes. DB fields: animation_file_id, sticker_file_id, sticker_emoji, video_file_id, video_duration, voice_file_id, voice_duration, audio_file_id, audio_duration, audio_title, document_file_id, document_file_name, video_note_file_id. UI: Display thumbnails for animations/videos/video_notes, sticker emoji preview, audio player widget, document download links. Spam detection: Extend to analyze sticker sets (known spam stickers), video thumbnails (Vision API), audio transcription (Whisper API for voice spam), document malware scanning (VirusTotal). Priority: Medium (improves context for spam review, detects new attack vectors)
+**4.18**: Forum/Topics Support - Enable bot to work in forum-enabled supergroups. Bot API: Pass message_thread_id in bot replies (SendMessage, SendPhoto, etc.) so responses appear in correct topic thread. Store message_thread_id in messages table for context. Implementation: Update all bot reply calls to include `messageThreadId: message.MessageThreadId`, update MessageProcessingService to capture thread ID, add nullable message_thread_id column to messages table. Without this: Bot replies in forum groups go to wrong topic or get lost. Priority: Medium (breaks bot functionality in forum groups, simple fix - just pass through thread ID)
 
 ### Phase 5: Analytics & Data Aggregation 🔮
 **5.1**: Analytics repo (time-series queries, false positive/negative rates, per-check performance)
@@ -148,6 +150,121 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 
 ### Phase 7: Advanced Features 🔮
 ML-based spam (10th algorithm using historical), sentiment analysis (shelved - false positives), API for third-party (not needed)
+
+### Phase 8: WTelegram User Account Integration 🔮 PLANNED
+**See:** WTELEGRAM_INTEGRATION.md for detailed planning
+
+**Unlocks (impossible with Bot API):**
+- Full member list (including lurkers) - `Channels_GetParticipants()` returns ALL members
+- Historical message import - `Messages_GetHistory()` backfills messages before bot joined
+- Send as admin user - Messages appear from admin's personal account (not bot)
+- Admin chat interface - Full chat UI in browser (/chat page)
+- Enhanced user data - Last seen, bio, common chats, verified badge
+
+**Architecture:**
+- Multi-instance session manager (per-web-user WTelegram clients)
+- Session isolation (/data/telegram-sessions/{userId}/session.dat encrypted with Data Protection API)
+- Resource management (30min idle cleanup, ~10-20MB per session)
+- Disable message listener (bot owns all incoming message processing)
+
+**Authentication Flow:**
+- Phone number → SMS verification code → 2FA password (if enabled)
+- Session persists 30 days (Telegram default)
+- Audit all actions (TelegramAccountConnected, MessageSent, MemberListImported, HistoryImported)
+
+**Implementation Priority:**
+1. Core infrastructure + auth (Day 1-2, ~9 hours)
+2. Full member list import (Day 3, ~4 hours) - Quick high-value win
+3. Send message as admin (Day 4, ~3 hours)
+4. Historical import (Day 5, ~6 hours)
+5. Chat interface (Day 6-7, ~8 hours) - Optional
+6. Polish (Day 8-9, ~7 hours)
+
+**Total Effort:** ~37 hours (~5 days)
+
+**Security:**
+- Data Protection API encryption (same as TOTP)
+- Owner/Admin permission required
+- Per-user session isolation (no sharing)
+- Audit trail for all actions
+- 30min idle session disposal
+
+**Why WTelegram (not TDLib)?**
+- Pure C# (no native dependencies)
+- Active maintenance (v4.3.11, Feb 2025)
+- MIT license (commercial-friendly)
+- Simple API surface
+- Good documentation
+
+**Use Cases:**
+- "Show all 500 members, not just 120 who messaged" (lurker visibility)
+- "Import last 6 months for spam trend analysis" (historical context)
+- "Reply as myself from browser, not bot" (authoritative moderation)
+- "Manage chats from desktop, no mobile needed" (admin convenience)
+
+**ToS Compliance:**
+✅ Allowed: User-initiated actions via UI (every action requires explicit button click)
+❌ Prohibited: Automated actions without consent, bulk scraping
+**Our Approach:** No automation - all WTelegram calls triggered by admin UI interaction
+
+### Phase 9: Mobile Web Support 🔮 PLANNED
+**Responsive Blazor UI for tablet/mobile browsers**
+
+**Motivation:**
+- Admins need moderation access on-the-go
+- Mobile Telegram app for reading, web UI for moderation actions
+- Tablets common for community managers
+
+**Scope:**
+- Responsive layouts (MudBlazor breakpoints: xs/sm/md/lg/xl)
+- Touch-friendly interactions (larger buttons, swipe gestures)
+- Optimized data loading (pagination, lazy loading, infinite scroll)
+- Mobile-first critical paths (ban user, mark spam, view reports)
+- Progressive Web App (PWA) support (install to home screen, offline basics)
+
+**Key Pages to Optimize:**
+1. **/reports** - Quick spam triage (swipe left=ham, right=spam)
+2. **/users** - List view with touch-friendly actions (trust toggle, ban button)
+3. **/messages** - Infinite scroll message viewer
+4. **/chat** (if Phase 8 implemented) - Mobile chat interface
+5. **/profile** - Manage TOTP on mobile
+
+**UI Patterns:**
+- Bottom sheet dialogs (easier to reach on mobile)
+- Floating action buttons (FAB) for primary actions
+- Collapsible navigation (hamburger menu)
+- Card-based layouts (better for small screens)
+- Sticky headers (context while scrolling)
+
+**Performance:**
+- Reduce initial bundle size (lazy load components)
+- Optimize images (serve smaller versions for mobile)
+- Cache API responses (reduce mobile data usage)
+- Debounce search inputs (prevent excessive queries on slow connections)
+
+**Testing:**
+- Chrome DevTools device emulation
+- Real device testing (iOS Safari, Android Chrome)
+- Touch gesture validation
+- Offline scenario handling
+
+**Total Effort:** ~15-20 hours (~2-3 days)
+
+**Dependencies:**
+- Existing Blazor pages (refactor for responsiveness)
+- MudBlazor responsive components (MudHidden, MudBreakpointProvider)
+
+**Success Metrics:**
+- All pages usable on 375px width (iPhone SE)
+- Critical actions accessible within 2 taps
+- Page load < 3 seconds on 3G
+- No horizontal scrolling
+- Touch targets ≥ 44px (Apple HIG, Material Design)
+
+**Future Enhancements:**
+- Native mobile apps (MAUI) - If web performance insufficient
+- Push notifications (ban/spam alerts) - Requires backend integration
+- Offline mode (service workers) - Cache recent data for offline viewing
 
 ## Future Enhancements (Pending Feedback)
 Cross-Group Welcome Exemption: Auto-delete rules notification for trusted users joining new groups (no restrictions, tagged+rules, X sec auto-delete). Awaiting admin feedback on auto-trust vs per-group vetting

@@ -159,7 +159,7 @@ public class WelcomeService : IWelcomeService
         // Must create scope because WelcomeService is singleton but IConfigService is scoped
         using var scope = _serviceProvider.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>("welcome", chatMemberUpdate.Chat.Id)
+        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatMemberUpdate.Chat.Id)
                      ?? WelcomeConfig.Default;
 
         if (!config.Enabled)
@@ -429,7 +429,7 @@ public class WelcomeService : IWelcomeService
         // Must create scope because WelcomeService is singleton but IConfigService is scoped
         using var scope = _serviceProvider.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>("welcome", chatId)
+        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId)
                      ?? WelcomeConfig.Default;
 
         try

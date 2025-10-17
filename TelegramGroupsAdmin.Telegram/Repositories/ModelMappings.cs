@@ -134,10 +134,14 @@ public static class ModelMappings
         string? chatName,
         string? chatIconPath,
         string? userName,
-        string? userPhotoPath) => new(
+        string? firstName,
+        string? userPhotoPath,
+        string? replyToUser,
+        string? replyToText) => new(
         MessageId: data.MessageId,
         UserId: data.UserId,
         UserName: userName,
+        FirstName: firstName,
         ChatId: data.ChatId,
         Timestamp: data.Timestamp,
         MessageText: data.MessageText,
@@ -152,7 +156,10 @@ public static class ModelMappings
         ChatIconPath: chatIconPath,
         UserPhotoPath: userPhotoPath,
         DeletedAt: data.DeletedAt,
-        DeletionSource: data.DeletionSource
+        DeletionSource: data.DeletionSource,
+        ReplyToMessageId: data.ReplyToMessageId,
+        ReplyToUser: replyToUser,
+        ReplyToText: replyToText
     );
 
     public static DataModels.MessageRecordDto ToDto(this UiModels.MessageRecord ui) => new()
@@ -170,7 +177,8 @@ public static class ModelMappings
         PhotoLocalPath = ui.PhotoLocalPath,
         PhotoThumbnailPath = ui.PhotoThumbnailPath,
         DeletedAt = ui.DeletedAt,
-        DeletionSource = ui.DeletionSource
+        DeletionSource = ui.DeletionSource,
+        ReplyToMessageId = ui.ReplyToMessageId
     };
 
     // Note: PhotoMessageRecord, HistoryStats, SpamCheckRecord are UI-only models
@@ -442,7 +450,6 @@ public static class ModelMappings
         UserPhotoPath: data.UserPhotoPath,
         PhotoHash: data.PhotoHash,
         IsTrusted: data.IsTrusted,
-        WarningPoints: data.WarningPoints,
         FirstSeenAt: data.FirstSeenAt,
         LastSeenAt: data.LastSeenAt,
         CreatedAt: data.CreatedAt,
@@ -458,7 +465,6 @@ public static class ModelMappings
         UserPhotoPath = ui.UserPhotoPath,
         PhotoHash = ui.PhotoHash,
         IsTrusted = ui.IsTrusted,
-        WarningPoints = ui.WarningPoints,
         FirstSeenAt = ui.FirstSeenAt,
         LastSeenAt = ui.LastSeenAt,
         CreatedAt = ui.CreatedAt,

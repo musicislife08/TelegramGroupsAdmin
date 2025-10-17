@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -21,6 +22,7 @@ public class ModerationActionService
     private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
     private readonly TelegramBotClientFactory _botClientFactory;
     private readonly TelegramOptions _telegramOptions;
+    private readonly IConfigService _configService;
     private readonly ILogger<ModerationActionService> _logger;
 
     public ModerationActionService(
@@ -31,6 +33,7 @@ public class ModerationActionService
         ITelegramUserMappingRepository telegramUserMappingRepository,
         TelegramBotClientFactory botClientFactory,
         IOptions<TelegramOptions> telegramOptions,
+        IConfigService configService,
         ILogger<ModerationActionService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;
@@ -40,6 +43,7 @@ public class ModerationActionService
         _telegramUserMappingRepository = telegramUserMappingRepository;
         _botClientFactory = botClientFactory;
         _telegramOptions = telegramOptions.Value;
+        _configService = configService;
         _logger = logger;
     }
 
@@ -221,17 +225,20 @@ public class ModerationActionService
     }
 
     /// <summary>
-    /// Warn user globally.
+    /// Warn user globally with automatic ban after threshold.
     /// Used by: /warn command, Reports "Warn" action
     /// </summary>
     public async Task<ModerationResult> WarnUserAsync(
         long userId,
         long? messageId,
         string? executorId,
-        string reason)
+        string reason,
+        long? chatId = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
+            // 1. Insert the warning
             var warnAction = new UserActionRecord(
                 Id: 0,
                 UserId: userId,
@@ -244,9 +251,52 @@ public class ModerationActionService
             );
             await _userActionsRepository.InsertAsync(warnAction);
 
-            _logger.LogInformation("Warn action completed: User {UserId} warned", userId);
+            // 2. Get current warning count
+            var warnCount = await _userActionsRepository.GetWarnCountAsync(userId);
 
-            return new ModerationResult { Success = true };
+            _logger.LogInformation("Warn action completed: User {UserId} warned (total warnings: {WarnCount})", userId, warnCount);
+
+            var result = new ModerationResult
+            {
+                Success = true,
+                WarningCount = warnCount
+            };
+
+            // 3. Check if auto-ban threshold is reached
+            var warningConfig = await _configService.GetEffectiveAsync<WarningSystemConfig>(ConfigType.Moderation, chatId)
+                               ?? WarningSystemConfig.Default;
+
+            if (warningConfig.AutoBanEnabled &&
+                warningConfig.AutoBanThreshold > 0 &&
+                warnCount >= warningConfig.AutoBanThreshold)
+            {
+                // 4. Auto-ban user
+                var autoBanReason = warningConfig.AutoBanReason.Replace("{count}", warnCount.ToString());
+                var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+
+                var banResult = await BanUserAsync(
+                    botClient: botClient,
+                    userId: userId,
+                    messageId: messageId,
+                    executorId: "system:auto-ban",
+                    reason: autoBanReason,
+                    cancellationToken: cancellationToken);
+
+                if (banResult.Success)
+                {
+                    result.AutoBanTriggered = true;
+                    result.ChatsAffected = banResult.ChatsAffected;
+                    _logger.LogWarning(
+                        "Auto-ban triggered: User {UserId} banned after {WarnCount} warnings (threshold: {Threshold})",
+                        userId, warnCount, warningConfig.AutoBanThreshold);
+                }
+                else
+                {
+                    _logger.LogError("Auto-ban failed for user {UserId}: {Error}", userId, banResult.ErrorMessage);
+                }
+            }
+
+            return result;
         }
         catch (Exception ex)
         {
@@ -606,4 +656,6 @@ public class ModerationResult
     public bool TrustRemoved { get; set; }
     public bool TrustRestored { get; set; }
     public int ChatsAffected { get; set; }
+    public int WarningCount { get; set; }
+    public bool AutoBanTriggered { get; set; }
 }

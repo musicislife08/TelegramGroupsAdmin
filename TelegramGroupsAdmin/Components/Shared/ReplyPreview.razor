@@ -1,0 +1,52 @@
+@* Telegram-style reply preview *@
+
+@if (ReplyToMessageId.HasValue && (!string.IsNullOrEmpty(ReplyToUser) || !string.IsNullOrEmpty(ReplyToText)))
+{
+    <div class="reply-preview" @onclick="HandleClick" title="Click to jump to original message">
+        <div class="reply-bar"></div>
+        <div class="reply-content">
+            <div class="reply-user">@GetReplyUserDisplay()</div>
+            <div class="reply-text">@GetReplyTextDisplay()</div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public long? ReplyToMessageId { get; set; }
+
+    [Parameter]
+    public string? ReplyToUser { get; set; }
+
+    [Parameter]
+    public string? ReplyToText { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnReplyClick { get; set; }
+
+    private string GetReplyUserDisplay()
+    {
+        return string.IsNullOrEmpty(ReplyToUser) ? "Unknown User" : ReplyToUser;
+    }
+
+    private string GetReplyTextDisplay()
+    {
+        if (string.IsNullOrEmpty(ReplyToText))
+            return "[Deleted message]";
+
+        // Truncate to ~60 characters
+        const int maxLength = 60;
+        if (ReplyToText.Length <= maxLength)
+            return ReplyToText;
+
+        return ReplyToText.Substring(0, maxLength).TrimEnd() + "...";
+    }
+
+    private async Task HandleClick()
+    {
+        if (ReplyToMessageId.HasValue)
+        {
+            await OnReplyClick.InvokeAsync(ReplyToMessageId.Value);
+        }
+    }
+}

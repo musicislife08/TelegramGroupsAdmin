@@ -1,0 +1,42 @@
+namespace TelegramGroupsAdmin.Configuration;
+
+/// <summary>
+/// Enumeration of configuration types stored in the unified configs table.
+/// Provides type safety and IntelliSense support when working with configurations.
+/// </summary>
+public enum ConfigType
+{
+    /// <summary>
+    /// Spam detection configuration (spam_detection_config column)
+    /// Contains: SpamDetectionConfig model
+    /// </summary>
+    SpamDetection,
+
+    /// <summary>
+    /// Welcome message configuration (welcome_config column)
+    /// Contains: WelcomeConfig model
+    /// Phase 4.4: Welcome system
+    /// </summary>
+    Welcome,
+
+    /// <summary>
+    /// Log level configuration (log_config column)
+    /// Contains: LogConfig model
+    /// Phase 4.7: Dynamic log levels
+    /// </summary>
+    Log,
+
+    /// <summary>
+    /// Moderation configuration including warning system (moderation_config column)
+    /// Contains: WarningSystemConfig model
+    /// Phase 4.11: Warning/Points System
+    /// </summary>
+    Moderation,
+
+    /// <summary>
+    /// Bot protection configuration (bot_protection_config column)
+    /// Contains: BotProtectionConfig model
+    /// Phase 6.1: Bot Auto-Ban
+    /// </summary>
+    BotProtection
+}

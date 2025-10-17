@@ -66,7 +66,6 @@ public class TelegramUserRepository
             existing.UserPhotoPath = user.UserPhotoPath;
             existing.PhotoHash = user.PhotoHash;
             existing.IsTrusted = user.IsTrusted;
-            existing.WarningPoints = user.WarningPoints;
             existing.LastSeenAt = user.LastSeenAt;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -138,29 +137,6 @@ public class TelegramUserRepository
                 "Updated trust status for Telegram user {TelegramUserId}: {IsTrusted}",
                 telegramUserId,
                 isTrusted);
-        }
-    }
-
-    /// <summary>
-    /// Update warning points (Phase 4.11: Warning/Points System)
-    /// </summary>
-    public async Task UpdateWarningPointsAsync(long telegramUserId, int warningPoints, CancellationToken ct = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        var entity = await context.TelegramUsers
-            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, ct);
-
-        if (entity != null)
-        {
-            entity.WarningPoints = warningPoints;
-            entity.UpdatedAt = DateTimeOffset.UtcNow;
-
-            await context.SaveChangesAsync(ct);
-
-            _logger.LogInformation(
-                "Updated warning points for Telegram user {TelegramUserId}: {WarningPoints}",
-                telegramUserId,
-                warningPoints);
         }
     }
 
