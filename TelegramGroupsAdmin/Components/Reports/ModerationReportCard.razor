@@ -1,0 +1,214 @@
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Repositories
+@inject MessageHistoryRepository MessageRepository
+
+<MudCard Elevation="2" Class="mb-3">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                <MudIcon Icon="@Icons.Material.Filled.Report" Color="Color.Warning" Size="Size.Small" />
+                <MudText Typo="Typo.h6">Moderation Report</MudText>
+                <MudSpacer />
+                <MudChip T="string" Size="Size.Small" Color="@GetStatusColor()">
+                    @Report.Status.ToString()
+                </MudChip>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @FormatTimestamp(Report.ReportedAt)
+                </MudText>
+            </MudStack>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (_message != null)
+        {
+            <MudStack Spacing="2">
+                <MudStack Row="true" Spacing="2">
+                    <MudText Typo="Typo.body2"><b>User:</b> @(_message.UserName ?? "Unknown")</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @_message.UserId</MudText>
+                </MudStack>
+
+                <MudDivider />
+
+                <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-break: break-word;">
+                    @(_message.MessageText ?? "[No text]")
+                </MudText>
+
+                @if (_message.PhotoFileId != null)
+                {
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Image" Color="Color.Info">
+                        Has Image
+                    </MudChip>
+                }
+
+                @if (_message.DeletedAt.HasValue)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error">
+                        Deleted @FormatTimestamp(_message.DeletedAt.Value)
+                    </MudChip>
+                }
+
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    <b>Reported by:</b> @(Report.ReportedByUserName ?? "Unknown") (@Report.ReportedByUserId)
+                </MudText>
+            </MudStack>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Warning">Message not found in cache</MudAlert>
+        }
+    </MudCardContent>
+    <MudCardActions>
+        @if (Report.Status == ReportStatus.Pending)
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.Block"
+                       OnClick="OnMarkSpam"
+                       Disabled="@ActionInProgress">
+                Delete as Spam
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Warning"
+                       StartIcon="@Icons.Material.Filled.Gavel"
+                       OnClick="OnBan"
+                       Disabled="@ActionInProgress">
+                Ban User
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Warning"
+                       StartIcon="@Icons.Material.Filled.Warning"
+                       OnClick="OnWarn"
+                       Disabled="@ActionInProgress">
+                Warn
+            </MudButton>
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.Close"
+                       OnClick="OnDismiss"
+                       Disabled="@ActionInProgress">
+                Dismiss
+            </MudButton>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Action taken: @Report.ActionTaken
+            </MudText>
+        }
+
+        <MudSpacer />
+
+        @if (_message != null)
+        {
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Info"
+                       StartIcon="@Icons.Material.Filled.History"
+                       Href="@GetMessagesLink()">
+                View in Messages
+            </MudButton>
+
+            @if (_telegramLink != null)
+            {
+                <MudButton Variant="Variant.Text"
+                           Color="Color.Info"
+                           StartIcon="@Icons.Material.Filled.Send"
+                           Href="@_telegramLink"
+                           Target="_blank">
+                    Open in Telegram
+                </MudButton>
+            }
+        }
+    </MudCardActions>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public required Report Report { get; set; }
+
+    [Parameter]
+    public EventCallback OnActionCompleted { get; set; }
+
+    [Parameter]
+    public EventCallback<(Report Report, string Action)> OnAction { get; set; }
+
+    private MessageRecord? _message;
+    private string? _telegramLink;
+    private bool ActionInProgress = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _message = await MessageRepository.GetMessageAsync(Report.MessageId);
+        _telegramLink = GetTelegramLink();
+    }
+
+    private Color GetStatusColor()
+    {
+        return Report.Status switch
+        {
+            ReportStatus.Pending => Color.Warning,
+            ReportStatus.Reviewed => Color.Success,
+            ReportStatus.Dismissed => Color.Default,
+            _ => Color.Default
+        };
+    }
+
+    private string FormatTimestamp(DateTimeOffset timestamp)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var diff = now - timestamp;
+
+        if (diff.TotalMinutes < 1) return "Just now";
+        if (diff.TotalHours < 1) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalDays < 1) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
+
+        return timestamp.LocalDateTime.ToString("MMM dd, yyyy");
+    }
+
+    private string GetMessagesLink()
+    {
+        return $"/messages?chat={Report.ChatId}&highlight={Report.MessageId}";
+    }
+
+    private string? GetTelegramLink()
+    {
+        if (Report.ChatId < 0)
+        {
+            var chatIdStr = Report.ChatId.ToString();
+            if (chatIdStr.StartsWith("-100"))
+            {
+                var numericId = chatIdStr.Substring(4);
+                return $"https://t.me/c/{numericId}/{Report.MessageId}";
+            }
+        }
+        return null;
+    }
+
+    private async Task OnMarkSpam()
+    {
+        ActionInProgress = true;
+        await OnAction.InvokeAsync((Report, "spam"));
+        ActionInProgress = false;
+    }
+
+    private async Task OnBan()
+    {
+        ActionInProgress = true;
+        await OnAction.InvokeAsync((Report, "ban"));
+        ActionInProgress = false;
+    }
+
+    private async Task OnWarn()
+    {
+        ActionInProgress = true;
+        await OnAction.InvokeAsync((Report, "warn"));
+        ActionInProgress = false;
+    }
+
+    private async Task OnDismiss()
+    {
+        ActionInProgress = true;
+        await OnAction.InvokeAsync((Report, "dismiss"));
+        ActionInProgress = false;
+    }
+}

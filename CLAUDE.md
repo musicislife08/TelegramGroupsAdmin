@@ -122,9 +122,10 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 **4.7** ✅: Runtime Logging Configuration - IRuntimeLoggingService (Singleton with IServiceScopeFactory pattern for database access), LogConfig model (DefaultLevel + namespace Overrides dictionary), LoggingSettings.razor (/settings#logging - default level selector, namespace override CRUD, autocomplete for common namespaces, visual log level icons/colors), stored in configs JSONB table (ConfigType.Log, global only). Note: Current limitation requires app restart for log level changes to take effect (future: IOptionsMonitor<LoggerFilterOptions> integration for hot-reload). Architecture: Singleton service → IServiceScopeFactory → Scoped IConfigService for database access.
 **4.8** ✅: Settings UI - All tabs implemented. General (App+MessageHistory env display), Integrations (OpenAI/SendGrid/VirusTotal/Telegram status+masked keys), Notifications (future features), Security (auth/password/audit/API/data protection), Logging (Phase 4.7 complete). Read-only (env configured)
 
+**4.10** ✅: Anti-Impersonation Detection - Composite scoring system (name similarity 50pts + photo hash 50pts = 100pts max). Name matching: Levenshtein distance algorithm (normalized 0-1 scale, 80% threshold). Photo matching: Perceptual hash (pHash) using ImageSharp average hash algorithm (8×8 grayscale, 90% similarity threshold), stored as 8-byte → Base64 string in telegram_users.photo_hash. Check triggers: On user join (WelcomeService) + first N messages (MessageProcessingService, configurable FirstMessagesCount). Auto-action: 100pts (both match) = auto-ban, 50-99pts (single match) = review queue. FetchUserPhotoJob computes pHash on photo download. Reports page: Unified card-based queue (ModerationReportCard + ImpersonationAlertCard), priority sorting (Critical 1000+, Medium 500+), side-by-side 128×128 photo comparison, verdict workflow (ConfirmedScam/FalsePositive/Whitelisted). Performance: Trusted users bypass, pending alert deduplication, message count gating. Architecture: IImpersonationDetectionService (Scoped), PhotoHashService (Singleton, ImageSharp), ImpersonationAlertsRepository, ReportQueueItem unified model. Actor attribution via Phase 4.19 system. DI pattern: Interface-only registration (no duplicate concrete classes).
+
 **Pending**:
 **4.9**: Bot connection management - Hot-reload bot, IBotLifecycleService, ReconnectAsync/DisconnectAsync, CancellationTokenSource, BotConnectionManager.razor, /settings#bot-connection, persist state in configs, Owner-only
-**4.10**: Anti-Impersonation - Name similarity (Levenshtein+visual), photo hash (pHash/ImageSharp), admin/channel name protection, auto-restrict suspicious, review queue /reports, side-by-side comparison, scam patterns (_support, _admin, _official)
 **4.11**: Warning/Points System - 0-100 scale, auto-escalation (20pts=5min mute, 50pts=1hr, 75pts=24hr, 100pts=ban), point decay (-10pts/week), multi-source (spam, manual /warn, reports), user DM notifications, /warnings command, UI in Messages/Reports
 **4.12** ✅: Admin Notes & Tags - admin_notes + user_tags tables (Phase 4.19 Actor system), repositories (AdminNotesRepository, UserTagsRepository), tag_definitions table (TagColor enum: Primary/Secondary/Info/Success/Warning/Error/Dark), UserDetailDialog UI (add/remove notes+tags with Actor attribution), TextInputDialog, TagSelectionDialog (visual multi-select chip interface with colors), TagEditDialog (create/edit tags with color picker), TagManagement.razor (/settings#tags - CRUD, color customization, usage count, delete validation), ConfirmDialog, pin/unpin notes, confidence_modifier field. UI features: Color-coded tags throughout app (TagColorExtensions.ToMudColor()), duplicate prevention (filters already-assigned tags), multi-tag selection, "Create New Tag" inline flow. Complete implementation.
 **4.13**: Advanced Filter Engine - custom_filters table (pattern regex, action, enabled, hit_count), chat-specific/global, domain blacklist/whitelist, phrase normalization, URL patterns, 12th spam check in SpamDetectorFactory, /spam#filters UI CRUD, confidence weighting integration
@@ -398,7 +399,7 @@ Total: 8-12 days for broad appeal
 - Phase 1: 100% ✅
 - Phase 2: 100% ✅ (2.1-2.9 complete)
 - Phase 3: 100% ✅
-- Phase 4: 55% (4.1-4.8, 4.12, 4.19 complete; 4.9-4.11, 4.13-4.18 pending)
+- Phase 4: 60% (4.1-4.8, 4.10, 4.12, 4.19 complete; 4.9, 4.11, 4.13-4.18 pending)
 - Phase 5: 0% (analytics, optional)
 - Phase 6: 10% (6.1 bot auto-ban complete)
 
@@ -408,15 +409,15 @@ Total: 8-12 days for broad appeal
 
 ## Estimated Timeline to Completion
 
-### **Milestone 1: MVP - Production Ready** (~6-8 days from now)
-**Target Date**: ~October 24, 2025
-**Estimated Effort**: 48-64 hours (6-8 days)
+### **Milestone 1: MVP - Production Ready** (~3-4 days from now)
+**Target Date**: ~October 21, 2025
+**Estimated Effort**: 24-32 hours (3-4 days)
 
 | Feature | Priority | Estimate | Rationale |
 |---------|----------|----------|-----------|
-| 4.10 Anti-Impersonation | **Critical** | 24-32h (3-4d) | Name similarity (Levenshtein), photo hash (pHash), review queue UI |
+| 4.10 Anti-Impersonation | ✅ | Done | COMPLETE - Composite scoring, pHash, unified queue UI |
 | 4.11 Warning/Points | **Critical** | 24-32h (3-4d) | Point system, auto-escalation, decay logic, DM notifications, UI |
-| 4.9 Bot Connection Mgmt | Low | 6-8h | Hot-reload infrastructure (nice-to-have) |
+| 4.9 Bot Connection Mgmt | Low | 6-8h | Hot-reload infrastructure (nice-to-have, deferred) |
 
 **Deliverable**: Full-featured moderation platform with impersonation protection and graduated discipline system
 
@@ -575,11 +576,11 @@ Automated recommendations, pattern detection, ML clustering, insights dashboard
 **Actual MVP Requirements:**
 | Feature | Type | Estimate | Notes |
 |---------|------|----------|-------|
-| 4.10 Anti-Impersonation | Core security | 3-4d | Name similarity (Levenshtein), photo hash (pHash), review queue UI |
+| 4.10 Anti-Impersonation | ✅ COMPLETE | Done | Composite scoring, pHash, unified queue UI |
 | 4.11 Warning/Points | Core moderation | 3-4d | Point system, auto-escalation, decay logic, DM notifications |
 
 **Realistic Timeline:**
-- **MVP (Production-Ready)**: ~7-10 days from now (**Target: ~Oct 27**)
+- **MVP (Production-Ready)**: ~3-4 days from now (**Target: ~Oct 21**)
   - Core moderation complete with impersonation protection
   - Everything needed for live deployment
 
@@ -620,8 +621,8 @@ This 11-day velocity delivering a production-quality platform with 73% completio
 
 ## Recommended Execution Order
 
-**Week 1-2** (Days 1-8): Core Moderation
-1. 4.10 Anti-Impersonation (4d) - Critical security
+**Week 1-2** (Days 1-4): Core Moderation
+1. 4.10 Anti-Impersonation ✅ COMPLETE
 2. 4.11 Warning/Points (4d) - Foundational moderation
 
 **Week 3-4** (Days 9-20): Enhanced Features
@@ -648,7 +649,7 @@ This 11-day velocity delivering a production-quality platform with 73% completio
 - 6.4 Scheduled Messages (professional polish)
 
 **Next Steps**:
-Immediate: 4.10 Anti-Impersonation (4d) - Name similarity (Levenshtein), photo hash (pHash), review queue UI
+Immediate: 4.11 Warning/Points System (4d) - 0-100 scale, auto-escalation, point decay, DM notifications, UI
 
 **Critical Issues**: C1 Fire-and-Forget✅ (Task.Run→TickerQ, WelcomeTimeoutJob+DeleteMessageJob+FetchUserPhotoJob, persistence/retry/logging), MH1+MH2✅ (GetStatsAsync 2→1 query 80% faster, CleanupExpiredAsync 3→1 query 50% faster, single-query GroupBy), H1+H2✅ (ChatPermissions static helpers, magic numbers→database config, no migration needed)
 

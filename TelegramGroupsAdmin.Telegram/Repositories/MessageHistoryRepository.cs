@@ -618,4 +618,16 @@ public class MessageHistoryRepository
                 deletionSource);
         }
     }
+
+    /// <summary>
+    /// Gets the number of messages a user has sent in a specific chat
+    /// Used for impersonation detection (check first N messages)
+    /// </summary>
+    public async Task<int> GetMessageCountAsync(long userId, long chatId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.Messages
+            .AsNoTracking()
+            .CountAsync(m => m.UserId == userId && m.ChatId == chatId, cancellationToken);
+    }
 }

@@ -37,6 +37,7 @@ public class AppDbContext : DbContext
     // User action tables
     public DbSet<UserActionRecordDto> UserActions => Set<UserActionRecordDto>();
     public DbSet<ReportDto> Reports => Set<ReportDto>();
+    public DbSet<ImpersonationAlertRecordDto> ImpersonationAlerts => Set<ImpersonationAlertRecordDto>();
 
     // Spam detection tables
     public DbSet<StopWordDto> StopWords => Set<StopWordDto>();
@@ -196,6 +197,25 @@ public class AppDbContext : DbContext
             .WithMany()
             .HasForeignKey(ut => ut.TelegramUserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Impersonation Alerts relationships
+        modelBuilder.Entity<ImpersonationAlertRecordDto>()
+            .HasOne(ia => ia.SuspectedUser)
+            .WithMany()
+            .HasForeignKey(ia => ia.SuspectedUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ImpersonationAlertRecordDto>()
+            .HasOne(ia => ia.TargetUser)
+            .WithMany()
+            .HasForeignKey(ia => ia.TargetUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ImpersonationAlertRecordDto>()
+            .HasOne(ia => ia.ReviewedBy)
+            .WithMany()
+            .HasForeignKey(ia => ia.ReviewedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // ============================================================================
         // Actor System Foreign Keys (Phase 4.19)
@@ -375,6 +395,15 @@ public class AppDbContext : DbContext
         // TagDefinitions indexes
         modelBuilder.Entity<TagDefinitionDto>()
             .HasIndex(td => td.UsageCount);
+
+        // ImpersonationAlerts indexes
+        modelBuilder.Entity<ImpersonationAlertRecordDto>()
+            .HasIndex(ia => new { ia.RiskLevel, ia.DetectedAt })
+            .HasFilter("reviewed_at IS NULL");  // Pending alerts only
+        modelBuilder.Entity<ImpersonationAlertRecordDto>()
+            .HasIndex(ia => ia.ChatId);
+        modelBuilder.Entity<ImpersonationAlertRecordDto>()
+            .HasIndex(ia => ia.SuspectedUserId);
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)
@@ -418,6 +447,14 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<TagDefinitionDto>()
             .Property(td => td.Color)
+            .HasConversion<int>();
+
+        modelBuilder.Entity<ImpersonationAlertRecordDto>()
+            .Property(ia => ia.RiskLevel)
+            .HasConversion<int>();
+
+        modelBuilder.Entity<ImpersonationAlertRecordDto>()
+            .Property(ia => ia.Verdict)
             .HasConversion<int>();
 
         // VerificationTokenDto stores token_type as string in DB but exposes as enum

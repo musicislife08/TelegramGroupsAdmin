@@ -182,6 +182,64 @@ public class WelcomeService : IWelcomeService
                 return;
             }
 
+            // Phase 4.10: Check for impersonation (name + photo similarity vs admins)
+            using (var impersonationScope = _serviceProvider.CreateScope())
+            {
+                var impersonationService = impersonationScope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
+                var telegramUserRepo = impersonationScope.ServiceProvider.GetRequiredService<TelegramUserRepository>();
+
+                // Check if user should be screened for impersonation
+                var shouldCheck = await impersonationService.ShouldCheckUserAsync(user.Id, chatMemberUpdate.Chat.Id);
+
+                if (shouldCheck)
+                {
+                    _logger.LogDebug(
+                        "Checking user {UserId} for impersonation in chat {ChatId}",
+                        user.Id,
+                        chatMemberUpdate.Chat.Id);
+
+                    // Get user's photo path if available (may be null if not cached yet)
+                    var existingUser = await telegramUserRepo.GetByTelegramIdAsync(user.Id, cancellationToken);
+                    var photoPath = existingUser?.UserPhotoPath;
+
+                    // Check for impersonation
+                    var impersonationResult = await impersonationService.CheckUserAsync(
+                        user.Id,
+                        chatMemberUpdate.Chat.Id,
+                        user.FirstName,
+                        user.LastName,
+                        photoPath);
+
+                    if (impersonationResult != null)
+                    {
+                        _logger.LogWarning(
+                            "Impersonation detected for user {UserId} in chat {ChatId} (score: {Score}, risk: {Risk})",
+                            user.Id,
+                            chatMemberUpdate.Chat.Id,
+                            impersonationResult.TotalScore,
+                            impersonationResult.RiskLevel);
+
+                        // Execute action (create alert, auto-ban if score >= 100)
+                        await impersonationService.ExecuteActionAsync(impersonationResult);
+
+                        // If auto-banned (score 100), skip welcome flow
+                        if (impersonationResult.ShouldAutoBan)
+                        {
+                            _logger.LogInformation(
+                                "User {UserId} auto-banned for impersonation, skipping welcome flow",
+                                user.Id);
+                            return;
+                        }
+
+                        // Score 50-99: Continue with welcome flow (alert created for manual review)
+                        _logger.LogInformation(
+                            "User {UserId} flagged for impersonation review (score: {Score}), continuing with welcome flow",
+                            user.Id,
+                            impersonationResult.TotalScore);
+                    }
+                }
+            }
+
             // Step 1: Restrict user permissions (mute on join)
             await RestrictUserPermissionsAsync(botClient, chatMemberUpdate.Chat.Id, user.Id, cancellationToken);
 

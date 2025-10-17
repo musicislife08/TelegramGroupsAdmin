@@ -346,6 +346,54 @@ public partial class MessageProcessingService(
                     UpdatedAt: now
                 );
                 await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
+
+                // Phase 4.10: Check for impersonation (name + photo similarity vs admins)
+                // Check users on their first N messages
+                var impersonationService = scope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
+                var shouldCheck = await impersonationService.ShouldCheckUserAsync(message.From!.Id, message.Chat.Id);
+
+                if (shouldCheck)
+                {
+                    logger.LogDebug(
+                        "Checking user {UserId} for impersonation on message #{MessageCount}",
+                        message.From.Id,
+                        message.MessageId);
+
+                    // Get cached user photo path (may be null if not fetched yet)
+                    var existingUser = await telegramUserRepo.GetByTelegramIdAsync(message.From.Id, cancellationToken);
+                    var photoPath = existingUser?.UserPhotoPath;
+
+                    // Check for impersonation
+                    var impersonationResult = await impersonationService.CheckUserAsync(
+                        message.From.Id,
+                        message.Chat.Id,
+                        message.From.FirstName,
+                        message.From.LastName,
+                        photoPath);
+
+                    if (impersonationResult != null)
+                    {
+                        logger.LogWarning(
+                            "Impersonation detected for user {UserId} in chat {ChatId} (score: {Score}, risk: {Risk})",
+                            message.From.Id,
+                            message.Chat.Id,
+                            impersonationResult.TotalScore,
+                            impersonationResult.RiskLevel);
+
+                        // Execute action (create alert, auto-ban if score >= 100)
+                        await impersonationService.ExecuteActionAsync(impersonationResult);
+
+                        // If auto-banned, message will remain in history for audit trail
+                        // User will be banned from all chats immediately
+                        if (impersonationResult.ShouldAutoBan)
+                        {
+                            logger.LogInformation(
+                                "User {UserId} auto-banned for impersonation (score: {Score})",
+                                message.From.Id,
+                                impersonationResult.TotalScore);
+                        }
+                    }
+                }
             }
 
             // Raise event for real-time UI updates

@@ -3,10 +3,12 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Components.Reports
 @inject IReportsRepository ReportsRepository
-@inject MessageHistoryRepository MessageRepository
+@inject IImpersonationAlertsRepository ImpersonationAlertsRepository
 @inject IReportActionsService ReportActionsService
-@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ILogger<Reports> Logger
@@ -20,11 +22,15 @@
     @* Filters *@
     <MudPaper Class="pa-3 mb-4" Elevation="1">
         <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
-            <MudSelect T="ReportStatus?" Label="Status" @bind-Value="_selectedStatus" Variant="Variant.Outlined" Dense="true">
-                <MudSelectItem T="ReportStatus?" Value="@((ReportStatus?)null)">All</MudSelectItem>
-                <MudSelectItem T="ReportStatus?" Value="@ReportStatus.Pending">Pending</MudSelectItem>
-                <MudSelectItem T="ReportStatus?" Value="@ReportStatus.Reviewed">Reviewed</MudSelectItem>
-                <MudSelectItem T="ReportStatus?" Value="@ReportStatus.Dismissed">Dismissed</MudSelectItem>
+            <MudSelect T="ReportTypeFilter" Label="Type" @bind-Value="_selectedTypeFilter" Variant="Variant.Outlined" Dense="true">
+                <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.All">All Types</MudSelectItem>
+                <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.Spam">Moderation Reports</MudSelectItem>
+                <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.Impersonation">Impersonation Alerts</MudSelectItem>
+            </MudSelect>
+
+            <MudSelect T="StatusFilter" Label="Status" @bind-Value="_selectedStatusFilter" Variant="Variant.Outlined" Dense="true">
+                <MudSelectItem T="StatusFilter" Value="@StatusFilter.Pending">Pending Only</MudSelectItem>
+                <MudSelectItem T="StatusFilter" Value="@StatusFilter.All">All Statuses</MudSelectItem>
             </MudSelect>
 
             <MudButton Variant="Variant.Filled"
@@ -37,9 +43,20 @@
 
             <MudSpacer />
 
-            <MudChip T="string" Color="Color.Warning" Size="Size.Small">
-                @_pendingCount Pending
-            </MudChip>
+            <MudStack Row="true" Spacing="2">
+                @if (_pendingSpamCount > 0)
+                {
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.Report">
+                        @_pendingSpamCount Moderation
+                    </MudChip>
+                }
+                @if (_pendingImpersonationCount > 0)
+                {
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Warning">
+                        @_pendingImpersonationCount Impersonation
+                    </MudChip>
+                }
+            </MudStack>
         </MudStack>
     </MudPaper>
 
@@ -49,134 +66,24 @@
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
     }
 
-    @* Reports List *@
-    @if (_reports.Any())
+    @* Unified Reports Queue (Cards) *@
+    @if (_filteredReports.Any())
     {
-        <MudPaper Elevation="2">
-            <MudTable Items="@_reports" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
-                <HeaderContent>
-                    <MudTh>ID</MudTh>
-                    <MudTh>Reported User</MudTh>
-                    <MudTh>Message</MudTh>
-                    <MudTh>Reporter</MudTh>
-                    <MudTh>Reported At</MudTh>
-                    <MudTh>Status</MudTh>
-                    <MudTh>Context</MudTh>
-                    <MudTh>Actions</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="ID">#@context.Id</MudTd>
-                    <MudTd DataLabel="Reported User">
-                        @{
-                            var message = GetMessage(context.MessageId, context.ChatId);
-                            if (message != null)
-                            {
-                                <MudStack Spacing="1">
-                                    <MudText Typo="Typo.body2">@message.UserName</MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @message.UserId</MudText>
-                                </MudStack>
-                            }
-                            else
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Error">Message not found</MudText>
-                            }
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Message">
-                        @{
-                            var msg = GetMessage(context.MessageId, context.ChatId);
-                            if (msg != null)
-                            {
-                                var messageText = msg.MessageText ?? "[No text]";
-
-                                <MudStack Spacing="1">
-                                    <MudText Typo="Typo.body2" Style="max-width: 400px; word-break: break-word; white-space: pre-wrap;">@messageText</MudText>
-                                    @if (msg.PhotoFileId != null)
-                                    {
-                                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Image" Color="Color.Info">Has Image</MudChip>
-                                    }
-                                    @if (msg.DeletedAt.HasValue)
-                                    {
-                                        <MudChip T="string" Size="Size.Small" Color="Color.Error">Deleted</MudChip>
-                                    }
-                                </MudStack>
-                            }
-                            else
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Warning">Message not cached</MudText>
-                            }
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Reporter">
-                        <MudStack Spacing="1">
-                            <MudText Typo="Typo.body2">@context.ReportedByUserName</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.ReportedByUserId</MudText>
-                        </MudStack>
-                    </MudTd>
-                    <MudTd DataLabel="Reported At">@FormatDate(context.ReportedAt)</MudTd>
-                    <MudTd DataLabel="Status">
-                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
-                            @context.Status.ToString()
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Context">
-                        @{
-                            var currentReport = context;
-                            var tmeLink = GetTelegramLink(currentReport.ChatId, currentReport.MessageId);
-                        }
-                        <MudStack Row="true" Spacing="1">
-                            @if (tmeLink != null)
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.Send"
-                                              Size="Size.Small"
-                                              Color="Color.Info"
-                                              Href="@tmeLink"
-                                              Target="_blank"
-                                              title="Open in Telegram" />
-                            }
-                            <MudIconButton Icon="@Icons.Material.Filled.History"
-                                          Size="Size.Small"
-                                          Color="Color.Info"
-                                          Href="@GetMessagesLink(currentReport.ChatId, currentReport.MessageId)"
-                                          title="View in Messages" />
-                        </MudStack>
-                    </MudTd>
-                    <MudTd DataLabel="Actions">
-                        @if (context.Status == ReportStatus.Pending)
-                        {
-                            <MudStack Row="true" Spacing="1">
-                                <MudIconButton Icon="@Icons.Material.Filled.Block"
-                                              Size="Size.Small"
-                                              Color="Color.Error"
-                                              OnClick="@(() => HandleAction(context, "spam"))"
-                                              title="Mark as Spam & Delete" />
-                                <MudIconButton Icon="@Icons.Material.Filled.Gavel"
-                                              Size="Size.Small"
-                                              Color="Color.Warning"
-                                              OnClick="@(() => HandleAction(context, "ban"))"
-                                              title="Ban User" />
-                                <MudIconButton Icon="@Icons.Material.Filled.Warning"
-                                              Size="Size.Small"
-                                              Color="Color.Warning"
-                                              OnClick="@(() => HandleAction(context, "warn"))"
-                                              title="Warn User" />
-                                <MudIconButton Icon="@Icons.Material.Filled.Close"
-                                              Size="Size.Small"
-                                              Color="Color.Default"
-                                              OnClick="@(() => HandleAction(context, "dismiss"))"
-                                              title="Dismiss Report" />
-                            </MudStack>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @context.ActionTaken
-                            </MudText>
-                        }
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </MudPaper>
+        <MudStack Spacing="3">
+            @foreach (var item in _filteredReports)
+            {
+                @if (item.SpamReport != null)
+                {
+                    <ModerationReportCard Report="@item.SpamReport"
+                                          OnAction="@HandleSpamAction" />
+                }
+                else if (item.ImpersonationAlert != null)
+                {
+                    <ImpersonationAlertCard Alert="@item.ImpersonationAlert"
+                                            OnAction="@HandleImpersonationAction" />
+                }
+            }
+        </MudStack>
     }
     else if (!_loading)
     {
@@ -185,13 +92,13 @@
                 <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Color="Color.Success" />
                 <MudText Typo="Typo.h6" Color="Color.Secondary">No reports found</MudText>
                 <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    @if (_selectedStatus == ReportStatus.Pending)
+                    @if (_selectedStatusFilter == StatusFilter.Pending)
                     {
                         <text>All reports have been reviewed!</text>
                     }
                     else
                     {
-                        <text>No reports match the selected filter.</text>
+                        <text>No reports match the selected filters.</text>
                     }
                 </MudText>
             </MudStack>
@@ -200,11 +107,16 @@
 </MudContainer>
 
 @code {
-    private List<Report> _reports = new();
-    private Dictionary<(int MessageId, long ChatId), MessageRecord> _messageCache = new();
-    private ReportStatus? _selectedStatus = ReportStatus.Pending;
+    private enum ReportTypeFilter { All, Spam, Impersonation }
+    private enum StatusFilter { Pending, All }
+
+    private List<ReportQueueItem> _allReports = new();
+    private List<ReportQueueItem> _filteredReports = new();
+    private ReportTypeFilter _selectedTypeFilter = ReportTypeFilter.All;
+    private StatusFilter _selectedStatusFilter = StatusFilter.Pending;
     private bool _loading = true;
-    private int _pendingCount = 0;
+    private int _pendingSpamCount = 0;
+    private int _pendingImpersonationCount = 0;
     private string _currentUserId = string.Empty;
 
     protected override async Task OnInitializedAsync()
@@ -224,6 +136,11 @@
         await LoadReportsAsync();
     }
 
+    protected override void OnParametersSet()
+    {
+        ApplyFilters();
+    }
+
     private async Task LoadReportsAsync()
     {
         _loading = true;
@@ -231,30 +148,67 @@
 
         try
         {
-            // Load reports
-            _reports = await ReportsRepository.GetReportsAsync(
+            var unifiedQueue = new List<ReportQueueItem>();
+
+            // Load spam reports
+            var spamReports = await ReportsRepository.GetReportsAsync(
                 chatId: null,
-                status: _selectedStatus,
+                status: null, // Load all, filter client-side
                 limit: 100,
                 offset: 0);
 
-            // Load pending count
-            _pendingCount = await ReportsRepository.GetPendingCountAsync();
-
-            // Load message data for all reports
-            _messageCache.Clear();
-            foreach (var report in _reports)
+            foreach (var report in spamReports)
             {
-                var message = await MessageRepository.GetMessageAsync(report.MessageId);
-                if (message != null)
+                unifiedQueue.Add(new ReportQueueItem
                 {
-                    _messageCache[(report.MessageId, report.ChatId)] = message;
-                }
+                    Type = ReportType.Spam,
+                    Timestamp = report.ReportedAt,
+                    Priority = CalculateSpamPriority(report),
+                    IsPending = report.Status == ReportStatus.Pending,
+                    SpamReport = report,
+                    ImpersonationAlert = null,
+                    DisplayTitle = "Moderation Report",
+                    UserId = report.ReportedByUserId ?? 0,
+                    UserName = report.ReportedByUserName
+                });
             }
+
+            // Load impersonation alerts
+            var impersonationAlerts = await ImpersonationAlertsRepository.GetPendingAlertsAsync(
+                chatId: null,
+                cancellationToken: default);
+
+            foreach (var alert in impersonationAlerts)
+            {
+                unifiedQueue.Add(new ReportQueueItem
+                {
+                    Type = ReportType.Impersonation,
+                    Timestamp = alert.DetectedAt,
+                    Priority = CalculateImpersonationPriority(alert),
+                    IsPending = !alert.ReviewedAt.HasValue,
+                    SpamReport = null,
+                    ImpersonationAlert = alert,
+                    DisplayTitle = "Impersonation Alert",
+                    UserId = alert.SuspectedUserId,
+                    UserName = alert.SuspectedUserName
+                });
+            }
+
+            // Sort by priority (high → low), then timestamp (new → old)
+            _allReports = unifiedQueue
+                .OrderByDescending(x => x.Priority)
+                .ThenByDescending(x => x.Timestamp)
+                .ToList();
+
+            // Update counts
+            _pendingSpamCount = spamReports.Count(r => r.Status == ReportStatus.Pending);
+            _pendingImpersonationCount = impersonationAlerts.Count(a => !a.ReviewedAt.HasValue);
+
+            ApplyFilters();
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error loading reports");
+            Logger.LogError(ex, "Error loading reports queue");
             Snackbar.Add("Failed to load reports", Severity.Error);
         }
         finally
@@ -264,104 +218,129 @@
         }
     }
 
-    private MessageRecord? GetMessage(int messageId, long chatId)
+    private void ApplyFilters()
     {
-        _messageCache.TryGetValue((messageId, chatId), out var message);
-        return message;
+        var filtered = _allReports.AsEnumerable();
+
+        // Type filter
+        if (_selectedTypeFilter != ReportTypeFilter.All)
+        {
+            filtered = filtered.Where(x => x.Type == (_selectedTypeFilter == ReportTypeFilter.Spam ? ReportType.Spam : ReportType.Impersonation));
+        }
+
+        // Status filter
+        if (_selectedStatusFilter == StatusFilter.Pending)
+        {
+            filtered = filtered.Where(x => x.IsPending);
+        }
+
+        _filteredReports = filtered.ToList();
     }
 
-    private async Task HandleAction(Report report, string action)
+    private int CalculateSpamPriority(Report report)
+    {
+        if (report.Status != ReportStatus.Pending) return 0;
+        // Higher priority for newer reports
+        var age = (DateTimeOffset.UtcNow - report.ReportedAt).TotalHours;
+        return (int)(100 - age); // Newer = higher priority
+    }
+
+    private int CalculateImpersonationPriority(ImpersonationAlertRecord alert)
+    {
+        if (alert.ReviewedAt.HasValue) return 0;
+
+        // Critical impersonation (100 points, auto-banned) = highest priority
+        if (alert.RiskLevel == Data.Models.ImpersonationRiskLevel.Critical)
+            return 1000 + alert.TotalScore;
+
+        // Medium risk = medium priority
+        return 500 + alert.TotalScore;
+    }
+
+    private async Task HandleSpamAction((Report Report, string Action) args)
     {
         try
         {
-            switch (action)
+            switch (args.Action)
             {
                 case "spam":
-                    await ReportActionsService.HandleSpamActionAsync(report.Id, _currentUserId);
-                    Snackbar.Add($"Report #{report.Id} processed: Message deleted as spam", Severity.Success);
+                    await ReportActionsService.HandleSpamActionAsync(args.Report.Id, _currentUserId);
+                    Snackbar.Add($"Report #{args.Report.Id} processed: Message deleted as spam", Severity.Success);
                     break;
 
                 case "ban":
-                    await ReportActionsService.HandleBanActionAsync(report.Id, _currentUserId);
-                    Snackbar.Add($"Report #{report.Id} processed: User banned", Severity.Success);
+                    await ReportActionsService.HandleBanActionAsync(args.Report.Id, _currentUserId);
+                    Snackbar.Add($"Report #{args.Report.Id} processed: User banned", Severity.Success);
                     break;
 
                 case "warn":
-                    await ReportActionsService.HandleWarnActionAsync(report.Id, _currentUserId);
-                    Snackbar.Add($"Report #{report.Id} processed: Warning issued", Severity.Success);
+                    await ReportActionsService.HandleWarnActionAsync(args.Report.Id, _currentUserId);
+                    Snackbar.Add($"Report #{args.Report.Id} processed: Warning issued", Severity.Success);
                     break;
 
                 case "dismiss":
-                    await ReportActionsService.HandleDismissActionAsync(report.Id, _currentUserId);
-                    Snackbar.Add($"Report #{report.Id} dismissed", Severity.Info);
+                    await ReportActionsService.HandleDismissActionAsync(args.Report.Id, _currentUserId);
+                    Snackbar.Add($"Report #{args.Report.Id} dismissed", Severity.Info);
                     break;
 
                 default:
-                    Snackbar.Add($"Unknown action: {action}", Severity.Error);
+                    Snackbar.Add($"Unknown action: {args.Action}", Severity.Error);
                     return;
             }
 
-            // Reload reports after action
             await LoadReportsAsync();
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error handling action {Action} for report {ReportId}", action, report.Id);
+            Logger.LogError(ex, "Error handling spam action {Action} for report {ReportId}", args.Action, args.Report.Id);
             Snackbar.Add($"Failed to process report: {ex.Message}", Severity.Error);
         }
     }
 
-    private Color GetStatusColor(ReportStatus status)
+    private async Task HandleImpersonationAction((ImpersonationAlertRecord Alert, string Action) args)
     {
-        return status switch
+        try
         {
-            ReportStatus.Pending => Color.Warning,
-            ReportStatus.Reviewed => Color.Success,
-            ReportStatus.Dismissed => Color.Default,
-            _ => Color.Default
-        };
-    }
-
-    private string FormatDate(DateTimeOffset? timestamp)
-    {
-        if (!timestamp.HasValue) return "N/A";
-        var date = timestamp.Value;
-        var now = DateTimeOffset.UtcNow;
-        var diff = now - date;
-
-        if (diff.TotalMinutes < 1) return "Just now";
-        if (diff.TotalHours < 1) return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalDays < 1) return $"{(int)diff.TotalHours}h ago";
-        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
-
-        return date.LocalDateTime.ToString("MMM dd, yyyy");
-    }
-
-    private string? GetTelegramLink(long chatId, int messageId)
-    {
-        // Convert chat_id to t.me link format
-        // Public chats/channels: t.me/username/messageId
-        // Private chats: t.me/c/chatId/messageId (requires removing -100 prefix)
-
-        // For private supergroups/channels, chatId format is -100XXXXXXXXXX
-        // t.me link format requires removing the -100 prefix
-        if (chatId < 0)
-        {
-            var chatIdStr = chatId.ToString();
-            if (chatIdStr.StartsWith("-100"))
+            switch (args.Action)
             {
-                var numericId = chatIdStr.Substring(4); // Remove -100 prefix
-                return $"https://t.me/c/{numericId}/{messageId}";
+                case "confirm":
+                    // Confirm as scam (Phase 4.10)
+                    await ImpersonationAlertsRepository.UpdateVerdictAsync(
+                        args.Alert.Id,
+                        Data.Models.ImpersonationVerdict.ConfirmedScam,
+                        _currentUserId);
+                    Snackbar.Add($"Impersonation confirmed for user {args.Alert.SuspectedUserId}", Severity.Success);
+                    break;
+
+                case "unban":
+                    // Unban + mark as false positive (Phase 4.10)
+                    await ImpersonationAlertsRepository.UpdateVerdictAsync(
+                        args.Alert.Id,
+                        Data.Models.ImpersonationVerdict.FalsePositive,
+                        _currentUserId);
+                    Snackbar.Add($"User {args.Alert.SuspectedUserId} marked as false positive (unban pending)", Severity.Info);
+                    break;
+
+                case "dismiss":
+                    // Whitelist (not scam, but also not false positive)
+                    await ImpersonationAlertsRepository.UpdateVerdictAsync(
+                        args.Alert.Id,
+                        Data.Models.ImpersonationVerdict.Whitelisted,
+                        _currentUserId);
+                    Snackbar.Add($"User whitelisted", Severity.Info);
+                    break;
+
+                default:
+                    Snackbar.Add($"Unknown action: {args.Action}", Severity.Error);
+                    return;
             }
+
+            await LoadReportsAsync();
         }
-
-        // For public chats, we'd need the username which we don't have in our schema yet
-        // Return null for now - could be enhanced by storing chat_username in messages table
-        return null;
-    }
-
-    private string GetMessagesLink(long chatId, int messageId)
-    {
-        return $"/messages?chat={chatId}&highlight={messageId}";
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error handling impersonation action {Action} for alert {AlertId}", args.Action, args.Alert.Id);
+            Snackbar.Add($"Failed to process alert: {ex.Message}", Severity.Error);
+        }
     }
 }

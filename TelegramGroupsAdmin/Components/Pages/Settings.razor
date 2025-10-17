@@ -58,6 +58,7 @@
 
 @code {
     private int _activeTabIndex = 0;
+    private bool _isDisposed = false;
 
     protected override void OnInitialized()
     {
@@ -83,6 +84,10 @@
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
+        // Prevent state changes during disposal
+        if (_isDisposed)
+            return;
+
         var fragment = new Uri(e.Location).Fragment.TrimStart('#');
         var newIndex = fragment switch
         {
@@ -108,6 +113,10 @@
 
     private void OnTabChanged(int index)
     {
+        // Prevent navigation during disposal
+        if (_isDisposed)
+            return;
+
         _activeTabIndex = index;
 
         // Update URL fragment without reload
@@ -126,11 +135,20 @@
             _ => "spam"
         };
 
-        Navigation.NavigateTo($"/settings#{fragment}", false);
+        try
+        {
+            Navigation.NavigateTo($"/settings#{fragment}", false);
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException)
+        {
+            // Circuit is disconnecting - silently ignore navigation failures during disposal
+            // This is expected during page refresh or when the browser closes the connection
+        }
     }
 
     public void Dispose()
     {
+        _isDisposed = true;
         Navigation.LocationChanged -= OnLocationChanged;
     }
 }

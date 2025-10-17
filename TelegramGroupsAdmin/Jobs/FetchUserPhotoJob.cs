@@ -15,18 +15,21 @@ namespace TelegramGroupsAdmin.Jobs;
 /// TickerQ job to fetch and cache user profile photos in telegram_users table
 /// Runs asynchronously after message save with 0s delay for instant execution
 /// Provides persistence, retry logic, and proper error handling (replaces fire-and-forget)
+/// Phase 4.10: Computes and stores pHash (8 bytes) for fast impersonation detection lookups
 /// </summary>
 public class FetchUserPhotoJob(
     ILogger<FetchUserPhotoJob> logger,
     TelegramBotClientFactory botClientFactory,
     TelegramPhotoService photoService,
     TelegramUserRepository telegramUserRepository,
+    IPhotoHashService photoHashService,
     IOptions<TelegramOptions> telegramOptions)
 {
     private readonly ILogger<FetchUserPhotoJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly TelegramPhotoService _photoService = photoService;
     private readonly TelegramUserRepository _telegramUserRepository = telegramUserRepository;
+    private readonly IPhotoHashService _photoHashService = photoHashService;
     private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
 
     /// <summary>
@@ -58,17 +61,40 @@ public class FetchUserPhotoJob(
 
             if (userPhotoPath != null)
             {
-                // Update telegram_users table with photo path (centralized storage)
+                // Phase 4.10: Compute perceptual hash for fast impersonation detection lookups
+                string? photoHashBase64 = null;
+                try
+                {
+                    var photoHashBytes = await _photoHashService.ComputePhotoHashAsync(userPhotoPath);
+                    if (photoHashBytes != null)
+                    {
+                        photoHashBase64 = Convert.ToBase64String(photoHashBytes);
+                        _logger.LogDebug(
+                            "Computed pHash for user {UserId} (8 bytes → 12 char Base64)",
+                            payload.UserId);
+                    }
+                }
+                catch (Exception hashEx)
+                {
+                    // Log but don't fail job if hash computation fails
+                    _logger.LogWarning(
+                        hashEx,
+                        "Failed to compute photo hash for user {UserId}, continuing without hash",
+                        payload.UserId);
+                }
+
+                // Update telegram_users table with photo path and pHash (centralized storage)
                 await _telegramUserRepository.UpdateUserPhotoPathAsync(
                     payload.UserId,
                     userPhotoPath,
-                    photoHash: null, // TODO: Phase 4.10 - compute pHash for impersonation detection
+                    photoHashBase64,
                     cancellationToken);
 
                 _logger.LogInformation(
-                    "Cached user photo for user {UserId}: {PhotoPath}",
+                    "Cached user photo for user {UserId}: {PhotoPath} (pHash: {HasHash})",
                     payload.UserId,
-                    userPhotoPath);
+                    userPhotoPath,
+                    photoHashBase64 != null ? "stored" : "none");
             }
             else
             {

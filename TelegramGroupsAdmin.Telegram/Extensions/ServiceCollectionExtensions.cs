@@ -32,6 +32,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAdminNotesRepository, AdminNotesRepository>(); // Phase 4.12
         services.AddScoped<IUserTagsRepository, UserTagsRepository>(); // Phase 4.12
         services.AddScoped<ITagDefinitionsRepository, TagDefinitionsRepository>(); // Phase 4.12
+        services.AddScoped<IImpersonationAlertsRepository, ImpersonationAlertsRepository>(); // Phase 4.10
         services.AddScoped<AuditLogRepository>();
         services.AddScoped<UserRepository>();
         services.AddScoped<MessageHistoryRepository>();
@@ -52,6 +53,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TelegramUserManagementService>(); // Orchestrates Telegram user operations
         services.AddSingleton<IWelcomeService, WelcomeService>();
         services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
+
+        // Phase 4.10: Anti-Impersonation Detection
+        services.AddSingleton<IPhotoHashService, PhotoHashService>();
+        services.AddScoped<IImpersonationDetectionService, ImpersonationDetectionService>();
 
         // Bot command system
         // Commands are Scoped (to allow injecting Scoped services like ModerationActionService)
