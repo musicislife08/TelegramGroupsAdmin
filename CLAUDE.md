@@ -487,7 +487,7 @@ Total: 8-12 days for broad appeal
 
 ### **Milestone 4: Open Source Ready** (~25-30 days from now)
 **Target Date**: ~November 15, 2025
-**Estimated Effort**: 48-56 hours (6-7 days beyond Security Audit)
+**Estimated Effort**: 64-80 hours (8-10 days beyond Security Audit)
 
 **Phase 6 Optional Protections:**
 | Feature | Priority | Estimate | Rationale |
@@ -498,16 +498,42 @@ Total: 8-12 days for broad appeal
 | 6.2 Raid Detection | Medium | 24-32h (3-4d) | Semantic similarity, sliding window, temp lockdown |
 | 6.4 Scheduled Messages | Low | 16-24h (2-3d) | TickerQ pattern, recurring cron, professional feature |
 
+**Infrastructure & Deployment:**
+| Task | Priority | Estimate | Rationale |
+|------|----------|----------|-----------|
+| .NET 10 RC2 Update | High | 4-6h | Update project files, NuGet packages, test for breaking changes |
+| Production Docker Container | **CRITICAL** | 8-12h (1-2d) | Minimal alpine/distroless image, non-root user, multi-stage build, compact size |
+| Docker Compose Example | **CRITICAL** | 4-6h | PostgreSQL + app + optional Redis, volume management, environment config |
+
+**Docker Container Requirements:**
+- **Base Image**: `mcr.microsoft.com/dotnet/aspnet:10.0-alpine` (minimal attack surface)
+- **Multi-stage Build**: Build stage + runtime stage (reduce image size)
+- **Security**: Non-root user, minimal packages, no unnecessary tools
+- **Size**: Target < 200MB (currently ~150MB for .NET + app)
+- **Health Checks**: `/health` endpoint monitoring
+- **Logging**: Structured JSON logging to stdout
+- **Environment**: All config via environment variables (12-factor)
+- **Volumes**: `/data` for database, `/data/images` for photos, `/data/keys` for Data Protection
+
+**Docker Compose Features:**
+- PostgreSQL 17 with persistent volume
+- TelegramGroupsAdmin app with restart policy
+- Optional Redis for caching (future)
+- Network isolation (internal network for DB)
+- Environment variable template (.env.example)
+- Init scripts for first-time setup
+- Health check dependencies (app waits for DB)
+
 **Documentation & Packaging:**
-- Docker Compose for easy deployment
-- Comprehensive README with setup instructions
+- Comprehensive README with quick start (docker-compose up)
 - Environment variable documentation
 - Migration guide (fresh install + upgrade paths)
-- Troubleshooting guide
+- Troubleshooting guide (common Docker issues)
 - Contributing guidelines
-- License file (MIT/Apache 2.0)
+- License file (MIT recommended for broad adoption)
+- Security policy (responsible disclosure)
 
-**Deliverable**: Broad community appeal (curated, crypto, large public, self-hosted), security-audited, production-ready for open source release
+**Deliverable**: Broad community appeal (curated, crypto, large public, self-hosted), security-audited, production-ready for open source release with one-command deployment
 
 ---
 
@@ -570,10 +596,12 @@ Automated recommendations, pattern detection, ML clustering, insights dashboard
   - Uses `security-reviewer` and `dotnet-refactor-advisor` agents
 
 - **Open Source Ready**: ~25-30 days from now (**Target: ~Nov 15**)
+  - .NET 10 RC2 update (latest runtime)
+  - Production Docker container (alpine-based, secure, < 200MB)
+  - Docker Compose with PostgreSQL (one-command deployment)
   - OpenAI-compatible API (local LLM support - removes API barrier)
   - Bio spam check, raid detection
-  - Broad community appeal features
-  - Documentation, Docker compose, README, contributing guidelines
+  - Comprehensive documentation (README, quick start, troubleshooting)
 
 - **Full Vision with Analytics**: ~35-42 days from now (**Target: ~Nov 28**)
   - Phase 5 analytics dashboard
