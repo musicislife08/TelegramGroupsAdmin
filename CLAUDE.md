@@ -386,21 +386,160 @@ Total: 8-12 days for broad appeal
 **Constraints**: Maintain 0 errors/0 warnings, no breaking changes, preserve functionality, readability-first, production stability
 **Priority**: Medium (after 4.4, before 4.5)
 
-## Current Status (Oct 2025)
-**Completion**: ~73% overall, ~97% core features
+## Current Status & Timeline (Oct 2025)
+
+**Development Velocity** (Oct 6 - Oct 17):
+- 11 days elapsed, 125 commits (~11 commits/day)
+- Delivered: Phases 1-3 complete, Phase 4 at 50%
+- Productivity: ~73% of core platform in 11 days
+- Quality maintained: 0 errors, 0 warnings throughout
+
+**Completion Status**:
 - Phase 1: 100% ✅
 - Phase 2: 100% ✅ (2.1-2.9 complete)
 - Phase 3: 100% ✅
 - Phase 4: 50% (4.1-4.5, 4.8, 4.12 core, 4.19 complete; 4.6-4.7, 4.9-4.11, 4.12 tag mgmt UI, 4.13-4.15, 4.17-4.18 pending)
-- Phases 5-7: 0% (future/optional)
+- Phase 5: 0% (analytics, optional)
+- Phase 6: 10% (6.1 bot auto-ban complete)
 
-**Production Ready**: Migration+Backup✅ (InitialSchema consolidated, validated, backup/restore+Data Protection, topological sort, sequence resets, strict DTO validation), Build Quality✅ (0 errors/warnings), System Ready: Fresh DB init (`dotnet run --migrate-only`), cross-machine backup/restore+TOTP, production deployment
+**Production Ready**: Migration+Backup✅, Build Quality✅, System Ready: Fresh DB init, cross-machine backup/restore+TOTP, production deployment
+
+---
+
+## Estimated Timeline to Completion
+
+### **Milestone 1: Core Moderation Complete** (~8-10 days from now)
+**Target Date**: ~October 27, 2025
+**Estimated Effort**: 64-76 hours
+
+| Feature | Priority | Estimate | Rationale |
+|---------|----------|----------|-----------|
+| 4.12 Tag Management UI | High | 2h | Final polish for Phase 4.12 |
+| 4.6 /tempban | High | 2-3h | Quick win, extends existing ban logic |
+| 4.7 Runtime Logging | Medium | 4-6h | Config management pattern already established |
+| 4.10 Anti-Impersonation | **Critical** | 24-32h (3-4d) | Name similarity (Levenshtein), photo hash (pHash), review queue UI |
+| 4.11 Warning/Points | **Critical** | 24-32h (3-4d) | Point system, auto-escalation, decay logic, DM notifications, UI |
+| 4.9 Bot Connection Mgmt | Low | 6-8h | Hot-reload infrastructure (nice-to-have) |
+
+**Deliverable**: Full-featured moderation platform with impersonation protection and graduated discipline system
+
+---
+
+### **Milestone 2: Enhanced Features** (~18-22 days from now)
+**Target Date**: ~November 8, 2025
+**Estimated Effort**: 80-96 hours (10-12 days beyond Milestone 1)
+
+| Feature | Priority | Estimate | Rationale |
+|---------|----------|----------|-----------|
+| 4.13 Filter Engine | High | 24-32h (3-4d) | Regex patterns, domain blacklist/whitelist, 12th spam check integration |
+| 4.14 Report Aggregation | High | 16h (2d) | Multi-report escalation, accuracy scoring, analytics |
+| 4.15 Appeal System | Medium | 32-40h (4-5d) | DM channel, appeals queue, verdict workflow |
+| 4.18 Forum/Topics | Low | 8h (1d) | Pass-through message_thread_id (simple) |
+| 4.16 OpenAI-Compatible | **Critical** | 8-16h (1-2d) | Local LLM support (Ollama/LM Studio), BaseUrl config |
+
+**Deliverable**: Production-ready with advanced filtering, appeals, and self-hosted AI option
+
+---
+
+### **Milestone 3: Open Source Readiness** (~26-32 days from now)
+**Target Date**: ~November 17, 2025
+**Estimated Effort**: 56-72 hours (7-9 days beyond Milestone 2)
+
+**Phase 6 Optional Protections:**
+| Feature | Priority | Estimate | Rationale |
+|---------|----------|----------|-----------|
+| 6.1 Bot Auto-Ban | ✅ | Done | Already complete |
+| 6.3 Bio Spam Check | High | 16h (2d) | 10th spam algorithm, user bio analysis on join, 30-day cache |
+| 6.2 Raid Detection | Medium | 24-32h (3-4d) | Semantic similarity, sliding window, temp lockdown |
+| 6.4 Scheduled Messages | Low | 16-24h (2-3d) | TickerQ pattern, recurring cron, professional feature |
+
+**Deliverable**: Broad community appeal (curated, crypto, large public, self-hosted)
+
+---
+
+### **Milestone 4: Analytics & Insights** (~40-50 days from now)
+**Target Date**: ~December 1, 2025
+**Estimated Effort**: 96-128 hours (12-16 days beyond Milestone 3)
+
+**Phase 5 Features (Optional):**
+| Feature | Priority | Estimate | Rationale |
+|---------|----------|----------|-----------|
+| 5.1 Analytics Repo | Medium | 16h (2d) | Time-series queries, false positive/negative rates |
+| 5.2 TickerQ Aggregation | Medium | 16h (2d) | Daily stats job, weekly/monthly rollups |
+| 5.3 Analytics UI | Medium | 16-24h (2-3d) | Trends charts, performance metrics, confidence analysis |
+| 5.4 Charting Library | Low | 8h (1d) | MudBlazor Charts or ApexCharts integration |
+| 5.5 Auto-Trust System | High | 16-24h (2-3d) | 7 days + 50 clean messages, UI approval workflow |
+| 5.6 Forwarded Spam | Medium | 16h (2d) | Channel blacklist, mass-forward detection |
+| 5.10 Smart Multi-Language | Low | 24-32h (3-4d) | Language detection, helpful DMs, template system |
+
+**Deliverable**: Data-driven insights and automated trust building
+
+---
+
+### **Phase 6 ML Insights** (Optional, ~55-65 days from now)
+**Estimated Effort**: 40-56 hours (5-7 days)
+Automated recommendations, pattern detection, ML clustering, insights dashboard
+
+---
+
+## Summary Projections
+
+**Based on 11-day velocity delivering 73% completion:**
+
+| Milestone | Target Date | Days from Now | Cumulative Days | Completion % |
+|-----------|-------------|---------------|-----------------|--------------|
+| **Current** | Oct 17 | 0 | 11 | 73% |
+| **Core Moderation** | ~Oct 27 | 10 | 21 | 85% |
+| **Enhanced Features** | ~Nov 8 | 22 | 33 | 92% |
+| **Open Source Ready** | ~Nov 17 | 31 | 42 | 96% |
+| **Analytics Complete** | ~Dec 1 | 45 | 56 | 100% core + analytics |
+
+**Realistic Estimates:**
+- **Minimum Viable Production**: 10 days (Core Moderation)
+- **Feature-Complete Platform**: 22 days (Enhanced Features)
+- **Open Source Release Quality**: 31 days (with broad community appeal)
+- **Full Vision with Analytics**: 45 days
+
+**Conservative Buffer**: Add 20-30% for polish, testing, documentation, edge cases
+**Aggressive Timeline**: ~30 days to open source
+**Comfortable Timeline**: ~40-50 days to full platform with analytics
+
+---
+
+## Recommended Execution Order
+
+**Week 1-2** (Days 1-10): Core Moderation
+1. 4.12 Tag Management UI (2h) - Quick completion
+2. 4.6 /tempban (3h) - Extends existing patterns
+3. 4.10 Anti-Impersonation (4d) - Critical security
+4. 4.11 Warning/Points (4d) - Foundational moderation
+
+**Week 3-4** (Days 11-22): Enhanced Features
+5. 4.16 OpenAI-Compatible (2d) - Critical for open source
+6. 4.13 Filter Engine (4d) - Advanced spam control
+7. 4.14 Report Aggregation (2d) - Improves admin workflow
+8. 4.18 Forum/Topics (1d) - Quick compatibility fix
+9. 4.7 Runtime Logging (1d) - Troubleshooting aid
+
+**Week 5** (Days 23-31): Open Source Polish
+10. 6.3 Bio Spam Check (2d) - High-value protection
+11. 6.2 Raid Detection (4d) - Crypto/large group protection
+12. Documentation polish, README, Docker compose
+13. Testing on fresh install, edge case validation
+
+**Week 6-7** (Days 32-45): Analytics & Appeal System
+14. 4.15 Appeal System (5d) - Completes moderation loop
+15. Phase 5 Analytics (12d) - Data-driven insights
+16. 6.4 Scheduled Messages (3d) - Professional feature
+
+**Flexible Items** (deprioritize if timeline pressure):
+- 4.9 Bot Connection Management (nice-to-have, not critical)
+- 4.17 Additional Media Types (can add post-launch)
+- 5.10 Smart Multi-Language (value-add, not core)
+- 6.4 Scheduled Messages (professional polish)
 
 **Next Steps**:
-Immediate (1-2 weeks): 4.12 Tag Management UI (2h, completes Phase 4.12), 4.10 Anti-Impersonation (3-4d, real attack vector), 4.6 /tempban (2-3h, quick win)
-Short Term (next month): 4.11 Warning/Points (3-4d, foundational), 4.13 Filter Engine (3-4d, tg-spam Lua features), 4.14 Report Aggregation (2d, enhances reports), 4.7 Runtime log config (4-6h, troubleshooting)
-Medium Term (after Phase 4): 4.15 Appeal System (4-5d, completes moderation loop), Refactoring review (REFACTORING_BACKLOG.md), 5.5/5.6/5.10 (conditional/lower priority)
-Long Term: Phase 5 Analytics, Phase 6 ML Insights (optional, value-add)
+Immediate: Start with 4.12 Tag Management UI (2h), then 4.6 /tempban (3h) - both quick wins to build momentum
 
 **Critical Issues**: C1 Fire-and-Forget✅ (Task.Run→TickerQ, WelcomeTimeoutJob+DeleteMessageJob+FetchUserPhotoJob, persistence/retry/logging), MH1+MH2✅ (GetStatsAsync 2→1 query 80% faster, CleanupExpiredAsync 3→1 query 50% faster, single-query GroupBy), H1+H2✅ (ChatPermissions static helpers, magic numbers→database config, no migration needed)
 
