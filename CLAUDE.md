@@ -518,7 +518,6 @@ Total: 8-12 days for broad appeal
 **Docker Compose Features:**
 - PostgreSQL 17 with persistent volume
 - TelegramGroupsAdmin app with restart policy
-- Optional Redis for caching (future)
 - Network isolation (internal network for DB)
 - Environment variable template (.env.example)
 - Init scripts for first-time setup
