@@ -28,14 +28,14 @@ public interface IUserTagsRepository
     Task<bool> DeleteTagAsync(long tagId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get all users with a specific tag type
+    /// Get all users with a specific tag name
     /// </summary>
-    Task<List<long>> GetUserIdsByTagTypeAsync(TagType tagType, CancellationToken cancellationToken = default);
+    Task<List<long>> GetUserIdsByTagNameAsync(string tagName, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Check if a user has a specific tag type
+    /// Check if a user has a specific tag name
     /// </summary>
-    Task<bool> UserHasTagAsync(long telegramUserId, TagType tagType, CancellationToken cancellationToken = default);
+    Task<bool> UserHasTagAsync(long telegramUserId, string tagName, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get the confidence modifier for a user based on their tags

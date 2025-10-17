@@ -436,8 +436,8 @@ public class TelegramUserRepository
         // Get user tags (Phase 4.12)
         var tags = await context.UserTags
             .AsNoTracking()
-            .Where(t => t.TelegramUserId == telegramUserId)
-            .OrderBy(t => t.TagType)
+            .Where(t => t.TelegramUserId == telegramUserId && t.RemovedAt == null)
+            .OrderBy(t => t.TagName)
             .ToListAsync(ct);
 
         return new UiModels.TelegramUserDetail

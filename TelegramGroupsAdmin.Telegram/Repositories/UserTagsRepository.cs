@@ -10,17 +10,19 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 public class UserTagsRepository : IUserTagsRepository
 {
     private readonly AppDbContext _context;
+    private readonly ITagDefinitionsRepository _tagDefinitionsRepository;
 
-    public UserTagsRepository(AppDbContext context)
+    public UserTagsRepository(AppDbContext context, ITagDefinitionsRepository tagDefinitionsRepository)
     {
         _context = context;
+        _tagDefinitionsRepository = tagDefinitionsRepository;
     }
 
     public async Task<List<UserTag>> GetTagsByUserIdAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         var tags = await _context.UserTags
-            .Where(t => t.TelegramUserId == telegramUserId)
-            .OrderBy(t => t.TagType)
+            .Where(t => t.TelegramUserId == telegramUserId && t.RemovedAt == null)
+            .OrderBy(t => t.TagName)
             .ToListAsync(cancellationToken);
 
         return tags.Select(t => t.ToModel()).ToList();
@@ -42,6 +44,9 @@ public class UserTagsRepository : IUserTagsRepository
         _context.UserTags.Add(dto);
         await _context.SaveChangesAsync(cancellationToken);
 
+        // Increment usage count for tag definition
+        await _tagDefinitionsRepository.IncrementUsageAsync(tag.TagName, cancellationToken);
+
         return dto.Id;
     }
 
@@ -53,34 +58,41 @@ public class UserTagsRepository : IUserTagsRepository
         if (tag == null)
             return false;
 
+        var tagName = tag.TagName;
+
+        // Hard delete for now (can switch to soft delete later if needed)
         _context.UserTags.Remove(tag);
         await _context.SaveChangesAsync(cancellationToken);
+
+        // Decrement usage count for tag definition
+        await _tagDefinitionsRepository.DecrementUsageAsync(tagName, cancellationToken);
+
         return true;
     }
 
-    public async Task<List<long>> GetUserIdsByTagTypeAsync(TagType tagType, CancellationToken cancellationToken = default)
+    public async Task<List<long>> GetUserIdsByTagNameAsync(string tagName, CancellationToken cancellationToken = default)
     {
-        var dataTagType = (Data.Models.TagType)(int)tagType;
+        var normalizedTag = tagName.ToLowerInvariant();
 
         return await _context.UserTags
-            .Where(t => t.TagType == dataTagType)
+            .Where(t => t.TagName == normalizedTag && t.RemovedAt == null)
             .Select(t => t.TelegramUserId)
             .Distinct()
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<bool> UserHasTagAsync(long telegramUserId, TagType tagType, CancellationToken cancellationToken = default)
+    public async Task<bool> UserHasTagAsync(long telegramUserId, string tagName, CancellationToken cancellationToken = default)
     {
-        var dataTagType = (Data.Models.TagType)(int)tagType;
+        var normalizedTag = tagName.ToLowerInvariant();
 
         return await _context.UserTags
-            .AnyAsync(t => t.TelegramUserId == telegramUserId && t.TagType == dataTagType, cancellationToken);
+            .AnyAsync(t => t.TelegramUserId == telegramUserId && t.TagName == normalizedTag && t.RemovedAt == null, cancellationToken);
     }
 
     public async Task<int> GetTotalConfidenceModifierAsync(long telegramUserId, CancellationToken cancellationToken = default)
     {
         var modifiers = await _context.UserTags
-            .Where(t => t.TelegramUserId == telegramUserId && t.ConfidenceModifier.HasValue)
+            .Where(t => t.TelegramUserId == telegramUserId && t.RemovedAt == null && t.ConfidenceModifier.HasValue)
             .Select(t => t.ConfidenceModifier!.Value)
             .ToListAsync(cancellationToken);
 

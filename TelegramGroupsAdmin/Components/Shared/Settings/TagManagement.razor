@@ -1,0 +1,221 @@
+@using TelegramGroupsAdmin.Data.Models
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Helpers
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ITagDefinitionsRepository TagDefinitionsRepository
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<MudStack Spacing="4">
+    <MudPaper Class="pa-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+            <div>
+                <MudText Typo="Typo.h6" GutterBottom="true">Tag Management</MudText>
+                <MudText Typo="Typo.body2">
+                    Manage tag color preferences and view usage statistics
+                </MudText>
+            </div>
+            @if (_canEdit)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateTag">
+                    Create Tag
+                </MudButton>
+            }
+        </MudStack>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+        }
+        else if (_tags.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-4">
+                No tag definitions found. Tags will be auto-created when first used with default colors.
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="_tags" Hover="true" Breakpoint="Breakpoint.Sm" Class="mt-4">
+                <HeaderContent>
+                    <MudTh>Tag Name</MudTh>
+                    <MudTh>Color</MudTh>
+                    <MudTh Style="text-align: right;">Usage Count</MudTh>
+                    <MudTh>Created</MudTh>
+                    <MudTh Style="text-align: right;">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Tag Name">
+                        <MudChip T="string" Size="Size.Small" Color="@GetMudColor(context.Color)">
+                            @context.TagName
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Color">
+                        <MudText Typo="Typo.body2">@context.Color.GetDisplayName()</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Usage Count" Style="text-align: right;">
+                        <MudText Typo="Typo.body2">@context.UsageCount</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Created">
+                        <MudText Typo="Typo.body2">@context.CreatedAt.LocalDateTime.ToString("MMM d, yyyy")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Actions" Style="text-align: right;">
+                        @if (_canEdit)
+                        {
+                            <MudTooltip Text="Edit color">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                              Size="Size.Small"
+                                              Color="Color.Primary"
+                                              OnClick="@(() => EditTag(context))" />
+                            </MudTooltip>
+                            <MudTooltip Text="Delete tag definition">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                              Size="Size.Small"
+                                              Color="Color.Error"
+                                              OnClick="@(() => DeleteTag(context))" />
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">View only</MudText>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-4">
+            <MudText Typo="Typo.body2">
+                <strong>Note:</strong> Tag definitions store color preferences only. Tags will auto-create on first use with the default color (Blue).
+                Deleting a tag definition removes the color preference but does not remove tags from users.
+            </MudText>
+        </MudAlert>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private List<TagDefinition> _tags = new();
+    private bool _loading = true;
+    private bool _canEdit = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if user has Admin or Owner role
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        _canEdit = user.IsInRole("Admin") || user.IsInRole("Owner");
+
+        await LoadTags();
+    }
+
+    private async Task LoadTags()
+    {
+        _loading = true;
+        try
+        {
+            _tags = await TagDefinitionsRepository.GetAllAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading tags: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task CreateTag()
+    {
+        var parameters = new DialogParameters
+        {
+            { "IsEdit", false }
+        };
+
+        var dialog = await DialogService.ShowAsync<TagEditDialog>("Create Tag", parameters, new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        });
+
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled && result.Data is TagEditDialog.TagEditResult editResult)
+        {
+            try
+            {
+                await TagDefinitionsRepository.CreateAsync(editResult.TagName, editResult.Color);
+                Snackbar.Add($"Tag '{editResult.TagName}' created successfully", Severity.Success);
+                await LoadTags();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error creating tag: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task EditTag(TagDefinition tag)
+    {
+        var parameters = new DialogParameters
+        {
+            { "IsEdit", true },
+            { "TagName", tag.TagName },
+            { "CurrentColor", tag.Color }
+        };
+
+        var dialog = await DialogService.ShowAsync<TagEditDialog>("Edit Tag Color", parameters, new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        });
+
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled && result.Data is TagEditDialog.TagEditResult editResult)
+        {
+            try
+            {
+                await TagDefinitionsRepository.UpdateColorAsync(tag.TagName, editResult.Color);
+                Snackbar.Add($"Tag '{tag.TagName}' color updated to {editResult.Color.GetDisplayName()}", Severity.Success);
+                await LoadTags();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error updating tag: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteTag(TagDefinition tag)
+    {
+        var message = tag.UsageCount > 0
+            ? $"Are you sure you want to delete the color preference for '{tag.TagName}'? This tag is currently used {tag.UsageCount} time(s). This will NOT remove the tag from users, only the color preference."
+            : $"Are you sure you want to delete the color preference for '{tag.TagName}'?";
+
+        var parameters = new DialogParameters
+        {
+            { "ContentText", message },
+            { "ButtonText", "Delete" },
+            { "Color", Color.Error }
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Deletion", parameters);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            try
+            {
+                await TagDefinitionsRepository.DeleteAsync(tag.TagName);
+                Snackbar.Add($"Tag definition '{tag.TagName}' deleted", Severity.Success);
+                await LoadTags();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting tag: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private static Color GetMudColor(TagColor tagColor) => tagColor.ToMudColor();
+}

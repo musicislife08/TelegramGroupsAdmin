@@ -580,21 +580,27 @@ public static class ModelMappings
     }
 
     // ============================================================================
-    // User Tags Mappings (Phase 4.12, Phase 4.19: Actor conversion)
+    // User Tags Mappings (Phase 4.12: String-based tags with soft delete, Phase 4.19: Actor conversion)
     // ============================================================================
 
     public static UiModels.UserTag ToModel(
         this DataModels.UserTagDto data,
         string? webUserEmail = null,
         string? telegramUsername = null,
-        string? telegramFirstName = null) => new()
+        string? telegramFirstName = null,
+        string? removedByWebUserEmail = null,
+        string? removedByTelegramUsername = null,
+        string? removedByTelegramFirstName = null) => new()
     {
         Id = data.Id,
         TelegramUserId = data.TelegramUserId,
-        TagType = (UiModels.TagType)data.TagType,
-        TagLabel = data.TagLabel,
+        TagName = data.TagName,
         AddedBy = ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
         AddedAt = data.AddedAt,
+        RemovedAt = data.RemovedAt,
+        RemovedBy = data.RemovedAt.HasValue
+            ? ToActor(data.RemovedByWebUserId, data.RemovedByTelegramUserId, data.RemovedBySystemIdentifier, removedByWebUserEmail, removedByTelegramUsername, removedByTelegramFirstName)
+            : null,
         ConfidenceModifier = data.ConfidenceModifier
     };
 
@@ -602,17 +608,49 @@ public static class ModelMappings
     {
         SetActorColumns(ui.AddedBy, out var webUserId, out var telegramUserId, out var systemIdentifier);
 
+        string? removedByWebUserId = null;
+        long? removedByTelegramUserId = null;
+        string? removedBySystemIdentifier = null;
+
+        if (ui.RemovedBy != null)
+        {
+            SetActorColumns(ui.RemovedBy, out removedByWebUserId, out removedByTelegramUserId, out removedBySystemIdentifier);
+        }
+
         return new()
         {
             Id = ui.Id,
             TelegramUserId = ui.TelegramUserId,
-            TagType = (DataModels.TagType)(int)ui.TagType,
-            TagLabel = ui.TagLabel,
+            TagName = ui.TagName,
             ActorWebUserId = webUserId,
             ActorTelegramUserId = telegramUserId,
             ActorSystemIdentifier = systemIdentifier,
             AddedAt = ui.AddedAt,
+            RemovedAt = ui.RemovedAt,
+            RemovedByWebUserId = removedByWebUserId,
+            RemovedByTelegramUserId = removedByTelegramUserId,
+            RemovedBySystemIdentifier = removedBySystemIdentifier,
             ConfidenceModifier = ui.ConfidenceModifier
         };
     }
+
+    // ============================================================================
+    // Tag Definition Mappings (Phase 4.12: Tag color preferences)
+    // ============================================================================
+
+    public static UiModels.TagDefinition ToModel(this DataModels.TagDefinitionDto data) => new()
+    {
+        TagName = data.TagName,
+        Color = data.Color,
+        UsageCount = data.UsageCount,
+        CreatedAt = data.CreatedAt
+    };
+
+    public static DataModels.TagDefinitionDto ToDto(this UiModels.TagDefinition ui) => new()
+    {
+        TagName = ui.TagName,
+        Color = ui.Color,
+        UsageCount = ui.UsageCount,
+        CreatedAt = ui.CreatedAt
+    };
 }

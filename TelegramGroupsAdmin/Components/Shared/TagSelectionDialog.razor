@@ -1,116 +1,183 @@
 @using TelegramGroupsAdmin.Telegram.Models
-@using MudBlazor
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Data.Models
+@using TelegramGroupsAdmin.Helpers
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ITagDefinitionsRepository TagDefinitionsRepository
 
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
-            <MudText Typo="Typo.body1">Select a tag to apply to this user:</MudText>
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudText Typo="Typo.body1">Add tags to this user:</MudText>
+                <MudButton Variant="Variant.Text"
+                          Color="Color.Primary"
+                          StartIcon="@Icons.Material.Filled.Add"
+                          Size="Size.Small"
+                          OnClick="CreateNewTag">
+                    Create New Tag
+                </MudButton>
+            </MudStack>
 
-            <MudSelect @bind-Value="_selectedTagType"
-                       Label="Tag Type"
-                       Variant="Variant.Outlined"
-                       Required="true"
-                       RequiredError="Please select a tag type">
-                @foreach (TagType tagType in Enum.GetValues<TagType>())
-                {
-                    <MudSelectItem Value="@tagType">
-                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                            <MudChip T="string" Size="Size.Small" Color="@GetTagColor(tagType)">
-                                @tagType.ToString()
-                            </MudChip>
-                            <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                @GetTagDescription(tagType)
-                            </MudText>
-                        </MudStack>
-                    </MudSelectItem>
-                }
-            </MudSelect>
-
-            @if (_selectedTagType == TagType.Custom)
+            @if (_loading)
             {
-                <MudTextField @bind-Value="_customLabel"
-                              Label="Custom Label"
-                              Placeholder="Enter custom tag label..."
-                              Variant="Variant.Outlined"
-                              MaxLength="50"
-                              Counter="50"
-                              Required="true"
-                              RequiredError="Custom label is required" />
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
             }
+            else if (_availableTags.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    @if (UserAssignedTags.Count > 0)
+                    {
+                        <text>All available tags are already assigned to this user. Click "Create New Tag" to add a new one.</text>
+                    }
+                    else
+                    {
+                        <text>No tags available. Click "Create New Tag" to add one.</text>
+                    }
+                </MudAlert>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                    Click tags to select (you can select multiple):
+                </MudText>
+                <MudPaper Elevation="0" Class="pa-3" Style="border: 1px solid var(--mud-palette-lines-default); border-radius: 4px; min-height: 120px;">
+                    <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                        @foreach (var tagDef in _availableTags)
+                        {
+                            var isSelected = _selectedTags.Contains(tagDef.TagName);
+                            <MudChip T="string"
+                                     Size="Size.Medium"
+                                     Color="@tagDef.Color.ToMudColor()"
+                                     Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
+                                     OnClick="@(() => ToggleTag(tagDef.TagName))"
+                                     Style="cursor: pointer;">
+                                @if (isSelected)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Class="mr-1" />
+                                }
+                                @tagDef.TagName
+                            </MudChip>
+                        }
+                    </MudStack>
+                </MudPaper>
 
-            <MudTextField @bind-Value="_confidenceModifier"
-                          Label="Confidence Modifier (Optional)"
-                          Placeholder="e.g., +10 or -20"
-                          Variant="Variant.Outlined"
-                          HelperText="Adjusts spam detection confidence for this user"
-                          T="int?" />
+                @if (_selectedTags.Count > 0)
+                {
+                    <MudAlert Severity="Severity.Success" Dense="true" Class="mt-2">
+                        Selected @_selectedTags.Count tag@(_selectedTags.Count == 1 ? "" : "s"): @string.Join(", ", _selectedTags)
+                    </MudAlert>
+                }
+            }
         </MudStack>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@(!IsValid())">Add Tag</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@(_selectedTags.Count == 0)">
+            Add @(_selectedTags.Count == 1 ? "Tag" : $"{_selectedTags.Count} Tags")
+        </MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
 
-    private TagType _selectedTagType = TagType.Suspicious;
-    private string _customLabel = string.Empty;
-    private int? _confidenceModifier;
+    [Parameter] public List<string> UserAssignedTags { get; set; } = new();
+
+    private List<TagDefinition> _availableTags = new();
+    private HashSet<string> _selectedTags = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAvailableTags();
+    }
+
+    private async Task LoadAvailableTags()
+    {
+        _loading = true;
+        try
+        {
+            var allTags = await TagDefinitionsRepository.GetAllAsync();
+
+            // Filter out tags that the user already has assigned
+            _availableTags = allTags
+                .Where(t => !UserAssignedTags.Contains(t.TagName))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading tags: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ToggleTag(string tagName)
+    {
+        if (_selectedTags.Contains(tagName))
+        {
+            _selectedTags.Remove(tagName);
+        }
+        else
+        {
+            _selectedTags.Add(tagName);
+        }
+    }
 
     private void Cancel() => MudDialog.Cancel();
+
+    private async Task CreateNewTag()
+    {
+        var parameters = new DialogParameters
+        {
+            { "IsEdit", false }
+        };
+
+        var dialog = await DialogService.ShowAsync<TagEditDialog>("Create New Tag", parameters, new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        });
+
+        var result = await dialog.Result;
+        if (result != null && !result.Canceled && result.Data is TagEditDialog.TagEditResult tagEditResult)
+        {
+            try
+            {
+                // Create the tag definition in the database
+                await TagDefinitionsRepository.CreateAsync(tagEditResult.TagName, tagEditResult.Color);
+
+                // Reload tags to include the new one
+                await LoadAvailableTags();
+
+                // Auto-select the newly created tag
+                _selectedTags.Add(tagEditResult.TagName);
+
+                Snackbar.Add($"Tag '{tagEditResult.TagName}' created successfully", Severity.Success);
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error creating tag: {ex.Message}", Severity.Error);
+            }
+        }
+    }
 
     private void Submit()
     {
         var result = new TagSelectionResult
         {
-            TagType = _selectedTagType,
-            CustomLabel = _selectedTagType == TagType.Custom ? _customLabel.Trim() : null,
-            ConfidenceModifier = _confidenceModifier
+            SelectedTags = _selectedTags.ToList()
         };
         MudDialog.Close(DialogResult.Ok(result));
     }
 
-    private bool IsValid()
-    {
-        if (_selectedTagType == TagType.Custom)
-        {
-            return !string.IsNullOrWhiteSpace(_customLabel);
-        }
-        return true;
-    }
-
-    private static Color GetTagColor(TagType tagType) => tagType switch
-    {
-        TagType.Suspicious => Color.Warning,
-        TagType.VerifiedContributor => Color.Success,
-        TagType.SpamRisk => Color.Error,
-        TagType.SuspectedBot => Color.Info,
-        TagType.Impersonator => Color.Error,
-        TagType.Helpful => Color.Success,
-        TagType.Moderator => Color.Primary,
-        TagType.Custom => Color.Default,
-        _ => Color.Default
-    };
-
-    private static string GetTagDescription(TagType tagType) => tagType switch
-    {
-        TagType.Suspicious => "User shows suspicious behavior",
-        TagType.VerifiedContributor => "High-quality contributor",
-        TagType.SpamRisk => "Shows spam patterns but not banned yet",
-        TagType.SuspectedBot => "May be a bot account (not confirmed)",
-        TagType.Impersonator => "Attempting to impersonate others",
-        TagType.Helpful => "Helpful community member",
-        TagType.Moderator => "Community moderator (not admin)",
-        TagType.Custom => "Custom tag with your own label",
-        _ => string.Empty
-    };
-
     public class TagSelectionResult
     {
-        public TagType TagType { get; set; }
-        public string? CustomLabel { get; set; }
-        public int? ConfidenceModifier { get; set; }
+        public List<string> SelectedTags { get; set; } = new();
     }
 }

@@ -1,11 +1,14 @@
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Telegram.Repositories
+@using DataModels = TelegramGroupsAdmin.Data.Models
+@using TelegramGroupsAdmin.Helpers
 @using Microsoft.AspNetCore.Components.Authorization
 @using MudBlazor
 @inject TelegramUserManagementService UserManagementService
 @inject IAdminNotesRepository AdminNotesRepository
 @inject IUserTagsRepository UserTagsRepository
+@inject ITagDefinitionsRepository TagDefinitionsRepository
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -301,13 +304,9 @@
                             {
                                 <MudChip T="string"
                                          Size="Size.Small"
-                                         Color="@GetTagColor(tag.TagType)"
+                                         Color="@GetTagColor(tag.TagName)"
                                          OnClose="@(() => DeleteTag(tag))">
-                                    @GetTagLabel(tag)
-                                    @if (tag.ConfidenceModifier.HasValue)
-                                    {
-                                        <text> (@(tag.ConfidenceModifier > 0 ? "+" : "")@tag.ConfidenceModifier)</text>
-                                    }
+                                    @tag.TagName
                                 </MudChip>
                             }
                         </MudStack>
@@ -361,6 +360,7 @@
 
     private TelegramUserDetail? _userDetail;
     private bool _loading = true;
+    private Dictionary<string, DataModels.TagColor> _tagColorMap = new();
 
     // Timeline state
     private bool _timelineExpanded = false;
@@ -369,6 +369,20 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadUserDetailAsync();
+        await LoadTagColorsAsync();
+    }
+
+    private async Task LoadTagColorsAsync()
+    {
+        try
+        {
+            var tagDefinitions = await TagDefinitionsRepository.GetAllAsync();
+            _tagColorMap = tagDefinitions.ToDictionary(t => t.TagName, t => t.Color);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading tag colors: {ex.Message}", Severity.Warning);
+        }
     }
 
     private async Task LoadUserDetailAsync()
@@ -658,7 +672,17 @@
 
     private async Task AddTag()
     {
-        var dialog = await DialogService.ShowAsync<TagSelectionDialog>("Add Tag");
+        if (_userDetail == null) return;
+
+        // Get the user's currently assigned tags to exclude from selection
+        var userAssignedTags = _userDetail.Tags.Select(t => t.TagName).ToList();
+
+        var parameters = new DialogParameters
+        {
+            { "UserAssignedTags", userAssignedTags }
+        };
+
+        var dialog = await DialogService.ShowAsync<TagSelectionDialog>("Add Tags", parameters);
         var result = await dialog.Result;
 
         if (result != null && !result.Canceled && result.Data is TagSelectionDialog.TagSelectionResult tagResult)
@@ -668,21 +692,33 @@
             var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             var userEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
 
-            var tag = new UserTag
-            {
-                TelegramUserId = UserId,
-                TagType = tagResult.TagType,
-                TagLabel = tagResult.CustomLabel,
-                AddedBy = !string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out _)
-                    ? Actor.FromWebUser(userId, userEmail)
-                    : Actor.FromSystem("unknown"),
-                AddedAt = DateTimeOffset.UtcNow,
-                ConfidenceModifier = tagResult.ConfidenceModifier
-            };
+            var actor = !string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out _)
+                ? Actor.FromWebUser(userId, userEmail)
+                : Actor.FromSystem("unknown");
 
-            await UserTagsRepository.AddTagAsync(tag);
-            Snackbar.Add("Tag added successfully", Severity.Success);
+            // Add all selected tags
+            var addedCount = 0;
+            foreach (var tagName in tagResult.SelectedTags)
+            {
+                var tag = new UserTag
+                {
+                    TelegramUserId = UserId,
+                    TagName = tagName,
+                    AddedBy = actor,
+                    AddedAt = DateTimeOffset.UtcNow
+                };
+
+                await UserTagsRepository.AddTagAsync(tag);
+                addedCount++;
+            }
+
+            var message = addedCount == 1
+                ? $"Tag '{tagResult.SelectedTags[0]}' added successfully"
+                : $"{addedCount} tags added successfully";
+            Snackbar.Add(message, Severity.Success);
+
             await LoadUserDetailAsync();
+            await LoadTagColorsAsync(); // Reload colors in case new tags were created
         }
     }
 
@@ -693,23 +729,15 @@
         await LoadUserDetailAsync();
     }
 
-    private static string GetTagLabel(UserTag tag)
+    private Color GetTagColor(string tagName)
     {
-        return !string.IsNullOrEmpty(tag.TagLabel)
-            ? tag.TagLabel
-            : tag.TagType.ToString();
-    }
+        // Look up color from tag definitions, fall back to default
+        if (_tagColorMap.TryGetValue(tagName, out var tagColor))
+        {
+            return tagColor.ToMudColor();
+        }
 
-    private static Color GetTagColor(TagType tagType) => tagType switch
-    {
-        TagType.Suspicious => Color.Warning,
-        TagType.VerifiedContributor => Color.Success,
-        TagType.SpamRisk => Color.Error,
-        TagType.SuspectedBot => Color.Info,
-        TagType.Impersonator => Color.Error,
-        TagType.Helpful => Color.Success,
-        TagType.Moderator => Color.Primary,
-        TagType.Custom => Color.Default,
-        _ => Color.Default
-    };
+        // Default color if tag definition doesn't exist
+        return Color.Primary;
+    }
 }

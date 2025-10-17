@@ -53,6 +53,7 @@ public class AppDbContext : DbContext
     // User notes and tags (Phase 4.12)
     public DbSet<AdminNoteDto> AdminNotes => Set<AdminNoteDto>();
     public DbSet<UserTagDto> UserTags => Set<UserTagDto>();
+    public DbSet<TagDefinitionDto> TagDefinitions => Set<TagDefinitionDto>();
 
     // TickerQ entities (background job system)
     public DbSet<TimeTickerEntity> TimeTickers => Set<TimeTickerEntity>();
@@ -367,7 +368,13 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<UserTagDto>()
             .HasIndex(ut => ut.TelegramUserId);
         modelBuilder.Entity<UserTagDto>()
-            .HasIndex(ut => ut.TagType);
+            .HasIndex(ut => ut.TagName);
+        modelBuilder.Entity<UserTagDto>()
+            .HasIndex(ut => ut.RemovedAt);
+
+        // TagDefinitions indexes
+        modelBuilder.Entity<TagDefinitionDto>()
+            .HasIndex(td => td.UsageCount);
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)
@@ -409,8 +416,8 @@ public class AppDbContext : DbContext
             .Property(al => al.EventType)
             .HasConversion<int>();
 
-        modelBuilder.Entity<UserTagDto>()
-            .Property(ut => ut.TagType)
+        modelBuilder.Entity<TagDefinitionDto>()
+            .Property(td => td.Color)
             .HasConversion<int>();
 
         // VerificationTokenDto stores token_type as string in DB but exposes as enum
