@@ -502,14 +502,18 @@ Total: 8-12 days for broad appeal
 | Task | Priority | Estimate | Rationale |
 |------|----------|----------|-----------|
 | .NET 10 RC2 Update | High | 4-6h | Update project files, NuGet packages, test for breaking changes |
-| Production Docker Container | **CRITICAL** | 8-12h (1-2d) | Minimal alpine/distroless image, non-root user, multi-stage build, compact size |
-| Docker Compose Example | **CRITICAL** | 4-6h | PostgreSQL + app + optional Redis, volume management, environment config |
+| Production Docker Container | **CRITICAL** | 8-12h (1-2d) | Ubuntu Chiseled (distroless-like), non-root user, multi-stage build, compact size |
+| Docker Compose Example | **CRITICAL** | 4-6h | PostgreSQL + app, volume management, environment config |
 
 **Docker Container Requirements:**
-- **Base Image**: `mcr.microsoft.com/dotnet/aspnet:10.0-alpine` (minimal attack surface)
-- **Multi-stage Build**: Build stage + runtime stage (reduce image size)
-- **Security**: Non-root user, minimal packages, no unnecessary tools
-- **Size**: Target < 200MB (currently ~150MB for .NET + app)
+- **Base Image**: `mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled` (Ubuntu Chiseled - distroless-like, officially supported)
+  - Ultra-minimal (no package manager, shell, or unnecessary tools)
+  - Non-root by default (app user)
+  - CVE scanning built-in
+  - Smaller than Alpine with better .NET performance
+- **Multi-stage Build**: Build stage (SDK) + runtime stage (Chiseled ASP.NET)
+- **Security**: Non-root user (built-in), read-only root filesystem where possible
+- **Size**: Target < 200MB (~120-150MB for Chiseled + app, smaller than Alpine)
 - **Health Checks**: `/health` endpoint monitoring
 - **Logging**: Structured JSON logging to stdout
 - **Environment**: All config via environment variables (12-factor)
@@ -596,7 +600,7 @@ Automated recommendations, pattern detection, ML clustering, insights dashboard
 
 - **Open Source Ready**: ~25-30 days from now (**Target: ~Nov 15**)
   - .NET 10 RC2 update (latest runtime)
-  - Production Docker container (alpine-based, secure, < 200MB)
+  - Production Docker container (Ubuntu Chiseled, distroless-like, < 150MB)
   - Docker Compose with PostgreSQL (one-command deployment)
   - OpenAI-compatible API (local LLM support - removes API barrier)
   - Bio spam check, raid detection
