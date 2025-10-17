@@ -10,6 +10,7 @@
 @inject IAdminNotesRepository AdminNotesRepository
 @inject IUserTagsRepository UserTagsRepository
 @inject ITagDefinitionsRepository TagDefinitionsRepository
+@inject IUserActionsRepository UserActionsRepository
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -79,7 +80,7 @@
                     </MudItem>
                     <MudItem xs="4">
                         <MudPaper Elevation="1" Class="pa-3 text-center">
-                            <MudText Typo="Typo.h6">@_userDetail.Actions.Count(a => a.ActionType == UserActionType.Warn)</MudText>
+                            <MudText Typo="Typo.h6">@GetActiveWarningCount()</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Warnings</MudText>
                         </MudPaper>
                     </MudItem>
@@ -179,13 +180,13 @@
                 {
                     <MudPaper Elevation="1" Class="pa-3 mb-4">
                         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
-                            <MudText Typo="Typo.subtitle2">Action History (@_userDetail.Actions.Count)</MudText>
-                            @if (_userDetail.Actions.Count > _timelineShowCount)
+                            <MudText Typo="Typo.subtitle2">Action History (@GetActiveActionsCount())</MudText>
+                            @if (GetActiveActionsCount() > _timelineShowCount)
                             {
                                 <MudButton Variant="Variant.Text"
                                            Size="Size.Small"
                                            OnClick="ToggleTimelineExpanded">
-                                    @(_timelineExpanded ? "Show Less" : $"Show All ({_userDetail.Actions.Count})")
+                                    @(_timelineExpanded ? "Show Less" : $"Show All ({GetActiveActionsCount()})")
                                 </MudButton>
                             }
                         </MudStack>
@@ -216,19 +217,30 @@
                                             </MudText>
                                         </ItemOpposite>
                                         <ItemContent>
-                                            <MudStack Spacing="0" Class="ml-2">
-                                                <MudText Typo="Typo.body2">
-                                                    <strong>@FormatActionType(action.ActionType)</strong>
-                                                </MudText>
-                                                @if (!string.IsNullOrEmpty(action.Reason))
-                                                {
-                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @action.Reason
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Style="width: 100%;">
+                                                <MudStack Spacing="0" Class="ml-2" Style="flex: 1;">
+                                                    <MudText Typo="Typo.body2">
+                                                        <strong>@FormatActionType(action.ActionType)</strong>
                                                     </MudText>
+                                                    @if (!string.IsNullOrEmpty(action.Reason))
+                                                    {
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                            @action.Reason
+                                                        </MudText>
+                                                    }
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        by @FormatIssuedBy(action.IssuedBy)
+                                                    </MudText>
+                                                </MudStack>
+                                                @if (action.ActionType == UserActionType.Warn)
+                                                {
+                                                    <MudTooltip Text="Remove warning">
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                       Size="Size.Small"
+                                                                       Color="Color.Error"
+                                                                       OnClick="@(() => RemoveWarning(action))" />
+                                                    </MudTooltip>
                                                 }
-                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                    by @FormatIssuedBy(action.IssuedBy)
-                                                </MudText>
                                             </MudStack>
                                         </ItemContent>
                                     </MudTimelineItem>
@@ -627,6 +639,32 @@
         return actor.DisplayName ?? "System";
     }
 
+    /// <summary>
+    /// Get count of active (non-expired) warnings
+    /// </summary>
+    private int GetActiveWarningCount()
+    {
+        if (_userDetail == null)
+            return 0;
+
+        var now = DateTimeOffset.UtcNow;
+        return _userDetail.Actions.Count(a =>
+            a.ActionType == UserActionType.Warn &&
+            (a.ExpiresAt == null || a.ExpiresAt > now));
+    }
+
+    /// <summary>
+    /// Get count of active (non-expired) actions for timeline display
+    /// </summary>
+    private int GetActiveActionsCount()
+    {
+        if (_userDetail == null)
+            return 0;
+
+        var now = DateTimeOffset.UtcNow;
+        return _userDetail.Actions.Count(a => a.ExpiresAt == null || a.ExpiresAt > now);
+    }
+
     // ============================================================================
     // Action Timeline Methods
     // ============================================================================
@@ -641,19 +679,23 @@
         if (_userDetail == null || !_userDetail.Actions.Any())
             return Enumerable.Empty<ActionGroup>();
 
-        var actions = _userDetail.Actions
+        var nowUtc = DateTimeOffset.UtcNow;
+
+        // Filter out expired warnings (ExpiresAt != null && ExpiresAt <= now)
+        var activeActions = _userDetail.Actions
+            .Where(a => a.ExpiresAt == null || a.ExpiresAt > nowUtc)
             .OrderByDescending(a => a.IssuedAt)
             .Take(_timelineExpanded ? int.MaxValue : _timelineShowCount)
             .ToList();
 
-        var now = DateTimeOffset.Now.ToLocalTime();
+        var nowLocal = DateTimeOffset.Now.ToLocalTime();
         var groups = new List<ActionGroup>();
         string? currentDateLabel = null;
 
-        foreach (var action in actions)
+        foreach (var action in activeActions)
         {
             var actionDate = action.IssuedAt.ToLocalTime();
-            var dateLabel = GetDateLabel(actionDate, now);
+            var dateLabel = GetDateLabel(actionDate, nowLocal);
 
             // Add date separator if the date label changed
             if (dateLabel != currentDateLabel)
@@ -860,5 +902,36 @@
 
         // Default color if tag definition doesn't exist
         return Color.Primary;
+    }
+
+    // ============================================================================
+    // Warning Removal (Phase 4.11)
+    // ============================================================================
+
+    private async Task RemoveWarning(UserActionRecord action)
+    {
+        var parameters = new DialogParameters
+        {
+            { "ContentText", $"Are you sure you want to remove this warning? Reason: {action.Reason ?? "No reason specified"}" },
+            { "ButtonText", "Remove" },
+            { "Color", Color.Warning }
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Remove Warning", parameters);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            try
+            {
+                await UserActionsRepository.ExpireActionAsync(action.Id);
+                Snackbar.Add("Warning removed successfully", Severity.Success);
+                await LoadUserDetailAsync(); // Refresh to update warning count
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error removing warning: {ex.Message}", Severity.Error);
+            }
+        }
     }
 }
