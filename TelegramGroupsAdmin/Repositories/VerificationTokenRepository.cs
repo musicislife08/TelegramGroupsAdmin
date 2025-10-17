@@ -20,7 +20,7 @@ public class VerificationTokenRepository
 
     public async Task<long> CreateAsync(DataModels.VerificationTokenDto verificationToken, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         context.VerificationTokens.Add(verificationToken);
         await context.SaveChangesAsync(ct);
@@ -33,7 +33,7 @@ public class VerificationTokenRepository
 
     public async Task<UiModels.VerificationToken?> GetByTokenAsync(string token, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         var entity = await context.VerificationTokens
             .AsNoTracking()
@@ -44,7 +44,7 @@ public class VerificationTokenRepository
 
     public async Task<UiModels.VerificationToken?> GetValidTokenAsync(string token, DataModels.TokenType tokenType, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         var tokenTypeString = tokenType switch
         {
@@ -69,7 +69,7 @@ public class VerificationTokenRepository
 
     public async Task MarkAsUsedAsync(string token, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         var entity = await context.VerificationTokens.FirstOrDefaultAsync(vt => vt.Token == token, ct);
         if (entity == null) return;
@@ -82,7 +82,7 @@ public class VerificationTokenRepository
 
     public async Task<int> CleanupExpiredAsync(CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         var now = DateTimeOffset.UtcNow;
 
@@ -102,7 +102,7 @@ public class VerificationTokenRepository
 
     public async Task<int> DeleteByUserIdAsync(string userId, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         var tokens = await context.VerificationTokens
             .Where(vt => vt.UserId == userId)

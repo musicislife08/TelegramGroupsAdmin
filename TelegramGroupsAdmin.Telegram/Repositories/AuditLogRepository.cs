@@ -24,7 +24,7 @@ public class AuditLogRepository
         string? value = null,
         CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         var entity = new DataModels.AuditLogRecordDto
         {
@@ -44,7 +44,7 @@ public class AuditLogRepository
 
     public async Task<List<UiModels.AuditLogRecord>> GetRecentEventsAsync(int limit = 100, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         var entities = await context.AuditLogs
             .AsNoTracking()
@@ -57,7 +57,7 @@ public class AuditLogRepository
 
     public async Task<List<UiModels.AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = 100, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         var entities = await context.AuditLogs
             .AsNoTracking()
@@ -71,7 +71,7 @@ public class AuditLogRepository
 
     public async Task<List<UiModels.AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = 100, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         var entities = await context.AuditLogs
             .AsNoTracking()
@@ -85,7 +85,7 @@ public class AuditLogRepository
 
     public async Task<List<UiModels.AuditLogRecord>> GetEventsByTypeAsync(DataModels.AuditEventType eventType, int limit = 100, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         var entities = await context.AuditLogs
             .AsNoTracking()

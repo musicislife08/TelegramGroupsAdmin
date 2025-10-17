@@ -75,7 +75,8 @@ public class TrustCommand : IBotCommand
         // Check if user is already trusted
         var isAlreadyTrusted = await userActionsRepository.IsUserTrustedAsync(
             targetUser.Id,
-            message.Chat.Id);
+            message.Chat.Id,
+            cancellationToken);
 
         if (isAlreadyTrusted)
         {
@@ -85,7 +86,8 @@ public class TrustCommand : IBotCommand
         // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
         string executorId = await _moderationService.GetExecutorIdentifierAsync(
             message.From!.Id,
-            message.From.Username);
+            message.From.Username,
+            cancellationToken);
 
         // Build reason with chat context
         var chatName = message.Chat.Title ?? message.Chat.Username ?? message.Chat.Id.ToString();
@@ -95,7 +97,8 @@ public class TrustCommand : IBotCommand
         var result = await _moderationService.TrustUserAsync(
             userId: targetUser.Id,
             executorId: executorId,
-            reason: reason);
+            reason: reason,
+            cancellationToken: cancellationToken);
 
         // Build response based on result
         if (!result.Success)

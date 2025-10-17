@@ -17,66 +17,66 @@ public class TelegramUserMappingRepository : ITelegramUserMappingRepository
         _contextFactory = contextFactory;
     }
 
-    public async Task<IEnumerable<TelegramUserMappingRecord>> GetByUserIdAsync(string userId)
+    public async Task<IEnumerable<TelegramUserMappingRecord>> GetByUserIdAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.TelegramUserMappings
             .AsNoTracking()
             .Where(tum => tum.UserId == userId && tum.IsActive)
             .OrderByDescending(tum => tum.LinkedAt)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel());
     }
 
-    public async Task<TelegramUserMappingRecord?> GetByTelegramIdAsync(long telegramId)
+    public async Task<TelegramUserMappingRecord?> GetByTelegramIdAsync(long telegramId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.TelegramUserMappings
             .AsNoTracking()
-            .FirstOrDefaultAsync(tum => tum.TelegramId == telegramId && tum.IsActive);
+            .FirstOrDefaultAsync(tum => tum.TelegramId == telegramId && tum.IsActive, cancellationToken);
 
         return entity?.ToModel();
     }
 
-    public async Task<string?> GetUserIdByTelegramIdAsync(long telegramId)
+    public async Task<string?> GetUserIdByTelegramIdAsync(long telegramId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.TelegramUserMappings
             .AsNoTracking()
             .Where(tum => tum.TelegramId == telegramId && tum.IsActive)
             .Select(tum => tum.UserId)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         return entity;
     }
 
-    public async Task<long> InsertAsync(TelegramUserMappingRecord mapping)
+    public async Task<long> InsertAsync(TelegramUserMappingRecord mapping, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = mapping.ToDto();
         context.TelegramUserMappings.Add(entity);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
         return entity.Id;
     }
 
-    public async Task<bool> DeactivateAsync(long mappingId)
+    public async Task<bool> DeactivateAsync(long mappingId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = await context.TelegramUserMappings.FirstOrDefaultAsync(tum => tum.Id == mappingId);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.TelegramUserMappings.FirstOrDefaultAsync(tum => tum.Id == mappingId, cancellationToken);
         if (entity == null)
             return false;
 
         entity.IsActive = false;
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
         return true;
     }
 
-    public async Task<bool> IsTelegramIdLinkedAsync(long telegramId)
+    public async Task<bool> IsTelegramIdLinkedAsync(long telegramId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         return await context.TelegramUserMappings
             .AsNoTracking()
-            .AnyAsync(tum => tum.TelegramId == telegramId && tum.IsActive);
+            .AnyAsync(tum => tum.TelegramId == telegramId && tum.IsActive, cancellationToken);
     }
 }

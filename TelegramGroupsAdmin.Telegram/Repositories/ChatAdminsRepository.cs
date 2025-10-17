@@ -21,15 +21,15 @@ public class ChatAdminsRepository : IChatAdminsRepository
     }
 
     /// <inheritdoc/>
-    public async Task<int> GetPermissionLevelAsync(long chatId, long telegramId)
+    public async Task<int> GetPermissionLevelAsync(long chatId, long telegramId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var admin = await context.ChatAdmins
             .AsNoTracking()
             .Where(ca => ca.ChatId == chatId && ca.TelegramId == telegramId && ca.IsActive == true)
             .Select(ca => new { ca.IsCreator })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (admin == null)
         {
@@ -40,54 +40,54 @@ public class ChatAdminsRepository : IChatAdminsRepository
     }
 
     /// <inheritdoc/>
-    public async Task<bool> IsAdminAsync(long chatId, long telegramId)
+    public async Task<bool> IsAdminAsync(long chatId, long telegramId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         return await context.ChatAdmins
             .AsNoTracking()
-            .AnyAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId && ca.IsActive == true);
+            .AnyAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId && ca.IsActive == true, cancellationToken);
     }
 
     /// <inheritdoc/>
-    public async Task<List<ChatAdmin>> GetChatAdminsAsync(long chatId)
+    public async Task<List<ChatAdmin>> GetChatAdminsAsync(long chatId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entities = await context.ChatAdmins
             .AsNoTracking()
             .Where(ca => ca.ChatId == chatId && ca.IsActive == true)
             .OrderByDescending(ca => ca.IsCreator)
             .ThenBy(ca => ca.PromotedAt)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
     /// <inheritdoc/>
-    public async Task<List<long>> GetAdminChatsAsync(long telegramId)
+    public async Task<List<long>> GetAdminChatsAsync(long telegramId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var chatIds = await context.ChatAdmins
             .AsNoTracking()
             .Where(ca => ca.TelegramId == telegramId && ca.IsActive == true)
             .OrderBy(ca => ca.ChatId)
             .Select(ca => ca.ChatId)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return chatIds;
     }
 
     /// <inheritdoc/>
-    public async Task UpsertAsync(long chatId, long telegramId, bool isCreator, string? username = null)
+    public async Task UpsertAsync(long chatId, long telegramId, bool isCreator, string? username = null, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
 
         var existing = await context.ChatAdmins
-            .FirstOrDefaultAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId);
+            .FirstOrDefaultAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId, cancellationToken);
 
         if (existing != null)
         {
@@ -113,22 +113,22 @@ public class ChatAdminsRepository : IChatAdminsRepository
             context.ChatAdmins.Add(newAdmin);
         }
 
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug("Upserted admin: chat={ChatId}, user={TelegramId} (@{Username}), creator={IsCreator}",
             chatId, telegramId, username ?? "unknown", isCreator);
     }
 
     /// <inheritdoc/>
-    public async Task DeactivateAsync(long chatId, long telegramId)
+    public async Task DeactivateAsync(long chatId, long telegramId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
 
         var admins = await context.ChatAdmins
             .Where(ca => ca.ChatId == chatId && ca.TelegramId == telegramId)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         foreach (var admin in admins)
         {
@@ -137,7 +137,7 @@ public class ChatAdminsRepository : IChatAdminsRepository
         }
 
         var rowsAffected = admins.Count;
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         if (rowsAffected > 0)
         {
@@ -146,49 +146,49 @@ public class ChatAdminsRepository : IChatAdminsRepository
     }
 
     /// <inheritdoc/>
-    public async Task DeleteByChatIdAsync(long chatId)
+    public async Task DeleteByChatIdAsync(long chatId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var toDelete = await context.ChatAdmins
             .Where(ca => ca.ChatId == chatId)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var rowsAffected = toDelete.Count;
 
         if (rowsAffected > 0)
         {
             context.ChatAdmins.RemoveRange(toDelete);
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Deleted {Count} admin records for chat {ChatId}", rowsAffected, chatId);
         }
     }
 
     /// <inheritdoc/>
-    public async Task UpdateLastVerifiedAsync(long chatId, long telegramId)
+    public async Task UpdateLastVerifiedAsync(long chatId, long telegramId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
 
         var admin = await context.ChatAdmins
-            .FirstOrDefaultAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId);
+            .FirstOrDefaultAsync(ca => ca.ChatId == chatId && ca.TelegramId == telegramId, cancellationToken);
 
         if (admin != null)
         {
             admin.LastVerifiedAt = now;
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 
     /// <inheritdoc/>
-    public async Task<int> GetAdminCountAsync(long chatId)
+    public async Task<int> GetAdminCountAsync(long chatId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         return await context.ChatAdmins
             .Where(ca => ca.ChatId == chatId && ca.IsActive)
-            .CountAsync();
+            .CountAsync(cancellationToken);
     }
 }

@@ -17,21 +17,21 @@ public class MessageHistoryRepository
         _logger = logger;
     }
 
-    public async Task InsertMessageAsync(UiModels.MessageRecord message)
+    public async Task InsertMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = message.ToDto();
         context.Messages.Add(entity);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug(
             "Inserted message {MessageId} from user {UserId} (photo: {HasPhoto})",
             message.MessageId, message.UserId, message.PhotoFileId != null);
     }
 
-    public async Task<UiModels.PhotoMessageRecord?> GetUserRecentPhotoAsync(long userId, long chatId)
+    public async Task<UiModels.PhotoMessageRecord?> GetUserRecentPhotoAsync(long userId, long chatId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.Messages
             .AsNoTracking()
             .Where(m => m.UserId == userId
@@ -39,7 +39,7 @@ public class MessageHistoryRepository
                 && m.PhotoFileId != null)
             .OrderByDescending(m => m.Timestamp)
             .Select(m => new { m.PhotoFileId, m.MessageText, m.Timestamp })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (entity == null)
             return null;
@@ -54,9 +54,9 @@ public class MessageHistoryRepository
             Timestamp: entity.Timestamp);
     }
 
-    public async Task<(int deletedCount, List<string> imagePaths)> CleanupExpiredAsync()
+    public async Task<(int deletedCount, List<string> imagePaths)> CleanupExpiredAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Retention: Keep messages from last 30 days OR messages with detection_results (training data)
         var retentionCutoff = DateTimeOffset.UtcNow.AddDays(-30);
 
@@ -75,7 +75,7 @@ public class MessageHistoryRepository
                 EditCount = x.Edits.Count(),
                 Edits = x.Edits.ToList()
             })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         if (expiredData.Count == 0)
         {
@@ -100,7 +100,7 @@ public class MessageHistoryRepository
         context.MessageEdits.RemoveRange(editsToDelete);
         context.Messages.RemoveRange(messagesToDelete);
 
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
         var deleted = messagesToDelete.Count;
 
         if (deleted > 0)
@@ -119,9 +119,9 @@ public class MessageHistoryRepository
         return (deleted, imagePaths);
     }
 
-    public async Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100)
+    public async Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var results = await (
             from m in context.Messages
             join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
@@ -147,7 +147,7 @@ public class MessageHistoryRepository
         )
         .AsNoTracking()
         .Take(limit)
-        .ToListAsync();
+        .ToListAsync(cancellationToken);
 
         return results.Select(x => x.Message.ToModel(
             chatName: x.ChatName,
@@ -165,9 +165,10 @@ public class MessageHistoryRepository
     /// </summary>
     public async Task<List<UiModels.MessageRecord>> GetMessagesBeforeAsync(
         DateTimeOffset? beforeTimestamp = null,
-        int limit = 50)
+        int limit = 50,
+        CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var query = from m in context.Messages
                     join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
                     from chat in chatGroup.DefaultIfEmpty()
@@ -194,7 +195,7 @@ public class MessageHistoryRepository
         var results = await query
             .AsNoTracking()
             .Take(limit)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return results.Select(x => x.Message.ToModel(
             chatName: x.ChatName,
@@ -206,9 +207,9 @@ public class MessageHistoryRepository
             replyToText: x.ReplyToText)).ToList();
     }
 
-    public async Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10)
+    public async Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var results = await (
             from m in context.Messages
             where m.ChatId == chatId
@@ -235,7 +236,7 @@ public class MessageHistoryRepository
         )
         .AsNoTracking()
         .Take(limit)
-        .ToListAsync();
+        .ToListAsync(cancellationToken);
 
         return results.Select(x => x.Message.ToModel(
             chatName: x.ChatName,
@@ -250,9 +251,10 @@ public class MessageHistoryRepository
     public async Task<List<UiModels.MessageRecord>> GetMessagesByDateRangeAsync(
         DateTimeOffset startTimestamp,
         DateTimeOffset endTimestamp,
-        int limit = 1000)
+        int limit = 1000,
+        CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var results = await (
             from m in context.Messages
             where m.Timestamp >= startTimestamp && m.Timestamp <= endTimestamp
@@ -279,7 +281,7 @@ public class MessageHistoryRepository
         )
         .AsNoTracking()
         .Take(limit)
-        .ToListAsync();
+        .ToListAsync(cancellationToken);
 
         return results.Select(x => x.Message.ToModel(
             chatName: x.ChatName,
@@ -291,20 +293,20 @@ public class MessageHistoryRepository
             replyToText: x.ReplyToText)).ToList();
     }
 
-    public async Task<UiModels.HistoryStats> GetStatsAsync()
+    public async Task<UiModels.HistoryStats> GetStatsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var totalMessages = await context.Messages.CountAsync();
-        var uniqueUsers = await context.Messages.Select(m => m.UserId).Distinct().CountAsync();
-        var photoCount = await context.Messages.CountAsync(m => m.PhotoFileId != null);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var totalMessages = await context.Messages.CountAsync(cancellationToken);
+        var uniqueUsers = await context.Messages.Select(m => m.UserId).Distinct().CountAsync(cancellationToken);
+        var photoCount = await context.Messages.CountAsync(m => m.PhotoFileId != null, cancellationToken);
 
         DateTimeOffset? oldestTimestamp = null;
         DateTimeOffset? newestTimestamp = null;
 
         if (totalMessages > 0)
         {
-            oldestTimestamp = await context.Messages.MinAsync(m => m.Timestamp);
-            newestTimestamp = await context.Messages.MaxAsync(m => m.Timestamp);
+            oldestTimestamp = await context.Messages.MinAsync(m => m.Timestamp, cancellationToken);
+            newestTimestamp = await context.Messages.MaxAsync(m => m.Timestamp, cancellationToken);
         }
 
         var result = new UiModels.HistoryStats(
@@ -317,9 +319,9 @@ public class MessageHistoryRepository
         return result;
     }
 
-    public async Task<Dictionary<long, UiModels.SpamCheckRecord>> GetSpamChecksForMessagesAsync(IEnumerable<long> messageIds)
+    public async Task<Dictionary<long, UiModels.SpamCheckRecord>> GetSpamChecksForMessagesAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var messageIdArray = messageIds.ToArray();
 
         // Query detection_results table (spam_checks table was dropped in normalized schema)
@@ -345,7 +347,7 @@ public class MessageHistoryRepository
                     CheckType = dr.DetectionMethod,
                     MatchedMessageId = dr.MessageId
                 })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         // Group by message ID and take the latest detection result per message (in-memory)
         var latestResults = results
@@ -359,7 +361,7 @@ public class MessageHistoryRepository
             .AsNoTracking()
             .Where(dr => latestMessageIds.Contains(dr.MessageId))
             .Select(dr => new { dr.MessageId, dr.NetConfidence, dr.DetectedAt })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         // Group detection results by message and take latest net_confidence
         var latestNetConfidence = netConfidenceResults
@@ -384,9 +386,9 @@ public class MessageHistoryRepository
             .ToDictionary(c => c.MatchedMessageId!.Value, c => c);
     }
 
-    public async Task<Dictionary<long, int>> GetEditCountsForMessagesAsync(IEnumerable<long> messageIds)
+    public async Task<Dictionary<long, int>> GetEditCountsForMessagesAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var messageIdArray = messageIds.ToArray();
 
         var results = await context.MessageEdits
@@ -394,29 +396,29 @@ public class MessageHistoryRepository
             .Where(e => messageIdArray.Contains(e.MessageId))
             .GroupBy(e => e.MessageId)
             .Select(g => new { MessageId = g.Key, EditCount = g.Count() })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return results.ToDictionary(r => r.MessageId, r => r.EditCount);
     }
 
-    public async Task<List<UiModels.MessageEditRecord>> GetEditsForMessageAsync(long messageId)
+    public async Task<List<UiModels.MessageEditRecord>> GetEditsForMessageAsync(long messageId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.MessageEdits
             .AsNoTracking()
             .Where(e => e.MessageId == messageId)
             .OrderBy(e => e.EditDate)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task InsertMessageEditAsync(UiModels.MessageEditRecord edit)
+    public async Task InsertMessageEditAsync(UiModels.MessageEditRecord edit, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = edit.ToDto();
         context.MessageEdits.Add(entity);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug(
             "Inserted edit for message {MessageId} at {EditDate}",
@@ -424,9 +426,9 @@ public class MessageHistoryRepository
             edit.EditDate);
     }
 
-    public async Task<UiModels.MessageRecord?> GetMessageAsync(long messageId)
+    public async Task<UiModels.MessageRecord?> GetMessageAsync(long messageId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var result = await (
             from m in context.Messages
             where m.MessageId == messageId
@@ -451,7 +453,7 @@ public class MessageHistoryRepository
             }
         )
         .AsNoTracking()
-        .FirstOrDefaultAsync();
+        .FirstOrDefaultAsync(cancellationToken);
 
         return result?.Message.ToModel(
             chatName: result.ChatName,
@@ -463,10 +465,10 @@ public class MessageHistoryRepository
             replyToText: result.ReplyToText);
     }
 
-    public async Task UpdateMessageAsync(UiModels.MessageRecord message)
+    public async Task UpdateMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = await context.Messages.FindAsync(message.MessageId);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Messages.FindAsync(new object[] { message.MessageId }, cancellationToken);
 
         if (entity != null)
         {
@@ -475,7 +477,7 @@ public class MessageHistoryRepository
             entity.EditDate = message.EditDate;
             entity.ContentHash = message.ContentHash;
 
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogDebug(
                 "Updated message {MessageId} (edit_date: {EditDate})",
@@ -484,9 +486,9 @@ public class MessageHistoryRepository
         }
     }
 
-    public async Task<List<string>> GetDistinctUserNamesAsync()
+    public async Task<List<string>> GetDistinctUserNamesAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Query from telegram_users table instead of messages
         var userNames = await context.TelegramUsers
             .AsNoTracking()
@@ -494,14 +496,14 @@ public class MessageHistoryRepository
             .Select(u => u.Username!)
             .Distinct()
             .OrderBy(u => u)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return userNames;
     }
 
-    public async Task<List<string>> GetDistinctChatNamesAsync()
+    public async Task<List<string>> GetDistinctChatNamesAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Query from managed_chats table instead of messages
         var chatNames = await context.ManagedChats
             .AsNoTracking()
@@ -509,19 +511,19 @@ public class MessageHistoryRepository
             .Select(c => c.ChatName!)
             .Distinct()
             .OrderBy(c => c)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return chatNames;
     }
 
-    public async Task<UiModels.DetectionStats> GetDetectionStatsAsync()
+    public async Task<UiModels.DetectionStats> GetDetectionStatsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Overall stats from detection_results
         var allDetections = await context.DetectionResults
             .AsNoTracking()
             .Select(dr => new { dr.IsSpam, dr.Confidence })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var total = allDetections.Count;
         var spam = allDetections.Count(d => d.IsSpam);
@@ -535,7 +537,7 @@ public class MessageHistoryRepository
             .AsNoTracking()
             .Where(dr => dr.DetectedAt >= since24h)
             .Select(dr => dr.IsSpam)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var recentTotal = recentDetections.Count;
         var recentSpam = recentDetections.Count(s => s);
@@ -552,9 +554,9 @@ public class MessageHistoryRepository
         };
     }
 
-    public async Task<List<UiModels.DetectionResultRecord>> GetRecentDetectionsAsync(int limit = 100)
+    public async Task<List<UiModels.DetectionResultRecord>> GetRecentDetectionsAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var results = await context.DetectionResults
             .AsNoTracking()
             .Join(context.Messages,
@@ -575,7 +577,7 @@ public class MessageHistoryRepository
                 })
             .OrderByDescending(x => x.DetectedAt)
             .Take(limit)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return results.Select(r => new UiModels.DetectionResultRecord
         {
@@ -595,17 +597,17 @@ public class MessageHistoryRepository
     /// <summary>
     /// Mark a message as deleted (soft delete)
     /// </summary>
-    public async Task MarkMessageAsDeletedAsync(long messageId, string deletionSource)
+    public async Task MarkMessageAsDeletedAsync(long messageId, string deletionSource, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = await context.Messages.FindAsync(messageId);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Messages.FindAsync(new object[] { messageId }, cancellationToken);
 
         if (entity != null)
         {
             entity.DeletedAt = DateTimeOffset.UtcNow;
             entity.DeletionSource = deletionSource;
 
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogDebug(
                 "Marked message {MessageId} as deleted (source: {DeletionSource})",

@@ -8,12 +8,12 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 
 public interface IWelcomeResponsesRepository
 {
-    Task<long> InsertAsync(WelcomeResponse response);
-    Task<WelcomeResponse?> GetByUserAndChatAsync(long userId, long chatId);
-    Task UpdateResponseAsync(long id, WelcomeResponseType responseType, bool dmSent = false, bool dmFallback = false);
-    Task SetTimeoutJobIdAsync(long id, Guid? jobId);
-    Task<List<WelcomeResponse>> GetByChatIdAsync(long chatId, int limit = 100);
-    Task<WelcomeStats> GetStatsAsync(long? chatId = null, DateTimeOffset? since = null);
+    Task<long> InsertAsync(WelcomeResponse response, CancellationToken cancellationToken = default);
+    Task<WelcomeResponse?> GetByUserAndChatAsync(long userId, long chatId, CancellationToken cancellationToken = default);
+    Task UpdateResponseAsync(long id, WelcomeResponseType responseType, bool dmSent = false, bool dmFallback = false, CancellationToken cancellationToken = default);
+    Task SetTimeoutJobIdAsync(long id, Guid? jobId, CancellationToken cancellationToken = default);
+    Task<List<WelcomeResponse>> GetByChatIdAsync(long chatId, int limit = 100, CancellationToken cancellationToken = default);
+    Task<WelcomeStats> GetStatsAsync(long? chatId = null, DateTimeOffset? since = null, CancellationToken cancellationToken = default);
 }
 
 public class WelcomeResponsesRepository : IWelcomeResponsesRepository
@@ -29,13 +29,13 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
         _logger = logger;
     }
 
-    public async Task<long> InsertAsync(WelcomeResponse response)
+    public async Task<long> InsertAsync(WelcomeResponse response, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entity = response.ToDto();
         context.WelcomeResponses.Add(entity);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "Recorded welcome response: User {UserId} (@{Username}) in chat {ChatId} - {Response} (DM: {DmSent}, Fallback: {DmFallback}, JobId: {JobId})",
@@ -50,24 +50,24 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
         return entity.Id;
     }
 
-    public async Task<WelcomeResponse?> GetByUserAndChatAsync(long userId, long chatId)
+    public async Task<WelcomeResponse?> GetByUserAndChatAsync(long userId, long chatId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entity = await context.WelcomeResponses
             .AsNoTracking()
             .Where(wr => wr.UserId == userId && wr.ChatId == chatId)
             .OrderByDescending(wr => wr.CreatedAt)
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         return entity?.ToModel();
     }
 
-    public async Task UpdateResponseAsync(long id, WelcomeResponseType responseType, bool dmSent = false, bool dmFallback = false)
+    public async Task UpdateResponseAsync(long id, WelcomeResponseType responseType, bool dmSent = false, bool dmFallback = false, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entity = await context.WelcomeResponses.FindAsync(id);
+        var entity = await context.WelcomeResponses.FindAsync(new object[] { id }, cancellationToken);
         if (entity == null)
         {
             _logger.LogWarning("Attempted to update non-existent welcome response ID {Id}", id);
@@ -79,7 +79,7 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
         entity.DmSent = dmSent;
         entity.DmFallback = dmFallback;
 
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "Updated welcome response {Id}: {Response} (DM: {DmSent}, Fallback: {DmFallback})",
@@ -89,11 +89,11 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
             dmFallback);
     }
 
-    public async Task SetTimeoutJobIdAsync(long id, Guid? jobId)
+    public async Task SetTimeoutJobIdAsync(long id, Guid? jobId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entity = await context.WelcomeResponses.FindAsync(id);
+        var entity = await context.WelcomeResponses.FindAsync(new object[] { id }, cancellationToken);
         if (entity == null)
         {
             _logger.LogWarning("Attempted to set timeout job ID for non-existent welcome response ID {Id}", id);
@@ -101,28 +101,28 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
         }
 
         entity.TimeoutJobId = jobId;
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug("Set timeout job ID for welcome response {Id}: {JobId}", id, jobId);
     }
 
-    public async Task<List<WelcomeResponse>> GetByChatIdAsync(long chatId, int limit = 100)
+    public async Task<List<WelcomeResponse>> GetByChatIdAsync(long chatId, int limit = 100, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entities = await context.WelcomeResponses
             .AsNoTracking()
             .Where(wr => wr.ChatId == chatId)
             .OrderByDescending(wr => wr.RespondedAt)
             .Take(limit)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<WelcomeStats> GetStatsAsync(long? chatId = null, DateTimeOffset? since = null)
+    public async Task<WelcomeStats> GetStatsAsync(long? chatId = null, DateTimeOffset? since = null, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var query = context.WelcomeResponses.AsNoTracking();
 
@@ -136,7 +136,7 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
             query = query.Where(wr => wr.RespondedAt >= since.Value);
         }
 
-        var responses = await query.ToListAsync();
+        var responses = await query.ToListAsync(cancellationToken);
 
         var total = responses.Count;
         if (total == 0)

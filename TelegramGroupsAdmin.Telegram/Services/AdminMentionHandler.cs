@@ -45,7 +45,7 @@ public class AdminMentionHandler
         try
         {
             // Get all active admins for this chat
-            var admins = await _chatAdminsRepository.GetChatAdminsAsync(message.Chat.Id);
+            var admins = await _chatAdminsRepository.GetChatAdminsAsync(message.Chat.Id, cancellationToken);
 
             if (admins.Count == 0)
             {

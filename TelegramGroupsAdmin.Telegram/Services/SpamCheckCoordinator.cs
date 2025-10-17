@@ -43,13 +43,14 @@ public class SpamCheckCoordinator : ISpamCheckCoordinator
             // Check if user is explicitly trusted
             isUserTrusted = await userActionsRepository.IsUserTrustedAsync(
                 userId,
-                string.IsNullOrWhiteSpace(request.ChatId) ? null : long.Parse(request.ChatId));
+                string.IsNullOrWhiteSpace(request.ChatId) ? null : long.Parse(request.ChatId),
+                cancellationToken);
 
             // Check if user is a chat admin (only if ChatId provided)
             if (!string.IsNullOrWhiteSpace(request.ChatId) && long.TryParse(request.ChatId, out var chatId))
             {
                 var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-                isUserAdmin = await chatAdminsRepository.IsAdminAsync(chatId, userId);
+                isUserAdmin = await chatAdminsRepository.IsAdminAsync(chatId, userId, cancellationToken);
             }
         }
 

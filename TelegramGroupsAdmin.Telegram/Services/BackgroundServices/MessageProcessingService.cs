@@ -41,7 +41,7 @@ public partial class MessageProcessingService(
     /// Handle new messages: save to database, execute commands, run spam detection
     /// Only processes group/supergroup messages - private DMs are handled by commands only
     /// </summary>
-    public async Task HandleNewMessageAsync(ITelegramBotClient botClient, Message message)
+    public async Task HandleNewMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken = default)
     {
         // Skip private chats - only process group messages for history/spam detection
         if (message.Chat.Type == ChatType.Private)
@@ -52,13 +52,14 @@ public partial class MessageProcessingService(
             {
                 try
                 {
-                    var commandResult = await commandRouter.RouteCommandAsync(botClient, message);
+                    var commandResult = await commandRouter.RouteCommandAsync(botClient, message, cancellationToken);
                     if (commandResult?.Response != null && !string.IsNullOrWhiteSpace(commandResult.Response))
                     {
                         await botClient.SendMessage(
                             chatId: message.Chat.Id,
                             text: commandResult.Response,
-                            parseMode: ParseMode.Markdown);
+                            parseMode: ParseMode.Markdown,
+                            cancellationToken: cancellationToken);
                     }
                 }
                 catch (Exception ex)
@@ -83,7 +84,7 @@ public partial class MessageProcessingService(
                 oldChatId,
                 newChatId);
 
-            await chatManagementService.HandleChatMigrationAsync(oldChatId, newChatId);
+            await chatManagementService.HandleChatMigrationAsync(oldChatId, newChatId, cancellationToken);
             return; // Don't process migration message further
         }
 
@@ -112,7 +113,8 @@ public partial class MessageProcessingService(
             {
                 await botClient.DeleteMessage(
                     chatId: message.Chat.Id,
-                    messageId: message.MessageId);
+                    messageId: message.MessageId,
+                    cancellationToken: cancellationToken);
 
                 logger.LogInformation(
                     "Deleted service message (type: {Type}) in chat {ChatId}",
@@ -140,10 +142,10 @@ public partial class MessageProcessingService(
             using (var scope = serviceProvider.CreateScope())
             {
                 var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-                var existingChat = await managedChatsRepository.GetByChatIdAsync(message.Chat.Id);
+                var existingChat = await managedChatsRepository.GetByChatIdAsync(message.Chat.Id, cancellationToken);
                 var isNewChat = existingChat == null;
 
-                await managedChatsRepository.UpdateLastSeenAsync(message.Chat.Id, now);
+                await managedChatsRepository.UpdateLastSeenAsync(message.Chat.Id, now, cancellationToken);
 
                 // Check if we need to refresh admin cache (only for groups/supergroups, not private DMs)
                 if (message.Chat.Type == ChatType.Group || message.Chat.Type == ChatType.Supergroup)
@@ -160,7 +162,7 @@ public partial class MessageProcessingService(
                     {
                         // Check if admin cache is empty for this chat
                         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-                        var adminCount = await chatAdminsRepository.GetAdminCountAsync(message.Chat.Id);
+                        var adminCount = await chatAdminsRepository.GetAdminCountAsync(message.Chat.Id, cancellationToken);
 
                         if (adminCount == 0)
                         {
@@ -178,7 +180,7 @@ public partial class MessageProcessingService(
 
                         try
                         {
-                            await chatManagementService.RefreshChatAdminsAsync(botClient, message.Chat.Id, default);
+                            await chatManagementService.RefreshChatAdminsAsync(botClient, message.Chat.Id, cancellationToken);
                         }
                         catch (Exception ex)
                         {
@@ -202,7 +204,7 @@ public partial class MessageProcessingService(
             {
                 try
                 {
-                    commandResult = await commandRouter.RouteCommandAsync(botClient, message);
+                    commandResult = await commandRouter.RouteCommandAsync(botClient, message, cancellationToken);
                     if (commandResult != null)
                     {
                         // Send response if there is one (and it's not empty)
@@ -212,7 +214,8 @@ public partial class MessageProcessingService(
                                 chatId: message.Chat.Id,
                                 text: commandResult.Response,
                                 parseMode: ParseMode.Markdown,
-                                replyParameters: new ReplyParameters { MessageId = message.MessageId });
+                                replyParameters: new ReplyParameters { MessageId = message.MessageId },
+                                cancellationToken: cancellationToken);
 
                             // Schedule auto-delete if requested
                             if (commandResult.DeleteResponseAfterSeconds.HasValue)
@@ -221,7 +224,8 @@ public partial class MessageProcessingService(
                                     message.Chat.Id,
                                     responseMessage.MessageId,
                                     commandResult.DeleteResponseAfterSeconds.Value,
-                                    "command_response");
+                                    "command_response",
+                                    cancellationToken);
                             }
                         }
                     }
@@ -248,7 +252,7 @@ public partial class MessageProcessingService(
                         var adminMentionHandler = scope.ServiceProvider.GetRequiredService<AdminMentionHandler>();
                         if (adminMentionHandler.ContainsAdminMention(text))
                         {
-                            await adminMentionHandler.NotifyAdminsAsync(botClient, message);
+                            await adminMentionHandler.NotifyAdminsAsync(botClient, message, cancellationToken);
                         }
                     }
                 }
@@ -281,7 +285,8 @@ public partial class MessageProcessingService(
                     botClient,
                     photoFileId,
                     message.Chat.Id,
-                    message.MessageId);
+                    message.MessageId,
+                    cancellationToken);
             }
 
             // Calculate content hash for spam correlation
@@ -323,7 +328,7 @@ public partial class MessageProcessingService(
             using (var scope = _scopeFactory.CreateScope())
             {
                 var repository = scope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
-                await repository.InsertMessageAsync(messageRecord);
+                await repository.InsertMessageAsync(messageRecord, cancellationToken);
 
                 // Upsert user into telegram_users table (centralized user tracking)
                 var telegramUserRepo = scope.ServiceProvider.GetRequiredService<TelegramUserRepository>();
@@ -340,7 +345,7 @@ public partial class MessageProcessingService(
                     CreatedAt: now,
                     UpdatedAt: now
                 );
-                await telegramUserRepo.UpsertAsync(telegramUser);
+                await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
             }
 
             // Raise event for real-time UI updates
@@ -361,7 +366,8 @@ public partial class MessageProcessingService(
                 {
                     await botClient.DeleteMessage(
                         chatId: message.Chat.Id,
-                        messageId: message.MessageId);
+                        messageId: message.MessageId,
+                        cancellationToken: cancellationToken);
 
                     logger.LogDebug("Deleted command message {MessageId} in chat {ChatId}", message.MessageId, message.Chat.Id);
                 }
@@ -374,7 +380,7 @@ public partial class MessageProcessingService(
             // Fetch user profile photo via TickerQ (0s delay for instant execution, with persistence/retry)
             if (message.From?.Id != null)
             {
-                await ScheduleUserPhotoFetchAsync(message.MessageId, message.From.Id);
+                await ScheduleUserPhotoFetchAsync(message.MessageId, message.From.Id, cancellationToken);
             }
 
             // Phase 2.6: Automatic spam detection with detection result storage
@@ -383,7 +389,7 @@ public partial class MessageProcessingService(
             {
                 _ = Task.Run(async () =>
                 {
-                    await RunSpamDetectionAsync(message, text, editVersion: 0);
+                    await RunSpamDetectionAsync(message, text, editVersion: 0, CancellationToken.None);
                 }, CancellationToken.None);
             }
         }
@@ -400,7 +406,7 @@ public partial class MessageProcessingService(
     /// <summary>
     /// Handle edited messages: save edit history, update message, re-scan for spam
     /// </summary>
-    public async Task HandleEditedMessageAsync(Message editedMessage)
+    public async Task HandleEditedMessageAsync(Message editedMessage, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -408,7 +414,7 @@ public partial class MessageProcessingService(
             var repository = scope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
 
             // Get the old message from the database
-            var oldMessage = await repository.GetMessageAsync(editedMessage.MessageId);
+            var oldMessage = await repository.GetMessageAsync(editedMessage.MessageId, cancellationToken);
             if (oldMessage == null)
             {
                 logger.LogWarning(
@@ -451,7 +457,7 @@ public partial class MessageProcessingService(
                 NewContentHash: newContentHash
             );
 
-            await repository.InsertMessageEditAsync(editRecord);
+            await repository.InsertMessageEditAsync(editRecord, cancellationToken);
 
             // Update the message in the messages table with new text and edit date
             var updatedMessage = oldMessage with
@@ -461,7 +467,7 @@ public partial class MessageProcessingService(
                 Urls = newUrls != null ? JsonSerializer.Serialize(newUrls) : null,
                 ContentHash = newContentHash
             };
-            await repository.UpdateMessageAsync(updatedMessage);
+            await repository.UpdateMessageAsync(updatedMessage, cancellationToken);
 
             // Raise event for real-time UI updates
             OnMessageEdited?.Invoke(editRecord);
@@ -482,12 +488,12 @@ public partial class MessageProcessingService(
                         var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
 
                         // Get the latest edit_version for this message
-                        var existingResults = await detectionResultsRepo.GetByMessageIdAsync(editedMessage.MessageId);
+                        var existingResults = await detectionResultsRepo.GetByMessageIdAsync(editedMessage.MessageId, CancellationToken.None);
                         var maxEditVersion = existingResults.Any()
                             ? existingResults.Max(r => r.EditVersion)
                             : 0;
 
-                        await RunSpamDetectionAsync(editedMessage, newText, editVersion: maxEditVersion + 1);
+                        await RunSpamDetectionAsync(editedMessage, newText, editVersion: maxEditVersion + 1, CancellationToken.None);
                     }
                     catch (Exception ex)
                     {
@@ -507,7 +513,7 @@ public partial class MessageProcessingService(
     /// <summary>
     /// Run spam detection on a message and take appropriate actions
     /// </summary>
-    private async Task RunSpamDetectionAsync(Message message, string text, int editVersion)
+    private async Task RunSpamDetectionAsync(Message message, string text, int editVersion, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -524,7 +530,7 @@ public partial class MessageProcessingService(
                 ChatId = message.Chat.Id.ToString()
             };
 
-            var result = await coordinator.CheckAsync(request);
+            var result = await coordinator.CheckAsync(request, cancellationToken);
 
             // Store detection result (spam or ham) for analytics and training
             // Only store if spam detection actually ran (not skipped for trusted/admin users)
@@ -552,7 +558,7 @@ public partial class MessageProcessingService(
                     EditVersion = editVersion
                 };
 
-                await detectionResultsRepo.InsertAsync(detectionResult);
+                await detectionResultsRepo.InsertAsync(detectionResult, cancellationToken);
 
                 var editInfo = editVersion > 0 ? $" (edit #{editVersion})" : "";
                 logger.LogInformation(
@@ -567,14 +573,15 @@ public partial class MessageProcessingService(
                 if (!result.SpamResult.IsSpam && message.From?.Id != null)
                 {
                     var autoTrustService = scope.ServiceProvider.GetRequiredService<UserAutoTrustService>();
-                    await autoTrustService.CheckAndApplyAutoTrustAsync(message.From.Id, message.Chat.Id);
+                    await autoTrustService.CheckAndApplyAutoTrustAsync(message.From.Id, message.Chat.Id, cancellationToken);
                 }
 
                 // Phase 2.7: Handle spam actions based on net confidence
                 await spamActionService.HandleSpamDetectionActionsAsync(
                     message,
                     result.SpamResult,
-                    detectionResult);
+                    detectionResult,
+                    cancellationToken);
             }
         }
         catch (Exception ex)
@@ -604,7 +611,8 @@ public partial class MessageProcessingService(
         ITelegramBotClient botClient,
         string photoFileId,
         long chatId,
-        long messageId)
+        long messageId,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -621,7 +629,7 @@ public partial class MessageProcessingService(
             var thumbPath = Path.Combine(thumbDir, fileName);
 
             // Download file from Telegram
-            var file = await botClient.GetFile(photoFileId);
+            var file = await botClient.GetFile(photoFileId, cancellationToken);
             if (file.FilePath == null)
             {
                 logger.LogWarning("Unable to get file path for photo {FileId}", photoFileId);
@@ -634,14 +642,14 @@ public partial class MessageProcessingService(
             {
                 await using (var fileStream = System.IO.File.Create(tempPath))
                 {
-                    await botClient.DownloadFile(file.FilePath, fileStream);
+                    await botClient.DownloadFile(file.FilePath, fileStream, cancellationToken);
                 }
 
                 // Copy to full image location
                 System.IO.File.Copy(tempPath, fullPath, overwrite: true);
 
                 // Generate thumbnail using ImageSharp
-                using (var image = await Image.LoadAsync(tempPath))
+                using (var image = await Image.LoadAsync(tempPath, cancellationToken))
                 {
                     var thumbnailSize = _historyOptions.ThumbnailSize;
                     image.Mutate(x => x.Resize(new ResizeOptions
@@ -650,7 +658,7 @@ public partial class MessageProcessingService(
                         Mode = ResizeMode.Max // Maintain aspect ratio
                     }));
 
-                    await image.SaveAsJpegAsync(thumbPath);
+                    await image.SaveAsJpegAsync(thumbPath, cancellationToken);
                 }
 
                 logger.LogDebug(
@@ -698,7 +706,7 @@ public partial class MessageProcessingService(
     /// <summary>
     /// Schedule a message for deletion via TickerQ
     /// </summary>
-    private async Task ScheduleMessageDeleteAsync(long chatId, int messageId, int delaySeconds, string reason)
+    private async Task ScheduleMessageDeleteAsync(long chatId, int messageId, int delaySeconds, string reason, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -717,7 +725,7 @@ public partial class MessageProcessingService(
                 ExecutionTime = DateTime.UtcNow.AddSeconds(delaySeconds),
                 Request = TickerQ.Utilities.TickerHelper.CreateTickerRequest(deletePayload),
                 Retries = 0 // Don't retry - message may have been manually deleted
-            });
+            }, cancellationToken);
 
             if (!result.IsSucceded)
             {
@@ -749,7 +757,7 @@ public partial class MessageProcessingService(
     /// <summary>
     /// Schedule user photo fetch via TickerQ with 0s delay (instant execution with persistence/retry)
     /// </summary>
-    private async Task ScheduleUserPhotoFetchAsync(long messageId, long userId)
+    private async Task ScheduleUserPhotoFetchAsync(long messageId, long userId, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -767,7 +775,7 @@ public partial class MessageProcessingService(
                 ExecutionTime = DateTime.UtcNow, // 0s delay for instant execution
                 Request = TickerQ.Utilities.TickerHelper.CreateTickerRequest(photoPayload),
                 Retries = 2 // Retry on Telegram API failures
-            });
+            }, cancellationToken);
 
             if (!result.IsSucceded)
             {

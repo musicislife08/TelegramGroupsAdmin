@@ -157,20 +157,20 @@ public class UserRepository
         _logger.LogInformation("Deleted all recovery codes for user {UserId}", userId);
     }
 
-    public async Task<List<UiModels.RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId)
+    public async Task<List<UiModels.RecoveryCodeRecord>> GetRecoveryCodesAsync(string userId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.RecoveryCodes
             .AsNoTracking()
             .Where(rc => rc.UserId == userId && rc.UsedAt == null)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task AddRecoveryCodesAsync(string userId, List<string> codeHashes)
+    public async Task AddRecoveryCodesAsync(string userId, List<string> codeHashes, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = codeHashes.Select(codeHash => new DataModels.RecoveryCodeRecordDto
         {
             UserId = userId,
@@ -179,7 +179,7 @@ public class UserRepository
         }).ToList();
 
         context.RecoveryCodes.AddRange(entities);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Added {Count} recovery codes for user {UserId}", codeHashes.Count, userId);
     }

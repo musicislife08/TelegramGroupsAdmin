@@ -38,12 +38,13 @@ public class UserAutoTrustService
     /// </summary>
     /// <param name="userId">Telegram user ID</param>
     /// <param name="chatId">Chat ID where message was posted (used for config lookup)</param>
-    public async Task CheckAndApplyAutoTrustAsync(long userId, long chatId)
+    /// <param name="cancellationToken">Cancellation token</param>
+    public async Task CheckAndApplyAutoTrustAsync(long userId, long chatId, CancellationToken cancellationToken = default)
     {
         try
         {
             // Get effective config (chat-specific overrides, global defaults)
-            var config = await _spamDetectionConfigRepository.GetEffectiveConfigAsync(chatId.ToString());
+            var config = await _spamDetectionConfigRepository.GetEffectiveConfigAsync(chatId.ToString(), cancellationToken);
 
             // Feature disabled - skip
             if (!config.FirstMessageOnly)
@@ -58,7 +59,8 @@ public class UserAutoTrustService
             // Get last N non-spam detection results for this user (global, across all chats)
             var recentResults = await _detectionResultsRepository.GetRecentNonSpamResultsForUserAsync(
                 userId,
-                limit: config.FirstMessagesCount);
+                limit: config.FirstMessagesCount,
+                cancellationToken);
 
             // Not enough non-spam messages yet
             if (recentResults.Count < config.FirstMessagesCount)
@@ -84,7 +86,7 @@ public class UserAutoTrustService
             );
 
             // AddOrUpdate pattern - safe even if already trusted
-            var actionId = await _userActionsRepository.InsertAsync(trustAction);
+            var actionId = await _userActionsRepository.InsertAsync(trustAction, cancellationToken);
 
             _logger.LogInformation(
                 "Auto-trusted user {UserId} after {Count} non-spam messages (action ID: {ActionId})",
@@ -97,7 +99,8 @@ public class UserAutoTrustService
                 Data.Models.AuditEventType.UserAutoWhitelisted,
                 actorUserId: "system",
                 targetUserId: userId.ToString(), // Telegram user ID as target
-                value: $"Auto-trusted after {config.FirstMessagesCount} non-spam messages");
+                value: $"Auto-trusted after {config.FirstMessagesCount} non-spam messages",
+                cancellationToken);
         }
         catch (Exception ex)
         {

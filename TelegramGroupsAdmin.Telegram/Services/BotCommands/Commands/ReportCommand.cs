@@ -73,7 +73,7 @@ public class ReportCommand : IBotCommand
             AdminNotes: null
         );
 
-        var reportId = await reportsRepository.InsertAsync(report);
+        var reportId = await reportsRepository.InsertAsync(report, cancellationToken);
 
         _logger.LogInformation(
             "Report {ReportId} submitted by {ReporterId} ({ReporterUsername}) for message {MessageId} from user {ReportedId} ({ReportedUsername})",

@@ -120,7 +120,7 @@ public class StartCommand : IBotCommand
             cancellationToken: cancellationToken);
 
         // Mark as DM sent in database (update the welcome response record)
-        var welcomeResponse = await _welcomeResponsesRepository.GetByUserAndChatAsync(targetUserId, chatId);
+        var welcomeResponse = await _welcomeResponsesRepository.GetByUserAndChatAsync(targetUserId, chatId, cancellationToken);
 
         if (welcomeResponse != null)
         {
@@ -128,7 +128,8 @@ public class StartCommand : IBotCommand
                 welcomeResponse.Id,
                 welcomeResponse.Response, // Keep existing response status
                 dmSent: true,
-                dmFallback: false);
+                dmFallback: false,
+                cancellationToken);
         }
 
         // Don't return a message - the Accept button will trigger the final confirmation

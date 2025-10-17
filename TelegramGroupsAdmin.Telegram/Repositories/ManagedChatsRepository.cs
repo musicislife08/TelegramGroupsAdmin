@@ -18,11 +18,11 @@ public class ManagedChatsRepository : IManagedChatsRepository
         _logger = logger;
     }
 
-    public async Task UpsertAsync(ManagedChatRecord chat)
+    public async Task UpsertAsync(ManagedChatRecord chat, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var existing = await context.ManagedChats
-            .FirstOrDefaultAsync(mc => mc.ChatId == chat.ChatId);
+            .FirstOrDefaultAsync(mc => mc.ChatId == chat.ChatId, cancellationToken);
 
         if (existing != null)
         {
@@ -51,7 +51,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
             context.ManagedChats.Add(entity);
         }
 
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug(
             "Upserted managed chat {ChatId} ({ChatName}): {BotStatus}, admin={IsAdmin}, active={IsActive}",
@@ -62,68 +62,68 @@ public class ManagedChatsRepository : IManagedChatsRepository
             chat.IsActive);
     }
 
-    public async Task<ManagedChatRecord?> GetByChatIdAsync(long chatId)
+    public async Task<ManagedChatRecord?> GetByChatIdAsync(long chatId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.ManagedChats
             .AsNoTracking()
-            .FirstOrDefaultAsync(mc => mc.ChatId == chatId);
+            .FirstOrDefaultAsync(mc => mc.ChatId == chatId, cancellationToken);
 
         return entity?.ToModel();
     }
 
-    public async Task<List<ManagedChatRecord>> GetActiveChatsAsync()
+    public async Task<List<ManagedChatRecord>> GetActiveChatsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.ManagedChats
             .AsNoTracking()
             .Where(mc => mc.IsActive == true)
             .OrderBy(mc => mc.ChatName)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<List<ManagedChatRecord>> GetAdminChatsAsync()
+    public async Task<List<ManagedChatRecord>> GetAdminChatsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.ManagedChats
             .AsNoTracking()
             .Where(mc => mc.IsActive == true && mc.IsAdmin == true)
             .OrderBy(mc => mc.ChatName)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<bool> IsActiveAndAdminAsync(long chatId)
+    public async Task<bool> IsActiveAndAdminAsync(long chatId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         return await context.ManagedChats
             .AsNoTracking()
-            .AnyAsync(mc => mc.ChatId == chatId && mc.IsActive == true && mc.IsAdmin == true);
+            .AnyAsync(mc => mc.ChatId == chatId && mc.IsActive == true && mc.IsAdmin == true, cancellationToken);
     }
 
-    public async Task MarkInactiveAsync(long chatId)
+    public async Task MarkInactiveAsync(long chatId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.ManagedChats
-            .FirstOrDefaultAsync(mc => mc.ChatId == chatId);
+            .FirstOrDefaultAsync(mc => mc.ChatId == chatId, cancellationToken);
 
         if (entity != null)
         {
             entity.IsActive = false;
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Marked chat {ChatId} as inactive", chatId);
         }
     }
 
-    public async Task UpdateLastSeenAsync(long chatId, DateTimeOffset timestamp)
+    public async Task UpdateLastSeenAsync(long chatId, DateTimeOffset timestamp, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var existing = await context.ManagedChats
-            .FirstOrDefaultAsync(mc => mc.ChatId == chatId);
+            .FirstOrDefaultAsync(mc => mc.ChatId == chatId, cancellationToken);
 
         if (existing != null)
         {
@@ -163,35 +163,35 @@ public class ManagedChatsRepository : IManagedChatsRepository
                 chatType);
         }
 
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<List<ManagedChatRecord>> GetAllChatsAsync()
+    public async Task<List<ManagedChatRecord>> GetAllChatsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.ManagedChats
             .AsNoTracking()
             .OrderByDescending(mc => mc.IsActive)
             .ThenBy(mc => mc.ChatName)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<List<ManagedChatRecord>> GetAllAsync()
+    public async Task<List<ManagedChatRecord>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        return await GetActiveChatsAsync();
+        return await GetActiveChatsAsync(cancellationToken);
     }
 
-    public async Task DeleteAsync(long chatId)
+    public async Task DeleteAsync(long chatId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var chat = await context.ManagedChats.FirstOrDefaultAsync(mc => mc.ChatId == chatId);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var chat = await context.ManagedChats.FirstOrDefaultAsync(mc => mc.ChatId == chatId, cancellationToken);
 
         if (chat != null)
         {
             context.ManagedChats.Remove(chat);
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
                 "Deleted managed chat {ChatId} ({ChatName})",

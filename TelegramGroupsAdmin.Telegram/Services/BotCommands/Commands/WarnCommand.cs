@@ -57,7 +57,7 @@ public class WarnCommand : IBotCommand
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
         // Check if target is admin (can't warn admins)
-        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id);
+        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id, cancellationToken);
         if (isAdmin)
         {
             return "❌ Cannot warn chat admins.";
@@ -70,7 +70,8 @@ public class WarnCommand : IBotCommand
             // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
             string executorId = await _moderationService.GetExecutorIdentifierAsync(
                 message.From!.Id,
-                message.From.Username);
+                message.From.Username,
+                cancellationToken);
 
             // Execute warn action using service
             var result = await _moderationService.WarnUserAsync(

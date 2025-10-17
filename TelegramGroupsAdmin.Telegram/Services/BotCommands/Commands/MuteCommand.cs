@@ -55,7 +55,7 @@ public class MuteCommand : IBotCommand
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
         // Check if target is admin (can't mute admins)
-        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id);
+        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id, cancellationToken);
         if (isAdmin)
         {
             return "❌ Cannot mute chat admins.";
@@ -87,7 +87,8 @@ public class MuteCommand : IBotCommand
             // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
             var executorId = await _moderationService.GetExecutorIdentifierAsync(
                 message.From!.Id,
-                message.From.Username);
+                message.From.Username,
+                cancellationToken);
 
             // Execute mute via ModerationActionService
             var result = await _moderationService.RestrictUserAsync(

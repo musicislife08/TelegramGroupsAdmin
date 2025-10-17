@@ -57,7 +57,8 @@ public class UnbanCommand : IBotCommand
             // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
             var executorId = await _moderationService.GetExecutorIdentifierAsync(
                 message.From!.Id,
-                message.From.Username);
+                message.From.Username,
+                cancellationToken);
 
             // Execute unban action through ModerationActionService
             var result = await _moderationService.UnbanUserAsync(

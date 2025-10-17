@@ -20,7 +20,7 @@ public interface IBotProtectionService
     /// Returns true if the bot should be allowed (whitelisted or admin-invited)
     /// Returns false if the bot should be banned
     /// </summary>
-    Task<bool> ShouldAllowBotAsync(long chatId, User user, ChatMemberUpdated? chatMemberUpdate = null);
+    Task<bool> ShouldAllowBotAsync(long chatId, User user, ChatMemberUpdated? chatMemberUpdate = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Ban a bot from the chat and log the event
@@ -41,7 +41,7 @@ public class BotProtectionService : IBotProtectionService
         _scopeFactory = scopeFactory;
     }
 
-    public async Task<bool> ShouldAllowBotAsync(long chatId, User user, ChatMemberUpdated? chatMemberUpdate = null)
+    public async Task<bool> ShouldAllowBotAsync(long chatId, User user, ChatMemberUpdated? chatMemberUpdate = null, CancellationToken cancellationToken = default)
     {
         // Not a bot - always allow
         if (!user.IsBot)
@@ -54,6 +54,7 @@ public class BotProtectionService : IBotProtectionService
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
         // Get effective config for this chat (chat-specific overrides global)
+        // Note: IConfigService doesn't support CancellationToken (configuration library)
         var config = await configService.GetEffectiveAsync<BotProtectionConfig>(ConfigType.BotProtection, chatId)
                     ?? BotProtectionConfig.Default;
 
@@ -82,7 +83,7 @@ public class BotProtectionService : IBotProtectionService
             if (invitedBy != null)
             {
                 // Check if inviter is a chat admin
-                var admins = await chatAdminsRepository.GetChatAdminsAsync(chatId);
+                var admins = await chatAdminsRepository.GetChatAdminsAsync(chatId, cancellationToken);
                 var isInviterAdmin = admins.Any(admin => admin.TelegramId == invitedBy.Id);
 
                 if (isInviterAdmin)
@@ -128,7 +129,7 @@ public class BotProtectionService : IBotProtectionService
                 Reason: $"Unauthorized bot: {reason}"
             );
 
-            await userActionsRepository.InsertAsync(action);
+            await userActionsRepository.InsertAsync(action, cancellationToken);
 
             _logger.LogInformation("Logged bot ban to audit trail for bot {BotId} in chat {ChatId}", bot.Id, chatId);
         }

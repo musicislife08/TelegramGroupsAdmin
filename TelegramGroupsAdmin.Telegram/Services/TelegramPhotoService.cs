@@ -36,7 +36,7 @@ public class TelegramPhotoService
     /// Get or fetch chat icon (group/channel photo)
     /// Returns relative path from wwwroot/images or null if not available
     /// </summary>
-    public async Task<string?> GetChatIconAsync(ITelegramBotClient botClient, long chatId)
+    public async Task<string?> GetChatIconAsync(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -51,7 +51,7 @@ public class TelegramPhotoService
             }
 
             // Fetch from Telegram
-            var chat = await botClient.GetChat(chatId);
+            var chat = await botClient.GetChat(chatId, cancellationToken);
             if (chat.Photo == null)
             {
                 _logger.LogInformation("Chat {ChatId} ({ChatName}) has no profile photo - skipping icon cache", chatId, chat.Title ?? chat.Username ?? "Unknown");
@@ -59,7 +59,7 @@ public class TelegramPhotoService
             }
 
             // Download the small version of the chat photo
-            var file = await botClient.GetFile(chat.Photo.SmallFileId);
+            var file = await botClient.GetFile(chat.Photo.SmallFileId, cancellationToken);
             if (file.FilePath == null)
             {
                 _logger.LogWarning("Unable to get file path for chat {ChatId} photo", chatId);
@@ -72,11 +72,11 @@ public class TelegramPhotoService
             {
                 await using (var fileStream = File.Create(tempPath))
                 {
-                    await botClient.DownloadFile(file.FilePath, fileStream);
+                    await botClient.DownloadFile(file.FilePath, fileStream, cancellationToken);
                 }
 
                 // Resize to 64x64 icon
-                await ResizeImageAsync(tempPath, localPath, 64);
+                await ResizeImageAsync(tempPath, localPath, 64, cancellationToken);
 
                 _logger.LogInformation("Cached chat icon for {ChatId}", chatId);
                 return relativePath;
@@ -100,7 +100,7 @@ public class TelegramPhotoService
     /// Get or fetch user profile photo
     /// Returns relative path from wwwroot/images or null if not available
     /// </summary>
-    public async Task<string?> GetUserPhotoAsync(ITelegramBotClient botClient, long userId)
+    public async Task<string?> GetUserPhotoAsync(ITelegramBotClient botClient, long userId, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -115,7 +115,7 @@ public class TelegramPhotoService
             }
 
             // Fetch from Telegram
-            var photos = await botClient.GetUserProfilePhotos(userId, limit: 1);
+            var photos = await botClient.GetUserProfilePhotos(userId, limit: 1, cancellationToken: cancellationToken);
             if (photos.TotalCount == 0 || photos.Photos.Length == 0)
             {
                 _logger.LogDebug("User {UserId} has no profile photo", userId);
@@ -126,7 +126,7 @@ public class TelegramPhotoService
             var photo = photos.Photos[0];
             var smallestPhoto = photo.OrderBy(p => p.FileSize).First();
 
-            var file = await botClient.GetFile(smallestPhoto.FileId);
+            var file = await botClient.GetFile(smallestPhoto.FileId, cancellationToken);
             if (file.FilePath == null)
             {
                 _logger.LogWarning("Unable to get file path for user {UserId} photo", userId);
@@ -139,11 +139,11 @@ public class TelegramPhotoService
             {
                 await using (var fileStream = File.Create(tempPath))
                 {
-                    await botClient.DownloadFile(file.FilePath, fileStream);
+                    await botClient.DownloadFile(file.FilePath, fileStream, cancellationToken);
                 }
 
                 // Resize to 64x64 icon
-                await ResizeImageAsync(tempPath, localPath, 64);
+                await ResizeImageAsync(tempPath, localPath, 64, cancellationToken);
 
                 _logger.LogInformation("Cached user photo for {UserId}", userId);
                 return relativePath;
@@ -166,9 +166,9 @@ public class TelegramPhotoService
     /// <summary>
     /// Resize image to square icon using ImageSharp
     /// </summary>
-    private async Task ResizeImageAsync(string sourcePath, string targetPath, int size)
+    private async Task ResizeImageAsync(string sourcePath, string targetPath, int size, CancellationToken cancellationToken = default)
     {
-        using var image = await Image.LoadAsync(sourcePath);
+        using var image = await Image.LoadAsync(sourcePath, cancellationToken);
 
         // Crop to center square, then resize
         image.Mutate(x => x
@@ -182,6 +182,6 @@ public class TelegramPhotoService
         await image.SaveAsJpegAsync(targetPath, new SixLabors.ImageSharp.Formats.Jpeg.JpegEncoder
         {
             Quality = 85
-        });
+        }, cancellationToken);
     }
 }

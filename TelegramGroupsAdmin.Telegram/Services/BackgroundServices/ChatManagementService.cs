@@ -31,7 +31,7 @@ public class ChatManagementService(
     /// Handle MyChatMember updates (bot added/removed, admin promotion/demotion)
     /// Only tracks groups/supergroups - private chats are not managed
     /// </summary>
-    public async Task HandleMyChatMemberUpdateAsync(ChatMemberUpdated myChatMember)
+    public async Task HandleMyChatMemberUpdateAsync(ChatMemberUpdated myChatMember, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -85,7 +85,7 @@ public class ChatManagementService(
             using (var scope = serviceProvider.CreateScope())
             {
                 var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-                await managedChatsRepository.UpsertAsync(chatRecord);
+                await managedChatsRepository.UpsertAsync(chatRecord, cancellationToken);
             }
 
             // If this is about ANOTHER user (not the bot), update admin cache
@@ -105,7 +105,7 @@ public class ChatManagementService(
                     {
                         // User promoted to admin
                         var isCreator = newStatus == ChatMemberStatus.Creator;
-                        await chatAdminsRepository.UpsertAsync(chat.Id, affectedUser.Id, isCreator);
+                        await chatAdminsRepository.UpsertAsync(chat.Id, affectedUser.Id, isCreator, cancellationToken: cancellationToken);
                         logger.LogInformation(
                             "✅ User {UserId} (@{Username}) promoted to {Role} in chat {ChatId}",
                             affectedUser.Id,
@@ -116,7 +116,7 @@ public class ChatManagementService(
                     else
                     {
                         // User demoted from admin
-                        await chatAdminsRepository.DeactivateAsync(chat.Id, affectedUser.Id);
+                        await chatAdminsRepository.DeactivateAsync(chat.Id, affectedUser.Id, cancellationToken);
                         logger.LogInformation(
                             "❌ User {UserId} (@{Username}) demoted from admin in chat {ChatId}",
                             affectedUser.Id,
@@ -161,7 +161,7 @@ public class ChatManagementService(
             }
 
             // Trigger immediate health check when bot status changes
-            await RefreshHealthForChatAsync(null, chat.Id);
+            await RefreshHealthForChatAsync(null, chat.Id, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -178,7 +178,7 @@ public class ChatManagementService(
     /// 2. Old Group becomes inaccessible (invalid chat ID)
     /// We delete the old chat record since the ID is now invalid
     /// </summary>
-    public async Task HandleChatMigrationAsync(long oldChatId, long newChatId)
+    public async Task HandleChatMigrationAsync(long oldChatId, long newChatId, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -186,10 +186,10 @@ public class ChatManagementService(
             var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
 
             // Delete old chat record (the old chat ID is now invalid)
-            var oldChat = await managedChatsRepository.GetByChatIdAsync(oldChatId);
+            var oldChat = await managedChatsRepository.GetByChatIdAsync(oldChatId, cancellationToken);
             if (oldChat != null)
             {
-                await managedChatsRepository.DeleteAsync(oldChatId);
+                await managedChatsRepository.DeleteAsync(oldChatId, cancellationToken);
 
                 logger.LogInformation(
                     "Deleted old Group {OldChatId} record (migrated to Supergroup {NewChatId})",
@@ -215,13 +215,13 @@ public class ChatManagementService(
     /// <summary>
     /// Refresh admin cache for all active managed chats on startup
     /// </summary>
-    public async Task RefreshAllChatAdminsAsync(ITelegramBotClient botClient, CancellationToken cancellationToken)
+    public async Task RefreshAllChatAdminsAsync(ITelegramBotClient botClient, CancellationToken cancellationToken = default)
     {
         try
         {
             using var scope = serviceProvider.CreateScope();
             var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-            var managedChats = await managedChatsRepository.GetActiveChatsAsync();
+            var managedChats = await managedChatsRepository.GetActiveChatsAsync(cancellationToken);
 
             logger.LogInformation("Refreshing admin cache for {Count} managed chats", managedChats.Count);
 
@@ -250,7 +250,7 @@ public class ChatManagementService(
     /// <summary>
     /// Refresh admin list for a specific chat (groups/supergroups only)
     /// </summary>
-    public async Task RefreshChatAdminsAsync(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken)
+    public async Task RefreshChatAdminsAsync(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -273,7 +273,7 @@ public class ChatManagementService(
             {
                 var isCreator = admin.Status == ChatMemberStatus.Creator;
                 var username = admin.User.Username; // Store Telegram username (without @)
-                await chatAdminsRepository.UpsertAsync(chatId, admin.User.Id, isCreator, username);
+                await chatAdminsRepository.UpsertAsync(chatId, admin.User.Id, isCreator, username, cancellationToken);
 
                 var displayName = username ?? admin.User.FirstName ?? admin.User.Id.ToString();
                 adminNames.Add($"@{displayName}" + (isCreator ? " (creator)" : ""));
@@ -295,12 +295,12 @@ public class ChatManagementService(
                 {
                     // Save icon path to database
                     var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-                    var existingChat = await managedChatsRepository.GetByChatIdAsync(chatId);
+                    var existingChat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
 
                     if (existingChat != null)
                     {
                         var updatedChat = existingChat with { ChatIconPath = iconPath };
-                        await managedChatsRepository.UpsertAsync(updatedChat);
+                        await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
                         logger.LogInformation("✅ Cached chat icon for {ChatId}: {IconPath}", chatId, iconPath);
                     }
                 }
@@ -321,7 +321,7 @@ public class ChatManagementService(
     /// <summary>
     /// Perform health check on a specific chat and update cache
     /// </summary>
-    public async Task RefreshHealthForChatAsync(ITelegramBotClient? botClient, long chatId)
+    public async Task RefreshHealthForChatAsync(ITelegramBotClient? botClient, long chatId, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -331,7 +331,7 @@ public class ChatManagementService(
                 return;
             }
 
-            var (health, chatName) = await PerformHealthCheckAsync(botClient, chatId);
+            var (health, chatName) = await PerformHealthCheckAsync(botClient, chatId, cancellationToken);
             _healthCache[chatId] = health;
             OnHealthUpdate?.Invoke(health);
 
@@ -340,13 +340,13 @@ public class ChatManagementService(
             {
                 using var scope = serviceProvider.CreateScope();
                 var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-                var existingChat = await managedChatsRepository.GetByChatIdAsync(chatId);
+                var existingChat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
 
                 if (existingChat != null && existingChat.ChatName != chatName)
                 {
                     // Update with fresh chat name from Telegram
                     var updatedChat = existingChat with { ChatName = chatName };
-                    await managedChatsRepository.UpsertAsync(updatedChat);
+                    await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
                     logger.LogDebug("Updated chat name for {ChatId}: {OldName} -> {NewName}",
                         chatId, existingChat.ChatName, chatName);
                 }
@@ -364,7 +364,7 @@ public class ChatManagementService(
     /// Perform health check on a chat (check reachability, permissions, etc.)
     /// Returns tuple of (health status, chat name)
     /// </summary>
-    private async Task<(ChatHealthStatus Health, string? ChatName)> PerformHealthCheckAsync(ITelegramBotClient botClient, long chatId)
+    private async Task<(ChatHealthStatus Health, string? ChatName)> PerformHealthCheckAsync(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken = default)
     {
         var health = new ChatHealthStatus
         {
@@ -377,7 +377,7 @@ public class ChatManagementService(
         try
         {
             // Try to get chat info
-            var chat = await botClient.GetChat(chatId);
+            var chat = await botClient.GetChat(chatId, cancellationToken);
             health.IsReachable = true;
             chatName = chat.Title ?? chat.Username ?? $"Chat {chatId}";
 
@@ -391,7 +391,7 @@ public class ChatManagementService(
             }
 
             // Get bot's member status
-            var botMember = await botClient.GetChatMember(chatId, botClient.BotId);
+            var botMember = await botClient.GetChatMember(chatId, botClient.BotId, cancellationToken);
             health.BotStatus = botMember.Status.ToString();
             health.IsAdmin = botMember.Status == ChatMemberStatus.Administrator;
 
@@ -405,7 +405,7 @@ public class ChatManagementService(
             }
 
             // Get admin count (only for groups/supergroups)
-            var admins = await botClient.GetChatAdministrators(chatId);
+            var admins = await botClient.GetChatAdministrators(chatId, cancellationToken);
             health.AdminCount = admins.Length;
 
             // Determine overall status
@@ -442,7 +442,7 @@ public class ChatManagementService(
     /// <summary>
     /// Refresh health for all managed chats
     /// </summary>
-    public async Task RefreshAllHealthAsync(ITelegramBotClient? botClient)
+    public async Task RefreshAllHealthAsync(ITelegramBotClient? botClient, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -454,11 +454,11 @@ public class ChatManagementService(
 
             using var scope = serviceProvider.CreateScope();
             var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-            var chats = await managedChatsRepository.GetAllChatsAsync();
+            var chats = await managedChatsRepository.GetAllChatsAsync(cancellationToken);
 
             foreach (var chat in chats.Where(c => c.IsActive))
             {
-                await RefreshHealthForChatAsync(botClient, chat.ChatId);
+                await RefreshHealthForChatAsync(botClient, chat.ChatId, cancellationToken);
             }
 
             logger.LogInformation("Completed health check for {Count} chats", chats.Count(c => c.IsActive));

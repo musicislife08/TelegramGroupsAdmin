@@ -1,0 +1,450 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Components.Shared
+@inject IUserManagementService UserManagementService
+@inject IInviteService InviteService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+@* Web admin user management - moved from /users page *@
+<div>
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">User Management</MudText>
+        @if (_currentUserPermissionLevel >= 1)
+        {
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Outlined"
+                          Color="Color.Primary"
+                          StartIcon="@Icons.Material.Filled.List"
+                          OnClick="ManageInvites">
+                    Manage Invites
+                </MudButton>
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          StartIcon="@Icons.Material.Filled.PersonAdd"
+                          OnClick="CreateUser">
+                    Create User
+                </MudButton>
+            </MudStack>
+        }
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+    }
+
+    <MudPaper Class="pa-4 mb-4" Elevation="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+            <MudText Typo="Typo.subtitle1">Filter by Status:</MudText>
+            <MudSelect T="UserStatus"
+                       MultiSelection="true"
+                       SelectedValues="_selectedStatuses"
+                       SelectedValuesChanged="OnStatusFilterChanged"
+                       Label="Status Filter"
+                       Variant="Variant.Outlined"
+                       AnchorOrigin="Origin.BottomCenter"
+                       Style="min-width: 300px;">
+                <MudSelectItem T="UserStatus" Value="UserStatus.Active">Active</MudSelectItem>
+                <MudSelectItem T="UserStatus" Value="UserStatus.Pending">Pending</MudSelectItem>
+                <MudSelectItem T="UserStatus" Value="UserStatus.Disabled">Disabled</MudSelectItem>
+                <MudSelectItem T="UserStatus" Value="UserStatus.Deleted">Deleted</MudSelectItem>
+            </MudSelect>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudTable Items="@_filteredUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info">
+            <HeaderContent>
+                <MudTh>Email</MudTh>
+                <MudTh>Permission Level</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>TOTP Enabled</MudTh>
+                <MudTh>Created</MudTh>
+                <MudTh>Last Login</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Email">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                        <MudText>@context.Email</MudText>
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Permission Level">
+                    <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor(context.PermissionLevelInt)">
+                        @GetPermissionName(context.PermissionLevelInt)
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                        @context.Status.ToString()
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="TOTP">
+                    @if (context.TotpEnabled)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Security" Color="Color.Success" Size="Size.Small" Title="2FA Enabled" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.SecurityUpdateWarning" Color="Color.Warning" Size="Size.Small" Title="2FA Not Enabled" />
+                    }
+                </MudTd>
+                <MudTd DataLabel="Created">@FormatDate(context.CreatedAt)</MudTd>
+                <MudTd DataLabel="Last Login">@FormatDate(context.LastLoginAt)</MudTd>
+                <MudTd DataLabel="Actions">
+                    @if (_currentUserPermissionLevel >= 2 && context.Id != _currentUserId)
+                    {
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomRight">
+                            <MudMenuItem Icon="@Icons.Material.Filled.Edit"
+                                        IconColor="Color.Primary"
+                                        OnClick="@(() => EditUserPermission(context))">
+                                Edit Permission
+                            </MudMenuItem>
+                            @if (context.TotpEnabled)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.LockReset"
+                                            IconColor="Color.Warning"
+                                            OnClick="@(() => Reset2FA(context))">
+                                    Reset 2FA
+                                </MudMenuItem>
+                            }
+                            @if (context.Status == UserStatus.Active)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Block"
+                                            IconColor="Color.Error"
+                                            OnClick="@(() => DisableUser(context))">
+                                    Disable User
+                                </MudMenuItem>
+                            }
+                            else if (context.Status == UserStatus.Disabled)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.CheckCircle"
+                                            IconColor="Color.Success"
+                                            OnClick="@(() => EnableUser(context))">
+                                    Enable User
+                                </MudMenuItem>
+                            }
+                            @if (context.Status == UserStatus.Deleted)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.RestoreFromTrash"
+                                            IconColor="Color.Success"
+                                            OnClick="@(() => RestoreUser(context))">
+                                    Restore User
+                                </MudMenuItem>
+                            }
+                            else
+                            {
+                                <MudDivider />
+                                <MudMenuItem Icon="@Icons.Material.Filled.DeleteForever"
+                                            IconColor="Color.Error"
+                                            OnClick="@(() => DeleteUser(context))">
+                                    Delete User
+                                </MudMenuItem>
+                            }
+                        </MudMenu>
+                    }
+                    else if (context.Id == _currentUserId)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">(You)</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">No permissions</MudText>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+</div>
+
+@code {
+    private List<UserRecord> _users = new();
+    private List<UserRecord> _filteredUsers = new();
+    private bool _loading = true;
+    private IEnumerable<UserStatus> _selectedStatuses = new[] { UserStatus.Active, UserStatus.Pending, UserStatus.Disabled };
+    private string? _currentUserId;
+    private int _currentUserPermissionLevel = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get current user info
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            _currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
+            if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
+            {
+                _currentUserPermissionLevel = level;
+            }
+        }
+
+        await LoadUsersAsync();
+    }
+
+    private void OnStatusFilterChanged(IEnumerable<UserStatus> selectedValues)
+    {
+        _selectedStatuses = selectedValues;
+        FilterUsers();
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            _users = await UserManagementService.GetAllUsersAsync();
+            FilterUsers();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading users: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void FilterUsers()
+    {
+        if (_selectedStatuses == null || !_selectedStatuses.Any())
+        {
+            _filteredUsers = new List<UserRecord>();
+        }
+        else
+        {
+            _filteredUsers = _users
+                .Where(u => _selectedStatuses.Contains(u.Status))
+                .ToList();
+        }
+        StateHasChanged();
+    }
+
+    private async Task EditUserPermission(UserRecord user)
+    {
+        var parameters = new DialogParameters<PermissionDialog>();
+        parameters.Add(p => p.CurrentPermissionLevel, user.PermissionLevelInt);
+        parameters.Add(p => p.UserEmail, user.Email);
+
+        var dialog = await DialogService.ShowAsync<PermissionDialog>("Edit Permission Level", parameters);
+        var result = await dialog.Result;
+
+        if (result is not null && !result.Canceled && result.Data is int newLevel)
+        {
+            try
+            {
+                await UserManagementService.UpdatePermissionLevelAsync(user.Id, newLevel, _currentUserId!);
+                Snackbar.Add($"Updated {user.Email} to {GetPermissionName(newLevel)}", Severity.Success);
+                await LoadUsersAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error updating permission: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DisableUser(UserRecord user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Disable User",
+            $"Are you sure you want to disable {user.Email}? They will not be able to log in.",
+            yesText: "Disable", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await UserManagementService.UpdateStatusAsync(user.Id, UserStatus.Disabled, _currentUserId!);
+                Snackbar.Add($"Disabled user {user.Email}", Severity.Success);
+                await LoadUsersAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error disabling user: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task EnableUser(UserRecord user)
+    {
+        try
+        {
+            await UserManagementService.UpdateStatusAsync(user.Id, UserStatus.Active, _currentUserId!);
+            Snackbar.Add($"Enabled user {user.Email}", Severity.Success);
+            await LoadUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error enabling user: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task CreateUser()
+    {
+        if (string.IsNullOrEmpty(_currentUserId))
+        {
+            Snackbar.Add("Unable to identify current user", Severity.Error);
+            return;
+        }
+
+        var parameters = new DialogParameters<CreateInviteDialog>();
+        parameters.Add(p => p.MaxPermissionLevel, _currentUserPermissionLevel);
+
+        var dialog = await DialogService.ShowAsync<CreateInviteDialog>("Create User", parameters);
+        var result = await dialog.Result;
+
+        if (result is not null && !result.Canceled && result.Data != null)
+        {
+            try
+            {
+                // Extract validDays and permissionLevel from anonymous object
+                var data = result.Data;
+                var dataType = data.GetType();
+                var validDaysProperty = dataType.GetProperty("ValidDays");
+                var permissionLevelProperty = dataType.GetProperty("PermissionLevel");
+
+                var validDays = validDaysProperty?.GetValue(data) as int? ?? 7;
+                var permissionLevel = permissionLevelProperty?.GetValue(data) as int? ?? 0;
+
+                var token = await InviteService.CreateInviteWithPermissionAsync(_currentUserId, permissionLevel, validDays);
+                var inviteLink = $"{Navigation.BaseUri}register?invite={token}";
+                var expiresAt = DateTimeOffset.UtcNow.AddDays(validDays);
+
+                // Show the invite link in a new dialog
+                var linkParameters = new DialogParameters<CreateInviteDialog>();
+                linkParameters.Add(p => p.InviteLink, inviteLink);
+                linkParameters.Add(p => p.ExpiresAt, expiresAt);
+
+                await DialogService.ShowAsync<CreateInviteDialog>("Invite Link Created", linkParameters);
+                Snackbar.Add("Invite created successfully", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error creating invite: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private static string GetPermissionName(int level) => level switch
+    {
+        0 => "ReadOnly",
+        1 => "Admin",
+        2 => "Owner",
+        _ => "Unknown"
+    };
+
+    private static Color GetPermissionColor(int level) => level switch
+    {
+        0 => Color.Default,
+        1 => Color.Primary,
+        2 => Color.Secondary,
+        _ => Color.Error
+    };
+
+    private static Color GetStatusColor(UserStatus status) => status switch
+    {
+        UserStatus.Pending => Color.Warning,
+        UserStatus.Active => Color.Success,
+        UserStatus.Disabled => Color.Error,
+        UserStatus.Deleted => Color.Dark,
+        _ => Color.Default
+    };
+
+    private async Task DeleteUser(UserRecord user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete User",
+            $"Are you sure you want to permanently delete {user.Email}? This action marks the user as deleted for audit purposes but keeps the record.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await UserManagementService.UpdateStatusAsync(user.Id, UserStatus.Deleted, _currentUserId!);
+                Snackbar.Add($"Deleted user {user.Email}", Severity.Success);
+                await LoadUsersAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting user: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task Reset2FA(UserRecord user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Reset 2FA",
+            $"Are you sure you want to reset 2FA for {user.Email}? This will:\n\n" +
+            "• Clear their TOTP secret\n" +
+            "• Delete all recovery codes\n" +
+            "• Force them to set up 2FA again on next login\n" +
+            "• Invalidate their current session",
+            yesText: "Reset 2FA", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await UserManagementService.Reset2FAAsync(user.Id, _currentUserId!);
+                Snackbar.Add($"Reset 2FA for {user.Email}", Severity.Success);
+                await LoadUsersAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error resetting 2FA: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task RestoreUser(UserRecord user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Restore User",
+            $"Are you sure you want to restore {user.Email}? The user will be set to Active status and can log in again.",
+            yesText: "Restore", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await UserManagementService.UpdateStatusAsync(user.Id, UserStatus.Active, _currentUserId!);
+                Snackbar.Add($"Restored user {user.Email}", Severity.Success);
+                await LoadUsersAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error restoring user: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task ManageInvites()
+    {
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true
+        };
+        var dialog = await DialogService.ShowAsync<InviteManagementDialog>("Manage Invites", options);
+        await dialog.Result;
+    }
+
+    private static string FormatDate(DateTimeOffset? timestamp)
+    {
+        if (!timestamp.HasValue) return "Never";
+        return timestamp.Value.ToString("yyyy-MM-dd HH:mm");
+    }
+}

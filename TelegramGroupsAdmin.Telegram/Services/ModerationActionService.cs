@@ -95,14 +95,14 @@ public class ModerationActionService
                 CheckResultsJson = null,
                 EditVersion = 0
             };
-            await _detectionResultsRepository.InsertAsync(detectionResult);
+            await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
 
             // 4. Remove any existing trust actions (compromised account protection)
-            await _userActionsRepository.ExpireTrustsForUserAsync(userId);
+            await _userActionsRepository.ExpireTrustsForUserAsync(userId, chatId: null, cancellationToken);
             result.TrustRemoved = true;
 
             // 5. Ban user globally across all managed chats
-            var allChats = await _managedChatsRepository.GetAllChatsAsync();
+            var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             foreach (var chat in allChats.Where(c => c.IsActive))
             {
                 try
@@ -130,7 +130,7 @@ public class ModerationActionService
                 ExpiresAt: null, // Permanent ban
                 Reason: reason
             );
-            await _userActionsRepository.InsertAsync(banAction);
+            await _userActionsRepository.InsertAsync(banAction, cancellationToken);
 
             _logger.LogInformation(
                 "Spam action completed: User {UserId} banned from {ChatsAffected} chats, trust removed, message {MessageId} deleted",
@@ -178,11 +178,11 @@ public class ModerationActionService
             var result = new ModerationResult();
 
             // Remove trust actions
-            await _userActionsRepository.ExpireTrustsForUserAsync(userId);
+            await _userActionsRepository.ExpireTrustsForUserAsync(userId, chatId: null, cancellationToken);
             result.TrustRemoved = true;
 
             // Ban globally
-            var allChats = await _managedChatsRepository.GetAllChatsAsync();
+            var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             foreach (var chat in allChats.Where(c => c.IsActive))
             {
                 try
@@ -210,7 +210,7 @@ public class ModerationActionService
                 ExpiresAt: null,
                 Reason: reason
             );
-            await _userActionsRepository.InsertAsync(banAction);
+            await _userActionsRepository.InsertAsync(banAction, cancellationToken);
 
             _logger.LogInformation("Ban action completed: User {UserId} banned from {ChatsAffected} chats", userId, result.ChatsAffected);
 
@@ -249,10 +249,10 @@ public class ModerationActionService
                 ExpiresAt: null,
                 Reason: reason
             );
-            await _userActionsRepository.InsertAsync(warnAction);
+            await _userActionsRepository.InsertAsync(warnAction, cancellationToken);
 
             // 2. Get current warning count
-            var warnCount = await _userActionsRepository.GetWarnCountAsync(userId);
+            var warnCount = await _userActionsRepository.GetWarnCountAsync(userId, chatId, cancellationToken);
 
             _logger.LogInformation("Warn action completed: User {UserId} warned (total warnings: {WarnCount})", userId, warnCount);
 
@@ -312,7 +312,8 @@ public class ModerationActionService
     public async Task<ModerationResult> TrustUserAsync(
         long userId,
         string? executorId,
-        string reason)
+        string reason,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -326,7 +327,7 @@ public class ModerationActionService
                 ExpiresAt: null,
                 Reason: reason
             );
-            await _userActionsRepository.InsertAsync(trustAction);
+            await _userActionsRepository.InsertAsync(trustAction, cancellationToken);
 
             _logger.LogInformation("Trust action completed: User {UserId} trusted globally", userId);
 
@@ -356,10 +357,10 @@ public class ModerationActionService
             var result = new ModerationResult();
 
             // Expire all active bans
-            await _userActionsRepository.ExpireBansForUserAsync(userId);
+            await _userActionsRepository.ExpireBansForUserAsync(userId, chatId: null, cancellationToken);
 
             // Unban from all chats
-            var allChats = await _managedChatsRepository.GetAllChatsAsync();
+            var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             foreach (var chat in allChats.Where(c => c.IsActive))
             {
                 try
@@ -388,12 +389,12 @@ public class ModerationActionService
                 ExpiresAt: null,
                 Reason: reason
             );
-            await _userActionsRepository.InsertAsync(unbanAction);
+            await _userActionsRepository.InsertAsync(unbanAction, cancellationToken);
 
             // Optionally restore trust (for false positive corrections)
             if (restoreTrust)
             {
-                await TrustUserAsync(userId, executorId, "Trust restored after unban (false positive correction)");
+                await TrustUserAsync(userId, executorId, "Trust restored after unban (false positive correction)", cancellationToken);
                 result.TrustRestored = true;
             }
 
@@ -486,7 +487,7 @@ public class ModerationActionService
             var expiresAt = DateTimeOffset.UtcNow.Add(duration);
 
             // Temp ban globally (Telegram API handles auto-unrestrict via until_date)
-            var allChats = await _managedChatsRepository.GetAllChatsAsync();
+            var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             foreach (var chat in allChats.Where(c => c.IsActive))
             {
                 try
@@ -515,7 +516,7 @@ public class ModerationActionService
                 ExpiresAt: expiresAt,
                 Reason: reason
             );
-            await _userActionsRepository.InsertAsync(banAction);
+            await _userActionsRepository.InsertAsync(banAction, cancellationToken);
 
             _logger.LogInformation(
                 "Temp ban action completed: User {UserId} banned from {ChatsAffected} chats until {ExpiresAt}",
@@ -550,7 +551,7 @@ public class ModerationActionService
             var expiresAt = DateTimeOffset.UtcNow.Add(duration);
 
             // Restrict user globally (Telegram API handles auto-unrestrict via until_date)
-            var allChats = await _managedChatsRepository.GetAllChatsAsync();
+            var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             foreach (var chat in allChats.Where(c => c.IsActive))
             {
                 try
@@ -596,7 +597,7 @@ public class ModerationActionService
                 ExpiresAt: expiresAt,
                 Reason: reason
             );
-            await _userActionsRepository.InsertAsync(muteAction);
+            await _userActionsRepository.InsertAsync(muteAction, cancellationToken);
 
             _logger.LogInformation(
                 "Mute action completed: User {UserId} restricted in {ChatsAffected} chats until {ExpiresAt}",
@@ -615,20 +616,20 @@ public class ModerationActionService
     /// <summary>
     /// Map Telegram user ID to web app user ID (for audit trail)
     /// </summary>
-    public async Task<string?> GetExecutorUserIdAsync(long? telegramUserId)
+    public async Task<string?> GetExecutorUserIdAsync(long? telegramUserId, CancellationToken cancellationToken = default)
     {
         if (telegramUserId == null) return null;
-        return await _telegramUserMappingRepository.GetUserIdByTelegramIdAsync(telegramUserId.Value);
+        return await _telegramUserMappingRepository.GetUserIdByTelegramIdAsync(telegramUserId.Value, cancellationToken);
     }
 
     /// <summary>
     /// Get executor identifier with fallback to Telegram username when no account mapping exists.
     /// Returns: Web app user ID (GUID) if mapped, otherwise "telegram:@username" or "telegram:userid"
     /// </summary>
-    public async Task<string> GetExecutorIdentifierAsync(long telegramUserId, string? telegramUsername)
+    public async Task<string> GetExecutorIdentifierAsync(long telegramUserId, string? telegramUsername, CancellationToken cancellationToken = default)
     {
         // Try to get mapped web app user ID first
-        var userId = await GetExecutorUserIdAsync(telegramUserId);
+        var userId = await GetExecutorUserIdAsync(telegramUserId, cancellationToken);
         if (!string.IsNullOrEmpty(userId))
         {
             return userId;

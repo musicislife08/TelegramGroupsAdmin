@@ -10,17 +10,17 @@ public interface IReportsRepository
     /// <summary>
     /// Insert a new report
     /// </summary>
-    Task<long> InsertAsync(Report report);
+    Task<long> InsertAsync(Report report, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get a report by ID
     /// </summary>
-    Task<Report?> GetByIdAsync(long id);
+    Task<Report?> GetByIdAsync(long id, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get all pending reports (optionally filtered by chat)
     /// </summary>
-    Task<List<Report>> GetPendingReportsAsync(long? chatId = null);
+    Task<List<Report>> GetPendingReportsAsync(long? chatId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get all reports with optional filters
@@ -29,7 +29,8 @@ public interface IReportsRepository
         long? chatId = null,
         ReportStatus? status = null,
         int limit = 100,
-        int offset = 0);
+        int offset = 0,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Update report status and reviewer info
@@ -39,15 +40,16 @@ public interface IReportsRepository
         ReportStatus status,
         string reviewedBy,
         string actionTaken,
-        string? adminNotes = null);
+        string? adminNotes = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get count of pending reports
     /// </summary>
-    Task<int> GetPendingCountAsync(long? chatId = null);
+    Task<int> GetPendingCountAsync(long? chatId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Delete old reports (cleanup)
     /// </summary>
-    Task DeleteOldReportsAsync(DateTimeOffset olderThanTimestamp);
+    Task DeleteOldReportsAsync(DateTimeOffset olderThanTimestamp, CancellationToken cancellationToken = default);
 }

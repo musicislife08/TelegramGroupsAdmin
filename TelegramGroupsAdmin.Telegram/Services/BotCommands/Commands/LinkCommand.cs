@@ -49,7 +49,7 @@ public class LinkCommand : IBotCommand
         var tokenRepository = scope.ServiceProvider.GetRequiredService<ITelegramLinkTokenRepository>();
 
         // Check if Telegram account is already linked
-        var existingMapping = await mappingRepository.GetByTelegramIdAsync(telegramUser.Id);
+        var existingMapping = await mappingRepository.GetByTelegramIdAsync(telegramUser.Id, cancellationToken);
         if (existingMapping != null)
         {
             return $"❌ Your Telegram account is already linked to a web app user.\n\n" +
@@ -57,7 +57,7 @@ public class LinkCommand : IBotCommand
         }
 
         // Validate token
-        var tokenRecord = await tokenRepository.GetByTokenAsync(token);
+        var tokenRecord = await tokenRepository.GetByTokenAsync(token, cancellationToken);
         if (tokenRecord == null)
         {
             return "❌ Invalid token. Please generate a new token from the web app.";
@@ -86,10 +86,10 @@ public class LinkCommand : IBotCommand
             IsActive: true
         );
 
-        await mappingRepository.InsertAsync(mapping);
+        await mappingRepository.InsertAsync(mapping, cancellationToken);
 
         // Mark token as used
-        await tokenRepository.MarkAsUsedAsync(token, telegramUser.Id);
+        await tokenRepository.MarkAsUsedAsync(token, telegramUser.Id, cancellationToken);
 
         _logger.LogInformation(
             "Telegram user {TelegramId} (@{Username}) successfully linked to web user {UserId}",

@@ -51,7 +51,8 @@ public class SpamActionService(
     public async Task HandleSpamDetectionActionsAsync(
         Message message,
         TelegramGroupsAdmin.SpamDetection.Services.SpamDetectionResult spamResult,
-        DetectionResultRecord detectionResult)
+        DetectionResultRecord detectionResult,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -78,7 +79,8 @@ public class SpamActionService(
                     message,
                     spamResult,
                     detectionResult,
-                    $"OpenAI flagged for review - Net: {spamResult.NetConfidence}");
+                    $"OpenAI flagged for review - Net: {spamResult.NetConfidence}",
+                    cancellationToken);
 
                 logger.LogInformation(
                     "Created admin review report for message {MessageId} in chat {ChatId}: OpenAI flagged for human review",
@@ -102,11 +104,12 @@ public class SpamActionService(
                     scope.ServiceProvider,
                     message,
                     spamResult,
-                    openAIResult);
+                    openAIResult,
+                    cancellationToken);
 
                 // Delete the spam message from the chat
                 var moderationActionService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
-                await moderationActionService.DeleteMessageAsync(message.MessageId, message.Chat.Id);
+                await moderationActionService.DeleteMessageAsync(message.MessageId, message.Chat.Id, cancellationToken);
 
                 logger.LogInformation(
                     "Deleted spam message {MessageId} from chat {ChatId} (auto-ban)",
@@ -125,7 +128,8 @@ public class SpamActionService(
                     message,
                     spamResult,
                     detectionResult,
-                    reason);
+                    reason,
+                    cancellationToken);
 
                 logger.LogInformation(
                     "Created admin review report for message {MessageId} in chat {ChatId}: {Reason}",
@@ -150,7 +154,8 @@ public class SpamActionService(
         Message message,
         TelegramGroupsAdmin.SpamDetection.Services.SpamDetectionResult spamResult,
         DetectionResultRecord detectionResult,
-        string reason)
+        string reason,
+        CancellationToken cancellationToken = default)
     {
         var report = new Report(
             Id: 0, // Will be assigned by database
@@ -168,7 +173,7 @@ public class SpamActionService(
             WebUserId: null // System-generated
         );
 
-        await reportsRepo.InsertAsync(report);
+        await reportsRepo.InsertAsync(report, cancellationToken);
     }
 
     /// <summary>
@@ -178,7 +183,8 @@ public class SpamActionService(
         IServiceProvider scopedServiceProvider,
         Message message,
         TelegramGroupsAdmin.SpamDetection.Services.SpamDetectionResult spamResult,
-        TelegramGroupsAdmin.SpamDetection.Models.SpamCheckResponse openAIResult)
+        TelegramGroupsAdmin.SpamDetection.Models.SpamCheckResponse openAIResult,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -201,10 +207,10 @@ public class SpamActionService(
                 Reason: $"Auto-ban: High confidence spam (Net: {spamResult.NetConfidence}, OpenAI: {openAIResult.Confidence}%)"
             );
 
-            await userActionsRepo.InsertAsync(banAction);
+            await userActionsRepo.InsertAsync(banAction, cancellationToken);
 
             // Get all managed chats for cross-chat enforcement
-            var managedChats = await managedChatsRepo.GetAllChatsAsync();
+            var managedChats = await managedChatsRepo.GetAllChatsAsync(cancellationToken);
             var activeChats = managedChats.Where(c => c.IsActive).ToList();
 
             logger.LogInformation(
@@ -224,7 +230,8 @@ public class SpamActionService(
                         chatId: chat.ChatId,
                         userId: message.From.Id,
                         untilDate: null, // Permanent ban
-                        revokeMessages: true); // Delete all messages from this user
+                        revokeMessages: true, // Delete all messages from this user
+                        cancellationToken: cancellationToken);
 
                     successCount++;
 

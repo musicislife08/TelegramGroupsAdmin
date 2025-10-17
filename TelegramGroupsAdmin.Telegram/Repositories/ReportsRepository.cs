@@ -19,13 +19,13 @@ public class ReportsRepository : IReportsRepository
         _logger = logger;
     }
 
-    public async Task<long> InsertAsync(Report report)
+    public async Task<long> InsertAsync(Report report, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entity = report.ToDto();
         context.Reports.Add(entity);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "Inserted report {ReportId} for message {MessageId} in chat {ChatId} by user {UserId}",
@@ -37,29 +37,30 @@ public class ReportsRepository : IReportsRepository
         return entity.Id;
     }
 
-    public async Task<Report?> GetByIdAsync(long id)
+    public async Task<Report?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var entity = await context.Reports
             .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.Id == id);
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
 
         return entity?.ToModel();
     }
 
-    public async Task<List<Report>> GetPendingReportsAsync(long? chatId = null)
+    public async Task<List<Report>> GetPendingReportsAsync(long? chatId = null, CancellationToken cancellationToken = default)
     {
-        return await GetReportsAsync(chatId, ReportStatus.Pending);
+        return await GetReportsAsync(chatId, ReportStatus.Pending, cancellationToken: cancellationToken);
     }
 
     public async Task<List<Report>> GetReportsAsync(
         long? chatId = null,
         ReportStatus? status = null,
         int limit = 100,
-        int offset = 0)
+        int offset = 0,
+        CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var query = context.Reports.AsNoTracking();
 
@@ -77,7 +78,7 @@ public class ReportsRepository : IReportsRepository
             .OrderByDescending(r => r.ReportedAt)
             .Skip(offset)
             .Take(limit)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return entities.Select(e => e.ToModel()).ToList();
     }
@@ -87,11 +88,12 @@ public class ReportsRepository : IReportsRepository
         ReportStatus status,
         string reviewedBy,
         string actionTaken,
-        string? adminNotes = null)
+        string? adminNotes = null,
+        CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entity = await context.Reports.FindAsync(reportId);
+        var entity = await context.Reports.FindAsync(new object[] { reportId }, cancellationToken);
 
         if (entity != null)
         {
@@ -103,7 +105,7 @@ public class ReportsRepository : IReportsRepository
             entity.ActionTaken = actionTaken;
             entity.AdminNotes = adminNotes;
 
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
                 "Updated report {ReportId} to status {Status} by user {ReviewedBy} (action: {ActionTaken})",
@@ -114,9 +116,9 @@ public class ReportsRepository : IReportsRepository
         }
     }
 
-    public async Task<int> GetPendingCountAsync(long? chatId = null)
+    public async Task<int> GetPendingCountAsync(long? chatId = null, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var query = context.Reports.AsNoTracking()
             .Where(r => r.Status == DataModels.ReportStatus.Pending);
@@ -126,24 +128,24 @@ public class ReportsRepository : IReportsRepository
             query = query.Where(r => r.ChatId == chatId.Value);
         }
 
-        return await query.CountAsync();
+        return await query.CountAsync(cancellationToken);
     }
 
-    public async Task DeleteOldReportsAsync(DateTimeOffset olderThanTimestamp)
+    public async Task DeleteOldReportsAsync(DateTimeOffset olderThanTimestamp, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var toDelete = await context.Reports
             .Where(r => r.ReportedAt < olderThanTimestamp
                 && r.Status != DataModels.ReportStatus.Pending)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var deleted = toDelete.Count;
 
         if (deleted > 0)
         {
             context.Reports.RemoveRange(toDelete);
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
                 "Deleted {Count} old reports (older than {Timestamp})",

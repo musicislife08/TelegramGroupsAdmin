@@ -57,7 +57,7 @@ public class BanCommand : IBotCommand
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
         // Check if target is admin (can't ban admins)
-        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id);
+        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id, cancellationToken);
         if (isAdmin)
         {
             return "❌ Cannot ban chat admins.";
@@ -70,7 +70,8 @@ public class BanCommand : IBotCommand
             // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
             var executorId = await _moderationService.GetExecutorIdentifierAsync(
                 message.From!.Id,
-                message.From.Username);
+                message.From.Username,
+                cancellationToken);
 
             // Execute ban via ModerationActionService
             var result = await _moderationService.BanUserAsync(

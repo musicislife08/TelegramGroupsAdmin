@@ -89,7 +89,7 @@ public partial class CommandRouter
             // Special cases: /link, /start, /help, and /report commands are always accessible (don't require linking)
             var permissionLevel = (commandName == "link" || commandName == "start" || commandName == "help" || commandName == "report")
                 ? 0
-                : await GetPermissionLevelAsync(botClient, message.Chat.Id, message.From.Id);
+                : await GetPermissionLevelAsync(botClient, message.Chat.Id, message.From.Id, cancellationToken);
 
             // Check permission
             if (permissionLevel < command.MinPermissionLevel)
@@ -170,18 +170,18 @@ public partial class CommandRouter
     /// 3. Telegram group admin → Admin (1, per-chat only)
     /// 4. Not linked and not admin → -1 (no permission)
     /// </summary>
-    private async Task<int> GetPermissionLevelAsync(ITelegramBotClient botClient, long chatId, long telegramId)
+    private async Task<int> GetPermissionLevelAsync(ITelegramBotClient botClient, long chatId, long telegramId, CancellationToken cancellationToken = default)
     {
         using var scope = _serviceProvider.CreateScope();
 
         // Check web app linking FIRST (global permissions, works in all chats)
         var mappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
-        var userId = await mappingRepository.GetUserIdByTelegramIdAsync(telegramId);
+        var userId = await mappingRepository.GetUserIdByTelegramIdAsync(telegramId, cancellationToken);
 
         if (userId != null)
         {
             var userRepository = scope.ServiceProvider.GetRequiredService<UserRepository>();
-            var user = await userRepository.GetByIdAsync(userId);
+            var user = await userRepository.GetByIdAsync(userId, cancellationToken);
 
             if (user != null)
             {
@@ -193,7 +193,7 @@ public partial class CommandRouter
 
         // Check Telegram admin permissions (cached, per-chat only)
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-        var adminPermissionLevel = await chatAdminsRepository.GetPermissionLevelAsync(chatId, telegramId);
+        var adminPermissionLevel = await chatAdminsRepository.GetPermissionLevelAsync(chatId, telegramId, cancellationToken);
 
         if (adminPermissionLevel > -1)
         {

@@ -20,7 +20,7 @@ public class InviteRepository
 
     public async Task<UiModels.InviteRecord?> GetByTokenAsync(string token, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
         var entity = await context.Invites
             .AsNoTracking()
             .FirstOrDefaultAsync(i => i.Token == token, ct);
@@ -30,7 +30,7 @@ public class InviteRepository
 
     public async Task CreateAsync(UiModels.InviteRecord invite, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
         var entity = invite.ToDto();
         context.Invites.Add(entity);
         await context.SaveChangesAsync(ct);
@@ -41,7 +41,7 @@ public class InviteRepository
 
     public async Task<string> CreateAsync(string createdBy, int validDays = 7, int permissionLevel = 0, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
         var token = Guid.NewGuid().ToString();
         var now = DateTimeOffset.UtcNow;
         var expiresAt = now.AddDays(validDays);
@@ -75,24 +75,24 @@ public class InviteRepository
         return token;
     }
 
-    public async Task MarkAsUsedAsync(string token, string usedBy)
+    public async Task MarkAsUsedAsync(string token, string usedBy, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = await context.Invites.FirstOrDefaultAsync(i => i.Token == token);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Invites.FirstOrDefaultAsync(i => i.Token == token, cancellationToken);
         if (entity == null) return;
 
         entity.UsedBy = usedBy;
         entity.Status = DataModels.InviteStatus.Used;
         entity.ModifiedAt = DateTimeOffset.UtcNow;
 
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Invite {Token} used by user {UsedBy}", token, usedBy);
     }
 
     public async Task<List<UiModels.InviteRecord>> GetByCreatorAsync(string createdBy, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
         var entities = await context.Invites
             .AsNoTracking()
             .Where(i => i.CreatedBy == createdBy)
@@ -102,19 +102,19 @@ public class InviteRepository
         return entities.Select(e => e.ToModel()).ToList();
     }
 
-    public async Task<int> CleanupExpiredAsync()
+    public async Task<int> CleanupExpiredAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var now = DateTimeOffset.UtcNow;
 
         var expiredInvites = await context.Invites
             .Where(i => i.ExpiresAt <= now && i.Status == DataModels.InviteStatus.Pending)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         if (expiredInvites.Count > 0)
         {
             context.Invites.RemoveRange(expiredInvites);
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Cleaned up {Count} expired invites", expiredInvites.Count);
         }
 
@@ -123,7 +123,7 @@ public class InviteRepository
 
     public async Task<List<UiModels.InviteRecord>> GetAllAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
         var query = context.Invites.AsNoTracking();
 
         if (filter != DataModels.InviteFilter.All)
@@ -138,7 +138,7 @@ public class InviteRepository
 
     public async Task<List<UiModels.InviteWithCreator>> GetAllWithCreatorEmailAsync(DataModels.InviteFilter filter = DataModels.InviteFilter.Pending, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
         var query = context.Invites
             .AsNoTracking()
             .Join(context.Users,
@@ -183,7 +183,7 @@ public class InviteRepository
 
     public async Task<bool> RevokeAsync(string token, CancellationToken ct = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
         var entity = await context.Invites
             .FirstOrDefaultAsync(i => i.Token == token && i.Status == DataModels.InviteStatus.Pending, ct);
 

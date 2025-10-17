@@ -55,7 +55,7 @@ public class TempBanCommand : IBotCommand
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
         // Check if target is admin (can't ban admins)
-        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id);
+        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id, cancellationToken);
         if (isAdmin)
         {
             return "❌ Cannot temp ban chat admins.";
@@ -87,7 +87,8 @@ public class TempBanCommand : IBotCommand
             // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
             var executorId = await _moderationService.GetExecutorIdentifierAsync(
                 message.From!.Id,
-                message.From.Username);
+                message.From.Username,
+                cancellationToken);
 
             // Execute temp ban via ModerationActionService
             var result = await _moderationService.TempBanUserAsync(

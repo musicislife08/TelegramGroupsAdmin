@@ -54,7 +54,7 @@ public class DeleteCommand : IBotCommand
             // Mark message as deleted in database
             using var scope = _serviceProvider.CreateScope();
             var messageRepository = scope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
-            await messageRepository.MarkMessageAsDeletedAsync(targetMessage.MessageId, "delete_command");
+            await messageRepository.MarkMessageAsDeletedAsync(targetMessage.MessageId, "delete_command", cancellationToken);
 
             _logger.LogInformation(
                 "DELETE TEST: Admin {AdminId} deleted message {MessageId} in chat {ChatId}",

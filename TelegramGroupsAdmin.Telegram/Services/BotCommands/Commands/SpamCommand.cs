@@ -61,14 +61,14 @@ public class SpamCommand : IBotCommand
         var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
 
         // Check if target user is an admin (can't mark admin messages as spam)
-        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, spamUserId.Value);
+        var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, spamUserId.Value, cancellationToken);
         if (isAdmin)
         {
             return "❌ Cannot mark admin messages as spam.";
         }
 
         // Check if target user is trusted (can't mark trusted messages as spam)
-        var isTrusted = await userActionsRepository.IsUserTrustedAsync(spamUserId.Value, message.Chat.Id);
+        var isTrusted = await userActionsRepository.IsUserTrustedAsync(spamUserId.Value, message.Chat.Id, cancellationToken);
         if (isTrusted)
         {
             return "❌ Cannot mark trusted user messages as spam.";
@@ -77,7 +77,8 @@ public class SpamCommand : IBotCommand
         // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
         var executorId = await _moderationService.GetExecutorIdentifierAsync(
             message.From!.Id,
-            message.From.Username);
+            message.From.Username,
+            cancellationToken);
 
         // Execute spam and ban action via centralized service
         var reason = $"Spam detected via /spam command in chat {message.Chat.Title ?? message.Chat.Id.ToString()}";

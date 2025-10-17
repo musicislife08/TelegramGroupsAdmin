@@ -19,12 +19,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         _logger = logger;
     }
 
-    public async Task InsertAsync(DetectionResultRecord result)
+    public async Task InsertAsync(DetectionResultRecord result, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = result.ToDto();
         context.DetectionResults.Add(entity);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug(
             "Inserted detection result for message {MessageId}: {IsSpam} (confidence: {Confidence}, net: {NetConfidence}, training: {UsedForTraining}, edit_version: {EditVersion})",
@@ -36,9 +36,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             result.EditVersion);
     }
 
-    public async Task<DetectionResultRecord?> GetByIdAsync(long id)
+    public async Task<DetectionResultRecord?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var result = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.Id == id)
@@ -64,14 +64,14 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 UserId = x.Message.UserId,
                 MessageText = x.Message.MessageText
             })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         return result;
     }
 
-    public async Task<List<DetectionResultRecord>> GetByMessageIdAsync(long messageId)
+    public async Task<List<DetectionResultRecord>> GetByMessageIdAsync(long messageId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var results = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.MessageId == messageId)
@@ -98,14 +98,14 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 UserId = x.Message.UserId,
                 MessageText = x.Message.MessageText
             })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return results;
     }
 
-    public async Task<List<DetectionResultRecord>> GetRecentAsync(int limit = 100)
+    public async Task<List<DetectionResultRecord>> GetRecentAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var results = await context.DetectionResults
             .AsNoTracking()
             .Join(context.Messages,
@@ -132,14 +132,14 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 UserId = x.Message.UserId,
                 MessageText = x.Message.MessageText
             })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return results;
     }
 
-    public async Task<List<(string MessageText, bool IsSpam)>> GetTrainingSamplesAsync()
+    public async Task<List<(string MessageText, bool IsSpam)>> GetTrainingSamplesAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Phase 2.6: Only use high-quality training samples
         // - Manual admin decisions (always training-worthy)
         // - Confident OpenAI results (85%+, marked as used_for_training = true)
@@ -154,7 +154,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             .Where(x => x.Message.MessageText != null && x.Message.MessageText != "")
             .OrderByDescending(x => x.IsSpam)
             .Select(x => new { x.Message.MessageText, x.IsSpam })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         _logger.LogDebug(
             "Retrieved {Count} training samples for Bayes classifier (used_for_training = true)",
@@ -163,9 +163,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return results.Select(r => (r.MessageText!, r.IsSpam)).ToList();
     }
 
-    public async Task<List<string>> GetSpamSamplesForSimilarityAsync(int limit = 1000)
+    public async Task<List<string>> GetSpamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Phase 2.6: Only use high-quality training samples for similarity matching
         var results = await context.DetectionResults
             .AsNoTracking()
@@ -178,7 +178,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             .OrderByDescending(x => x.DetectedAt)
             .Take(limit)
             .Select(x => x.MessageText!)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         _logger.LogDebug(
             "Retrieved {Count} spam samples for similarity check (used_for_training = true)",
@@ -187,9 +187,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return results;
     }
 
-    public async Task<bool> IsUserTrustedAsync(long userId, long? chatId = null)
+    public async Task<bool> IsUserTrustedAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Check for active 'trust' action
         // All trusts are global now (no chat_ids column)
         var now = DateTimeOffset.UtcNow;
@@ -197,7 +197,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             .AsNoTracking()
             .AnyAsync(ua => ua.UserId == userId
                 && ua.ActionType == DataModels.UserActionType.Trust
-                && (ua.ExpiresAt == null || ua.ExpiresAt > now));
+                && (ua.ExpiresAt == null || ua.ExpiresAt > now), cancellationToken);
 
         if (isTrusted)
         {
@@ -210,9 +210,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return isTrusted;
     }
 
-    public async Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit = 3)
+    public async Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit = 3, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Get last N non-spam detection results for this user (global, not per-chat)
         // Used for auto-whitelisting: if user has N consecutive non-spam messages, trust them
         var results = await context.DetectionResults
@@ -242,7 +242,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 UserId = x.Message.UserId,
                 MessageText = x.Message.MessageText
             })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         _logger.LogDebug(
             "Retrieved {Count} recent non-spam results for user {UserId} (limit: {Limit})",
@@ -253,9 +253,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return results;
     }
 
-    public async Task<DetectionStats> GetStatsAsync()
+    public async Task<DetectionStats> GetStatsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // MH1: Single query optimization - calculate all stats in one database round-trip
         var since24h = DateTimeOffset.UtcNow.AddDays(-1);
@@ -271,7 +271,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 Last24hDetections = g.Count(dr => dr.DetectedAt >= since24h),
                 Last24hSpam = g.Count(dr => dr.DetectedAt >= since24h && dr.IsSpam)
             })
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(cancellationToken);
 
         // Handle empty table case
         if (stats == null)
@@ -300,21 +300,21 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         };
     }
 
-    public async Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp)
+    public async Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Note: Per CLAUDE.md, detection_results should be permanent
         // This method exists for completeness but should rarely be used
         var toDelete = await context.DetectionResults
             .Where(dr => dr.DetectedAt < timestamp)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var deleted = toDelete.Count;
 
         if (deleted > 0)
         {
             context.DetectionResults.RemoveRange(toDelete);
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogWarning(
                 "Deleted {Count} old detection results (timestamp < {Timestamp})",
@@ -329,9 +329,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     // Training Data Management Methods (for TrainingData.razor UI)
     // ====================================================================================
 
-    public async Task<List<DetectionResultRecord>> GetAllTrainingDataAsync()
+    public async Task<List<DetectionResultRecord>> GetAllTrainingDataAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var results = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.UsedForTraining == true)
@@ -358,20 +358,20 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 UserId = x.Message.UserId,
                 MessageText = x.Message.MessageText
             })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         _logger.LogDebug("Retrieved {Count} training data records (used_for_training = true)", results.Count);
         return results;
     }
 
-    public async Task<TrainingDataStats> GetTrainingDataStatsAsync()
+    public async Task<TrainingDataStats> GetTrainingDataStatsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var trainingData = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.UsedForTraining == true)
             .Select(dr => new { dr.IsSpam, dr.DetectionSource })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var total = trainingData.Count;
         var spam = trainingData.Count(d => d.IsSpam);
@@ -391,10 +391,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         };
     }
 
-    public async Task UpdateDetectionResultAsync(long id, bool isSpam, bool usedForTraining)
+    public async Task UpdateDetectionResultAsync(long id, bool isSpam, bool usedForTraining, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = await context.DetectionResults.FindAsync(id);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.DetectionResults.FindAsync([id], cancellationToken);
         if (entity == null)
         {
             throw new InvalidOperationException($"Detection result {id} not found");
@@ -403,31 +403,31 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // IsSpam is computed from net_confidence, so update that instead
         entity.NetConfidence = isSpam ? 100 : -100;
         entity.UsedForTraining = usedForTraining;
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "Updated detection result {Id}: IsSpam={IsSpam} (net_confidence={NetConfidence}), UsedForTraining={UsedForTraining}",
             id, isSpam, entity.NetConfidence, usedForTraining);
     }
 
-    public async Task DeleteDetectionResultAsync(long id)
+    public async Task DeleteDetectionResultAsync(long id, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var entity = await context.DetectionResults.FindAsync(id);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.DetectionResults.FindAsync([id], cancellationToken);
         if (entity == null)
         {
             throw new InvalidOperationException($"Detection result {id} not found");
         }
 
         context.DetectionResults.Remove(entity);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogWarning("Deleted detection result {Id}", id);
     }
 
-    public async Task<long> AddManualTrainingSampleAsync(string messageText, bool isSpam, string source, int? confidence, string? addedBy)
+    public async Task<long> AddManualTrainingSampleAsync(string messageText, bool isSpam, string source, int? confidence, string? addedBy, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Create message record (chat_id=0, user_id=0 pattern for manual samples)
         // user_id=0 maps to "system" user in telegram_users table
@@ -441,7 +441,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         };
 
         context.Messages.Add(message);
-        await context.SaveChangesAsync(); // Save to get message_id
+        await context.SaveChangesAsync(cancellationToken); // Save to get message_id
 
         // Create detection_result record linked to the message
         var detectionResult = new DataModels.DetectionResultRecordDto
@@ -461,7 +461,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         };
 
         context.DetectionResults.Add(detectionResult);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "Added manual training sample: message_id={MessageId}, detection_result_id={Id}, is_spam={IsSpam}, source={Source}, added_by={AddedBy}",
