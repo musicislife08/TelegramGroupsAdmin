@@ -441,24 +441,78 @@ Total: 8-12 days for broad appeal
 
 ---
 
-### **Milestone 3: Open Source Ready** (~18-22 days from now)
+### **Milestone 3: Security Audit & Refactor Analysis** (~18-22 days from now)
 **Target Date**: ~November 8, 2025
-**Estimated Effort**: 48-56 hours (6-7 days beyond Feature-Complete)
+**Estimated Effort**: 24-32 hours (3-4 days beyond Feature-Complete)
+
+**Critical Quality Gates:**
+| Task | Priority | Estimate | Rationale |
+|------|----------|----------|-----------|
+| **Security Audit** | **CRITICAL** | 16-24h (2-3d) | Full security review before open source |
+| **Refactor Analysis** | **CRITICAL** | 8-12h (1-2d) | Final code quality scan, technical debt identification |
+
+**Security Audit Scope:**
+- Authentication & authorization (TOTP, cookie security, permission enforcement)
+- Input validation & sanitization (SQL injection, XSS, command injection)
+- API security (rate limiting, CSRF, endpoint protection)
+- Data protection (encryption at rest, secure storage, PII handling)
+- Telegram bot security (command validation, webhook security if implemented)
+- Dependency vulnerabilities (NuGet packages, outdated libraries)
+- Configuration security (secrets management, environment variables)
+- Session management (token expiry, secure cookie flags)
+- Database security (parameterized queries, connection string protection)
+- File upload security (if any) (path traversal, malicious content)
+
+**Refactor Analysis Scope:**
+- Performance optimization opportunities (query N+1, caching gaps)
+- Code duplication (DRY violations, extract common patterns)
+- Complexity hotspots (cyclomatic complexity, method length)
+- Modern C# patterns (collection expressions, pattern matching, primary constructors)
+- Async/await consistency (missing ConfigureAwait, blocking calls)
+- Error handling consistency (try-catch patterns, exception types)
+- Test coverage gaps (unit tests, integration tests)
+- Documentation completeness (XML comments, README updates)
+- Architecture patterns (dependency injection, interface usage)
+- Naming consistency (conventions across projects)
+
+**Deliverable**: Production-hardened, security-validated, refactored codebase ready for open source release
+
+**Tools/Agents:**
+- `security-reviewer` agent for automated security scan
+- `dotnet-refactor-advisor` agent for code quality analysis
+- Manual review of critical paths (auth, data access, bot commands)
+- OWASP dependency check for known vulnerabilities
+
+---
+
+### **Milestone 4: Open Source Ready** (~25-30 days from now)
+**Target Date**: ~November 15, 2025
+**Estimated Effort**: 48-56 hours (6-7 days beyond Security Audit)
 
 **Phase 6 Optional Protections:**
 | Feature | Priority | Estimate | Rationale |
 |---------|----------|----------|-----------|
 | 6.1 Bot Auto-Ban | ✅ | Done | Already complete |
+| 4.16 OpenAI-Compatible | **CRITICAL** | 8-16h (1-2d) | Local LLM support (Ollama/LM Studio), removes API barrier |
 | 6.3 Bio Spam Check | High | 16h (2d) | 10th spam algorithm, user bio analysis on join, 30-day cache |
 | 6.2 Raid Detection | Medium | 24-32h (3-4d) | Semantic similarity, sliding window, temp lockdown |
 | 6.4 Scheduled Messages | Low | 16-24h (2-3d) | TickerQ pattern, recurring cron, professional feature |
 
-**Deliverable**: Broad community appeal (curated, crypto, large public, self-hosted)
+**Documentation & Packaging:**
+- Docker Compose for easy deployment
+- Comprehensive README with setup instructions
+- Environment variable documentation
+- Migration guide (fresh install + upgrade paths)
+- Troubleshooting guide
+- Contributing guidelines
+- License file (MIT/Apache 2.0)
+
+**Deliverable**: Broad community appeal (curated, crypto, large public, self-hosted), security-audited, production-ready for open source release
 
 ---
 
-### **Milestone 4: Full Platform with Analytics** (~28-35 days from now)
-**Target Date**: ~November 20, 2025
+### **Milestone 5: Full Platform with Analytics** (~35-42 days from now)
+**Target Date**: ~November 28, 2025
 **Estimated Effort**: 80-96 hours (10-12 days beyond Open Source Ready)
 
 **Phase 5 Features (Optional):**
@@ -476,9 +530,11 @@ Total: 8-12 days for broad appeal
 
 ---
 
-### **Phase 6 ML Insights** (Optional, ~55-65 days from now)
-**Estimated Effort**: 40-56 hours (5-7 days)
+### **Phase 6 ML Insights** (Optional, ~50-60 days from now)
+**Target Date**: ~December 10, 2025
+**Estimated Effort**: 40-56 hours (5-7 days beyond Full Platform)
 Automated recommendations, pattern detection, ML clustering, insights dashboard
+*Note: Optional enhancement, not required for open source release*
 
 ---
 
@@ -507,21 +563,29 @@ Automated recommendations, pattern detection, ML clustering, insights dashboard
   - Filter engine, appeals, report aggregation
   - All Phase 4 features complete
 
-- **Open Source Ready**: ~18-22 days from now (**Target: ~Nov 8**)
-  - OpenAI-compatible API (local LLM support)
+- **Security Audit & Refactor Analysis**: ~18-22 days from now (**Target: ~Nov 8**)
+  - **CRITICAL GATE**: Full security review (auth, input validation, API security, data protection)
+  - **CRITICAL GATE**: Final refactor analysis (performance, duplication, complexity, modern C# patterns)
+  - Production-hardened, security-validated codebase
+  - Uses `security-reviewer` and `dotnet-refactor-advisor` agents
+
+- **Open Source Ready**: ~25-30 days from now (**Target: ~Nov 15**)
+  - OpenAI-compatible API (local LLM support - removes API barrier)
   - Bio spam check, raid detection
   - Broad community appeal features
-  - Documentation, Docker compose, README
+  - Documentation, Docker compose, README, contributing guidelines
 
-- **Full Vision with Analytics**: ~28-35 days from now (**Target: ~Nov 20**)
+- **Full Vision with Analytics**: ~35-42 days from now (**Target: ~Nov 28**)
   - Phase 5 analytics dashboard
   - Auto-trust system
   - Optional enhancements
 
-**With Buffer for New Ideas**: Add 20-30% for experimentation
+**With Buffer for New Ideas & Quality**: Add 20-30% for experimentation + polish
 - **MVP**: 10-12 days (comfortable)
 - **Feature-Complete**: 18-20 days (comfortable)
-- **Open Source**: 25-30 days (comfortable)
+- **Security-Audited**: 25-28 days (comfortable, includes quality gates)
+- **Open Source**: 32-38 days (comfortable, battle-tested)
+- **Full Platform**: 45-55 days (comfortable, complete vision)
 
 **Achievement Acknowledgment:**
 This 11-day velocity delivering a production-quality platform with 73% completion represents exceptional development speed. The hard architectural work (auth, database, bot infrastructure, spam algorithms, actor system) is complete. Remaining work is incremental additions to a solid foundation.
