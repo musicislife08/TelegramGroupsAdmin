@@ -289,53 +289,53 @@ ORDER BY ua.issued_at DESC;
 
 ## Implementation Phases
 
-### Phase 1: Core Infrastructure (Day 1 - ~4 hours)
-- [ ] Move current Users.razor to Settings.razor#accounts tab
-- [ ] Create new Users.razor (Telegram users)
-- [ ] Update NavMenu.razor routing
-- [ ] Create TelegramUserRepository base queries (GetAll, GetById, GetTrusted)
-- [ ] Create TelegramUserManagementService stub (basic orchestration)
-- [ ] Create TelegramUserDetail model (basic fields)
+### Phase 1: Core Infrastructure ✅ COMPLETE
+- [x] Move current Users.razor to Settings.razor#accounts tab
+- [x] Create new Users.razor (Telegram users)
+- [x] Update NavMenu.razor routing
+- [x] Create TelegramUserRepository base queries (GetAll, GetById, GetTrusted)
+- [x] Create TelegramUserManagementService stub (basic orchestration)
+- [x] Create TelegramUserDetail model (basic fields)
 
-### Phase 2: Basic User List (Day 2 - ~6 hours)
-- [ ] Top stats section (moderation queue counts: banned, flagged, warned, notes)
-- [ ] Top stats section (top users - last 30 days query)
-- [ ] Tab navigation component (All/Flagged/Trusted/Banned)
-- [ ] User table component (MudTable with basic columns)
-- [ ] Status badge component (🟢🔵🟡🟠🔴 logic)
-- [ ] Trust toggle button (prominent action)
-- [ ] Search functionality (username, name)
-- [ ] Filtering logic per tab (4 different queries)
-- [ ] Pagination basics (if needed)
+### Phase 2: Basic User List ✅ COMPLETE
+- [x] ~~Top stats section (moderation queue counts: banned, flagged, warned, notes)~~ NOT NEEDED
+- [x] ~~Top stats section (top users - last 30 days query)~~ NOT NEEDED
+- [x] ~~Tab navigation component (All/Flagged/Trusted/Banned)~~ NOT NEEDED (single list works fine)
+- [x] User table component (MudTable with basic columns)
+- [x] Status badge component (🟢🔵🟡🟠🔴 logic)
+- [x] Trust toggle button (prominent action)
+- [x] Search functionality (username, name)
+- [x] ~~Filtering logic per tab (4 different queries)~~ NOT NEEDED
+- [x] Pagination basics (if needed)
 
-### Phase 3: User Detail View (Day 3 - ~6 hours)
-- [ ] TelegramUserDetailDialog.razor (modal shell)
-- [ ] Overview tab (user info, status timeline, first/last seen)
-- [ ] Chats tab (membership list from messages table, activity per chat)
-- [ ] Moderation tab shell (warnings display from user_actions)
-- [ ] Actions menu in list view (view details, view messages)
-- [ ] Actions in modal (ban, trust, warn buttons)
-- [ ] Chat count tooltip in list view
-- [ ] Warning count badges
+### Phase 3: User Detail View ✅ COMPLETE
+- [x] TelegramUserDetailDialog.razor (modal shell)
+- [x] Overview tab (user info, status timeline, first/last seen)
+- [x] Chats tab (membership list from messages table, activity per chat)
+- [x] Moderation tab shell (warnings display from user_actions)
+- [x] Actions menu in list view (view details, view messages)
+- [x] Actions in modal (ban, trust, warn buttons)
+- [x] Chat count tooltip in list view
+- [x] Warning count badges
+- [x] Action History Timeline with date grouping (Today/Yesterday/Day Name/Month Day)
+- [x] Phase 4.19 Actor System integration (proper actor display names)
 
-### Phase 4: Admin Notes & Tags (Day 4 - ~7 hours)
-**Database (1 hour):**
-- [ ] Create tag_definitions table migration
-- [ ] Create admin_notes table migration
-- [ ] Create user_tags table migration (with FK to tag_definitions)
-- [ ] Run migrations
-- [ ] Seed 5 default tags (suspicious, verified, impersonator, spam-bot, quality)
+### Phase 4: Admin Notes & Tags ⏳ MOSTLY COMPLETE (~90%)
+**Database (1 hour):** ✅ COMPLETE
+- [x] Create admin_notes table migration (Phase 4.19 Actor system)
+- [x] Create user_tags table migration (Phase 4.19 Actor system)
+- [x] Run migrations
+- [x] ~~Seed 5 default tags~~ NOT NEEDED (using TagType enum)
 
-**Backend (2 hours):**
-- [ ] Create TagDefinition model
-- [ ] Create AdminNote model
-- [ ] Create UserTag model (with joined Definition)
-- [ ] Create TagDefinitionsRepository
-- [ ] Create AdminNotesRepository
-- [ ] Create UserTagsRepository
-- [ ] Update TelegramUserManagementService (add notes + tags methods)
+**Backend (2 hours):** ✅ COMPLETE
+- [x] Create AdminNote model (with Actor)
+- [x] Create UserTag model (with TagType enum)
+- [x] Create AdminNotesRepository (Add, TogglePin, Delete)
+- [x] Create UserTagsRepository (Add, Delete)
+- [x] Update TelegramUserManagementService (GetUserDetailAsync includes notes+tags)
+- [x] Register repositories in DI
 
-**Settings UI - Tag Management (2 hours):**
+**Settings UI - Tag Management (2 hours):** 🔲 PENDING
 - [ ] /settings#tags tab structure
 - [ ] Tag list view (name, color chip, usage count)
 - [ ] Create tag dialog (name input + MudSelect color picker)
@@ -343,37 +343,38 @@ ORDER BY ua.issued_at DESC;
 - [ ] Delete tag validation (block if in use, show usage count)
 - [ ] Lowercase enforcement (client-side validation)
 
-**Users UI - Notes & Tags (2 hours):**
-- [ ] Notes section in Moderation tab (list with timestamp, author, text)
-- [ ] Add note dialog (MudTextField multiline, save button)
-- [ ] Note display formatting
-- [ ] Tags display (MudChip with colors from tag_definitions)
-- [ ] Add tag dialog (MudSelect dropdown from tag_definitions)
-- [ ] Remove tag functionality (soft delete with removed_at)
-- [ ] Note count badge in list view
-- [ ] Tag chips in list view (max 3 visible, show +N)
+**Users UI - Notes & Tags (2 hours):** ✅ COMPLETE
+- [x] Notes section in UserDetailDialog (list with timestamp, author, text)
+- [x] Add note dialog (TextInputDialog with multiline)
+- [x] Note display formatting
+- [x] Pin/Unpin note functionality
+- [x] Delete note with confirmation
+- [x] Tags display (MudChip with TagType colors)
+- [x] Add tag dialog (TagSelectionDialog with TagType enum)
+- [x] Remove tag functionality
+- [x] Phase 4.19 Actor attribution (web user email, Telegram username, system)
+- [x] Confidence modifier support
 
-### Phase 5: Banned Users Tab (Day 5 - ~2 hours)
-- [ ] Banned users query implementation (with ban details JOIN)
-- [ ] Banned tab UI (different columns: ban date, banned by, reason, expires)
-- [ ] Ban expiry display logic (permanent vs temporary with countdown)
-- [ ] Unban button (primary action, calls ModerationActionService)
-- [ ] Format "banned by" display (web: vs telegram: vs system: prefixes)
-- [ ] Link to trigger message (if message_id present)
-- [ ] Update moderation queue stats (add banned count)
+### Phase 5: Banned Users Tab ✅ COMPLETE (Integrated into main view)
+- [x] Banned users display in main Users.razor
+- [x] Ban details in UserDetailDialog action history
+- [x] Ban expiry display logic (permanent vs temporary)
+- [x] Unban button (calls ModerationActionService)
+- [x] Phase 4.19 Actor display (banned by web user/Telegram/system)
+- [x] Link to trigger message (if message_id present)
 
-### Phase 6: Polish & Export (Day 5 - ~4 hours)
-- [ ] Loading states (MudProgressLinear, skeleton loaders)
-- [ ] Error handling (try-catch, MudSnackbar toast notifications)
-- [ ] Empty states ("No users found", "No notes yet")
-- [ ] Pagination refinement (cursor-based if > 100 users)
-- [ ] Export user data functionality (CSV with notes/tags)
-- [ ] Mobile responsive tweaks (stack columns on small screens)
-- [ ] Performance optimization (debounce search, cache stats queries)
-- [ ] Accessibility (ARIA labels, keyboard navigation)
+### Phase 6: Polish & Export ✅ COMPLETE
+- [x] Loading states (MudProgressLinear, skeleton loaders)
+- [x] Error handling (try-catch, MudSnackbar toast notifications)
+- [x] Empty states ("No users found", "No notes yet", "No tags yet")
+- [x] ~~Pagination refinement~~ NOT NEEDED (user count manageable)
+- [x] ~~Export user data functionality~~ NOT NEEDED (can add later if requested)
+- [x] Mobile responsive tweaks (MudBlazor responsive by default)
+- [x] ~~Performance optimization (debounce search, cache stats queries)~~ NOT NEEDED (performance adequate)
+- [x] Accessibility (MudBlazor handles ARIA labels)
 
-**Total: 5 days (~29 hours)**
-**Most complex phase: Phase 4 (Admin Notes & Tags) at ~7 hours**
+**Total: ~27 hours implemented, 2 hours remaining (Tag Management UI)**
+**Status: Phase 4.12 is 90% complete - core functionality working, only Settings tag management page pending**
 
 ---
 

@@ -126,7 +126,7 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 **4.9**: Bot connection management - Hot-reload bot, IBotLifecycleService, ReconnectAsync/DisconnectAsync, CancellationTokenSource, BotConnectionManager.razor, /settings#bot-connection, persist state in configs, Owner-only
 **4.10**: Anti-Impersonation - Name similarity (Levenshtein+visual), photo hash (pHash/ImageSharp), admin/channel name protection, auto-restrict suspicious, review queue /reports, side-by-side comparison, scam patterns (_support, _admin, _official)
 **4.11**: Warning/Points System - 0-100 scale, auto-escalation (20pts=5min mute, 50pts=1hr, 75pts=24hr, 100pts=ban), point decay (-10pts/week), multi-source (spam, manual /warn, reports), user DM notifications, /warnings command, UI in Messages/Reports
-**4.12** ✅: Admin Notes & Tags - admin_notes + user_tags tables, repositories (AdminNotesRepository, UserTagsRepository), TagType enum (Suspicious, VerifiedContributor, SpamRisk, SuspectedBot, Impersonator, Helpful, Moderator, Custom), UserDetailDialog UI (add/remove notes+tags), audit trail (added_by, created_at), confidence_modifier field, IsFlagged computed property. Ready for Phase 4.13 filter integration.
+**4.12** ⏳: Admin Notes & Tags - admin_notes + user_tags tables (Phase 4.19 Actor system), repositories (AdminNotesRepository, UserTagsRepository), TagType enum (Suspicious, VerifiedContributor, SpamRisk, SuspectedBot, Impersonator, Helpful, Moderator, Custom), UserDetailDialog UI (add/remove notes+tags with Actor attribution), TextInputDialog, TagSelectionDialog, ConfirmDialog, pin/unpin notes, confidence_modifier field. **Pending**: /settings#tags management page (tag CRUD, color customization, usage count, delete validation). Core functionality complete, admin tag management UI remaining (~2h).
 **4.13**: Advanced Filter Engine - custom_filters table (pattern regex, action, enabled, hit_count), chat-specific/global, domain blacklist/whitelist, phrase normalization, URL patterns, 12th spam check in SpamDetectorFactory, /spam#filters UI CRUD, confidence weighting integration
 **4.14**: Report Aggregation - Multi-report auto-escalation (3 unique in 1hr→action), reports tracking (message_id, reported_by, timestamp), confidence boost (+15/report), reporter accuracy scoring, false report protection (<60% accuracy→downweight, 10+ false→remove permission), /reports#analytics top reporters
 **4.15**: Appeal System - Welcome requires bot DM start (Accept→bot DM→unrestrict), establishes DM channel, banned users submit appeals via DM, appeals queue /reports#appeals (user history, ban reason, detection, appeal text), approve/deny+reason, max 2 appeals/ban, 30-day expiration, appeals_history verdicts
@@ -387,18 +387,18 @@ Total: 8-12 days for broad appeal
 **Priority**: Medium (after 4.4, before 4.5)
 
 ## Current Status (Oct 2025)
-**Completion**: ~72% overall, ~96% core features
+**Completion**: ~73% overall, ~97% core features
 - Phase 1: 100% ✅
-- Phase 2: 100% ✅ (2.1-2.8 complete)
+- Phase 2: 100% ✅ (2.1-2.9 complete)
 - Phase 3: 100% ✅
-- Phase 4: 40% (4.1-4.5, 4.8 complete; 4.6-4.7, 4.9-4.15 pending)
+- Phase 4: 50% (4.1-4.5, 4.8, 4.12 core, 4.19 complete; 4.6-4.7, 4.9-4.11, 4.12 tag mgmt UI, 4.13-4.15, 4.17-4.18 pending)
 - Phases 5-7: 0% (future/optional)
 
 **Production Ready**: Migration+Backup✅ (InitialSchema consolidated, validated, backup/restore+Data Protection, topological sort, sequence resets, strict DTO validation), Build Quality✅ (0 errors/warnings), System Ready: Fresh DB init (`dotnet run --migrate-only`), cross-machine backup/restore+TOTP, production deployment
 
 **Next Steps**:
-Immediate (1-2 weeks): 4.10 Anti-Impersonation (3-4d, real attack vector), 4.11 Warning/Points (3-4d, foundational), 4.6 /tempban (2-3h, quick win)
-Short Term (next month): 4.13 Filter Engine (3-4d, tg-spam Lua features), 4.12 Admin Notes (2-3d, surgical intelligence), 4.14 Report Aggregation (2d, enhances reports), 4.7 Runtime log config (4-6h, troubleshooting)
+Immediate (1-2 weeks): 4.12 Tag Management UI (2h, completes Phase 4.12), 4.10 Anti-Impersonation (3-4d, real attack vector), 4.6 /tempban (2-3h, quick win)
+Short Term (next month): 4.11 Warning/Points (3-4d, foundational), 4.13 Filter Engine (3-4d, tg-spam Lua features), 4.14 Report Aggregation (2d, enhances reports), 4.7 Runtime log config (4-6h, troubleshooting)
 Medium Term (after Phase 4): 4.15 Appeal System (4-5d, completes moderation loop), Refactoring review (REFACTORING_BACKLOG.md), 5.5/5.6/5.10 (conditional/lower priority)
 Long Term: Phase 5 Analytics, Phase 6 ML Insights (optional, value-add)
 
