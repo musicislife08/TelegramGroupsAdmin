@@ -1,47 +1,139 @@
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Configuration.Models
+@using Microsoft.Extensions.Logging
+@inject IRuntimeLoggingService RuntimeLoggingService
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="4">
     <!-- Dynamic Log Level Configuration -->
     <MudPaper Class="pa-4">
-        <MudText Typo="Typo.h6" GutterBottom="true">Dynamic Log Level Configuration</MudText>
-        <MudText Typo="Typo.body2" Class="mb-4">
-            Adjust log levels at runtime without restarting the application
-        </MudText>
-
-        <MudAlert Severity="Severity.Info" Class="mb-4">
-            <strong>Phase 4.7 - Coming Soon</strong>
-            <br />
-            This tab will enable dynamic log level configuration similar to *arr apps (Sonarr, Radarr, etc.).
-            Changes will be stored in the database and applied immediately without requiring a restart.
-        </MudAlert>
-
-        <MudStack Spacing="3">
-            <MudText Typo="Typo.subtitle2">Planned Features:</MudText>
-            <ul style="margin-left: 20px;">
-                <li>Per-namespace log level configuration</li>
-                <li>Real-time log level updates without restart</li>
-                <li>Database storage for persistence</li>
-                <li>Default log levels with per-namespace overrides</li>
-                <li>ILoggerFactory integration for immediate application</li>
-                <li>Support for: Trace, Debug, Information, Warning, Error, Critical</li>
-            </ul>
-
-            <MudDivider Class="my-3" />
-
-            <MudText Typo="Typo.subtitle2">Current Log Levels (from appsettings.json):</MudText>
-            <MudAlert Severity="Severity.Success" Dense="true">
-                <ul class="my-2" style="margin-left: 20px;">
-                    <li><strong>Microsoft</strong>: Warning</li>
-                    <li><strong>Microsoft.Hosting.Lifetime</strong>: Information</li>
-                    <li><strong>TelegramGroupsAdmin</strong>: Information</li>
-                </ul>
-            </MudAlert>
-
-            <MudText Typo="Typo.body2" Class="mt-2">
-                To change log levels before Phase 4.7 is implemented, modify your appsettings.json or
-                set environment variables like <code>Logging__LogLevel__TelegramGroupsAdmin=Debug</code>
-            </MudText>
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+            <div>
+                <MudText Typo="Typo.h6" GutterBottom="true">Dynamic Log Level Configuration</MudText>
+                <MudText Typo="Typo.body2">
+                    Adjust log levels and save to database. Changes take effect on next restart.
+                </MudText>
+            </div>
+            <MudButtonGroup Variant="Variant.Outlined">
+                <MudButton Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ResetToDefaults" Disabled="_loading">
+                    Reset to Defaults
+                </MudButton>
+                <MudButton Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveConfiguration" Disabled="_loading || !_hasChanges">
+                    Save Configuration
+                </MudButton>
+            </MudButtonGroup>
         </MudStack>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (_config != null)
+        {
+            <MudStack Spacing="3">
+                <!-- Default Log Level -->
+                <MudSelect T="LogLevel"
+                          Value="_config.DefaultLevel"
+                          ValueChanged="@((LogLevel value) => { _config.DefaultLevel = value; _hasChanges = true; })"
+                          Label="Default Log Level"
+                          Variant="Variant.Outlined"
+                          HelperText="Applied to all namespaces unless overridden"
+                          Dense="true">
+                    @foreach (var level in RuntimeLoggingService.GetAvailableLogLevels())
+                    {
+                        <MudSelectItem Value="@level">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@GetLogLevelIcon(level)" Size="Size.Small" Color="@GetLogLevelColor(level)" />
+                                <MudText>@level</MudText>
+                            </MudStack>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudDivider Class="my-2" />
+
+                <!-- Namespace Overrides -->
+                <MudText Typo="Typo.subtitle2">Namespace-Specific Overrides:</MudText>
+
+                @foreach (var kvp in _config.Overrides.OrderBy(x => x.Key))
+                {
+                    var ns = kvp.Key;
+                    var level = kvp.Value;
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudText Style="flex: 1;">@ns</MudText>
+                        <MudSelect T="LogLevel"
+                                  Value="_config.Overrides[ns]"
+                                  ValueChanged="@((LogLevel value) => { _config.Overrides[ns] = value; _hasChanges = true; })"
+                                  Label="Log Level"
+                                  Variant="Variant.Outlined"
+                                  Dense="true"
+                                  Style="min-width: 200px;">
+                            @foreach (var availableLevel in RuntimeLoggingService.GetAvailableLogLevels())
+                            {
+                                <MudSelectItem Value="@availableLevel">
+                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                        <MudIcon Icon="@GetLogLevelIcon(availableLevel)" Size="Size.Small" Color="@GetLogLevelColor(availableLevel)" />
+                                        <MudText>@availableLevel</MudText>
+                                    </MudStack>
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                      Size="Size.Small"
+                                      Color="Color.Error"
+                                      OnClick="@(() => RemoveOverride(ns))" />
+                    </MudStack>
+                }
+
+                <!-- Add New Override -->
+                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mt-3">
+                    <MudAutocomplete T="string"
+                                    @bind-Value="_newNamespace"
+                                    Label="Add Namespace Override"
+                                    Variant="Variant.Outlined"
+                                    Dense="true"
+                                    SearchFunc="SearchNamespaces"
+                                    CoerceText="false"
+                                    CoerceValue="false"
+                                    Placeholder="e.g., TelegramGroupsAdmin.Telegram"
+                                    Style="flex: 1;" />
+                    <MudSelect @bind-Value="_newLogLevel"
+                              Label="Log Level"
+                              Variant="Variant.Outlined"
+                              Dense="true"
+                              Style="min-width: 200px;">
+                        @foreach (var level in RuntimeLoggingService.GetAvailableLogLevels())
+                        {
+                            <MudSelectItem Value="@level">
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudIcon Icon="@GetLogLevelIcon(level)" Size="Size.Small" Color="@GetLogLevelColor(level)" />
+                                    <MudText>@level</MudText>
+                                </MudStack>
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Primary"
+                              StartIcon="@Icons.Material.Filled.Add"
+                              OnClick="AddOverride"
+                              Disabled="string.IsNullOrWhiteSpace(_newNamespace)">
+                        Add
+                    </MudButton>
+                </MudStack>
+
+                @if (_config.LastModified != default)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                        Last modified: @_config.LastModified.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss")
+                    </MudAlert>
+                }
+
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">
+                    <strong>Note:</strong> Log level changes are saved to the database but require an application restart to take effect.
+                    This is a current limitation of the .NET logging system.
+                </MudAlert>
+            </MudStack>
+        }
     </MudPaper>
 
     <!-- Log Output Configuration -->
@@ -101,10 +193,126 @@
 </MudStack>
 
 @code {
-    // This component is a placeholder for Phase 4.7
-    // Real implementation will include:
-    // - IConfigService integration for storing log levels
-    // - ILoggerFactory manipulation for runtime updates
-    // - Per-namespace log level dropdowns
-    // - Save/Reset functionality
+    private LogConfig? _config;
+    private bool _loading = true;
+    private bool _hasChanges = false;
+    private string _newNamespace = string.Empty;
+    private LogLevel _newLogLevel = LogLevel.Information;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfiguration();
+    }
+
+    private async Task LoadConfiguration()
+    {
+        _loading = true;
+        try
+        {
+            _config = await RuntimeLoggingService.GetCurrentConfigAsync();
+            _hasChanges = false;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading log configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveConfiguration()
+    {
+        if (_config == null) return;
+
+        try
+        {
+            await RuntimeLoggingService.UpdateConfigAsync(_config);
+            _hasChanges = false;
+            Snackbar.Add("Log configuration saved successfully. Restart application to apply changes.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving log configuration: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ResetToDefaults()
+    {
+        try
+        {
+            await RuntimeLoggingService.ResetToDefaultsAsync();
+            await LoadConfiguration();
+            Snackbar.Add("Log configuration reset to defaults. Restart application to apply changes.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error resetting log configuration: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void AddOverride()
+    {
+        if (_config == null || string.IsNullOrWhiteSpace(_newNamespace)) return;
+
+        if (_config.Overrides.ContainsKey(_newNamespace))
+        {
+            Snackbar.Add($"Override for '{_newNamespace}' already exists", Severity.Warning);
+            return;
+        }
+
+        _config.Overrides[_newNamespace] = _newLogLevel;
+        _newNamespace = string.Empty;
+        _newLogLevel = LogLevel.Information;
+        _hasChanges = true;
+        StateHasChanged();
+    }
+
+    private void RemoveOverride(string ns)
+    {
+        if (_config == null) return;
+
+        _config.Overrides.Remove(ns);
+        _hasChanges = true;
+        StateHasChanged();
+    }
+
+    private Task<IEnumerable<string>> SearchNamespaces(string? value, CancellationToken cancellationToken)
+    {
+        var commonNamespaces = RuntimeLoggingService.GetCommonNamespaces();
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return Task.FromResult<IEnumerable<string>>(commonNamespaces);
+        }
+
+        var filtered = commonNamespaces
+            .Where(ns => ns.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return Task.FromResult<IEnumerable<string>>(filtered);
+    }
+
+    private static string GetLogLevelIcon(LogLevel level) => level switch
+    {
+        LogLevel.Trace => Icons.Material.Filled.BugReport,
+        LogLevel.Debug => Icons.Material.Filled.Code,
+        LogLevel.Information => Icons.Material.Filled.Info,
+        LogLevel.Warning => Icons.Material.Filled.Warning,
+        LogLevel.Error => Icons.Material.Filled.Error,
+        LogLevel.Critical => Icons.Material.Filled.Report,
+        _ => Icons.Material.Filled.Circle
+    };
+
+    private static Color GetLogLevelColor(LogLevel level) => level switch
+    {
+        LogLevel.Trace => Color.Secondary,
+        LogLevel.Debug => Color.Info,
+        LogLevel.Information => Color.Primary,
+        LogLevel.Warning => Color.Warning,
+        LogLevel.Error => Color.Error,
+        LogLevel.Critical => Color.Error,
+        _ => Color.Default
+    };
 }

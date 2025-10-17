@@ -6,6 +6,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using MudBlazor
 @inject TelegramUserManagementService UserManagementService
+@inject ModerationActionService ModerationService
 @inject IAdminNotesRepository AdminNotesRepository
 @inject IUserTagsRepository UserTagsRepository
 @inject ITagDefinitionsRepository TagDefinitionsRepository
@@ -118,6 +119,14 @@
                                        OnClick="BanUser"
                                        Size="Size.Small">
                                 Ban
+                            </MudButton>
+
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Warning"
+                                       StartIcon="@Icons.Material.Filled.AccessTime"
+                                       OnClick="TempBanUser"
+                                       Size="Size.Small">
+                                Temp Ban
                             </MudButton>
                         }
                         else
@@ -429,10 +438,122 @@
         Snackbar.Add("Ban functionality - Coming soon", Severity.Info);
     }
 
-    private void UnbanUser()
+    private async Task UnbanUser()
     {
-        // TODO: Implement unban functionality
-        Snackbar.Add("Unban functionality - Coming soon", Severity.Info);
+        if (_userDetail == null) return;
+
+        // Show confirmation dialog
+        var confirmed = await DialogService.ShowMessageBox(
+            "Confirm Unban",
+            $"Are you sure you want to unban {_userDetail.DisplayName}?",
+            yesText: "Unban",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        try
+        {
+            // Get current user ID for audit trail
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            // Unban the user
+            var result = await ModerationService.UnbanUserAsync(
+                _userDetail.TelegramUserId,
+                executorId,
+                "Unbanned from user detail dialog",
+                restoreTrust: false);
+
+            if (result.Success)
+            {
+                Snackbar.Add($"Successfully unbanned {_userDetail.DisplayName} from {result.ChatsAffected} chat(s)", Severity.Success);
+                await LoadUserDetailAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to unban user: {result.ErrorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error unbanning user: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task TempBanUser()
+    {
+        if (_userDetail == null) return;
+
+        // Show temp ban dialog
+        var parameters = new DialogParameters<TempBanDialog>
+        {
+            { x => x.UserId, _userDetail.TelegramUserId },
+            { x => x.Username, _userDetail.DisplayName }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<TempBanDialog>("Temporary Ban", parameters, options);
+        var result = await dialog.Result;
+
+        if (result == null || result.Canceled || result.Data is not TempBanDialog.TempBanResult tempBanResult)
+            return;
+
+        try
+        {
+            // Get current user ID for audit trail
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            // Call moderation service to temp ban the user
+            var banResult = await ModerationService.TempBanUserAsync(
+                _userDetail.TelegramUserId,
+                null, // No specific message ID
+                executorId,
+                tempBanResult.Reason,
+                tempBanResult.Duration);
+
+            if (banResult.Success)
+            {
+                var expiryTime = DateTimeOffset.UtcNow.Add(tempBanResult.Duration).LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss");
+                Snackbar.Add(
+                    $"User temporarily banned for {FormatDuration(tempBanResult.Duration)} from {banResult.ChatsAffected} chat(s). Auto-unban at {expiryTime}.",
+                    Severity.Success);
+
+                await LoadUserDetailAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to temp ban user: {banResult.ErrorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error temp banning user: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalMinutes < 60)
+            return $"{(int)duration.TotalMinutes} minute{((int)duration.TotalMinutes == 1 ? "" : "s")}";
+
+        if (duration.TotalHours < 24)
+            return $"{(int)duration.TotalHours} hour{((int)duration.TotalHours == 1 ? "" : "s")}";
+
+        var days = (int)duration.TotalDays;
+        var hours = duration.Hours;
+
+        if (hours == 0)
+            return $"{days} day{(days == 1 ? "" : "s")}";
+
+        return $"{days} day{(days == 1 ? "" : "s")} {hours} hour{(hours == 1 ? "" : "s")}";
     }
 
     private void ViewMessages()

@@ -378,11 +378,12 @@
 
             await Task.WhenAll(allUsersTask, flaggedTask, trustedTask, bannedTask, bannedWithDetailsTask);
 
-            _allUsers = await allUsersTask;
-            _flaggedUsers = await flaggedTask;
-            _trustedUsers = await trustedTask;
-            _bannedUsers = await bannedTask;
-            _bannedUsersWithDetails = await bannedWithDetailsTask;
+            // Exclude system user (telegram_user_id=0) from all lists
+            _allUsers = (await allUsersTask).Where(u => u.TelegramUserId != 0).ToList();
+            _flaggedUsers = (await flaggedTask).Where(u => u.TelegramUserId != 0).ToList();
+            _trustedUsers = (await trustedTask).Where(u => u.TelegramUserId != 0).ToList();
+            _bannedUsers = (await bannedTask).Where(u => u.TelegramUserId != 0).ToList();
+            _bannedUsersWithDetails = (await bannedWithDetailsTask).Where(u => u.TelegramUserId != 0).ToList();
         }
         catch (Exception ex)
         {

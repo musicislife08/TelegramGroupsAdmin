@@ -118,11 +118,11 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 **4.3** ✅: TelegramGroupsAdmin.Telegram library, moved 6 models+13 repos+services+9 commands+4 background services, AddTelegramServices(), ModelMappings public, clean dependencies
 **4.4** ✅: Welcome system - DB schema, WelcomeService, Repository, bot integration, config from DB, chat name caching, TickerQ jobs (WelcomeTimeoutJob, DeleteMessageJob), callback validation, user leaves, /settings#telegram. C1 RESOLVED: Fire-and-forget Task.Run→TickerQ. TickerQ arch: jobs in main app, payloads in Abstractions. Flow: restrict on join→welcome+buttons→timeout auto-kick (60s)→accept (restore+DM/fallback)→deny/timeout (kick). Templates: chat_welcome, dm_template, chat_fallback. Variables: {chat_name}, {username}, {rules_text}
 **4.5** ✅: OpenAI tri-state (spam/clean/review), SpamCheckResultType enum, modular prompts (technical+custom rules+mode guidance), review queue integration. Prompt arch: GetBaseTechnicalPrompt (JSON, unchangeable), GetDefaultRulesPrompt (spam/legit indicators, user-overridable), GetModeGuidancePrompt (veto vs detection), BuildSystemPrompt factory
-**4.6** ✅: /tempban command - Full implementation with flexible duration parsing (5m/1h/24h/5min/1hr formats), Telegram API `until_date` parameter for automatic unrestriction, cross-chat global temp bans (user_actions with ExpiresAt field), ModerationActionService.TempBanUserAsync(), proper error handling and logging, registered in CommandRouter and dependency injection. Complete implementation.
-**4.8** ✅: Settings UI - All tabs implemented. General (App+MessageHistory env display), Integrations (OpenAI/SendGrid/VirusTotal/Telegram status+masked keys), Notifications (future features), Security (auth/password/audit/API/data protection), Logging (Phase 4.7 placeholder+troubleshooting). Read-only (env configured)
+**4.6** ✅: /tempban command - Full implementation with flexible duration parsing (5m/1h/24h/5min/1hr formats), Telegram API `until_date` parameter for automatic unrestriction, cross-chat global temp bans (user_actions with ExpiresAt field), ModerationActionService.TempBanUserAsync(), proper error handling and logging, registered in CommandRouter and dependency injection. Complete implementation. UI integration: TempBanDialog (duration presets + custom), Messages page (per-message action), UserDetailDialog (user-level action). All use shared dialog and service for consistency.
+**4.7** ✅: Runtime Logging Configuration - IRuntimeLoggingService (Singleton with IServiceScopeFactory pattern for database access), LogConfig model (DefaultLevel + namespace Overrides dictionary), LoggingSettings.razor (/settings#logging - default level selector, namespace override CRUD, autocomplete for common namespaces, visual log level icons/colors), stored in configs JSONB table (ConfigType.Log, global only). Note: Current limitation requires app restart for log level changes to take effect (future: IOptionsMonitor<LoggerFilterOptions> integration for hot-reload). Architecture: Singleton service → IServiceScopeFactory → Scoped IConfigService for database access.
+**4.8** ✅: Settings UI - All tabs implemented. General (App+MessageHistory env display), Integrations (OpenAI/SendGrid/VirusTotal/Telegram status+masked keys), Notifications (future features), Security (auth/password/audit/API/data protection), Logging (Phase 4.7 complete). Read-only (env configured)
 
 **Pending**:
-**4.7**: /settings#logging (dynamic log levels, configs JSONB, ILoggerFactory immediate application)
 **4.9**: Bot connection management - Hot-reload bot, IBotLifecycleService, ReconnectAsync/DisconnectAsync, CancellationTokenSource, BotConnectionManager.razor, /settings#bot-connection, persist state in configs, Owner-only
 **4.10**: Anti-Impersonation - Name similarity (Levenshtein+visual), photo hash (pHash/ImageSharp), admin/channel name protection, auto-restrict suspicious, review queue /reports, side-by-side comparison, scam patterns (_support, _admin, _official)
 **4.11**: Warning/Points System - 0-100 scale, auto-escalation (20pts=5min mute, 50pts=1hr, 75pts=24hr, 100pts=ban), point decay (-10pts/week), multi-source (spam, manual /warn, reports), user DM notifications, /warnings command, UI in Messages/Reports
@@ -398,7 +398,7 @@ Total: 8-12 days for broad appeal
 - Phase 1: 100% ✅
 - Phase 2: 100% ✅ (2.1-2.9 complete)
 - Phase 3: 100% ✅
-- Phase 4: 58% (4.1-4.6, 4.8, 4.12, 4.19 complete; 4.7, 4.9-4.11, 4.13-4.15, 4.17-4.18 pending)
+- Phase 4: 55% (4.1-4.8, 4.12, 4.19 complete; 4.9-4.11, 4.13-4.18 pending)
 - Phase 5: 0% (analytics, optional)
 - Phase 6: 10% (6.1 bot auto-ban complete)
 
@@ -408,13 +408,12 @@ Total: 8-12 days for broad appeal
 
 ## Estimated Timeline to Completion
 
-### **Milestone 1: MVP - Production Ready** (~7-10 days from now)
-**Target Date**: ~October 27, 2025
-**Estimated Effort**: 56-64 hours (7-8 days)
+### **Milestone 1: MVP - Production Ready** (~6-8 days from now)
+**Target Date**: ~October 24, 2025
+**Estimated Effort**: 48-64 hours (6-8 days)
 
 | Feature | Priority | Estimate | Rationale |
 |---------|----------|----------|-----------|
-| 4.7 Runtime Logging | Medium | 4-6h | Config management pattern already established |
 | 4.10 Anti-Impersonation | **Critical** | 24-32h (3-4d) | Name similarity (Levenshtein), photo hash (pHash), review queue UI |
 | 4.11 Warning/Points | **Critical** | 24-32h (3-4d) | Point system, auto-escalation, decay logic, DM notifications, UI |
 | 4.9 Bot Connection Mgmt | Low | 6-8h | Hot-reload infrastructure (nice-to-have) |
@@ -576,9 +575,8 @@ Automated recommendations, pattern detection, ML clustering, insights dashboard
 **Actual MVP Requirements:**
 | Feature | Type | Estimate | Notes |
 |---------|------|----------|-------|
-| 4.7 Runtime Logging | Quick win | 1d | Config management pattern established |
-| 4.10 Anti-Impersonation | Core security | 3-4d | Only complex item left |
-| 4.11 Warning/Points | Core moderation | 3-4d | Builds on user_actions pattern |
+| 4.10 Anti-Impersonation | Core security | 3-4d | Name similarity (Levenshtein), photo hash (pHash), review queue UI |
+| 4.11 Warning/Points | Core moderation | 3-4d | Point system, auto-escalation, decay logic, DM notifications |
 
 **Realistic Timeline:**
 - **MVP (Production-Ready)**: ~7-10 days from now (**Target: ~Oct 27**)
@@ -622,28 +620,26 @@ This 11-day velocity delivering a production-quality platform with 73% completio
 
 ## Recommended Execution Order
 
-**Week 1-2** (Days 1-10): Core Moderation
+**Week 1-2** (Days 1-8): Core Moderation
 1. 4.10 Anti-Impersonation (4d) - Critical security
 2. 4.11 Warning/Points (4d) - Foundational moderation
-3. 4.7 Runtime Logging (1d) - Troubleshooting aid
 
-**Week 3-4** (Days 11-22): Enhanced Features
-5. 4.16 OpenAI-Compatible (2d) - Critical for open source
-6. 4.13 Filter Engine (4d) - Advanced spam control
-7. 4.14 Report Aggregation (2d) - Improves admin workflow
-8. 4.18 Forum/Topics (1d) - Quick compatibility fix
-9. 4.7 Runtime Logging (1d) - Troubleshooting aid
+**Week 3-4** (Days 9-20): Enhanced Features
+3. 4.16 OpenAI-Compatible (2d) - Critical for open source
+4. 4.13 Filter Engine (4d) - Advanced spam control
+5. 4.14 Report Aggregation (2d) - Improves admin workflow
+6. 4.18 Forum/Topics (1d) - Quick compatibility fix
 
-**Week 5** (Days 23-31): Open Source Polish
-10. 6.3 Bio Spam Check (2d) - High-value protection
-11. 6.2 Raid Detection (4d) - Crypto/large group protection
-12. Documentation polish, README, Docker compose
-13. Testing on fresh install, edge case validation
+**Week 5** (Days 21-29): Open Source Polish
+7. 6.3 Bio Spam Check (2d) - High-value protection
+8. 6.2 Raid Detection (4d) - Crypto/large group protection
+9. Documentation polish, README, Docker compose
+10. Testing on fresh install, edge case validation
 
-**Week 6-7** (Days 32-45): Analytics & Appeal System
-14. 4.15 Appeal System (5d) - Completes moderation loop
-15. Phase 5 Analytics (12d) - Data-driven insights
-16. 6.4 Scheduled Messages (3d) - Professional feature
+**Week 6-7** (Days 30-43): Analytics & Appeal System
+11. 4.15 Appeal System (5d) - Completes moderation loop
+12. Phase 5 Analytics (12d) - Data-driven insights
+13. 6.4 Scheduled Messages (3d) - Professional feature
 
 **Flexible Items** (deprioritize if timeline pressure):
 - 4.9 Bot Connection Management (nice-to-have, not critical)
@@ -652,7 +648,7 @@ This 11-day velocity delivering a production-quality platform with 73% completio
 - 6.4 Scheduled Messages (professional polish)
 
 **Next Steps**:
-Immediate: Start with 4.7 Runtime Logging (1d), then 4.10 Anti-Impersonation (4d)
+Immediate: 4.10 Anti-Impersonation (4d) - Name similarity (Levenshtein), photo hash (pHash), review queue UI
 
 **Critical Issues**: C1 Fire-and-Forget✅ (Task.Run→TickerQ, WelcomeTimeoutJob+DeleteMessageJob+FetchUserPhotoJob, persistence/retry/logging), MH1+MH2✅ (GetStatsAsync 2→1 query 80% faster, CleanupExpiredAsync 3→1 query 50% faster, single-query GroupBy), H1+H2✅ (ChatPermissions static helpers, magic numbers→database config, no migration needed)
 

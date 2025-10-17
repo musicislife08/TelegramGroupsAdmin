@@ -87,6 +87,7 @@
                                    OnFilterByUser="HandleFilterByUser"
                                    OnFilterByChat="HandleFilterByChat"
                                    OnDeleteMessage="HandleDeleteMessage"
+                                   OnTempBan="HandleTempBan"
                                    OnReplyClick="HandleReplyClick" />
         </MudVirtualize>
 
@@ -723,6 +724,92 @@
                 $"Failed to delete message: {ex.Message}",
                 yesText: "OK");
         }
+    }
+
+    private async Task HandleTempBan(MessageRecord message)
+    {
+        // Show temp ban dialog
+        var parameters = new DialogParameters<TempBanDialog>
+        {
+            { x => x.UserId, message.UserId },
+            { x => x.Username, message.UserName ?? message.FirstName ?? $"User {message.UserId}" }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<TempBanDialog>("Temporary Ban", parameters, options);
+        var result = await dialog.Result;
+
+        if (result == null || result.Canceled || result.Data is not TempBanDialog.TempBanResult tempBanResult)
+            return;
+
+        try
+        {
+            // Get current user ID for audit trail
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            // Call moderation service to temp ban the user
+            var banResult = await ModerationService.TempBanUserAsync(
+                message.UserId,
+                message.MessageId,
+                executorId,
+                tempBanResult.Reason,
+                tempBanResult.Duration);
+
+            if (banResult.Success)
+            {
+                var expiryTime = DateTimeOffset.UtcNow.Add(tempBanResult.Duration).LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss");
+                await DialogService.ShowMessageBox(
+                    "Success",
+                    $"User temporarily banned for {FormatDuration(tempBanResult.Duration)}. They will be automatically unbanned at {expiryTime}.",
+                    yesText: "OK");
+
+                Logger.LogInformation(
+                    "User {UserId} temp banned from {ChatsAffected} chats for {Duration}, expires at {ExpiryTime}",
+                    message.UserId, banResult.ChatsAffected, tempBanResult.Duration, expiryTime);
+            }
+            else
+            {
+                Logger.LogError("Failed to temp ban user {UserId}: {Error}", message.UserId, banResult.ErrorMessage);
+
+                await DialogService.ShowMessageBox(
+                    "Error",
+                    $"Failed to temp ban user: {banResult.ErrorMessage}",
+                    yesText: "OK");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error temp banning user {UserId}", message.UserId);
+
+            await DialogService.ShowMessageBox(
+                "Error",
+                $"Failed to temp ban user: {ex.Message}",
+                yesText: "OK");
+        }
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalMinutes < 60)
+            return $"{(int)duration.TotalMinutes} minute{((int)duration.TotalMinutes == 1 ? "" : "s")}";
+
+        if (duration.TotalHours < 24)
+            return $"{(int)duration.TotalHours} hour{((int)duration.TotalHours == 1 ? "" : "s")}";
+
+        var days = (int)duration.TotalDays;
+        var hours = duration.Hours;
+
+        if (hours == 0)
+            return $"{days} day{(days == 1 ? "" : "s")}";
+
+        return $"{days} day{(days == 1 ? "" : "s")} {hours} hour{(hours == 1 ? "" : "s")}";
     }
 
     private bool IsCurrentUserMessage(long telegramUserId)

@@ -1,0 +1,149 @@
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body1">
+                Temporarily ban <strong>@Username</strong> from the group?
+            </MudText>
+
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                The user will be automatically unbanned after the selected duration.
+            </MudText>
+
+            <!-- Duration Presets -->
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle2">Quick Duration:</MudText>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="@(_selectedDuration == TimeSpan.FromMinutes(5) ? Variant.Filled : Variant.Outlined)"
+                              Color="Color.Primary"
+                              OnClick="@(() => SelectDuration(TimeSpan.FromMinutes(5)))">
+                        5 Minutes
+                    </MudButton>
+                    <MudButton Variant="@(_selectedDuration == TimeSpan.FromHours(1) ? Variant.Filled : Variant.Outlined)"
+                              Color="Color.Primary"
+                              OnClick="@(() => SelectDuration(TimeSpan.FromHours(1)))">
+                        1 Hour
+                    </MudButton>
+                    <MudButton Variant="@(_selectedDuration == TimeSpan.FromHours(24) ? Variant.Filled : Variant.Outlined)"
+                              Color="Color.Primary"
+                              OnClick="@(() => SelectDuration(TimeSpan.FromHours(24)))">
+                        24 Hours
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+
+            <!-- Custom Duration -->
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+                <MudNumericField @bind-Value="_customMinutes"
+                                Label="Custom Duration (minutes)"
+                                Variant="Variant.Outlined"
+                                Min="1"
+                                Max="10080"
+                                HideSpinButtons="false"
+                                Style="flex: 1;" />
+                <MudButton Variant="Variant.Outlined"
+                          Color="Color.Primary"
+                          OnClick="ApplyCustomDuration"
+                          Disabled="_customMinutes < 1">
+                    Apply
+                </MudButton>
+            </MudStack>
+
+            @if (_selectedDuration != TimeSpan.Zero)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <strong>Selected duration:</strong> @FormatDuration(_selectedDuration)
+                    <br />
+                    <strong>Unban time:</strong> @(DateTimeOffset.UtcNow.Add(_selectedDuration).LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss"))
+                </MudAlert>
+            }
+
+            <!-- Optional Reason -->
+            <MudTextField @bind-Value="_reason"
+                         Label="Reason (optional)"
+                         Variant="Variant.Outlined"
+                         Lines="2"
+                         Placeholder="e.g., Repeated spam warnings" />
+
+            <MudAlert Severity="Severity.Warning" Dense="true">
+                This action will be recorded in the audit log and visible to other admins.
+            </MudAlert>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Warning"
+                  Variant="Variant.Filled"
+                  OnClick="Submit"
+                  Disabled="_selectedDuration == TimeSpan.Zero">
+            Temp Ban @FormatDuration(_selectedDuration)
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public long UserId { get; set; }
+    [Parameter] public string Username { get; set; } = string.Empty;
+
+    private TimeSpan _selectedDuration = TimeSpan.Zero;
+    private int _customMinutes = 60;
+    private string _reason = string.Empty;
+
+    private void SelectDuration(TimeSpan duration)
+    {
+        _selectedDuration = duration;
+    }
+
+    private void ApplyCustomDuration()
+    {
+        if (_customMinutes < 1) return;
+        _selectedDuration = TimeSpan.FromMinutes(_customMinutes);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        if (_selectedDuration == TimeSpan.Zero)
+        {
+            Snackbar.Add("Please select a duration", Severity.Warning);
+            return;
+        }
+
+        var result = new TempBanResult
+        {
+            Duration = _selectedDuration,
+            Reason = string.IsNullOrWhiteSpace(_reason) ? "No reason provided" : _reason
+        };
+
+        MudDialog.Close(DialogResult.Ok(result));
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration == TimeSpan.Zero) return "";
+
+        if (duration.TotalMinutes < 60)
+            return $"{(int)duration.TotalMinutes} minute{((int)duration.TotalMinutes == 1 ? "" : "s")}";
+
+        if (duration.TotalHours < 24)
+            return $"{(int)duration.TotalHours} hour{((int)duration.TotalHours == 1 ? "" : "s")}";
+
+        var days = (int)duration.TotalDays;
+        var hours = duration.Hours;
+
+        if (hours == 0)
+            return $"{days} day{(days == 1 ? "" : "s")}";
+
+        return $"{days} day{(days == 1 ? "" : "s")} {hours} hour{(hours == 1 ? "" : "s")}";
+    }
+
+    public class TempBanResult
+    {
+        public TimeSpan Duration { get; set; }
+        public string Reason { get; set; } = string.Empty;
+    }
+}

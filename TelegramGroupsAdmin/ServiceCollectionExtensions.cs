@@ -137,6 +137,9 @@ public static class ServiceCollectionExtensions
         // Telegram photo service (chat icons, user profile photos)
         services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.TelegramPhotoService>();
 
+        // Runtime logging configuration service (Phase 4.7)
+        services.AddSingleton<IRuntimeLoggingService, RuntimeLoggingService>();
+
         return services;
     }
 

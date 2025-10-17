@@ -533,6 +533,21 @@ public class ModerationActionService
     }
 
     /// <summary>
+    /// UI-friendly overload: Temp ban user without requiring bot client parameter
+    /// </summary>
+    public async Task<ModerationResult> TempBanUserAsync(
+        long userId,
+        long? messageId,
+        string? executorId,
+        string reason,
+        TimeSpan duration,
+        CancellationToken cancellationToken = default)
+    {
+        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        return await TempBanUserAsync(botClient, userId, messageId, executorId, reason, duration, cancellationToken);
+    }
+
+    /// <summary>
     /// Restrict user (mute) globally with automatic unrestriction.
     /// Used by: /mute command
     /// </summary>
