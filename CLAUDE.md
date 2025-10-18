@@ -7,7 +7,7 @@
 - **TelegramGroupsAdmin**: Main app, Blazor+API, TickerQ jobs (WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob)
 - **TelegramGroupsAdmin.Configuration**: Config IOptions classes, AddApplicationConfiguration()
 - **TelegramGroupsAdmin.Data**: EF Core DbContext, migrations, Data Protection (internal to repos)
-- **TelegramGroupsAdmin.Telegram**: Bot services, 9 commands, repos, orchestrators, AddTelegramServices()
+- **TelegramGroupsAdmin.Telegram**: Bot services, 13 commands, repos, orchestrators, AddTelegramServices()
 - **TelegramGroupsAdmin.Telegram.Abstractions**: TelegramBotClientFactory, job payloads (breaks circular deps)
 - **TelegramGroupsAdmin.SpamDetection**: 9 spam algorithms, self-contained, database-driven
 
@@ -107,7 +107,7 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 **4.1** ✅: TickerQ PostgreSQL job queue
 **4.2** ✅: Unified configs table (JSONB, chat_id NULL=global), IConfigService (Save/Get/GetEffective/Delete), auto-merging
 **4.2.1** ✅: 36 timestamps bigint→timestamptz, DTOs→DateTimeOffset, TickerQ configs, 228 messages preserved
-**4.3** ✅: TelegramGroupsAdmin.Telegram library, moved 6 models+13 repos+services+9 commands+4 background services, AddTelegramServices(), ModelMappings public, clean dependencies
+**4.3** ✅: TelegramGroupsAdmin.Telegram library, moved 6 models+13 repos+services+13 commands+4 background services, AddTelegramServices(), ModelMappings public, clean dependencies
 **4.4** ✅: Welcome system - DB schema, WelcomeService, Repository, bot integration, config from DB, chat name caching, TickerQ jobs (WelcomeTimeoutJob, DeleteMessageJob), callback validation, user leaves, /settings#telegram. Flow: restrict on join→welcome+buttons→timeout auto-kick (60s)→accept (restore to chat default permissions + DM w/ return button)→deny/timeout (kick). DM modes: Exclusive (DM-only, chat silent), Chat+DM (both), Chat-only (DM fallback). Invite link caching: IChatInviteLinkService stores links in configs.invite_link, GetInviteLinkAsync (cache-first), RefreshInviteLinkAsync (force refresh), health check validates every 1 min. Templates: chat_welcome, dm_template, chat_fallback. Variables: {chat_name}, {username}, {rules_text}
 **4.5** ✅: OpenAI tri-state (spam/clean/review), SpamCheckResultType enum, modular prompts (technical+custom rules+mode guidance), review queue integration. Prompt arch: GetBaseTechnicalPrompt (JSON, unchangeable), GetDefaultRulesPrompt (spam/legit indicators, user-overridable), GetModeGuidancePrompt (veto vs detection), BuildSystemPrompt factory
 **4.6** ✅: /tempban command - Flexible duration parsing (5m/1h/24h formats), TickerQ TempbanExpiryJob for auto-unrestriction, cross-chat global bans (user_actions.ExpiresAt), ModerationActionService.TempBanUserAsync(). DM notifications: SendTempBanNotificationAsync sends details + rejoin links for all managed chats via IUserMessagingService. UI: TempBanDialog (duration presets), Messages page action, UserDetailDialog action. Bot response auto-delete: DeleteResponseAfterSeconds set to ban duration.

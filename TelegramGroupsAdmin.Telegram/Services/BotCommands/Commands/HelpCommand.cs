@@ -16,7 +16,8 @@ public class HelpCommand : IBotCommand
     private static readonly List<CommandMetadata> _commandMetadata = new()
     {
         new("report", "Report message for admin review", 0),
-        new("link", "Link your Telegram account to web app", 0),
+        new("invite", "Get invite link for this chat", -1),
+        new("link", "Link your Telegram account to web app", 1),
         new("spam", "Mark message as spam and delete it", 1),
         new("ban", "Ban user from all managed chats", 1),
         new("tempban", "Temporarily ban user with auto-unrestriction", 1),
@@ -89,6 +90,7 @@ public class HelpCommand : IBotCommand
         "help" => "📋",
         "start" => "👋",
         "report" => "📢",
+        "invite" => "🔗",
         "spam" => "🚫",
         "ban" => "⛔",
         "tempban" => "⏱️",

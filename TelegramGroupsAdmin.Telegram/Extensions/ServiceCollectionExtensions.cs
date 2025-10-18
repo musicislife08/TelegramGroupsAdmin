@@ -86,6 +86,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBotCommand, MuteCommand>(sp => sp.GetRequiredService<MuteCommand>());
         services.AddScoped<ReportCommand>();
         services.AddScoped<IBotCommand, ReportCommand>(sp => sp.GetRequiredService<ReportCommand>());
+        services.AddScoped<InviteCommand>();
+        services.AddScoped<IBotCommand, InviteCommand>(sp => sp.GetRequiredService<InviteCommand>());
         services.AddScoped<DeleteCommand>();
         services.AddScoped<IBotCommand, DeleteCommand>(sp => sp.GetRequiredService<DeleteCommand>());
         services.AddSingleton<CommandRouter>();

@@ -89,9 +89,9 @@ public partial class CommandRouter
             // Get actual permission level for all commands
             var actualPermissionLevel = await GetPermissionLevelAsync(botClient, message.Chat.Id, message.From.Id, cancellationToken);
 
-            // Special cases: /link, /start, /report, and /help bypass permission checks (accessible to everyone)
+            // Special cases: /link, /start, /report, /help, and /invite bypass permission checks (accessible to everyone)
             // BUT they still receive actual permission level for context (e.g., /help shows correct commands)
-            var bypassPermissionCheck = commandName == "link" || commandName == "start" || commandName == "report" || commandName == "help";
+            var bypassPermissionCheck = commandName is "link" or "start" or "report" or "help" or "invite";
             var permissionLevel = bypassPermissionCheck ? Math.Max(actualPermissionLevel, command.MinPermissionLevel) : actualPermissionLevel;
 
             // Check permission
