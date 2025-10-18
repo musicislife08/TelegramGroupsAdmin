@@ -404,9 +404,12 @@ public class ChatManagementService(
                 health.CanInviteUsers = admin.CanInviteUsers;
             }
 
-            // Get admin count (only for groups/supergroups)
+            // Get admin count and refresh admin cache (only for groups/supergroups)
             var admins = await botClient.GetChatAdministrators(chatId, cancellationToken);
             health.AdminCount = admins.Length;
+
+            // Refresh admin cache in database (for permission checks in commands)
+            await RefreshChatAdminsAsync(botClient, chatId, cancellationToken);
 
             // Validate and refresh cached invite link (private groups only)
             if (chat.Type == ChatType.Supergroup && string.IsNullOrEmpty(chat.Username))
