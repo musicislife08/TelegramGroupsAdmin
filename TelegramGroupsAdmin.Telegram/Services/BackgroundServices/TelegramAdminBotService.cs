@@ -146,9 +146,13 @@ public class TelegramAdminBotService(
             return;
         }
 
-        // Handle user joins/leaves (for welcome system - Phase 4.4)
+        // Handle user joins/leaves/promotions/demotions
         if (update.ChatMember is { } chatMember)
         {
+            // Check for admin status changes (instant permission updates)
+            await chatManagementService.HandleAdminStatusChangeAsync(chatMember, cancellationToken);
+
+            // Handle joins/leaves (welcome system - Phase 4.4)
             await welcomeService.HandleChatMemberUpdateAsync(botClient, chatMember, cancellationToken);
             return;
         }

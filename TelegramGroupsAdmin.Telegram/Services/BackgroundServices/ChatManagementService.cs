@@ -213,6 +213,67 @@ public class ChatManagementService(
     }
 
     /// <summary>
+    /// Handle ChatMember updates for admin promotion/demotion (instant permission updates)
+    /// Called when any user (not just bot) is promoted/demoted in a managed chat
+    /// </summary>
+    public async Task HandleAdminStatusChangeAsync(ChatMemberUpdated chatMemberUpdate, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var chat = chatMemberUpdate.Chat;
+            var user = chatMemberUpdate.NewChatMember.User;
+            var oldStatus = chatMemberUpdate.OldChatMember.Status;
+            var newStatus = chatMemberUpdate.NewChatMember.Status;
+
+            // Skip if status didn't involve admin permissions
+            var wasAdmin = oldStatus is ChatMemberStatus.Administrator or ChatMemberStatus.Creator;
+            var isNowAdmin = newStatus is ChatMemberStatus.Administrator or ChatMemberStatus.Creator;
+
+            if (wasAdmin == isNowAdmin)
+            {
+                // No admin status change (e.g., just permissions updated, or regular member change)
+                return;
+            }
+
+            using var scope = serviceProvider.CreateScope();
+            var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
+
+            if (isNowAdmin)
+            {
+                // User promoted to admin
+                var isCreator = newStatus == ChatMemberStatus.Creator;
+                await chatAdminsRepository.UpsertAsync(chat.Id, user.Id, isCreator, user.Username, cancellationToken);
+
+                logger.LogInformation(
+                    "⬆️ INSTANT: User promoted to {Role} in chat {ChatId} ({ChatName}): {TelegramId} (@{Username})",
+                    isCreator ? "creator" : "admin",
+                    chat.Id,
+                    chat.Title ?? "Unknown",
+                    user.Id,
+                    user.Username ?? "unknown");
+            }
+            else
+            {
+                // User demoted from admin
+                await chatAdminsRepository.DeactivateAsync(chat.Id, user.Id, cancellationToken);
+
+                logger.LogInformation(
+                    "⬇️ INSTANT: User demoted from admin in chat {ChatId} ({ChatName}): {TelegramId} (@{Username})",
+                    chat.Id,
+                    chat.Title ?? "Unknown",
+                    user.Id,
+                    user.Username ?? "unknown");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to handle admin status change for user {UserId} in chat {ChatId}",
+                chatMemberUpdate.NewChatMember.User.Id,
+                chatMemberUpdate.Chat.Id);
+        }
+    }
+
+    /// <summary>
     /// Refresh admin cache for all active managed chats on startup
     /// </summary>
     public async Task RefreshAllChatAdminsAsync(ITelegramBotClient botClient, CancellationToken cancellationToken = default)
