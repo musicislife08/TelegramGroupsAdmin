@@ -64,6 +64,14 @@ public class TelegramUserDto
     public bool IsTrusted { get; set; } = false;
 
     /// <summary>
+    /// Whether user has started a DM conversation with the bot (enables private notifications)
+    /// Set to true when user sends /start to bot in private chat
+    /// Set to false when bot gets blocked by user (Forbidden error)
+    /// </summary>
+    [Column("bot_dm_enabled")]
+    public bool BotDmEnabled { get; set; } = false;
+
+    /// <summary>
     /// First time this user was seen in any managed chat
     /// Used for auto-trust eligibility (requires 7 days minimum)
     /// </summary>

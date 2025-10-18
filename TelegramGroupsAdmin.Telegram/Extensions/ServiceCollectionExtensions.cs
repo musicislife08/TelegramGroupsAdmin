@@ -51,6 +51,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<UserAutoTrustService>();
         services.AddScoped<AdminMentionHandler>();
         services.AddScoped<TelegramUserManagementService>(); // Orchestrates Telegram user operations
+        services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM with fallback to chat mentions
         services.AddSingleton<IWelcomeService, WelcomeService>();
         services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
 

@@ -88,14 +88,4 @@ public class UserTagsRepository : IUserTagsRepository
         return await _context.UserTags
             .AnyAsync(t => t.TelegramUserId == telegramUserId && t.TagName == normalizedTag && t.RemovedAt == null, cancellationToken);
     }
-
-    public async Task<int> GetTotalConfidenceModifierAsync(long telegramUserId, CancellationToken cancellationToken = default)
-    {
-        var modifiers = await _context.UserTags
-            .Where(t => t.TelegramUserId == telegramUserId && t.RemovedAt == null && t.ConfidenceModifier.HasValue)
-            .Select(t => t.ConfidenceModifier!.Value)
-            .ToListAsync(cancellationToken);
-
-        return modifiers.Sum();
-    }
 }

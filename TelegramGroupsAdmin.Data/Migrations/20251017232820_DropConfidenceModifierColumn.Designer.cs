@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TelegramGroupsAdmin.Data;
@@ -11,9 +12,11 @@ using TelegramGroupsAdmin.Data;
 namespace TgSpam_PreFilterApi.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251017232820_DropConfidenceModifierColumn")]
+    partial class DropConfidenceModifierColumn
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -945,10 +948,6 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                     b.Property<long>("TelegramUserId")
                         .HasColumnType("bigint")
                         .HasColumnName("telegram_user_id");
-
-                    b.Property<bool>("BotDmEnabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("bot_dm_enabled");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")

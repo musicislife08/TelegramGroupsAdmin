@@ -9,11 +9,13 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
 /// <summary>
 /// /report - Report message for admin review
+/// Notifies all chat admins via DM if available, falls back to chat mention
 /// </summary>
 public class ReportCommand : IBotCommand
 {
     private readonly ILogger<ReportCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IUserMessagingService _messagingService;
 
     public string Name => "report";
     public string Description => "Report message for admin review";
@@ -25,10 +27,12 @@ public class ReportCommand : IBotCommand
 
     public ReportCommand(
         ILogger<ReportCommand> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IUserMessagingService messagingService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _messagingService = messagingService;
     }
 
     public async Task<string> ExecuteAsync(
@@ -83,6 +87,47 @@ public class ReportCommand : IBotCommand
             reportedMessage.MessageId,
             reportedUser.Id,
             reportedUser.Username);
+
+        // Notify all admins of the new report
+        var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
+        var admins = await chatAdminsRepository.GetChatAdminsAsync(message.Chat.Id, cancellationToken);
+        var adminUserIds = admins.Select(a => a.TelegramId).ToList();
+
+        if (adminUserIds.Any())
+        {
+            var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
+            var messagePreview = reportedMessage.Text?.Length > 100
+                ? reportedMessage.Text.Substring(0, 100) + "..."
+                : reportedMessage.Text ?? "[Media message]";
+
+            var reportNotification = $"🚨 **New Report #{reportId}**\n\n" +
+                                    $"**Chat:** {chatName}\n" +
+                                    $"**Reported by:** @{reporter.Username ?? reporter.FirstName ?? reporter.Id.ToString()}\n" +
+                                    $"**Reported user:** @{reportedUser.Username ?? reportedUser.FirstName ?? reportedUser.Id.ToString()}\n" +
+                                    $"**Message:** {messagePreview}\n\n" +
+                                    $"[Jump to message](https://t.me/c/{Math.Abs(message.Chat.Id).ToString().TrimStart('-')}/{reportedMessage.MessageId})\n\n" +
+                                    $"Review in the Reports tab or use moderation commands.";
+
+            var results = await _messagingService.SendToMultipleUsersAsync(
+                botClient,
+                userIds: adminUserIds,
+                chatId: message.Chat.Id,
+                messageText: reportNotification,
+                replyToMessageId: reportedMessage.MessageId,
+                cancellationToken);
+
+            var dmCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.PrivateDm);
+            var mentionCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.ChatMention);
+
+            _logger.LogInformation(
+                "Report {ReportId} notification sent to {TotalAdmins} admins ({DmCount} via DM, {MentionCount} via chat mention)",
+                reportId, results.Count, dmCount, mentionCount);
+
+            return $"✅ Message reported for admin review (Report #{reportId})\n" +
+                   $"Reported user: @{reportedUser.Username ?? reportedUser.Id.ToString()}\n" +
+                   $"Notified {dmCount} admin(s) via DM, {mentionCount} in chat\n\n" +
+                   $"_Admins will review your report shortly._";
+        }
 
         return $"✅ Message reported for admin review (Report #{reportId})\n" +
                $"Reported user: @{reportedUser.Username ?? reportedUser.Id.ToString()}\n\n" +

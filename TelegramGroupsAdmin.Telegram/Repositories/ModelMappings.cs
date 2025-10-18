@@ -521,6 +521,7 @@ public static class ModelMappings
         UserPhotoPath: data.UserPhotoPath,
         PhotoHash: data.PhotoHash,
         IsTrusted: data.IsTrusted,
+        BotDmEnabled: data.BotDmEnabled,
         FirstSeenAt: data.FirstSeenAt,
         LastSeenAt: data.LastSeenAt,
         CreatedAt: data.CreatedAt,
@@ -536,6 +537,7 @@ public static class ModelMappings
         UserPhotoPath = ui.UserPhotoPath,
         PhotoHash = ui.PhotoHash,
         IsTrusted = ui.IsTrusted,
+        BotDmEnabled = ui.BotDmEnabled,
         FirstSeenAt = ui.FirstSeenAt,
         LastSeenAt = ui.LastSeenAt,
         CreatedAt = ui.CreatedAt,
@@ -600,8 +602,7 @@ public static class ModelMappings
         RemovedAt = data.RemovedAt,
         RemovedBy = data.RemovedAt.HasValue
             ? ToActor(data.RemovedByWebUserId, data.RemovedByTelegramUserId, data.RemovedBySystemIdentifier, removedByWebUserEmail, removedByTelegramUsername, removedByTelegramFirstName)
-            : null,
-        ConfidenceModifier = data.ConfidenceModifier
+            : null
     };
 
     public static DataModels.UserTagDto ToDto(this UiModels.UserTag ui)
@@ -629,8 +630,7 @@ public static class ModelMappings
             RemovedAt = ui.RemovedAt,
             RemovedByWebUserId = removedByWebUserId,
             RemovedByTelegramUserId = removedByTelegramUserId,
-            RemovedBySystemIdentifier = removedBySystemIdentifier,
-            ConfidenceModifier = ui.ConfidenceModifier
+            RemovedBySystemIdentifier = removedBySystemIdentifier
         };
     }
 

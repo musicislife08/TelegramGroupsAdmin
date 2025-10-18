@@ -51,9 +51,6 @@ public class UserTagDto
     [MaxLength(50)]
     public string? RemovedBySystemIdentifier { get; set; }
 
-    [Column("confidence_modifier")]
-    public int? ConfidenceModifier { get; set; }  // Optional: Adjust spam confidence
-
     // Navigation property
     [ForeignKey(nameof(TelegramUserId))]
     public virtual TelegramUserDto? TelegramUser { get; set; }

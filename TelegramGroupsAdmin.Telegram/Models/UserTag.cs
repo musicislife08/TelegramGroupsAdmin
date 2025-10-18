@@ -21,6 +21,4 @@ public class UserTag
     /// Who removed this tag (Phase 4.19: Actor system, nullable until removed)
     /// </summary>
     public Actor? RemovedBy { get; set; }
-
-    public int? ConfidenceModifier { get; set; }
 }

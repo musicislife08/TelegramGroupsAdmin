@@ -9,18 +9,21 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
 /// <summary>
-/// /start - Handle deep links for welcome system
+/// /start - Handle deep links for welcome system and enable bot DM notifications
 /// </summary>
 public class StartCommand : IBotCommand
 {
     private readonly IWelcomeResponsesRepository _welcomeResponsesRepository;
+    private readonly TelegramUserRepository _telegramUserRepository;
     private readonly IServiceProvider _serviceProvider;
 
     public StartCommand(
         IWelcomeResponsesRepository welcomeResponsesRepository,
+        TelegramUserRepository telegramUserRepository,
         IServiceProvider serviceProvider)
     {
         _welcomeResponsesRepository = welcomeResponsesRepository;
+        _telegramUserRepository = telegramUserRepository;
         _serviceProvider = serviceProvider;
     }
 
@@ -43,6 +46,13 @@ public class StartCommand : IBotCommand
         if (message.Chat.Type != ChatType.Private)
         {
             return string.Empty; // Silently ignore /start in group chats
+        }
+
+        // User started a private conversation with the bot - enable DM notifications
+        // This allows the bot to send private messages to this user in the future
+        if (message.From != null)
+        {
+            await _telegramUserRepository.SetBotDmEnabledAsync(message.From.Id, enabled: true, cancellationToken);
         }
 
         // Check if this is a deep link for welcome system

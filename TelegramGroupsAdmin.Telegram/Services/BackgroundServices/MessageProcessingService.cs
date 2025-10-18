@@ -340,6 +340,7 @@ public partial class MessageProcessingService(
                     UserPhotoPath: null, // Will be populated by FetchUserPhotoJob
                     PhotoHash: null,
                     IsTrusted: false,
+                    BotDmEnabled: false, // Will be set to true when user sends /start in private chat
                     FirstSeenAt: now,
                     LastSeenAt: now,
                     CreatedAt: now,

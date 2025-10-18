@@ -66,6 +66,7 @@ public class TelegramUserRepository
             existing.UserPhotoPath = user.UserPhotoPath;
             existing.PhotoHash = user.PhotoHash;
             existing.IsTrusted = user.IsTrusted;
+            existing.BotDmEnabled = user.BotDmEnabled;
             existing.LastSeenAt = user.LastSeenAt;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -137,6 +138,31 @@ public class TelegramUserRepository
                 "Updated trust status for Telegram user {TelegramUserId}: {IsTrusted}",
                 telegramUserId,
                 isTrusted);
+        }
+    }
+
+    /// <summary>
+    /// Set bot DM enabled status (user accepted bot communication)
+    /// Set to true when user sends /start in private chat
+    /// Set to false when bot receives Forbidden error (user blocked bot)
+    /// </summary>
+    public async Task SetBotDmEnabledAsync(long telegramUserId, bool enabled, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var entity = await context.TelegramUsers
+            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, ct);
+
+        if (entity != null)
+        {
+            entity.BotDmEnabled = enabled;
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+
+            await context.SaveChangesAsync(ct);
+
+            _logger.LogInformation(
+                "Updated bot DM status for Telegram user {TelegramUserId}: {BotDmEnabled}",
+                telegramUserId,
+                enabled);
         }
     }
 

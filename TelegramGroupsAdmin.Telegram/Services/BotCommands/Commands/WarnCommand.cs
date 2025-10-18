@@ -10,12 +10,14 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
 /// <summary>
 /// /warn - Issue warning to user (auto-ban after threshold)
+/// Notifies user via DM if available, falls back to chat mention
 /// </summary>
 public class WarnCommand : IBotCommand
 {
     private readonly ILogger<WarnCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly ModerationActionService _moderationService;
+    private readonly IUserMessagingService _messagingService;
 
     public string Name => "warn";
     public string Description => "Issue warning to user (auto-ban after threshold)";
@@ -28,11 +30,13 @@ public class WarnCommand : IBotCommand
     public WarnCommand(
         ILogger<WarnCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationActionService moderationService)
+        ModerationActionService moderationService,
+        IUserMessagingService messagingService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
+        _messagingService = messagingService;
     }
 
     public async Task<string> ExecuteAsync(
@@ -88,9 +92,34 @@ public class WarnCommand : IBotCommand
                 return $"❌ Failed to issue warning: {result.ErrorMessage}";
             }
 
-            // Build response message
+            // Notify user of warning via DM (preferred) or chat mention (fallback)
+            var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
+            var warningNotification = $"⚠️ **Warning Issued**\n\n" +
+                                     $"**Chat:** {chatName}\n" +
+                                     $"**Reason:** {reason}\n" +
+                                     $"**Total Warnings:** {result.WarningCount}\n\n" +
+                                     $"Please review the group rules.";
+
+            if (result.AutoBanTriggered)
+            {
+                warningNotification += $"\n\n🚫 **Auto-ban triggered!** You have been banned from {result.ChatsAffected} chat(s) due to excessive warnings.";
+            }
+
+            var messageResult = await _messagingService.SendToUserAsync(
+                botClient,
+                userId: targetUser.Id,
+                chatId: message.Chat.Id,
+                messageText: warningNotification,
+                replyToMessageId: message.ReplyToMessage.MessageId,
+                cancellationToken);
+
+            // Build admin confirmation response
             var username = targetUser.Username ?? targetUser.FirstName ?? targetUser.Id.ToString();
-            var response = $"⚠️ Warning issued to {(targetUser.Username != null ? "@" + targetUser.Username : username)}\n" +
+            var deliveryNote = messageResult.DeliveryMethod == MessageDeliveryMethod.PrivateDm
+                ? " (notified via DM)"
+                : " (notified in chat)";
+
+            var response = $"⚠️ Warning issued to {(targetUser.Username != null ? "@" + targetUser.Username : username)}{deliveryNote}\n" +
                           $"Reason: {reason}\n" +
                           $"Total warnings: {result.WarningCount}";
 

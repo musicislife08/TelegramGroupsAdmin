@@ -36,9 +36,4 @@ public interface IUserTagsRepository
     /// Check if a user has a specific tag name
     /// </summary>
     Task<bool> UserHasTagAsync(long telegramUserId, string tagName, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Get the confidence modifier for a user based on their tags
-    /// </summary>
-    Task<int> GetTotalConfidenceModifierAsync(long telegramUserId, CancellationToken cancellationToken = default);
 }

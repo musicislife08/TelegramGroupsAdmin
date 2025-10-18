@@ -15,6 +15,7 @@
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject ModerationActionService ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
+@inject NavigationManager NavigationManager
 @inject ILogger<Messages> Logger
 @attribute [Authorize]
 @implements IDisposable
@@ -153,6 +154,9 @@
     private DateTime _lastUpdate = DateTime.Now;
     private int _userPermissionLevel = 0; // Default to ReadOnly
     private HashSet<long> _userTelegramIds = new(); // Current user's linked Telegram IDs
+    private long? _highlightMessageId = null; // Message to scroll to and highlight
+    private bool _firstRenderComplete = false; // Track if we've done the initial auto-scroll
+    private long? _filterByUserId = null; // Track userId from query string for name lookup after load
     private const int PageSize = 50;
 
     protected override async Task OnInitializedAsync()
@@ -189,6 +193,9 @@
         // Subscribe to real-time updates
         MessageHistoryService.OnNewMessage += HandleNewMessage;
 
+        // Parse query string parameters and apply filters BEFORE loading messages
+        await ApplyQueryStringFiltersAsync();
+
         await LoadMessagesAsync();
     }
 
@@ -196,6 +203,88 @@
     {
         // Unsubscribe from events
         MessageHistoryService.OnNewMessage -= HandleNewMessage;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Only run once after the first render, and only if we have a highlight target
+        if (firstRender && _highlightMessageId.HasValue && !_firstRenderComplete)
+        {
+            _firstRenderComplete = true;
+
+            try
+            {
+                var targetMessageId = _highlightMessageId.Value;
+                Logger.LogDebug("Auto-scrolling to highlighted message: {MessageId}", targetMessageId);
+
+                // Check if target message is in the filtered list
+                var targetMessage = _filteredMessages.FirstOrDefault(m => m.MessageId == targetMessageId);
+
+                if (targetMessage == null)
+                {
+                    // Message not loaded yet, try to load it
+                    Logger.LogInformation("Highlighted message {MessageId} not in current view, loading...", targetMessageId);
+
+                    // Load the message from repository
+                    var message = await MessageRepository.GetMessageAsync(targetMessageId);
+                    if (message == null)
+                    {
+                        Logger.LogWarning("Highlighted message {MessageId} not found in database", targetMessageId);
+                        return;
+                    }
+
+                    // Add to the list if not already there
+                    if (!_allMessages.Any(m => m.MessageId == targetMessageId))
+                    {
+                        // Insert in chronological order (messages are sorted newest-first)
+                        var insertIndex = _allMessages.FindIndex(m => m.Timestamp < message.Timestamp);
+                        if (insertIndex >= 0)
+                        {
+                            _allMessages.Insert(insertIndex, message);
+                        }
+                        else
+                        {
+                            _allMessages.Add(message);
+                        }
+
+                        // Load metadata for this message
+                        var messageIds = new[] { targetMessageId };
+                        var spamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
+                        var editCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+
+                        foreach (var kvp in spamChecks)
+                            _spamChecks[kvp.Key] = kvp.Value;
+                        foreach (var kvp in editCounts)
+                            _editCounts[kvp.Key] = kvp.Value;
+
+                        // Load detection history for Admin+ users
+                        if (_userPermissionLevel >= 1)
+                        {
+                            await LoadDetectionHistoryAsync(messageIds);
+                        }
+
+                        ApplyFilters();
+                        StateHasChanged();
+                    }
+                }
+
+                // Use JavaScript to scroll to and highlight the message
+                await JS.InvokeVoidAsync("scrollToMessage", targetMessageId);
+
+                Logger.LogInformation("Successfully scrolled to highlighted message: {MessageId}", targetMessageId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to auto-scroll to highlighted message {MessageId}", _highlightMessageId);
+            }
+            finally
+            {
+                // Clear the highlight flag to prevent repeated scrolling
+                _highlightMessageId = null;
+            }
+        }
+
+        await base.OnAfterRenderAsync(firstRender);
     }
 
     private async void HandleNewMessage(MessageRecord message)
@@ -261,6 +350,22 @@
             }
 
             _lastUpdate = DateTime.Now;
+
+            // Update userId filter with actual username if we have it from query string
+            if (_filterByUserId.HasValue)
+            {
+                var userMessage = _allMessages.FirstOrDefault(m => m.UserId == _filterByUserId.Value);
+                if (userMessage != null)
+                {
+                    // Update filter with actual username instead of "User {id}"
+                    var actualName = userMessage.UserName ?? userMessage.FirstName ?? $"User {_filterByUserId.Value}";
+                    _filterState.UserName = actualName;
+                    Logger.LogDebug("Updated userId filter to actual name: {UserName}", actualName);
+
+                    // Clear the userId flag once we've updated the filter with the real name
+                    _filterByUserId = null;
+                }
+            }
 
             ApplyFilters();
         }
@@ -342,6 +447,19 @@
         _filteredMessages = _allMessages
             .Where(m => _filterState.Matches(m, GetSpamCheck(m.MessageId)))
             .ToList();
+
+        // Additional userId filter from query string (if set and UserName filter is still active)
+        if (_filterByUserId.HasValue && !string.IsNullOrEmpty(_filterState.UserName))
+        {
+            _filteredMessages = _filteredMessages
+                .Where(m => m.UserId == _filterByUserId.Value)
+                .ToList();
+        }
+        else if (_filterByUserId.HasValue && string.IsNullOrEmpty(_filterState.UserName))
+        {
+            // User cleared the filter, so clear our userId tracking too
+            _filterByUserId = null;
+        }
 
         StateHasChanged();
     }
@@ -816,6 +934,60 @@
     {
         // Check if message sender matches any of current user's linked Telegram accounts
         return _userTelegramIds.Contains(telegramUserId);
+    }
+
+    private async Task ApplyQueryStringFiltersAsync()
+    {
+        try
+        {
+            var uri = new Uri(NavigationManager.Uri);
+            var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+            // Apply userId filter (from UserDetailDialog: /messages?userId=123)
+            if (query.TryGetValue("userId", out var userIdStr) && long.TryParse(userIdStr, out var userIdFilter))
+            {
+                // Store the userId for lookup after messages load
+                _filterByUserId = userIdFilter;
+                // Set a placeholder - will be updated with actual username after messages load
+                _filterState.UserName = $"User {userIdFilter}";
+                Logger.LogDebug("Applied userId filter: {UserId}", userIdFilter);
+            }
+
+            // Apply chat filter (from ModerationReportCard: /messages?chat=123&highlight=456)
+            if (query.TryGetValue("chat", out var chatIdStr) && long.TryParse(chatIdStr, out var chatIdFilter))
+            {
+                // Load a message from this chat to get the chat name
+                var chatMessages = await MessageRepository.GetMessagesByChatIdAsync(chatIdFilter, limit: 1);
+
+                if (chatMessages.Any() && !string.IsNullOrEmpty(chatMessages.First().ChatName))
+                {
+                    _filterState.ChatName = chatMessages.First().ChatName;
+                    Logger.LogDebug("Applied chat filter: {ChatId} ({ChatName})", chatIdFilter, _filterState.ChatName);
+                }
+                else
+                {
+                    // Set a placeholder if no messages found yet
+                    _filterState.ChatName = $"Chat {chatIdFilter}";
+                    Logger.LogDebug("Applied chat filter with placeholder: {ChatId}", chatIdFilter);
+                }
+            }
+
+            // Store highlight target (from ModerationReportCard or Users: highlight=456 or messageId=456)
+            if (query.TryGetValue("highlight", out var highlightStr) && long.TryParse(highlightStr, out var highlightId))
+            {
+                _highlightMessageId = highlightId;
+                Logger.LogDebug("Will highlight message: {MessageId}", highlightId);
+            }
+            else if (query.TryGetValue("messageId", out var messageIdStr) && long.TryParse(messageIdStr, out var messageId))
+            {
+                _highlightMessageId = messageId;
+                Logger.LogDebug("Will highlight message: {MessageId}", messageId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error parsing query string parameters");
+        }
     }
 
     private async Task HandleReplyClick(long targetMessageId)

@@ -121,6 +121,7 @@ public class BotProtectionService : IBotProtectionService
                 UserPhotoPath: null, // Bots don't need photo fetching
                 PhotoHash: null,
                 IsTrusted: false,
+                BotDmEnabled: false, // Bots don't accept DMs
                 FirstSeenAt: now,
                 LastSeenAt: now,
                 CreatedAt: now,

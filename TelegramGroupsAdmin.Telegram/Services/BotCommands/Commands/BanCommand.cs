@@ -10,12 +10,14 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
 /// <summary>
 /// /ban - Ban user from all managed chats
+/// Notifies user via DM if available, falls back to chat mention
 /// </summary>
 public class BanCommand : IBotCommand
 {
     private readonly ILogger<BanCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly ModerationActionService _moderationService;
+    private readonly IUserMessagingService _messagingService;
 
     public string Name => "ban";
     public string Description => "Ban user from all managed chats";
@@ -28,11 +30,13 @@ public class BanCommand : IBotCommand
     public BanCommand(
         ILogger<BanCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationActionService moderationService)
+        ModerationActionService moderationService,
+        IUserMessagingService messagingService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _moderationService = moderationService;
+        _messagingService = messagingService;
     }
 
     public async Task<string> ExecuteAsync(
@@ -87,8 +91,28 @@ public class BanCommand : IBotCommand
                 return $"❌ Failed to ban user: {result.ErrorMessage}";
             }
 
-            // Build success message
-            var response = $"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} banned from {result.ChatsAffected} chat(s)\n" +
+            // Notify user of ban via DM (preferred) or chat mention (fallback)
+            var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
+            var banNotification = $"🚫 **You have been banned**\n\n" +
+                                 $"**Chat:** {chatName}\n" +
+                                 $"**Reason:** {reason}\n" +
+                                 $"**Chats affected:** {result.ChatsAffected}\n\n" +
+                                 $"If you believe this was a mistake, you may appeal by contacting the chat administrators.";
+
+            var messageResult = await _messagingService.SendToUserAsync(
+                botClient,
+                userId: targetUser.Id,
+                chatId: message.Chat.Id,
+                messageText: banNotification,
+                replyToMessageId: null, // Don't reply to trigger message for bans
+                cancellationToken);
+
+            // Build admin confirmation response
+            var deliveryNote = messageResult.DeliveryMethod == MessageDeliveryMethod.PrivateDm
+                ? " (notified via DM)"
+                : " (notified in chat)";
+
+            var response = $"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} banned from {result.ChatsAffected} chat(s){deliveryNote}\n" +
                           $"Reason: {reason}";
 
             if (result.TrustRemoved)

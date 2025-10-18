@@ -22,13 +22,23 @@
     @* Filters *@
     <MudPaper Class="pa-3 mb-4" Elevation="1">
         <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
-            <MudSelect T="ReportTypeFilter" Label="Type" @bind-Value="_selectedTypeFilter" Variant="Variant.Outlined" Dense="true">
+            <MudSelect T="ReportTypeFilter"
+                       Label="Type"
+                       Value="_selectedTypeFilter"
+                       ValueChanged="OnTypeFilterChanged"
+                       Variant="Variant.Outlined"
+                       Dense="true">
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.All">All Types</MudSelectItem>
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.Spam">Moderation Reports</MudSelectItem>
                 <MudSelectItem T="ReportTypeFilter" Value="@ReportTypeFilter.Impersonation">Impersonation Alerts</MudSelectItem>
             </MudSelect>
 
-            <MudSelect T="StatusFilter" Label="Status" @bind-Value="_selectedStatusFilter" Variant="Variant.Outlined" Dense="true">
+            <MudSelect T="StatusFilter"
+                       Label="Status"
+                       Value="_selectedStatusFilter"
+                       ValueChanged="OnStatusFilterChanged"
+                       Variant="Variant.Outlined"
+                       Dense="true">
                 <MudSelectItem T="StatusFilter" Value="@StatusFilter.Pending">Pending Only</MudSelectItem>
                 <MudSelectItem T="StatusFilter" Value="@StatusFilter.All">All Statuses</MudSelectItem>
             </MudSelect>
@@ -235,6 +245,20 @@
         }
 
         _filteredReports = filtered.ToList();
+    }
+
+    private void OnTypeFilterChanged(ReportTypeFilter newValue)
+    {
+        _selectedTypeFilter = newValue;
+        ApplyFilters();
+        StateHasChanged();
+    }
+
+    private void OnStatusFilterChanged(StatusFilter newValue)
+    {
+        _selectedStatusFilter = newValue;
+        ApplyFilters();
+        StateHasChanged();
     }
 
     private int CalculateSpamPriority(Report report)
