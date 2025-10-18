@@ -268,19 +268,53 @@ public class ChatManagementService(
             using var scope = serviceProvider.CreateScope();
             var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
+            // Get current admin IDs from Telegram
+            var currentAdminIds = admins.Select(a => a.User.Id).ToHashSet();
+
+            // Get cached admins from database
+            var cachedAdmins = await chatAdminsRepository.GetChatAdminsAsync(chatId, cancellationToken);
+            var cachedAdminIds = cachedAdmins.Select(a => a.TelegramId).ToHashSet();
+
+            // Find demoted admins (in cache but not in current list)
+            var demotedAdminIds = cachedAdminIds.Except(currentAdminIds).ToList();
+
+            // Deactivate demoted admins
+            foreach (var demotedId in demotedAdminIds)
+            {
+                await chatAdminsRepository.DeactivateAsync(chatId, demotedId, cancellationToken);
+                var demotedAdmin = cachedAdmins.First(a => a.TelegramId == demotedId);
+                logger.LogInformation(
+                    "⬇️ Admin demoted in chat {ChatId}: {TelegramId} (@{Username})",
+                    chatId,
+                    demotedId,
+                    demotedAdmin.Username ?? "unknown");
+            }
+
+            // Upsert current admins (add new, update existing)
             var adminNames = new List<string>();
             foreach (var admin in admins)
             {
                 var isCreator = admin.Status == ChatMemberStatus.Creator;
                 var username = admin.User.Username; // Store Telegram username (without @)
+                var wasNew = !cachedAdminIds.Contains(admin.User.Id);
+
                 await chatAdminsRepository.UpsertAsync(chatId, admin.User.Id, isCreator, username, cancellationToken);
 
                 var displayName = username ?? admin.User.FirstName ?? admin.User.Id.ToString();
                 adminNames.Add($"@{displayName}" + (isCreator ? " (creator)" : ""));
+
+                if (wasNew)
+                {
+                    logger.LogInformation(
+                        "⬆️ New admin promoted in chat {ChatId}: {TelegramId} (@{Username})",
+                        chatId,
+                        admin.User.Id,
+                        username ?? "unknown");
+                }
             }
 
             logger.LogInformation(
-                "Cached {Count} admins for chat {ChatId}: {Admins}",
+                "✅ Synced {Count} admins for chat {ChatId}: {Admins}",
                 admins.Length,
                 chatId,
                 string.Join(", ", adminNames));
