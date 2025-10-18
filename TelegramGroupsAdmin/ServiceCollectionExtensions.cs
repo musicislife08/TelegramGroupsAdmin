@@ -293,6 +293,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<Jobs.TestJob>();
         services.AddScoped<Jobs.WelcomeTimeoutJob>();
         services.AddScoped<Jobs.DeleteMessageJob>();
+        services.AddScoped<Jobs.TempbanExpiryJob>();
 
         return services;
     }

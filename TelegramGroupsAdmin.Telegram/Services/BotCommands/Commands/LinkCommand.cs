@@ -27,7 +27,7 @@ public class LinkCommand : IBotCommand
         _serviceProvider = serviceProvider;
     }
 
-    public async Task<string> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,
@@ -37,8 +37,11 @@ public class LinkCommand : IBotCommand
         // Validate token argument
         if (args.Length == 0 || string.IsNullOrWhiteSpace(args[0]))
         {
-            return "❌ Please provide a link token: `/link <token>`\n\n" +
-                   "Generate a token at: Profile → Linked Telegram Accounts";
+            return new CommandResult(
+                "❌ Please provide a link token: `/link <token>`\n\n" +
+                "Generate a token at: Profile → Linked Telegram Accounts",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
         }
 
         var token = args[0].Trim();
@@ -52,28 +55,40 @@ public class LinkCommand : IBotCommand
         var existingMapping = await mappingRepository.GetByTelegramIdAsync(telegramUser.Id, cancellationToken);
         if (existingMapping != null)
         {
-            return $"❌ Your Telegram account is already linked to a web app user.\n\n" +
-                   $"To link a different account, first unlink from the web app.";
+            return new CommandResult(
+                $"❌ Your Telegram account is already linked to a web app user.\n\n" +
+                $"To link a different account, first unlink from the web app.",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
         }
 
         // Validate token
         var tokenRecord = await tokenRepository.GetByTokenAsync(token, cancellationToken);
         if (tokenRecord == null)
         {
-            return "❌ Invalid token. Please generate a new token from the web app.";
+            return new CommandResult(
+                "❌ Invalid token. Please generate a new token from the web app.",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
         }
 
         // Check if token is expired
         var now = DateTimeOffset.UtcNow;
         if (tokenRecord.ExpiresAt < now)
         {
-            return "❌ Token expired. Please generate a new token from the web app.";
+            return new CommandResult(
+                "❌ Token expired. Please generate a new token from the web app.",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
         }
 
         // Check if token was already used
         if (tokenRecord.UsedAt != null)
         {
-            return "❌ Token already used. Please generate a new token from the web app.";
+            return new CommandResult(
+                "❌ Token already used. Please generate a new token from the web app.",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
         }
 
         // Create mapping
@@ -97,7 +112,10 @@ public class LinkCommand : IBotCommand
             telegramUser.Username ?? "none",
             tokenRecord.UserId);
 
-        return $"✅ Successfully linked your Telegram account!\n\n" +
-               $"You can now use bot commands with your web app permissions.";
+        return new CommandResult(
+            $"✅ Successfully linked your Telegram account!\n\n" +
+            $"You can now use bot commands with your web app permissions.",
+            DeleteCommandMessage,
+            DeleteResponseAfterSeconds);
     }
 }

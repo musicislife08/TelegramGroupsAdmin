@@ -39,7 +39,7 @@ public class WarnCommand : IBotCommand
         _messagingService = messagingService;
     }
 
-    public async Task<string> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,
@@ -48,13 +48,13 @@ public class WarnCommand : IBotCommand
     {
         if (message.ReplyToMessage == null)
         {
-            return "❌ Please reply to a message from the user to warn.";
+            return new CommandResult("❌ Please reply to a message from the user to warn.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var targetUser = message.ReplyToMessage.From;
         if (targetUser == null)
         {
-            return "❌ Could not identify target user.";
+            return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         using var scope = _serviceProvider.CreateScope();
@@ -64,7 +64,7 @@ public class WarnCommand : IBotCommand
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id, cancellationToken);
         if (isAdmin)
         {
-            return "❌ Cannot warn chat admins.";
+            return new CommandResult("❌ Cannot warn chat admins.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var reason = args.Length > 0 ? string.Join(" ", args) : "No reason provided";
@@ -89,7 +89,7 @@ public class WarnCommand : IBotCommand
 
             if (!result.Success)
             {
-                return $"❌ Failed to issue warning: {result.ErrorMessage}";
+                return new CommandResult($"❌ Failed to issue warning: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             // Notify user of warning via DM (preferred) or chat mention (fallback)
@@ -128,12 +128,12 @@ public class WarnCommand : IBotCommand
                 response += $"\n\n🚫 Auto-ban triggered! User has been banned from {result.ChatsAffected} chat(s).";
             }
 
-            return response;
+            return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to warn user {UserId}", targetUser.Id);
-            return $"❌ Failed to issue warning: {ex.Message}";
+            return new CommandResult($"❌ Failed to issue warning: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 }

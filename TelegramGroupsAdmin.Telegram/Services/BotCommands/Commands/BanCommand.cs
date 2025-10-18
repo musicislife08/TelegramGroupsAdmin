@@ -39,7 +39,7 @@ public class BanCommand : IBotCommand
         _messagingService = messagingService;
     }
 
-    public async Task<string> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,
@@ -48,13 +48,13 @@ public class BanCommand : IBotCommand
     {
         if (message.ReplyToMessage == null)
         {
-            return "❌ Please reply to a message from the user to ban.";
+            return new CommandResult("❌ Please reply to a message from the user to ban.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var targetUser = message.ReplyToMessage.From;
         if (targetUser == null)
         {
-            return "❌ Could not identify target user.";
+            return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         using var scope = _serviceProvider.CreateScope();
@@ -64,7 +64,7 @@ public class BanCommand : IBotCommand
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id, cancellationToken);
         if (isAdmin)
         {
-            return "❌ Cannot ban chat admins.";
+            return new CommandResult("❌ Cannot ban chat admins.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var reason = args.Length > 0 ? string.Join(" ", args) : "Banned by admin";
@@ -88,7 +88,7 @@ public class BanCommand : IBotCommand
 
             if (!result.Success)
             {
-                return $"❌ Failed to ban user: {result.ErrorMessage}";
+                return new CommandResult($"❌ Failed to ban user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             // Notify user of ban via DM (preferred) or chat mention (fallback)
@@ -124,12 +124,12 @@ public class BanCommand : IBotCommand
                 "User {TargetId} ({TargetUsername}) banned by {ExecutorId} from {ChatsAffected} chats. Reason: {Reason}",
                 targetUser.Id, targetUser.Username, message.From?.Id, result.ChatsAffected, reason);
 
-            return response;
+            return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to ban user {UserId}", targetUser.Id);
-            return $"❌ Failed to ban user: {ex.Message}";
+            return new CommandResult($"❌ Failed to ban user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 }

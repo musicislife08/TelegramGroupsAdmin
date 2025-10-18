@@ -40,6 +40,7 @@ public interface IBotCommand
 
     /// <summary>
     /// Auto-delete the bot's response after this many seconds (null = don't delete)
+    /// Default value - commands can override in CommandResult
     /// </summary>
     int? DeleteResponseAfterSeconds { get; }
 
@@ -51,8 +52,8 @@ public interface IBotCommand
     /// <param name="args">Command arguments (parsed after command name)</param>
     /// <param name="userPermissionLevel">Permission level of user who issued command</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Response message to send to user</returns>
-    Task<string> ExecuteAsync(
+    /// <returns>CommandResult with response message and optional dynamic deletion time</returns>
+    Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,

@@ -66,7 +66,8 @@ public class TelegramUserRepository
             existing.UserPhotoPath = user.UserPhotoPath;
             existing.PhotoHash = user.PhotoHash;
             existing.IsTrusted = user.IsTrusted;
-            existing.BotDmEnabled = user.BotDmEnabled;
+            // NOTE: BotDmEnabled is NOT updated here - it's only set via SetBotDmEnabledAsync()
+            // to prevent message processing from resetting DM status after user completes /start
             existing.LastSeenAt = user.LastSeenAt;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -414,10 +415,16 @@ public class TelegramUserRepository
         if (user == null)
             return null;
 
-        // Get chat memberships
+        // Get chat memberships (exclude deleted service messages from count)
+        // Check if user is currently banned (global cross-chat ban)
+        var isCurrentlyBanned = await context.UserActions
+            .AnyAsync(ua => ua.UserId == telegramUserId
+                && ua.ActionType == DataModels.UserActionType.Ban
+                && (ua.ExpiresAt == null || ua.ExpiresAt > DateTimeOffset.UtcNow), ct);
+
         var chatMemberships = await (
             from m in context.Messages
-            where m.UserId == telegramUserId
+            where m.UserId == telegramUserId && m.DeletedAt == null
             join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
             from chat in chatGroup.DefaultIfEmpty()
             group new { m, chat } by new { m.ChatId, ChatName = chat != null ? chat.ChatName : null } into g
@@ -427,7 +434,8 @@ public class TelegramUserRepository
                 ChatName = g.Key.ChatName,
                 MessageCount = g.Count(),
                 LastActivityAt = g.Max(x => x.m.Timestamp),
-                FirstSeenAt = g.Min(x => x.m.Timestamp)
+                FirstSeenAt = g.Min(x => x.m.Timestamp),
+                IsBanned = isCurrentlyBanned // Global ban applies to all chats
             }
         )
         .AsNoTracking()
@@ -475,6 +483,7 @@ public class TelegramUserRepository
             UserPhotoPath = user.UserPhotoPath,
             PhotoHash = user.PhotoHash,
             IsTrusted = user.IsTrusted,
+            BotDmEnabled = user.BotDmEnabled,
             FirstSeenAt = user.FirstSeenAt,
             LastSeenAt = user.LastSeenAt,
             ChatMemberships = chatMemberships,

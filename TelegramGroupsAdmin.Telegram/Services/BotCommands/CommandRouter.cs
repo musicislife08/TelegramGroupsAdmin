@@ -86,13 +86,16 @@ public partial class CommandRouter
             using var scope = _serviceProvider.CreateScope();
             var command = (IBotCommand)scope.ServiceProvider.GetRequiredService(commandType);
 
-            // Special cases: /link, /start, /help, and /report commands are always accessible (don't require linking)
-            var permissionLevel = (commandName == "link" || commandName == "start" || commandName == "help" || commandName == "report")
-                ? 0
-                : await GetPermissionLevelAsync(botClient, message.Chat.Id, message.From.Id, cancellationToken);
+            // Get actual permission level for all commands
+            var actualPermissionLevel = await GetPermissionLevelAsync(botClient, message.Chat.Id, message.From.Id, cancellationToken);
+
+            // Special cases: /link, /start, /report, and /help bypass permission checks (accessible to everyone)
+            // BUT they still receive actual permission level for context (e.g., /help shows correct commands)
+            var bypassPermissionCheck = commandName == "link" || commandName == "start" || commandName == "report" || commandName == "help";
+            var permissionLevel = bypassPermissionCheck ? Math.Max(actualPermissionLevel, command.MinPermissionLevel) : actualPermissionLevel;
 
             // Check permission
-            if (permissionLevel < command.MinPermissionLevel)
+            if (!bypassPermissionCheck && permissionLevel < command.MinPermissionLevel)
             {
                 _logger.LogWarning(
                     "User {UserId} (@{Username}) attempted to use command /{Command} without sufficient permissions (has {UserLevel}, needs {RequiredLevel})",
@@ -130,9 +133,10 @@ public partial class CommandRouter
                 "Executing command /{Command} by user {UserId} ({Username}) with args: {Args}",
                 commandName, message.From.Id, message.From.Username, string.Join(", ", args));
 
-            var response = await command.ExecuteAsync(botClient, message, args, permissionLevel, cancellationToken);
+            var result = await command.ExecuteAsync(botClient, message, args, permissionLevel, cancellationToken);
 
-            return new CommandResult(response, command.DeleteCommandMessage, command.DeleteResponseAfterSeconds);
+            // Commands can now return dynamic CommandResult or use defaults from interface properties
+            return result;
         }
         catch (Exception ex)
         {

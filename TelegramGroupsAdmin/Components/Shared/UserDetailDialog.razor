@@ -66,22 +66,30 @@
 
                 <!-- Quick Stats -->
                 <MudGrid Class="mb-4">
-                    <MudItem xs="4">
+                    <MudItem xs="3">
                         <MudPaper Elevation="1" Class="pa-3 text-center">
                             <MudText Typo="Typo.h6">@_userDetail.ChatMemberships.Count</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Chats</MudText>
                         </MudPaper>
                     </MudItem>
-                    <MudItem xs="4">
+                    <MudItem xs="3">
                         <MudPaper Elevation="1" Class="pa-3 text-center">
                             <MudText Typo="Typo.h6">@_userDetail.ChatMemberships.Sum(c => c.MessageCount)</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Messages</MudText>
                         </MudPaper>
                     </MudItem>
-                    <MudItem xs="4">
+                    <MudItem xs="3">
                         <MudPaper Elevation="1" Class="pa-3 text-center">
                             <MudText Typo="Typo.h6">@GetActiveWarningCount()</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Warnings</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="3">
+                        <MudPaper Elevation="1" Class="pa-3 text-center">
+                            <MudIcon Icon="@(_userDetail.BotDmEnabled ? Icons.Material.Filled.MarkEmailRead : Icons.Material.Filled.MarkEmailUnread)"
+                                     Color="@(_userDetail.BotDmEnabled ? Color.Success : Color.Default)"
+                                     Size="Size.Large" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Bot DMs</MudText>
                         </MudPaper>
                     </MudItem>
                 </MudGrid>
@@ -96,6 +104,18 @@
                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                             <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Color="Color.Info" />
                             <MudText Typo="Typo.body2">Last seen: @FormatTimestamp(_userDetail.LastSeenAt)</MudText>
+                        </MudStack>
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@(_userDetail.BotDmEnabled ? Icons.Material.Filled.MarkEmailRead : Icons.Material.Filled.MarkEmailUnread)"
+                                     Size="Size.Small"
+                                     Color="@(_userDetail.BotDmEnabled ? Color.Success : Color.Default)" />
+                            <MudText Typo="Typo.body2">
+                                Bot DMs: @(_userDetail.BotDmEnabled ? "✅ Enabled" : "❌ Disabled")
+                                @if (!_userDetail.BotDmEnabled)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">(User must send /start to bot)</MudText>
+                                }
+                            </MudText>
                         </MudStack>
                     </MudStack>
                 </MudPaper>
@@ -161,9 +181,26 @@
                             {
                                 <MudListItem T="string">
                                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Style="width: 100%;">
-                                        <MudIcon Icon="@Icons.Material.Filled.Forum" Size="Size.Small" />
+                                        <MudIcon Icon="@Icons.Material.Filled.Forum"
+                                                 Size="Size.Small"
+                                                 Color="@(membership.IsBanned ? Color.Error : Color.Default)" />
                                         <div style="flex: 1;">
-                                            <MudText Typo="Typo.body2">@(membership.ChatName ?? $"Chat {membership.ChatId}")</MudText>
+                                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                <MudText Typo="Typo.body2"
+                                                         Style="@(membership.IsBanned ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                                                    @(membership.ChatName ?? $"Chat {membership.ChatId}")
+                                                </MudText>
+                                                @if (membership.IsBanned)
+                                                {
+                                                    <MudChip T="string"
+                                                             Size="Size.Small"
+                                                             Color="Color.Error"
+                                                             Variant="Variant.Text"
+                                                             Icon="@Icons.Material.Filled.Block">
+                                                        Banned
+                                                    </MudChip>
+                                                }
+                                            </MudStack>
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                 @membership.MessageCount messages • Last: @FormatTimestamp(membership.LastActivityAt)
                                             </MudText>

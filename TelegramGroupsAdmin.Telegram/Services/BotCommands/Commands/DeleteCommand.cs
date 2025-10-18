@@ -30,7 +30,7 @@ public class DeleteCommand : IBotCommand
         _serviceProvider = serviceProvider;
     }
 
-    public async Task<string> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,
@@ -39,7 +39,7 @@ public class DeleteCommand : IBotCommand
     {
         if (message.ReplyToMessage == null)
         {
-            return "❌ Please reply to the message you want to delete.";
+            return new CommandResult("❌ Please reply to the message you want to delete.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var targetMessage = message.ReplyToMessage;
@@ -62,12 +62,12 @@ public class DeleteCommand : IBotCommand
                 targetMessage.MessageId,
                 message.Chat.Id);
 
-            return "✅ Message deleted successfully!\n\n_This is a temporary test command._";
+            return new CommandResult("✅ Message deleted successfully!\n\n_This is a temporary test command._", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to delete message {MessageId} in chat {ChatId}", targetMessage.MessageId, message.Chat.Id);
-            return $"❌ Failed to delete message: {ex.Message}";
+            return new CommandResult($"❌ Failed to delete message: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 }

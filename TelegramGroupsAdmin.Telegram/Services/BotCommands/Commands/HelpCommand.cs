@@ -19,6 +19,7 @@ public class HelpCommand : IBotCommand
         new("link", "Link your Telegram account to web app", 0),
         new("spam", "Mark message as spam and delete it", 1),
         new("ban", "Ban user from all managed chats", 1),
+        new("tempban", "Temporarily ban user with auto-unrestriction", 1),
         new("trust", "Whitelist user (bypass spam detection)", 1),
         new("unban", "Remove ban from user", 1),
         new("warn", "Issue warning to user", 1),
@@ -40,7 +41,7 @@ public class HelpCommand : IBotCommand
     public bool DeleteCommandMessage => false; // Keep visible for reference
     public int? DeleteResponseAfterSeconds => 30; // Auto-delete help response after 30 seconds
 
-    public Task<string> ExecuteAsync(
+    public Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,
@@ -80,7 +81,7 @@ public class HelpCommand : IBotCommand
 
         sb.AppendLine($"\n_Permission: {GetPermissionName(userPermissionLevel)}_");
 
-        return Task.FromResult(sb.ToString());
+        return Task.FromResult(new CommandResult(sb.ToString(), DeleteCommandMessage, DeleteResponseAfterSeconds));
     }
 
     private static string GetCommandEmoji(string commandName) => commandName switch
@@ -90,6 +91,7 @@ public class HelpCommand : IBotCommand
         "report" => "📢",
         "spam" => "🚫",
         "ban" => "⛔",
+        "tempban" => "⏱️",
         "trust" => "✅",
         "unban" => "🔓",
         "warn" => "⚠️",

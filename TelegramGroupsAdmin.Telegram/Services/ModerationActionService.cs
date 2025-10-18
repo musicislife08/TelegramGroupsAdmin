@@ -1,11 +1,16 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
+using TickerQ.Utilities;
+using TickerQ.Utilities.Interfaces.Managers;
+using TickerQ.Utilities.Models.Ticker;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -23,6 +28,9 @@ public class ModerationActionService
     private readonly TelegramBotClientFactory _botClientFactory;
     private readonly TelegramOptions _telegramOptions;
     private readonly IConfigService _configService;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly IUserMessagingService _messagingService;
+    private readonly IChatInviteLinkService _inviteLinkService;
     private readonly ILogger<ModerationActionService> _logger;
 
     public ModerationActionService(
@@ -34,6 +42,9 @@ public class ModerationActionService
         TelegramBotClientFactory botClientFactory,
         IOptions<TelegramOptions> telegramOptions,
         IConfigService configService,
+        IServiceProvider serviceProvider,
+        IUserMessagingService messagingService,
+        IChatInviteLinkService inviteLinkService,
         ILogger<ModerationActionService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;
@@ -44,6 +55,9 @@ public class ModerationActionService
         _botClientFactory = botClientFactory;
         _telegramOptions = telegramOptions.Value;
         _configService = configService;
+        _serviceProvider = serviceProvider;
+        _messagingService = messagingService;
+        _inviteLinkService = inviteLinkService;
         _logger = logger;
     }
 
@@ -486,7 +500,7 @@ public class ModerationActionService
             var result = new ModerationResult();
             var expiresAt = DateTimeOffset.UtcNow.Add(duration);
 
-            // Temp ban globally (Telegram API handles auto-unrestrict via until_date)
+            // Temp ban globally (permanent ban, will be lifted by background job)
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             foreach (var chat in allChats.Where(c => c.IsActive))
             {
@@ -495,7 +509,6 @@ public class ModerationActionService
                     await botClient.BanChatMember(
                         chatId: chat.ChatId,
                         userId: userId,
-                        untilDate: expiresAt.DateTime,
                         cancellationToken: cancellationToken);
                     result.ChatsAffected++;
                 }
@@ -517,6 +530,60 @@ public class ModerationActionService
                 Reason: reason
             );
             await _userActionsRepository.InsertAsync(banAction, cancellationToken);
+
+            // Schedule automatic unrestriction via TickerQ background job
+            try
+            {
+                var payload = new TempbanExpiryJobPayload(
+                    UserId: userId,
+                    Reason: reason,
+                    ExpiresAt: expiresAt
+                );
+
+                _logger.LogDebug(
+                    "Scheduling TempbanExpiryJob for user {UserId}, expires at {ExpiresAt}",
+                    userId,
+                    expiresAt);
+
+                // Get TickerQ manager from scope (it's scoped, ModerationActionService is scoped)
+                using var tickerScope = _serviceProvider.CreateScope();
+                var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+
+                var executionTime = expiresAt.UtcDateTime; // Use UtcDateTime to preserve timezone
+                var request = TickerHelper.CreateTickerRequest(payload);
+
+                var tickerResult = await timeTickerManager.AddAsync(new TimeTicker
+                {
+                    Function = "TempbanExpiry",
+                    ExecutionTime = executionTime,
+                    Request = request,
+                    Retries = 2, // Retry twice if unban fails
+                    RetryIntervals = [60, 300] // Retry after 1 min, then 5 min
+                });
+
+                if (!tickerResult.IsSucceded)
+                {
+                    throw tickerResult.Exception ?? new InvalidOperationException("TickerQ AddAsync failed without exception");
+                }
+
+                _logger.LogInformation(
+                    "Successfully scheduled TempbanExpiryJob for user {UserId} (JobId: {JobId}, Expires: {ExpiresAt})",
+                    userId,
+                    tickerResult.Result?.Id,
+                    expiresAt);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to schedule TempbanExpiryJob for user {UserId}. User will need manual unbanning at {ExpiresAt}",
+                    userId,
+                    expiresAt);
+                // Don't throw - tempban still succeeded, just missing auto-unrestrict
+            }
+
+            // Send DM notification with rejoin links (both UI and bot command)
+            await SendTempBanNotificationAsync(botClient, userId, reason, duration, cancellationToken);
 
             _logger.LogInformation(
                 "Temp ban action completed: User {UserId} banned from {ChatsAffected} chats until {ExpiresAt}",
@@ -658,6 +725,149 @@ public class ModerationActionService
 
         // Last resort: Telegram user ID
         return $"telegram:{telegramUserId}";
+    }
+
+    /// <summary>
+    /// Send DM notification to tempbanned user with rejoin links for all managed chats.
+    /// Used by both UI and bot command tempban actions.
+    /// No chat fallback - DM only per requirements.
+    /// </summary>
+    private async Task SendTempBanNotificationAsync(
+        ITelegramBotClient botClient,
+        long userId,
+        string reason,
+        TimeSpan duration,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation(
+                "Starting tempban notification for user {UserId}. Reason: {Reason}, Duration: {Duration}",
+                userId, reason, duration);
+
+            var expiresAt = DateTimeOffset.UtcNow.Add(duration);
+
+            // Get all active managed chats to provide rejoin links
+            using var scope = _serviceProvider.CreateScope();
+            var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+            var allChats = await managedChatsRepo.GetAllChatsAsync(cancellationToken);
+            var activeChats = allChats.Where(c => c.IsActive).ToList();
+
+            _logger.LogInformation(
+                "Found {ChatCount} active managed chats for tempban notification",
+                activeChats.Count);
+
+            // Build notification message
+            var notification = $"⏱️ **You have been temporarily banned**\n\n" +
+                              $"**Reason:** {reason}\n" +
+                              $"**Duration:** {FormatDuration(duration)}\n" +
+                              $"**Expires:** {expiresAt:yyyy-MM-dd HH:mm} UTC\n\n" +
+                              $"You will be automatically unbanned after this time.";
+
+            // Collect invite links for all active chats
+            var inviteLinks = new List<(string ChatName, string? InviteLink)>();
+            foreach (var chat in activeChats)
+            {
+                var inviteLink = await _inviteLinkService.GetInviteLinkAsync(botClient, chat.ChatId, cancellationToken);
+                inviteLinks.Add((chat.ChatName ?? $"Chat {chat.ChatId}", inviteLink));
+
+                if (inviteLink != null)
+                {
+                    _logger.LogInformation(
+                        "Retrieved invite link for chat {ChatId} ({ChatName}): {InviteLink}",
+                        chat.ChatId, chat.ChatName, inviteLink);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Failed to retrieve invite link for chat {ChatId} ({ChatName}). User will not receive rejoin link for this chat.",
+                        chat.ChatId, chat.ChatName);
+                }
+            }
+
+            // Add rejoin links section if any links were retrieved
+            var linksWithValues = inviteLinks.Where(l => l.InviteLink != null).ToList();
+            if (linksWithValues.Any())
+            {
+                notification += "\n\n**Rejoin Links:**";
+                foreach (var (chatName, inviteLink) in linksWithValues)
+                {
+                    notification += $"\n• [{chatName}]({inviteLink})";
+                }
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "No invite links could be retrieved for any chat. User will not receive rejoin links.");
+            }
+
+            // Send DM only (no chat fallback per user requirements)
+            // Use first active chat as fallback chat ID (required by SendToUserAsync for potential chat mentions)
+            var fallbackChatId = activeChats.FirstOrDefault()?.ChatId ?? 0;
+
+            _logger.LogInformation(
+                "Attempting to send tempban DM to user {UserId}. Notification length: {Length} characters",
+                userId, notification.Length);
+
+            var result = await _messagingService.SendToUserAsync(
+                botClient,
+                userId: userId,
+                chatId: fallbackChatId,
+                messageText: notification,
+                replyToMessageId: null,
+                cancellationToken: cancellationToken);
+
+            _logger.LogInformation(
+                "Tempban notification delivery result for user {UserId}: Success={Success}, DeliveryMethod={DeliveryMethod}, Error={Error}",
+                userId, result.Success, result.DeliveryMethod, result.ErrorMessage ?? "None");
+
+            if (result.DeliveryMethod == MessageDeliveryMethod.PrivateDm)
+            {
+                _logger.LogInformation(
+                    "✅ Successfully sent tempban notification via DM to user {UserId} with {LinkCount} rejoin links",
+                    userId,
+                    linksWithValues.Count);
+            }
+            else if (result.DeliveryMethod == MessageDeliveryMethod.ChatMention)
+            {
+                _logger.LogInformation(
+                    "⚠️ Tempban notification sent via chat mention fallback for user {UserId} (DM unavailable)",
+                    userId);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "❌ Failed to send tempban notification to user {UserId}. DeliveryMethod: {DeliveryMethod}",
+                    userId, result.DeliveryMethod);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to send tempban notification to user {UserId}",
+                userId);
+            // Non-fatal - tempban still succeeded
+        }
+    }
+
+    /// <summary>
+    /// Format duration for user-friendly display
+    /// </summary>
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalMinutes < 60)
+        {
+            return $"{(int)duration.TotalMinutes} minute{((int)duration.TotalMinutes != 1 ? "s" : "")}";
+        }
+        else if (duration.TotalHours < 24)
+        {
+            return $"{(int)duration.TotalHours} hour{((int)duration.TotalHours != 1 ? "s" : "")}";
+        }
+        else
+        {
+            return $"{(int)duration.TotalDays} day{((int)duration.TotalDays != 1 ? "s" : "")}";
+        }
     }
 
     /// <summary>

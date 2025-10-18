@@ -35,7 +35,7 @@ public class ReportCommand : IBotCommand
         _messagingService = messagingService;
     }
 
-    public async Task<string> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,
@@ -44,7 +44,7 @@ public class ReportCommand : IBotCommand
     {
         if (message.ReplyToMessage == null)
         {
-            return "❌ Please reply to the message you want to report.";
+            return new CommandResult("❌ Please reply to the message you want to report.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var reportedMessage = message.ReplyToMessage;
@@ -53,7 +53,7 @@ public class ReportCommand : IBotCommand
 
         if (reportedUser == null || reporter == null)
         {
-            return "❌ Could not identify users.";
+            return new CommandResult("❌ Could not identify users.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         // Save report to database
@@ -123,14 +123,20 @@ public class ReportCommand : IBotCommand
                 "Report {ReportId} notification sent to {TotalAdmins} admins ({DmCount} via DM, {MentionCount} via chat mention)",
                 reportId, results.Count, dmCount, mentionCount);
 
-            return $"✅ Message reported for admin review (Report #{reportId})\n" +
-                   $"Reported user: @{reportedUser.Username ?? reportedUser.Id.ToString()}\n" +
-                   $"Notified {dmCount} admin(s) via DM, {mentionCount} in chat\n\n" +
-                   $"_Admins will review your report shortly._";
+            return new CommandResult(
+                $"✅ Message reported for admin review (Report #{reportId})\n" +
+                $"Reported user: @{reportedUser.Username ?? reportedUser.Id.ToString()}\n" +
+                $"Notified {dmCount} admin(s) via DM, {mentionCount} in chat\n\n" +
+                $"_Admins will review your report shortly._",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
         }
 
-        return $"✅ Message reported for admin review (Report #{reportId})\n" +
-               $"Reported user: @{reportedUser.Username ?? reportedUser.Id.ToString()}\n\n" +
-               $"_Admins will review your report shortly._";
+        return new CommandResult(
+            $"✅ Message reported for admin review (Report #{reportId})\n" +
+            $"Reported user: @{reportedUser.Username ?? reportedUser.Id.ToString()}\n\n" +
+            $"_Admins will review your report shortly._",
+            DeleteCommandMessage,
+            DeleteResponseAfterSeconds);
     }
 }

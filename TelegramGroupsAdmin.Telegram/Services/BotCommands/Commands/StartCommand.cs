@@ -35,7 +35,7 @@ public class StartCommand : IBotCommand
     public bool DeleteCommandMessage => false;
     public int? DeleteResponseAfterSeconds => null;
 
-    public async Task<string> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,
@@ -45,7 +45,7 @@ public class StartCommand : IBotCommand
         // Only respond to /start in private DMs, ignore in group chats
         if (message.Chat.Type != ChatType.Private)
         {
-            return string.Empty; // Silently ignore /start in group chats
+            return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds); // Silently ignore /start in group chats
         }
 
         // User started a private conversation with the bot - enable DM notifications
@@ -62,12 +62,15 @@ public class StartCommand : IBotCommand
         }
 
         // Default /start response
-        return "👋 Welcome to TelegramGroupsAdmin Bot!\n\n" +
-               "This bot helps manage your Telegram groups with spam detection and moderation tools.\n\n" +
-               "Use /help to see available commands.";
+        return new CommandResult(
+            "👋 Welcome to TelegramGroupsAdmin Bot!\n\n" +
+            "This bot helps manage your Telegram groups with spam detection and moderation tools.\n\n" +
+            "Use /help to see available commands.",
+            DeleteCommandMessage,
+            DeleteResponseAfterSeconds);
     }
 
-    private async Task<string> HandleWelcomeDeepLinkAsync(
+    private async Task<CommandResult> HandleWelcomeDeepLinkAsync(
         ITelegramBotClient botClient,
         Message message,
         string payload,
@@ -77,13 +80,19 @@ public class StartCommand : IBotCommand
         var parts = payload.Split('_');
         if (parts.Length != 3 || !long.TryParse(parts[1], out var chatId) || !long.TryParse(parts[2], out var targetUserId))
         {
-            return "❌ Invalid deep link. Please use the button from the welcome message.";
+            return new CommandResult(
+                "❌ Invalid deep link. Please use the button from the welcome message.",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
         }
 
         // Verify the user clicking is the target user
         if (message.From?.Id != targetUserId)
         {
-            return "❌ This link is not for you. Please use the welcome link sent to you.";
+            return new CommandResult(
+                "❌ This link is not for you. Please use the welcome link sent to you.",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
         }
 
         // Get chat info
@@ -94,7 +103,10 @@ public class StartCommand : IBotCommand
         }
         catch (Exception)
         {
-            return "❌ Unable to retrieve chat information. The bot may have been removed from the chat.";
+            return new CommandResult(
+                "❌ Unable to retrieve chat information. The bot may have been removed from the chat.",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
         }
 
         // Get welcome config (using default for now - TODO: load from database)
@@ -143,6 +155,6 @@ public class StartCommand : IBotCommand
         }
 
         // Don't return a message - the Accept button will trigger the final confirmation
-        return string.Empty;
+        return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 }

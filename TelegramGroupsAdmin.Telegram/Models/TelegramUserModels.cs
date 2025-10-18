@@ -69,6 +69,7 @@ public class TelegramUserDetail
     public string? UserPhotoPath { get; set; }
     public string? PhotoHash { get; set; }
     public bool IsTrusted { get; set; }
+    public bool BotDmEnabled { get; set; }
     public DateTimeOffset FirstSeenAt { get; set; }
     public DateTimeOffset LastSeenAt { get; set; }
 
@@ -112,6 +113,7 @@ public class UserChatMembership
     public int MessageCount { get; set; }
     public DateTimeOffset LastActivityAt { get; set; }
     public DateTimeOffset FirstSeenAt { get; set; }
+    public bool IsBanned { get; set; }
 }
 
 /// <summary>

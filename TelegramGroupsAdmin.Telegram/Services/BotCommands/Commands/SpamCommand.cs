@@ -35,7 +35,7 @@ public class SpamCommand : IBotCommand
         _moderationService = moderationService;
     }
 
-    public async Task<string> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,
@@ -44,7 +44,7 @@ public class SpamCommand : IBotCommand
     {
         if (message.ReplyToMessage == null)
         {
-            return "❌ Please reply to the spam message.";
+            return new CommandResult("❌ Please reply to the spam message.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var spamMessage = message.ReplyToMessage;
@@ -53,7 +53,7 @@ public class SpamCommand : IBotCommand
 
         if (spamUserId == null)
         {
-            return "❌ Could not identify user.";
+            return new CommandResult("❌ Could not identify user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         using var scope = _serviceProvider.CreateScope();
@@ -64,14 +64,14 @@ public class SpamCommand : IBotCommand
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, spamUserId.Value, cancellationToken);
         if (isAdmin)
         {
-            return "❌ Cannot mark admin messages as spam.";
+            return new CommandResult("❌ Cannot mark admin messages as spam.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         // Check if target user is trusted (can't mark trusted messages as spam)
         var isTrusted = await userActionsRepository.IsUserTrustedAsync(spamUserId.Value, message.Chat.Id, cancellationToken);
         if (isTrusted)
         {
-            return "❌ Cannot mark trusted user messages as spam.";
+            return new CommandResult("❌ Cannot mark trusted user messages as spam.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
@@ -93,7 +93,7 @@ public class SpamCommand : IBotCommand
 
         if (!result.Success)
         {
-            return $"❌ Failed to process spam action: {result.ErrorMessage}";
+            return new CommandResult($"❌ Failed to process spam action: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         _logger.LogInformation(
@@ -109,6 +109,6 @@ public class SpamCommand : IBotCommand
             response += "\n⚠️ User trust revoked (compromised account protection)";
         }
 
-        return response;
+        return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 }

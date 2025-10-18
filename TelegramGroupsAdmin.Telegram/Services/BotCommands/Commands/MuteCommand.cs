@@ -33,7 +33,7 @@ public class MuteCommand : IBotCommand
         _moderationService = moderationService;
     }
 
-    public async Task<string> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,
@@ -42,13 +42,13 @@ public class MuteCommand : IBotCommand
     {
         if (message.ReplyToMessage == null)
         {
-            return "❌ Please reply to a message from the user to mute.";
+            return new CommandResult("❌ Please reply to a message from the user to mute.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var targetUser = message.ReplyToMessage.From;
         if (targetUser == null)
         {
-            return "❌ Could not identify target user.";
+            return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         using var scope = _serviceProvider.CreateScope();
@@ -58,7 +58,7 @@ public class MuteCommand : IBotCommand
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id, cancellationToken);
         if (isAdmin)
         {
-            return "❌ Cannot mute chat admins.";
+            return new CommandResult("❌ Cannot mute chat admins.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         // Parse duration (default 5 minutes if not specified or invalid)
@@ -102,7 +102,7 @@ public class MuteCommand : IBotCommand
 
             if (!result.Success)
             {
-                return $"❌ Failed to mute user: {result.ErrorMessage}";
+                return new CommandResult($"❌ Failed to mute user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             // Build success message
@@ -115,12 +115,12 @@ public class MuteCommand : IBotCommand
                 "User {TargetId} ({TargetUsername}) muted by {ExecutorId} in {ChatsAffected} chats for {Duration}. Reason: {Reason}",
                 targetUser.Id, targetUser.Username, message.From?.Id, result.ChatsAffected, duration, reason);
 
-            return response;
+            return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to mute user {UserId}", targetUser.Id);
-            return $"❌ Failed to mute user: {ex.Message}";
+            return new CommandResult($"❌ Failed to mute user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 

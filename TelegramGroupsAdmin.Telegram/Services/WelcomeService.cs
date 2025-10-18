@@ -286,7 +286,7 @@ public class WelcomeService : IWelcomeService
                 using var tickerScope = _serviceProvider.CreateScope();
                 var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
 
-                var executionTime = DateTime.UtcNow.AddSeconds(config.TimeoutSeconds);
+                var executionTime = DateTimeOffset.UtcNow.AddSeconds(config.TimeoutSeconds);
                 var request = TickerHelper.CreateTickerRequest(payload);
 
                 _logger.LogDebug(
@@ -299,7 +299,7 @@ public class WelcomeService : IWelcomeService
                 var result = await timeTickerManager.AddAsync(new TimeTicker
                 {
                     Function = "WelcomeTimeout",
-                    ExecutionTime = executionTime,
+                    ExecutionTime = executionTime.UtcDateTime, // Use UtcDateTime to preserve timezone
                     Request = request,
                     Retries = 1,
                     RetryIntervals = [30] // Retry once after 30s if it fails
@@ -448,10 +448,11 @@ public class WelcomeService : IWelcomeService
 
                     using var tickerScope2 = _serviceProvider.CreateScope();
                     var timeTickerManager2 = tickerScope2.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+                    var deleteExecutionTime = DateTimeOffset.UtcNow.AddSeconds(10);
                     var deleteResult = await timeTickerManager2.AddAsync(new TimeTicker
                     {
                         Function = "DeleteMessage",
-                        ExecutionTime = DateTime.UtcNow.AddSeconds(10),
+                        ExecutionTime = deleteExecutionTime.UtcDateTime, // Use UtcDateTime to preserve timezone
                         Request = TickerHelper.CreateTickerRequest(deletePayload),
                         Retries = 0 // Don't retry - message may have been manually deleted
                     });
@@ -1090,10 +1091,11 @@ public class WelcomeService : IWelcomeService
 
                     using var tickerScope3 = _serviceProvider.CreateScope();
                     var timeTickerManager3 = tickerScope3.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+                    var fallbackExecutionTime = DateTimeOffset.UtcNow.AddSeconds(30);
                     var fallbackDeleteResult = await timeTickerManager3.AddAsync(new TimeTicker
                     {
                         Function = "DeleteMessage",
-                        ExecutionTime = DateTime.UtcNow.AddSeconds(30),
+                        ExecutionTime = fallbackExecutionTime.UtcDateTime, // Use UtcDateTime to preserve timezone
                         Request = TickerHelper.CreateTickerRequest(fallbackDeletePayload),
                         Retries = 0 // Don't retry - message may have been manually deleted
                     });

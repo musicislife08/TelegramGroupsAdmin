@@ -52,6 +52,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<AdminMentionHandler>();
         services.AddScoped<TelegramUserManagementService>(); // Orchestrates Telegram user operations
         services.AddScoped<IUserMessagingService, UserMessagingService>(); // DM with fallback to chat mentions
+        services.AddSingleton<IChatInviteLinkService, ChatInviteLinkService>(); // Phase 4.6: Invite link retrieval
         services.AddSingleton<IWelcomeService, WelcomeService>();
         services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
 

@@ -34,7 +34,7 @@ public class UnbanCommand : IBotCommand
         _moderationService = moderationService;
     }
 
-    public async Task<string> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,
@@ -43,13 +43,13 @@ public class UnbanCommand : IBotCommand
     {
         if (message.ReplyToMessage == null)
         {
-            return "❌ Please reply to a message from the user to unban.";
+            return new CommandResult("❌ Please reply to a message from the user to unban.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         var targetUser = message.ReplyToMessage.From;
         if (targetUser == null)
         {
-            return "❌ Could not identify target user.";
+            return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         try
@@ -72,17 +72,17 @@ public class UnbanCommand : IBotCommand
             // Build response based on result
             if (!result.Success)
             {
-                return $"❌ {result.ErrorMessage}";
+                return new CommandResult($"❌ {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
             }
 
             var response = $"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} unbanned from {result.ChatsAffected} chat(s)";
 
-            return response;
+            return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to unban user {UserId}", targetUser.Id);
-            return $"❌ Failed to unban user: {ex.Message}";
+            return new CommandResult($"❌ Failed to unban user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
 }

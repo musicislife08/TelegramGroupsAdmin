@@ -34,7 +34,7 @@ public class TrustCommand : IBotCommand
         _moderationService = moderationService;
     }
 
-    public async Task<string> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,
@@ -57,16 +57,16 @@ public class TrustCommand : IBotCommand
 
             // Try to find user in chat members (limited by Telegram API - only works for recent messages)
             // For now, return error - need to implement GetChatMember API call
-            return "❌ Username lookup not yet implemented. Please reply to a message from the user.";
+            return new CommandResult("❌ Username lookup not yet implemented. Please reply to a message from the user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         else
         {
-            return "❌ Please reply to a message from the user OR provide username: /trust <username>";
+            return new CommandResult("❌ Please reply to a message from the user OR provide username: /trust <username>", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         if (targetUser == null)
         {
-            return "❌ Could not identify target user.";
+            return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         using var scope = _serviceProvider.CreateScope();
@@ -80,7 +80,7 @@ public class TrustCommand : IBotCommand
 
         if (isAlreadyTrusted)
         {
-            return $"ℹ️ User @{targetUser.Username ?? targetUser.Id.ToString()} is already trusted.";
+            return new CommandResult($"ℹ️ User @{targetUser.Username ?? targetUser.Id.ToString()} is already trusted.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
@@ -104,7 +104,7 @@ public class TrustCommand : IBotCommand
         if (!result.Success)
         {
             _logger.LogError("Failed to trust user {UserId}: {Error}", targetUser.Id, result.ErrorMessage);
-            return $"❌ Failed to trust user: {result.ErrorMessage}";
+            return new CommandResult($"❌ Failed to trust user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         _logger.LogInformation(
@@ -114,7 +114,7 @@ public class TrustCommand : IBotCommand
             message.From?.Id,
             message.Chat.Id);
 
-        return $"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} marked as trusted\n\n" +
-               $"This user's messages will bypass spam detection globally.";
+        return new CommandResult($"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} marked as trusted\n\n" +
+               $"This user's messages will bypass spam detection globally.", DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 }

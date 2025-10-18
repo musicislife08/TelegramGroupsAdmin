@@ -8,6 +8,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
 /// <summary>
 /// /tempban - Temporarily ban user from all managed chats with auto-unrestriction
+/// Sends DM notification with rejoin link if user has bot DM enabled
 /// </summary>
 public class TempBanCommand : IBotCommand
 {
@@ -33,7 +34,7 @@ public class TempBanCommand : IBotCommand
         _moderationService = moderationService;
     }
 
-    public async Task<string> ExecuteAsync(
+    public async Task<CommandResult> ExecuteAsync(
         ITelegramBotClient botClient,
         Message message,
         string[] args,
@@ -42,13 +43,13 @@ public class TempBanCommand : IBotCommand
     {
         if (message.ReplyToMessage == null)
         {
-            return "❌ Please reply to a message from the user to temp ban.";
+            return new CommandResult("❌ Please reply to a message from the user to temp ban.", DeleteCommandMessage);
         }
 
         var targetUser = message.ReplyToMessage.From;
         if (targetUser == null)
         {
-            return "❌ Could not identify target user.";
+            return new CommandResult("❌ Could not identify target user.", DeleteCommandMessage);
         }
 
         using var scope = _serviceProvider.CreateScope();
@@ -58,7 +59,7 @@ public class TempBanCommand : IBotCommand
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, targetUser.Id, cancellationToken);
         if (isAdmin)
         {
-            return "❌ Cannot temp ban chat admins.";
+            return new CommandResult("❌ Cannot temp ban chat admins.", DeleteCommandMessage);
         }
 
         // Parse duration (default 1 hour if not specified or invalid)
@@ -102,10 +103,10 @@ public class TempBanCommand : IBotCommand
 
             if (!result.Success)
             {
-                return $"❌ Failed to temp ban user: {result.ErrorMessage}";
+                return new CommandResult($"❌ Failed to temp ban user: {result.ErrorMessage}", DeleteCommandMessage);
             }
 
-            // Build success message
+            // Build success message (DM notification sent by ModerationActionService)
             var response = $"⏱️ User @{targetUser.Username ?? targetUser.Id.ToString()} temp banned from {result.ChatsAffected} chat(s)\n" +
                           $"Duration: {FormatDuration(duration)}\n" +
                           $"Reason: {reason}\n" +
@@ -115,12 +116,13 @@ public class TempBanCommand : IBotCommand
                 "User {TargetId} ({TargetUsername}) temp banned by {ExecutorId} from {ChatsAffected} chats for {Duration}. Reason: {Reason}",
                 targetUser.Id, targetUser.Username, message.From?.Id, result.ChatsAffected, duration, reason);
 
-            return response;
+            // Return CommandResult with dynamic deletion time matching tempban duration
+            return new CommandResult(response, DeleteCommandMessage, (int)duration.TotalSeconds);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to temp ban user {UserId}", targetUser.Id);
-            return $"❌ Failed to temp ban user: {ex.Message}";
+            return new CommandResult($"❌ Failed to temp ban user: {ex.Message}", DeleteCommandMessage);
         }
     }
 

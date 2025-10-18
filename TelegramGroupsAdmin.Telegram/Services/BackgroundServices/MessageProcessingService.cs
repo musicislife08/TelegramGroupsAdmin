@@ -768,10 +768,11 @@ public partial class MessageProcessingService(
             using var scope = serviceProvider.CreateScope();
             var timeTickerManager = scope.ServiceProvider.GetRequiredService<TickerQ.Utilities.Interfaces.Managers.ITimeTickerManager<TickerQ.Utilities.Models.Ticker.TimeTicker>>();
 
+            var executionTime = DateTimeOffset.UtcNow.AddSeconds(delaySeconds);
             var result = await timeTickerManager.AddAsync(new TickerQ.Utilities.Models.Ticker.TimeTicker
             {
                 Function = "DeleteMessage",
-                ExecutionTime = DateTime.UtcNow.AddSeconds(delaySeconds),
+                ExecutionTime = executionTime.UtcDateTime, // Use UtcDateTime to preserve timezone
                 Request = TickerQ.Utilities.TickerHelper.CreateTickerRequest(deletePayload),
                 Retries = 0 // Don't retry - message may have been manually deleted
             }, cancellationToken);
@@ -818,10 +819,11 @@ public partial class MessageProcessingService(
             using var scope = serviceProvider.CreateScope();
             var timeTickerManager = scope.ServiceProvider.GetRequiredService<TickerQ.Utilities.Interfaces.Managers.ITimeTickerManager<TickerQ.Utilities.Models.Ticker.TimeTicker>>();
 
+            var executionTime = DateTimeOffset.UtcNow; // 0s delay for instant execution
             var result = await timeTickerManager.AddAsync(new TickerQ.Utilities.Models.Ticker.TimeTicker
             {
                 Function = "FetchUserPhoto",
-                ExecutionTime = DateTime.UtcNow, // 0s delay for instant execution
+                ExecutionTime = executionTime.UtcDateTime, // Use UtcDateTime to preserve timezone
                 Request = TickerQ.Utilities.TickerHelper.CreateTickerRequest(photoPayload),
                 Retries = 2 // Retry on Telegram API failures
             }, cancellationToken);
