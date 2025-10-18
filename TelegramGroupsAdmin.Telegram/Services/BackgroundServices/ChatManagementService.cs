@@ -408,6 +408,12 @@ public class ChatManagementService(
             var admins = await botClient.GetChatAdministrators(chatId, cancellationToken);
             health.AdminCount = admins.Length;
 
+            // Validate and refresh cached invite link (private groups only)
+            if (chat.Type == ChatType.Supergroup && string.IsNullOrEmpty(chat.Username))
+            {
+                await ValidateInviteLinkAsync(botClient, chatId, cancellationToken);
+            }
+
             // Determine overall status
             health.Status = "Healthy";
             health.Warnings.Clear();
@@ -466,6 +472,38 @@ public class ChatManagementService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to refresh health for all chats");
+        }
+    }
+
+    /// <summary>
+    /// Validate and refresh cached invite link from Telegram API
+    /// Only applies to private supergroups (not public chats with usernames)
+    /// Ensures cached invite link is still valid and updates it if Telegram has changed it
+    /// </summary>
+    private async Task ValidateInviteLinkAsync(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var inviteLinkService = scope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
+
+            // Force refresh from Telegram API to validate/update cached link
+            // This ensures the link is current and handles cases where admin revoked old link
+            var inviteLink = await inviteLinkService.RefreshInviteLinkAsync(botClient, chatId, cancellationToken);
+
+            if (inviteLink != null)
+            {
+                logger.LogDebug("Validated and refreshed invite link for chat {ChatId}", chatId);
+            }
+            else
+            {
+                logger.LogWarning("Could not validate/refresh invite link for chat {ChatId} - bot may lack admin permissions", chatId);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Non-fatal - invite link validation failure shouldn't fail health check
+            logger.LogWarning(ex, "Failed to validate invite link for chat {ChatId}", chatId);
         }
     }
 }

@@ -633,10 +633,21 @@ public class WelcomeService : IWelcomeService
                 return;
             }
 
+            // Get chat's default permissions to restore user to group defaults
+            var chat = await botClient.GetChat(chatId, cancellationToken);
+            var defaultPermissions = chat.Permissions ?? CreateDefaultPermissions();
+
+            _logger.LogDebug(
+                "Restoring user {UserId} to chat {ChatId} default permissions: Messages={CanSendMessages}, Media={CanSendPhotos}",
+                userId,
+                chatId,
+                defaultPermissions.CanSendMessages,
+                defaultPermissions.CanSendPhotos);
+
             await botClient.RestrictChatMember(
                 chatId: chatId,
                 userId: userId,
-                permissions: CreateDefaultPermissions(),
+                permissions: defaultPermissions,
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
@@ -989,15 +1000,62 @@ public class WelcomeService : IWelcomeService
         // Step 6: Update welcome response record (mark as accepted via DM)
         await WithRepositoryAsync((repo, ct) => repo.UpdateResponseAsync(welcomeResponse.Id, WelcomeResponseType.Accepted, dmSent: true, dmFallback: false, ct), cancellationToken);
 
-        // Step 6: Send confirmation to user in DM
+        // Step 7: Send confirmation to user in DM with button to return to chat
         try
         {
             var chat = await botClient.GetChat(groupChatId, cancellationToken);
             var chatName = chat.Title ?? "the chat";
 
+            // Build deep link to navigate to chat (not join - user is already member)
+            // For public chats (with username), use t.me/username
+            // For private chats, use tg://resolve?domain= or tg://privatepost for navigation
+            string? chatDeepLink = null;
+
+            if (!string.IsNullOrEmpty(chat.Username))
+            {
+                // Public chat - use username link (works in both web and app)
+                chatDeepLink = $"https://t.me/{chat.Username}";
+                _logger.LogDebug("Using public chat link for {ChatId}: {Link}", groupChatId, chatDeepLink);
+            }
+            else
+            {
+                // Private chat - unfortunately there's no reliable deep link for private chats by ID alone
+                // The best we can do is use the invite link which will open the chat if already a member
+                using var inviteLinkScope = _serviceProvider.CreateScope();
+                var inviteLinkService = inviteLinkScope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
+                chatDeepLink = await inviteLinkService.GetInviteLinkAsync(botClient, groupChatId, cancellationToken);
+
+                if (chatDeepLink != null)
+                {
+                    _logger.LogDebug("Using invite link for private chat {ChatId}: {Link}", groupChatId, chatDeepLink);
+                }
+                else
+                {
+                    _logger.LogWarning("Could not get invite link for private chat {ChatId}", groupChatId);
+                }
+            }
+
+            InlineKeyboardMarkup? keyboard = null;
+            if (chatDeepLink != null)
+            {
+                keyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new[]
+                    {
+                        InlineKeyboardButton.WithUrl($"💬 Return to {chatName}", chatDeepLink)
+                    }
+                });
+
+                _logger.LogInformation(
+                    "Sent confirmation with chat deep link to user {UserId}: {DeepLink}",
+                    user.Id,
+                    chatDeepLink);
+            }
+
             await botClient.SendMessage(
                 chatId: user.Id,
                 text: $"✅ Welcome! You can now participate in {chatName}.",
+                replyMarkup: keyboard,
                 cancellationToken: cancellationToken);
         }
         catch (Exception ex)

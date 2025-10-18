@@ -56,6 +56,14 @@ public class ConfigRecordDto
     public string? BotProtectionConfig { get; set; }
 
     /// <summary>
+    /// Cached permanent invite link for this chat (NULL for global config or public chats)
+    /// Used for return-to-chat buttons in DM notifications (welcome, tempban, etc.)
+    /// Automatically created/reused by ChatInviteLinkService
+    /// </summary>
+    [Column("invite_link")]
+    public string? InviteLink { get; set; }
+
+    /// <summary>
     /// When this config was created (UTC timestamp)
     /// </summary>
     [Column("created_at")]
