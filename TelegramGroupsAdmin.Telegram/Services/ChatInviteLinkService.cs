@@ -90,11 +90,13 @@ public class ChatInviteLinkService : IChatInviteLinkService
     {
         try
         {
-            // Force refresh from Telegram API (ignore cache)
+            // Fetch current link from Telegram API
+            // FetchAndCacheInviteLinkAsync will compare with cache and only update if different
             using var scope = _serviceProvider.CreateScope();
             var configRepo = scope.ServiceProvider.GetRequiredService<IConfigRepository>();
 
-            _logger.LogDebug("Force refreshing invite link for chat {ChatId}", chatId);
+            _logger.LogDebug("Refreshing invite link from Telegram for chat {ChatId}", chatId);
+
             return await FetchAndCacheInviteLinkAsync(botClient, chatId, configRepo, ct);
         }
         catch (Exception ex)
@@ -108,7 +110,8 @@ public class ChatInviteLinkService : IChatInviteLinkService
     }
 
     /// <summary>
-    /// Fetch invite link from Telegram API and cache in database
+    /// Fetch current invite link from Telegram API and cache in database
+    /// Only updates cache if link has changed (reduces unnecessary writes)
     /// </summary>
     private async Task<string?> FetchAndCacheInviteLinkAsync(
         ITelegramBotClient botClient,
@@ -119,26 +122,41 @@ public class ChatInviteLinkService : IChatInviteLinkService
         // Get chat info from Telegram
         var chat = await botClient.GetChat(chatId, ct);
 
-        string? inviteLink;
+        string? currentLink;
 
         // Public group - use username link (e.g., https://t.me/groupname)
         if (!string.IsNullOrEmpty(chat.Username))
         {
-            inviteLink = $"https://t.me/{chat.Username}";
-            _logger.LogDebug("Got public invite link for chat {ChatId}: {Link}", chatId, inviteLink);
+            currentLink = $"https://t.me/{chat.Username}";
+            _logger.LogDebug("Got public invite link for chat {ChatId}: {Link}", chatId, currentLink);
         }
         else
         {
-            // Private group - use primary invite link (permanent and reusable)
-            // ExportChatInviteLink returns the main link (same as the one in chat settings)
-            inviteLink = await botClient.ExportChatInviteLink(chatId, ct);
-            _logger.LogDebug("Exported primary invite link for private chat {ChatId}", chatId);
+            // Private group - check if we already have a cached link
+            // ExportChatInviteLink GENERATES a new link (revokes old), so we must avoid calling it
+            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, ct);
+
+            if (cachedConfig?.InviteLink != null)
+            {
+                // Use cached link - don't call ExportChatInviteLink (it would revoke this one)
+                _logger.LogDebug("Using existing cached invite link for private chat {ChatId}", chatId);
+                return cachedConfig.InviteLink;
+            }
+
+            // No cached link - export the primary link (this WILL revoke any previous primary link)
+            // This should only happen on first setup
+            currentLink = await botClient.ExportChatInviteLink(chatId, ct);
+            _logger.LogWarning(
+                "Exported PRIMARY invite link for private chat {ChatId} - this revokes previous primary link! " +
+                "Link: {Link}",
+                chatId,
+                currentLink);
+
+            // Cache it so we never call ExportChatInviteLink again for this chat
+            await configRepo.SaveInviteLinkAsync(chatId, currentLink, ct);
+            return currentLink;
         }
 
-        // Cache the invite link in database for future requests
-        await configRepo.SaveInviteLinkAsync(chatId, inviteLink, ct);
-        _logger.LogInformation("Cached invite link for chat {ChatId}", chatId);
-
-        return inviteLink;
+        return currentLink;
     }
 }

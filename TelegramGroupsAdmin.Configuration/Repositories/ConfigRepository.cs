@@ -33,6 +33,18 @@ public interface IConfigRepository
     /// Save/update invite link for a chat (upserts config row if needed)
     /// </summary>
     Task SaveInviteLinkAsync(long chatId, string inviteLink, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Clear cached invite link for a chat (set to null)
+    /// Use when link is known to be invalid/revoked
+    /// </summary>
+    Task ClearInviteLinkAsync(long chatId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Clear all cached invite links (for all chats)
+    /// Use when admin regenerates all chat links or troubleshooting
+    /// </summary>
+    Task ClearAllInviteLinksAsync(CancellationToken cancellationToken = default);
 }
 
 public class ConfigRepository(AppDbContext context) : IConfigRepository
@@ -113,5 +125,36 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ClearInviteLinkAsync(long chatId, CancellationToken cancellationToken = default)
+    {
+        var existing = await _context.Configs
+            .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
+
+        if (existing != null)
+        {
+            existing.InviteLink = null;
+            existing.UpdatedAt = DateTimeOffset.UtcNow;
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    public async Task ClearAllInviteLinksAsync(CancellationToken cancellationToken = default)
+    {
+        var configsWithLinks = await _context.Configs
+            .Where(c => c.InviteLink != null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var config in configsWithLinks)
+        {
+            config.InviteLink = null;
+            config.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        if (configsWithLinks.Any())
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
     }
 }

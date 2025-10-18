@@ -476,9 +476,10 @@ public class ChatManagementService(
     }
 
     /// <summary>
-    /// Validate and refresh cached invite link from Telegram API
+    /// Validate and update cached invite link from Telegram
     /// Only applies to private supergroups (not public chats with usernames)
-    /// Ensures cached invite link is still valid and updates it if Telegram has changed it
+    /// Fetches current primary link from Telegram and updates cache if changed
+    /// Detects when admin changes/revokes link and keeps cache in sync
     /// </summary>
     private async Task ValidateInviteLinkAsync(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken = default)
     {
@@ -487,17 +488,17 @@ public class ChatManagementService(
             using var scope = serviceProvider.CreateScope();
             var inviteLinkService = scope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
 
-            // Force refresh from Telegram API to validate/update cached link
-            // This ensures the link is current and handles cases where admin revoked old link
+            // Refresh from Telegram API to validate and update if needed
+            // This fetches the current primary link and only writes to DB if it changed
             var inviteLink = await inviteLinkService.RefreshInviteLinkAsync(botClient, chatId, cancellationToken);
 
             if (inviteLink != null)
             {
-                logger.LogDebug("Validated and refreshed invite link for chat {ChatId}", chatId);
+                logger.LogDebug("Validated invite link for chat {ChatId}", chatId);
             }
             else
             {
-                logger.LogWarning("Could not validate/refresh invite link for chat {ChatId} - bot may lack admin permissions", chatId);
+                logger.LogWarning("Could not validate invite link for chat {ChatId} - bot may lack admin permissions", chatId);
             }
         }
         catch (Exception ex)
