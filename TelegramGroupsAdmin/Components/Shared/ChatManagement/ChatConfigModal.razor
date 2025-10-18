@@ -13,6 +13,7 @@
 @inject ITelegramUserMappingRepository TelegramMappingsRepository
 @inject IUserManagementService UserManagementService
 @inject TelegramGroupsAdmin.Configuration.Services.IConfigService ConfigService
+@inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
 
 <MudDialog>
     <DialogContent>
@@ -83,6 +84,49 @@
                                 }
                             </MudPaper>
                         }
+
+                        <!-- Cached Invite Link -->
+                        <MudPaper Elevation="1" Class="pa-4">
+                            <MudText Typo="Typo.h6" GutterBottom="true">Cached Invite Link</MudText>
+                            @if (!string.IsNullOrEmpty(_cachedInviteLink))
+                            {
+                                <MudStack Spacing="2">
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                        Used for "Return to Chat" buttons in DM notifications (welcome, tempban, etc.)
+                                    </MudText>
+                                    <MudTextField @bind-Value="_cachedInviteLink"
+                                                  Label="Current Cached Link"
+                                                  Variant="Variant.Outlined"
+                                                  ReadOnly="true"
+                                                  Adornment="Adornment.End"
+                                                  AdornmentIcon="@Icons.Material.Filled.Link" />
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Warning"
+                                               StartIcon="@Icons.Material.Filled.Refresh"
+                                               OnClick="ClearCachedInviteLink"
+                                               Disabled="_clearingLink">
+                                        @if (_clearingLink)
+                                        {
+                                            <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                                            <span>Clearing...</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Clear Cached Link</span>
+                                        }
+                                    </MudButton>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        Clear this if admins regenerated the invite link in Telegram. The next health check (within 1 minute) will fetch and cache the fresh link.
+                                    </MudText>
+                                </MudStack>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Info">
+                                    No invite link cached yet. The health check will fetch and cache it within 1 minute.
+                                </MudAlert>
+                            }
+                        </MudPaper>
 
                         <!-- Info message about automatic updates -->
                         <MudAlert Severity="Severity.Info">
@@ -294,12 +338,16 @@
     private List<ChatAdmin>? _admins;
     private Dictionary<long, string> _adminLinkages = new();
 
+    // Invite Link
+    private string? _cachedInviteLink;
+    private bool _clearingLink;
+
     protected override async Task OnInitializedAsync()
     {
         _healthStatus = ChatInfo.HealthStatus;
         _useCustomConfig = ChatInfo.HasCustomSpamConfig;
         _useCustomWelcomeConfig = ChatInfo.HasCustomWelcomeConfig;
-        await LoadAdminsAsync();
+        await Task.WhenAll(LoadAdminsAsync(), LoadCachedInviteLinkAsync());
     }
 
     private async Task LoadAdminsAsync()
@@ -437,6 +485,40 @@
         finally
         {
             _savingWelcomeConfig = false;
+        }
+    }
+
+    private async Task LoadCachedInviteLinkAsync()
+    {
+        try
+        {
+            var config = await ConfigRepository.GetByChatIdAsync(ChatInfo.Chat.ChatId);
+            _cachedInviteLink = config?.InviteLink;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load cached invite link: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ClearCachedInviteLink()
+    {
+        _clearingLink = true;
+        try
+        {
+            await ConfigRepository.ClearInviteLinkAsync(ChatInfo.Chat.ChatId);
+            _cachedInviteLink = null;
+            Snackbar.Add(
+                "Cleared cached invite link for this chat. The next health check (within 1 minute) will fetch a fresh link from Telegram.",
+                Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to clear invite link: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _clearingLink = false;
         }
     }
 

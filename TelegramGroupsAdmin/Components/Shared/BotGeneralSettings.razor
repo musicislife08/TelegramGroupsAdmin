@@ -2,13 +2,8 @@
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Services
 @using TelegramGroupsAdmin.Configuration.Repositories
-@using TelegramGroupsAdmin.Telegram.Repositories
-@using TelegramGroupsAdmin.Data
-@using Microsoft.EntityFrameworkCore
 @inject IConfigService ConfigService
 @inject IConfigRepository ConfigRepository
-@inject IManagedChatsRepository ManagedChatsRepository
-@inject AppDbContext DbContext
 @inject ISnackbar Snackbar
 
 <MudPaper Class="pa-4" Elevation="1">
@@ -125,79 +120,32 @@
 </MudPaper>
 
 <MudPaper Class="pa-4 mt-4" Elevation="1">
-    <MudText Typo="Typo.h6" GutterBottom="true">Cached Invite Links</MudText>
+    <MudText Typo="Typo.h6" GutterBottom="true">Cached Invite Links (Global)</MudText>
     <MudText Typo="Typo.body2" Class="mb-4">
-        Manage cached invite links for DM notifications (welcome, tempban, etc.)
+        Bulk clear all cached invite links across all managed chats.
     </MudText>
 
-    @if (_loadingLinks)
-    {
-        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-    }
-    else if (_chatLinks.Any())
-    {
-        <MudTable Items="@_chatLinks" Hover="true" Dense="true" Class="mb-4">
-            <HeaderContent>
-                <MudTh>Chat Name</MudTh>
-                <MudTh>Chat Type</MudTh>
-                <MudTh>Invite Link</MudTh>
-                <MudTh>Actions</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Chat Name">@context.ChatName</MudTd>
-                <MudTd DataLabel="Chat Type">@context.ChatType</MudTd>
-                <MudTd DataLabel="Invite Link">
-                    @if (!string.IsNullOrEmpty(context.InviteLink))
-                    {
-                        <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="font-family: monospace;">
-                            @(context.InviteLink.Length > 40 ? context.InviteLink.Substring(0, 40) + "..." : context.InviteLink)
-                        </MudText>
-                    }
-                    else
-                    {
-                        <MudText Typo="Typo.caption" Class="mud-text-disabled">Not cached</MudText>
-                    }
-                </MudTd>
-                <MudTd DataLabel="Actions">
-                    <MudButton Size="Size.Small"
-                               Variant="Variant.Text"
-                               Color="Color.Warning"
-                               StartIcon="@Icons.Material.Filled.Refresh"
-                               OnClick="@(() => ClearInviteLink(context.ChatId))"
-                               Disabled="string.IsNullOrEmpty(context.InviteLink) || _clearingLinks">
-                        Clear
-                    </MudButton>
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
+    <MudButton Variant="Variant.Outlined"
+               Color="Color.Warning"
+               StartIcon="@Icons.Material.Filled.DeleteSweep"
+               OnClick="ClearAllInviteLinks"
+               Disabled="_clearingLinks">
+        @if (_clearingLinks)
+        {
+            <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+            <span>Clearing...</span>
+        }
+        else
+        {
+            <span>Clear All Cached Links</span>
+        }
+    </MudButton>
 
-        <MudButton Variant="Variant.Outlined"
-                   Color="Color.Warning"
-                   StartIcon="@Icons.Material.Filled.DeleteSweep"
-                   OnClick="ClearAllInviteLinks"
-                   Disabled="_clearingLinks || !_chatLinks.Any(c => !string.IsNullOrEmpty(c.InviteLink))">
-            @if (_clearingLinks)
-            {
-                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
-                <span>Clearing...</span>
-            }
-            else
-            {
-                <span>Clear All Cached Links</span>
-            }
-        </MudButton>
-    }
-    else
-    {
-        <MudAlert Severity="Severity.Info">No managed chats found.</MudAlert>
-    }
-
-    <MudAlert Severity="Severity.Warning" Class="mt-4">
+    <MudAlert Severity="Severity.Info" Class="mt-4">
         <MudText Typo="Typo.body2">
-            <strong>When to use this:</strong><br/>
-            • After admins regenerate chat invite links in Telegram<br/>
-            • If "Return to Chat" buttons in DMs stop working<br/>
-            • To force the bot to fetch fresh invite links from Telegram<br/>
+            <strong>Per-Chat Management:</strong><br/>
+            • To clear a single chat's cached link, go to that chat's configuration dialog (Health & Status tab)<br/>
+            • Use this global button only when regenerating all invite links at once<br/>
             <br/>
             <strong>Note:</strong> The next health check (within 1 minute) will automatically cache new links.
         </MudText>
@@ -210,22 +158,12 @@
     private bool _loading = true;
     private bool _saving = false;
     private bool _clearingLinks = false;
-    private bool _loadingLinks = true;
     private BotProtectionConfig? _config;
     private string _whitelistText = "";
-    private List<ChatLinkInfo> _chatLinks = new();
-
-    private class ChatLinkInfo
-    {
-        public long ChatId { get; set; }
-        public string ChatName { get; set; } = "";
-        public string ChatType { get; set; } = "";
-        public string? InviteLink { get; set; }
-    }
 
     protected override async Task OnInitializedAsync()
     {
-        await Task.WhenAll(LoadConfig(), LoadChatLinks());
+        await LoadConfig();
     }
 
     private async Task LoadConfig()
@@ -283,72 +221,12 @@
         Snackbar.Add("Defaults loaded. Click 'Save Configuration' to apply.", Severity.Info);
     }
 
-    private async Task LoadChatLinks()
-    {
-        _loadingLinks = true;
-        try
-        {
-            // Get all managed chats
-            var managedChats = await ManagedChatsRepository.GetAllChatsAsync();
-
-            // Get all configs with invite links
-            var configsWithLinks = await DbContext.Configs
-                .Where(c => c.ChatId != null)
-                .Select(c => new { c.ChatId, c.InviteLink })
-                .ToDictionaryAsync(c => c.ChatId!.Value, c => c.InviteLink);
-
-            // Combine the data
-            _chatLinks = managedChats.Select(chat => new ChatLinkInfo
-            {
-                ChatId = chat.ChatId,
-                ChatName = chat.ChatName ?? "Unknown",
-                ChatType = chat.ChatType.ToString(),
-                InviteLink = configsWithLinks.TryGetValue(chat.ChatId, out var link) ? link : null
-            }).ToList();
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to load chat links: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _loadingLinks = false;
-        }
-    }
-
-    private async Task ClearInviteLink(long chatId)
-    {
-        _clearingLinks = true;
-        try
-        {
-            await ConfigRepository.ClearInviteLinkAsync(chatId);
-
-            // Reload the links table
-            await LoadChatLinks();
-
-            Snackbar.Add(
-                "Cleared cached invite link for this chat. The next health check (within 1 minute) will fetch a fresh link from Telegram.",
-                Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to clear invite link: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _clearingLinks = false;
-        }
-    }
-
     private async Task ClearAllInviteLinks()
     {
         _clearingLinks = true;
         try
         {
             await ConfigRepository.ClearAllInviteLinksAsync();
-
-            // Reload the links table
-            await LoadChatLinks();
 
             Snackbar.Add(
                 "Cleared all cached invite links. The next health check (within 1 minute) will fetch fresh links from Telegram.",
