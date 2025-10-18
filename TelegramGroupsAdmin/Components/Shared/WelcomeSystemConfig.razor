@@ -28,6 +28,29 @@
                     </MudText>
                 </MudItem>
 
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" GutterBottom="true">Welcome Mode</MudText>
+                    <MudRadioGroup @bind-Value="_config.Mode" Disabled="!_config.Enabled">
+                        <MudRadio Value="@WelcomeMode.DmWelcome" Color="Color.Primary">
+                            <MudText>
+                                <strong>DM Welcome</strong> - Rules sent privately via bot DM
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary ml-6">
+                                Clean group chat, forces users to interact with bot privately. Shows "Read Rules" button.
+                            </MudText>
+                        </MudRadio>
+
+                        <MudRadio Value="@WelcomeMode.ChatAcceptDeny" Color="Color.Primary" Class="mt-2">
+                            <MudText>
+                                <strong>Chat Accept/Deny</strong> - Rules shown in group with buttons
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary ml-6">
+                                Faster onboarding, rules visible to all. Shows Accept/Deny buttons in chat.
+                            </MudText>
+                        </MudRadio>
+                    </MudRadioGroup>
+                </MudItem>
+
                 <MudItem xs="12" md="6">
                     <MudNumericField @bind-Value="_config.TimeoutSeconds"
                                      Label="Timeout (seconds)"

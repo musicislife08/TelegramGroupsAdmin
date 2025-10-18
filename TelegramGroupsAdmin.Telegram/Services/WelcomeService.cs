@@ -526,37 +526,59 @@ public class WelcomeService : IWelcomeService
         var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
         var messageText = config.ChatWelcomeTemplate.Replace("{username}", username);
 
-        // Get bot username for deep link
-        var botInfo = await botClient.GetMe(cancellationToken);
-        var deepLink = $"https://t.me/{botInfo.Username}?start=welcome_{chatId}_{user.Id}";
-
-        // Encode user ID in callback data for validation + deep link button for DM
-        // DM button on top to encourage private rules delivery
-        var keyboard = new InlineKeyboardMarkup(new[]
+        // Add rules to chat message ONLY in ChatAcceptDeny mode
+        if (config.Mode == WelcomeMode.ChatAcceptDeny)
         {
-            new[]
+            messageText += $"\n\n📜 **Rules:**\n{config.RulesText}";
+        }
+
+        // Build keyboard based on welcome mode
+        InlineKeyboardMarkup keyboard;
+
+        if (config.Mode == WelcomeMode.DmWelcome)
+        {
+            // DM Welcome mode: Single row with deep link button
+            var botInfo = await botClient.GetMe(cancellationToken);
+            var deepLink = $"https://t.me/{botInfo.Username}?start=welcome_{chatId}_{user.Id}";
+
+            keyboard = new InlineKeyboardMarkup(new[]
             {
-                InlineKeyboardButton.WithUrl("📖 Read Rules (Opens Bot Chat)", deepLink)
-            },
-            new[]
+                new[]
+                {
+                    InlineKeyboardButton.WithUrl("📖 Read Rules (Opens Bot Chat)", deepLink)
+                }
+            });
+
+            _logger.LogInformation(
+                "Sent DM welcome message {MessageId} to user {UserId} in chat {ChatId} with deep link: {DeepLink}",
+                0, // Will be set after send
+                user.Id,
+                chatId,
+                deepLink);
+        }
+        else // ChatAcceptDeny
+        {
+            // Chat Accept/Deny mode: Single row with Accept/Deny buttons
+            keyboard = new InlineKeyboardMarkup(new[]
             {
-                InlineKeyboardButton.WithCallbackData(config.AcceptButtonText, $"welcome_accept:{user.Id}"),
-                InlineKeyboardButton.WithCallbackData(config.DenyButtonText, $"welcome_deny:{user.Id}")
-            }
-        });
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData(config.AcceptButtonText, $"welcome_accept:{user.Id}"),
+                    InlineKeyboardButton.WithCallbackData(config.DenyButtonText, $"welcome_deny:{user.Id}")
+                }
+            });
+
+            _logger.LogInformation(
+                "Sent chat accept/deny welcome message to user {UserId} in chat {ChatId}",
+                user.Id,
+                chatId);
+        }
 
         var message = await botClient.SendMessage(
             chatId: chatId,
             text: messageText,
             replyMarkup: keyboard,
             cancellationToken: cancellationToken);
-
-        _logger.LogInformation(
-            "Sent welcome message {MessageId} to user {UserId} in chat {ChatId} with deep link: {DeepLink}",
-            message.MessageId,
-            user.Id,
-            chatId,
-            deepLink);
 
         return message;
     }

@@ -31,12 +31,25 @@ public enum WelcomeResponseType
 }
 
 /// <summary>
+/// Welcome message delivery mode
+/// </summary>
+public enum WelcomeMode
+{
+    /// <summary>Rules sent via DM with deep link button (clean group chat)</summary>
+    DmWelcome = 0,
+
+    /// <summary>Rules shown in chat with Accept/Deny buttons (faster onboarding)</summary>
+    ChatAcceptDeny = 1
+}
+
+/// <summary>
 /// Configuration for welcome message system
 /// Stored in configs table as JSONB
 /// </summary>
 public class WelcomeConfig
 {
     public bool Enabled { get; set; }
+    public WelcomeMode Mode { get; set; } = WelcomeMode.ChatAcceptDeny;
     public int TimeoutSeconds { get; set; }
     public string ChatWelcomeTemplate { get; set; } = string.Empty;
     public string DmTemplate { get; set; } = string.Empty;
@@ -51,6 +64,7 @@ public class WelcomeConfig
     public static WelcomeConfig Default => new()
     {
         Enabled = true,
+        Mode = WelcomeMode.ChatAcceptDeny, // Default to chat mode for backward compatibility
         TimeoutSeconds = 60,
         ChatWelcomeTemplate = "👋 Welcome {username}!\n\nTo participate in this chat, please read and accept our rules.\n\n📖 Click \"Read Rules\" below, then click the START button to receive the rules privately.",
         DmTemplate = "Welcome to {chat_name}! Here are our rules:\n\n{rules_text}\n\n✅ Click \"I Accept\" below, or return to the chat to accept there.",
