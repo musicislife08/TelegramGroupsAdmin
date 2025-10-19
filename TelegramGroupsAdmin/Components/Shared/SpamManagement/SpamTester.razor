@@ -2,7 +2,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using Microsoft.JSInterop
 @using TelegramGroupsAdmin.Telegram.Services
-@inject ISpamCheckCoordinator SpamCheckOrchestrator
+@inject IContentCheckCoordinator SpamCheckOrchestrator
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
 @implements IDisposable
@@ -178,7 +178,7 @@
     private IBrowserFile? _selectedImage;
     private byte[]? _pastedImageData;
     private bool _isRunning;
-    private SpamCheckCoordinatorResult? _result;
+    private ContentCheckCoordinatorResult? _result;
     private DotNetObjectReference<SpamTester>? _dotNetHelper;
     private bool _pasteListenerSetup = false;
 

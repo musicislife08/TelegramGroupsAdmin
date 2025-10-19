@@ -24,6 +24,9 @@ public class SpamCheckConfigRecordDto
     [Column("enabled")]
     public bool Enabled { get; set; }
 
+    [Column("always_run")]
+    public bool AlwaysRun { get; set; }
+
     [Column("confidence_threshold")]
     public int? ConfidenceThreshold { get; set; }
 

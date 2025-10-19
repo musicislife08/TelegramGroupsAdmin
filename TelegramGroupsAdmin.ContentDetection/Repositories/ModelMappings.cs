@@ -30,4 +30,37 @@ internal static class ModelMappings
     }
 
     // NOTE: TrainingSample mappings removed - training data comes from detection_results.used_for_training
+
+    // ContentCheckConfig mappings (Phase 4.14: Critical Checks Infrastructure)
+
+    public static DomainModels.ContentCheckConfig ToModel(this DataModels.SpamCheckConfigRecordDto dto)
+    {
+        return new DomainModels.ContentCheckConfig(
+            Id: dto.Id,
+            ChatId: dto.ChatId,
+            CheckName: dto.CheckName,
+            Enabled: dto.Enabled,
+            AlwaysRun: dto.AlwaysRun,
+            ConfidenceThreshold: dto.ConfidenceThreshold,
+            ConfigurationJson: dto.ConfigurationJson,
+            ModifiedDate: dto.ModifiedDate,
+            ModifiedBy: dto.ModifiedBy
+        );
+    }
+
+    public static DataModels.SpamCheckConfigRecordDto ToDto(this DomainModels.ContentCheckConfig model)
+    {
+        return new()
+        {
+            Id = model.Id,
+            ChatId = model.ChatId,
+            CheckName = model.CheckName,
+            Enabled = model.Enabled,
+            AlwaysRun = model.AlwaysRun,
+            ConfidenceThreshold = model.ConfidenceThreshold,
+            ConfigurationJson = model.ConfigurationJson,
+            ModifiedDate = model.ModifiedDate,
+            ModifiedBy = model.ModifiedBy
+        };
+    }
 }

@@ -435,7 +435,7 @@ public partial class MessageProcessingService(
             {
                 _ = Task.Run(async () =>
                 {
-                    await RunSpamDetectionAsync(message, text, editVersion: 0, CancellationToken.None);
+                    await RunSpamDetectionAsync(botClient, message, text, editVersion: 0, CancellationToken.None);
                 }, CancellationToken.None);
             }
         }
@@ -452,7 +452,7 @@ public partial class MessageProcessingService(
     /// <summary>
     /// Handle edited messages: save edit history, update message, re-scan for spam
     /// </summary>
-    public async Task HandleEditedMessageAsync(Message editedMessage, CancellationToken cancellationToken = default)
+    public async Task HandleEditedMessageAsync(ITelegramBotClient botClient, Message editedMessage, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -539,7 +539,7 @@ public partial class MessageProcessingService(
                             ? existingResults.Max(r => r.EditVersion)
                             : 0;
 
-                        await RunSpamDetectionAsync(editedMessage, newText, editVersion: maxEditVersion + 1, CancellationToken.None);
+                        await RunSpamDetectionAsync(botClient, editedMessage, newText, editVersion: maxEditVersion + 1, CancellationToken.None);
                     }
                     catch (Exception ex)
                     {
@@ -559,12 +559,12 @@ public partial class MessageProcessingService(
     /// <summary>
     /// Run spam detection on a message and take appropriate actions
     /// </summary>
-    private async Task RunSpamDetectionAsync(Message message, string text, int editVersion, CancellationToken cancellationToken = default)
+    private async Task RunSpamDetectionAsync(ITelegramBotClient botClient, Message message, string text, int editVersion, CancellationToken cancellationToken = default)
     {
         try
         {
             using var scope = serviceProvider.CreateScope();
-            var coordinator = scope.ServiceProvider.GetRequiredService<ISpamCheckCoordinator>();
+            var coordinator = scope.ServiceProvider.GetRequiredService<IContentCheckCoordinator>();
             var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
             var spamDetectionEngine = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IContentDetectionEngine>();
 
@@ -577,6 +577,28 @@ public partial class MessageProcessingService(
             };
 
             var result = await coordinator.CheckAsync(request, cancellationToken);
+
+            // Phase 4.14: Handle critical check violations FIRST (before regular spam)
+            // Critical violations apply to ALL users (trusted/admin included)
+            if (result.HasCriticalViolations)
+            {
+                logger.LogWarning(
+                    "Critical check violations detected for message {MessageId} from user {UserId}: {Violations}",
+                    message.MessageId,
+                    message.From?.Id,
+                    string.Join("; ", result.CriticalCheckViolations));
+
+                // Use SpamActionService to handle critical violations
+                // Policy: Delete + DM notice, NO ban/warn for trusted/admin users
+                await spamActionService.HandleCriticalCheckViolationAsync(
+                    botClient,
+                    message,
+                    result.CriticalCheckViolations,
+                    cancellationToken).ConfigureAwait(false);
+
+                // If critical violations found, don't process regular spam (already handled)
+                return;
+            }
 
             // Store detection result (spam or ham) for analytics and training
             // Only store if spam detection actually ran (not skipped for trusted/admin users)

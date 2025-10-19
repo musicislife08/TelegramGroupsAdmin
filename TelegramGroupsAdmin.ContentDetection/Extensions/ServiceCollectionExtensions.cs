@@ -29,6 +29,7 @@ public static class ServiceCollectionExtensions
 
         // Register repositories (needed by engine for config)
         services.AddScoped<ISpamDetectionConfigRepository, SpamDetectionConfigRepository>();
+        services.AddScoped<IContentCheckConfigRepository, ContentCheckConfigRepository>(); // Phase 4.14: Critical checks
 
         // Register URL filtering repositories (Phase 4.13)
         services.AddScoped<IBlocklistSubscriptionsRepository, BlocklistSubscriptionsRepository>();

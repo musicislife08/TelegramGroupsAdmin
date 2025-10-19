@@ -177,7 +177,7 @@ public class TelegramAdminBotService(
         // Handle edited messages
         if (update.EditedMessage is { } editedMessage)
         {
-            await messageProcessingService.HandleEditedMessageAsync(editedMessage);
+            await messageProcessingService.HandleEditedMessageAsync(botClient, editedMessage);
             return;
         }
     }

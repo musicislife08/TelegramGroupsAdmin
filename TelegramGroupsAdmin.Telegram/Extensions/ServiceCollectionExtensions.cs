@@ -43,8 +43,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITelegramImageService, TelegramImageService>();
         services.AddSingleton<TelegramPhotoService>();
 
-        // Spam check coordination (filters trusted/admin users before spam detection)
-        services.AddScoped<ISpamCheckCoordinator, SpamCheckCoordinator>();
+        // Content check coordination (Phase 4.14: filters trusted/admin users, runs critical checks for all)
+        services.AddScoped<IContentCheckCoordinator, ContentCheckCoordinator>();
 
         // Moderation and user management services
         services.AddScoped<ModerationActionService>();

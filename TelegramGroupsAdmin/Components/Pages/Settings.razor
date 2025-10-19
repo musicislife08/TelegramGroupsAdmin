@@ -25,6 +25,7 @@
                     <MudNavLink Href="/settings/content-detection/advanced" Icon="@Icons.Material.Filled.Tune" Match="NavLinkMatch.All">Advanced</MudNavLink>
                     <MudNavLink Href="/settings/content-detection/external" Icon="@Icons.Material.Filled.CloudSync" Match="NavLinkMatch.All">External Services</MudNavLink>
                     <MudNavLink Href="/settings/content-detection/url-filters" Icon="@Icons.Material.Filled.Link" Match="NavLinkMatch.All">URL Filters</MudNavLink>
+                    <MudNavLink Href="/settings/content-detection/critical-checks" Icon="@Icons.Material.Filled.VerifiedUser" Match="NavLinkMatch.All">Critical Checks</MudNavLink>
                     <MudDivider Class="my-2" />
                     <MudNavLink Href="/settings/content-detection/stopwords-mgmt" Icon="@Icons.Material.Filled.List" Match="NavLinkMatch.All">Stop Words Management</MudNavLink>
                     <MudNavLink Href="/settings/content-detection/training" Icon="@Icons.Material.Filled.School" Match="NavLinkMatch.All">Training Data</MudNavLink>
@@ -80,6 +81,9 @@
                             break;
                         case "url-filters":
                             <UrlFiltersConfig ChatId="null" />
+                            break;
+                        case "critical-checks":
+                            <CriticalChecks />
                             break;
                         case "stopwords-mgmt":
                             <StopWords />

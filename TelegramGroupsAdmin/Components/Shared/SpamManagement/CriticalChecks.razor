@@ -1,0 +1,321 @@
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Telegram.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@inject IContentCheckConfigRepository CheckConfigRepository
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+
+<MudGrid>
+    <MudItem xs="12">
+        <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Class="mb-4">
+            <MudText Typo="Typo.subtitle2"><strong>Critical Checks (Phase 4.14)</strong></MudText>
+            <MudText Typo="Typo.body2">
+                Critical checks run for <strong>ALL users</strong>, including trusted users and admins.
+                When a critical check flags a message, it is deleted and the user is notified, but NO ban or warning is applied.
+                Use this for security policies that must apply universally (malicious URLs, malware, etc.).
+            </MudText>
+        </MudAlert>
+    </MudItem>
+
+    @if (_loading)
+    {
+        <MudItem xs="12">
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        </MudItem>
+    }
+    else
+    {
+        <!-- Security Checks Group -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.h6" Color="Color.Primary">
+                        <MudIcon Icon="@Icons.Material.Filled.Security" Class="mr-2" />
+                        Security Checks
+                    </MudText>
+
+                    @foreach (var check in _securityChecks)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudSwitch T="bool"
+                                      @bind-Value="check.AlwaysRun"
+                                      Color="@(check.AlwaysRun ? Color.Success : Color.Default)"
+                                      Label="@check.DisplayName"
+                                      Disabled="@(!_canEdit)" />
+                            @if (check.AlwaysRun)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Always Run</MudChip>
+                            }
+                        </MudStack>
+                        <MudText Typo="Typo.caption" Class="ml-10">@check.Description</MudText>
+
+                        @if (!check.Enabled && check.AlwaysRun)
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense="true" Class="ml-10">
+                                This check is marked as critical but is <strong>disabled</strong>. It will not run.
+                            </MudAlert>
+                        }
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Malware Detection Group -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.h6" Color="Color.Primary">
+                        <MudIcon Icon="@Icons.Material.Filled.BugReport" Class="mr-2" />
+                        Malware Detection
+                    </MudText>
+
+                    @foreach (var check in _malwareChecks)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudSwitch T="bool"
+                                      @bind-Value="check.AlwaysRun"
+                                      Color="@(check.AlwaysRun ? Color.Success : Color.Default)"
+                                      Label="@check.DisplayName"
+                                      Disabled="@(!_canEdit)" />
+                            @if (check.AlwaysRun)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Always Run</MudChip>
+                            }
+                        </MudStack>
+                        <MudText Typo="Typo.caption" Class="ml-10">@check.Description</MudText>
+
+                        @if (!check.Enabled && check.AlwaysRun)
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense="true" Class="ml-10">
+                                This check is marked as critical but is <strong>disabled</strong>. It will not run.
+                            </MudAlert>
+                        }
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Spam Detection Algorithms Group -->
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.h6" Color="Color.Primary">
+                        <MudIcon Icon="@Icons.Material.Filled.FilterAlt" Class="mr-2" />
+                        Spam Detection Algorithms
+                    </MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Default">
+                        Generally, spam checks should NOT be marked as "always run" since they're content moderation (not security).
+                        However, you can enable this if you want certain algorithms to apply even to trusted users/admins.
+                    </MudText>
+
+                    <MudGrid>
+                        @foreach (var check in _spamChecks)
+                        {
+                            <MudItem xs="12" sm="6" md="4">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudSwitch T="bool"
+                                              @bind-Value="check.AlwaysRun"
+                                              Color="@(check.AlwaysRun ? Color.Success : Color.Default)"
+                                              Label="@check.DisplayName"
+                                              Disabled="@(!_canEdit)" />
+                                    @if (check.AlwaysRun)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Always Run</MudChip>
+                                    }
+                                </MudStack>
+                                <MudText Typo="Typo.caption" Class="ml-10">@check.Description</MudText>
+
+                                @if (!check.Enabled && check.AlwaysRun)
+                                {
+                                    <MudAlert Severity="Severity.Warning" Dense="true" Class="ml-10">
+                                        This check is marked as critical but is <strong>disabled</strong>. It will not run.
+                                    </MudAlert>
+                                }
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Save Button -->
+        <MudItem xs="12">
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          OnClick="SaveChanges"
+                          Disabled="@(!_canEdit || _saving)">
+                    @if (_saving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        <text>&nbsp;Saving...</text>
+                    }
+                    else
+                    {
+                        <text>Save Changes</text>
+                    }
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                          OnClick="LoadConfiguration"
+                          Disabled="@_saving">
+                    Reset
+                </MudButton>
+            </MudStack>
+        </MudItem>
+
+        @if (_hasDisabledCriticalChecks)
+        {
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
+                    <strong>Warning:</strong> You have disabled one or more critical security checks.
+                    This may expose your chat to malicious content (URLs, files, etc.).
+                    Only disable critical checks if you understand the security implications.
+                </MudAlert>
+            </MudItem>
+        }
+    }
+</MudGrid>
+
+@code {
+    private bool _loading = true;
+    private bool _saving = false;
+    private bool _canEdit = false;
+    private List<CheckViewModel> _securityChecks = new();
+    private List<CheckViewModel> _malwareChecks = new();
+    private List<CheckViewModel> _spamChecks = new();
+    private bool _hasDisabledCriticalChecks => _securityChecks.Any(c => !c.AlwaysRun) || _malwareChecks.Any(c => !c.AlwaysRun);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if user is Admin or Owner (only they can modify critical checks)
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
+        var permissionLevel = permissionClaim != null && int.TryParse(permissionClaim.Value, out var level)
+            ? (PermissionLevel)level
+            : PermissionLevel.ReadOnly;
+        _canEdit = permissionLevel >= PermissionLevel.Admin;
+
+        await LoadConfiguration();
+    }
+
+    private async Task LoadConfiguration()
+    {
+        try
+        {
+            _loading = true;
+            StateHasChanged();
+
+            var configs = await CheckConfigRepository.GetGlobalConfigsAsync();
+
+            // Define ALL available checks with display info
+            var knownChecks = new Dictionary<string, (string DisplayName, string Description, string Category)>
+            {
+                // Security Checks
+                ["UrlFiltering"] = ("URL Filtering", "Block malicious domains from 540K+ blocklists (hard-block mode)", "Security"),
+                ["FileScanning"] = ("File Scanning", "Scan files with ClamAV/YARA/AMSI (Placeholder for Phase 4.17)", "Security"),
+
+                // Malware Detection
+                ["VirusTotal"] = ("VirusTotal", "Malware and threat detection via VirusTotal API", "Malware"),
+                ["ImageSpam"] = ("Image Spam (Vision)", "OpenAI Vision API image content analysis", "Malware"),
+
+                // Spam Detection Algorithms
+                ["StopWords"] = ("Stop Words", "Pattern matching against banned keywords/phrases", "Spam"),
+                ["CAS"] = ("CAS (Combot)", "Check against Combot Anti-Spam database", "Spam"),
+                ["Similarity"] = ("Similarity (TF-IDF)", "Detect duplicate/similar spam messages", "Spam"),
+                ["Bayes"] = ("Bayesian Filter", "Statistical spam classification", "Spam"),
+                ["MultiLanguage"] = ("Multi-Language", "Detect excessive language mixing", "Spam"),
+                ["Spacing"] = ("Spacing Check", "Detect excessive spacing/formatting abuse", "Spam"),
+                ["InvisibleChars"] = ("Invisible Characters", "Detect hidden Unicode characters", "Spam"),
+                ["OpenAI"] = ("OpenAI Content Check", "GPT-4 semantic spam analysis", "Spam"),
+                ["SeoScraping"] = ("SEO Scraping", "Detect SEO spam and scraping patterns", "Spam"),
+
+                // Impersonation
+                ["Impersonation"] = ("Impersonation", "Photo hash + name Levenshtein distance", "Security")
+            };
+
+            // Create view models for ALL checks (not just those in DB)
+            var viewModels = new List<CheckViewModel>();
+            foreach (var (checkName, (displayName, description, category)) in knownChecks)
+            {
+                var config = configs.FirstOrDefault(c => c.CheckName == checkName);
+                viewModels.Add(new CheckViewModel
+                {
+                    CheckName = checkName,
+                    DisplayName = displayName,
+                    Description = description,
+                    Category = category,
+                    Enabled = config?.Enabled ?? true, // Default enabled if not in DB
+                    AlwaysRun = config?.AlwaysRun ?? false // Default NOT critical
+                });
+            }
+
+            _securityChecks = viewModels.Where(vm => vm.Category == "Security").ToList();
+            _malwareChecks = viewModels.Where(vm => vm.Category == "Malware").ToList();
+            _spamChecks = viewModels.Where(vm => vm.Category == "Spam").ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load critical checks configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveChanges()
+    {
+        if (!_canEdit)
+        {
+            Snackbar.Add("You don't have permission to modify critical checks", Severity.Error);
+            return;
+        }
+
+        try
+        {
+            _saving = true;
+            StateHasChanged();
+
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "system";
+
+            // Save all checks
+            var allChecks = _securityChecks.Concat(_malwareChecks).Concat(_spamChecks);
+            foreach (var check in allChecks)
+            {
+                await CheckConfigRepository.SetAlwaysRunAsync(
+                    check.CheckName,
+                    check.AlwaysRun,
+                    userId ?? "unknown",
+                    CancellationToken.None);
+            }
+
+            Snackbar.Add("Critical checks configuration saved successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+            StateHasChanged();
+        }
+    }
+
+    private class CheckViewModel
+    {
+        public string CheckName { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+        public bool Enabled { get; set; }
+        public bool AlwaysRun { get; set; }
+    }
+}

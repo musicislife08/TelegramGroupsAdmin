@@ -335,4 +335,103 @@ public class SpamActionService(
                 message.From?.Id);
         }
     }
+
+    /// <summary>
+    /// Handle critical check violations for trusted/admin users (Phase 4.14)
+    /// Policy: Delete message + DM notice, NO ban/warn for trusted/admin users
+    /// Critical checks (URL filtering, file scanning) bypass trust status
+    /// </summary>
+    /// <param name="botClient">Telegram bot client</param>
+    /// <param name="message">Original message that violated critical check</param>
+    /// <param name="violations">List of critical check violations with details</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    public async Task HandleCriticalCheckViolationAsync(
+        ITelegramBotClient botClient,
+        Message message,
+        List<string> violations,
+        CancellationToken cancellationToken = default)
+    {
+        if (message.From == null)
+        {
+            logger.LogWarning("Cannot handle critical check violation: message has no sender");
+            return;
+        }
+
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var userMessagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
+
+            var userId = message.From.Id;
+            var chatId = message.Chat.Id;
+            var userName = message.From.Username ?? message.From.FirstName ?? $"User {userId}";
+
+            logger.LogWarning(
+                "Critical check violation by user {UserId} (@{Username}) in chat {ChatId}: {Violations}",
+                userId,
+                userName,
+                chatId,
+                string.Join("; ", violations));
+
+            // Step 1: Delete the violating message
+            try
+            {
+                await botClient.DeleteMessage(chatId, message.MessageId, cancellationToken).ConfigureAwait(false);
+                logger.LogInformation(
+                    "Deleted message {MessageId} from chat {ChatId} due to critical check violations",
+                    message.MessageId,
+                    chatId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "Failed to delete message {MessageId} from chat {ChatId}",
+                    message.MessageId,
+                    chatId);
+            }
+
+            // Step 2: Notify user about violation (DM preferred, public reply fallback)
+            var violationList = string.Join("\n", violations.Select((v, i) => $"{i + 1}. {v}"));
+            var notificationMessage = $"⚠️ Your message was deleted due to security policy violations:\n\n{violationList}\n\n" +
+                                     $"These checks apply to all users regardless of trust status.";
+
+            var sendResult = await userMessagingService.SendToUserAsync(
+                botClient,
+                userId,
+                chatId,
+                notificationMessage,
+                replyToMessageId: null,  // Original message already deleted
+                cancellationToken).ConfigureAwait(false);
+
+            if (sendResult.Success)
+            {
+                logger.LogInformation(
+                    "Sent critical check violation notice to user {UserId} via {DeliveryMethod}",
+                    userId,
+                    sendResult.DeliveryMethod);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Failed to send critical check violation notice to user {UserId}: {Error}",
+                    userId,
+                    sendResult.ErrorMessage);
+            }
+
+            // Step 3: Log audit event (for transparency)
+            logger.LogInformation(
+                "Critical check violation handling complete for user {UserId} in chat {ChatId}. " +
+                "Message deleted, user notified via {DeliveryMethod}. NO ban/warning applied.",
+                userId,
+                chatId,
+                sendResult.DeliveryMethod);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "Failed to handle critical check violation for user {UserId} in chat {ChatId}",
+                message.From.Id,
+                message.Chat.Id);
+        }
+    }
 }
