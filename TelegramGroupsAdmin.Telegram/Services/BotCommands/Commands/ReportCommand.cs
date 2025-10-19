@@ -4,6 +4,10 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Models;
+using DataModels = TelegramGroupsAdmin.Data.Models;
+
+
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -70,7 +74,7 @@ public class ReportCommand : IBotCommand
             ReportedByUserId: reporter.Id,
             ReportedByUserName: reporter.Username ?? reporter.FirstName,
             ReportedAt: now,
-            Status: ReportStatus.Pending,
+            Status: DataModels.ReportStatus.Pending,
             ReviewedBy: null,
             ReviewedAt: null,
             ActionTaken: null,

@@ -266,7 +266,7 @@
                     }
                 </MudTd>
                 <MudTd DataLabel="Issued By">
-                    @if (context.IssuedBy.Type == TelegramGroupsAdmin.Telegram.Models.ActorType.System)
+                    @if (context.IssuedBy.Type == ActorType.System)
                     {
                         @if (context.IssuedBy.SystemIdentifier == "bot_protection")
                         {
@@ -287,7 +287,7 @@
                             </MudChip>
                         }
                     }
-                    else if (context.IssuedBy.Type == TelegramGroupsAdmin.Telegram.Models.ActorType.WebUser)
+                    else if (context.IssuedBy.Type == ActorType.WebUser)
                     {
                         @* Try to show email if we have it cached *@
                         @if (context.IssuedBy.WebUserId != null && _userEmailCache.ContainsKey(context.IssuedBy.WebUserId))
@@ -303,7 +303,7 @@
                             </MudChip>
                         }
                     }
-                    else if (context.IssuedBy.Type == TelegramGroupsAdmin.Telegram.Models.ActorType.TelegramUser)
+                    else if (context.IssuedBy.Type == ActorType.TelegramUser)
                     {
                         <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SmartToy" Color="Color.Info">
                             @context.IssuedBy.DisplayName

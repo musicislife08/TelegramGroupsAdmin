@@ -174,7 +174,7 @@
                     Type = ReportType.Spam,
                     Timestamp = report.ReportedAt,
                     Priority = CalculateSpamPriority(report),
-                    IsPending = report.Status == ReportStatus.Pending,
+                    IsPending = report.Status == DataModels.ReportStatus.Pending,
                     SpamReport = report,
                     ImpersonationAlert = null,
                     DisplayTitle = "Moderation Report",
@@ -211,7 +211,7 @@
                 .ToList();
 
             // Update counts
-            _pendingSpamCount = spamReports.Count(r => r.Status == ReportStatus.Pending);
+            _pendingSpamCount = spamReports.Count(r => r.Status == DataModels.ReportStatus.Pending);
             _pendingImpersonationCount = impersonationAlerts.Count(a => !a.ReviewedAt.HasValue);
 
             ApplyFilters();
@@ -263,7 +263,7 @@
 
     private int CalculateSpamPriority(Report report)
     {
-        if (report.Status != ReportStatus.Pending) return 0;
+        if (report.Status != DataModels.ReportStatus.Pending) return 0;
         // Higher priority for newer reports
         var age = (DateTimeOffset.UtcNow - report.ReportedAt).TotalHours;
         return (int)(100 - age); // Newer = higher priority

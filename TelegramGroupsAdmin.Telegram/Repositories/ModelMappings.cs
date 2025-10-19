@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -17,7 +18,7 @@ public static class ModelMappings
     /// Convert database actor columns (exclusive arc) to Actor model
     /// Exactly one of the three parameters must be non-null (enforced by DB CHECK constraint)
     /// </summary>
-    public static UiModels.Actor ToActor(
+    public static Actor ToActor(
         string? webUserId,
         long? telegramUserId,
         string? systemIdentifier,
@@ -27,28 +28,28 @@ public static class ModelMappings
     {
         if (webUserId != null)
         {
-            return UiModels.Actor.FromWebUser(webUserId, webUserEmail);
+            return Actor.FromWebUser(webUserId, webUserEmail);
         }
 
         if (telegramUserId != null)
         {
-            return UiModels.Actor.FromTelegramUser(telegramUserId.Value, telegramUsername, telegramFirstName);
+            return Actor.FromTelegramUser(telegramUserId.Value, telegramUsername, telegramFirstName);
         }
 
         if (systemIdentifier != null)
         {
-            return UiModels.Actor.FromSystem(systemIdentifier);
+            return Actor.FromSystem(systemIdentifier);
         }
 
         // Should never happen due to CHECK constraint, but handle gracefully
-        return UiModels.Actor.FromSystem("unknown");
+        return Actor.FromSystem("unknown");
     }
 
     /// <summary>
     /// Populate DTO actor columns from Actor model (for ToDto methods)
     /// </summary>
     public static void SetActorColumns(
-        UiModels.Actor actor,
+        Actor actor,
         out string? webUserId,
         out long? telegramUserId,
         out string? systemIdentifier)
@@ -453,7 +454,7 @@ public static class ModelMappings
         ReportedByUserId: data.ReportedByUserId,
         ReportedByUserName: data.ReportedByUserName,
         ReportedAt: data.ReportedAt,
-        Status: (UiModels.ReportStatus)data.Status,
+        Status: data.Status,
         ReviewedBy: data.ReviewedBy,
         ReviewedAt: data.ReviewedAt,
         ActionTaken: data.ActionTaken,

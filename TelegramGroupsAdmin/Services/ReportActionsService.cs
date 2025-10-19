@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -73,7 +74,7 @@ public class ReportActionsService : IReportActionsService
         // Update report status
         await _reportsRepository.UpdateReportStatusAsync(
             reportId,
-            ReportStatus.Reviewed,
+            DataModels.ReportStatus.Reviewed,
             reviewerId,
             "spam",
             $"User banned from {result.ChatsAffected} chats, message deleted");
@@ -136,7 +137,7 @@ public class ReportActionsService : IReportActionsService
         // Update report status
         await _reportsRepository.UpdateReportStatusAsync(
             reportId,
-            ReportStatus.Reviewed,
+            DataModels.ReportStatus.Reviewed,
             reviewerId,
             "ban",
             $"User banned from {result.ChatsAffected} chats");
@@ -177,7 +178,7 @@ public class ReportActionsService : IReportActionsService
         // Update report status
         await _reportsRepository.UpdateReportStatusAsync(
             reportId,
-            ReportStatus.Reviewed,
+            DataModels.ReportStatus.Reviewed,
             reviewerId,
             "warn",
             $"User {message.UserId} warned");
@@ -199,7 +200,7 @@ public class ReportActionsService : IReportActionsService
         // Update report status
         await _reportsRepository.UpdateReportStatusAsync(
             reportId,
-            ReportStatus.Dismissed,
+            DataModels.ReportStatus.Dismissed,
             reviewerId,
             "dismiss",
             reason ?? "No action needed");

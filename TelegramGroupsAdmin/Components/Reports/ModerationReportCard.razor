@@ -58,7 +58,7 @@
         }
     </MudCardContent>
     <MudCardActions>
-        @if (Report.Status == ReportStatus.Pending)
+        @if (Report.Status == DataModels.ReportStatus.Pending)
         {
             <MudButton Variant="Variant.Filled"
                        Color="Color.Error"
@@ -145,9 +145,9 @@
     {
         return Report.Status switch
         {
-            ReportStatus.Pending => Color.Warning,
-            ReportStatus.Reviewed => Color.Success,
-            ReportStatus.Dismissed => Color.Default,
+            DataModels.ReportStatus.Pending => Color.Warning,
+            DataModels.ReportStatus.Reviewed => Color.Success,
+            DataModels.ReportStatus.Dismissed => Color.Default,
             _ => Color.Default
         };
     }

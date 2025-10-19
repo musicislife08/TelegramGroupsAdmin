@@ -50,12 +50,12 @@ public class ReportsRepository : IReportsRepository
 
     public async Task<List<Report>> GetPendingReportsAsync(long? chatId = null, CancellationToken cancellationToken = default)
     {
-        return await GetReportsAsync(chatId, ReportStatus.Pending, cancellationToken: cancellationToken);
+        return await GetReportsAsync(chatId, DataModels.ReportStatus.Pending, cancellationToken: cancellationToken);
     }
 
     public async Task<List<Report>> GetReportsAsync(
         long? chatId = null,
-        ReportStatus? status = null,
+        DataModels.ReportStatus? status = null,
         int limit = 100,
         int offset = 0,
         CancellationToken cancellationToken = default)
@@ -85,7 +85,7 @@ public class ReportsRepository : IReportsRepository
 
     public async Task UpdateReportStatusAsync(
         long reportId,
-        ReportStatus status,
+        DataModels.ReportStatus status,
         string reviewedBy,
         string actionTaken,
         string? adminNotes = null,

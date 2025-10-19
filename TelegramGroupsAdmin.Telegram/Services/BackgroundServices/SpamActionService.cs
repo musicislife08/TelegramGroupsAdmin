@@ -6,6 +6,10 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Models;
+using DataModels = TelegramGroupsAdmin.Data.Models;
+
+
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
@@ -224,7 +228,7 @@ public class SpamActionService(
             ReportedByUserId: null, // System-generated (not user-reported)
             ReportedByUserName: "Auto-Detection",
             ReportedAt: DateTimeOffset.UtcNow,
-            Status: ReportStatus.Pending,
+            Status: DataModels.ReportStatus.Pending,
             ReviewedBy: null,
             ReviewedAt: null,
             ActionTaken: null,
