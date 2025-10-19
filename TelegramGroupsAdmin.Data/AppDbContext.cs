@@ -61,6 +61,10 @@ public class AppDbContext : DbContext
     public DbSet<UserTagDto> UserTags => Set<UserTagDto>();
     public DbSet<TagDefinitionDto> TagDefinitions => Set<TagDefinitionDto>();
 
+    // File scanning tables (Phase 4.17)
+    public DbSet<FileScanResultRecord> FileScanResults => Set<FileScanResultRecord>();
+    public DbSet<FileScanQuotaRecord> FileScanQuotas => Set<FileScanQuotaRecord>();
+
     // TickerQ entities (background job system)
     public DbSet<TimeTickerEntity> TimeTickers => Set<TimeTickerEntity>();
     public DbSet<CronTickerEntity> CronTickers => Set<CronTickerEntity>();
@@ -434,6 +438,22 @@ public class AppDbContext : DbContext
         // Unique constraint on cached_blocked_domains to prevent duplicates
         modelBuilder.Entity<CachedBlockedDomainDto>()
             .HasIndex(cbd => new { cbd.Domain, cbd.BlockMode, cbd.ChatId })
+            .IsUnique();
+
+        // File scanning indexes (Phase 4.17)
+        // FileScanResults indexes - hash lookup for caching
+        modelBuilder.Entity<FileScanResultRecord>()
+            .HasIndex(fsr => fsr.FileHash);  // Primary cache lookup
+        modelBuilder.Entity<FileScanResultRecord>()
+            .HasIndex(fsr => new { fsr.Scanner, fsr.ScannedAt });  // Analytics queries
+
+        // FileScanQuota indexes - service + window queries for quota tracking
+        modelBuilder.Entity<FileScanQuotaRecord>()
+            .HasIndex(fsq => new { fsq.Service, fsq.QuotaType, fsq.QuotaWindowEnd });  // Find active quotas
+
+        // Unique constraint on file_scan_quota to prevent overlapping quota windows for same service/type
+        modelBuilder.Entity<FileScanQuotaRecord>()
+            .HasIndex(fsq => new { fsq.Service, fsq.QuotaType, fsq.QuotaWindowStart })
             .IsUnique();
     }
 
