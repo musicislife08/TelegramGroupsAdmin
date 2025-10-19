@@ -1,7 +1,7 @@
 # TelegramGroupsAdmin - AI Reference
 
 ## Stack
-.NET 10.0, Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 10, TickerQ 2.5.3, OpenAI API, VirusTotal, SendGrid
+.NET 10.0 RC2 (10.0.100-rc.2.25502.107), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 10.0 RC2, TickerQ 2.5.3, OpenAI API, VirusTotal, SendGrid
 
 ## Projects
 - **TelegramGroupsAdmin**: Main app, Blazor+API, TickerQ jobs (WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob, TempbanExpiryJob)

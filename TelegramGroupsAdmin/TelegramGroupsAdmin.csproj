@@ -18,12 +18,12 @@
         <PackageReference Include="CsvHelper" Version="33.1.0" />
         <PackageReference Include="Dapper" Version="2.1.66" />
         <PackageReference Include="DiffPlex" Version="1.9.0" />
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0-rc.1.25451.107" />
-        <!-- WORKAROUND: Force newer versions to fix GHSA-w3q9-fxm7-j8fq vulnerability in Microsoft.EntityFrameworkCore.Design transitive deps
-             Remove when Microsoft.EntityFrameworkCore.Design updates to 17.14.28+ (Oct 2025) -->
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0-rc.2.25502.107" />
         <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.14.28" />
         <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.14.28" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0-rc.1.25451.107">
+        <!-- WORKAROUND: Force newer versions to fix GHSA-w3q9-fxm7-j8fq vulnerability in Microsoft.EntityFrameworkCore.Design transitive deps
+             Remove when Microsoft.EntityFrameworkCore.Design updates to 17.14.28+ (Oct 2025) -->
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0-rc.2.25502.107">
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
           <PrivateAssets>all</PrivateAssets>
         </PackageReference>
