@@ -147,36 +147,59 @@ public record UserActionRecord(
 );
 
 /// <summary>
-/// Action types for user moderation
+/// Moderation action types for user management
 /// </summary>
 public enum UserActionType
 {
+    /// <summary>Ban user from all managed chats</summary>
     Ban = 0,
+
+    /// <summary>Issue warning to user, counts toward auto-ban threshold</summary>
     Warn = 1,
+
+    /// <summary>Temporarily mute user in chat</summary>
     Mute = 2,
+
+    /// <summary>Mark user as trusted, bypass spam detection</summary>
     Trust = 3,
+
+    /// <summary>Remove ban from user</summary>
     Unban = 4
 }
 
 /// <summary>
-/// Bot status in a managed chat
+/// Bot membership status in a Telegram chat
 /// </summary>
 public enum BotChatStatus
 {
+    /// <summary>Bot is a regular member without admin privileges</summary>
     Member = 0,
+
+    /// <summary>Bot is an administrator with elevated permissions</summary>
     Administrator = 1,
+
+    /// <summary>Bot left the chat voluntarily</summary>
     Left = 2,
+
+    /// <summary>Bot was kicked/removed from the chat</summary>
     Kicked = 3
 }
 
 /// <summary>
-/// Chat type categories
+/// Telegram chat type classification
 /// </summary>
 public enum ManagedChatType
 {
+    /// <summary>Private one-on-one chat</summary>
     Private = 0,
+
+    /// <summary>Basic group chat (legacy, up to 200 members)</summary>
     Group = 1,
+
+    /// <summary>Supergroup chat (modern, unlimited members)</summary>
     Supergroup = 2,
+
+    /// <summary>Broadcast channel</summary>
     Channel = 3
 }
 

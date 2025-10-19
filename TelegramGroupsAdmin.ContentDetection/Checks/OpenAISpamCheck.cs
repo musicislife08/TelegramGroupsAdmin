@@ -212,8 +212,24 @@ public class OpenAIContentCheck(
         }
 
         var userPrompt = req.VetoMode
-            ? $"Analyze this message that was flagged by other spam filters. Is it actually spam?\n\n{contextBuilder}\nCurrent message from user {req.UserName} (ID: {req.UserId}):\n\"{req.Message}\"\n\nRespond with JSON: {{\"result\": \"spam\" or \"clean\" or \"review\", \"reason\": \"explanation\", \"confidence\": 0.0-1.0}}"
-            : $"Analyze this message for spam content.\n\n{contextBuilder}\nMessage from user {req.UserName} (ID: {req.UserId}):\n\"{req.Message}\"\n\nRespond with JSON: {{\"result\": \"spam\" or \"clean\" or \"review\", \"reason\": \"explanation\", \"confidence\": 0.0-1.0}}";
+            ? $$"""
+               Analyze this message that was flagged by other spam filters. Is it actually spam?
+
+               {{contextBuilder}}
+               Current message from user {{req.UserName}} (ID: {{req.UserId}}):
+               "{{req.Message}}"
+
+               Respond with JSON: {"result": "spam" or "clean" or "review", "reason": "explanation", "confidence": 0.0-1.0}
+               """
+            : $$"""
+              Analyze this message for spam content.
+
+              {{contextBuilder}}
+              Message from user {{req.UserName}} (ID: {{req.UserId}}):
+              "{{req.Message}}"
+
+              Respond with JSON: {"result": "spam" or "clean" or "review", "reason": "explanation", "confidence": 0.0-1.0}
+              """;
 
         return new OpenAIRequest
         {
@@ -339,12 +355,12 @@ public class OpenAIContentCheck(
         var rules = customRulesPrompt ?? GetDefaultRulesPrompt();
         var modeGuidance = GetModeGuidancePrompt(vetoMode);
 
-        return $"""
-            {baseTechnical}
+        return $$"""
+            {{baseTechnical}}
 
-            {rules}
+            {{rules}}
 
-            {modeGuidance}
+            {{modeGuidance}}
 
             Consider the message context, user history, and conversation flow when making your decision.
             Always respond with valid JSON format.

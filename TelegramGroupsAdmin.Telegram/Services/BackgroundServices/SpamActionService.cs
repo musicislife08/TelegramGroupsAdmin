@@ -228,7 +228,15 @@ public class SpamActionService(
             ReviewedBy: null,
             ReviewedAt: null,
             ActionTaken: null,
-            AdminNotes: $"{reason}\n\nDetection Details:\n{detectionResult.Reason}\n\nNet Confidence: {spamResult.NetConfidence}\nMax Confidence: {spamResult.MaxConfidence}",
+            AdminNotes: $$"""
+                {{reason}}
+
+                Detection Details:
+                {{detectionResult.Reason}}
+
+                Net Confidence: {{spamResult.NetConfidence}}
+                Max Confidence: {{spamResult.MaxConfidence}}
+                """,
             WebUserId: null // System-generated
         );
 

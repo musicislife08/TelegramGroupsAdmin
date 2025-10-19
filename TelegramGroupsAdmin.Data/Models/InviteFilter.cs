@@ -1,8 +1,7 @@
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// Filter options for querying invites by status.
-/// Enum values match the InviteStatus values for direct comparison.
+/// Filter options for querying invites by status (enum values match InviteStatus for direct comparison)
 /// </summary>
 public enum InviteFilter
 {

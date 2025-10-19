@@ -192,7 +192,19 @@ public class ImageSpamCheck(
             ? $"Message text: \"{messageText}\""
             : "No message text provided.";
 
-        return $"{systemPrompt}\n\n{messageContext}\n\nRespond ONLY with valid JSON (no markdown, no code blocks):\n{{\n  \"spam\": true or false,\n  \"confidence\": 1-100,\n  \"reason\": \"specific explanation\",\n  \"patterns_detected\": [\"list\", \"of\", \"patterns\"]\n}}";
+        return $$"""
+            {{systemPrompt}}
+
+            {{messageContext}}
+
+            Respond ONLY with valid JSON (no markdown, no code blocks):
+            {
+              "spam": true or false,
+              "confidence": 1-100,
+              "reason": "specific explanation",
+              "patterns_detected": ["list", "of", "patterns"]
+            }
+            """;
     }
 
     /// <summary>

@@ -1,37 +1,24 @@
 namespace TelegramGroupsAdmin.ContentDetection.Models;
 
 /// <summary>
-/// Result type for content checks (spam, malware, policy violations)
+/// Content check result classification (spam, malware, policy violations)
 /// Phase 4.13: Expanded to support multiple violation types
 /// </summary>
 public enum CheckResultType
 {
-    /// <summary>
-    /// Content is clean (no violations)
-    /// </summary>
+    /// <summary>Content is clean with no violations detected</summary>
     Clean = 0,
 
-    /// <summary>
-    /// Content is spam
-    /// </summary>
+    /// <summary>Content identified as spam</summary>
     Spam = 1,
 
-    /// <summary>
-    /// Content needs human review (uncertain classification)
-    /// Only used by AI-based checks (OpenAI, future ML checks)
-    /// </summary>
+    /// <summary>Content needs human review due to uncertain classification (AI-based checks only)</summary>
     Review = 2,
 
-    /// <summary>
-    /// Phase 4.13: Content contains malware (virus, trojan, etc.)
-    /// From VirusTotal file scanning
-    /// </summary>
+    /// <summary>Content contains malware detected via VirusTotal file scanning</summary>
     Malware = 3,
 
-    /// <summary>
-    /// Phase 4.13: Hard block policy violation (instant ban)
-    /// From URL hard blocks, severe policy violations
-    /// </summary>
+    /// <summary>Hard block policy violation triggering instant ban (URL hard blocks, severe policy violations)</summary>
     HardBlock = 4
 }
 
@@ -118,22 +105,16 @@ public record ContentCheckResult
 }
 
 /// <summary>
-/// Actions to take based on spam confidence
+/// Recommended moderation actions based on spam detection confidence
 /// </summary>
 public enum SpamAction
 {
-    /// <summary>
-    /// Allow the message (low confidence spam)
-    /// </summary>
+    /// <summary>Allow the message to remain (low confidence spam)</summary>
     Allow = 0,
 
-    /// <summary>
-    /// Flag for admin review (medium confidence spam)
-    /// </summary>
+    /// <summary>Flag for admin review (medium confidence spam)</summary>
     ReviewQueue = 1,
 
-    /// <summary>
-    /// Auto-ban user and delete message (high confidence spam)
-    /// </summary>
+    /// <summary>Auto-ban user and delete message (high confidence spam)</summary>
     AutoBan = 2
 }

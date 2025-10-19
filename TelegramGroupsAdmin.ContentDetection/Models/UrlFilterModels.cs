@@ -7,63 +7,44 @@ namespace TelegramGroupsAdmin.ContentDetection.Models;
 // ============================================================================
 
 /// <summary>
-/// Blocklist file format
+/// Blocklist file format specification for parsing domain lists
 /// </summary>
 public enum BlocklistFormat
 {
-    /// <summary>
-    /// Block List Project format: one domain per line, # for comments
-    /// Example: evil.com\n# comment\nspam.net
-    /// </summary>
+    /// <summary>Block List Project format - one domain per line with # for comments</summary>
     NewlineDomains = 0,
 
-    /// <summary>
-    /// Hosts file format: 0.0.0.0 or 127.0.0.1 prefix
-    /// Example: 0.0.0.0 evil.com
-    /// </summary>
+    /// <summary>Hosts file format - 0.0.0.0 or 127.0.0.1 prefix before domain</summary>
     HostsFile = 1,
 
-    /// <summary>
-    /// CSV format: domain in first column, header skipped
-    /// Example: domain,category,notes
-    /// </summary>
+    /// <summary>CSV format - domain in first column, header row skipped</summary>
     Csv = 2
 }
 
 /// <summary>
-/// Block mode determines how URLs are filtered
+/// URL filtering enforcement mode
 /// </summary>
 public enum BlockMode
 {
-    /// <summary>
-    /// Not checked (disabled)
-    /// </summary>
+    /// <summary>URL filtering disabled for this source</summary>
     Disabled = 0,
 
-    /// <summary>
-    /// Soft block: Runs during spam detection, contributes to confidence voting, subject to OpenAI veto
-    /// </summary>
+    /// <summary>Soft block - contributes to spam confidence voting, subject to OpenAI veto</summary>
     Soft = 1,
 
-    /// <summary>
-    /// Hard block: Pre-filter before spam detection, instant ban, no OpenAI veto
-    /// </summary>
+    /// <summary>Hard block - instant ban before spam detection, no OpenAI veto</summary>
     Hard = 2
 }
 
 /// <summary>
-/// Domain filter type (blacklist or whitelist)
+/// Domain filter type classification
 /// </summary>
 public enum DomainFilterType
 {
-    /// <summary>
-    /// Blacklist: Domain is blocked
-    /// </summary>
+    /// <summary>Blacklist - domain is blocked</summary>
     Blacklist = 0,
 
-    /// <summary>
-    /// Whitelist: Domain bypasses all checks
-    /// </summary>
+    /// <summary>Whitelist - domain bypasses all checks</summary>
     Whitelist = 1
 }
 

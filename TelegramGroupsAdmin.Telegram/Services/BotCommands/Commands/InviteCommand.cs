@@ -94,7 +94,13 @@ public class InviteCommand : IBotCommand
             message.Chat.Title ?? "Unknown");
 
         return new CommandResult(
-            $"🔗 *Invite Link*\n\n{inviteLink}\n\n_This message will auto-delete in {config.DeleteResponseAfterSeconds} seconds_",
+            $$"""
+              🔗 *Invite Link*
+
+              {{inviteLink}}
+
+              _This message will auto-delete in {{config.DeleteResponseAfterSeconds}} seconds_
+              """,
             config.DeleteCommandMessage,
             config.DeleteResponseAfterSeconds);
     }

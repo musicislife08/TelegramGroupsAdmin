@@ -4,24 +4,32 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// Bot status in a managed chat (Data layer - stored as INT in database)
+/// Bot membership status in a Telegram chat (stored as INT in database)
 /// </summary>
 public enum BotChatStatus
 {
+    /// <summary>Bot is a regular member without admin privileges</summary>
     Member = 0,
+    /// <summary>Bot is an administrator with elevated permissions</summary>
     Administrator = 1,
+    /// <summary>Bot left the chat voluntarily</summary>
     Left = 2,
+    /// <summary>Bot was kicked/removed from the chat</summary>
     Kicked = 3
 }
 
 /// <summary>
-/// Chat type categories (Data layer - stored as INT in database)
+/// Telegram chat type classification (stored as INT in database)
 /// </summary>
 public enum ManagedChatType
 {
+    /// <summary>Private one-on-one chat</summary>
     Private = 0,
+    /// <summary>Basic group chat (legacy, up to 200 members)</summary>
     Group = 1,
+    /// <summary>Supergroup chat (modern, unlimited members)</summary>
     Supergroup = 2,
+    /// <summary>Broadcast channel</summary>
     Channel = 3
 }
 

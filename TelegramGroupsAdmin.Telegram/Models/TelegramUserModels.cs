@@ -117,15 +117,24 @@ public class UserChatMembership
 }
 
 /// <summary>
-/// Telegram user status badge colors
+/// Telegram user status classification for display badges
 /// </summary>
 public enum TelegramUserStatus
 {
-    Clean = 0,      // 🔵 No issues
-    Flagged = 1,    // 🟡 Needs review
-    Warned = 2,     // 🟠 Has warnings
-    Banned = 3,     // 🔴 Banned
-    Trusted = 4     // 🟢 Explicitly trusted
+    /// <summary>No issues - blue badge</summary>
+    Clean = 0,
+
+    /// <summary>Needs review - yellow badge</summary>
+    Flagged = 1,
+
+    /// <summary>Has warnings - orange badge</summary>
+    Warned = 2,
+
+    /// <summary>Banned - red badge</summary>
+    Banned = 3,
+
+    /// <summary>Explicitly trusted - green badge</summary>
+    Trusted = 4
 }
 
 /// <summary>

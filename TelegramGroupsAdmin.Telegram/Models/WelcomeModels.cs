@@ -19,14 +19,23 @@ public record WelcomeResponse(
 );
 
 /// <summary>
-/// Response types for welcome messages
+/// User response status to welcome message prompts
 /// </summary>
 public enum WelcomeResponseType
 {
+    /// <summary>User has not yet responded to welcome message</summary>
     Pending = 0,
+
+    /// <summary>User accepted the rules and is allowed in chat</summary>
     Accepted = 1,
+
+    /// <summary>User declined the rules and was removed</summary>
     Denied = 2,
+
+    /// <summary>User did not respond within timeout period and was removed</summary>
     Timeout = 3,
+
+    /// <summary>User left the chat before responding</summary>
     Left = 4
 }
 
@@ -66,9 +75,25 @@ public class WelcomeConfig
         Enabled = true,
         Mode = WelcomeMode.ChatAcceptDeny, // Default to chat mode for backward compatibility
         TimeoutSeconds = 60,
-        ChatWelcomeTemplate = "👋 Welcome {username}!\n\nTo participate in this chat, please read and accept our rules.\n\n📖 Click \"Read Rules\" below, then click the START button to receive the rules privately.",
-        DmTemplate = "Welcome to {chat_name}! Here are our rules:\n\n{rules_text}\n\n✅ Click \"I Accept\" below, or return to the chat to accept there.",
-        ChatFallbackTemplate = "Thanks for accepting! Here are our rules:\n\n{rules_text}",
+        ChatWelcomeTemplate = """
+            👋 Welcome {username}!
+
+            To participate in this chat, please read and accept our rules.
+
+            📖 Click "Read Rules" below, then click the START button to receive the rules privately.
+            """,
+        DmTemplate = """
+            Welcome to {chat_name}! Here are our rules:
+
+            {rules_text}
+
+            ✅ Click "I Accept" below, or return to the chat to accept there.
+            """,
+        ChatFallbackTemplate = """
+            Thanks for accepting! Here are our rules:
+
+            {rules_text}
+            """,
         AcceptButtonText = "✅ I Accept",
         DenyButtonText = "❌ Decline",
         RulesText = "1. Be respectful\n2. No spam\n3. Stay on topic"

@@ -54,7 +54,7 @@ public record MessageSendResult(
     string? ErrorMessage = null);
 
 /// <summary>
-/// How the message was delivered
+/// Message delivery method classification
 /// </summary>
 public enum MessageDeliveryMethod
 {

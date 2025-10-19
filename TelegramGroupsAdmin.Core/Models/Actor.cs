@@ -1,7 +1,7 @@
 namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
-/// Actor type for action attribution (Phase 4.19)
+/// Actor type classification for action attribution (Phase 4.19)
 /// </summary>
 public enum ActorType
 {

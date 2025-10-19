@@ -4,21 +4,26 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// Risk level for impersonation alerts
+/// Risk level classification for impersonation alerts
 /// </summary>
 public enum ImpersonationRiskLevel
 {
-    Medium = 0,  // 50 points (name OR photo match)
-    Critical = 1 // 100 points (name AND photo match)
+    /// <summary>50 points - name OR photo match detected</summary>
+    Medium = 0,
+    /// <summary>100 points - name AND photo match detected</summary>
+    Critical = 1
 }
 
 /// <summary>
-/// Verdict after manual review
+/// Admin verdict after reviewing an impersonation alert
 /// </summary>
 public enum ImpersonationVerdict
 {
+    /// <summary>Not actually impersonation, safe to ignore</summary>
     FalsePositive = 0,
+    /// <summary>Confirmed scammer/impersonator, ban upheld</summary>
     ConfirmedScam = 1,
+    /// <summary>Legitimate user, add to whitelist to prevent future alerts</summary>
     Whitelisted = 2
 }
 

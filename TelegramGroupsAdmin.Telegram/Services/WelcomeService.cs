@@ -470,7 +470,12 @@ public class WelcomeService : IWelcomeService
         // Add rules to chat message ONLY in ChatAcceptDeny mode
         if (config.Mode == WelcomeMode.ChatAcceptDeny)
         {
-            messageText += $"\n\n📜 **Rules:**\n{config.RulesText}";
+            messageText += $$"""
+
+
+                📜 **Rules:**
+                {{config.RulesText}}
+                """;
         }
 
         // Build keyboard based on welcome mode
@@ -972,7 +977,13 @@ public class WelcomeService : IWelcomeService
 
         // Send rules without button instructions (user already accepted in group)
         // Just show the rules text, no action needed
-        var dmText = $"Welcome to {chatName}! Here are our rules:\n\n{config.RulesText}\n\n✅ You're all set! You can now participate in the chat.";
+        var dmText = $$"""
+            Welcome to {{chatName}}! Here are our rules:
+
+            {{config.RulesText}}
+
+            ✅ You're all set! You can now participate in the chat.
+            """;
 
         try
         {
