@@ -121,7 +121,7 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 ML-based spam (10th algorithm using historical), sentiment analysis (shelved - false positives), API for third-party (not needed)
 
 ### Phase 8: WTelegram User Account Integration 🔮
-**See:** WTELEGRAM_INTEGRATION.md for detailed planning (~37 hours)
+**See:** WTELEGRAM_INTEGRATION.md for detailed planning
 
 ### Phase 9: Mobile Web Support 🔮
 Responsive Blazor UI, touch-friendly interactions, PWA support, mobile-first critical paths (reports/users/messages)
@@ -136,7 +136,7 @@ Responsive Blazor UI, touch-friendly interactions, PWA support, mobile-first cri
 **4.16**: OpenAI-Compatible API - BaseUrl config, Ollama/LM Studio, local LLM support (removes API barrier)
 
 ## Code Quality
-**See:** REFACTORING_BACKLOG.md (88/100 score, 28-37h effort)
+**See:** REFACTORING_BACKLOG.md (88/100 score)
 
 ## Next Steps
 MVP Complete ✅ (Oct 17) - Phase 4.14 Critical Checks Infrastructure, Phase 4.15-4.18 pending

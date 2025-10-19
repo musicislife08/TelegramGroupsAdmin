@@ -321,13 +321,13 @@ ORDER BY ua.issued_at DESC;
 - [x] Phase 4.19 Actor System integration (proper actor display names)
 
 ### Phase 4: Admin Notes & Tags ⏳ MOSTLY COMPLETE (~90%)
-**Database (1 hour):** ✅ COMPLETE
+**Database:** ✅ COMPLETE
 - [x] Create admin_notes table migration (Phase 4.19 Actor system)
 - [x] Create user_tags table migration (Phase 4.19 Actor system)
 - [x] Run migrations
 - [x] ~~Seed 5 default tags~~ NOT NEEDED (using TagType enum)
 
-**Backend (2 hours):** ✅ COMPLETE
+**Backend:** ✅ COMPLETE
 - [x] Create AdminNote model (with Actor)
 - [x] Create UserTag model (with TagType enum)
 - [x] Create AdminNotesRepository (Add, TogglePin, Delete)
@@ -335,7 +335,7 @@ ORDER BY ua.issued_at DESC;
 - [x] Update TelegramUserManagementService (GetUserDetailAsync includes notes+tags)
 - [x] Register repositories in DI
 
-**Settings UI - Tag Management (2 hours):** 🔲 PENDING
+**Settings UI - Tag Management:** 🔲 PENDING
 - [ ] /settings#tags tab structure
 - [ ] Tag list view (name, color chip, usage count)
 - [ ] Create tag dialog (name input + MudSelect color picker)
@@ -343,7 +343,7 @@ ORDER BY ua.issued_at DESC;
 - [ ] Delete tag validation (block if in use, show usage count)
 - [ ] Lowercase enforcement (client-side validation)
 
-**Users UI - Notes & Tags (2 hours):** ✅ COMPLETE
+**Users UI - Notes & Tags:** ✅ COMPLETE
 - [x] Notes section in UserDetailDialog (list with timestamp, author, text)
 - [x] Add note dialog (TextInputDialog with multiline)
 - [x] Note display formatting
@@ -373,7 +373,6 @@ ORDER BY ua.issued_at DESC;
 - [x] ~~Performance optimization (debounce search, cache stats queries)~~ NOT NEEDED (performance adequate)
 - [x] Accessibility (MudBlazor handles ARIA labels)
 
-**Total: ~27 hours implemented, 2 hours remaining (Tag Management UI)**
 **Status: Phase 4.12 is 90% complete - core functionality working, only Settings tag management page pending**
 
 ---
@@ -469,7 +468,7 @@ ORDER BY ua.issued_at DESC;
 │      Reason: Spam detected (95% confidence)         ││
 │      [Unban] [View Messages] [⋮]                    ││
 │                                                      ││
-│  👤 @badactor      2025-01-15    Admin      🟠 24h  ││
+│  👤 @badactor      2025-01-15    Admin      🟠 Temp ││
 │      Jane Smith    09:15          @mod1             ││
 │      Reason: Repeated warnings ignored               ││
 │      [Unban] [View Messages] [⋮]                    ││

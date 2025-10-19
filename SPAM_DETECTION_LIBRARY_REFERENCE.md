@@ -93,7 +93,7 @@ public record SpamDetectionResult
 ```
 
 **Improvements:**
-- Database training data with automatic retraining (hourly)
+- Database training data with automatic retraining
 - Certainty scoring (confidence × certainty)
 - Continuous learning pipeline
 - Shared tokenizer integration
@@ -354,10 +354,10 @@ await _configRepository.UpdateCheckConfigAsync(
 ## Performance Features
 
 ### Caching
-- **OpenAI responses**: 1-hour cache by message hash
-- **CAS lookups**: 1-hour cache by user ID
-- **Stop words**: 5-minute cache refresh
-- **Spam samples**: 10-minute cache refresh
+- **OpenAI responses**: Cached by message hash
+- **CAS lookups**: Cached by user ID
+- **Stop words**: Cached with periodic refresh
+- **Spam samples**: Cached with periodic refresh
 
 ### Early Exit Optimization
 - **Similarity check**: Stops after high-confidence match or 20 samples
@@ -395,7 +395,7 @@ catch (Exception ex)
 - **Database**: Query failure → use cached data → skip check
 
 ### Rate Limiting
-- **VirusTotal**: 4 requests/minute with queue
+- **VirusTotal**: Request rate limiting with queue
 - **OpenAI**: HTTP 429 detection with retry-after
 - **Google Safe Browsing**: Built-in quota management
 

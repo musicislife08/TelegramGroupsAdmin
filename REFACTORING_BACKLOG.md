@@ -25,7 +25,6 @@ The codebase demonstrates strong adherence to modern C# practices with minimal c
 - **Medium:** 17 (code quality, maintainability)
 - **Low:** 8 (style, cleanup)
 
-**Total Estimated Effort:** 28-37 hours
 **Expected Performance Gains:** 30-50% improvement in high-traffic operations
 
 ---
@@ -125,7 +124,6 @@ public sealed class TelegramOptions
 - Avoids confusion about when to use record vs class
 
 **Impact:** Consistency, future-proofs for Settings UI, aligns with MudBlazor requirements
-**Effort:** 2 hours
 **Breaking Change:** Yes - `init` → `set` (but configs are only accessed via IOptions<T>, so low risk)
 
 ---
@@ -165,7 +163,6 @@ Task SaveAsync<T>(ConfigType configType, long? chatId, T config) where T : class
 ```
 
 **Impact:** Type safety, IntelliSense discoverability, refactoring safety
-**Effort:** 2 hours
 **Breaking Change:** Yes (acceptable)
 
 ---
@@ -207,7 +204,6 @@ return await chatAdminsRepository.GetPermissionLevelAsync(chatId, telegramId);
 ```
 
 **Impact:** 50% reduction in DB calls, 20-30ms latency improvement per command
-**Effort:** 2 hours
 
 ---
 
@@ -240,7 +236,6 @@ modelBuilder.Entity<WelcomeResponseDto>()
 ```
 
 **Impact:** Consistency, type safety, performance (int comparisons faster)
-**Effort:** 2 hours (requires migration to convert string → int)
 **Breaking Change:** Yes (database migration required)
 
 ---
@@ -269,7 +264,6 @@ _users = await UserRepository.GetAllIncludingDeletedAsync();
 ```
 
 **Impact:** Best practice compliance, clearer code
-**Effort:** 0.5 hours
 
 ---
 
@@ -296,7 +290,6 @@ subkey.CopyTo(span.Slice(1 + SaltSize, Pbkdf2SubkeyLength));
 ```
 
 **Impact:** Performance (minor but measurable), modern .NET best practice
-**Effort:** 0.5 hours
 
 ---
 
@@ -318,7 +311,6 @@ services.Configure<SendGridOptions>(configuration.GetSection("SendGrid"));
 ```
 
 **Impact:** Consistency, discoverability, removes need for full qualification
-**Effort:** 0.5 hours
 **Breaking Change:** Yes (namespace change)
 
 ---
@@ -350,7 +342,6 @@ var result = await GetDetectionResultsWithMessages(context)
 ```
 
 **Impact:** Reduces duplication, single point of change
-**Effort:** 2 hours
 
 ---
 
@@ -377,7 +368,6 @@ ConfidenceThreshold = config.Similarity.ConfidenceThreshold,
 ```
 
 **Impact:** Per-chat tuning without code changes
-**Effort:** 1 hour
 **Note:** No migration needed - C# defaults handle missing properties
 
 ---
@@ -401,7 +391,6 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
 ```
 
 **Impact:** Reduces 1 line of boilerplate per class
-**Effort:** 0.5 hours
 
 ---
 
@@ -424,7 +413,6 @@ if (existing != null)
 ```
 
 **Impact:** Adding new config columns won't require code changes
-**Effort:** 1 hour
 
 ---
 
@@ -448,7 +436,6 @@ Claim[] claims =
 ```
 
 **Impact:** Reduced allocation, clearer intent
-**Effort:** 0.5 hours
 
 ---
 
@@ -477,7 +464,6 @@ private static async Task SignInUserAsync(
 ```
 
 **Impact:** DRY principle, single source of truth
-**Effort:** 1 hour
 
 ---
 
@@ -510,7 +496,6 @@ private async Task<RegisterResult> CreateNewUserAsync(...) { /* ... */ }
 ```
 
 **Impact:** Testability, readability, SRP compliance
-**Effort:** 3 hours
 
 ---
 
@@ -530,7 +515,6 @@ private static string ToPascalCase(string snakeCase)
 ```
 
 **Impact:** Modern syntax, method can be static
-**Effort:** 0.5 hours
 
 ---
 
@@ -556,7 +540,6 @@ private async Task HandleNewMessageAsync(MessageRecord message)
 ```
 
 **Impact:** Better error handling
-**Effort:** 0.5 hours
 
 ---
 
@@ -581,7 +564,6 @@ private static readonly ChatPermissions DefaultPermissions = new() { /* ... */ }
 ```
 
 **Impact:** Small allocation reduction, clearer intent
-**Effort:** 0.5 hours
 
 ---
 
@@ -600,7 +582,6 @@ await using var context = await _contextFactory.CreateDbContextAsync();
 ```
 
 **Impact:** Code consistency
-**Effort:** 0.5 hours
 
 ---
 
@@ -619,7 +600,6 @@ if (spamResult.NetConfidence > AutoBanNetConfidenceThreshold && openAIConfident 
 ```
 
 **Impact:** Centralized config, self-documenting
-**Effort:** 0.5 hours
 
 ---
 
@@ -673,7 +653,6 @@ var jobId = await ScheduleJobAsync("WelcomeTimeout", payload, config.TimeoutSeco
 ```
 
 **Impact:** Reduces 150+ lines to ~30 lines, consistent error handling
-**Effort:** 2 hours
 
 ---
 
@@ -701,7 +680,6 @@ public class StopWordsSpamCheck(
 ```
 
 **Impact:** 11 classes × ~10 lines saved = 110+ lines removed
-**Effort:** 2 hours
 **Note:** Parameters use camelCase per Microsoft conventions
 
 ---
@@ -742,7 +720,6 @@ catch (Exception ex)
 ```
 
 **Impact:** 110 lines → 30 lines, single place to adjust fail-open behavior
-**Effort:** 1 hour
 
 ---
 
@@ -757,7 +734,6 @@ frequencies[word] = frequencies.GetValueOrDefault(word, 0) + 1;
 ```
 
 **Impact:** More concise, single lookup instead of two
-**Effort:** 0.5 hours
 
 ---
 
@@ -774,7 +750,6 @@ modelBuilder.Entity<WelcomeResponseDto>()
 ```
 
 **Impact:** Query optimization for job cancellation
-**Effort:** 1 hour (requires migration)
 
 ---
 
@@ -799,7 +774,6 @@ public AppDbContext CreateDbContext(string[] args)
 ```
 
 **Impact:** Developer flexibility without code changes
-**Effort:** 0.5 hours
 
 ---
 
@@ -819,7 +793,6 @@ catch (Exception ex)
 }
 ```
 
-**Effort:** 0.5 hours
 
 ---
 
@@ -831,7 +804,6 @@ catch (Exception ex)
 **Recommendation:**
 Remove the empty method entirely from OnModelCreating.
 
-**Effort:** 0.5 hours
 
 ---
 
@@ -849,7 +821,6 @@ public string Protect(string totpSecret)
 }
 ```
 
-**Effort:** 0.5 hours
 
 ---
 
@@ -863,7 +834,6 @@ public string Protect(string totpSecret)
 <RootNamespace>TelegramGroupsAdmin.Data</RootNamespace>
 ```
 
-**Effort:** 0.5 hours
 
 ---
 
@@ -880,7 +850,6 @@ grep -r "ISpamDetector" --include="*.cs" .
 rm TelegramGroupsAdmin.SpamDetection/Services/SpamDetector.cs
 ```
 
-**Effort:** 0.5 hours
 
 ---
 
@@ -900,7 +869,6 @@ var dmText = $$"""
     """;
 ```
 
-**Effort:** 0.5 hours
 **Note:** Only beneficial for strings with 3+ line breaks
 
 ---
@@ -917,7 +885,6 @@ await repository.InsertAsync(...).ConfigureAwait(false);
 ```
 
 **Impact:** Minor performance, library best practice
-**Effort:** 1 hour
 **Note:** Not critical for .NET Core but standard for library code
 
 ---
@@ -945,51 +912,47 @@ public enum PermissionLevel
 }
 ```
 
-**Effort:** 1 hour
 
 ---
 
 ## Execution Roadmap
 
-### Phase 1: High Priority (Week 1-2)
-**Estimated Effort:** 12-15 hours
+### Phase 1: High Priority
 
-1. **H4** - String magic values → enum for ConfigType (2h, breaking change)
-2. **H5** - Optimize permission checking query (2h)
-3. **H11** - Add missing ConfidenceThreshold config properties (1h)
-4. **H6** - WelcomeResponseDto enum consistency (2h, requires migration)
-5. **H3** - Convert all option records → classes for Blazor consistency (2h)
-6. **H7** - Fix .Result usage in Audit.razor (0.5h)
-7. **H8** - Buffer.BlockCopy → Span<T> (0.5h)
-8. **H9** - Fix namespace mismatch (0.5h)
-9. **H10** - Extract duplicate query patterns (2h)
+1. **H4** - String magic values → enum for ConfigType (breaking change)
+2. **H5** - Optimize permission checking query
+3. **H11** - Add missing ConfidenceThreshold config properties
+4. **H6** - WelcomeResponseDto enum consistency (requires migration)
+5. **H3** - Convert all option records → classes for Blazor consistency
+6. **H7** - Fix .Result usage in Audit.razor
+7. **H8** - Buffer.BlockCopy → Span<T>
+8. **H9** - Fix namespace mismatch
+9. **H10** - Extract duplicate query patterns
 
-### Phase 2: Medium Priority - Code Quality (Week 3-4)
-**Estimated Effort:** 12-16 hours
+### Phase 2: Medium Priority - Code Quality
 
-1. **M11** - Extract TickerQ scheduling helper (2h)
-2. **M13** - Extract fail-open error handling (1h)
-3. **M5** - Refactor long RegisterAsync method (3h)
-4. **M4** - Extract duplicate sign-in logic (1h)
-5. **M12** - Convert to primary constructors (2h, optional)
-6. **M2** - Use EF Core SetValues() (1h)
-7. **M15** - Add missing indexes (1h, requires migration)
-8. **M10** - Extract magic number constants (0.5h)
-9. **M8** - ChatPermissions → static readonly (0.5h)
-10. **M9** - Standardize scope creation (0.5h)
-11. **M1, M3, M6, M7, M14, M16** - Various small improvements (3h)
+1. **M11** - Extract TickerQ scheduling helper
+2. **M13** - Extract fail-open error handling
+3. **M5** - Refactor long RegisterAsync method
+4. **M4** - Extract duplicate sign-in logic
+5. **M12** - Convert to primary constructors (optional)
+6. **M2** - Use EF Core SetValues()
+7. **M15** - Add missing indexes (requires migration)
+8. **M10** - Extract magic number constants
+9. **M8** - ChatPermissions → static readonly
+10. **M9** - Standardize scope creation
+11. **M1, M3, M6, M7, M14, M16** - Various small improvements
 
-### Phase 3: Low Priority - Polish (Week 5)
-**Estimated Effort:** 4-6 hours
+### Phase 3: Low Priority - Polish
 
-1. **L5** - Remove obsolete SpamDetector (0.5h)
-2. **L2** - Remove empty ConfigureCompositeKeys (0.5h)
-3. **L4** - Fix RootNamespace mismatch (0.5h)
-4. **L3** - Use ThrowIfNullOrEmpty (0.5h)
-5. **L1** - Add logging to catch-all (0.5h)
-6. **L7** - Add ConfigureAwait(false) sweep (1h)
-7. **L8** - Add enum XML docs (1h)
-8. **L6** - Raw string literals (0.5h, optional)
+1. **L5** - Remove obsolete SpamDetector
+2. **L2** - Remove empty ConfigureCompositeKeys
+3. **L4** - Fix RootNamespace mismatch
+4. **L3** - Use ThrowIfNullOrEmpty
+5. **L1** - Add logging to catch-all
+6. **L7** - Add ConfigureAwait(false) sweep
+7. **L8** - Add enum XML docs
+8. **L6** - Raw string literals (optional)
 
 ---
 
@@ -1049,16 +1012,201 @@ dotnet ef migrations add RefactorWelcomeResponseAndAddIndex --project TelegramGr
 
 ---
 
+## File Organization & Architecture Refactoring (ARCH-prefix)
+
+### ARCH-1: Strict One-Class-Per-File + Library Separation of Concerns
+**Scope:** All 7 projects (331 C# files)
+**Severity:** Architectural | **Impact:** Maintainability, Navigation, Discoverability
+
+**Issue:**
+Many files contain multiple classes/interfaces/enums (consolidation pattern from early development). While organized by domain, this violates one-class-per-file convention and makes navigation harder as codebase grows.
+
+**Current State:**
+- **TelegramGroupsAdmin.Telegram/Models:**
+  - MessageModels.cs: 11 types (243 lines)
+  - UserModels.cs: 10 types (167 lines)
+  - TelegramUserModels.cs: 6+ types (179 lines)
+  - WelcomeModels.cs: 6 types (126 lines)
+  - Plus 8 other multi-class files
+
+- **TelegramGroupsAdmin.Data/Models:**
+  - SpamDetectionRecords.cs: 4 classes + 1 enum
+  - UrlFilterRecords.cs: 3 classes
+  - Plus 15+ other multi-class files
+
+- **TelegramGroupsAdmin.ContentDetection/Models:**
+  - SpamCheckRequests.cs: 12+ sealed classes (123 lines)
+  - UrlFilterModels.cs: 9 types
+
+- **Critical Duplicates:**
+  - Actor.cs exists in BOTH Core AND Telegram (152 lines each, identical)
+  - ReportStatus enum in BOTH Data AND Telegram
+  - IMessageHistoryService in BOTH Telegram AND ContentDetection
+
+**Recommendation:**
+
+**Phase 1: Critical Fixes**
+1. Delete `TelegramGroupsAdmin.Telegram/Models/Actor.cs` (use Core version)
+2. Move `ReportStatus` enum to Core
+3. Move `IMessageHistoryService` to Core/Interfaces
+4. Expand Core as shared abstraction layer
+
+**Phase 2: Telegram Library (Pilot)**
+Split all multi-class files:
+- MessageModels.cs → 15 files (Messages/ folder)
+- UserModels.cs → 10 files (Users/ folder)
+- TelegramUserModels.cs → 8 files (Users/ folder)
+- WelcomeModels.cs → 6 files (Welcome/ folder)
+- Extract service interfaces (IWelcomeService, IImpersonationDetectionService, etc.)
+
+Reorganize structure:
+```
+TelegramGroupsAdmin.Telegram/
+├── Models/
+│   ├── Messages/
+│   ├── Users/
+│   ├── Moderation/
+│   ├── Welcome/
+│   ├── Config/
+│   ├── Reports/
+│   ├── Tags/
+│   └── Enums/
+├── Services/
+│   ├── Interfaces/
+│   ├── BackgroundServices/
+│   └── BotCommands/
+│       ├── Interfaces/
+│       └── Commands/
+└── Repositories/
+```
+
+**Phase 3: Other Libraries**
+Apply same pattern to:
+- ContentDetection (SpamCheckRequests.cs → 12 files, UrlFilterModels.cs → 9 files)
+- Data (25+ multi-class files → individual DTOs)
+- Configuration (ConfigRecord naming consistency)
+- Main App (DialogModels.cs, BackupModels.cs)
+
+**Phase 4: Dead Code Cleanup**
+Search and destroy:
+- Unused classes/interfaces (verify zero references)
+- Deprecated methods (e.g., SetUserActiveAsync)
+- SpamDetector.cs (marked LEGACY/obsolete)
+- Old TODO comments (convert actionable ones to backlog)
+- Commented-out code blocks
+
+Search patterns:
+```bash
+grep -r "\[Obsolete" --include="*.cs"
+grep -ri "deprecated" --include="*.cs"
+# Manual verification for each candidate
+```
+
+**Rationale:**
+- **Navigation:** IDE file search becomes more precise (no ambiguity)
+- **Git history:** Changes to one type don't pollute history of unrelated types
+- **Merge conflicts:** Reduced (separate files = isolated changes)
+- **Discoverability:** Clear 1:1 mapping between type name and file name
+- **Dead code:** Easier to identify unused code via reference search
+- **Core library:** Single source of truth for shared contracts
+
+**Impact:**
+- File count increases ~2-3x (331 files → ~800-900 files)
+- Average file size decreases (150 lines → 30-50 lines)
+- Navigation time decreases (Ctrl+T goes directly to type)
+- Merge conflict rate decreases (isolated changes)
+- Dead code removal improves codebase clarity
+
+
+**Breaking Change:** No (internal reorganization, public API unchanged)
+
+---
+
+## Future Architecture Patterns (Documented, Not Implemented)
+
+### FUTURE-1: Interface Default Implementations (IDI) Pattern
+**Technology:** C# 8.0+ Interface Default Methods
+**Status:** DOCUMENTED (Not Yet Adopted)
+**Target:** Post-ARCH-1 completion
+
+**Pattern Overview:**
+
+C# 8.0+ supports default method implementations in interfaces. This would be an **exception to strict one-class-per-file** once adopted.
+
+**Example:**
+```csharp
+// File: IBotCommand.cs (contains interface + default implementations)
+public interface IBotCommand
+{
+    string CommandName { get; }
+    Task<bool> ExecuteAsync(Message message, CancellationToken ct);
+
+    // Default implementations (shared behavior)
+    bool IsAuthorized(Message message) => true;
+
+    string GetHelpText() => $"/{CommandName} - No help available";
+
+    async Task<bool> ValidatePermissionsAsync(long chatId, long userId)
+    {
+        // Default permission check logic
+        return true;
+    }
+}
+
+// File: BanCommand.cs (only overrides what's needed)
+public class BanCommand : IBotCommand
+{
+    public string CommandName => "ban";
+
+    public async Task<bool> ExecuteAsync(Message message, CancellationToken ct)
+    {
+        // Custom implementation
+    }
+
+    // Inherits default IsAuthorized(), GetHelpText(), ValidatePermissionsAsync()
+}
+```
+
+**Benefits:**
+- Reduces boilerplate across 13 bot commands
+- Single source of truth for common behavior
+- Default fail-open logic for spam checks
+- Shared repository patterns
+
+**Candidate Interfaces:**
+1. **IBotCommand** (13 implementations) - Authorization, help text, validation (~150-200 lines saved)
+2. **ISpamCheck** (9 implementations) - Fail-open error handling, logging (~100-150 lines saved)
+3. **IRepository** (20+ implementations) - AsNoTracking, Include patterns (~200-300 lines saved)
+
+**When to Adopt:**
+- After ARCH-1 completes (clean baseline established)
+- When duplicate patterns clear across 3+ implementations
+- When default behavior is truly universal
+
+**File Naming Convention:**
+- Interface with defaults: `IBotCommand.cs` (single file - exception to one-class-per-file)
+- Implementations: `BanCommand.cs`, `WarnCommand.cs` (separate files)
+
+**Expected Impact:**
+- ~500-800 lines of duplicate code eliminated
+- Improved consistency (default behavior enforced)
+- Easier to add new implementations
+
+**Tracking:** FUTURE-1
+
+---
+
 ## Summary Statistics
 
-| Priority | Count | Est. Effort | Performance Impact |
-|----------|-------|-------------|-------------------|
-| High | 9 issues | 12-15 hours | 30-50% faster in high-traffic operations |
-| Medium | 17 issues | 12-16 hours | Code quality + consistency |
-| Low | 8 issues | 4-6 hours | Style polish |
+| Priority | Count | Impact |
+|----------|-------|--------|
+| Architectural | 1 issue (ARCH-1) | File organization, navigation, maintainability |
+| High | 9 issues | 30-50% faster in high-traffic operations |
+| Medium | 17 issues | Code quality + consistency |
+| Low | 8 issues | Style polish |
+| Future | 1 pattern (FUTURE-1) | IDI pattern for boilerplate reduction |
 
-**Total Issues Found:** 34 actionable
-**Total Estimated Effort:** 28-37 hours
+**Total Issues Found:** 35 actionable (34 immediate + 1 architectural)
 **Expected Performance Gain:** 30-50% improvement in command routing, 15-20% in queries
 
 ---
@@ -1070,5 +1218,5 @@ dotnet ef migrations add RefactorWelcomeResponseAndAddIndex --project TelegramGr
 - **No feature changes:** Pure refactoring, preserve all functionality
 - **Build quality:** Must maintain 0 errors, 0 warnings standard
 
-**Last Updated:** 2025-10-15
-**Next Review:** After Phase 1 completion
+**Last Updated:** 2025-10-18
+**Next Review:** After Phase 1 completion (H-prefix issues) or ARCH-1 completion (file organization)
