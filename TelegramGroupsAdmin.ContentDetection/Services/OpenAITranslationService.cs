@@ -69,7 +69,7 @@ IMPORTANT: Respond with ONLY the raw JSON object. Do NOT wrap it in markdown cod
                 temperature = 0.1
             };
 
-            var response = await _httpClient.PostAsJsonAsync("https://api.openai.com/v1/chat/completions", request, cancellationToken);
+            var response = await _httpClient.PostAsJsonAsync("https://api.openai.com/v1/chat/completions", request, cancellationToken).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -77,7 +77,7 @@ IMPORTANT: Respond with ONLY the raw JSON object. Do NOT wrap it in markdown cod
                 return null;
             }
 
-            var jsonContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            var jsonContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             var openAiResponse = JsonSerializer.Deserialize<OpenAIResponse>(jsonContent, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true

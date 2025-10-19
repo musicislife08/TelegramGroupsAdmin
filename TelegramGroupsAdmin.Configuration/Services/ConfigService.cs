@@ -21,7 +21,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         ArgumentNullException.ThrowIfNull(config);
 
         var json = JsonSerializer.Serialize(config, JsonOptions);
-        var record = await configRepository.GetAsync(chatId);
+        var record = await configRepository.GetAsync(chatId).ConfigureAwait(false);
 
         if (record == null)
         {
@@ -35,12 +35,12 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         // Set the appropriate config column based on config type
         SetConfigColumn(record, configType, json);
 
-        await configRepository.UpsertAsync(record);
+        await configRepository.UpsertAsync(record).ConfigureAwait(false);
     }
 
     public async Task<T?> GetAsync<T>(ConfigType configType, long? chatId) where T : class
     {
-        var record = await configRepository.GetAsync(chatId);
+        var record = await configRepository.GetAsync(chatId).ConfigureAwait(false);
         if (record == null)
         {
             return null;
@@ -60,12 +60,12 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         // If requesting global config, just return it directly
         if (chatId == null)
         {
-            return await GetAsync<T>(configType, null);
+            return await GetAsync<T>(configType, null).ConfigureAwait(false);
         }
 
         // Get both global and chat-specific configs
-        var globalConfig = await GetAsync<T>(configType, null);
-        var chatConfig = await GetAsync<T>(configType, chatId);
+        var globalConfig = await GetAsync<T>(configType, null).ConfigureAwait(false);
+        var chatConfig = await GetAsync<T>(configType, chatId).ConfigureAwait(false);
 
         // If no chat-specific config, return global
         if (chatConfig == null)
@@ -85,7 +85,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
 
     public async Task DeleteAsync(ConfigType configType, long? chatId)
     {
-        var record = await configRepository.GetAsync(chatId);
+        var record = await configRepository.GetAsync(chatId).ConfigureAwait(false);
         if (record == null)
         {
             return;
@@ -97,11 +97,11 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         // If all config columns are null, delete the entire row
         if (IsRecordEmpty(record))
         {
-            await configRepository.DeleteAsync(chatId);
+            await configRepository.DeleteAsync(chatId).ConfigureAwait(false);
         }
         else
         {
-            await configRepository.UpsertAsync(record);
+            await configRepository.UpsertAsync(record).ConfigureAwait(false);
         }
     }
 

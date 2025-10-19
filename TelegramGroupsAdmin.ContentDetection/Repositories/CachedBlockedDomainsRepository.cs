@@ -34,7 +34,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
             query = query.Where(cbd => cbd.BlockMode == (int)blockMode.Value);
         }
 
-        var dtos = await query.ToListAsync(cancellationToken);
+        var dtos = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
         return dtos.Select(ToModel).ToList();
     }
 
@@ -48,7 +48,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
                 cbd.Domain == domain &&
                 (cbd.ChatId == null || cbd.ChatId == chatId) &&
                 cbd.BlockMode == (int)blockMode,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
         return dto == null ? null : ToModel(dto);
     }
@@ -64,7 +64,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
                 cbd.Domain == domain &&
                 (cbd.ChatId == null || cbd.ChatId == chatId) &&
                 cbd.BlockMode == (int)BlockMode.Hard,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
         return dto == null ? null : ToModel(dto);
     }
@@ -82,8 +82,8 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
             Notes = d.Notes
         }).ToList();
 
-        await _context.CachedBlockedDomains.AddRangeAsync(dtos, cancellationToken);
-        await _context.SaveChangesAsync(cancellationToken);
+        await _context.CachedBlockedDomains.AddRangeAsync(dtos, cancellationToken).ConfigureAwait(false);
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DeleteBySourceAsync(string sourceType, long sourceId, CancellationToken cancellationToken = default)
@@ -92,7 +92,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         // Use ExecuteDeleteAsync to avoid loading entities into memory and prevent concurrency issues
         await _context.CachedBlockedDomains
             .Where(cbd => cbd.SourceSubscriptionId == sourceId)
-            .ExecuteDeleteAsync(cancellationToken);
+            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DeleteAllAsync(long? chatId = null, CancellationToken cancellationToken = default)
@@ -105,7 +105,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         }
 
         // Use ExecuteDeleteAsync to avoid loading entities into memory and prevent concurrency issues
-        await query.ExecuteDeleteAsync(cancellationToken);
+        await query.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<UrlFilterStats> GetStatsAsync(long? chatId = null, CancellationToken cancellationToken = default)
@@ -117,22 +117,22 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
             query = query.Where(cbd => cbd.ChatId == null || cbd.ChatId == chatId.Value);
         }
 
-        var totalCachedDomains = await query.CountAsync(cancellationToken);
-        var hardBlockDomains = await query.CountAsync(cbd => cbd.BlockMode == (int)BlockMode.Hard, cancellationToken);
-        var softBlockDomains = await query.CountAsync(cbd => cbd.BlockMode == (int)BlockMode.Soft, cancellationToken);
+        var totalCachedDomains = await query.CountAsync(cancellationToken).ConfigureAwait(false);
+        var hardBlockDomains = await query.CountAsync(cbd => cbd.BlockMode == (int)BlockMode.Hard, cancellationToken).ConfigureAwait(false);
+        var softBlockDomains = await query.CountAsync(cbd => cbd.BlockMode == (int)BlockMode.Soft, cancellationToken).ConfigureAwait(false);
 
         // Count subscriptions
-        var totalSubscriptions = await _context.BlocklistSubscriptions.CountAsync(cancellationToken);
+        var totalSubscriptions = await _context.BlocklistSubscriptions.CountAsync(cancellationToken).ConfigureAwait(false);
         var enabledSubscriptions = await _context.BlocklistSubscriptions
-            .CountAsync(bs => bs.Enabled, cancellationToken);
+            .CountAsync(bs => bs.Enabled, cancellationToken).ConfigureAwait(false);
         var hardBlockSubscriptions = await _context.BlocklistSubscriptions
-            .CountAsync(bs => bs.Enabled && bs.BlockMode == (int)BlockMode.Hard, cancellationToken);
+            .CountAsync(bs => bs.Enabled && bs.BlockMode == (int)BlockMode.Hard, cancellationToken).ConfigureAwait(false);
         var softBlockSubscriptions = await _context.BlocklistSubscriptions
-            .CountAsync(bs => bs.Enabled && bs.BlockMode == (int)BlockMode.Soft, cancellationToken);
+            .CountAsync(bs => bs.Enabled && bs.BlockMode == (int)BlockMode.Soft, cancellationToken).ConfigureAwait(false);
 
         // Count whitelisted domains (domain_filters with FilterType=Whitelist)
         var whitelistedDomains = await _context.DomainFilters
-            .CountAsync(df => df.Enabled && df.FilterType == 1, cancellationToken);  // 1 = Whitelist
+            .CountAsync(df => df.Enabled && df.FilterType == 1, cancellationToken).ConfigureAwait(false);  // 1 = Whitelist
 
         return new UrlFilterStats(
             TotalSubscriptions: totalSubscriptions,
