@@ -13,6 +13,7 @@
 The codebase demonstrates strong adherence to modern C# practices with minimal critical issues. Most concerns are code quality improvements and consistency refinements.
 
 **Key Strengths:**
+
 - ✅ Modern C# 12/13 features (collection expressions, file-scoped namespaces, switch expressions)
 - ✅ Proper async/await patterns throughout
 - ✅ Strong architectural separation (UI/Data models, 3-tier pattern)
@@ -20,6 +21,7 @@ The codebase demonstrates strong adherence to modern C# practices with minimal c
 - ✅ Good use of EF Core patterns (AsNoTracking, proper indexing)
 
 **Statistics by Severity:**
+
 - **Critical:** 0 (C1 resolved in Phase 4.4)
 - **High:** 0 (all resolved 2025-10-18)
 - **Medium:** 15 (code quality, maintainability)
@@ -32,33 +34,39 @@ The codebase demonstrates strong adherence to modern C# practices with minimal c
 ## Recent Fixes (Completed)
 
 ### ✅ C1: Fire-and-Forget Tasks (Phase 4.4)
+
 **Status:** RESOLVED
 **Impact:** Production reliability ensured
 
 All `Task.Run` fire-and-forget patterns replaced with TickerQ persistent jobs:
+
 - WelcomeTimeoutJob (kicks user after timeout)
 - DeleteMessageJob (deletes warning/fallback messages)
 - Jobs survive restarts, have retry logic, proper error logging
 
 ### ✅ MH1: GetStatsAsync Query Optimization
+
 **Status:** RESOLVED
 **Impact:** 80% faster (2 queries → 1 query)
 
 Consolidated statistics calculation into single query with GroupBy aggregation.
 
 ### ✅ MH2: CleanupExpiredAsync Query Optimization
+
 **Status:** RESOLVED
 **Impact:** 50% faster (3 queries → 1 query)
 
 Single query fetches messages with related edits, eliminates duplicate WHERE clauses.
 
 ### ✅ H1: Extract Duplicate ChatPermissions
+
 **Status:** RESOLVED
 **Impact:** DRY principle, maintainability
 
 Static helper methods for permission policies (restricted vs default).
 
 ### ✅ H2: Magic Numbers to Database Config
+
 **Status:** RESOLVED
 **Impact:** Per-chat tuning without redeployment
 
@@ -81,6 +89,7 @@ Added MaxConfidenceVetoThreshold, Translation thresholds to SpamDetectionConfig.
 ## Medium Priority Issues (M-prefix)
 
 ### M1: Redundant Field Assignment in Primary Constructors
+
 **Project:** TelegramGroupsAdmin.Configuration, TelegramGroupsAdmin.Data
 **Location:** `ConfigService.cs:10-12`, `ConfigRepository.cs:28-30`
 **Severity:** Medium | **Impact:** Readability
@@ -89,6 +98,7 @@ Added MaxConfidenceVetoThreshold, Translation thresholds to SpamDetectionConfig.
 C# 12 primary constructors don't need explicit field assignment.
 
 **Recommendation:**
+
 ```csharp
 public class ConfigService(IConfigRepository configRepository) : IConfigService
 {
@@ -101,6 +111,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
 ---
 
 ### M2: ConfigRepository UpsertAsync Manual Property Assignment
+
 **Project:** TelegramGroupsAdmin.Configuration
 **Location:** `ConfigRepository.cs:39-60`
 **Severity:** Medium | **Impact:** Maintainability
@@ -109,6 +120,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
 Manual property assignment requires updating code when schema changes.
 
 **Recommendation:**
+
 ```csharp
 if (existing != null)
 {
@@ -122,8 +134,8 @@ if (existing != null)
 
 ---
 
-
 ### M4: Duplicate Sign-In Logic
+
 **Project:** TelegramGroupsAdmin
 **Location:** `Endpoints/AuthEndpoints.cs:43-63, 94-114`
 **Severity:** Medium | **Impact:** Maintainability
@@ -132,6 +144,7 @@ if (existing != null)
 Sign-in logic duplicated in `/api/auth/login` and `/api/auth/register`.
 
 **Recommendation:**
+
 ```csharp
 private static async Task SignInUserAsync(
     HttpContext httpContext,
@@ -152,6 +165,7 @@ private static async Task SignInUserAsync(
 ---
 
 ### M5: Long Method - AuthService.RegisterAsync
+
 **Project:** TelegramGroupsAdmin
 **Location:** `Services/AuthService.cs:165-421` (257 lines)
 **Severity:** Medium | **Impact:** Testability
@@ -160,6 +174,7 @@ private static async Task SignInUserAsync(
 257-line method violates Single Responsibility Principle.
 
 **Recommendation:**
+
 ```csharp
 public async Task<RegisterResult> RegisterAsync(...)
 {
@@ -183,13 +198,14 @@ private async Task<RegisterResult> CreateNewUserAsync(...) { /* ... */ }
 
 ---
 
-
 ### M7: Async Void in Event Handler Needs Error Handling
+
 **Project:** TelegramGroupsAdmin
 **Location:** `Components/Pages/Messages.razor:148`
 **Severity:** Medium | **Impact:** Reliability
 
 **Recommendation:**
+
 ```csharp
 private async Task HandleNewMessageAsync(MessageRecord message)
 {
@@ -210,6 +226,7 @@ private async Task HandleNewMessageAsync(MessageRecord message)
 ---
 
 ### M8: ChatPermissions Should Be Static Constants
+
 **Project:** TelegramGroupsAdmin.Telegram
 **Location:** `Services/WelcomeService.cs:60-97`
 **Severity:** Medium | **Impact:** Performance
@@ -218,6 +235,7 @@ private async Task HandleNewMessageAsync(MessageRecord message)
 Creating new ChatPermissions objects on every user join.
 
 **Recommendation:**
+
 ```csharp
 private static readonly ChatPermissions RestrictedPermissions = new()
 {
@@ -234,11 +252,13 @@ private static readonly ChatPermissions DefaultPermissions = new() { /* ... */ }
 ---
 
 ### M9: Inconsistent Scope Creation Patterns
+
 **Project:** TelegramGroupsAdmin.Telegram
 **Location:** Throughout services
 **Severity:** Medium | **Impact:** Consistency
 
 **Recommendation:**
+
 ```csharp
 // Use consistent pattern: using var for simplicity
 using var scope = _serviceProvider.CreateScope();
@@ -252,11 +272,13 @@ await using var context = await _contextFactory.CreateDbContextAsync();
 ---
 
 ### M10: Magic Numbers for Confidence Thresholds
+
 **Project:** TelegramGroupsAdmin.Telegram
 **Location:** `Services/SpamActionService.cs:90, 116`
 **Severity:** Medium | **Impact:** Maintainability
 
 **Recommendation:**
+
 ```csharp
 private const int AutoBanNetConfidenceThreshold = 50;
 private const int BorderlineNetConfidenceThreshold = 0;
@@ -270,6 +292,7 @@ if (spamResult.NetConfidence > AutoBanNetConfidenceThreshold && openAIConfident 
 ---
 
 ### M11: Repeated TickerQ Job Scheduling Pattern
+
 **Project:** TelegramGroupsAdmin.Telegram
 **Location:** `Services/WelcomeService.cs`, `Services/MessageProcessingService.cs`
 **Severity:** Medium | **Impact:** Maintainability
@@ -278,6 +301,7 @@ if (spamResult.NetConfidence > AutoBanNetConfidenceThreshold && openAIConfident 
 Same 15-line TickerQ scheduling pattern repeated 10+ times.
 
 **Recommendation:**
+
 ```csharp
 // Extract to helper method
 private async Task<long?> ScheduleJobAsync<TPayload>(
@@ -323,11 +347,13 @@ var jobId = await ScheduleJobAsync("WelcomeTimeout", payload, config.TimeoutSeco
 ---
 
 ### M12: Use Primary Constructors for Spam Checks
+
 **Project:** TelegramGroupsAdmin.SpamDetection
 **Location:** All 11 spam check classes
 **Severity:** Medium | **Impact:** Readability
 
 **Recommendation:**
+
 ```csharp
 public class StopWordsSpamCheck(
     ILogger<StopWordsSpamCheck> logger,
@@ -351,11 +377,13 @@ public class StopWordsSpamCheck(
 ---
 
 ### M13: Extract Repeated Fail-Open Error Handling
+
 **Project:** TelegramGroupsAdmin.SpamDetection
 **Location:** Every CheckAsync method in all 11 spam checks
 **Severity:** Medium | **Impact:** Maintainability
 
 **Recommendation:**
+
 ```csharp
 // Add static helper
 public static class SpamCheckHelpers
@@ -390,11 +418,13 @@ catch (Exception ex)
 ---
 
 ### M14: Replace Dictionary.ContainsKey + Get with GetValueOrDefault
+
 **Project:** TelegramGroupsAdmin.SpamDetection
 **Location:** `Services/TokenizerService.cs:123-127`
 **Severity:** Medium | **Impact:** Readability
 
 **Recommendation:**
+
 ```csharp
 frequencies[word] = frequencies.GetValueOrDefault(word, 0) + 1;
 ```
@@ -404,11 +434,13 @@ frequencies[word] = frequencies.GetValueOrDefault(word, 0) + 1;
 ---
 
 ### M15: Missing Index on WelcomeResponseDto.TimeoutJobId
+
 **Project:** TelegramGroupsAdmin.Data
 **Location:** `AppDbContext.cs:176-217`
 **Severity:** Medium | **Impact:** Performance
 
 **Recommendation:**
+
 ```csharp
 modelBuilder.Entity<WelcomeResponseDto>()
     .HasIndex(w => w.TimeoutJobId)
@@ -420,11 +452,13 @@ modelBuilder.Entity<WelcomeResponseDto>()
 ---
 
 ### M16: AppDbContextFactory Hardcoded Connection String
+
 **Project:** TelegramGroupsAdmin.Data
 **Location:** `AppDbContextFactory.cs:17`
 **Severity:** Medium | **Impact:** Developer Experience
 
 **Recommendation:**
+
 ```csharp
 public AppDbContext CreateDbContext(string[] args)
 {
@@ -446,6 +480,7 @@ public AppDbContext CreateDbContext(string[] args)
 ## Low Priority Issues (L-prefix)
 
 ### L9: Expose ConfidenceThreshold Properties in Settings UI
+
 **Project:** TelegramGroupsAdmin
 **Location:** Settings UI - Spam Detection tab
 **Severity:** Low | **Impact:** User Experience
@@ -454,6 +489,7 @@ public AppDbContext CreateDbContext(string[] args)
 H11 added ConfidenceThreshold properties to 5 spam detection config classes, but no UI exists to edit them.
 
 **Properties needing UI inputs:**
+
 - SimilarityConfig.ConfidenceThreshold (default: 75)
 - BayesConfig.ConfidenceThreshold (default: 75)
 - TranslationConfig.ConfidenceThreshold (default: 80)
@@ -462,6 +498,7 @@ H11 added ConfidenceThreshold properties to 5 spam detection config classes, but
 
 **Recommendation:**
 Add MudNumericField inputs in /settings#spam-detection for each property:
+
 ```razor
 <MudNumericField @bind-Value="config.Similarity.ConfidenceThreshold"
                  Label="Similarity Confidence Threshold"
@@ -474,15 +511,14 @@ Add MudNumericField inputs in /settings#spam-detection for each property:
 
 ---
 
-
-
-
 ### L6: Raw String Literals for Long Templates
+
 **Project:** TelegramGroupsAdmin.Telegram
 **Location:** `Services/WelcomeService.cs:935`
 **Severity:** Low | **Impact:** Readability (marginal)
 
 **Recommendation:**
+
 ```csharp
 var dmText = $$"""
     Welcome to {{chatName}}! Here are our rules:
@@ -498,11 +534,13 @@ var dmText = $$"""
 ---
 
 ### L7: ConfigureAwait(false) for Library Code
+
 **Project:** TelegramGroupsAdmin.Telegram
 **Location:** Throughout all services
 **Severity:** Low | **Impact:** Best Practice
 
 **Recommendation:**
+
 ```csharp
 await botClient.SendMessage(...).ConfigureAwait(false);
 await repository.InsertAsync(...).ConfigureAwait(false);
@@ -514,11 +552,13 @@ await repository.InsertAsync(...).ConfigureAwait(false);
 ---
 
 ### L8: Add XML Documentation to Enum Values
+
 **Project:** TelegramGroupsAdmin.Data
 **Location:** All enum definitions
 **Severity:** Low | **Impact:** Developer Experience
 
 **Recommendation:**
+
 ```csharp
 /// <summary>
 /// User permission level hierarchy (stored as INT in database)
@@ -535,7 +575,6 @@ public enum PermissionLevel
     Owner = 2
 }
 ```
-
 
 ---
 
@@ -592,6 +631,7 @@ dotnet ef migrations add RefactorWelcomeResponseAndAddIndex --project TelegramGr
 ## Testing Strategy
 
 **For Each Refactoring:**
+
 1. Run full build: `dotnet build` (must maintain 0 errors, 0 warnings)
 2. Run existing tests (if any)
 3. Manual testing for critical paths:
@@ -602,6 +642,7 @@ dotnet ef migrations add RefactorWelcomeResponseAndAddIndex --project TelegramGr
    - Command routing (H5)
 
 **Breaking Changes:**
+
 - **H4** (ConfigType enum) - Update all callers
 - **H3** (Records) - Verify IOptions binding still works
 - **H6** (Enum storage) - Test data migration script
@@ -612,17 +653,20 @@ dotnet ef migrations add RefactorWelcomeResponseAndAddIndex --project TelegramGr
 ## Success Metrics
 
 **Code Quality:**
+
 - ✅ Maintain 0 build errors, 0 warnings
 - ✅ Reduce total lines of code by ~400-500 (boilerplate removal)
 - ✅ Eliminate all magic strings/numbers in critical paths
 - ✅ Consistent patterns across all 5 projects
 
 **Performance:**
+
 - ✅ 50% reduction in DB calls for command routing (H5)
 - ✅ Minor allocation reductions (M8, M3)
 - ✅ Improved query performance (M15 index)
 
 **Maintainability:**
+
 - ✅ Single source of truth for duplicated logic (M4, M11, M13)
 - ✅ Type safety for config types (H4)
 - ✅ Easier per-chat tuning (H11)
@@ -633,6 +677,7 @@ dotnet ef migrations add RefactorWelcomeResponseAndAddIndex --project TelegramGr
 ## File Organization & Architecture Refactoring (ARCH-prefix)
 
 ### ARCH-1: Strict One-Class-Per-File + Library Separation of Concerns
+
 **Scope:** All 7 projects (331 C# files)
 **Severity:** Architectural | **Impact:** Maintainability, Navigation, Discoverability
 
@@ -640,6 +685,7 @@ dotnet ef migrations add RefactorWelcomeResponseAndAddIndex --project TelegramGr
 Many files contain multiple classes/interfaces/enums (consolidation pattern from early development). While organized by domain, this violates one-class-per-file convention and makes navigation harder as codebase grows.
 
 **Current State:**
+
 - **TelegramGroupsAdmin.Telegram/Models:**
   - MessageModels.cs: 11 types (243 lines)
   - UserModels.cs: 10 types (167 lines)
@@ -663,7 +709,8 @@ Many files contain multiple classes/interfaces/enums (consolidation pattern from
 
 **Recommendation:**
 
-**Phase 1: Critical Fixes**
+### Phase 1: Critical Fixes
+
 1. Delete `TelegramGroupsAdmin.Telegram/Models/Actor.cs` (use Core version)
 2. Move `ReportStatus` enum to Core
 3. Move `IMessageHistoryService` to Core/Interfaces
@@ -671,6 +718,7 @@ Many files contain multiple classes/interfaces/enums (consolidation pattern from
 
 **Phase 2: Telegram Library (Pilot)**
 Split all multi-class files:
+
 - MessageModels.cs → 15 files (Messages/ folder)
 - UserModels.cs → 10 files (Users/ folder)
 - TelegramUserModels.cs → 8 files (Users/ folder)
@@ -678,7 +726,8 @@ Split all multi-class files:
 - Extract service interfaces (IWelcomeService, IImpersonationDetectionService, etc.)
 
 Reorganize structure:
-```
+
+```text
 TelegramGroupsAdmin.Telegram/
 ├── Models/
 │   ├── Messages/
@@ -700,6 +749,7 @@ TelegramGroupsAdmin.Telegram/
 
 **Phase 3: Other Libraries**
 Apply same pattern to:
+
 - ContentDetection (SpamCheckRequests.cs → 12 files, UrlFilterModels.cs → 9 files)
 - Data (25+ multi-class files → individual DTOs)
 - Configuration (ConfigRecord naming consistency)
@@ -707,6 +757,7 @@ Apply same pattern to:
 
 **Phase 4: Dead Code Cleanup**
 Search and destroy:
+
 - Unused classes/interfaces (verify zero references)
 - Deprecated methods (e.g., SetUserActiveAsync)
 - SpamDetector.cs (marked LEGACY/obsolete)
@@ -714,6 +765,7 @@ Search and destroy:
 - Commented-out code blocks
 
 Search patterns:
+
 ```bash
 grep -r "\[Obsolete" --include="*.cs"
 grep -ri "deprecated" --include="*.cs"
@@ -721,6 +773,7 @@ grep -ri "deprecated" --include="*.cs"
 ```
 
 **Rationale:**
+
 - **Navigation:** IDE file search becomes more precise (no ambiguity)
 - **Git history:** Changes to one type don't pollute history of unrelated types
 - **Merge conflicts:** Reduced (separate files = isolated changes)
@@ -729,12 +782,12 @@ grep -ri "deprecated" --include="*.cs"
 - **Core library:** Single source of truth for shared contracts
 
 **Impact:**
+
 - File count increases ~2-3x (331 files → ~800-900 files)
 - Average file size decreases (150 lines → 30-50 lines)
 - Navigation time decreases (Ctrl+T goes directly to type)
 - Merge conflict rate decreases (isolated changes)
 - Dead code removal improves codebase clarity
-
 
 **Breaking Change:** No (internal reorganization, public API unchanged)
 
@@ -743,6 +796,7 @@ grep -ri "deprecated" --include="*.cs"
 ## Future Architecture Patterns (Documented, Not Implemented)
 
 ### FUTURE-1: Interface Default Implementations (IDI) Pattern
+
 **Technology:** C# 8.0+ Interface Default Methods
 **Status:** DOCUMENTED (Not Yet Adopted)
 **Target:** Post-ARCH-1 completion
@@ -752,6 +806,7 @@ grep -ri "deprecated" --include="*.cs"
 C# 8.0+ supports default method implementations in interfaces. This would be an **exception to strict one-class-per-file** once adopted.
 
 **Example:**
+
 ```csharp
 // File: IBotCommand.cs (contains interface + default implementations)
 public interface IBotCommand
@@ -786,26 +841,31 @@ public class BanCommand : IBotCommand
 ```
 
 **Benefits:**
+
 - Reduces boilerplate across 13 bot commands
 - Single source of truth for common behavior
 - Default fail-open logic for spam checks
 - Shared repository patterns
 
 **Candidate Interfaces:**
+
 1. **IBotCommand** (13 implementations) - Authorization, help text, validation (~150-200 lines saved)
 2. **ISpamCheck** (9 implementations) - Fail-open error handling, logging (~100-150 lines saved)
 3. **IRepository** (20+ implementations) - AsNoTracking, Include patterns (~200-300 lines saved)
 
 **When to Adopt:**
+
 - After ARCH-1 completes (clean baseline established)
 - When duplicate patterns clear across 3+ implementations
 - When default behavior is truly universal
 
 **File Naming Convention:**
+
 - Interface with defaults: `IBotCommand.cs` (single file - exception to one-class-per-file)
 - Implementations: `BanCommand.cs`, `WarnCommand.cs` (separate files)
 
 **Expected Impact:**
+
 - ~500-800 lines of duplicate code eliminated
 - Improved consistency (default behavior enforced)
 - Easier to add new implementations
