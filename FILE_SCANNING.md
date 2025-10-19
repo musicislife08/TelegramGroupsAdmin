@@ -155,9 +155,26 @@ The system separates scanning into two distinct tiers based on cost and quota co
 
 **Purpose**: Leverage multiple free Windows antivirus engines simultaneously via Microsoft's Antimalware Scan Interface
 
-**Why This Is Powerful**:
-- AMSI sends scan requests to ALL registered antivirus providers
-- Single API call → 4-5 independent commercial AV engines scan in parallel
+**⚠️ CRITICAL: Verify Multi-Engine Behavior Before Deployment**:
+- AMSI does NOT guarantee all installed AVs will respond to each scan request
+- Windows Defender often enters "passive mode" when third-party AV is installed
+- AMSI typically resolves to ONE active provider at a time (not 4-5 in parallel)
+- **You MUST verify** how many engines actually respond on YOUR Windows configuration
+- Build a probe script (see AMSI Provider Verification section) that logs which providers answer
+- If only 1 provider responds consistently, reframe as "different engine" NOT "multi-engine voting"
+- Update architecture documentation based on actual test results
+
+**Workaround if AMSI Only Uses One Provider**:
+- If AMSI resolves to only one AV, you can still achieve multi-engine scanning using multiple Windows VMs
+- Deploy separate Windows VMs, each with a different AV installed (VM1: Defender only, VM2: Avast only, VM3: AVG only, etc.)
+- Configure Tier 1 to call all Windows Scanner APIs in parallel (multiple HTTP endpoints)
+- Resource cost: Higher (4-5 VMs vs 1 VM), but still $0 in software licensing
+- Benefit: Guaranteed independent scans from each AV engine
+- This approach gives you true multi-engine voting even if AMSI doesn't
+
+**Why This Is Powerful** (IF Multi-Engine Works):
+- AMSI can send scan requests to ALL registered antivirus providers
+- Single API call → potentially 4-5 independent commercial AV engines scan in parallel
 - Bypasses expensive SDK licensing (uses free consumer AV installations)
 - Each AV has unique signatures and heuristics
 - Built-in voting (AMSI returns "malicious" if ANY provider detects threat)
@@ -229,7 +246,130 @@ Since AMSI is a Windows-only API, a lightweight REST service is needed:
 
 ---
 
-## 4. Tier 2 - Cloud Scanners
+## 3.5. Critical Implementation Notes
+
+### Hash-First Cloud Optimization
+
+**Always try hash reputation before uploading files to cloud services:**
+
+- **VirusTotal**: Supports free hash-only lookups (GET `/api/v3/files/{hash}`) before file upload
+- **Cost**: Hash lookups don't count against upload quota in most services
+- **Privacy**: Hash lookups expose file identity but not content
+- **Speed**: ~100ms vs 5-10s for file upload + scan
+- **Flow**: Check hash first → if unknown, then upload → if known-good, skip all scanning → if known-bad, flag immediately
+
+This optimization can reduce cloud quota consumption by 30-50% for common files.
+
+---
+
+### Archive Handling Policy
+
+**How ClamAV handles archives:**
+- Automatically decompresses and scans contents of: .zip, .tar, .tar.gz, .rar, .7z
+- **Recursion limit**: 17 levels deep (default) to prevent archive bombs
+- **File limit**: 10,000 files per archive (prevents zip bombs)
+- **Size limit**: 25MB extracted content per archive (prevents decompression bombs)
+
+**Password-protected archives:**
+- ClamAV cannot scan password-protected archives
+- **Policy options**:
+  - **Permissive** (default): Allow password-protected archives (fail-open)
+  - **Strict**: Block all password-protected archives
+  - **Whitelist-only**: Allow password-protected archives only from trusted users
+
+**YARA and nested content:**
+- YARA scans raw bytes (does not extract archives automatically)
+- Can detect archive-specific patterns (magic bytes, structure anomalies)
+- Cannot scan contents of password-protected archives
+
+Document your archive policy in configuration and communicate to users if strict mode is enabled.
+
+---
+
+### File Size Limitations
+
+**Telegram file size reality:**
+- Telegram supports files up to **2 GB** (2,147,483,648 bytes)
+- Your default config: **100 MB** (104,857,600 bytes) limit
+
+**Trade-offs:**
+
+| Limit | Files Scanned | Files Skipped | Rationale |
+|-------|---------------|---------------|-----------|
+| 100 MB | ~90-95% | Large archives, videos, ISOs | Balance scan time vs coverage |
+| 500 MB | ~97-99% | Very large archives/media | Longer scan times acceptable |
+| 2 GB | 100% | None | Maximum coverage, may timeout |
+
+**Recommendations:**
+- **Default (100 MB)**: Good balance for most deployments
+- **High-security chats**: Increase to 500 MB or 2 GB with longer timeouts
+- **Public groups**: Keep at 100 MB to prevent resource exhaustion
+- **Document the trade-off**: Users should know large files are skipped
+
+Files exceeding the limit are **fail-open** (allowed) by default. Consider fail-close for high-security groups.
+
+---
+
+### Fail-Close Per-Chat Option
+
+**Current behavior**: When all scanners fail or quota exhausted → fail-open (allow file)
+
+**Fail-close option** (per-chat configuration):
+- When scan cannot complete (timeout, all quota exhausted, all scanners down) → delete file + notify user
+- **Use cases**:
+  - High-security groups (zero tolerance for missed threats)
+  - Groups under active attack (temporary fail-close during incident)
+  - Compliance requirements (must scan all files)
+
+**Configuration**:
+```json
+{
+  "general": {
+    "failOpen": false,  // Set to false for fail-close behavior
+    "failCloseDMMessage": "File scanning temporarily unavailable. Your file was removed for safety. Please try again later."
+  }
+}
+```
+
+**Trade-off**: Fail-close may block legitimate files during outages. Use with caution.
+
+---
+
+### Cloud Privacy & Licensing Considerations
+
+**Which services upload file content vs hash-only:**
+
+| Service | Hash Lookup | File Upload | Privacy Level |
+|---------|-------------|-------------|---------------|
+| VirusTotal | ✅ Free | ✅ Required for unknown hashes | Medium (upload required eventually) |
+| MetaDefender | ❌ No | ✅ Required | Low (always uploads) |
+| Hybrid Analysis | ❌ No | ✅ Required + Public visibility | Very Low (samples may be public) |
+| Intezer | ❌ No | ✅ Required + Public visibility | Very Low (free tier is public) |
+
+**Privacy recommendations:**
+- **Hash-first always**: Check VT hash before uploading
+- **Per-chat toggles**: Allow users to disable specific cloud services
+- **Local-only mode**: Option to disable all cloud services (ClamAV + YARA only)
+- **Document visibility**: Warn users that Hybrid Analysis and Intezer free tiers may expose samples publicly
+
+**Licensing warnings:**
+
+⚠️ **Free antivirus products may prohibit server/commercial use:**
+- Avast Free, AVG Free, Avira Free: Check EULA for server deployment restrictions
+- Some "home/free" licenses prohibit use on Windows Server SKUs
+- Multi-AV installations may violate some EULAs (read carefully)
+- **Recommendation**: Test with 1-2 AVs first, verify licensing compliance
+- **Alternative**: Use only Windows Defender (no licensing restrictions) if uncertain
+
+**License compliance checklist:**
+1. Read EULA for each AV before installing on Windows Server
+2. Verify "free tier" allows server deployment
+3. Document which AVs are legally compliant for your use case
+4. Have fallback plan (single AV or local-only mode) if licensing unclear
+
+---
+
+##  4. Tier 2 - Cloud Scanners
 
 ### Queue Priority System
 
