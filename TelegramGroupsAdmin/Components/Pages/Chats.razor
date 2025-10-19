@@ -1,7 +1,7 @@
 @page "/chats"
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Components.Shared.ChatManagement
-@using TelegramGroupsAdmin.SpamDetection.Repositories
+@using TelegramGroupsAdmin.ContentDetection.Repositories
 @inject TelegramAdminBotService BotService
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject ISpamDetectionConfigRepository SpamConfigRepository
@@ -127,8 +127,8 @@
             // Check which chats have custom spam configs
             var allConfigs = await SpamConfigRepository.GetAllChatConfigsAsync();
             var customConfigChatIds = allConfigs
-                .Where(c => c.ChatId != "0")
-                .Select(c => long.Parse(c.ChatId))
+                .Where(c => c.ChatId != 0)
+                .Select(c => c.ChatId)
                 .ToHashSet();
 
             _chats = new List<ManagedChatInfo>();

@@ -1,0 +1,142 @@
+@using TelegramGroupsAdmin.ContentDetection.Configuration
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@inject ISpamDetectionConfigRepository ConfigRepository
+@inject ISnackbar Snackbar
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Primary">URL Blocklist</MudText>
+
+                <MudSwitch T="bool" @bind-Value="_config.UrlBlocklist.Enabled"
+                          Label="Enable URL Blocklist Check"
+                          Color="Color.Primary" />
+
+                @if (_config.UrlBlocklist.Enabled)
+                {
+                    <MudNumericField @bind-Value="_cacheHours"
+                                    Label="Cache Duration (hours)"
+                                    Min="1" Max="168"
+                                    helperText="How long to cache blocklist entries" />
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Primary">Threat Intelligence</MudText>
+
+                <MudSwitch T="bool" @bind-Value="_config.ThreatIntel.Enabled"
+                          Label="Enable Threat Intelligence"
+                          Color="Color.Primary" />
+
+                @if (_config.ThreatIntel.Enabled)
+                {
+                    <MudSwitch T="bool" @bind-Value="_config.ThreatIntel.UseVirusTotal"
+                              Label="Use VirusTotal"
+                              Color="Color.Primary" />
+
+                    <MudNumericField @bind-Value="_threatIntelTimeoutSeconds"
+                                    Label="Timeout (seconds)"
+                                    Min="5" Max="60"
+                                    helperText="Request timeout for threat intel APIs" />
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Primary">SEO Scraping</MudText>
+
+                <MudSwitch T="bool" @bind-Value="_config.SeoScraping.Enabled"
+                          Label="Enable SEO Scraping"
+                          Color="Color.Primary" />
+
+                @if (_config.SeoScraping.Enabled)
+                {
+                    <MudNumericField @bind-Value="_seoTimeoutSeconds"
+                                    Label="Timeout (seconds)"
+                                    Min="5" Max="30"
+                                    helperText="Request timeout for SEO scraping" />
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Primary">Image Content Detection</MudText>
+
+                <MudSwitch T="bool" @bind-Value="_config.ImageSpam.Enabled"
+                          Label="Enable Image Content Detection"
+                          Color="Color.Primary" />
+
+                @if (_config.ImageSpam.Enabled)
+                {
+                    <MudSwitch T="bool" @bind-Value="_config.ImageSpam.UseOpenAIVision"
+                              Label="Use OpenAI Vision"
+                              Color="Color.Primary" />
+
+                    <MudNumericField @bind-Value="_imageTimeoutSeconds"
+                                    Label="Timeout (seconds)"
+                                    Min="10" Max="60"
+                                    helperText="Request timeout for image analysis" />
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter]
+    public long? ChatId { get; set; }
+
+    private SpamDetectionConfig _config = new();
+    private int _cacheHours = 24;
+    private int _threatIntelTimeoutSeconds = 30;
+    private int _seoTimeoutSeconds = 10;
+    private int _imageTimeoutSeconds = 30;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfiguration();
+    }
+
+    private async Task LoadConfiguration()
+    {
+        try
+        {
+            _config = ChatId.HasValue
+                ? await ConfigRepository.GetEffectiveConfigAsync(ChatId.Value)
+                : await ConfigRepository.GetGlobalConfigAsync();
+
+            _cacheHours = (int)_config.UrlBlocklist.CacheDuration.TotalHours;
+            _threatIntelTimeoutSeconds = (int)_config.ThreatIntel.Timeout.TotalSeconds;
+            _seoTimeoutSeconds = (int)_config.SeoScraping.Timeout.TotalSeconds;
+            _imageTimeoutSeconds = (int)_config.ImageSpam.Timeout.TotalSeconds;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new SpamDetectionConfig();
+        }
+        finally
+        {
+        }
+    }
+
+    public SpamDetectionConfig GetConfig()
+    {
+        _config.UrlBlocklist.CacheDuration = TimeSpan.FromHours(_cacheHours);
+        _config.ThreatIntel.Timeout = TimeSpan.FromSeconds(_threatIntelTimeoutSeconds);
+        _config.SeoScraping.Timeout = TimeSpan.FromSeconds(_seoTimeoutSeconds);
+        _config.ImageSpam.Timeout = TimeSpan.FromSeconds(_imageTimeoutSeconds);
+        return _config;
+    }
+}

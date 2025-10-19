@@ -30,12 +30,6 @@
                 <MudSelectItem Value="@("correction")">False Positive Correction</MudSelectItem>
             </MudSelect>
 
-            <MudNumericField @bind-Value="_confidence"
-                            Label="Confidence (optional)"
-                            Min="0" Max="100"
-                            Placeholder="0-100"
-                            HelperText="Confidence level when this sample was added (0-100%)" />
-
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
                 <strong>Training Tips:</strong>
                 <ul style="margin: 8px 0; padding-left: 20px;">
@@ -72,7 +66,6 @@
     private string _messageText = string.Empty;
     private bool _isSpam = true; // Default to spam for safety
     private string _source = "manual";
-    private int? _confidence;
     private bool _isSubmitting = false;
 
     private void Cancel() => MudDialog.Cancel();
@@ -90,7 +83,7 @@
                 MessageText = _messageText.Trim(),
                 IsSpam = _isSpam,
                 Source = _source,
-                Confidence = _confidence
+                Confidence = 100 // Always 100 for manual samples (will be converted to ±100 net_confidence)
             };
 
             MudDialog.Close(DialogResult.Ok(data));

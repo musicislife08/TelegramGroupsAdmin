@@ -15,8 +15,7 @@ public class SpamCheckConfigRecordDto
     public long Id { get; set; }
 
     [Column("chat_id")]
-    [Required]
-    public string ChatId { get; set; } = string.Empty;
+    public long ChatId { get; set; }
 
     [Column("check_name")]
     [Required]

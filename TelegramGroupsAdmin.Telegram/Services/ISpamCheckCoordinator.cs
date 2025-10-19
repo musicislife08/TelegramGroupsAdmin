@@ -1,6 +1,6 @@
-using SpamLibRequest = TelegramGroupsAdmin.SpamDetection.Models.SpamCheckRequest;
-using TelegramGroupsAdmin.SpamDetection.Models;
-using TelegramGroupsAdmin.SpamDetection.Services;
+using SpamLibRequest = TelegramGroupsAdmin.ContentDetection.Models.ContentCheckRequest;
+using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -48,7 +48,7 @@ public record SpamCheckCoordinatorResult
     /// <summary>
     /// Spam detection result (null if skipped)
     /// </summary>
-    public SpamDetectionResult? SpamResult { get; init; }
+    public ContentDetectionResult? SpamResult { get; init; }
 
     /// <summary>
     /// Overall determination: should this message be allowed?

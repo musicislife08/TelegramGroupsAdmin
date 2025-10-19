@@ -132,7 +132,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TelegramGroupsAdmin.Services.Email.IEmailService, TelegramGroupsAdmin.Services.Email.SendGridEmailService>();
 
         // Message history adapter for spam detection library
-        services.AddScoped<TelegramGroupsAdmin.SpamDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
+        services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
 
         // Telegram photo service (chat icons, user profile photos)
         services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.TelegramPhotoService>();
@@ -226,9 +226,9 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddRepositories(this IServiceCollection services)
     {
-        // Spam Detection repositories (from SpamDetection library)
-        services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.IStopWordsRepository, TelegramGroupsAdmin.SpamDetection.Repositories.StopWordsRepository>();
-        services.AddScoped<TelegramGroupsAdmin.SpamDetection.Repositories.ISpamDetectionConfigRepository, TelegramGroupsAdmin.SpamDetection.Repositories.SpamDetectionConfigRepository>();
+        // Spam Detection repositories (from ContentDetection library)
+        services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.IStopWordsRepository, TelegramGroupsAdmin.ContentDetection.Repositories.StopWordsRepository>();
+        services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.ISpamDetectionConfigRepository, TelegramGroupsAdmin.ContentDetection.Repositories.SpamDetectionConfigRepository>();
 
         // Report Actions Service (uses repositories from Telegram library)
         services.AddScoped<IReportActionsService, ReportActionsService>();
@@ -294,6 +294,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<Jobs.WelcomeTimeoutJob>();
         services.AddScoped<Jobs.DeleteMessageJob>();
         services.AddScoped<Jobs.TempbanExpiryJob>();
+        services.AddScoped<Jobs.BlocklistSyncJob>(); // Phase 4.13: URL Filtering
 
         return services;
     }

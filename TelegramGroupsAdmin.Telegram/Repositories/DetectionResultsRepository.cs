@@ -362,11 +362,22 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
+        // Get next negative message_id for manual samples
+        // Negative IDs distinguish manual samples from real Telegram messages (which have positive IDs)
+        var nextManualId = await context.Messages
+            .Where(m => m.ChatId == 0 && m.MessageId < 0)
+            .Select(m => m.MessageId)
+            .OrderBy(m => m)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var messageId = nextManualId == 0 ? -1 : nextManualId - 1; // Start at -1, then -2, -3, etc.
+
         // Create message record (chat_id=0, user_id=0 pattern for manual samples)
         // user_id=0 maps to "system" user in telegram_users table
         var message = new DataModels.MessageRecordDto
         {
             ChatId = 0,
+            MessageId = messageId, // Use negative ID for manual samples
             UserId = 0,
             MessageText = messageText,
             Timestamp = DateTimeOffset.UtcNow,
@@ -374,7 +385,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         };
 
         context.Messages.Add(message);
-        await context.SaveChangesAsync(cancellationToken); // Save to get message_id
+        await context.SaveChangesAsync(cancellationToken);
 
         // Create detection_result record linked to the message
         // Phase 4.19: Actor system - manual samples use SystemIdentifier

@@ -4,12 +4,13 @@
 .NET 10.0, Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 10, TickerQ 2.5.3, OpenAI API, VirusTotal, SendGrid
 
 ## Projects
-- **TelegramGroupsAdmin**: Main app, Blazor+API, TickerQ jobs (WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob)
+- **TelegramGroupsAdmin**: Main app, Blazor+API, TickerQ jobs (WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob, TempbanExpiryJob)
 - **TelegramGroupsAdmin.Configuration**: Config IOptions classes, AddApplicationConfiguration()
 - **TelegramGroupsAdmin.Data**: EF Core DbContext, migrations, Data Protection (internal to repos)
 - **TelegramGroupsAdmin.Telegram**: Bot services, 13 commands, repos, orchestrators, AddTelegramServices()
 - **TelegramGroupsAdmin.Telegram.Abstractions**: TelegramBotClientFactory, job payloads (breaks circular deps)
 - **TelegramGroupsAdmin.SpamDetection**: 9 spam algorithms, self-contained, database-driven
+- **TelegramGroupsAdmin.ContentDetection**: URL filtering (blocklists, domain filters), impersonation detection (photo hash, Levenshtein), AddContentDetectionServices()
 
 ## Architecture Patterns
 **Extension Methods**: ServiceCollectionExtensions (AddBlazorServices, AddCookieAuthentication, AddApplicationServices, AddHttpClients, AddTelegramServices, AddRepositories, AddTgSpamWebDataServices, AddTickerQBackgroundJobs), WebApplicationExtensions (ConfigurePipeline, MapApiEndpoints, RunDatabaseMigrationsAsync), ConfigurationExtensions (AddApplicationConfiguration)
@@ -24,32 +25,6 @@
 3. ChatManagementService - MyChatMember, admin cache, health checks (permissions + invite link validation), chat names
 4. SpamActionService - Training QC, auto-ban (cross-chat), borderline reports
 5. CleanupBackgroundService - Message retention (keeps spam/ham samples)
-
-## Database (PostgreSQL)
-**DB**: telegram_groups_admin, 19 tables
-**Migrations**: InitialSchema.cs (validated), Latest: RemoveUserNameAndPhotoFromMessages (normalized to telegram_users)
-
-**Core Tables**:
-- messages: message_id(PK), chat_id, user_id, timestamp, edit_date, message_text, photo*, urls, content_hash. Retention: 180d (except spam/ham refs)
-- telegram_users: telegram_user_id(PK, manually set from Telegram API), username, first_name, last_name, user_photo_path, photo_hash (Phase 4.10), is_trusted (Phase 5.5), warning_points (Phase 4.11), first_seen_at, last_seen_at. **Centralized user metadata** (usernames/photos now via JOIN, not denormalized in messages). user_id=0 = "system" (imported training data)
-- detection_results: id(PK), message_id(FK cascade), detected_at, detection_source(auto/manual), is_spam(computed: net_confidence>0), confidence, net_confidence, reason, detection_method, added_by, used_for_training, check_results_json, edit_version. Retention: permanent
-- message_edits: id(PK), message_id(FK cascade), edit_date, old/new text/hash
-- user_actions: id(PK), user_id, action_type(ban/warn/mute/trust/unban), message_id, issued_by, issued_at, expires_at, reason. Global cross-chat
-- welcome_responses: id(PK), chat_id, user_id, username, welcome_message_id, response(accepted/denied/timeout/left), responded_at, dm_sent, dm_fallback
-
-**Config Tables**:
-- stop_words: id(PK), word, word_type(0=message/1=username/2=userID), added_date, source, enabled, added_by, detection_count, last_detected_date
-- spam_detection_configs: chat_id(PK), min_confidence_threshold, enabled_checks, custom_prompt, auto_ban_threshold
-- spam_check_configs: check_name(PK), enabled, confidence_weight, config_json
-- configs: id(PK), chat_id(nullable for global), spam_detection_config, welcome_config, log_config, moderation_config, bot_protection_config (all JSONB), invite_link (cached). Pattern: global (chat_id=NULL) + per-chat overrides
-
-**Identity**:
-- users: id(GUID PK), email, password_hash, security_stamp, permission_level(0=ReadOnly/1=Admin/2=Owner), totp*, status(0=Pending/1=Active/2=Disabled/3=Deleted), email_verified
-- invites: token(PK), created_by, expires_at, used_by, permission_level, status(0=Pending/1=Used/2=Revoked)
-- audit_log: id(PK), event_type(enum), timestamp, actor_user_id, target_user_id, value
-- verification_tokens: id(PK), user_id, token_type(email_verify/password_reset), token, expires_at
-
-**Design**: Normalized, cascade deletes (edits cascade, detections/actions remain), configurable retention, global actions, audit trail
 
 ## Configuration (Env Vars)
 **Required**: VIRUSTOTAL__APIKEY, OPENAI__APIKEY, TELEGRAM__BOTTOKEN, TELEGRAM__CHATID, SPAMDETECTION__APIKEY, SENDGRID__APIKEY/FROMEMAIL/FROMNAME
@@ -71,8 +46,8 @@
 
 ## Blazor Pages
 **Public**: /login, /login/verify, /login/setup-2fa, /register
-**Authenticated**: / (dashboard), /analytics (Admin+), /messages, /spam (Admin+), /users (Admin+), /reports (Admin+), /audit (Admin+), /settings (Admin+), /profile
-**Features**: URL fragment nav, logical menu grouping, component reuse
+**Authenticated**: / (dashboard), /analytics (Admin+), /messages, /users (Admin+), /reports (Admin+), /audit (Admin+), /settings (Admin+), /profile
+**Features**: URL fragment nav, nested sidebar navigation in Settings, component reuse
 
 ## Permissions
 **Levels**: 0=ReadOnly, 1=Admin, 2=Owner (hierarchy, cannot escalate above own)
@@ -116,11 +91,11 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 **4.10** ✅: Anti-Impersonation - Composite scoring (name Levenshtein 50pts + photo pHash 50pts). Triggers: join + first N messages. Auto-ban 100pts, review queue 50-99pts. telegram_users.photo_hash, ImpersonationAlertsRepository, unified Reports queue
 **4.11** ✅: Warning System - Simple count (user_actions), WarnCommand, auto-ban at threshold (default 3), UserDetailDialog removal, global warnings
 **4.12** ✅: Admin Notes & Tags - admin_notes + user_tags + tag_definitions tables, Actor system, UserDetailDialog UI, TagManagement.razor (/settings#tags), color-coded chips, pin/unpin, confidence_modifier
+**4.13** ✅: URL Filtering System - Domain blacklist/whitelist (540K cached domains), 6 curated blocklists (Malware, Phishing, Ransomware, Fraud, Botnet, Scam URLs), BlocklistSyncService (parallel sync with IServiceScopeFactory pattern), cached_blocked_domains table with composite index (domain, block_mode, chat_id) for O(log n) lookups (<1ms), hard vs soft blocking modes, UrlPreFilterService.CheckHardBlockAsync() short-circuits spam detection, BlocklistSubscriptionsRepository, DomainFiltersRepository (manual blacklist/whitelist entries), /settings#url-filters UI (subscription CRUD, block mode toggles, manual domain management), negative ID pattern for manual training samples (messages.message_id < 0 for chat_id=0), ExecuteDeleteAsync bulk deletes, Messages tab excludes manual samples (ChatId != 0)
 **4.19** ✅: Actor System - Exclusive Arc (web_user_id, telegram_user_id, system_identifier + CHECK). 5 tables migrated (user_actions, detection_results, user_tags, stop_words, admin_notes). LEFT JOIN display name resolution. Actor badges in UI
 
 **Pending**:
 **4.9**: Bot connection management - Hot-reload, IBotLifecycleService, /settings#bot-connection (Owner-only)
-**4.13**: Advanced Filter Engine - custom_filters table (pattern regex, action, enabled, hit_count), chat-specific/global, domain blacklist/whitelist, phrase normalization, URL patterns, 12th spam check in SpamDetectorFactory, /spam#filters UI CRUD, confidence weighting integration
 **4.14**: Report Aggregation - Multi-report auto-escalation (3 unique in 1hr→action), reports tracking (message_id, reported_by, timestamp), confidence boost (+15/report), reporter accuracy scoring, false report protection (<60% accuracy→downweight, 10+ false→remove permission), /reports#analytics top reporters
 **4.15**: Appeal System - Welcome requires bot DM start (Accept→bot DM→unrestrict), establishes DM channel, banned users submit appeals via DM, appeals queue /reports#appeals (user history, ban reason, detection, appeal text), approve/deny+reason, max 2 appeals/ban, 30-day expiration, appeals_history verdicts
 **4.17**: Additional Media Types - GIFs, stickers, videos, voice, audio, documents, video notes. DB fields + UI display + spam detection (Vision, Whisper, VirusTotal)

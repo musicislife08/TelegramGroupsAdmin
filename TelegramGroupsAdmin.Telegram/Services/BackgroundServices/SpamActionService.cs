@@ -22,7 +22,7 @@ public class SpamActionService(
     /// High-quality samples only: Confident OpenAI results (85%+) or manual admin decisions
     /// Low-confidence auto-detections are NOT training-worthy
     /// </summary>
-    public static bool DetermineIfTrainingWorthy(TelegramGroupsAdmin.SpamDetection.Services.SpamDetectionResult result)
+    public static bool DetermineIfTrainingWorthy(TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult result)
     {
         // Manual admin decisions are always training-worthy (will be set when admin uses Mark as Spam/Ham)
         // For auto-detections, only confident results are training-worthy
@@ -42,15 +42,16 @@ public class SpamActionService(
     }
 
     /// <summary>
-    /// Handle spam detection actions based on confidence levels
-    /// - Net > +50 with OpenAI 85%+ confident → Auto-ban
-    /// - Net > +50 with OpenAI <85% confident → Create report for admin review
-    /// - Net +0 to +50 (borderline) → Create report for admin review
-    /// - Net < 0 → No action (clean message)
+    /// Handle content detection actions based on violation type and confidence levels
+    /// Phase 4.13: Differentiates between Spam, HardBlock, and Malware
+    /// - HardBlock → Instant ban + delete (no OpenAI veto, policy violation)
+    /// - Malware → Delete + alert admin (no auto-ban, might be accidental)
+    /// - Spam (Net > +50 with OpenAI 85%+) → Auto-ban + delete
+    /// - Spam (borderline or uncertain) → Create report for admin review
     /// </summary>
     public async Task HandleSpamDetectionActionsAsync(
         Message message,
-        TelegramGroupsAdmin.SpamDetection.Services.SpamDetectionResult spamResult,
+        TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
         DetectionResultRecord detectionResult,
         CancellationToken cancellationToken = default)
     {
@@ -64,14 +65,69 @@ public class SpamActionService(
 
             using var scope = serviceProvider.CreateScope();
             var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
+            var moderationActionService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
 
+            // Phase 4.13: Check for hard block or malware (different handling than spam)
+            var hardBlockResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == "HardBlock");
+            var malwareResult = spamResult.CheckResults.FirstOrDefault(c => c.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Malware);
+
+            if (hardBlockResult != null)
+            {
+                // Hard block = instant policy violation (no OpenAI veto needed)
+                logger.LogWarning(
+                    "Hard block for message {MessageId} from user {UserId} in chat {ChatId}: {Reason}",
+                    message.MessageId, message.From?.Id, message.Chat.Id, hardBlockResult.Details);
+
+                // Execute instant ban across all chats
+                await ExecuteAutoBanAsync(
+                    scope.ServiceProvider,
+                    message,
+                    spamResult,
+                    hardBlockResult,
+                    cancellationToken);
+
+                // Delete the message
+                await moderationActionService.DeleteMessageAsync(message.MessageId, message.Chat.Id, cancellationToken);
+
+                logger.LogInformation(
+                    "Deleted hard block message {MessageId} and banned user {UserId} (policy violation)",
+                    message.MessageId, message.From?.Id);
+                return;
+            }
+
+            if (malwareResult != null)
+            {
+                // Malware = delete message + alert admin (don't auto-ban, might be accidental upload)
+                logger.LogWarning(
+                    "Malware detected in message {MessageId} from user {UserId} in chat {ChatId}: {Details}",
+                    message.MessageId, message.From?.Id, message.Chat.Id, malwareResult.Details);
+
+                // Delete the malware-containing message
+                await moderationActionService.DeleteMessageAsync(message.MessageId, message.Chat.Id, cancellationToken);
+
+                // Create critical alert for admin review
+                await CreateBorderlineReportAsync(
+                    reportsRepo,
+                    message,
+                    spamResult,
+                    detectionResult,
+                    $"MALWARE DETECTED: {malwareResult.Details}",
+                    cancellationToken);
+
+                logger.LogInformation(
+                    "Deleted malware message {MessageId} and created admin alert (no auto-ban)",
+                    message.MessageId);
+                return;
+            }
+
+            // Standard spam detection handling below...
             // Check if OpenAI was involved and how confident it was
             var openAIResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == "OpenAI");
             var openAIConfident = openAIResult != null && openAIResult.Confidence >= 85;
 
             // Decision logic based on net confidence and OpenAI involvement
             // Phase 4.5: Skip auto-ban if OpenAI flagged for review
-            if (openAIResult?.Result == TelegramGroupsAdmin.SpamDetection.Models.SpamCheckResultType.Review)
+            if (openAIResult?.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Review)
             {
                 // OpenAI uncertain - send to admin review instead of auto-ban
                 await CreateBorderlineReportAsync(
@@ -89,7 +145,7 @@ public class SpamActionService(
                 return; // Early return - don't auto-ban
             }
 
-            if (spamResult.NetConfidence > 50 && openAIConfident && openAIResult!.Result == TelegramGroupsAdmin.SpamDetection.Models.SpamCheckResultType.Spam)
+            if (spamResult.NetConfidence > 50 && openAIConfident && openAIResult!.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Spam)
             {
                 // High confidence + OpenAI confirmed = auto-ban across all managed chats
                 logger.LogInformation(
@@ -108,7 +164,6 @@ public class SpamActionService(
                     cancellationToken);
 
                 // Delete the spam message from the chat
-                var moderationActionService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
                 await moderationActionService.DeleteMessageAsync(message.MessageId, message.Chat.Id, cancellationToken);
 
                 logger.LogInformation(
@@ -152,7 +207,7 @@ public class SpamActionService(
     private static async Task CreateBorderlineReportAsync(
         IReportsRepository reportsRepo,
         Message message,
-        TelegramGroupsAdmin.SpamDetection.Services.SpamDetectionResult spamResult,
+        TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
         DetectionResultRecord detectionResult,
         string reason,
         CancellationToken cancellationToken = default)
@@ -182,8 +237,8 @@ public class SpamActionService(
     private async Task ExecuteAutoBanAsync(
         IServiceProvider scopedServiceProvider,
         Message message,
-        TelegramGroupsAdmin.SpamDetection.Services.SpamDetectionResult spamResult,
-        TelegramGroupsAdmin.SpamDetection.Models.SpamCheckResponse openAIResult,
+        TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
+        TelegramGroupsAdmin.ContentDetection.Models.ContentCheckResponse openAIResult,
         CancellationToken cancellationToken = default)
     {
         try

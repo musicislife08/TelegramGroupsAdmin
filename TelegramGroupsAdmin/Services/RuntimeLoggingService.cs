@@ -53,7 +53,7 @@ public class RuntimeLoggingService : IRuntimeLoggingService
     private static readonly string[] CommonNamespaces = [
         "TelegramGroupsAdmin",
         "TelegramGroupsAdmin.Telegram",
-        "TelegramGroupsAdmin.SpamDetection",
+        "TelegramGroupsAdmin.ContentDetection",
         "TelegramGroupsAdmin.Data",
         "Microsoft",
         "Microsoft.EntityFrameworkCore",

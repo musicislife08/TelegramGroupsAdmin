@@ -1,5 +1,5 @@
 using TelegramGroupsAdmin.Telegram.Repositories;
-using SpamDetectionServices = TelegramGroupsAdmin.SpamDetection.Services;
+using ContentDetectionServices = TelegramGroupsAdmin.ContentDetection.Services;
 
 namespace TelegramGroupsAdmin.Services;
 
@@ -7,7 +7,7 @@ namespace TelegramGroupsAdmin.Services;
 /// Adapter to convert from main app's MessageHistoryRepository
 /// to spam library's IMessageHistoryService interface
 /// </summary>
-public class MessageHistoryAdapter : SpamDetectionServices.IMessageHistoryService
+public class MessageHistoryAdapter : ContentDetectionServices.IMessageHistoryService
 {
     private readonly MessageHistoryRepository _repository;
     private readonly ILogger<MessageHistoryAdapter> _logger;
@@ -20,24 +20,18 @@ public class MessageHistoryAdapter : SpamDetectionServices.IMessageHistoryServic
         _logger = logger;
     }
 
-    public async Task<IEnumerable<SpamDetectionServices.HistoryMessage>> GetRecentMessagesAsync(
-        string chatId,
+    public async Task<IEnumerable<ContentDetectionServices.HistoryMessage>> GetRecentMessagesAsync(
+        long chatId,
         int count = 10,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            if (!long.TryParse(chatId, out var chatIdLong))
-            {
-                _logger.LogWarning("Invalid chat ID format: {ChatId}", chatId);
-                return Enumerable.Empty<SpamDetectionServices.HistoryMessage>();
-            }
-
             // Get recent messages from repository (filtered by chat_id in query)
-            var messages = await _repository.GetMessagesByChatIdAsync(chatIdLong, count);
+            var messages = await _repository.GetMessagesByChatIdAsync(chatId, count);
 
             // Convert to spam library's HistoryMessage format
-            return messages.Select(m => new SpamDetectionServices.HistoryMessage
+            return messages.Select(m => new ContentDetectionServices.HistoryMessage
             {
                 UserId = m.UserId.ToString(),
                 UserName = m.UserName ?? "Unknown",
@@ -49,7 +43,7 @@ public class MessageHistoryAdapter : SpamDetectionServices.IMessageHistoryServic
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get message history for chat {ChatId}", chatId);
-            return Enumerable.Empty<SpamDetectionServices.HistoryMessage>();
+            return Enumerable.Empty<ContentDetectionServices.HistoryMessage>();
         }
     }
 }

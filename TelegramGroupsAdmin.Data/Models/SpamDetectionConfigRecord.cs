@@ -15,7 +15,7 @@ public class SpamDetectionConfigRecordDto
     public long Id { get; set; }
 
     [Column("chat_id")]
-    public string? ChatId { get; set; }
+    public long? ChatId { get; set; }
 
     [Column("config_json")]
     [Required]

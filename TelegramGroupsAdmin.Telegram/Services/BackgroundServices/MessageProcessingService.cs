@@ -569,14 +569,14 @@ public partial class MessageProcessingService(
             using var scope = serviceProvider.CreateScope();
             var coordinator = scope.ServiceProvider.GetRequiredService<ISpamCheckCoordinator>();
             var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
-            var spamDetectionEngine = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.SpamDetection.Services.ISpamDetectionEngine>();
+            var spamDetectionEngine = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IContentDetectionEngine>();
 
-            var request = new TelegramGroupsAdmin.SpamDetection.Models.SpamCheckRequest
+            var request = new TelegramGroupsAdmin.ContentDetection.Models.ContentCheckRequest
             {
                 Message = text,
-                UserId = message.From?.Id.ToString() ?? "",
+                UserId = message.From?.Id ?? 0,
                 UserName = message.From?.Username,
-                ChatId = message.Chat.Id.ToString()
+                ChatId = message.Chat.Id
             };
 
             var result = await coordinator.CheckAsync(request, cancellationToken);

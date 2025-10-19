@@ -12,7 +12,10 @@
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.0-rc.1.25451.107" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0-rc.1.25451.107" />
+    <!-- WORKAROUND: Force newer versions to fix GHSA-w3q9-fxm7-j8fq vulnerability in Microsoft.EntityFrameworkCore.Design transitive deps
+         Remove when Microsoft.EntityFrameworkCore.Design updates to 17.14.28+ (Oct 2025) -->
+    <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.14.28" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.14.28" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0-rc.1.25451.107" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0-rc.1.25451.107">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

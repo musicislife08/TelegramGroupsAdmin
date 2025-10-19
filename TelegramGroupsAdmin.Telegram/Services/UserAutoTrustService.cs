@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.SpamDetection.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -44,7 +44,7 @@ public class UserAutoTrustService
         try
         {
             // Get effective config (chat-specific overrides, global defaults)
-            var config = await _spamDetectionConfigRepository.GetEffectiveConfigAsync(chatId.ToString(), cancellationToken);
+            var config = await _spamDetectionConfigRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
 
             // Feature disabled - skip
             if (!config.FirstMessageOnly)

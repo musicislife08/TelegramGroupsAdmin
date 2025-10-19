@@ -178,7 +178,8 @@ public class MessageHistoryRepository
                     from parentMsg in parentGroup.DefaultIfEmpty()
                     join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
                     from parentUserInfo in parentUserGroup.DefaultIfEmpty()
-                    where beforeTimestamp == null || m.Timestamp < beforeTimestamp
+                    where m.ChatId != 0 // Exclude manual training samples (chat_id=0)
+                       && (beforeTimestamp == null || m.Timestamp < beforeTimestamp)
                     orderby m.Timestamp descending
                     select new
                     {

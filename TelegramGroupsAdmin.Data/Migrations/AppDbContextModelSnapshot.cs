@@ -125,6 +125,147 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                     b.ToTable("audit_log");
                 });
 
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.BlocklistSubscriptionDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AddedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_date");
+
+                    b.Property<int>("BlockMode")
+                        .HasColumnType("integer")
+                        .HasColumnName("block_mode");
+
+                    b.Property<long?>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<int?>("EntryCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("entry_count");
+
+                    b.Property<int>("Format")
+                        .HasColumnType("integer")
+                        .HasColumnName("format");
+
+                    b.Property<bool>("IsBuiltIn")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_built_in");
+
+                    b.Property<DateTimeOffset?>("LastFetched")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_fetched");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("RefreshIntervalHours")
+                        .HasColumnType("integer")
+                        .HasColumnName("refresh_interval_hours");
+
+                    b.Property<string>("SystemIdentifier")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("system_identifier");
+
+                    b.Property<long?>("TelegramUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("telegram_user_id");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("url");
+
+                    b.Property<string>("WebUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("web_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BlockMode")
+                        .HasFilter("block_mode > 0");
+
+                    b.HasIndex("ChatId");
+
+                    b.HasIndex("Enabled")
+                        .HasFilter("enabled = true");
+
+                    b.HasIndex("Url");
+
+                    b.ToTable("blocklist_subscriptions");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.CachedBlockedDomainDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("BlockMode")
+                        .HasColumnType("integer")
+                        .HasColumnName("block_mode");
+
+                    b.Property<long?>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<string>("Domain")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("domain");
+
+                    b.Property<DateTimeOffset>("FirstSeen")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen");
+
+                    b.Property<DateTimeOffset>("LastVerified")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_verified");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<long?>("SourceSubscriptionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("source_subscription_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LastVerified");
+
+                    b.HasIndex("SourceSubscriptionId");
+
+                    b.HasIndex("Domain", "BlockMode", "ChatId")
+                        .IsUnique();
+
+                    b.ToTable("cached_blocked_domains");
+                });
+
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ChatAdminRecordDto", b =>
                 {
                     b.Property<long>("Id")
@@ -188,9 +329,8 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("added_date");
 
-                    b.Property<string>("ChatId")
-                        .IsRequired()
-                        .HasColumnType("text")
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
                         .HasColumnName("chat_id");
 
                     b.Property<string>("CustomPrompt")
@@ -354,6 +494,71 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_detection_results_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
                         });
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.DomainFilterDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AddedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_date");
+
+                    b.Property<int>("BlockMode")
+                        .HasColumnType("integer")
+                        .HasColumnName("block_mode");
+
+                    b.Property<long?>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<string>("Domain")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("domain");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<int>("FilterType")
+                        .HasColumnType("integer")
+                        .HasColumnName("filter_type");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("SystemIdentifier")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("system_identifier");
+
+                    b.Property<long?>("TelegramUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("telegram_user_id");
+
+                    b.Property<string>("WebUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("web_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChatId");
+
+                    b.HasIndex("Domain");
+
+                    b.HasIndex("FilterType", "BlockMode")
+                        .HasFilter("enabled = true");
+
+                    b.ToTable("domain_filters");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ImpersonationAlertRecordDto", b =>
@@ -760,9 +965,8 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<string>("ChatId")
-                        .IsRequired()
-                        .HasColumnType("text")
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
                         .HasColumnName("chat_id");
 
                     b.Property<string>("CheckName")
@@ -804,8 +1008,8 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<string>("ChatId")
-                        .HasColumnType("text")
+                    b.Property<long?>("ChatId")
+                        .HasColumnType("bigint")
                         .HasColumnName("chat_id");
 
                     b.Property<string>("ConfigJson")

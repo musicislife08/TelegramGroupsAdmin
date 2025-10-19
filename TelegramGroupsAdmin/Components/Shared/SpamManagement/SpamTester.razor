@@ -1,5 +1,5 @@
 @using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.SpamDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Models
 @using Microsoft.JSInterop
 @using TelegramGroupsAdmin.Telegram.Services
 @inject ISpamCheckCoordinator SpamCheckOrchestrator
@@ -151,10 +151,10 @@
                     <MudTd>
                         @switch (context.Result)
                         {
-                            case TelegramGroupsAdmin.SpamDetection.Models.SpamCheckResultType.Spam:
+                            case TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Spam:
                                 <MudChip T="string" Color="Color.Error" Size="Size.Small">SPAM</MudChip>
                                 break;
-                            case TelegramGroupsAdmin.SpamDetection.Models.SpamCheckResultType.Review:
+                            case TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Review:
                                 <MudChip T="string" Color="Color.Warning" Size="Size.Small">REVIEW</MudChip>
                                 break;
                             default:
@@ -293,12 +293,12 @@
                 imageFileName = "pasted-image.png";
             }
 
-            var request = new TelegramGroupsAdmin.SpamDetection.Models.SpamCheckRequest
+            var request = new TelegramGroupsAdmin.ContentDetection.Models.ContentCheckRequest
             {
                 Message = _messageText ?? string.Empty, // Empty string if only testing image
-                UserId = string.IsNullOrWhiteSpace(_userId) ? "0" : _userId, // Use "0" if no user provided
+                UserId = string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId), // Use 0 if no user provided
                 UserName = _userName,
-                ChatId = string.IsNullOrWhiteSpace(_chatId) ? null : _chatId, // Use chat-specific config if provided
+                ChatId = string.IsNullOrWhiteSpace(_chatId) ? 0 : long.Parse(_chatId), // Use 0 for global if not provided
                 ImageData = imageStream,
                 ImageFileName = imageFileName
             };

@@ -45,6 +45,11 @@ public class AppDbContext : DbContext
     public DbSet<SpamDetectionConfigRecordDto> SpamDetectionConfigs => Set<SpamDetectionConfigRecordDto>();
     public DbSet<SpamCheckConfigRecordDto> SpamCheckConfigs => Set<SpamCheckConfigRecordDto>();
 
+    // URL filtering tables (Phase 4.13)
+    public DbSet<BlocklistSubscriptionDto> BlocklistSubscriptions => Set<BlocklistSubscriptionDto>();
+    public DbSet<DomainFilterDto> DomainFilters => Set<DomainFilterDto>();
+    public DbSet<CachedBlockedDomainDto> CachedBlockedDomains => Set<CachedBlockedDomainDto>();
+
     // Configuration table
     public DbSet<ConfigRecordDto> Configs => Set<ConfigRecordDto>();
 
@@ -404,6 +409,41 @@ public class AppDbContext : DbContext
             .HasIndex(ia => ia.ChatId);
         modelBuilder.Entity<ImpersonationAlertRecordDto>()
             .HasIndex(ia => ia.SuspectedUserId);
+
+        // URL Filtering indexes (Phase 4.13)
+        // BlocklistSubscriptions indexes
+        modelBuilder.Entity<BlocklistSubscriptionDto>()
+            .HasIndex(bs => bs.ChatId);
+        modelBuilder.Entity<BlocklistSubscriptionDto>()
+            .HasIndex(bs => bs.Enabled)
+            .HasFilter("enabled = true");
+        modelBuilder.Entity<BlocklistSubscriptionDto>()
+            .HasIndex(bs => bs.BlockMode)
+            .HasFilter("block_mode > 0");
+        modelBuilder.Entity<BlocklistSubscriptionDto>()
+            .HasIndex(bs => bs.Url);  // For duplicate detection
+
+        // DomainFilters indexes
+        modelBuilder.Entity<DomainFilterDto>()
+            .HasIndex(df => df.ChatId);
+        modelBuilder.Entity<DomainFilterDto>()
+            .HasIndex(df => df.Domain);
+        modelBuilder.Entity<DomainFilterDto>()
+            .HasIndex(df => new { df.FilterType, df.BlockMode })
+            .HasFilter("enabled = true");
+
+        // CachedBlockedDomains indexes (CRITICAL for lookup performance)
+        modelBuilder.Entity<CachedBlockedDomainDto>()
+            .HasIndex(cbd => new { cbd.Domain, cbd.BlockMode, cbd.ChatId });  // Primary lookup index
+        modelBuilder.Entity<CachedBlockedDomainDto>()
+            .HasIndex(cbd => cbd.SourceSubscriptionId);  // For cleanup when subscription disabled
+        modelBuilder.Entity<CachedBlockedDomainDto>()
+            .HasIndex(cbd => cbd.LastVerified);  // For finding stale entries
+
+        // Unique constraint on cached_blocked_domains to prevent duplicates
+        modelBuilder.Entity<CachedBlockedDomainDto>()
+            .HasIndex(cbd => new { cbd.Domain, cbd.BlockMode, cbd.ChatId })
+            .IsUnique();
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)

@@ -1,9 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using SpamLibRequest = TelegramGroupsAdmin.SpamDetection.Models.SpamCheckRequest;
+using SpamLibRequest = TelegramGroupsAdmin.ContentDetection.Models.ContentCheckRequest;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.SpamDetection.Models;
-using TelegramGroupsAdmin.SpamDetection.Services;
+using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -13,12 +13,12 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class SpamCheckCoordinator : ISpamCheckCoordinator
 {
-    private readonly ISpamDetectionEngine _spamDetectionEngine;
+    private readonly IContentDetectionEngine _spamDetectionEngine;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<SpamCheckCoordinator> _logger;
 
     public SpamCheckCoordinator(
-        ISpamDetectionEngine spamDetectionEngine,
+        IContentDetectionEngine spamDetectionEngine,
         IServiceProvider serviceProvider,
         ILogger<SpamCheckCoordinator> logger)
     {
@@ -34,25 +34,19 @@ public class SpamCheckCoordinator : ISpamCheckCoordinator
         bool isUserTrusted = false;
         bool isUserAdmin = false;
 
-        // Only check trust/admin status if UserId is provided and looks like a valid Telegram ID
-        if (!string.IsNullOrWhiteSpace(request.UserId) && long.TryParse(request.UserId, out var userId))
-        {
-            using var scope = _serviceProvider.CreateScope();
-            var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+        // Check trust/admin status for the user
+        using var scope = _serviceProvider.CreateScope();
+        var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
 
-            // Check if user is explicitly trusted
-            isUserTrusted = await userActionsRepository.IsUserTrustedAsync(
-                userId,
-                string.IsNullOrWhiteSpace(request.ChatId) ? null : long.Parse(request.ChatId),
-                cancellationToken);
+        // Check if user is explicitly trusted
+        isUserTrusted = await userActionsRepository.IsUserTrustedAsync(
+            request.UserId,
+            request.ChatId,
+            cancellationToken);
 
-            // Check if user is a chat admin (only if ChatId provided)
-            if (!string.IsNullOrWhiteSpace(request.ChatId) && long.TryParse(request.ChatId, out var chatId))
-            {
-                var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-                isUserAdmin = await chatAdminsRepository.IsAdminAsync(chatId, userId, cancellationToken);
-            }
-        }
+        // Check if user is a chat admin
+        var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
+        isUserAdmin = await chatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, cancellationToken);
 
         // If user is trusted or admin, skip spam detection entirely
         if (isUserTrusted || isUserAdmin)
@@ -64,7 +58,7 @@ public class SpamCheckCoordinator : ISpamCheckCoordinator
             _logger.LogInformation(
                 "Skipping spam detection for user {UserId} in chat {ChatId}: {Reason}",
                 request.UserId,
-                request.ChatId ?? "N/A",
+                request.ChatId,
                 skipReason);
 
             return new SpamCheckCoordinatorResult
@@ -80,8 +74,8 @@ public class SpamCheckCoordinator : ISpamCheckCoordinator
         // Run spam detection
         _logger.LogDebug(
             "Running spam detection for user {UserId} in chat {ChatId}",
-            request.UserId ?? "N/A",
-            request.ChatId ?? "N/A");
+            request.UserId,
+            request.ChatId);
 
         var spamResult = await _spamDetectionEngine.CheckMessageAsync(request, cancellationToken);
 

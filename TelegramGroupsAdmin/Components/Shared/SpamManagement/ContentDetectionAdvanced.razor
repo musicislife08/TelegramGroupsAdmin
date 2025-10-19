@@ -1,0 +1,149 @@
+@using TelegramGroupsAdmin.ContentDetection.Configuration
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@inject ISpamDetectionConfigRepository ConfigRepository
+@inject ISnackbar Snackbar
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Primary">Invisible Characters</MudText>
+
+                <MudSwitch T="bool" @bind-Value="_config.InvisibleChars.Enabled"
+                          Label="Enable Invisible Character Detection"
+                          Color="Color.Primary" />
+
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Detects zero-width Unicode characters used by spammers (excludes legitimate emoji sequences)
+                </MudText>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Primary">Translation</MudText>
+
+                <MudSwitch T="bool" @bind-Value="_config.Translation.Enabled"
+                          Label="Enable Foreign Language Translation"
+                          Color="Color.Primary" />
+
+                @if (_config.Translation.Enabled)
+                {
+                    <MudSwitch T="bool" @bind-Value="_config.Translation.CheckTranslatedContent"
+                              Label="Check Translated Content"
+                              Color="Color.Primary" />
+                }
+
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Translates non-English messages to English before running spam checks
+                </MudText>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Primary">Spacing Detection</MudText>
+
+                <MudSwitch T="bool" @bind-Value="_config.Spacing.Enabled"
+                          Label="Enable Abnormal Spacing Check"
+                          Color="Color.Primary" />
+
+                @if (_config.Spacing.Enabled)
+                {
+                    <MudNumericField @bind-Value="_config.Spacing.MinWordsCount"
+                                    Label="Minimum Words for Analysis"
+                                    Min="3" Max="20"
+                                    helperText="Minimum number of words required" />
+
+                    <MudNumericField @bind-Value="_config.Spacing.ShortWordLength"
+                                    Label="Short Word Length"
+                                    Min="1" Max="5"
+                                    helperText="Maximum length for 'short' words" />
+
+                    <MudSlider @bind-Value="_config.Spacing.ShortWordRatioThreshold"
+                              Min="0.1" Max="1.0" Step="0.05">
+                        <MudText>Short Word Ratio: @_config.Spacing.ShortWordRatioThreshold.ToString("F2")</MudText>
+                    </MudSlider>
+
+                    <MudSlider @bind-Value="_config.Spacing.SpaceRatioThreshold"
+                              Min="0.1" Max="1.0" Step="0.05">
+                        <MudText>Space Ratio: @_config.Spacing.SpaceRatioThreshold.ToString("F2")</MudText>
+                    </MudSlider>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Primary">OpenAI Integration</MudText>
+
+                <MudSwitch T="bool" @bind-Value="_config.OpenAI.Enabled"
+                          Label="Enable OpenAI Check"
+                          Color="Color.Primary" />
+
+                @if (_config.OpenAI.Enabled)
+                {
+                    <MudSwitch T="bool" @bind-Value="_config.OpenAI.VetoMode"
+                              Label="Veto Mode (Confirm Spam)"
+                              Color="Color.Primary"
+                              helperText="If enabled, OpenAI confirms spam. If disabled, OpenAI finds spam." />
+
+                    @if (_config.OpenAI.VetoMode)
+                    {
+                        <MudNumericField @bind-Value="_config.OpenAI.VetoThreshold"
+                                        Label="Veto Threshold"
+                                        Min="50" Max="100"
+                                        HelperText="OpenAI veto runs only if spam confidence is below this (higher = more vetos)" />
+                    }
+
+                    <MudSwitch T="bool" @bind-Value="_config.OpenAI.CheckShortMessages"
+                              Label="Check Short Messages"
+                              Color="Color.Primary" />
+
+                    <MudTextField @bind-Value="_config.OpenAI.SystemPrompt"
+                                 Label="Custom System Prompt (Optional)"
+                                 Lines="3"
+                                 helperText="Topic-specific instructions for this group" />
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter]
+    public long? ChatId { get; set; }
+
+    private SpamDetectionConfig _config = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfiguration();
+    }
+
+    private async Task LoadConfiguration()
+    {
+        try
+        {
+            _config = ChatId.HasValue
+                ? await ConfigRepository.GetEffectiveConfigAsync(ChatId.Value)
+                : await ConfigRepository.GetGlobalConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new SpamDetectionConfig();
+        }
+        finally
+        {
+        }
+    }
+
+    public SpamDetectionConfig GetConfig() => _config;
+}

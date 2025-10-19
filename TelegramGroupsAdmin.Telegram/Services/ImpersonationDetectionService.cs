@@ -5,7 +5,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.SpamDetection.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Configuration;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;

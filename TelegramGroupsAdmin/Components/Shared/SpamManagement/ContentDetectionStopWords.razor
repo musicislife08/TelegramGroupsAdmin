@@ -1,0 +1,54 @@
+@using TelegramGroupsAdmin.ContentDetection.Configuration
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@inject ISpamDetectionConfigRepository ConfigRepository
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h6" Color="Color.Primary">Stop Words Detection</MudText>
+
+        <MudSwitch T="bool" @bind-Value="_config.StopWords.Enabled"
+                  Label="Enable Stop Words Check"
+                  Color="Color.Primary" />
+
+        @if (_config.StopWords.Enabled)
+        {
+            <MudNumericField @bind-Value="_config.StopWords.ConfidenceThreshold"
+                            Label="Confidence Threshold"
+                            Min="1" Max="100"
+                            helperText="Confidence level when stop words are detected (0-100%)" />
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public long? ChatId { get; set; }
+
+    private SpamDetectionConfig _config = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfiguration();
+    }
+
+    private async Task LoadConfiguration()
+    {
+        try
+        {
+            _config = ChatId.HasValue
+                ? await ConfigRepository.GetEffectiveConfigAsync(ChatId.Value)
+                : await ConfigRepository.GetGlobalConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new SpamDetectionConfig();
+        }
+        finally
+        {
+        }
+    }
+
+    public SpamDetectionConfig GetConfig() => _config;
+}

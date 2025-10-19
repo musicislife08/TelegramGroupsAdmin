@@ -1,7 +1,7 @@
 using TelegramGroupsAdmin;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data.Extensions;
-using TelegramGroupsAdmin.SpamDetection.Extensions;
+using TelegramGroupsAdmin.ContentDetection.Extensions;
 using TelegramGroupsAdmin.Telegram.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,7 +14,7 @@ builder.Logging.AddSimpleConsole(options =>
 });
 builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Information);
-builder.Logging.AddFilter("TelegramGroupsAdmin.SpamDetection", LogLevel.Debug);
+builder.Logging.AddFilter("TelegramGroupsAdmin.ContentDetection", LogLevel.Debug);
 builder.Logging.AddFilter("TelegramGroupsAdmin", LogLevel.Information);
 builder.Logging.AddFilter("Npgsql", LogLevel.Warning);
 
@@ -51,8 +51,8 @@ builder.Services.AddTelegramServices();
 // Repositories
 builder.Services.AddRepositories();
 
-// Spam Detection library
-builder.Services.AddSpamDetection();
+// Content Detection library
+builder.Services.AddContentDetection();
 
 var app = builder.Build();
 

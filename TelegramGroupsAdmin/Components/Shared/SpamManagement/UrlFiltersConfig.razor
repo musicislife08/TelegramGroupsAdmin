@@ -1,0 +1,543 @@
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Services.Blocklists
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Auth
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IBlocklistSubscriptionsRepository BlocklistRepo
+@inject IDomainFiltersRepository DomainFiltersRepo
+@inject IBlocklistSyncService BlocklistSync
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+@implements IDisposable
+
+<MudGrid>
+    <!-- Left Panel: Hard Block (Pre-Detection) -->
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4" Elevation="2" Style="height: 100%">
+            <MudStack Spacing="3">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6" Color="Color.Error">
+                        <MudIcon Icon="@Icons.Material.Filled.Block" Class="mr-2" />
+                        Hard Block
+                    </MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error">Instant Ban</MudChip>
+                </MudStack>
+
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Pre-detection instant ban, no OpenAI veto. Runs before spam detection.
+                </MudText>
+
+                @if (_loading)
+                {
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                }
+                else
+                {
+                    <!-- Built-in Blocklists -->
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">Block List Project Subscriptions</MudText>
+                    @foreach (var blocklist in _builtInBlocklists)
+                    {
+                        <MudCheckBox T="bool"
+                                    Value="@IsBlocklistEnabled(blocklist, BlockMode.Hard)"
+                                    ValueChanged="@(async (bool enabled) => await ToggleBlocklist(blocklist, BlockMode.Hard, enabled))"
+                                    Label="@blocklist.Name"
+                                    Color="Color.Primary"
+                                    Dense="true">
+                            @if (blocklist.EntryCount.HasValue)
+                            {
+                                <MudText Typo="Typo.caption" Class="ml-2">(@blocklist.EntryCount.Value.ToString("N0") domains)</MudText>
+                            }
+                        </MudCheckBox>
+                    }
+
+                    <!-- Custom URLs -->
+                    <MudText Typo="Typo.subtitle2" Class="mt-4">Custom Blocklist URLs (one per line)</MudText>
+                    <MudTextField @bind-Value="_hardBlockCustomUrls"
+                                 Lines="6"
+                                 Variant="Variant.Outlined"
+                                 Placeholder="https://example.com/blocklist.txt"
+                                 HelperText="External blocklists (newline format)" />
+
+                    <!-- Manual Domains -->
+                    <MudText Typo="Typo.subtitle2" Class="mt-4">Manual Domains (one per line)</MudText>
+                    <MudTextField @bind-Value="_hardBlockManualDomains"
+                                 Lines="6"
+                                 Variant="Variant.Outlined"
+                                 Placeholder="evil.com&#10;spam.net&#10;*.scam.org"
+                                 HelperText="Manually blocked domains (supports wildcards)" />
+
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Error"
+                              StartIcon="@Icons.Material.Filled.Save"
+                              OnClick="@(() => SaveConfiguration(BlockMode.Hard))"
+                              Disabled="@_saving"
+                              FullWidth="true">
+                        Save Hard Block Rules
+                    </MudButton>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Center Panel: Global Whitelist -->
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4" Elevation="2" Style="height: 100%">
+            <MudStack Spacing="3">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6" Color="Color.Success">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="mr-2" />
+                        Whitelist
+                    </MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Bypass All</MudChip>
+                </MudStack>
+
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Domains that bypass all blocking checks (hard and soft).
+                </MudText>
+
+                @if (_loading)
+                {
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">Trusted Domains (one per line)</MudText>
+                    <MudTextField @bind-Value="_whitelistDomains"
+                                 Lines="20"
+                                 Variant="Variant.Outlined"
+                                 Placeholder="trusted.com&#10;legitimate.org&#10;*.safe-domain.net"
+                                 HelperText="Whitelisted domains (supports wildcards)" />
+
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Success"
+                              StartIcon="@Icons.Material.Filled.Save"
+                              OnClick="SaveWhitelist"
+                              Disabled="@_saving"
+                              FullWidth="true">
+                        Save Whitelist
+                    </MudButton>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Right Panel: Soft Block (Confidence Voting) -->
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4" Elevation="2" Style="height: 100%">
+            <MudStack Spacing="3">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6" Color="Color.Warning">
+                        <MudIcon Icon="@Icons.Material.Filled.Warning" Class="mr-2" />
+                        Soft Block
+                    </MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">OpenAI Veto</MudChip>
+                </MudStack>
+
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Contributes to confidence voting, subject to OpenAI veto. Runs during spam detection.
+                </MudText>
+
+                @if (_loading)
+                {
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                }
+                else
+                {
+                    <!-- Built-in Blocklists -->
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">Block List Project Subscriptions</MudText>
+                    @foreach (var blocklist in _builtInBlocklists)
+                    {
+                        <MudCheckBox T="bool"
+                                    Value="@IsBlocklistEnabled(blocklist, BlockMode.Soft)"
+                                    ValueChanged="@(async (bool enabled) => await ToggleBlocklist(blocklist, BlockMode.Soft, enabled))"
+                                    Label="@blocklist.Name"
+                                    Color="Color.Primary"
+                                    Dense="true">
+                            @if (blocklist.EntryCount.HasValue)
+                            {
+                                <MudText Typo="Typo.caption" Class="ml-2">(@blocklist.EntryCount.Value.ToString("N0") domains)</MudText>
+                            }
+                        </MudCheckBox>
+                    }
+
+                    <!-- Custom URLs -->
+                    <MudText Typo="Typo.subtitle2" Class="mt-4">Custom Blocklist URLs (one per line)</MudText>
+                    <MudTextField @bind-Value="_softBlockCustomUrls"
+                                 Lines="6"
+                                 Variant="Variant.Outlined"
+                                 Placeholder="https://example.com/blocklist.txt"
+                                 HelperText="External blocklists (newline format)" />
+
+                    <!-- Manual Domains -->
+                    <MudText Typo="Typo.subtitle2" Class="mt-4">Manual Domains (one per line)</MudText>
+                    <MudTextField @bind-Value="_softBlockManualDomains"
+                                 Lines="6"
+                                 Variant="Variant.Outlined"
+                                 Placeholder="suspicious.com&#10;questionable.net"
+                                 HelperText="Manually blocked domains (supports wildcards)" />
+
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Warning"
+                              StartIcon="@Icons.Material.Filled.Save"
+                              OnClick="@(() => SaveConfiguration(BlockMode.Soft))"
+                              Disabled="@_saving"
+                              FullWidth="true">
+                        Save Soft Block Rules
+                    </MudButton>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<!-- Sync Button -->
+@if (!_loading)
+{
+    <MudStack Row="true" Justify="Justify.Center" Class="mt-4">
+        <MudButton Variant="Variant.Outlined"
+                  Color="Color.Primary"
+                  StartIcon="@Icons.Material.Filled.Sync"
+                  OnClick="SyncAllBlocklists"
+                  Disabled="@_syncing">
+            @if (_syncing)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <text>Syncing all blocklists...</text>
+            }
+            else
+            {
+                <text>Sync All Blocklists Now</text>
+            }
+        </MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter]
+    public long? ChatId { get; set; }
+
+    private List<BlocklistSubscription> _builtInBlocklists = new();
+    private List<BlocklistSubscription> _customSubscriptions = new();
+    private List<DomainFilter> _manualFilters = new();
+
+    private bool _loading = true;
+    private bool _saving = false;
+    private bool _syncing = false;
+    private CancellationTokenSource? _reloadCts;
+
+    // Hard Block state
+    private string _hardBlockCustomUrls = string.Empty;
+    private string _hardBlockManualDomains = string.Empty;
+
+    // Whitelist state
+    private string _whitelistDomains = string.Empty;
+
+    // Soft Block state
+    private string _softBlockCustomUrls = string.Empty;
+    private string _softBlockManualDomains = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        try
+        {
+            var allSubscriptions = await BlocklistRepo.GetAllAsync(ChatId);
+            _builtInBlocklists = allSubscriptions.Where(s => s.IsBuiltIn).ToList();
+            _customSubscriptions = allSubscriptions.Where(s => !s.IsBuiltIn).ToList();
+
+            _manualFilters = await DomainFiltersRepo.GetAllAsync(ChatId);
+
+            // Load Hard Block custom URLs
+            var hardCustomSubs = _customSubscriptions.Where(s => s.BlockMode == BlockMode.Hard).ToList();
+            _hardBlockCustomUrls = string.Join(Environment.NewLine, hardCustomSubs.Select(s => s.Url));
+
+            // Load Hard Block manual domains
+            var hardManualDomains = _manualFilters
+                .Where(f => f.FilterType == DomainFilterType.Blacklist && f.BlockMode == BlockMode.Hard && f.Enabled)
+                .Select(f => f.Domain);
+            _hardBlockManualDomains = string.Join(Environment.NewLine, hardManualDomains);
+
+            // Load Whitelist domains
+            var whitelistDomains = _manualFilters
+                .Where(f => f.FilterType == DomainFilterType.Whitelist && f.Enabled)
+                .Select(f => f.Domain);
+            _whitelistDomains = string.Join(Environment.NewLine, whitelistDomains);
+
+            // Load Soft Block custom URLs
+            var softCustomSubs = _customSubscriptions.Where(s => s.BlockMode == BlockMode.Soft).ToList();
+            _softBlockCustomUrls = string.Join(Environment.NewLine, softCustomSubs.Select(s => s.Url));
+
+            // Load Soft Block manual domains
+            var softManualDomains = _manualFilters
+                .Where(f => f.FilterType == DomainFilterType.Blacklist && f.BlockMode == BlockMode.Soft && f.Enabled)
+                .Select(f => f.Domain);
+            _softBlockManualDomains = string.Join(Environment.NewLine, softManualDomains);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading URL filters: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private bool IsBlocklistEnabled(BlocklistSubscription blocklist, BlockMode mode)
+    {
+        return blocklist.Enabled && blocklist.BlockMode == mode;
+    }
+
+    private async Task ToggleBlocklist(BlocklistSubscription blocklist, BlockMode newMode, bool enabled)
+    {
+        // Cancel any pending reload
+        _reloadCts?.Cancel();
+        _reloadCts = new CancellationTokenSource();
+        var currentCts = _reloadCts;
+
+        try
+        {
+            var updated = blocklist with
+            {
+                BlockMode = enabled ? newMode : BlockMode.Disabled,
+                Enabled = enabled
+            };
+
+            await BlocklistRepo.UpdateAsync(updated);
+
+            // Debounce reload - wait 500ms before reloading to batch multiple changes
+            await Task.Delay(500, currentCts.Token);
+
+            // Only reload if this is still the latest change
+            if (!currentCts.IsCancellationRequested)
+            {
+                await LoadDataAsync();
+            }
+
+            Snackbar.Add($"{blocklist.Name} {(enabled ? "enabled" : "disabled")} for {newMode} blocking", Severity.Success);
+        }
+        catch (OperationCanceledException)
+        {
+            // Debounce was cancelled by a newer change, this is expected
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error toggling blocklist: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SaveConfiguration(BlockMode mode)
+    {
+        _saving = true;
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var userEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+            var actor = !string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out _)
+                ? Core.Models.Actor.FromWebUser(userId, userEmail)
+                : Core.Models.Actor.FromSystem("unknown");
+
+            if (mode == BlockMode.Hard)
+            {
+                await SaveHardBlockConfigurationAsync(actor);
+            }
+            else if (mode == BlockMode.Soft)
+            {
+                await SaveSoftBlockConfigurationAsync(actor);
+            }
+
+            await BlocklistSync.RebuildCacheAsync(ChatId);
+            await LoadDataAsync();
+
+            Snackbar.Add($"{mode} block configuration saved successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task SaveHardBlockConfigurationAsync(Core.Models.Actor actor)
+    {
+        // Save custom URLs
+        var urls = _hardBlockCustomUrls
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(u => u.Trim())
+            .Where(u => !string.IsNullOrWhiteSpace(u))
+            .ToList();
+
+        // Remove old custom hard block subscriptions
+        var oldCustomHard = _customSubscriptions.Where(s => s.BlockMode == BlockMode.Hard).ToList();
+        foreach (var old in oldCustomHard)
+        {
+            await BlocklistRepo.DeleteAsync(old.Id);
+        }
+
+        // Add new custom subscriptions
+        foreach (var url in urls)
+        {
+            var subscription = new BlocklistSubscription(
+                Id: 0,
+                ChatId: ChatId,
+                Name: $"Custom: {url}",
+                Url: url,
+                Format: BlocklistFormat.NewlineDomains,
+                BlockMode: BlockMode.Hard,
+                IsBuiltIn: false,
+                Enabled: true,
+                LastFetched: null,
+                EntryCount: null,
+                RefreshIntervalHours: 24,
+                AddedBy: actor,
+                AddedDate: DateTimeOffset.UtcNow,
+                Notes: "Custom hard block URL"
+            );
+            await BlocklistRepo.InsertAsync(subscription);
+        }
+
+        // Save manual domains
+        await SaveManualDomainsAsync(_hardBlockManualDomains, DomainFilterType.Blacklist, BlockMode.Hard, actor);
+    }
+
+    private async Task SaveSoftBlockConfigurationAsync(Core.Models.Actor actor)
+    {
+        // Save custom URLs
+        var urls = _softBlockCustomUrls
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(u => u.Trim())
+            .Where(u => !string.IsNullOrWhiteSpace(u))
+            .ToList();
+
+        // Remove old custom soft block subscriptions
+        var oldCustomSoft = _customSubscriptions.Where(s => s.BlockMode == BlockMode.Soft).ToList();
+        foreach (var old in oldCustomSoft)
+        {
+            await BlocklistRepo.DeleteAsync(old.Id);
+        }
+
+        // Add new custom subscriptions
+        foreach (var url in urls)
+        {
+            var subscription = new BlocklistSubscription(
+                Id: 0,
+                ChatId: ChatId,
+                Name: $"Custom: {url}",
+                Url: url,
+                Format: BlocklistFormat.NewlineDomains,
+                BlockMode: BlockMode.Soft,
+                IsBuiltIn: false,
+                Enabled: true,
+                LastFetched: null,
+                EntryCount: null,
+                RefreshIntervalHours: 24,
+                AddedBy: actor,
+                AddedDate: DateTimeOffset.UtcNow,
+                Notes: "Custom soft block URL"
+            );
+            await BlocklistRepo.InsertAsync(subscription);
+        }
+
+        // Save manual domains
+        await SaveManualDomainsAsync(_softBlockManualDomains, DomainFilterType.Blacklist, BlockMode.Soft, actor);
+    }
+
+    private async Task SaveWhitelist()
+    {
+        _saving = true;
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var userEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+            var actor = !string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out _)
+                ? Core.Models.Actor.FromWebUser(userId, userEmail)
+                : Core.Models.Actor.FromSystem("unknown");
+
+            await SaveManualDomainsAsync(_whitelistDomains, DomainFilterType.Whitelist, BlockMode.Disabled, actor);
+            await BlocklistSync.RebuildCacheAsync(ChatId);
+            await LoadDataAsync();
+
+            Snackbar.Add("Whitelist saved successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving whitelist: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task SaveManualDomainsAsync(string domainsText, DomainFilterType filterType, BlockMode blockMode, Core.Models.Actor actor)
+    {
+        var domains = domainsText
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(d => d.Trim().ToLowerInvariant())
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .ToHashSet();
+
+        // Remove old filters of this type and mode
+        var oldFilters = _manualFilters
+            .Where(f => f.FilterType == filterType && f.BlockMode == blockMode)
+            .ToList();
+
+        foreach (var old in oldFilters)
+        {
+            await DomainFiltersRepo.DeleteAsync(old.Id);
+        }
+
+        // Add new filters
+        foreach (var domain in domains)
+        {
+            var filter = new DomainFilter(
+                Id: 0,
+                ChatId: ChatId,
+                Domain: domain,
+                FilterType: filterType,
+                BlockMode: blockMode,
+                Enabled: true,
+                AddedBy: actor,
+                AddedDate: DateTimeOffset.UtcNow,
+                Notes: null
+            );
+            await DomainFiltersRepo.InsertAsync(filter);
+        }
+    }
+
+    private async Task SyncAllBlocklists()
+    {
+        _syncing = true;
+        try
+        {
+            await BlocklistSync.SyncAllAsync();
+            await LoadDataAsync();
+            Snackbar.Add("All blocklists synced successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error syncing blocklists: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _syncing = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _reloadCts?.Cancel();
+        _reloadCts?.Dispose();
+    }
+}

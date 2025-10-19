@@ -1,6 +1,6 @@
 @using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.SpamDetection.Repositories
-@using TelegramGroupsAdmin.SpamDetection.Configuration
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.ContentDetection.Configuration
 @using TelegramGroupsAdmin.Components.Shared.SpamManagement
 @using TelegramGroupsAdmin.Components.Shared
 @using TelegramGroupsAdmin.Configuration
@@ -157,27 +157,23 @@
 
                     @if (_useCustomConfig)
                     {
-                        <!-- Reusable SpamDetectionConfig component for per-chat configuration -->
-                        <SpamDetectionConfig @ref="_spamConfigComponent" ChatId="@ChatInfo.Chat.ChatId" OnSaved="OnConfigSaved" />
+                        <MudAlert Severity="Severity.Info" Class="mb-4">
+                            For detailed content detection configuration, use the Settings page: /settings/content-detection
+                        </MudAlert>
 
-                        <!-- Save Button -->
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                                  OnClick="SaveSpamConfigAsync" Disabled="@_savingConfig" FullWidth="true">
-                            @if (_savingConfig)
-                            {
-                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                <MudText Class="ms-2">Saving...</MudText>
-                            }
-                            else
-                            {
-                                <span>Save Configuration</span>
-                            }
-                        </MudButton>
+                        <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+                            <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Settings">
+                                <ContentDetectionGeneral ChatId="@ChatInfo.Chat.ChatId" />
+                            </MudTabPanel>
+                            <MudTabPanel Text="URL Filters" Icon="@Icons.Material.Filled.Link">
+                                <UrlFiltersConfig ChatId="@ChatInfo.Chat.ChatId" />
+                            </MudTabPanel>
+                        </MudTabs>
                     }
                     else
                     {
                         <MudAlert Severity="Severity.Info">
-                            This chat is using the global spam detection configuration.
+                            This chat is using the global content detection configuration.
                             To customize settings for this chat specifically, enable "Use Custom Configuration" above.
                         </MudAlert>
                     }
@@ -324,9 +320,7 @@
     private ChatHealthStatus? _healthStatus;
 
     // Spam Detection Config
-    private bool _savingConfig;
     private bool _useCustomConfig;
-    private SpamManagement.SpamDetectionConfig? _spamConfigComponent;
 
     // Welcome System Config
     private bool _savingWelcomeConfig;
@@ -397,34 +391,16 @@
         }
     }
 
-    private async Task SaveSpamConfigAsync()
-    {
-        if (_spamConfigComponent != null)
-        {
-            _savingConfig = true;
-            await _spamConfigComponent.SaveConfiguration();
-            _savingConfig = false;
-        }
-    }
 
-    private Task OnConfigSaved()
-    {
-        // Config was saved by SpamDetectionConfig component
-        ChatInfo.HasCustomSpamConfig = true;
-        return Task.CompletedTask;
-    }
 
     private async Task SaveConfigAsync()
     {
-        _savingConfig = true;
         try
         {
-            var chatIdStr = ChatInfo.Chat.ChatId.ToString();
-
             if (!_useCustomConfig && ChatInfo.HasCustomSpamConfig)
             {
                 // Delete custom config (revert to global)
-                await SpamConfigRepository.DeleteChatConfigAsync(chatIdStr);
+                await SpamConfigRepository.DeleteChatConfigAsync(ChatInfo.Chat.ChatId);
                 ChatInfo.HasCustomSpamConfig = false;
                 Snackbar.Add("Reverted to global configuration", Severity.Success);
             }
@@ -435,7 +411,6 @@
         }
         finally
         {
-            _savingConfig = false;
         }
     }
 

@@ -1,7 +1,7 @@
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Auth
-@using TelegramGroupsAdmin.SpamDetection.Repositories
+@using TelegramGroupsAdmin.ContentDetection.Repositories
 @inject IStopWordsRepository StopWordsRepository
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDialogService DialogService
@@ -163,7 +163,7 @@
         {
             try
             {
-                var stopWord = new TelegramGroupsAdmin.SpamDetection.Models.StopWord(
+                var stopWord = new TelegramGroupsAdmin.ContentDetection.Models.StopWord(
                     Id: 0,
                     Word: data.Word.ToLowerInvariant(),
                     Enabled: true,
@@ -223,7 +223,7 @@
         }
     }
 
-    private static StopWordItem MapToStopWordItem(TelegramGroupsAdmin.SpamDetection.Models.StopWord stopWord)
+    private static StopWordItem MapToStopWordItem(TelegramGroupsAdmin.ContentDetection.Models.StopWord stopWord)
     {
         // Convert SpamDetection domain model to Blazor dialog model
         return new StopWordItem
