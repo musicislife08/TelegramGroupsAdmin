@@ -34,4 +34,10 @@ public interface ITelegramUserMappingRepository
     /// Check if a Telegram account is already linked
     /// </summary>
     Task<bool> IsTelegramIdLinkedAsync(long telegramId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get permission level for a linked Telegram user (single query with JOIN)
+    /// Returns null if not linked or user not found
+    /// </summary>
+    Task<int?> GetPermissionLevelByTelegramIdAsync(long telegramId, CancellationToken cancellationToken = default);
 }

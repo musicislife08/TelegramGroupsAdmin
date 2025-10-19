@@ -175,11 +175,11 @@ public class BackupService : IBackupService
     /// <summary>
     /// Convert snake_case to PascalCase (e.g., "stop_words" → "StopWords")
     /// </summary>
-    private string ToPascalCase(string snakeCase)
+    private static string ToPascalCase(string snakeCase)
     {
         var parts = snakeCase.Split('_', StringSplitOptions.RemoveEmptyEntries);
         return string.Concat(parts.Select(p =>
-            p.Length > 0 ? char.ToUpperInvariant(p[0]) + p.Substring(1).ToLowerInvariant() : ""));
+            p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant() : ""));
     }
 
     /// <summary>

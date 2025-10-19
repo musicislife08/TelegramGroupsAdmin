@@ -21,9 +21,9 @@ The codebase demonstrates strong adherence to modern C# practices with minimal c
 
 **Statistics by Severity:**
 - **Critical:** 0 (C1 resolved in Phase 4.4)
-- **High:** 9 (performance, consistency, type safety)
-- **Medium:** 17 (code quality, maintainability)
-- **Low:** 8 (style, cleanup)
+- **High:** 0 (all resolved 2025-10-18)
+- **Medium:** 15 (code quality, maintainability)
+- **Low:** 4 (style, cleanup, UI enhancements)
 
 **Expected Performance Gains:** 30-50% improvement in high-traffic operations
 
@@ -74,301 +74,7 @@ Added MaxConfidenceVetoThreshold, Translation thresholds to SpamDetectionConfig.
 
 ## High Priority Issues (H-prefix)
 
-### H3: Inconsistent Option Class Patterns - Should All Be Classes
-**Project:** TelegramGroupsAdmin.Configuration
-**Severity:** High | **Impact:** Consistency
-
-**Issue:**
-Mix of records (6 files) and classes (1 file) creates inconsistency. Since MudBlazor requires mutable classes for two-way binding, ALL options should be classes for consistency.
-
-**Current Code:**
-```csharp
-// Most are records (OpenAI, Telegram, SendGrid, MessageHistory, SpamDetection, Email)
-public sealed record OpenAIOptions
-{
-    public required string ApiKey { get; init; }
-    public string Model { get; init; } = "gpt-4o-mini";
-}
-
-// Only AppOptions is a class
-public class AppOptions
-{
-    public string BaseUrl { get; set; } = "http://localhost:5161";
-}
-```
-
-**Recommendation:**
-```csharp
-// Convert ALL to classes for consistency (MudBlazor binding compatibility)
-public sealed class OpenAIOptions
-{
-    public required string ApiKey { get; set; }
-    public string Model { get; set; } = "gpt-4o-mini";
-    public int MaxTokens { get; set; } = 500;
-}
-
-public sealed class TelegramOptions
-{
-    public required string BotToken { get; set; }
-    public required string ChatId { get; set; }
-}
-
-// etc. for all 7 option classes
-```
-
-**Rationale:**
-- Per CLAUDE.md Phase 4.4: "WelcomeConfig converted from record to class for Blazor binding"
-- MudBlazor v8.13.0 requires `{ get; set; }` for form binding
-- Even read-only configs may become editable in future Settings UI
-- Consistency across entire Configuration project
-- Avoids confusion about when to use record vs class
-
-**Impact:** Consistency, future-proofs for Settings UI, aligns with MudBlazor requirements
-**Breaking Change:** Yes - `init` → `set` (but configs are only accessed via IOptions<T>, so low risk)
-
----
-
-### H4: String Magic Values for Config Types
-**Project:** TelegramGroupsAdmin.Configuration
-**Location:** `ConfigService.cs:111-140`
-**Severity:** High | **Impact:** Type Safety
-
-**Issue:**
-Config type names are magic strings - typos won't cause compile errors.
-
-**Current Code:**
-```csharp
-switch (configType.ToLowerInvariant())
-{
-    case "spam_detection":
-        record.SpamDetectionConfig = json;
-        break;
-    // ...
-}
-```
-
-**Recommendation:**
-```csharp
-// Use enum for type safety
-public enum ConfigType
-{
-    SpamDetection,
-    Welcome,
-    Log,
-    Moderation
-}
-
-// Refactor IConfigService
-Task SaveAsync<T>(ConfigType configType, long? chatId, T config) where T : class;
-```
-
-**Impact:** Type safety, IntelliSense discoverability, refactoring safety
-**Breaking Change:** Yes (acceptable)
-
----
-
-### H5: Inefficient Permission Checking
-**Project:** TelegramGroupsAdmin.Telegram
-**Location:** `CommandRouter.cs:173-209`
-**Severity:** High | **Impact:** Performance
-
-**Issue:**
-Command permission checking makes 2-3 database calls per command execution.
-
-**Current Code:**
-```csharp
-// Check web app linking FIRST
-var userId = await mappingRepository.GetUserIdByTelegramIdAsync(telegramId);
-if (userId != null)
-{
-    var user = await userRepository.GetByIdAsync(userId);
-    // ...
-}
-// Check Telegram admin
-var adminPermissionLevel = await chatAdminsRepository.GetPermissionLevelAsync(...);
-```
-
-**Recommendation:**
-```csharp
-// Single query with JOIN
-var result = await dbContext.TelegramUserMappings
-    .Where(m => m.TelegramId == telegramId)
-    .Join(dbContext.Users, m => m.UserId, u => u.Id, (m, u) => new { Mapping = m, User = u })
-    .Select(x => (int?)x.User.PermissionLevel)
-    .FirstOrDefaultAsync();
-
-if (result.HasValue) return result.Value;
-
-// Otherwise check chat admin (can cache)
-return await chatAdminsRepository.GetPermissionLevelAsync(chatId, telegramId);
-```
-
-**Impact:** 50% reduction in DB calls, 20-30ms latency improvement per command
-
----
-
-### H6: WelcomeResponseDto Enum Inconsistency
-**Project:** TelegramGroupsAdmin.Data
-**Location:** `Models/WelcomeRecords.cs:33-36`
-**Severity:** High | **Impact:** Consistency
-
-**Issue:**
-WelcomeResponseDto stores response as string while all other enums are stored as int.
-
-**Current Code:**
-```csharp
-[Column("response")]
-[MaxLength(20)]
-public string Response { get; set; } = string.Empty;
-
-public enum WelcomeResponseType { ... }
-```
-
-**Recommendation:**
-```csharp
-[Column("response")]
-public WelcomeResponseType Response { get; set; }
-
-// In AppDbContext.ConfigureValueConversions
-modelBuilder.Entity<WelcomeResponseDto>()
-    .Property(w => w.Response)
-    .HasConversion<int>();
-```
-
-**Impact:** Consistency, type safety, performance (int comparisons faster)
-**Breaking Change:** Yes (database migration required)
-
----
-
-### H7: Avoid .Result in Blazor Component
-**Project:** TelegramGroupsAdmin
-**Location:** `Components/Pages/Audit.razor:188-189`
-**Severity:** High | **Impact:** Best Practice
-
-**Issue:**
-Using `.Result` after `await` is poor practice.
-
-**Current Code:**
-```csharp
-await Task.WhenAll(eventsTask, usersTask);
-
-_events = eventsTask.Result;  // ❌
-_users = usersTask.Result;    // ❌
-```
-
-**Recommendation:**
-```csharp
-// Direct await (simplest)
-_events = await AuditService.GetRecentEventsAsync(limit: 500);
-_users = await UserRepository.GetAllIncludingDeletedAsync();
-```
-
-**Impact:** Best practice compliance, clearer code
-
----
-
-### H8: Buffer.BlockCopy → Span<T>
-**Project:** TelegramGroupsAdmin
-**Location:** `Services/Auth/PasswordHasher.cs:25-26, 43, 46`
-**Severity:** High | **Impact:** Performance
-
-**Issue:**
-Buffer.BlockCopy is legacy .NET Framework API.
-
-**Current Code:**
-```csharp
-Buffer.BlockCopy(salt, 0, outputBytes, 1, SaltSize);
-Buffer.BlockCopy(subkey, 0, outputBytes, 1 + SaltSize, Pbkdf2SubkeyLength);
-```
-
-**Recommendation:**
-```csharp
-var span = outputBytes.AsSpan();
-span[0] = 0x01;
-salt.CopyTo(span.Slice(1, SaltSize));
-subkey.CopyTo(span.Slice(1 + SaltSize, Pbkdf2SubkeyLength));
-```
-
-**Impact:** Performance (minor but measurable), modern .NET best practice
-
----
-
-### H9: Namespace Mismatch for SendGrid/Email Options
-**Project:** TelegramGroupsAdmin.Configuration
-**Location:** `SendGridOptions.cs:1`, `EmailOptions.cs:1`
-**Severity:** High | **Impact:** Consistency
-
-**Issue:**
-SendGridOptions and EmailOptions use `TelegramGroupsAdmin.Services.Email` namespace while in Configuration project.
-
-**Recommendation:**
-```csharp
-// Move to proper namespace
-namespace TelegramGroupsAdmin.Configuration;
-
-// Then simplify ConfigurationExtensions.cs
-services.Configure<SendGridOptions>(configuration.GetSection("SendGrid"));
-```
-
-**Impact:** Consistency, discoverability, removes need for full qualification
-**Breaking Change:** Yes (namespace change)
-
----
-
-### H10: Duplicate Query Patterns in Telegram Repositories
-**Project:** TelegramGroupsAdmin.Telegram
-**Location:** Multiple repository files
-**Severity:** High | **Impact:** Maintainability
-
-**Issue:**
-Same JOIN + Select pattern repeated 5+ times in DetectionResultsRepository.
-
-**Recommendation:**
-```csharp
-// Extract to reusable query helper
-private IQueryable<DetectionResultWithMessage> GetDetectionResultsWithMessages(AppDbContext context)
-    => context.DetectionResults
-        .AsNoTracking()
-        .Join(context.Messages,
-            dr => dr.MessageId,
-            m => m.MessageId,
-            (dr, m) => new { DetectionResult = dr, Message = m });
-
-// Then use in methods
-var result = await GetDetectionResultsWithMessages(context)
-    .Where(x => x.DetectionResult.Id == id)
-    .Select(x => new DetectionResultRecord { ... })
-    .FirstOrDefaultAsync();
-```
-
-**Impact:** Reduces duplication, single point of change
-
----
-
-### H11: Missing ConfidenceThreshold Config Properties
-**Project:** TelegramGroupsAdmin.SpamDetection
-**Location:** `SpamDetectionEngine.cs:113, 163, 174, 184, 197`
-**Severity:** High | **Impact:** Maintainability
-
-**Issue:**
-Magic numbers for confidence thresholds should be in config.
-
-**Recommendation:**
-```csharp
-// Add to SpamDetectionConfig.cs nested configs
-public class SimilarityConfig
-{
-    public bool Enabled { get; set; } = true;
-    public double Threshold { get; set; } = 0.5;
-    public int ConfidenceThreshold { get; set; } = 75; // NEW
-}
-
-// Use in BuildRequestForCheck
-ConfidenceThreshold = config.Similarity.ConfidenceThreshold,
-```
-
-**Impact:** Per-chat tuning without code changes
-**Note:** No migration needed - C# defaults handle missing properties
+**None remaining** - All 7 High priority issues resolved 2025-10-18
 
 ---
 
@@ -416,28 +122,6 @@ if (existing != null)
 
 ---
 
-### M3: Collection Expression Opportunities
-**Project:** TelegramGroupsAdmin
-**Location:** `Endpoints/AuthEndpoints.cs:43-49, 94-100`
-**Severity:** Medium | **Impact:** Readability
-
-**Issue:**
-Using `List<Claim>` when array is more efficient.
-
-**Recommendation:**
-```csharp
-Claim[] claims =
-[
-    new(ClaimTypes.NameIdentifier, result.UserId!),
-    new(ClaimTypes.Email, result.Email!),
-    new(ClaimTypes.Role, GetRoleName(result.PermissionLevel!.Value)),
-    new(CustomClaimTypes.PermissionLevel, result.PermissionLevel.Value.ToString())
-];
-```
-
-**Impact:** Reduced allocation, clearer intent
-
----
 
 ### M4: Duplicate Sign-In Logic
 **Project:** TelegramGroupsAdmin
@@ -499,24 +183,6 @@ private async Task<RegisterResult> CreateNewUserAsync(...) { /* ... */ }
 
 ---
 
-### M6: Use Range Operator Instead of Substring
-**Project:** TelegramGroupsAdmin
-**Location:** `Services/Backup/BackupService.cs:181-182`
-**Severity:** Medium | **Impact:** Readability
-
-**Recommendation:**
-```csharp
-private static string ToPascalCase(string snakeCase)
-{
-    var parts = snakeCase.Split('_', StringSplitOptions.RemoveEmptyEntries);
-    return string.Concat(parts.Select(p =>
-        p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant() : ""));
-}
-```
-
-**Impact:** Modern syntax, method can be static
-
----
 
 ### M7: Async Void in Event Handler Needs Error Handling
 **Project:** TelegramGroupsAdmin
@@ -779,79 +445,37 @@ public AppDbContext CreateDbContext(string[] args)
 
 ## Low Priority Issues (L-prefix)
 
-### L1: Catch-All Without Logging
+### L9: Expose ConfidenceThreshold Properties in Settings UI
 **Project:** TelegramGroupsAdmin
-**Location:** `SeoPreviewScraper.cs:40-43`
-**Severity:** Low | **Impact:** Debuggability
+**Location:** Settings UI - Spam Detection tab
+**Severity:** Low | **Impact:** User Experience
+
+**Issue:**
+H11 added ConfidenceThreshold properties to 5 spam detection config classes, but no UI exists to edit them.
+
+**Properties needing UI inputs:**
+- SimilarityConfig.ConfidenceThreshold (default: 75)
+- BayesConfig.ConfidenceThreshold (default: 75)
+- TranslationConfig.ConfidenceThreshold (default: 80)
+- SpacingConfig.ConfidenceThreshold (default: 70)
+- OpenAIConfig.ConfidenceThreshold (default: 85)
 
 **Recommendation:**
-```csharp
-catch (Exception ex)
-{
-    _logger.LogDebug(ex, "Failed to scrape SEO preview from {Url}", url);
-    return null; // Fail-safe
-}
+Add MudNumericField inputs in /settings#spam-detection for each property:
+```razor
+<MudNumericField @bind-Value="config.Similarity.ConfidenceThreshold"
+                 Label="Similarity Confidence Threshold"
+                 Min="0" Max="100"
+                 HelperText="Confidence level (0-100) for similarity spam detection" />
 ```
 
+**Impact:** Allows per-chat tuning of spam detection sensitivity via UI
+**Note:** Properties work with defaults until UI is built
 
 ---
 
-### L2: Empty ConfigureCompositeKeys Method
-**Project:** TelegramGroupsAdmin.Data
-**Location:** `AppDbContext.cs:83-87`
-**Severity:** Low | **Impact:** Readability
-
-**Recommendation:**
-Remove the empty method entirely from OnModelCreating.
 
 
----
-
-### L3: Use ArgumentException.ThrowIfNullOrEmpty
-**Project:** TelegramGroupsAdmin.Data
-**Location:** `Services/TotpProtectionService.cs:14-19, 24-29`
-**Severity:** Low | **Impact:** Readability
-
-**Recommendation:**
-```csharp
-public string Protect(string totpSecret)
-{
-    ArgumentException.ThrowIfNullOrEmpty(totpSecret);
-    return _protector.Protect(totpSecret);
-}
-```
-
-
----
-
-### L4: RootNamespace Mismatch
-**Project:** TelegramGroupsAdmin.Data
-**Location:** `TelegramGroupsAdmin.Data.csproj:5`
-**Severity:** Low | **Impact:** Consistency
-
-**Recommendation:**
-```xml
-<RootNamespace>TelegramGroupsAdmin.Data</RootNamespace>
-```
-
-
----
-
-### L5: Remove Obsolete SpamDetector Class
-**Project:** TelegramGroupsAdmin.SpamDetection
-**Location:** `Services/SpamDetector.cs:1-130`
-**Severity:** Low | **Impact:** Code Cleanliness
-
-**Recommendation:**
-```bash
-# Verify no references exist
-grep -r "ISpamDetector" --include="*.cs" .
-# If none found, delete
-rm TelegramGroupsAdmin.SpamDetection/Services/SpamDetector.cs
-```
-
-
----
 
 ### L6: Raw String Literals for Long Templates
 **Project:** TelegramGroupsAdmin.Telegram
@@ -924,10 +548,8 @@ public enum PermissionLevel
 3. **H11** - Add missing ConfidenceThreshold config properties
 4. **H6** - WelcomeResponseDto enum consistency (requires migration)
 5. **H3** - Convert all option records → classes for Blazor consistency
-6. **H7** - Fix .Result usage in Audit.razor
-7. **H8** - Buffer.BlockCopy → Span<T>
-8. **H9** - Fix namespace mismatch
-9. **H10** - Extract duplicate query patterns
+6. **H9** - Fix namespace mismatch
+7. **H10** - Extract duplicate query patterns
 
 ### Phase 2: Medium Priority - Code Quality
 
@@ -941,18 +563,14 @@ public enum PermissionLevel
 8. **M10** - Extract magic number constants
 9. **M8** - ChatPermissions → static readonly
 10. **M9** - Standardize scope creation
-11. **M1, M3, M6, M7, M14, M16** - Various small improvements
+11. **M1, M7, M14, M16** - Various small improvements
 
 ### Phase 3: Low Priority - Polish
 
-1. **L5** - Remove obsolete SpamDetector
-2. **L2** - Remove empty ConfigureCompositeKeys
-3. **L4** - Fix RootNamespace mismatch
-4. **L3** - Use ThrowIfNullOrEmpty
-5. **L1** - Add logging to catch-all
-6. **L7** - Add ConfigureAwait(false) sweep
-7. **L8** - Add enum XML docs
-8. **L6** - Raw string literals (optional)
+1. **L7** - Add ConfigureAwait(false) sweep
+2. **L8** - Add enum XML docs
+3. **L6** - Raw string literals (optional)
+4. **L9** - Expose ConfidenceThreshold properties in Settings UI (5 MudNumericField inputs)
 
 ---
 
@@ -1201,12 +819,12 @@ public class BanCommand : IBotCommand
 | Priority | Count | Impact |
 |----------|-------|--------|
 | Architectural | 1 issue (ARCH-1) | File organization, navigation, maintainability |
-| High | 9 issues | 30-50% faster in high-traffic operations |
-| Medium | 17 issues | Code quality + consistency |
-| Low | 8 issues | Style polish |
+| High | 7 issues | 30-50% faster in high-traffic operations |
+| Medium | 15 issues | Code quality + consistency |
+| Low | 4 issues | Style polish + UI enhancements |
 | Future | 1 pattern (FUTURE-1) | IDI pattern for boilerplate reduction |
 
-**Total Issues Found:** 35 actionable (34 immediate + 1 architectural)
+**Total Issues Found:** 27 actionable (26 immediate + 1 architectural)
 **Expected Performance Gain:** 30-50% improvement in command routing, 15-20% in queries
 
 ---

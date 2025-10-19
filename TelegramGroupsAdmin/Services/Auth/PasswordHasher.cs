@@ -21,9 +21,10 @@ public class PasswordHasher : IPasswordHasher
         );
 
         var outputBytes = new byte[1 + SaltSize + Pbkdf2SubkeyLength];
-        outputBytes[0] = 0x01; // Version marker
-        Buffer.BlockCopy(salt, 0, outputBytes, 1, SaltSize);
-        Buffer.BlockCopy(subkey, 0, outputBytes, 1 + SaltSize, Pbkdf2SubkeyLength);
+        var span = outputBytes.AsSpan();
+        span[0] = 0x01; // Version marker
+        salt.CopyTo(span.Slice(1, SaltSize));
+        subkey.CopyTo(span.Slice(1 + SaltSize, Pbkdf2SubkeyLength));
 
         return Convert.ToBase64String(outputBytes);
     }
@@ -39,11 +40,9 @@ public class PasswordHasher : IPasswordHasher
                 return false;
             }
 
-            var salt = new byte[SaltSize];
-            Buffer.BlockCopy(decodedHash, 1, salt, 0, SaltSize);
-
-            var expectedSubkey = new byte[Pbkdf2SubkeyLength];
-            Buffer.BlockCopy(decodedHash, 1 + SaltSize, expectedSubkey, 0, Pbkdf2SubkeyLength);
+            var decodedSpan = decodedHash.AsSpan();
+            var salt = decodedSpan.Slice(1, SaltSize).ToArray();
+            var expectedSubkey = decodedSpan.Slice(1 + SaltSize, Pbkdf2SubkeyLength).ToArray();
 
             var actualSubkey = KeyDerivation.Pbkdf2(
                 password: password,

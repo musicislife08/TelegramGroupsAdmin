@@ -55,7 +55,7 @@ public class BotProtectionService : IBotProtectionService
 
         // Get effective config for this chat (chat-specific overrides global)
         // Note: IConfigService doesn't support CancellationToken (configuration library)
-        var config = await configService.GetEffectiveAsync<BotProtectionConfig>(ConfigType.BotProtection, chatId)
+        var config = await configService.GetEffectiveAsync<BotProtectionConfig>(ConfigType.UrlFilter, chatId)
                     ?? BotProtectionConfig.Default;
 
         // Bot protection disabled - allow all bots

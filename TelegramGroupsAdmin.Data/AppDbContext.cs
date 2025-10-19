@@ -70,9 +70,6 @@ public class AppDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Configure composite keys
-        ConfigureCompositeKeys(modelBuilder);
-
         // Configure relationships
         ConfigureRelationships(modelBuilder);
 
@@ -90,12 +87,6 @@ public class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new TimeTickerConfigurations());
         modelBuilder.ApplyConfiguration(new CronTickerConfigurations());
         modelBuilder.ApplyConfiguration(new CronTickerOccurrenceConfigurations());
-    }
-
-    private static void ConfigureCompositeKeys(ModelBuilder modelBuilder)
-    {
-        // chat_admins uses regular PK (id), has unique constraint on (chat_id, telegram_id)
-        // No composite key configuration needed - handled by database constraint
     }
 
     private static void ConfigureRelationships(ModelBuilder modelBuilder)
@@ -495,6 +486,10 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<ImpersonationAlertRecordDto>()
             .Property(ia => ia.Verdict)
+            .HasConversion<int>();
+
+        modelBuilder.Entity<WelcomeResponseDto>()
+            .Property(w => w.Response)
             .HasConversion<int>();
 
         // VerificationTokenDto stores token_type as string in DB but exposes as enum

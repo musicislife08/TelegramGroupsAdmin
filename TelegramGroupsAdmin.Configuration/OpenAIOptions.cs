@@ -1,8 +1,8 @@
 namespace TelegramGroupsAdmin.Configuration;
 
-public sealed record OpenAIOptions
+public sealed class OpenAIOptions
 {
-    public required string ApiKey { get; init; }
-    public string Model { get; init; } = "gpt-4o-mini";
-    public int MaxTokens { get; init; } = 500;
+    public required string ApiKey { get; set; }
+    public string Model { get; set; } = "gpt-4o-mini";
+    public int MaxTokens { get; set; } = 500;
 }

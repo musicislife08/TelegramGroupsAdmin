@@ -139,6 +139,11 @@ public class SimilarityConfig
     /// Similarity threshold (0.0 - 1.0)
     /// </summary>
     public double Threshold { get; set; } = 0.5;
+
+    /// <summary>
+    /// Confidence threshold for spam classification (0-100)
+    /// </summary>
+    public int ConfidenceThreshold { get; set; } = 75;
 }
 
 /// <summary>
@@ -181,6 +186,11 @@ public class BayesConfig
     /// Minimum spam probability to trigger (0.0 - 100.0)
     /// </summary>
     public double MinSpamProbability { get; set; } = 50.0;
+
+    /// <summary>
+    /// Confidence threshold for spam classification (0-100)
+    /// </summary>
+    public int ConfidenceThreshold { get; set; } = 75;
 }
 
 /// <summary>
@@ -221,6 +231,11 @@ public class TranslationConfig
     /// Default: 0.8 (80% Latin = likely English/Western European language)
     /// </summary>
     public double LatinScriptThreshold { get; set; } = 0.8;
+
+    /// <summary>
+    /// Confidence threshold for spam classification (0-100)
+    /// </summary>
+    public int ConfidenceThreshold { get; set; } = 80;
 }
 
 /// <summary>
@@ -252,6 +267,11 @@ public class SpacingConfig
     /// Threshold for space ratio (0.0 - 1.0)
     /// </summary>
     public double SpaceRatioThreshold { get; set; } = 0.3;
+
+    /// <summary>
+    /// Confidence threshold for spam classification (0-100)
+    /// </summary>
+    public int ConfidenceThreshold { get; set; } = 70;
 }
 
 /// <summary>
@@ -285,6 +305,11 @@ public class OpenAIConfig
     /// Custom system prompt for this group (topic-specific)
     /// </summary>
     public string? SystemPrompt { get; set; }
+
+    /// <summary>
+    /// Confidence threshold for spam classification (0-100)
+    /// </summary>
+    public int ConfidenceThreshold { get; set; } = 85;
 }
 
 /// <summary>

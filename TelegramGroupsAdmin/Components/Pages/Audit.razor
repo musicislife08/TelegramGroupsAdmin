@@ -446,13 +446,8 @@
         {
             // Load both audit events and users for filtering/display
             // Use GetAllIncludingDeletedAsync to show emails for deleted users in audit log
-            var eventsTask = AuditService.GetRecentEventsAsync(limit: 500);
-            var usersTask = UserRepository.GetAllIncludingDeletedAsync();
-
-            await Task.WhenAll(eventsTask, usersTask);
-
-            _events = eventsTask.Result;
-            _users = usersTask.Result;
+            _events = await AuditService.GetRecentEventsAsync(limit: 500);
+            _users = await UserRepository.GetAllIncludingDeletedAsync();
 
             // Build email cache for fast lookups
             _userEmailCache = _users.ToDictionary(u => u.Id, u => u.Email);
@@ -478,24 +473,17 @@
 
         try
         {
-            // Load moderation actions, web admin users, and Telegram users in parallel
-            var actionsTask = UserActionsRepository.GetRecentAsync(limit: 500);
-            var webUsersTask = _users.Count == 0 ? UserRepository.GetAllIncludingDeletedAsync() : Task.FromResult(_users);
-            var telegramUsersTask = TelegramUserRepository.GetAllWithStatsAsync();
-
-            await Task.WhenAll(actionsTask, webUsersTask, telegramUsersTask);
-
-            _userActions = actionsTask.Result;
+            // Load moderation actions and web admin users (if needed)
+            _userActions = await UserActionsRepository.GetRecentAsync(limit: 500);
 
             // Build web admin user email cache (if not already loaded)
             if (_users.Count == 0)
             {
-                _users = webUsersTask.Result;
+                _users = await UserRepository.GetAllIncludingDeletedAsync();
                 _userEmailCache = _users.ToDictionary(u => u.Id, u => u.Email);
             }
 
             // Build Telegram users cache for display names
-            var telegramUsers = telegramUsersTask.Result;
             _telegramUsersCache = new Dictionary<long, TelegramGroupsAdmin.Telegram.Models.TelegramUser>();
 
             // We need to fetch full TelegramUser objects, not just list items

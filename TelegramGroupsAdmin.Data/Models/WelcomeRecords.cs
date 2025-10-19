@@ -29,11 +29,10 @@ public class WelcomeResponseDto
     public int WelcomeMessageId { get; set; }
 
     /// <summary>
-    /// Response type: 'pending', 'accepted', 'denied', 'timeout', 'left'
+    /// Response type: Pending, Accepted, Denied, Timeout, Left
     /// </summary>
     [Column("response")]
-    [MaxLength(20)]
-    public string Response { get; set; } = string.Empty;
+    public WelcomeResponseType Response { get; set; } = WelcomeResponseType.Pending;
 
     [Column("responded_at")]
     public DateTimeOffset RespondedAt { get; set; }

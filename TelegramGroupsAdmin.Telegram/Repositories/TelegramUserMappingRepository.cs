@@ -79,4 +79,21 @@ public class TelegramUserMappingRepository : ITelegramUserMappingRepository
             .AsNoTracking()
             .AnyAsync(tum => tum.TelegramId == telegramId && tum.IsActive, cancellationToken);
     }
+
+    public async Task<int?> GetPermissionLevelByTelegramIdAsync(long telegramId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        // Single query with JOIN - returns null if no mapping or user found
+        var permissionLevel = await context.TelegramUserMappings
+            .AsNoTracking()
+            .Where(tum => tum.TelegramId == telegramId && tum.IsActive)
+            .Join(
+                context.Users,
+                tum => tum.UserId,
+                user => user.Id,
+                (tum, user) => (int?)user.PermissionLevel)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return permissionLevel;
+    }
 }

@@ -13,20 +13,14 @@ public class TotpProtectionService : ITotpProtectionService
 
     public string Protect(string totpSecret)
     {
-        if (string.IsNullOrEmpty(totpSecret))
-        {
-            throw new ArgumentException("TOTP secret cannot be null or empty", nameof(totpSecret));
-        }
+        ArgumentException.ThrowIfNullOrEmpty(totpSecret);
 
         return _protector.Protect(totpSecret);
     }
 
     public string Unprotect(string protectedTotpSecret)
     {
-        if (string.IsNullOrEmpty(protectedTotpSecret))
-        {
-            throw new ArgumentException("Protected TOTP secret cannot be null or empty", nameof(protectedTotpSecret));
-        }
+        ArgumentException.ThrowIfNullOrEmpty(protectedTotpSecret);
 
         return _protector.Unprotect(protectedTotpSecret);
     }

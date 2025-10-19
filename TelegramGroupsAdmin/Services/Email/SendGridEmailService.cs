@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using SendGrid;
 using SendGrid.Helpers.Mail;
+using TelegramGroupsAdmin.Configuration;
 
 namespace TelegramGroupsAdmin.Services.Email;
 

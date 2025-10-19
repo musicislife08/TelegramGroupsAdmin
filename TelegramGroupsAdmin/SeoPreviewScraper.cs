@@ -3,7 +3,7 @@ namespace TelegramGroupsAdmin;
 using AngleSharp;
 using AngleSharp.Html.Dom;
 
-public class SeoPreviewScraper(HttpClient client)
+public class SeoPreviewScraper(HttpClient client, ILogger<SeoPreviewScraper> logger)
 {
     public async Task<SeoPreviewResult?> GetSeoPreviewAsync(string url, CancellationToken cancellationToken = default)
     {
@@ -37,8 +37,9 @@ public class SeoPreviewScraper(HttpClient client)
                         m.GetAttribute("property")?.Equals(name, StringComparison.OrdinalIgnoreCase) == true)
                     ?.Content;
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogDebug(ex, "Failed to scrape SEO preview from {Url}", url);
             return null; // Fail-safe: treat as no preview
         }
     }

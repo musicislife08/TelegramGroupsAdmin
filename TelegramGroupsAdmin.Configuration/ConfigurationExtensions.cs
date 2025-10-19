@@ -20,7 +20,7 @@ public static class ConfigurationExtensions
         services.Configure<TelegramOptions>(configuration.GetSection("Telegram"));
         services.Configure<SpamDetectionOptions>(configuration.GetSection("SpamDetection"));
         services.Configure<MessageHistoryOptions>(configuration.GetSection("MessageHistory"));
-        services.Configure<TelegramGroupsAdmin.Services.Email.SendGridOptions>(configuration.GetSection("SendGrid"));
+        services.Configure<SendGridOptions>(configuration.GetSection("SendGrid"));
 
         // Unified configuration service (database-driven config with global/chat-specific merging)
         services.AddScoped<IConfigRepository, ConfigRepository>();

@@ -59,7 +59,7 @@ public class WelcomeTimeoutJob(
                     && r.WelcomeMessageId == payload.WelcomeMessageId)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (response == null || response.Response != "pending")
+            if (response == null || (int)response.Response != (int)TelegramGroupsAdmin.Data.Models.WelcomeResponseType.Pending)
             {
                 _logger.LogInformation(
                     "User {UserId} already responded to welcome in chat {ChatId}, skipping timeout",
@@ -118,7 +118,7 @@ public class WelcomeTimeoutJob(
             }
 
             // Update response record
-            response.Response = "timeout";
+            response.Response = TelegramGroupsAdmin.Data.Models.WelcomeResponseType.Timeout;
             response.RespondedAt = DateTimeOffset.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
 

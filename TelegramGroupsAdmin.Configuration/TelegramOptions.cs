@@ -1,7 +1,7 @@
 namespace TelegramGroupsAdmin.Configuration;
 
-public sealed record TelegramOptions
+public sealed class TelegramOptions
 {
-    public required string BotToken { get; init; }
-    public required string ChatId { get; init; }
+    public required string BotToken { get; set; }
+    public required string ChatId { get; set; }
 }

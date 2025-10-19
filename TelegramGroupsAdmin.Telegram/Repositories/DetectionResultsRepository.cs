@@ -20,6 +20,29 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     }
 
     /// <summary>
+    /// Strongly-typed record for detection result + message JOIN
+    /// Used to avoid duplicate JOIN patterns in training sample queries (H10)
+    /// </summary>
+    private record DetectionResultWithMessage(
+        DataModels.DetectionResultRecordDto DetectionResult,
+        DataModels.MessageRecordDto Message);
+
+    /// <summary>
+    /// Helper to JOIN detection_results with messages table (H10)
+    /// Returns queryable with strongly-typed DetectionResultWithMessage records
+    /// </summary>
+    private static IQueryable<DetectionResultWithMessage> WithMessageJoin(
+        IQueryable<DataModels.DetectionResultRecordDto> detectionResults,
+        AppDbContext context)
+    {
+        return detectionResults
+            .Join(context.Messages,
+                dr => dr.MessageId,
+                m => m.MessageId,
+                (dr, m) => new DetectionResultWithMessage(dr, m));
+    }
+
+    /// <summary>
     /// Helper to add actor JOINs to detection results query (Phase 4.19)
     /// Returns queryable with full actor information for display names
     /// </summary>
@@ -120,16 +143,13 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // - Manual admin decisions (always training-worthy)
         // - Confident OpenAI results (85%+, marked as used_for_training = true)
         // This prevents low-quality auto-detections from polluting training data
-        var results = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => dr.UsedForTraining == true)
-            .Join(context.Messages,
-                dr => dr.MessageId,
-                m => m.MessageId,
-                (dr, m) => new { Message = m, dr.IsSpam })
+        var results = await WithMessageJoin(
+                context.DetectionResults.AsNoTracking(),
+                context)
+            .Where(x => x.DetectionResult.UsedForTraining == true)
             .Where(x => x.Message.MessageText != null && x.Message.MessageText != "")
-            .OrderByDescending(x => x.IsSpam)
-            .Select(x => new { x.Message.MessageText, x.IsSpam })
+            .OrderByDescending(x => x.DetectionResult.IsSpam)
+            .Select(x => new { x.Message.MessageText, x.DetectionResult.IsSpam })
             .ToListAsync(cancellationToken);
 
         _logger.LogDebug(
@@ -143,17 +163,14 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Phase 2.6: Only use high-quality training samples for similarity matching
-        var results = await context.DetectionResults
-            .AsNoTracking()
-            .Where(dr => dr.IsSpam == true && dr.UsedForTraining == true)
-            .Join(context.Messages,
-                dr => dr.MessageId,
-                m => m.MessageId,
-                (dr, m) => new { dr.DetectedAt, m.MessageText })
-            .Where(x => x.MessageText != null && x.MessageText != "")
-            .OrderByDescending(x => x.DetectedAt)
+        var results = await WithMessageJoin(
+                context.DetectionResults.AsNoTracking(),
+                context)
+            .Where(x => x.DetectionResult.IsSpam == true && x.DetectionResult.UsedForTraining == true)
+            .Where(x => x.Message.MessageText != null && x.Message.MessageText != "")
+            .OrderByDescending(x => x.DetectionResult.DetectedAt)
             .Take(limit)
-            .Select(x => x.MessageText!)
+            .Select(x => x.Message.MessageText!)
             .ToListAsync(cancellationToken);
 
         _logger.LogDebug(
@@ -418,4 +435,5 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
         return detectionResult.Id;
     }
+
 }

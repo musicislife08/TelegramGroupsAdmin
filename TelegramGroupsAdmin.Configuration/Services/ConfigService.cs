@@ -122,7 +122,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
             case ConfigType.Moderation:
                 record.ModerationConfig = json;
                 break;
-            case ConfigType.BotProtection:
+            case ConfigType.UrlFilter:
                 record.BotProtectionConfig = json;
                 break;
             default:
@@ -138,7 +138,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
             ConfigType.Welcome => record.WelcomeConfig,
             ConfigType.Log => record.LogConfig,
             ConfigType.Moderation => record.ModerationConfig,
-            ConfigType.BotProtection => record.BotProtectionConfig,
+            ConfigType.UrlFilter => record.BotProtectionConfig,
             _ => throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type")
         };
     }

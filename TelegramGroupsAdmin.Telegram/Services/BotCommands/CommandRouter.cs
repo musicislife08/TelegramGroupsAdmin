@@ -179,20 +179,15 @@ public partial class CommandRouter
         using var scope = _serviceProvider.CreateScope();
 
         // Check web app linking FIRST (global permissions, works in all chats)
+        // Optimized: Single query with JOIN instead of 2 separate queries
         var mappingRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
-        var userId = await mappingRepository.GetUserIdByTelegramIdAsync(telegramId, cancellationToken);
+        var permissionLevel = await mappingRepository.GetPermissionLevelByTelegramIdAsync(telegramId, cancellationToken);
 
-        if (userId != null)
+        if (permissionLevel.HasValue)
         {
-            var userRepository = scope.ServiceProvider.GetRequiredService<UserRepository>();
-            var user = await userRepository.GetByIdAsync(userId, cancellationToken);
-
-            if (user != null)
-            {
-                _logger.LogDebug("User {TelegramId} is linked to web app user with {PermissionLevel} permissions (global)",
-                    telegramId, user.PermissionLevel);
-                return (int)user.PermissionLevel; // 0=ReadOnly, 1=Admin, 2=Owner (global)
-            }
+            _logger.LogDebug("User {TelegramId} is linked to web app user with {PermissionLevel} permissions (global)",
+                telegramId, permissionLevel.Value);
+            return permissionLevel.Value; // 0=ReadOnly, 1=Admin, 2=Owner (global)
         }
 
         // Check Telegram admin permissions (cached, per-chat only)

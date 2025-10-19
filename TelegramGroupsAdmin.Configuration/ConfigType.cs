@@ -34,9 +34,9 @@ public enum ConfigType
     Moderation,
 
     /// <summary>
-    /// Bot protection configuration (bot_protection_config column)
-    /// Contains: BotProtectionConfig model
-    /// Phase 6.1: Bot Auto-Ban
+    /// URL filtering configuration (url_filter_config column)
+    /// Contains: UrlFilterConfig model
+    /// Phase 4.13: URL Filtering System
     /// </summary>
-    BotProtection
+    UrlFilter
 }

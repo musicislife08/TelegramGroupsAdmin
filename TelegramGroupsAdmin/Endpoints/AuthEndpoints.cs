@@ -40,13 +40,13 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            var claims = new List<Claim>
-            {
+            Claim[] claims =
+            [
                 new(ClaimTypes.NameIdentifier, result.UserId!),
                 new(ClaimTypes.Email, result.Email!),
                 new(ClaimTypes.Role, GetRoleName(result.PermissionLevel!.Value)),
                 new(CustomClaimTypes.PermissionLevel, result.PermissionLevel.Value.ToString())
-            };
+            ];
 
             var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
@@ -91,13 +91,13 @@ public static class AuthEndpoints
             if (loginResult.Success && !loginResult.RequiresTotp)
             {
                 // Sign in the user with cookie authentication
-                var claims = new List<Claim>
-                {
+                Claim[] claims =
+                [
                     new(ClaimTypes.NameIdentifier, loginResult.UserId!),
                     new(ClaimTypes.Email, loginResult.Email!),
                     new(ClaimTypes.Role, GetRoleName(loginResult.PermissionLevel!.Value)),
                     new(CustomClaimTypes.PermissionLevel, loginResult.PermissionLevel.Value.ToString())
-                };
+                ];
 
                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
                 var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
@@ -145,13 +145,13 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            var claims = new List<Claim>
-            {
+            Claim[] claims =
+            [
                 new(ClaimTypes.NameIdentifier, result.UserId!),
                 new(ClaimTypes.Email, result.Email!),
                 new(ClaimTypes.Role, GetRoleName(result.PermissionLevel!.Value)),
                 new(CustomClaimTypes.PermissionLevel, result.PermissionLevel.Value.ToString())
-            };
+            ];
 
             var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
@@ -198,13 +198,13 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            var claims = new List<Claim>
-            {
+            Claim[] claims =
+            [
                 new(ClaimTypes.NameIdentifier, result.UserId!),
                 new(ClaimTypes.Email, result.Email!),
                 new(ClaimTypes.Role, GetRoleName(result.PermissionLevel!.Value)),
                 new(CustomClaimTypes.PermissionLevel, result.PermissionLevel.Value.ToString())
-            };
+            ];
 
             var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
             var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);

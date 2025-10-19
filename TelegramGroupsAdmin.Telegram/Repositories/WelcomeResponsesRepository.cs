@@ -74,7 +74,7 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
             return;
         }
 
-        entity.Response = responseType.ToString().ToLowerInvariant();
+        entity.Response = (DataModels.WelcomeResponseType)responseType;
         entity.RespondedAt = DateTimeOffset.UtcNow;
         entity.DmSent = dmSent;
         entity.DmFallback = dmFallback;
@@ -144,10 +144,10 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
             return new WelcomeStats(0, 0, 0, 0, 0, 0.0, 0, 0, 0.0);
         }
 
-        var accepted = responses.Count(r => r.Response == "accepted");
-        var denied = responses.Count(r => r.Response == "denied");
-        var timeout = responses.Count(r => r.Response == "timeout");
-        var left = responses.Count(r => r.Response == "left");
+        var accepted = responses.Count(r => (int)r.Response == (int)WelcomeResponseType.Accepted);
+        var denied = responses.Count(r => (int)r.Response == (int)WelcomeResponseType.Denied);
+        var timeout = responses.Count(r => (int)r.Response == (int)WelcomeResponseType.Timeout);
+        var left = responses.Count(r => (int)r.Response == (int)WelcomeResponseType.Left);
 
         var dmSent = responses.Count(r => r.DmSent);
         var dmFallback = responses.Count(r => r.DmFallback);
