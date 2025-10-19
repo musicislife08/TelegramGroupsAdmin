@@ -49,50 +49,43 @@ public interface IConfigRepository
 
 public class ConfigRepository(AppDbContext context) : IConfigRepository
 {
-    private readonly AppDbContext _context = context;
-
     public async Task<ConfigRecordDto?> GetAsync(long? chatId, CancellationToken cancellationToken = default)
     {
-        return await _context.Configs
+        return await context.Configs
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
     }
 
     public async Task UpsertAsync(ConfigRecordDto config, CancellationToken cancellationToken = default)
     {
-        var existing = await _context.Configs
+        var existing = await context.Configs
             .FirstOrDefaultAsync(c => c.ChatId == config.ChatId, cancellationToken);
 
         if (existing != null)
         {
-            // Update existing record
-            existing.SpamDetectionConfig = config.SpamDetectionConfig;
-            existing.WelcomeConfig = config.WelcomeConfig;
-            existing.LogConfig = config.LogConfig;
-            existing.ModerationConfig = config.ModerationConfig;
-            existing.BotProtectionConfig = config.BotProtectionConfig;
-            existing.InviteLink = config.InviteLink;
+            // Update existing record using EF Core's SetValues
+            context.Entry(existing).CurrentValues.SetValues(config);
             existing.UpdatedAt = DateTimeOffset.UtcNow;
         }
         else
         {
             // Insert new record (CreatedAt will be set by database default)
             config.UpdatedAt = null;
-            await _context.Configs.AddAsync(config, cancellationToken);
+            await context.Configs.AddAsync(config, cancellationToken);
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task DeleteAsync(long? chatId, CancellationToken cancellationToken = default)
     {
-        var config = await _context.Configs
+        var config = await context.Configs
             .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
         if (config != null)
         {
-            _context.Configs.Remove(config);
-            await _context.SaveChangesAsync(cancellationToken);
+            context.Configs.Remove(config);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 
@@ -103,7 +96,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
 
     public async Task SaveInviteLinkAsync(long chatId, string inviteLink, CancellationToken cancellationToken = default)
     {
-        var existing = await _context.Configs
+        var existing = await context.Configs
             .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
         if (existing != null)
@@ -115,7 +108,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
         else
         {
             // Create new config row just for invite link
-            await _context.Configs.AddAsync(new ConfigRecordDto
+            await context.Configs.AddAsync(new ConfigRecordDto
             {
                 ChatId = chatId,
                 InviteLink = inviteLink,
@@ -124,25 +117,25 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
             }, cancellationToken);
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task ClearInviteLinkAsync(long chatId, CancellationToken cancellationToken = default)
     {
-        var existing = await _context.Configs
+        var existing = await context.Configs
             .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
 
         if (existing != null)
         {
             existing.InviteLink = null;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 
     public async Task ClearAllInviteLinksAsync(CancellationToken cancellationToken = default)
     {
-        var configsWithLinks = await _context.Configs
+        var configsWithLinks = await context.Configs
             .Where(c => c.InviteLink != null)
             .ToListAsync(cancellationToken);
 
@@ -154,7 +147,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
 
         if (configsWithLinks.Any())
         {
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
         }
     }
 }

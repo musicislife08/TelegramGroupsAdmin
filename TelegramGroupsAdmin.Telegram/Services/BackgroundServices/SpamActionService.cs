@@ -17,6 +17,10 @@ public class SpamActionService(
     IServiceProvider serviceProvider,
     ILogger<SpamActionService> logger)
 {
+    // Confidence thresholds for spam detection decisions
+    private const int AutoBanNetConfidenceThreshold = 50;
+    private const int BorderlineNetConfidenceThreshold = 0;
+    private const int OpenAIConfidentThreshold = 85;
     /// <summary>
     /// Determine if detection result should be used for training
     /// High-quality samples only: Confident OpenAI results (85%+) or manual admin decisions
@@ -32,7 +36,7 @@ public class SpamActionService(
         if (openAIResult != null)
         {
             // OpenAI confident (85%+) = training-worthy
-            return openAIResult.Confidence >= 85;
+            return openAIResult.Confidence >= OpenAIConfidentThreshold;
         }
 
         // No OpenAI veto = borderline/uncertain detection
@@ -58,7 +62,7 @@ public class SpamActionService(
         try
         {
             // Only take action if spam was detected
-            if (!spamResult.IsSpam || spamResult.NetConfidence <= 0)
+            if (!spamResult.IsSpam || spamResult.NetConfidence <= BorderlineNetConfidenceThreshold)
             {
                 return;
             }
@@ -123,7 +127,7 @@ public class SpamActionService(
             // Standard spam detection handling below...
             // Check if OpenAI was involved and how confident it was
             var openAIResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == "OpenAI");
-            var openAIConfident = openAIResult != null && openAIResult.Confidence >= 85;
+            var openAIConfident = openAIResult != null && openAIResult.Confidence >= OpenAIConfidentThreshold;
 
             // Decision logic based on net confidence and OpenAI involvement
             // Phase 4.5: Skip auto-ban if OpenAI flagged for review
@@ -145,7 +149,7 @@ public class SpamActionService(
                 return; // Early return - don't auto-ban
             }
 
-            if (spamResult.NetConfidence > 50 && openAIConfident && openAIResult!.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Spam)
+            if (spamResult.NetConfidence > AutoBanNetConfidenceThreshold && openAIConfident && openAIResult!.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Spam)
             {
                 // High confidence + OpenAI confirmed = auto-ban across all managed chats
                 logger.LogInformation(
@@ -171,11 +175,11 @@ public class SpamActionService(
                     message.MessageId,
                     message.Chat.Id);
             }
-            else if (spamResult.NetConfidence > 0)
+            else if (spamResult.NetConfidence > BorderlineNetConfidenceThreshold)
             {
                 // Borderline detection (0 < net ≤ 50) OR OpenAI uncertain (<85%) → Admin review
-                var reason = spamResult.NetConfidence > 50
-                    ? $"OpenAI uncertain (<85%) - Net: {spamResult.NetConfidence}, OpenAI: {openAIResult?.Confidence ?? 0}%"
+                var reason = spamResult.NetConfidence > AutoBanNetConfidenceThreshold
+                    ? $"OpenAI uncertain (<{OpenAIConfidentThreshold}%) - Net: {spamResult.NetConfidence}, OpenAI: {openAIResult?.Confidence ?? 0}%"
                     : $"Borderline detection - Net: {spamResult.NetConfidence}";
 
                 await CreateBorderlineReportAsync(

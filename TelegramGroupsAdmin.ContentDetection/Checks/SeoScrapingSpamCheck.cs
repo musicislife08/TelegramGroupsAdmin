@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
@@ -11,10 +12,11 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Spam check that scrapes URL metadata and analyzes for suspicious content patterns
 /// Based on existing SeoPreviewScraper and suspicious content analysis
 /// </summary>
-public partial class SeoScrapingSpamCheck : IContentCheck
+public partial class SeoScrapingSpamCheck(
+    ILogger<SeoScrapingSpamCheck> logger,
+    IHttpClientFactory httpClientFactory) : IContentCheck
 {
-    private readonly ILogger<SeoScrapingSpamCheck> _logger;
-    private readonly HttpClient _httpClient;
+    private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
 
     private static readonly Regex UrlRegex = CompiledUrlRegex();
 
@@ -48,18 +50,6 @@ public partial class SeoScrapingSpamCheck : IContentCheck
 
     public string CheckName => "SeoScraping";
 
-    public SeoScrapingSpamCheck(
-        ILogger<SeoScrapingSpamCheck> logger,
-        IHttpClientFactory httpClientFactory)
-    {
-        _logger = logger;
-        _httpClient = httpClientFactory.CreateClient();
-
-        // Configure HTTP client
-        _httpClient.Timeout = TimeSpan.FromSeconds(10);
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (TelegramGroupsAdmin/1.0)");
-    }
-
     /// <summary>
     /// Check if SEO scraping check should be executed
     /// </summary>
@@ -84,6 +74,11 @@ public partial class SeoScrapingSpamCheck : IContentCheck
 
         try
         {
+            // Configure HTTP client
+            _httpClient.Timeout = TimeSpan.FromSeconds(10);
+            _httpClient.DefaultRequestHeaders.Clear();
+            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (TelegramGroupsAdmin/1.0)");
+
             var urls = ExtractUrls(req.Message);
 
             foreach (var url in urls)
@@ -103,7 +98,7 @@ public partial class SeoScrapingSpamCheck : IContentCheck
 
                 if (LooksSuspicious(combinedText))
                 {
-                    _logger.LogDebug("SeoScraping check for user {UserId}: Suspicious content in {Url}",
+                    logger.LogDebug("SeoScraping check for user {UserId}: Suspicious content in {Url}",
                         req.UserId, url);
 
                     return new ContentCheckResponse
@@ -116,7 +111,7 @@ public partial class SeoScrapingSpamCheck : IContentCheck
                 }
             }
 
-            _logger.LogDebug("SeoScraping check for user {UserId}: No suspicious content found for {UrlCount} URLs",
+            logger.LogDebug("SeoScraping check for user {UserId}: No suspicious content found for {UrlCount} URLs",
                 req.UserId, urls.Count);
 
             return new ContentCheckResponse
@@ -129,15 +124,7 @@ public partial class SeoScrapingSpamCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "SeoScraping check failed for user {UserId}", req.UserId);
-            return new ContentCheckResponse
-            {
-                CheckName = CheckName,
-                Result = CheckResultType.Clean, // Fail open
-                Details = "SEO scraping check failed due to error",
-                Confidence = 0,
-                Error = ex
-            };
+            return ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId);
         }
     }
 
@@ -177,7 +164,7 @@ public partial class SeoScrapingSpamCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Failed to scrape SEO preview for URL: {Url}", url);
+            logger.LogDebug(ex, "Failed to scrape SEO preview for URL: {Url}", url);
             return null; // Fail-safe: treat as no preview
         }
     }

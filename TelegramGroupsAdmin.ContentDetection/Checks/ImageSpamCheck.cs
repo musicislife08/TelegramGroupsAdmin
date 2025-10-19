@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
@@ -11,23 +12,13 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Spam check that analyzes images using OpenAI Vision API for spam detection
 /// Based on existing OpenAIVisionSpamDetectionService implementation
 /// </summary>
-public class ImageSpamCheck : IContentCheck
+public class ImageSpamCheck(
+    ILogger<ImageSpamCheck> logger,
+    IHttpClientFactory httpClientFactory) : IContentCheck
 {
-    private readonly ILogger<ImageSpamCheck> _logger;
-    private readonly HttpClient _httpClient;
+    private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
 
     public string CheckName => "ImageSpam";
-
-    public ImageSpamCheck(
-        ILogger<ImageSpamCheck> logger,
-        IHttpClientFactory httpClientFactory)
-    {
-        _logger = logger;
-        _httpClient = httpClientFactory.CreateClient();
-
-        // Configure HTTP client
-        _httpClient.Timeout = TimeSpan.FromSeconds(30);
-    }
 
     /// <summary>
     /// Check if image spam check should be executed
@@ -47,9 +38,11 @@ public class ImageSpamCheck : IContentCheck
 
         try
         {
+            _httpClient.Timeout = TimeSpan.FromSeconds(30);
+
             if (string.IsNullOrEmpty(req.ApiKey))
             {
-                _logger.LogWarning("OpenAI API key not configured for image spam detection");
+                logger.LogWarning("OpenAI API key not configured for image spam detection");
                 return new ContentCheckResponse
                 {
                     CheckName = CheckName,
@@ -71,7 +64,7 @@ public class ImageSpamCheck : IContentCheck
             {
                 // For Telegram file IDs, we'd need to download the image first
                 // This should be handled by the caller, so log a warning
-                _logger.LogWarning("PhotoFileId provided but no PhotoUrl - image cannot be processed");
+                logger.LogWarning("PhotoFileId provided but no PhotoUrl - image cannot be processed");
                 return new ContentCheckResponse
                 {
                     CheckName = CheckName,
@@ -123,7 +116,7 @@ public class ImageSpamCheck : IContentCheck
             _httpClient.DefaultRequestHeaders.Clear();
             _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {req.ApiKey}");
 
-            _logger.LogDebug("ImageSpam check for user {UserId}: Calling OpenAI Vision API",
+            logger.LogDebug("ImageSpam check for user {UserId}: Calling OpenAI Vision API",
                 req.UserId);
 
             var response = await _httpClient.PostAsJsonAsync(
@@ -135,7 +128,7 @@ public class ImageSpamCheck : IContentCheck
             if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
             {
                 var retryAfter = response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 60;
-                _logger.LogWarning("OpenAI Vision rate limit hit. Retry after {RetryAfter} seconds", retryAfter);
+                logger.LogWarning("OpenAI Vision rate limit hit. Retry after {RetryAfter} seconds", retryAfter);
 
                 return new ContentCheckResponse
                 {
@@ -150,7 +143,7 @@ public class ImageSpamCheck : IContentCheck
             if (!response.IsSuccessStatusCode)
             {
                 var error = await response.Content.ReadAsStringAsync(req.CancellationToken);
-                _logger.LogError("OpenAI Vision API error: {StatusCode} - {Error}", response.StatusCode, error);
+                logger.LogError("OpenAI Vision API error: {StatusCode} - {Error}", response.StatusCode, error);
 
                 return new ContentCheckResponse
                 {
@@ -167,7 +160,7 @@ public class ImageSpamCheck : IContentCheck
 
             if (string.IsNullOrWhiteSpace(content))
             {
-                _logger.LogWarning("Empty response from OpenAI Vision for user {UserId}", req.UserId);
+                logger.LogWarning("Empty response from OpenAI Vision for user {UserId}", req.UserId);
                 return new ContentCheckResponse
                 {
                     CheckName = CheckName,
@@ -182,15 +175,7 @@ public class ImageSpamCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Image spam check failed for user {UserId}", req.UserId);
-            return new ContentCheckResponse
-            {
-                CheckName = CheckName,
-                Result = CheckResultType.Clean, // Fail open
-                Details = "Image spam check failed due to error",
-                Confidence = 0,
-                Error = ex
-            };
+            return ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId);
         }
     }
 
@@ -250,7 +235,7 @@ public class ImageSpamCheck : IContentCheck
 
             if (response == null)
             {
-                _logger.LogWarning("Failed to deserialize OpenAI Vision response for user {UserId}: {Content}",
+                logger.LogWarning("Failed to deserialize OpenAI Vision response for user {UserId}: {Content}",
                     userId, content);
                 return new ContentCheckResponse
                 {
@@ -262,7 +247,7 @@ public class ImageSpamCheck : IContentCheck
                 };
             }
 
-            _logger.LogDebug("OpenAI Vision analysis for user {UserId}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
+            logger.LogDebug("OpenAI Vision analysis for user {UserId}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
                 userId, response.Spam, response.Confidence, response.Reason);
 
             var details = response.Reason ?? "No reason provided";
@@ -283,7 +268,7 @@ public class ImageSpamCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error parsing OpenAI Vision response for user {UserId}: {Content}",
+            logger.LogError(ex, "Error parsing OpenAI Vision response for user {UserId}: {Content}",
                 userId, content);
             return new ContentCheckResponse
             {

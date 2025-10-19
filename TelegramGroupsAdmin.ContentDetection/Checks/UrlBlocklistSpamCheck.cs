@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 
@@ -12,26 +13,15 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Hard blocks are handled by UrlPreFilterService before spam detection
 /// Phase 4.13: URL Filtering
 /// </summary>
-public partial class UrlBlocklistSpamCheck : IContentCheck
+public partial class UrlBlocklistSpamCheck(
+    ILogger<UrlBlocklistSpamCheck> logger,
+    ICachedBlockedDomainsRepository cacheRepo,
+    IDomainFiltersRepository filtersRepo) : IContentCheck
 {
-    private readonly ILogger<UrlBlocklistSpamCheck> _logger;
-    private readonly ICachedBlockedDomainsRepository _cacheRepo;
-    private readonly IDomainFiltersRepository _filtersRepo;
-
     private static readonly Regex UrlRegex = CompiledUrlRegex();
     private static readonly Regex DomainRegex = CompiledDomainRegex();
 
     public string CheckName => "UrlFilters";
-
-    public UrlBlocklistSpamCheck(
-        ILogger<UrlBlocklistSpamCheck> logger,
-        ICachedBlockedDomainsRepository cacheRepo,
-        IDomainFiltersRepository filtersRepo)
-    {
-        _logger = logger;
-        _cacheRepo = cacheRepo;
-        _filtersRepo = filtersRepo;
-    }
 
     /// <summary>
     /// Check if URL blocklist check should be executed
@@ -72,12 +62,12 @@ public partial class UrlBlocklistSpamCheck : IContentCheck
                 };
             }
 
-            _logger.LogDebug("URL filter check for user {UserId}: Checking {DomainCount} domains in chat {ChatId}",
+            logger.LogDebug("URL filter check for user {UserId}: Checking {DomainCount} domains in chat {ChatId}",
                 req.UserId, domains.Count, req.ChatId);
 
             // Check whitelist first (whitelist bypasses all filters)
             // Use GetEffectiveAsync to fetch only enabled whitelists (optimized query with index)
-            var whitelistFilters = await _filtersRepo.GetEffectiveAsync(
+            var whitelistFilters = await filtersRepo.GetEffectiveAsync(
                 req.ChatId,
                 DomainFilterType.Whitelist,
                 blockMode: null,
@@ -92,19 +82,19 @@ public partial class UrlBlocklistSpamCheck : IContentCheck
 
                 if (whitelistDomains.Contains(normalized))
                 {
-                    _logger.LogDebug("Domain {Domain} is whitelisted, skipping filter check", normalized);
+                    logger.LogDebug("Domain {Domain} is whitelisted, skipping filter check", normalized);
                     continue;
                 }
 
                 // Check soft block cache (BlockMode = Soft)
-                var blockedDomain = await _cacheRepo.GetByDomainAsync(normalized, req.ChatId, BlockMode.Soft, req.CancellationToken);
+                var blockedDomain = await cacheRepo.GetByDomainAsync(normalized, req.ChatId, BlockMode.Soft, req.CancellationToken);
                 if (blockedDomain != null)
                 {
                     var source = blockedDomain.SourceSubscriptionId.HasValue
                         ? $"blocklist subscription ID {blockedDomain.SourceSubscriptionId}"
                         : "manual filter";
 
-                    _logger.LogInformation("URL filter match for user {UserId}: Domain {Domain} on soft block list (source: {Source})",
+                    logger.LogInformation("URL filter match for user {UserId}: Domain {Domain} on soft block list (source: {Source})",
                         req.UserId, normalized, source);
 
                     return new ContentCheckResponse
@@ -117,7 +107,7 @@ public partial class UrlBlocklistSpamCheck : IContentCheck
                 }
             }
 
-            _logger.LogDebug("URL filter check for user {UserId}: No soft blocks found for {DomainCount} domains",
+            logger.LogDebug("URL filter check for user {UserId}: No soft blocks found for {DomainCount} domains",
                 req.UserId, domains.Count);
 
             return new ContentCheckResponse
@@ -130,15 +120,7 @@ public partial class UrlBlocklistSpamCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "URL filter check failed for user {UserId}", req.UserId);
-            return new ContentCheckResponse
-            {
-                CheckName = CheckName,
-                Result = CheckResultType.Clean,
-                Details = "URL filter check failed due to error",
-                Confidence = 0,
-                Error = ex
-            };
+            return ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId);
         }
     }
 

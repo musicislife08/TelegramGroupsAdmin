@@ -9,7 +9,6 @@ namespace TelegramGroupsAdmin.Configuration.Services;
 /// </summary>
 public class ConfigService(IConfigRepository configRepository) : IConfigService
 {
-    private readonly IConfigRepository _configRepository = configRepository;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -22,7 +21,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         ArgumentNullException.ThrowIfNull(config);
 
         var json = JsonSerializer.Serialize(config, JsonOptions);
-        var record = await _configRepository.GetAsync(chatId);
+        var record = await configRepository.GetAsync(chatId);
 
         if (record == null)
         {
@@ -36,12 +35,12 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         // Set the appropriate config column based on config type
         SetConfigColumn(record, configType, json);
 
-        await _configRepository.UpsertAsync(record);
+        await configRepository.UpsertAsync(record);
     }
 
     public async Task<T?> GetAsync<T>(ConfigType configType, long? chatId) where T : class
     {
-        var record = await _configRepository.GetAsync(chatId);
+        var record = await configRepository.GetAsync(chatId);
         if (record == null)
         {
             return null;
@@ -86,7 +85,7 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
 
     public async Task DeleteAsync(ConfigType configType, long? chatId)
     {
-        var record = await _configRepository.GetAsync(chatId);
+        var record = await configRepository.GetAsync(chatId);
         if (record == null)
         {
             return;
@@ -98,11 +97,11 @@ public class ConfigService(IConfigRepository configRepository) : IConfigService
         // If all config columns are null, delete the entire row
         if (IsRecordEmpty(record))
         {
-            await _configRepository.DeleteAsync(chatId);
+            await configRepository.DeleteAsync(chatId);
         }
         else
         {
-            await _configRepository.UpsertAsync(record);
+            await configRepository.UpsertAsync(record);
         }
     }
 

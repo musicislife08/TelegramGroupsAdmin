@@ -167,257 +167,79 @@ public class AuthService(
         // Check if this is first run (no users exist)
         var isFirstRun = await IsFirstRunAsync(ct);
 
+        // Determine permission level and validate invite
         string? invitedBy = null;
         PermissionLevel permissionLevel;
 
         if (isFirstRun)
         {
-            // First user gets Owner permissions automatically
             permissionLevel = PermissionLevel.Owner;
             logger.LogInformation("First run detected - creating owner account");
         }
         else
         {
-            // Subsequent users require invite token
-            if (string.IsNullOrEmpty(inviteToken))
+            // Validate invite token for subsequent users
+            var inviteValidation = await ValidateInviteTokenAsync(inviteToken, ct);
+            if (!inviteValidation.IsValid)
             {
-                return new RegisterResult(false, null, "Invite token is required");
+                return new RegisterResult(false, null, inviteValidation.ErrorMessage);
             }
 
-            // Validate invite token
-            var invite = await userRepository.GetInviteByTokenAsync(inviteToken, ct);
-            if (invite == null)
-            {
-                return new RegisterResult(false, null, "Invalid invite token");
-            }
-
-            switch (invite.Status)
-            {
-                case InviteStatus.Used:
-                    return new RegisterResult(false, null, "Invite token already used");
-                case InviteStatus.Revoked:
-                    return new RegisterResult(false, null, "Invite token has been revoked");
-                case InviteStatus.Pending:
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-
-            if (invite.ExpiresAt < DateTimeOffset.UtcNow)
-            {
-                return new RegisterResult(false, null, "Invite token expired");
-            }
-
-            invitedBy = invite.CreatedBy;
-            permissionLevel = invite.PermissionLevel; // Use permission level from invite
+            invitedBy = inviteValidation.InvitedBy;
+            permissionLevel = inviteValidation.PermissionLevel;
         }
 
-        // Check if email already exists (including deleted users for reactivation)
+        // Check if email already exists (including deleted users)
         var existing = await userRepository.GetByEmailIncludingDeletedAsync(email, ct);
         if (existing != null)
         {
-            // Only allow reactivation if user is deleted, otherwise block registration
             if (existing.Status != UserStatus.Deleted)
             {
                 logger.LogWarning("Registration attempt for existing active/disabled user: {Email}", email);
                 return new RegisterResult(false, null, "Email already registered");
             }
 
-            // Reactivate deleted user with fresh credentials
-            var reactivatedUser = existing with
-            {
-                PasswordHash = passwordHasher.HashPassword(password),
-                SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = permissionLevel,
-                InvitedBy = invitedBy,
-                Status = UserStatus.Active,
-                IsActive = true,
-                TotpSecret = null,
-                TotpEnabled = false,
-                ModifiedBy = existing.Id,
-                ModifiedAt = DateTimeOffset.UtcNow,
-                EmailVerified = isFirstRun, // First user is auto-verified
-                EmailVerificationToken = null, // Deprecated - using verification_tokens table
-                EmailVerificationTokenExpiresAt = null
-            };
-
-            await userRepository.UpdateAsync(reactivatedUser, ct);
-            logger.LogInformation("Reactivated deleted user: {UserId}", existing.Id);
-
-            // Mark invite as used (if not first run)
-            if (!isFirstRun && !string.IsNullOrEmpty(inviteToken))
-            {
-                await userRepository.UseInviteAsync(inviteToken, existing.Id, ct);
-
-                // Audit log - user reactivation via invite
-                await auditLog.LogEventAsync(
-                    AuditEventType.UserRegistered,
-                    actorUserId: existing.Id,
-                    targetUserId: existing.Id,
-                    value: $"Reactivated via invite from {invitedBy}",
-                    ct: ct);
-
-                // Send verification email using verification_tokens table
-                try
-                {
-                    // Generate verification token
-                    var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-                    var verificationToken = new VerificationToken(
-                        Id: 0, // Will be set by database
-                        UserId: existing.Id,
-                        TokenType: TokenType.EmailVerification,
-                        Token: tokenString,
-                        Value: null,
-                        ExpiresAt: DateTimeOffset.UtcNow.AddHours(24),
-                        CreatedAt: DateTimeOffset.UtcNow,
-                        UsedAt: null
-                    );
-
-                    await verificationTokenRepository.CreateAsync(verificationToken.ToDto(), ct);
-
-                    await emailService.SendTemplatedEmailAsync(
-                        email,
-                        EmailTemplate.EmailVerification,
-                        new Dictionary<string, string>
-                        {
-                            { "VerificationToken", tokenString },
-                            { "BaseUrl", _appOptions.BaseUrl }
-                        },
-                        ct);
-
-                    logger.LogInformation("Sent verification email to {Email}", email);
-
-                    // Audit log - email verification sent
-                    await auditLog.LogEventAsync(
-                        AuditEventType.UserEmailVerificationSent,
-                        actorUserId: null, // System event
-                        targetUserId: existing.Id,
-                        value: email,
-                        ct: ct);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Failed to send verification email to {Email}", email);
-                    // Don't fail registration if email fails
-                }
-            }
-            else
-            {
-                // Audit log - user reactivation (first run - shouldn't happen but handle it)
-                await auditLog.LogEventAsync(
-                    AuditEventType.UserRegistered,
-                    actorUserId: existing.Id,
-                    targetUserId: existing.Id,
-                    value: "Reactivated (first run)",
-                    ct: ct);
-            }
-
-            return new RegisterResult(true, existing.Id, null);
+            // Reactivate deleted user
+            return await ReactivateUserAsync(existing, password, permissionLevel, invitedBy, isFirstRun, inviteToken, email, ct);
         }
 
-        // Create user
-        var userId = Guid.NewGuid().ToString();
-        var passwordHash = passwordHasher.HashPassword(password);
-        var securityStamp = Guid.NewGuid().ToString();
+        // Create new user
+        return await CreateNewUserAsync(email, password, permissionLevel, invitedBy, isFirstRun, inviteToken, ct);
+    }
 
-        var user = new UserRecord(
-            Id: userId,
-            Email: email,
-            NormalizedEmail: email.ToUpperInvariant(),
-            PasswordHash: passwordHash,
-            SecurityStamp: securityStamp,
-            PermissionLevel: permissionLevel,
-            InvitedBy: invitedBy,
-            IsActive: true,
-            TotpSecret: null,
-            TotpEnabled: false,
-            TotpSetupStartedAt: null,
-            CreatedAt: DateTimeOffset.UtcNow,
-            LastLoginAt: null,
-            Status: UserStatus.Active,
-            ModifiedBy: null,
-            ModifiedAt: null,
-            EmailVerified: isFirstRun, // First user is auto-verified
-            EmailVerificationToken: null, // Deprecated - using verification_tokens table
-            EmailVerificationTokenExpiresAt: null,
-            PasswordResetToken: null,
-            PasswordResetTokenExpiresAt: null
-        );
-
-        await userRepository.CreateAsync(user, ct);
-
-        // Mark invite as used (if not first run)
-        if (!isFirstRun && !string.IsNullOrEmpty(inviteToken))
+    private async Task<(bool IsValid, string? ErrorMessage, string? InvitedBy, PermissionLevel PermissionLevel)> ValidateInviteTokenAsync(
+        string? inviteToken,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(inviteToken))
         {
-            await userRepository.UseInviteAsync(inviteToken, userId, ct);
-            logger.LogInformation("New user registered: {UserId} via invite from {InviterId}", userId, invitedBy);
-
-            // Audit log - user registration via invite
-            await auditLog.LogEventAsync(
-                AuditEventType.UserRegistered,
-                actorUserId: userId,
-                targetUserId: userId,
-                value: $"Registered via invite from {invitedBy}",
-                ct: ct);
-
-            // Send verification email using verification_tokens table (unless first user)
-            try
-            {
-                // Generate verification token
-                var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-                var verificationToken = new VerificationToken(
-                    Id: 0, // Will be set by database
-                    UserId: userId,
-                    TokenType: TokenType.EmailVerification,
-                    Token: tokenString,
-                    Value: null,
-                    ExpiresAt: DateTimeOffset.UtcNow.AddHours(24),
-                    CreatedAt: DateTimeOffset.UtcNow,
-                    UsedAt: null
-                );
-
-                await verificationTokenRepository.CreateAsync(verificationToken.ToDto(), ct);
-
-                await emailService.SendTemplatedEmailAsync(
-                    email,
-                    EmailTemplate.EmailVerification,
-                    new Dictionary<string, string>
-                    {
-                        { "VerificationToken", tokenString },
-                        { "BaseUrl", _appOptions.BaseUrl }
-                    },
-                    ct);
-
-                logger.LogInformation("Sent verification email to {Email}", email);
-
-                // Audit log - email verification sent
-                await auditLog.LogEventAsync(
-                    AuditEventType.UserEmailVerificationSent,
-                    actorUserId: null, // System event
-                    targetUserId: userId,
-                    value: email,
-                    ct: ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to send verification email to {Email}", email);
-                // Don't fail registration if email fails
-            }
+            return (false, "Invite token is required", null, default);
         }
-        else
+
+        var invite = await userRepository.GetInviteByTokenAsync(inviteToken, ct);
+        if (invite == null)
         {
-            logger.LogInformation("Owner account created: {UserId} (first run)", userId);
-
-            // Audit log - owner account creation (first run)
-            await auditLog.LogEventAsync(
-                AuditEventType.UserRegistered,
-                actorUserId: userId,
-                targetUserId: userId,
-                value: "First user (Owner)",
-                ct: ct);
+            return (false, "Invalid invite token", null, default);
         }
 
-        return new RegisterResult(true, userId, null);
+        switch (invite.Status)
+        {
+            case InviteStatus.Used:
+                return (false, "Invite token already used", null, default);
+            case InviteStatus.Revoked:
+                return (false, "Invite token has been revoked", null, default);
+            case InviteStatus.Pending:
+                break;
+            default:
+                throw new ArgumentOutOfRangeException();
+        }
+
+        if (invite.ExpiresAt < DateTimeOffset.UtcNow)
+        {
+            return (false, "Invite token expired", null, default);
+        }
+
+        return (true, null, invite.CreatedBy, invite.PermissionLevel);
     }
 
     public async Task<TotpSetupResult> EnableTotpAsync(string userId, CancellationToken ct = default)
@@ -520,6 +342,186 @@ public class AuthService(
             ct: ct);
 
         return true;
+    }
+
+    private async Task<RegisterResult> ReactivateUserAsync(
+        UserRecord existing,
+        string password,
+        PermissionLevel permissionLevel,
+        string? invitedBy,
+        bool isFirstRun,
+        string? inviteToken,
+        string email,
+        CancellationToken ct)
+    {
+        // Reactivate deleted user with fresh credentials
+        var reactivatedUser = existing with
+        {
+            PasswordHash = passwordHasher.HashPassword(password),
+            SecurityStamp = Guid.NewGuid().ToString(),
+            PermissionLevel = permissionLevel,
+            InvitedBy = invitedBy,
+            Status = UserStatus.Active,
+            IsActive = true,
+            TotpSecret = null,
+            TotpEnabled = false,
+            ModifiedBy = existing.Id,
+            ModifiedAt = DateTimeOffset.UtcNow,
+            EmailVerified = isFirstRun,
+            EmailVerificationToken = null,
+            EmailVerificationTokenExpiresAt = null
+        };
+
+        await userRepository.UpdateAsync(reactivatedUser, ct);
+        logger.LogInformation("Reactivated deleted user: {UserId}", existing.Id);
+
+        // Mark invite as used (if not first run)
+        if (!isFirstRun && !string.IsNullOrEmpty(inviteToken))
+        {
+            await userRepository.UseInviteAsync(inviteToken, existing.Id, ct);
+
+            // Audit log - user reactivation via invite
+            await auditLog.LogEventAsync(
+                AuditEventType.UserRegistered,
+                actorUserId: existing.Id,
+                targetUserId: existing.Id,
+                value: $"Reactivated via invite from {invitedBy}",
+                ct: ct);
+
+            // Send verification email
+            await SendVerificationEmailAsync(existing.Id, email, ct);
+        }
+        else
+        {
+            // Audit log - user reactivation (first run)
+            await auditLog.LogEventAsync(
+                AuditEventType.UserRegistered,
+                actorUserId: existing.Id,
+                targetUserId: existing.Id,
+                value: "Reactivated (first run)",
+                ct: ct);
+        }
+
+        return new RegisterResult(true, existing.Id, null);
+    }
+
+    private async Task<RegisterResult> CreateNewUserAsync(
+        string email,
+        string password,
+        PermissionLevel permissionLevel,
+        string? invitedBy,
+        bool isFirstRun,
+        string? inviteToken,
+        CancellationToken ct)
+    {
+        // Create user
+        var userId = Guid.NewGuid().ToString();
+        var passwordHash = passwordHasher.HashPassword(password);
+        var securityStamp = Guid.NewGuid().ToString();
+
+        var user = new UserRecord(
+            Id: userId,
+            Email: email,
+            NormalizedEmail: email.ToUpperInvariant(),
+            PasswordHash: passwordHash,
+            SecurityStamp: securityStamp,
+            PermissionLevel: permissionLevel,
+            InvitedBy: invitedBy,
+            IsActive: true,
+            TotpSecret: null,
+            TotpEnabled: false,
+            TotpSetupStartedAt: null,
+            CreatedAt: DateTimeOffset.UtcNow,
+            LastLoginAt: null,
+            Status: UserStatus.Active,
+            ModifiedBy: null,
+            ModifiedAt: null,
+            EmailVerified: isFirstRun,
+            EmailVerificationToken: null,
+            EmailVerificationTokenExpiresAt: null,
+            PasswordResetToken: null,
+            PasswordResetTokenExpiresAt: null
+        );
+
+        await userRepository.CreateAsync(user, ct);
+
+        // Mark invite as used (if not first run)
+        if (!isFirstRun && !string.IsNullOrEmpty(inviteToken))
+        {
+            await userRepository.UseInviteAsync(inviteToken, userId, ct);
+            logger.LogInformation("New user registered: {UserId} via invite from {InviterId}", userId, invitedBy);
+
+            // Audit log - user registration via invite
+            await auditLog.LogEventAsync(
+                AuditEventType.UserRegistered,
+                actorUserId: userId,
+                targetUserId: userId,
+                value: $"Registered via invite from {invitedBy}",
+                ct: ct);
+
+            // Send verification email
+            await SendVerificationEmailAsync(userId, email, ct);
+        }
+        else
+        {
+            logger.LogInformation("Owner account created: {UserId} (first run)", userId);
+
+            // Audit log - owner account creation (first run)
+            await auditLog.LogEventAsync(
+                AuditEventType.UserRegistered,
+                actorUserId: userId,
+                targetUserId: userId,
+                value: "First user (Owner)",
+                ct: ct);
+        }
+
+        return new RegisterResult(true, userId, null);
+    }
+
+    private async Task SendVerificationEmailAsync(string userId, string email, CancellationToken ct)
+    {
+        try
+        {
+            // Generate verification token
+            var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+            var verificationToken = new VerificationToken(
+                Id: 0,
+                UserId: userId,
+                TokenType: TokenType.EmailVerification,
+                Token: tokenString,
+                Value: null,
+                ExpiresAt: DateTimeOffset.UtcNow.AddHours(24),
+                CreatedAt: DateTimeOffset.UtcNow,
+                UsedAt: null
+            );
+
+            await verificationTokenRepository.CreateAsync(verificationToken.ToDto(), ct);
+
+            await emailService.SendTemplatedEmailAsync(
+                email,
+                EmailTemplate.EmailVerification,
+                new Dictionary<string, string>
+                {
+                    { "VerificationToken", tokenString },
+                    { "BaseUrl", _appOptions.BaseUrl }
+                },
+                ct);
+
+            logger.LogInformation("Sent verification email to {Email}", email);
+
+            // Audit log - email verification sent
+            await auditLog.LogEventAsync(
+                AuditEventType.UserEmailVerificationSent,
+                actorUserId: null,
+                targetUserId: userId,
+                value: email,
+                ct: ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to send verification email to {Email}", email);
+            // Don't fail registration if email fails
+        }
     }
 
     public async Task<bool> ResendVerificationEmailAsync(string email, CancellationToken ct = default)

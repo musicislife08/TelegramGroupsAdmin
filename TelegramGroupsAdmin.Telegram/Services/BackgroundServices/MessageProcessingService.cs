@@ -10,6 +10,7 @@ using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
@@ -139,61 +140,59 @@ public partial class MessageProcessingService(
 
             // Update last_seen_at for this chat (also auto-adds chat if it doesn't exist)
             // Then refresh admin cache for newly discovered chats OR chats with empty admin cache
-            using (var scope = serviceProvider.CreateScope())
+            using var scope = serviceProvider.CreateScope();
+            var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+            var existingChat = await managedChatsRepository.GetByChatIdAsync(message.Chat.Id, cancellationToken);
+            var isNewChat = existingChat == null;
+
+            await managedChatsRepository.UpdateLastSeenAsync(message.Chat.Id, now, cancellationToken);
+
+            // Check if we need to refresh admin cache (only for groups/supergroups, not private DMs)
+            if (message.Chat.Type == ChatType.Group || message.Chat.Type == ChatType.Supergroup)
             {
-                var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-                var existingChat = await managedChatsRepository.GetByChatIdAsync(message.Chat.Id, cancellationToken);
-                var isNewChat = existingChat == null;
+                bool shouldRefreshAdmins = false;
+                string refreshReason = "";
 
-                await managedChatsRepository.UpdateLastSeenAsync(message.Chat.Id, now, cancellationToken);
-
-                // Check if we need to refresh admin cache (only for groups/supergroups, not private DMs)
-                if (message.Chat.Type == ChatType.Group || message.Chat.Type == ChatType.Supergroup)
+                if (isNewChat)
                 {
-                    bool shouldRefreshAdmins = false;
-                    string refreshReason = "";
-
-                    if (isNewChat)
-                    {
-                        shouldRefreshAdmins = true;
-                        refreshReason = "newly discovered chat";
-                    }
-                    else
-                    {
-                        // Check if admin cache is empty for this chat
-                        var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-                        var adminCount = await chatAdminsRepository.GetAdminCountAsync(message.Chat.Id, cancellationToken);
-
-                        if (adminCount == 0)
-                        {
-                            shouldRefreshAdmins = true;
-                            refreshReason = "admin cache is empty";
-                        }
-                    }
-
-                    if (shouldRefreshAdmins)
-                    {
-                        logger.LogInformation(
-                            "Refreshing admin cache for chat {ChatId} ({Reason})",
-                            message.Chat.Id,
-                            refreshReason);
-
-                        try
-                        {
-                            await chatManagementService.RefreshChatAdminsAsync(botClient, message.Chat.Id, cancellationToken);
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogWarning(ex, "Failed to refresh admins for chat {ChatId}", message.Chat.Id);
-                        }
-                    }
+                    shouldRefreshAdmins = true;
+                    refreshReason = "newly discovered chat";
                 }
                 else
                 {
-                    if (isNewChat)
+                    // Check if admin cache is empty for this chat
+                    var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
+                    var adminCount = await chatAdminsRepository.GetAdminCountAsync(message.Chat.Id, cancellationToken);
+
+                    if (adminCount == 0)
                     {
-                        logger.LogDebug("Discovered new private chat {ChatId}, skipping admin cache refresh", message.Chat.Id);
+                        shouldRefreshAdmins = true;
+                        refreshReason = "admin cache is empty";
                     }
+                }
+
+                if (shouldRefreshAdmins)
+                {
+                    logger.LogInformation(
+                        "Refreshing admin cache for chat {ChatId} ({Reason})",
+                        message.Chat.Id,
+                        refreshReason);
+
+                    try
+                    {
+                        await chatManagementService.RefreshChatAdminsAsync(botClient, message.Chat.Id, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to refresh admins for chat {ChatId}", message.Chat.Id);
+                    }
+                }
+            }
+            else
+            {
+                if (isNewChat)
+                {
+                    logger.LogDebug("Discovered new private chat {ChatId}, skipping admin cache refresh", message.Chat.Id);
                 }
             }
 
@@ -247,13 +246,11 @@ public partial class MessageProcessingService(
             {
                 try
                 {
-                    using (var scope = serviceProvider.CreateScope())
+                    using var mentionScope = serviceProvider.CreateScope();
+                    var adminMentionHandler = mentionScope.ServiceProvider.GetRequiredService<AdminMentionHandler>();
+                    if (adminMentionHandler.ContainsAdminMention(text))
                     {
-                        var adminMentionHandler = scope.ServiceProvider.GetRequiredService<AdminMentionHandler>();
-                        if (adminMentionHandler.ContainsAdminMention(text))
-                        {
-                            await adminMentionHandler.NotifyAdminsAsync(botClient, message, cancellationToken);
-                        }
+                        await adminMentionHandler.NotifyAdminsAsync(botClient, message, cancellationToken);
                     }
                 }
                 catch (Exception ex)
@@ -325,74 +322,72 @@ public partial class MessageProcessingService(
             );
 
             // Save message to database using a scoped repository
-            using (var scope = _scopeFactory.CreateScope())
+            using var messageScope = _scopeFactory.CreateScope();
+            var repository = messageScope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
+            await repository.InsertMessageAsync(messageRecord, cancellationToken);
+
+            // Upsert user into telegram_users table (centralized user tracking)
+            var telegramUserRepo = messageScope.ServiceProvider.GetRequiredService<TelegramUserRepository>();
+            var telegramUser = new TelegramGroupsAdmin.Telegram.Models.TelegramUser(
+                TelegramUserId: message.From!.Id,
+                Username: message.From.Username,
+                FirstName: message.From.FirstName,
+                LastName: message.From.LastName,
+                UserPhotoPath: null, // Will be populated by FetchUserPhotoJob
+                PhotoHash: null,
+                IsTrusted: false,
+                BotDmEnabled: false, // Will be set to true when user sends /start in private chat
+                FirstSeenAt: now,
+                LastSeenAt: now,
+                CreatedAt: now,
+                UpdatedAt: now
+            );
+            await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
+
+            // Phase 4.10: Check for impersonation (name + photo similarity vs admins)
+            // Check users on their first N messages
+            var impersonationService = messageScope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
+            var shouldCheck = await impersonationService.ShouldCheckUserAsync(message.From!.Id, message.Chat.Id);
+
+            if (shouldCheck)
             {
-                var repository = scope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
-                await repository.InsertMessageAsync(messageRecord, cancellationToken);
+                logger.LogDebug(
+                    "Checking user {UserId} for impersonation on message #{MessageCount}",
+                    message.From.Id,
+                    message.MessageId);
 
-                // Upsert user into telegram_users table (centralized user tracking)
-                var telegramUserRepo = scope.ServiceProvider.GetRequiredService<TelegramUserRepository>();
-                var telegramUser = new TelegramGroupsAdmin.Telegram.Models.TelegramUser(
-                    TelegramUserId: message.From!.Id,
-                    Username: message.From.Username,
-                    FirstName: message.From.FirstName,
-                    LastName: message.From.LastName,
-                    UserPhotoPath: null, // Will be populated by FetchUserPhotoJob
-                    PhotoHash: null,
-                    IsTrusted: false,
-                    BotDmEnabled: false, // Will be set to true when user sends /start in private chat
-                    FirstSeenAt: now,
-                    LastSeenAt: now,
-                    CreatedAt: now,
-                    UpdatedAt: now
-                );
-                await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
+                // Get cached user photo path (may be null if not fetched yet)
+                var existingUser = await telegramUserRepo.GetByTelegramIdAsync(message.From.Id, cancellationToken);
+                var photoPath = existingUser?.UserPhotoPath;
 
-                // Phase 4.10: Check for impersonation (name + photo similarity vs admins)
-                // Check users on their first N messages
-                var impersonationService = scope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
-                var shouldCheck = await impersonationService.ShouldCheckUserAsync(message.From!.Id, message.Chat.Id);
+                // Check for impersonation
+                var impersonationResult = await impersonationService.CheckUserAsync(
+                    message.From.Id,
+                    message.Chat.Id,
+                    message.From.FirstName,
+                    message.From.LastName,
+                    photoPath);
 
-                if (shouldCheck)
+                if (impersonationResult != null)
                 {
-                    logger.LogDebug(
-                        "Checking user {UserId} for impersonation on message #{MessageCount}",
-                        message.From.Id,
-                        message.MessageId);
-
-                    // Get cached user photo path (may be null if not fetched yet)
-                    var existingUser = await telegramUserRepo.GetByTelegramIdAsync(message.From.Id, cancellationToken);
-                    var photoPath = existingUser?.UserPhotoPath;
-
-                    // Check for impersonation
-                    var impersonationResult = await impersonationService.CheckUserAsync(
+                    logger.LogWarning(
+                        "Impersonation detected for user {UserId} in chat {ChatId} (score: {Score}, risk: {Risk})",
                         message.From.Id,
                         message.Chat.Id,
-                        message.From.FirstName,
-                        message.From.LastName,
-                        photoPath);
+                        impersonationResult.TotalScore,
+                        impersonationResult.RiskLevel);
 
-                    if (impersonationResult != null)
+                    // Execute action (create alert, auto-ban if score >= 100)
+                    await impersonationService.ExecuteActionAsync(impersonationResult);
+
+                    // If auto-banned, message will remain in history for audit trail
+                    // User will be banned from all chats immediately
+                    if (impersonationResult.ShouldAutoBan)
                     {
-                        logger.LogWarning(
-                            "Impersonation detected for user {UserId} in chat {ChatId} (score: {Score}, risk: {Risk})",
+                        logger.LogInformation(
+                            "User {UserId} auto-banned for impersonation (score: {Score})",
                             message.From.Id,
-                            message.Chat.Id,
-                            impersonationResult.TotalScore,
-                            impersonationResult.RiskLevel);
-
-                        // Execute action (create alert, auto-ban if score >= 100)
-                        await impersonationService.ExecuteActionAsync(impersonationResult);
-
-                        // If auto-banned, message will remain in history for audit trail
-                        // User will be banned from all chats immediately
-                        if (impersonationResult.ShouldAutoBan)
-                        {
-                            logger.LogInformation(
-                                "User {UserId} auto-banned for impersonation (score: {Score})",
-                                message.From.Id,
-                                impersonationResult.TotalScore);
-                        }
+                            impersonationResult.TotalScore);
                     }
                 }
             }
@@ -757,51 +752,19 @@ public partial class MessageProcessingService(
     /// </summary>
     private async Task ScheduleMessageDeleteAsync(long chatId, int messageId, int delaySeconds, string reason, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var deletePayload = new TelegramGroupsAdmin.Telegram.Abstractions.Jobs.DeleteMessagePayload(
-                chatId,
-                messageId,
-                reason
-            );
+        var deletePayload = new TelegramGroupsAdmin.Telegram.Abstractions.Jobs.DeleteMessagePayload(
+            chatId,
+            messageId,
+            reason
+        );
 
-            using var scope = serviceProvider.CreateScope();
-            var timeTickerManager = scope.ServiceProvider.GetRequiredService<TickerQ.Utilities.Interfaces.Managers.ITimeTickerManager<TickerQ.Utilities.Models.Ticker.TimeTicker>>();
-
-            var executionTime = DateTimeOffset.UtcNow.AddSeconds(delaySeconds);
-            var result = await timeTickerManager.AddAsync(new TickerQ.Utilities.Models.Ticker.TimeTicker
-            {
-                Function = "DeleteMessage",
-                ExecutionTime = executionTime.UtcDateTime, // Use UtcDateTime to preserve timezone
-                Request = TickerQ.Utilities.TickerHelper.CreateTickerRequest(deletePayload),
-                Retries = 0 // Don't retry - message may have been manually deleted
-            }, cancellationToken);
-
-            if (!result.IsSucceded)
-            {
-                logger.LogWarning(
-                    "Failed to schedule message delete for message {MessageId} in chat {ChatId}: {Error}",
-                    messageId,
-                    chatId,
-                    result.Exception?.Message ?? "Unknown error");
-            }
-            else
-            {
-                logger.LogDebug(
-                    "Scheduled delete for message {MessageId} in chat {ChatId} after {Delay}s (JobId: {JobId})",
-                    messageId,
-                    chatId,
-                    delaySeconds,
-                    result.Result?.Id);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Error scheduling message delete for message {MessageId} in chat {ChatId}",
-                messageId,
-                chatId);
-        }
+        await TickerQHelper.ScheduleJobAsync(
+            serviceProvider,
+            logger,
+            "DeleteMessage",
+            deletePayload,
+            delaySeconds,
+            retries: 0);
     }
 
     /// <summary>
@@ -809,48 +772,17 @@ public partial class MessageProcessingService(
     /// </summary>
     private async Task ScheduleUserPhotoFetchAsync(long messageId, long userId, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var photoPayload = new TelegramGroupsAdmin.Telegram.Abstractions.Jobs.FetchUserPhotoPayload(
-                messageId,
-                userId
-            );
+        var photoPayload = new TelegramGroupsAdmin.Telegram.Abstractions.Jobs.FetchUserPhotoPayload(
+            messageId,
+            userId
+        );
 
-            using var scope = serviceProvider.CreateScope();
-            var timeTickerManager = scope.ServiceProvider.GetRequiredService<TickerQ.Utilities.Interfaces.Managers.ITimeTickerManager<TickerQ.Utilities.Models.Ticker.TimeTicker>>();
-
-            var executionTime = DateTimeOffset.UtcNow; // 0s delay for instant execution
-            var result = await timeTickerManager.AddAsync(new TickerQ.Utilities.Models.Ticker.TimeTicker
-            {
-                Function = "FetchUserPhoto",
-                ExecutionTime = executionTime.UtcDateTime, // Use UtcDateTime to preserve timezone
-                Request = TickerQ.Utilities.TickerHelper.CreateTickerRequest(photoPayload),
-                Retries = 2 // Retry on Telegram API failures
-            }, cancellationToken);
-
-            if (!result.IsSucceded)
-            {
-                logger.LogWarning(
-                    "Failed to schedule user photo fetch for user {UserId} (message {MessageId}): {Error}",
-                    userId,
-                    messageId,
-                    result.Exception?.Message ?? "Unknown error");
-            }
-            else
-            {
-                logger.LogDebug(
-                    "Scheduled user photo fetch for user {UserId} (message {MessageId}, JobId: {JobId})",
-                    userId,
-                    messageId,
-                    result.Result?.Id);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Error scheduling user photo fetch for user {UserId} (message {MessageId})",
-                userId,
-                messageId);
-        }
+        await TickerQHelper.ScheduleJobAsync(
+            serviceProvider,
+            logger,
+            "FetchUserPhoto",
+            photoPayload,
+            delaySeconds: 0,
+            retries: 2);
     }
 }

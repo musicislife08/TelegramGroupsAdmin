@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
@@ -10,23 +11,14 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Spam check using CAS (Combot Anti-Spam) API to check if user is in global spam database
 /// Based on tg-spam's CAS integration
 /// </summary>
-public class CasSpamCheck : IContentCheck
+public class CasSpamCheck(
+    ILogger<CasSpamCheck> logger,
+    IHttpClientFactory httpClientFactory,
+    IMemoryCache cache) : IContentCheck
 {
-    private readonly ILogger<CasSpamCheck> _logger;
-    private readonly HttpClient _httpClient;
-    private readonly IMemoryCache _cache;
+    private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
 
     public string CheckName => "CAS";
-
-    public CasSpamCheck(
-        ILogger<CasSpamCheck> logger,
-        IHttpClientFactory httpClientFactory,
-        IMemoryCache cache)
-    {
-        _logger = logger;
-        _httpClient = httpClientFactory.CreateClient();
-        _cache = cache;
-    }
 
     /// <summary>
     /// Check if CAS check should be executed
@@ -55,15 +47,15 @@ public class CasSpamCheck : IContentCheck
             var cacheKey = $"cas_check_{req.UserId}";
 
             // Check cache first
-            if (_cache.TryGetValue(cacheKey, out CasResponse? cachedResponse) && cachedResponse != null)
+            if (cache.TryGetValue(cacheKey, out CasResponse? cachedResponse) && cachedResponse != null)
             {
-                _logger.LogDebug("CAS check for user {UserId}: Using cached result", req.UserId);
+                logger.LogDebug("CAS check for user {UserId}: Using cached result", req.UserId);
                 return CreateResponse(cachedResponse, fromCache: true);
             }
 
             // Make API request to CAS with timeout
             var apiUrl = $"{req.ApiUrl.TrimEnd('/')}/check?user_id={req.UserId}";
-            _logger.LogDebug("CAS check for user {UserId}: Calling {ApiUrl}", req.UserId, apiUrl);
+            logger.LogDebug("CAS check for user {UserId}: Calling {ApiUrl}", req.UserId, apiUrl);
 
             // Create cancellation token with timeout (can't modify HttpClient.Timeout after first use)
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(req.CancellationToken);
@@ -80,7 +72,7 @@ public class CasSpamCheck : IContentCheck
             // Fail open on any error
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("CAS API returned {StatusCode} for user {UserId}", response.StatusCode, req.UserId);
+                logger.LogWarning("CAS API returned {StatusCode} for user {UserId}", response.StatusCode, req.UserId);
                 return CreateFailResponse("CAS API error");
             }
 
@@ -92,19 +84,18 @@ public class CasSpamCheck : IContentCheck
 
             if (casResponse == null)
             {
-                _logger.LogWarning("Failed to parse CAS API response for user {UserId}", req.UserId);
+                logger.LogWarning("Failed to parse CAS API response for user {UserId}", req.UserId);
                 return CreateFailResponse("Failed to parse CAS response");
             }
 
             // Cache the result for 1 hour
-            _cache.Set(cacheKey, casResponse, TimeSpan.FromHours(1));
+            cache.Set(cacheKey, casResponse, TimeSpan.FromHours(1));
 
             return CreateResponse(casResponse, fromCache: false);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "CAS check failed for user {UserId}", req.UserId);
-            return CreateFailResponse("CAS check failed due to error", ex);
+            return ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId);
         }
     }
 
@@ -121,7 +112,7 @@ public class CasSpamCheck : IContentCheck
             ? $"User banned in CAS database{(fromCache ? " (cached)" : "")}"
             : $"User not found in CAS database{(fromCache ? " (cached)" : "")}";
 
-        _logger.LogDebug("CAS check completed: IsSpam={IsSpam}, Confidence={Confidence}, FromCache={FromCache}",
+        logger.LogDebug("CAS check completed: IsSpam={IsSpam}, Confidence={Confidence}, FromCache={FromCache}",
             isSpam, confidence, fromCache);
 
         return new ContentCheckResponse

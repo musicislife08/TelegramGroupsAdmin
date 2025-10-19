@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
@@ -12,22 +13,13 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Currently supports VirusTotal (disabled by default for URLs due to 15s latency)
 /// TODO: Add ClamAV for local virus scanning (files/images)
 /// </summary>
-public partial class ThreatIntelSpamCheck : IContentCheck
+public partial class ThreatIntelSpamCheck(
+    ILogger<ThreatIntelSpamCheck> logger,
+    IHttpClientFactory httpClientFactory) : IContentCheck
 {
-    private readonly ILogger<ThreatIntelSpamCheck> _logger;
-    private readonly IHttpClientFactory _httpClientFactory;
-
     private static readonly Regex UrlRegex = CompiledUrlRegex();
 
     public string CheckName => "ThreatIntel";
-
-    public ThreatIntelSpamCheck(
-        ILogger<ThreatIntelSpamCheck> logger,
-        IHttpClientFactory httpClientFactory)
-    {
-        _logger = logger;
-        _httpClientFactory = httpClientFactory;
-    }
 
     /// <summary>
     /// Check if threat intel check should be executed
@@ -61,7 +53,7 @@ public partial class ThreatIntelSpamCheck : IContentCheck
                     var virusTotalResult = await CheckVirusTotalAsync(url, req.VirusTotalApiKey, req.CancellationToken);
                     if (virusTotalResult.IsThreat)
                     {
-                        _logger.LogDebug("ThreatIntel check for user {UserId}: VirusTotal flagged {Url}",
+                        logger.LogDebug("ThreatIntel check for user {UserId}: VirusTotal flagged {Url}",
                             req.UserId, url);
 
                         return new ContentCheckResponse
@@ -75,7 +67,7 @@ public partial class ThreatIntelSpamCheck : IContentCheck
                 }
             }
 
-            _logger.LogDebug("ThreatIntel check for user {UserId}: No threats found for {UrlCount} URLs",
+            logger.LogDebug("ThreatIntel check for user {UserId}: No threats found for {UrlCount} URLs",
                 req.UserId, req.Urls.Count);
 
             return new ContentCheckResponse
@@ -88,15 +80,7 @@ public partial class ThreatIntelSpamCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "ThreatIntel check failed for user {UserId}", req.UserId);
-            return new ContentCheckResponse
-            {
-                CheckName = CheckName,
-                Result = CheckResultType.Clean, // Fail open
-                Details = "ThreatIntel check failed due to error",
-                Confidence = 0,
-                Error = ex
-            };
+            return ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId);
         }
     }
 
@@ -108,7 +92,7 @@ public partial class ThreatIntelSpamCheck : IContentCheck
         try
         {
             // Use named client "VirusTotal" - will configure API key in headers
-            var client = _httpClientFactory.CreateClient("VirusTotal");
+            var client = httpClientFactory.CreateClient("VirusTotal");
 
             // Add API key to headers
             client.DefaultRequestHeaders.Clear();
@@ -155,7 +139,7 @@ public partial class ThreatIntelSpamCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "VirusTotal check failed for URL: {Url}", url);
+            logger.LogError(ex, "VirusTotal check failed for URL: {Url}", url);
             return new ThreatResult(false, $"Error: {ex.Message}");
         }
     }

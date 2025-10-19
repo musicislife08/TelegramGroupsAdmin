@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -13,13 +14,12 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Based on tg-spam's similarity detection using TF-IDF vectors with optimizations
 /// Engine orchestrates config loading - check manages its own DB access with guardrails
 /// </summary>
-public class SimilaritySpamCheck : IContentCheck
+public class SimilaritySpamCheck(
+    ILogger<SimilaritySpamCheck> logger,
+    IDbContextFactory<AppDbContext> dbContextFactory,
+    ITokenizerService tokenizerService) : IContentCheck
 {
     private const int MAX_SIMILARITY_SAMPLES = 5_000; // Guardrail: cap similarity query
-
-    private readonly ILogger<SimilaritySpamCheck> _logger;
-    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
-    private readonly ITokenizerService _tokenizerService;
 
     public string CheckName => "Similarity";
 
@@ -43,16 +43,6 @@ public class SimilaritySpamCheck : IContentCheck
     private HashSet<string>? _cachedVocabulary;
     private DateTime _lastCacheUpdate = DateTime.MinValue;
     private readonly TimeSpan _cacheRefreshInterval = TimeSpan.FromMinutes(10);
-
-    public SimilaritySpamCheck(
-        ILogger<SimilaritySpamCheck> logger,
-        IDbContextFactory<AppDbContext> dbContextFactory,
-        ITokenizerService tokenizerService)
-    {
-        _logger = logger;
-        _dbContextFactory = dbContextFactory;
-        _tokenizerService = tokenizerService;
-    }
 
     /// <summary>
     /// Check if similarity check should be executed
@@ -96,7 +86,7 @@ public class SimilaritySpamCheck : IContentCheck
 
             if (_cachedSamples == null || !_cachedSamples.Any() || _cachedVectors == null || _cachedVocabulary == null)
             {
-                _logger.LogWarning("Similarity check has no spam samples: Samples={HasSamples}, Count={Count}, Vectors={HasVectors}, Vocab={HasVocab}",
+                logger.LogWarning("Similarity check has no spam samples: Samples={HasSamples}, Count={Count}, Vectors={HasVectors}, Vocab={HasVocab}",
                     _cachedSamples != null, _cachedSamples?.Count ?? 0, _cachedVectors != null, _cachedVocabulary != null);
                 return new ContentCheckResponse
                 {
@@ -108,7 +98,7 @@ public class SimilaritySpamCheck : IContentCheck
             }
 
             // Preprocess message using shared tokenizer
-            var processedMessage = _tokenizerService.RemoveEmojis(req.Message);
+            var processedMessage = tokenizerService.RemoveEmojis(req.Message);
             var messageVector = ComputeTfIdfVector(processedMessage, _cachedVocabulary);
 
             // Calculate similarity with early exit optimization
@@ -158,7 +148,7 @@ public class SimilaritySpamCheck : IContentCheck
             // This is now a no-op for backward compatibility - keeping the code structure but removing the fire-and-forget
             if (isSpam && matchedSampleId > 0)
             {
-                _logger.LogDebug("Similarity match found for sample {SampleId} (detection count tracking removed in normalized schema)", matchedSampleId);
+                logger.LogDebug("Similarity match found for sample {SampleId} (detection count tracking removed in normalized schema)", matchedSampleId);
             }
 
             var details = isSpam
@@ -175,15 +165,7 @@ public class SimilaritySpamCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Similarity check failed for user {UserId}", req.UserId);
-            return new ContentCheckResponse
-            {
-                CheckName = CheckName,
-                Result = CheckResultType.Clean, // Fail open
-                Details = "Similarity check failed due to error",
-                Confidence = 0,
-                Error = ex
-            };
+            return ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId);
         }
     }
 
@@ -197,10 +179,10 @@ public class SimilaritySpamCheck : IContentCheck
         {
             try
             {
-                _logger.LogInformation("Refreshing similarity cache for chat {ChatId}...", chatId);
+                logger.LogInformation("Refreshing similarity cache for chat {ChatId}...", chatId);
 
                 // Load spam samples from database with guardrail
-                await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+                await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
                 var samples = await dbContext.DetectionResults
                     .AsNoTracking()
                     .Include(dr => dr.Message)
@@ -223,11 +205,11 @@ public class SimilaritySpamCheck : IContentCheck
 
                 _cachedSamples = samples;
 
-                _logger.LogInformation("Loaded {Count} spam samples from database", _cachedSamples.Count);
+                logger.LogInformation("Loaded {Count} spam samples from database", _cachedSamples.Count);
 
                 // Build vocabulary from all samples
                 _cachedVocabulary = BuildVocabulary(_cachedSamples.Select(s => s.MessageText).ToArray());
-                _logger.LogInformation("Built vocabulary with {VocabSize} unique words", _cachedVocabulary.Count);
+                logger.LogInformation("Built vocabulary with {VocabSize} unique words", _cachedVocabulary.Count);
 
                 // Pre-compute TF-IDF vectors for all samples
                 _cachedVectors = new Dictionary<long, double[]>();
@@ -237,12 +219,12 @@ public class SimilaritySpamCheck : IContentCheck
                 }
 
                 _lastCacheUpdate = DateTime.UtcNow;
-                _logger.LogInformation("Refreshed similarity cache with {Count} samples, {VocabSize} vocab, {VectorCount} vectors for chat {ChatId}",
+                logger.LogInformation("Refreshed similarity cache with {Count} samples, {VocabSize} vocab, {VectorCount} vectors for chat {ChatId}",
                     _cachedSamples.Count, _cachedVocabulary.Count, _cachedVectors.Count, chatId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to refresh similarity cache");
+                logger.LogError(ex, "Failed to refresh similarity cache");
                 // Keep existing cache if refresh fails
             }
         }
@@ -273,7 +255,7 @@ public class SimilaritySpamCheck : IContentCheck
     private string[] NormalizeAndTokenize(string text)
     {
         // Use shared tokenizer for consistent preprocessing
-        var tokens = _tokenizerService.Tokenize(text);
+        var tokens = tokenizerService.Tokenize(text);
 
         // Additional filtering for similarity analysis
         return tokens.Where(w => w.Length >= 3).ToArray();

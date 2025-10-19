@@ -492,6 +492,11 @@ public class AppDbContext : DbContext
             .Property(w => w.Response)
             .HasConversion<int>();
 
+        // WelcomeResponseDto index for job cancellation queries
+        modelBuilder.Entity<WelcomeResponseDto>()
+            .HasIndex(w => w.TimeoutJobId)
+            .HasFilter("timeout_job_id IS NOT NULL"); // Partial index for active jobs only
+
         // VerificationTokenDto stores token_type as string in DB but exposes as enum
         // The entity already handles this with TokenTypeString property
     }

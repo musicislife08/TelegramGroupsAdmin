@@ -40,27 +40,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            Claim[] claims =
-            [
-                new(ClaimTypes.NameIdentifier, result.UserId!),
-                new(ClaimTypes.Email, result.Email!),
-                new(ClaimTypes.Role, GetRoleName(result.PermissionLevel!.Value)),
-                new(CustomClaimTypes.PermissionLevel, result.PermissionLevel.Value.ToString())
-            ];
-
-            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-            var authProperties = new AuthenticationProperties
-            {
-                IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-            };
-
-            await httpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                claimsPrincipal,
-                authProperties);
+            await SignInUserAsync(httpContext, result.UserId!, result.Email!, result.PermissionLevel!.Value);
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -91,27 +71,7 @@ public static class AuthEndpoints
             if (loginResult.Success && !loginResult.RequiresTotp)
             {
                 // Sign in the user with cookie authentication
-                Claim[] claims =
-                [
-                    new(ClaimTypes.NameIdentifier, loginResult.UserId!),
-                    new(ClaimTypes.Email, loginResult.Email!),
-                    new(ClaimTypes.Role, GetRoleName(loginResult.PermissionLevel!.Value)),
-                    new(CustomClaimTypes.PermissionLevel, loginResult.PermissionLevel.Value.ToString())
-                ];
-
-                var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-                var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-                var authProperties = new AuthenticationProperties
-                {
-                    IsPersistent = true,
-                    ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-                };
-
-                await httpContext.SignInAsync(
-                    CookieAuthenticationDefaults.AuthenticationScheme,
-                    claimsPrincipal,
-                    authProperties);
+                await SignInUserAsync(httpContext, loginResult.UserId!, loginResult.Email!, loginResult.PermissionLevel!.Value);
 
                 return Results.Json(new { success = true });
             }
@@ -145,27 +105,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            Claim[] claims =
-            [
-                new(ClaimTypes.NameIdentifier, result.UserId!),
-                new(ClaimTypes.Email, result.Email!),
-                new(ClaimTypes.Role, GetRoleName(result.PermissionLevel!.Value)),
-                new(CustomClaimTypes.PermissionLevel, result.PermissionLevel.Value.ToString())
-            ];
-
-            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-            var authProperties = new AuthenticationProperties
-            {
-                IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-            };
-
-            await httpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                claimsPrincipal,
-                authProperties);
+            await SignInUserAsync(httpContext, result.UserId!, result.Email!, result.PermissionLevel!.Value);
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -198,27 +138,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            Claim[] claims =
-            [
-                new(ClaimTypes.NameIdentifier, result.UserId!),
-                new(ClaimTypes.Email, result.Email!),
-                new(ClaimTypes.Role, GetRoleName(result.PermissionLevel!.Value)),
-                new(CustomClaimTypes.PermissionLevel, result.PermissionLevel.Value.ToString())
-            ];
-
-            var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-            var authProperties = new AuthenticationProperties
-            {
-                IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-            };
-
-            await httpContext.SignInAsync(
-                CookieAuthenticationDefaults.AuthenticationScheme,
-                claimsPrincipal,
-                authProperties);
+            await SignInUserAsync(httpContext, result.UserId!, result.Email!, result.PermissionLevel!.Value);
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -241,6 +161,31 @@ public static class AuthEndpoints
         2 => "Owner",
         _ => "ReadOnly"
     };
+
+    private static async Task SignInUserAsync(HttpContext httpContext, string userId, string email, int permissionLevel)
+    {
+        Claim[] claims =
+        [
+            new(ClaimTypes.NameIdentifier, userId),
+            new(ClaimTypes.Email, email),
+            new(ClaimTypes.Role, GetRoleName(permissionLevel)),
+            new(CustomClaimTypes.PermissionLevel, permissionLevel.ToString())
+        ];
+
+        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+
+        var authProperties = new AuthenticationProperties
+        {
+            IsPersistent = true,
+            ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
+        };
+
+        await httpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            claimsPrincipal,
+            authProperties);
+    }
 }
 
 public record LoginRequest(string Email, string Password);

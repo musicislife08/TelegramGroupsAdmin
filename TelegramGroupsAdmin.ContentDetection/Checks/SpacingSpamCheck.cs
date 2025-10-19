@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
@@ -10,16 +11,9 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Streamlined version focusing on the most effective patterns
 /// Config comes from strongly-typed request - no database access needed
 /// </summary>
-public class SpacingSpamCheck : IContentCheck
+public class SpacingSpamCheck(ILogger<SpacingSpamCheck> logger) : IContentCheck
 {
-    private readonly ILogger<SpacingSpamCheck> _logger;
-
     public string CheckName => "Spacing";
-
-    public SpacingSpamCheck(ILogger<SpacingSpamCheck> logger)
-    {
-        _logger = logger;
-    }
 
     /// <summary>
     /// Check if spacing check should be executed
@@ -61,15 +55,7 @@ public class SpacingSpamCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Spacing check failed for user {UserId}", req.UserId);
-            return Task.FromResult(new ContentCheckResponse
-            {
-                CheckName = CheckName,
-                Result = CheckResultType.Clean, // Fail open
-                Details = "Spacing check failed due to error",
-                Confidence = 0,
-                Error = ex
-            });
+            return Task.FromResult(ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId));
         }
     }
 

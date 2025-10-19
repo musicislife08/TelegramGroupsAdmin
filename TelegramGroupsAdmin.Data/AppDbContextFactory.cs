@@ -12,9 +12,12 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
     {
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
 
-        // Use a dummy connection string for design-time operations
+        // Try environment variable first, fall back to dummy connection string for design-time operations
         // Actual connection string comes from configuration at runtime
-        optionsBuilder.UseNpgsql("Host=localhost;Database=telegram_groups_admin;Username=tgadmin;Password=changeme");
+        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+            ?? "Host=localhost;Database=telegram_groups_admin;Username=tgadmin;Password=changeme";
+
+        optionsBuilder.UseNpgsql(connectionString);
 
         return new AppDbContext(optionsBuilder.Options);
     }

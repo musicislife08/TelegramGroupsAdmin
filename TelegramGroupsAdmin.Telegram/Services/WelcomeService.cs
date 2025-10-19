@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
+using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -30,6 +31,50 @@ public class WelcomeService : IWelcomeService
     private readonly TelegramOptions _telegramOptions;
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotProtectionService _botProtectionService;
+
+    /// <summary>
+    /// Static restricted permissions (all false) for new users awaiting welcome acceptance.
+    /// Reused to avoid allocations on every user join.
+    /// </summary>
+    private static readonly ChatPermissions RestrictedPermissions = new()
+    {
+        CanSendMessages = false,
+        CanSendAudios = false,
+        CanSendDocuments = false,
+        CanSendPhotos = false,
+        CanSendVideos = false,
+        CanSendVideoNotes = false,
+        CanSendVoiceNotes = false,
+        CanSendPolls = false,
+        CanSendOtherMessages = false,
+        CanAddWebPagePreviews = false,
+        CanChangeInfo = false,
+        CanInviteUsers = false,
+        CanPinMessages = false,
+        CanManageTopics = false
+    };
+
+    /// <summary>
+    /// Static default permissions for accepted users (messaging enabled, admin features restricted).
+    /// Reused to avoid allocations when restoring permissions.
+    /// </summary>
+    private static readonly ChatPermissions DefaultPermissions = new()
+    {
+        CanSendMessages = true,
+        CanSendAudios = true,
+        CanSendDocuments = true,
+        CanSendPhotos = true,
+        CanSendVideos = true,
+        CanSendVideoNotes = true,
+        CanSendVoiceNotes = true,
+        CanSendPolls = true,
+        CanSendOtherMessages = true,
+        CanAddWebPagePreviews = true,
+        CanChangeInfo = false,      // Admin feature - restricted
+        CanInviteUsers = true,
+        CanPinMessages = false,     // Admin feature - restricted
+        CanManageTopics = false     // Admin feature - restricted
+    };
 
     public WelcomeService(
         ILogger<WelcomeService> logger,
@@ -57,47 +102,6 @@ public class WelcomeService : IWelcomeService
         await action(repository, cancellationToken);
     }
 
-    /// <summary>
-    /// Creates restricted permissions (all false) for new users awaiting welcome acceptance
-    /// </summary>
-    private static ChatPermissions CreateRestrictedPermissions() => new()
-    {
-        CanSendMessages = false,
-        CanSendAudios = false,
-        CanSendDocuments = false,
-        CanSendPhotos = false,
-        CanSendVideos = false,
-        CanSendVideoNotes = false,
-        CanSendVoiceNotes = false,
-        CanSendPolls = false,
-        CanSendOtherMessages = false,
-        CanAddWebPagePreviews = false,
-        CanChangeInfo = false,
-        CanInviteUsers = false,
-        CanPinMessages = false,
-        CanManageTopics = false
-    };
-
-    /// <summary>
-    /// Creates default permissions for accepted users (messaging enabled, admin features restricted)
-    /// </summary>
-    private static ChatPermissions CreateDefaultPermissions() => new()
-    {
-        CanSendMessages = true,
-        CanSendAudios = true,
-        CanSendDocuments = true,
-        CanSendPhotos = true,
-        CanSendVideos = true,
-        CanSendVideoNotes = true,
-        CanSendVoiceNotes = true,
-        CanSendPolls = true,
-        CanSendOtherMessages = true,
-        CanAddWebPagePreviews = true,
-        CanChangeInfo = false,      // Admin feature - restricted
-        CanInviteUsers = true,
-        CanPinMessages = false,     // Admin feature - restricted
-        CanManageTopics = false     // Admin feature - restricted
-    };
 
     public async Task HandleChatMemberUpdateAsync(
         ITelegramBotClient botClient,
@@ -183,60 +187,58 @@ public class WelcomeService : IWelcomeService
             }
 
             // Phase 4.10: Check for impersonation (name + photo similarity vs admins)
-            using (var impersonationScope = _serviceProvider.CreateScope())
+            using var impersonationScope = _serviceProvider.CreateScope();
+            var impersonationService = impersonationScope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
+            var telegramUserRepo = impersonationScope.ServiceProvider.GetRequiredService<TelegramUserRepository>();
+
+            // Check if user should be screened for impersonation
+            var shouldCheck = await impersonationService.ShouldCheckUserAsync(user.Id, chatMemberUpdate.Chat.Id);
+
+            if (shouldCheck)
             {
-                var impersonationService = impersonationScope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
-                var telegramUserRepo = impersonationScope.ServiceProvider.GetRequiredService<TelegramUserRepository>();
+                _logger.LogDebug(
+                    "Checking user {UserId} for impersonation in chat {ChatId}",
+                    user.Id,
+                    chatMemberUpdate.Chat.Id);
 
-                // Check if user should be screened for impersonation
-                var shouldCheck = await impersonationService.ShouldCheckUserAsync(user.Id, chatMemberUpdate.Chat.Id);
+                // Get user's photo path if available (may be null if not cached yet)
+                var existingUser = await telegramUserRepo.GetByTelegramIdAsync(user.Id, cancellationToken);
+                var photoPath = existingUser?.UserPhotoPath;
 
-                if (shouldCheck)
+                // Check for impersonation
+                var impersonationResult = await impersonationService.CheckUserAsync(
+                    user.Id,
+                    chatMemberUpdate.Chat.Id,
+                    user.FirstName,
+                    user.LastName,
+                    photoPath);
+
+                if (impersonationResult != null)
                 {
-                    _logger.LogDebug(
-                        "Checking user {UserId} for impersonation in chat {ChatId}",
-                        user.Id,
-                        chatMemberUpdate.Chat.Id);
-
-                    // Get user's photo path if available (may be null if not cached yet)
-                    var existingUser = await telegramUserRepo.GetByTelegramIdAsync(user.Id, cancellationToken);
-                    var photoPath = existingUser?.UserPhotoPath;
-
-                    // Check for impersonation
-                    var impersonationResult = await impersonationService.CheckUserAsync(
+                    _logger.LogWarning(
+                        "Impersonation detected for user {UserId} in chat {ChatId} (score: {Score}, risk: {Risk})",
                         user.Id,
                         chatMemberUpdate.Chat.Id,
-                        user.FirstName,
-                        user.LastName,
-                        photoPath);
+                        impersonationResult.TotalScore,
+                        impersonationResult.RiskLevel);
 
-                    if (impersonationResult != null)
+                    // Execute action (create alert, auto-ban if score >= 100)
+                    await impersonationService.ExecuteActionAsync(impersonationResult);
+
+                    // If auto-banned (score 100), skip welcome flow
+                    if (impersonationResult.ShouldAutoBan)
                     {
-                        _logger.LogWarning(
-                            "Impersonation detected for user {UserId} in chat {ChatId} (score: {Score}, risk: {Risk})",
-                            user.Id,
-                            chatMemberUpdate.Chat.Id,
-                            impersonationResult.TotalScore,
-                            impersonationResult.RiskLevel);
-
-                        // Execute action (create alert, auto-ban if score >= 100)
-                        await impersonationService.ExecuteActionAsync(impersonationResult);
-
-                        // If auto-banned (score 100), skip welcome flow
-                        if (impersonationResult.ShouldAutoBan)
-                        {
-                            _logger.LogInformation(
-                                "User {UserId} auto-banned for impersonation, skipping welcome flow",
-                                user.Id);
-                            return;
-                        }
-
-                        // Score 50-99: Continue with welcome flow (alert created for manual review)
                         _logger.LogInformation(
-                            "User {UserId} flagged for impersonation review (score: {Score}), continuing with welcome flow",
-                            user.Id,
-                            impersonationResult.TotalScore);
+                            "User {UserId} auto-banned for impersonation, skipping welcome flow",
+                            user.Id);
+                        return;
                     }
+
+                    // Score 50-99: Continue with welcome flow (alert created for manual review)
+                    _logger.LogInformation(
+                        "User {UserId} flagged for impersonation review (score: {Score}), continuing with welcome flow",
+                        user.Id,
+                        impersonationResult.TotalScore);
                 }
             }
 
@@ -275,59 +277,26 @@ public class WelcomeService : IWelcomeService
                 welcomeMessage.MessageId
             );
 
-            try
+            var jobId = await TickerQHelper.ScheduleJobAsync(
+                _serviceProvider,
+                _logger,
+                "WelcomeTimeout",
+                payload,
+                delaySeconds: config.TimeoutSeconds,
+                retries: 1,
+                retryIntervals: [30]);
+
+            if (jobId.HasValue)
             {
-                _logger.LogDebug(
-                    "Attempting to schedule TickerQ job for user {UserId} in chat {ChatId}",
-                    user.Id,
-                    chatMemberUpdate.Chat.Id);
-
-                // Get TickerQ manager from scope (it's scoped, we're singleton)
-                using var tickerScope = _serviceProvider.CreateScope();
-                var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
-
-                var executionTime = DateTimeOffset.UtcNow.AddSeconds(config.TimeoutSeconds);
-                var request = TickerHelper.CreateTickerRequest(payload);
-
-                _logger.LogDebug(
-                    "TickerQ job details - Function: WelcomeTimeout, ExecutionTime: {ExecutionTime}, Payload: ChatId={ChatId}, UserId={UserId}, MessageId={MessageId}",
-                    executionTime,
-                    payload.ChatId,
-                    payload.UserId,
-                    payload.WelcomeMessageId);
-
-                var result = await timeTickerManager.AddAsync(new TimeTicker
-                {
-                    Function = "WelcomeTimeout",
-                    ExecutionTime = executionTime.UtcDateTime, // Use UtcDateTime to preserve timezone
-                    Request = request,
-                    Retries = 1,
-                    RetryIntervals = [30] // Retry once after 30s if it fails
-                });
-
-                if (!result.IsSucceded)
-                {
-                    throw result.Exception ?? new InvalidOperationException("TickerQ AddAsync failed without exception");
-                }
-
                 // Store the job ID in the welcome response record
-                await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(responseId, result.Result?.Id, ct), cancellationToken);
+                await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(responseId, jobId, ct), cancellationToken);
 
                 _logger.LogInformation(
                     "Successfully scheduled welcome timeout for user {UserId} in chat {ChatId} (timeout: {Timeout}s, JobId: {JobId})",
                     user.Id,
                     chatMemberUpdate.Chat.Id,
                     config.TimeoutSeconds,
-                    result.Result?.Id);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Failed to schedule TickerQ timeout job for user {UserId} in chat {ChatId}",
-                    user.Id,
-                    chatMemberUpdate.Chat.Id);
-                // Don't throw - we want to continue even if scheduling fails
+                    jobId);
             }
         }
         catch (Exception ex)
@@ -439,42 +408,13 @@ public class WelcomeService : IWelcomeService
                     "wrong_user_warning"
                 );
 
-                try
-                {
-                    _logger.LogDebug(
-                        "Scheduling delete for warning message {MessageId} in chat {ChatId}",
-                        warningMsg.MessageId,
-                        chatId);
-
-                    using var tickerScope2 = _serviceProvider.CreateScope();
-                    var timeTickerManager2 = tickerScope2.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
-                    var deleteExecutionTime = DateTimeOffset.UtcNow.AddSeconds(10);
-                    var deleteResult = await timeTickerManager2.AddAsync(new TimeTicker
-                    {
-                        Function = "DeleteMessage",
-                        ExecutionTime = deleteExecutionTime.UtcDateTime, // Use UtcDateTime to preserve timezone
-                        Request = TickerHelper.CreateTickerRequest(deletePayload),
-                        Retries = 0 // Don't retry - message may have been manually deleted
-                    });
-
-                    if (!deleteResult.IsSucceded)
-                    {
-                        throw deleteResult.Exception ?? new InvalidOperationException("TickerQ AddAsync failed for delete job");
-                    }
-
-                    _logger.LogDebug(
-                        "Successfully scheduled delete for warning message {MessageId} (JobId: {JobId})",
-                        warningMsg.MessageId,
-                        deleteResult.Result?.Id);
-                }
-                catch (Exception deleteEx)
-                {
-                    _logger.LogError(
-                        deleteEx,
-                        "Failed to schedule delete for warning message {MessageId} in chat {ChatId}",
-                        warningMsg.MessageId,
-                        chatId);
-                }
+                await TickerQHelper.ScheduleJobAsync(
+                    _serviceProvider,
+                    _logger,
+                    "DeleteMessage",
+                    deletePayload,
+                    delaySeconds: 10,
+                    retries: 0);
             }
             catch (Exception ex)
             {
@@ -595,7 +535,7 @@ public class WelcomeService : IWelcomeService
             await botClient.RestrictChatMember(
                 chatId: chatId,
                 userId: userId,
-                permissions: CreateRestrictedPermissions(),
+                permissions: RestrictedPermissions,
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
@@ -635,7 +575,7 @@ public class WelcomeService : IWelcomeService
 
             // Get chat's default permissions to restore user to group defaults
             var chat = await botClient.GetChat(chatId, cancellationToken);
-            var defaultPermissions = chat.Permissions ?? CreateDefaultPermissions();
+            var defaultPermissions = chat.Permissions ?? DefaultPermissions;
 
             _logger.LogDebug(
                 "Restoring user {UserId} to chat {ChatId} default permissions: Messages={CanSendMessages}, Media={CanSendPhotos}",
@@ -714,30 +654,10 @@ public class WelcomeService : IWelcomeService
         // Step 2: Cancel timeout job if it exists
         if (existingResponse?.TimeoutJobId.HasValue == true)
         {
-            try
+            if (await TickerQHelper.CancelJobAsync(_serviceProvider, _logger, existingResponse.TimeoutJobId.Value))
             {
-                using var tickerScope = _serviceProvider.CreateScope();
-                var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
-
-                await timeTickerManager.DeleteAsync(existingResponse.TimeoutJobId.Value);
-
-                _logger.LogInformation(
-                    "Cancelled timeout job {JobId} for user {UserId} in chat {ChatId}",
-                    existingResponse.TimeoutJobId.Value,
-                    user.Id,
-                    chatId);
-
                 // Clear the job ID since it's been cancelled
                 await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(existingResponse.Id, null, ct), cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to cancel timeout job {JobId} for user {UserId}",
-                    existingResponse.TimeoutJobId.Value,
-                    user.Id);
-                // Non-fatal - continue with acceptance flow
             }
         }
 
@@ -807,29 +727,9 @@ public class WelcomeService : IWelcomeService
         var existingResponse = await WithRepositoryAsync((repo, ct) => repo.GetByUserAndChatAsync(user.Id, chatId, ct), cancellationToken);
         if (existingResponse?.TimeoutJobId.HasValue == true)
         {
-            try
+            if (await TickerQHelper.CancelJobAsync(_serviceProvider, _logger, existingResponse.TimeoutJobId.Value))
             {
-                using var tickerScope = _serviceProvider.CreateScope();
-                var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
-
-                await timeTickerManager.DeleteAsync(existingResponse.TimeoutJobId.Value);
-
-                _logger.LogInformation(
-                    "Cancelled timeout job {JobId} for user {UserId} in chat {ChatId}",
-                    existingResponse.TimeoutJobId.Value,
-                    user.Id,
-                    chatId);
-
                 await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(existingResponse.Id, null, ct), cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to cancel timeout job {JobId} for user {UserId}",
-                    existingResponse.TimeoutJobId.Value,
-                    user.Id);
-                // Non-fatal - continue with deny flow
             }
         }
 
@@ -927,29 +827,9 @@ public class WelcomeService : IWelcomeService
         // Step 3: Cancel timeout job if it exists
         if (welcomeResponse.TimeoutJobId.HasValue)
         {
-            try
+            if (await TickerQHelper.CancelJobAsync(_serviceProvider, _logger, welcomeResponse.TimeoutJobId.Value))
             {
-                using var tickerScope = _serviceProvider.CreateScope();
-                var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
-
-                await timeTickerManager.DeleteAsync(welcomeResponse.TimeoutJobId.Value);
-
-                _logger.LogInformation(
-                    "Cancelled timeout job {JobId} for user {UserId} in chat {ChatId}",
-                    welcomeResponse.TimeoutJobId.Value,
-                    user.Id,
-                    groupChatId);
-
                 await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(welcomeResponse.Id, null, ct), cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to cancel timeout job {JobId} for user {UserId}",
-                    welcomeResponse.TimeoutJobId.Value,
-                    user.Id);
-                // Non-fatal - continue with acceptance flow
             }
         }
 
@@ -1140,42 +1020,13 @@ public class WelcomeService : IWelcomeService
                     "fallback_rules"
                 );
 
-                try
-                {
-                    _logger.LogDebug(
-                        "Scheduling delete for fallback message {MessageId} in chat {ChatId}",
-                        fallbackMessage.MessageId,
-                        chatId);
-
-                    using var tickerScope3 = _serviceProvider.CreateScope();
-                    var timeTickerManager3 = tickerScope3.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
-                    var fallbackExecutionTime = DateTimeOffset.UtcNow.AddSeconds(30);
-                    var fallbackDeleteResult = await timeTickerManager3.AddAsync(new TimeTicker
-                    {
-                        Function = "DeleteMessage",
-                        ExecutionTime = fallbackExecutionTime.UtcDateTime, // Use UtcDateTime to preserve timezone
-                        Request = TickerHelper.CreateTickerRequest(fallbackDeletePayload),
-                        Retries = 0 // Don't retry - message may have been manually deleted
-                    });
-
-                    if (!fallbackDeleteResult.IsSucceded)
-                    {
-                        throw fallbackDeleteResult.Exception ?? new InvalidOperationException("TickerQ AddAsync failed for fallback delete job");
-                    }
-
-                    _logger.LogDebug(
-                        "Successfully scheduled delete for fallback message {MessageId} (JobId: {JobId})",
-                        fallbackMessage.MessageId,
-                        fallbackDeleteResult.Result?.Id);
-                }
-                catch (Exception deleteEx)
-                {
-                    _logger.LogError(
-                        deleteEx,
-                        "Failed to schedule delete for fallback message {MessageId} in chat {ChatId}",
-                        fallbackMessage.MessageId,
-                        chatId);
-                }
+                await TickerQHelper.ScheduleJobAsync(
+                    _serviceProvider,
+                    _logger,
+                    "DeleteMessage",
+                    fallbackDeletePayload,
+                    delaySeconds: 30,
+                    retries: 0);
 
                 return (DmSent: false, DmFallback: true);
             }
@@ -1215,29 +1066,9 @@ public class WelcomeService : IWelcomeService
             // Cancel timeout job if it exists
             if (response.TimeoutJobId.HasValue)
             {
-                try
+                if (await TickerQHelper.CancelJobAsync(_serviceProvider, _logger, response.TimeoutJobId.Value))
                 {
-                    using var tickerScope = _serviceProvider.CreateScope();
-                    var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
-
-                    await timeTickerManager.DeleteAsync(response.TimeoutJobId.Value);
-
-                    _logger.LogInformation(
-                        "Cancelled timeout job {JobId} for user {UserId} who left chat {ChatId}",
-                        response.TimeoutJobId.Value,
-                        userId,
-                        chatId);
-
                     await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(response.Id, null, ct), cancellationToken);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to cancel timeout job {JobId} for user {UserId} who left",
-                        response.TimeoutJobId.Value,
-                        userId);
-                    // Non-fatal - continue with marking as left
                 }
             }
 

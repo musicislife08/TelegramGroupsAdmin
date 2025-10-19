@@ -120,10 +120,7 @@ public partial class TokenizerService : ITokenizerService
 
         foreach (var word in words)
         {
-            if (frequencies.ContainsKey(word))
-                frequencies[word]++;
-            else
-                frequencies[word] = 1;
+            frequencies[word] = frequencies.GetValueOrDefault(word, 0) + 1;
         }
 
         return frequencies;
@@ -212,10 +209,7 @@ public partial class AdvancedTokenizerService : ITokenizerService
 
         foreach (var word in words)
         {
-            if (frequencies.ContainsKey(word))
-                frequencies[word]++;
-            else
-                frequencies[word] = 1;
+            frequencies[word] = frequencies.GetValueOrDefault(word, 0) + 1;
         }
 
         return frequencies;

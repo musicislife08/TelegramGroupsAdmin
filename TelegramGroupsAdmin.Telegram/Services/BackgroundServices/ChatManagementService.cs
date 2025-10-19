@@ -82,11 +82,9 @@ public class ChatManagementService(
                 ChatIconPath: null
             );
 
-            using (var scope = serviceProvider.CreateScope())
-            {
-                var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-                await managedChatsRepository.UpsertAsync(chatRecord, cancellationToken);
-            }
+            using var scope = serviceProvider.CreateScope();
+            var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+            await managedChatsRepository.UpsertAsync(chatRecord, cancellationToken);
 
             // If this is about ANOTHER user (not the bot), update admin cache
             var affectedUser = myChatMember.NewChatMember.User;
@@ -98,8 +96,8 @@ public class ChatManagementService(
 
                 if (wasAdmin != isNowAdmin)
                 {
-                    using var scope = serviceProvider.CreateScope();
-                    var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
+                    using var adminScope = serviceProvider.CreateScope();
+                    var chatAdminsRepository = adminScope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
                     if (isNowAdmin)
                     {

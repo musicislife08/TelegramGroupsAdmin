@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -13,30 +14,15 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Enhanced OpenAI spam check with history context, JSON responses, and fallback
 /// Improved veto system based on tg-spam with additional context and reliability
 /// </summary>
-public class OpenAIContentCheck : IContentCheck
+public class OpenAIContentCheck(
+    ILogger<OpenAIContentCheck> logger,
+    IHttpClientFactory httpClientFactory,
+    IMemoryCache cache,
+    IMessageHistoryService messageHistoryService) : IContentCheck
 {
-    private readonly ILogger<OpenAIContentCheck> _logger;
-    private readonly HttpClient _httpClient;
-    private readonly IMemoryCache _cache;
-    private readonly IMessageHistoryService _messageHistoryService;
+    private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
 
     public string CheckName => "OpenAI";
-
-    public OpenAIContentCheck(
-        ILogger<OpenAIContentCheck> logger,
-        IHttpClientFactory httpClientFactory,
-        IMemoryCache cache,
-        IMessageHistoryService messageHistoryService)
-    {
-        _logger = logger;
-        _httpClient = httpClientFactory.CreateClient();
-        _cache = cache;
-        _messageHistoryService = messageHistoryService;
-
-        // Configure HTTP client for OpenAI API
-        _httpClient.Timeout = TimeSpan.FromSeconds(30);
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", "TelegramGroupsAdmin/1.0");
-    }
 
     /// <summary>
     /// Check if OpenAI check should be executed
@@ -62,6 +48,11 @@ public class OpenAIContentCheck : IContentCheck
 
         try
         {
+            // Configure HTTP client for OpenAI API
+            _httpClient.Timeout = TimeSpan.FromSeconds(30);
+            _httpClient.DefaultRequestHeaders.Clear();
+            _httpClient.DefaultRequestHeaders.Add("User-Agent", "TelegramGroupsAdmin/1.0");
+
             // Skip short messages unless specifically configured to check them
             if (!req.CheckShortMessages && req.Message.Length < req.MinMessageLength)
             {
@@ -88,16 +79,16 @@ public class OpenAIContentCheck : IContentCheck
 
             // Check cache first
             var cacheKey = $"openai_check_{GetMessageHash(req.Message)}";
-            if (_cache.TryGetValue(cacheKey, out OpenAIResponse? cachedResponse) && cachedResponse != null)
+            if (cache.TryGetValue(cacheKey, out OpenAIResponse? cachedResponse) && cachedResponse != null)
             {
-                _logger.LogDebug("OpenAI check for user {UserId}: Using cached result", req.UserId);
+                logger.LogDebug("OpenAI check for user {UserId}: Using cached result", req.UserId);
                 return CreateResponse(cachedResponse, req, fromCache: true);
             }
 
             // Check API key
             if (string.IsNullOrEmpty(req.ApiKey))
             {
-                _logger.LogWarning("OpenAI API key not configured");
+                logger.LogWarning("OpenAI API key not configured");
                 return new ContentCheckResponse
                 {
                     CheckName = CheckName,
@@ -115,7 +106,7 @@ public class OpenAIContentCheck : IContentCheck
                 PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
             });
 
-            _logger.LogDebug("OpenAI check for user {UserId}: Calling API with message length {MessageLength}",
+            logger.LogDebug("OpenAI check for user {UserId}: Calling API with message length {MessageLength}",
                 req.UserId, req.Message.Length);
 
             // Make API call
@@ -128,7 +119,7 @@ public class OpenAIContentCheck : IContentCheck
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync(req.CancellationToken);
-                _logger.LogWarning("OpenAI API returned {StatusCode}: {ErrorContent}", response.StatusCode, errorContent);
+                logger.LogWarning("OpenAI API returned {StatusCode}: {ErrorContent}", response.StatusCode, errorContent);
 
                 // Handle rate limiting specially
                 if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
@@ -161,7 +152,7 @@ public class OpenAIContentCheck : IContentCheck
 
             if (openaiResponse?.Choices?.Any() != true)
             {
-                _logger.LogWarning("Invalid OpenAI API response for user {UserId}", req.UserId);
+                logger.LogWarning("Invalid OpenAI API response for user {UserId}", req.UserId);
                 return new ContentCheckResponse
                 {
                     CheckName = CheckName,
@@ -173,13 +164,13 @@ public class OpenAIContentCheck : IContentCheck
             }
 
             // Cache the result for 1 hour
-            _cache.Set(cacheKey, openaiResponse, TimeSpan.FromHours(1));
+            cache.Set(cacheKey, openaiResponse, TimeSpan.FromHours(1));
 
             return CreateResponse(openaiResponse, req, fromCache: false);
         }
         catch (TaskCanceledException)
         {
-            _logger.LogWarning("OpenAI check for user {UserId}: Request timed out", req.UserId);
+            logger.LogWarning("OpenAI check for user {UserId}: Request timed out", req.UserId);
             return new ContentCheckResponse
             {
                 CheckName = CheckName,
@@ -191,15 +182,7 @@ public class OpenAIContentCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "OpenAI check for user {UserId}: Unexpected error", req.UserId);
-            return new ContentCheckResponse
-            {
-                CheckName = CheckName,
-                Result = CheckResultType.Clean, // Fail open on error
-                Details = "OpenAI check failed due to error",
-                Confidence = 0,
-                Error = ex
-            };
+            return ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId);
         }
     }
 
@@ -214,7 +197,7 @@ public class OpenAIContentCheck : IContentCheck
         var systemPrompt = BuildSystemPrompt(req.VetoMode, req.SystemPrompt);
 
         // Get message history for context
-        var history = await _messageHistoryService.GetRecentMessagesAsync(req.ChatId, 5, req.CancellationToken);
+        var history = await messageHistoryService.GetRecentMessagesAsync(req.ChatId, 5, req.CancellationToken);
         var contextBuilder = new System.Text.StringBuilder();
 
         if (history.Any())
@@ -420,7 +403,7 @@ public class OpenAIContentCheck : IContentCheck
                     details += " (cached)";
                 }
 
-                _logger.LogDebug("OpenAI check completed: Result={Result}, Confidence={Confidence}, Reason={Reason}, FromCache={FromCache}",
+                logger.LogDebug("OpenAI check completed: Result={Result}, Confidence={Confidence}, Reason={Reason}, FromCache={FromCache}",
                     result, confidence, jsonResponse.Reason, fromCache);
 
                 return new ContentCheckResponse
@@ -434,7 +417,7 @@ public class OpenAIContentCheck : IContentCheck
         }
         catch (JsonException ex)
         {
-            _logger.LogWarning(ex, "Failed to parse OpenAI JSON response: {Content}", content);
+            logger.LogWarning(ex, "Failed to parse OpenAI JSON response: {Content}", content);
         }
 
         // Fallback to legacy parsing if JSON fails
@@ -480,7 +463,7 @@ public class OpenAIContentCheck : IContentCheck
             details += " (cached)";
         }
 
-        _logger.LogDebug("OpenAI legacy parsing: Result={Result}, Confidence={Confidence}, Content={Content}",
+        logger.LogDebug("OpenAI legacy parsing: Result={Result}, Confidence={Confidence}, Content={Content}",
             result, confidence, content.Length > 100 ? content[..100] + "..." : content);
 
         return new ContentCheckResponse

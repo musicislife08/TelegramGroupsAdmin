@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
+using TelegramGroupsAdmin.Telegram.Helpers;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -532,54 +533,36 @@ public class ModerationActionService
             await _userActionsRepository.InsertAsync(banAction, cancellationToken);
 
             // Schedule automatic unrestriction via TickerQ background job
-            try
+            var payload = new TempbanExpiryJobPayload(
+                UserId: userId,
+                Reason: reason,
+                ExpiresAt: expiresAt
+            );
+
+            var delaySeconds = (int)(expiresAt - DateTimeOffset.UtcNow).TotalSeconds;
+            var jobId = await TickerQHelper.ScheduleJobAsync(
+                _serviceProvider,
+                _logger,
+                "TempbanExpiry",
+                payload,
+                delaySeconds: delaySeconds,
+                retries: 2,
+                retryIntervals: [60, 300]);
+
+            if (jobId.HasValue)
             {
-                var payload = new TempbanExpiryJobPayload(
-                    UserId: userId,
-                    Reason: reason,
-                    ExpiresAt: expiresAt
-                );
-
-                _logger.LogDebug(
-                    "Scheduling TempbanExpiryJob for user {UserId}, expires at {ExpiresAt}",
-                    userId,
-                    expiresAt);
-
-                // Get TickerQ manager from scope (it's scoped, ModerationActionService is scoped)
-                using var tickerScope = _serviceProvider.CreateScope();
-                var timeTickerManager = tickerScope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
-
-                var executionTime = expiresAt.UtcDateTime; // Use UtcDateTime to preserve timezone
-                var request = TickerHelper.CreateTickerRequest(payload);
-
-                var tickerResult = await timeTickerManager.AddAsync(new TimeTicker
-                {
-                    Function = "TempbanExpiry",
-                    ExecutionTime = executionTime,
-                    Request = request,
-                    Retries = 2, // Retry twice if unban fails
-                    RetryIntervals = [60, 300] // Retry after 1 min, then 5 min
-                });
-
-                if (!tickerResult.IsSucceded)
-                {
-                    throw tickerResult.Exception ?? new InvalidOperationException("TickerQ AddAsync failed without exception");
-                }
-
                 _logger.LogInformation(
                     "Successfully scheduled TempbanExpiryJob for user {UserId} (JobId: {JobId}, Expires: {ExpiresAt})",
                     userId,
-                    tickerResult.Result?.Id,
+                    jobId,
                     expiresAt);
             }
-            catch (Exception ex)
+            else
             {
                 _logger.LogError(
-                    ex,
                     "Failed to schedule TempbanExpiryJob for user {UserId}. User will need manual unbanning at {ExpiresAt}",
                     userId,
                     expiresAt);
-                // Don't throw - tempban still succeeded, just missing auto-unrestrict
             }
 
             // Send DM notification with rejoin links (both UI and bot command)

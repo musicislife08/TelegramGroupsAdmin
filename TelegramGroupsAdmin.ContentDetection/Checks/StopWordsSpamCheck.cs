@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -12,25 +13,14 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Enhanced version based on tg-spam with database storage and emoji preprocessing
 /// Engine orchestrates config loading - check manages its own DB access with guardrails
 /// </summary>
-public class StopWordsSpamCheck : IContentCheck
+public class StopWordsSpamCheck(
+    ILogger<StopWordsSpamCheck> logger,
+    IDbContextFactory<AppDbContext> dbContextFactory,
+    ITokenizerService tokenizerService) : IContentCheck
 {
     private const int MAX_STOP_WORDS = 10_000; // Guardrail: cap stop words query
 
-    private readonly ILogger<StopWordsSpamCheck> _logger;
-    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
-    private readonly ITokenizerService _tokenizerService;
-
     public string CheckName => "StopWords";
-
-    public StopWordsSpamCheck(
-        ILogger<StopWordsSpamCheck> logger,
-        IDbContextFactory<AppDbContext> dbContextFactory,
-        ITokenizerService tokenizerService)
-    {
-        _logger = logger;
-        _dbContextFactory = dbContextFactory;
-        _tokenizerService = tokenizerService;
-    }
 
     /// <summary>
     /// Check if stop words check should be executed
@@ -58,7 +48,7 @@ public class StopWordsSpamCheck : IContentCheck
         try
         {
             // Load stop words from database with guardrail
-            await using var dbContext = await _dbContextFactory.CreateDbContextAsync(req.CancellationToken);
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync(req.CancellationToken);
             var stopWords = await dbContext.StopWords
                 .AsNoTracking()
                 .Where(w => w.Enabled)
@@ -81,7 +71,7 @@ public class StopWordsSpamCheck : IContentCheck
             var foundMatches = new List<string>();
 
             // Check message text (with emoji preprocessing)
-            var processedMessage = _tokenizerService.RemoveEmojis(req.Message);
+            var processedMessage = tokenizerService.RemoveEmojis(req.Message);
             var messageMatches = CheckTextForStopWords(processedMessage, stopWordsSet, "message");
             foundMatches.AddRange(messageMatches);
 
@@ -117,15 +107,7 @@ public class StopWordsSpamCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "StopWords check failed for user {UserId}", req.UserId);
-            return new ContentCheckResponse
-            {
-                CheckName = CheckName,
-                Result = CheckResultType.Clean, // Fail open
-                Details = "StopWords check failed due to error",
-                Confidence = 0,
-                Error = ex
-            };
+            return ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId);
         }
     }
 

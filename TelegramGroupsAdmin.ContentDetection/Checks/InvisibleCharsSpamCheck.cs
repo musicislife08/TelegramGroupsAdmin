@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
@@ -8,16 +9,9 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Detects invisible/zero-width Unicode characters used by spammers to evade filters
 /// Excludes Zero Width Joiner when used in legitimate emoji sequences
 /// </summary>
-public class InvisibleCharsSpamCheck : IContentCheck
+public class InvisibleCharsSpamCheck(ILogger<InvisibleCharsSpamCheck> logger) : IContentCheck
 {
-    private readonly ILogger<InvisibleCharsSpamCheck> _logger;
-
     public string CheckName => "InvisibleChars";
-
-    public InvisibleCharsSpamCheck(ILogger<InvisibleCharsSpamCheck> logger)
-    {
-        _logger = logger;
-    }
 
     public bool ShouldExecute(ContentCheckRequest request)
     {
@@ -40,7 +34,7 @@ public class InvisibleCharsSpamCheck : IContentCheck
 
             if (count > 0)
             {
-                _logger.LogDebug("InvisibleChars check for user {UserId}: Found {Count} invisible characters",
+                logger.LogDebug("InvisibleChars check for user {UserId}: Found {Count} invisible characters",
                     req.UserId, count);
 
                 return Task.FromResult(new ContentCheckResponse
@@ -65,15 +59,7 @@ public class InvisibleCharsSpamCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "InvisibleChars check failed for user {UserId}", req.UserId);
-            return Task.FromResult(new ContentCheckResponse
-            {
-                CheckName = CheckName,
-                Result = CheckResultType.Clean,
-                Details = "Check failed due to error",
-                Confidence = 0,
-                Error = ex
-            });
+            return Task.FromResult(ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId));
         }
     }
 

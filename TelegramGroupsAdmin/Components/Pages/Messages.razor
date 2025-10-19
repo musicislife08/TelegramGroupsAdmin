@@ -292,26 +292,33 @@
         // CRITICAL: Must use InvokeAsync because HistoryBot runs on background thread
         await InvokeAsync(async () =>
         {
-            // Add to our list
-            _allMessages.Insert(0, message); // Add at beginning (most recent first)
-
-            // Load spam check for this new message if it exists
-            var messageIds = new[] { message.MessageId };
-            var newSpamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
-            foreach (var kvp in newSpamChecks)
+            try
             {
-                _spamChecks[kvp.Key] = kvp.Value;
-            }
+                // Add to our list
+                _allMessages.Insert(0, message); // Add at beginning (most recent first)
 
-            // Load edit count for this message
-            var newEditCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
-            foreach (var kvp in newEditCounts)
+                // Load spam check for this new message if it exists
+                var messageIds = new[] { message.MessageId };
+                var newSpamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
+                foreach (var kvp in newSpamChecks)
+                {
+                    _spamChecks[kvp.Key] = kvp.Value;
+                }
+
+                // Load edit count for this message
+                var newEditCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+                foreach (var kvp in newEditCounts)
+                {
+                    _editCounts[kvp.Key] = kvp.Value;
+                }
+
+                // Reapply filters
+                ApplyFilters();
+            }
+            catch (Exception ex)
             {
-                _editCounts[kvp.Key] = kvp.Value;
+                Logger.LogError(ex, "Failed to handle new message {MessageId} from real-time update", message.MessageId);
             }
-
-            // Reapply filters
-            ApplyFilters();
         });
     }
 

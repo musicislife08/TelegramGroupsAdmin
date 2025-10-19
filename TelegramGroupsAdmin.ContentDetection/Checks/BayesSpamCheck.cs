@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -11,28 +12,18 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Enhanced Naive Bayes spam classifier with database training and continuous learning
 /// Based on tg-spam's Bayes implementation with improved self-learning capabilities
 /// </summary>
-public class BayesSpamCheck : IContentCheck
+public class BayesSpamCheck(
+    ILogger<BayesSpamCheck> logger,
+    IDbContextFactory<AppDbContext> dbContextFactory,
+    ITokenizerService tokenizerService) : IContentCheck
 {
     private const int MAX_TRAINING_SAMPLES = 10_000;
 
-    private readonly ILogger<BayesSpamCheck> _logger;
-    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
-    private readonly ITokenizerService _tokenizerService;
     private BayesClassifier? _classifier;
     private DateTime _lastTrainingUpdate = DateTime.MinValue;
     private readonly TimeSpan _retrainingInterval = TimeSpan.FromHours(1);
 
     public string CheckName => "Bayes";
-
-    public BayesSpamCheck(
-        ILogger<BayesSpamCheck> logger,
-        IDbContextFactory<AppDbContext> dbContextFactory,
-        ITokenizerService tokenizerService)
-    {
-        _logger = logger;
-        _dbContextFactory = dbContextFactory;
-        _tokenizerService = tokenizerService;
-    }
 
     /// <summary>
     /// Check if Bayes check should be executed
@@ -86,7 +77,7 @@ public class BayesSpamCheck : IContentCheck
             }
 
             // Preprocess message using shared tokenizer
-            var processedMessage = _tokenizerService.RemoveEmojis(req.Message);
+            var processedMessage = tokenizerService.RemoveEmojis(req.Message);
             var (spamProbability, details, certainty) = _classifier.ClassifyMessage(processedMessage);
 
             var spamProbabilityPercent = spamProbability * 100;
@@ -110,15 +101,7 @@ public class BayesSpamCheck : IContentCheck
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Bayes check failed for user {UserId}", req.UserId);
-            return new ContentCheckResponse
-            {
-                CheckName = CheckName,
-                Result = CheckResultType.Clean, // Fail open
-                Details = "Bayes check failed due to error",
-                Confidence = 0,
-                Error = ex
-            };
+            return ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId);
         }
     }
 
@@ -138,7 +121,7 @@ public class BayesSpamCheck : IContentCheck
         {
             // Load training data from detection_results (Phase 2.2: normalized architecture)
             // Training data = detection_results WHERE used_for_training = true
-            await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
             // Query detection_results + JOIN messages to get message text
             // Separate manual vs auto based on detection_source
@@ -163,12 +146,12 @@ public class BayesSpamCheck : IContentCheck
 
             if (!trainingSet.Any())
             {
-                _logger.LogWarning("No training samples available for Bayes classifier (detection_results.used_for_training = true)");
+                logger.LogWarning("No training samples available for Bayes classifier (detection_results.used_for_training = true)");
                 return;
             }
 
             // Create new classifier and train with bounded sample set
-            _classifier = new BayesClassifier(_tokenizerService);
+            _classifier = new BayesClassifier(tokenizerService);
 
             var spamCount = 0;
             var hamCount = 0;
@@ -183,13 +166,13 @@ public class BayesSpamCheck : IContentCheck
             }
 
             _lastTrainingUpdate = DateTime.UtcNow;
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Bayes classifier trained with {Total} samples ({Manual} manual, {Auto} auto, {Spam} spam, {Ham} ham)",
                 trainingSet.Count, manualSamples.Count, autoSamples.Count, spamCount, hamCount);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to retrain Bayes classifier");
+            logger.LogError(ex, "Failed to retrain Bayes classifier");
         }
     }
 
