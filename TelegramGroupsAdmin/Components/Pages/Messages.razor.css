@@ -1,0 +1,182 @@
+/* Telegram Desktop Clone Layout */
+
+.telegram-layout {
+    display: flex;
+    height: calc(100vh - 64px); /* Account for app header */
+    background: #0e1621;
+    overflow: hidden;
+}
+
+/* Left Sidebar - Chat List */
+.telegram-sidebar {
+    width: 380px;
+    flex-shrink: 0;
+    background: #17212b;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.sidebar-header {
+    padding: 12px 16px;
+    background: #17212b;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+}
+
+.sidebar-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 8px;
+}
+
+.sidebar-search {
+    width: 100%;
+    padding: 8px 12px;
+    background: #0e1621;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    color: white;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.sidebar-search:focus {
+    border-color: #64b5f6;
+}
+
+.sidebar-search::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.chat-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Main Chat View */
+.telegram-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #0e1621;
+    overflow: hidden;
+}
+
+/* Empty State (no chat selected) */
+.empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.4);
+    gap: 12px;
+}
+
+.empty-state-icon {
+    width: 120px;
+    height: 120px;
+    opacity: 0.3;
+}
+
+.empty-state-text {
+    font-size: 18px;
+    font-weight: 500;
+}
+
+.empty-state-subtext {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .telegram-layout {
+        height: calc(100vh - 56px); /* Smaller header on mobile */
+    }
+
+    .telegram-sidebar {
+        width: 100%;
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 10;
+        transition: transform 0.3s ease;
+    }
+
+    .telegram-sidebar.has-selection {
+        transform: translateX(-100%);
+    }
+
+    .telegram-main {
+        width: 100%;
+        position: absolute;
+        left: 0;
+        top: 0;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+    }
+
+    .telegram-main.active {
+        transform: translateX(0);
+    }
+}
+
+/* Scrollbar Styling (Telegram-like) */
+.chat-list::-webkit-scrollbar,
+.messages-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-list::-webkit-scrollbar-track,
+.messages-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.chat-list::-webkit-scrollbar-thumb,
+.messages-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.chat-list::-webkit-scrollbar-thumb:hover,
+.messages-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Messages Container - newest at bottom like Telegram */
+.messages-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 16px;
+    background: #0e1621;
+    display: flex;
+    flex-direction: column-reverse; /* Reverse so newest messages appear at bottom */
+}
+
+/* Load More Container */
+.load-more-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: #0e1621;
+}
+
+.loading-text {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+}
+
+/* Scroll Sentinel - invisible element that triggers loading when visible */
+.scroll-sentinel {
+    height: 20px;
+    width: 100%;
+}

@@ -113,7 +113,7 @@ public class BotProtectionService : IBotProtectionService
             using var scope = _scopeFactory.CreateScope();
 
             // First, upsert bot to telegram_users table to capture username/name before banning
-            var telegramUserRepo = scope.ServiceProvider.GetRequiredService<TelegramUserRepository>();
+            var telegramUserRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
             var now = DateTimeOffset.UtcNow;
             var telegramUser = new TelegramUser(
                 TelegramUserId: bot.Id,

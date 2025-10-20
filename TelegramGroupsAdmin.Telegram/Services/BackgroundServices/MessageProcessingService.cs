@@ -325,11 +325,11 @@ public partial class MessageProcessingService(
 
             // Save message to database using a scoped repository
             using var messageScope = _scopeFactory.CreateScope();
-            var repository = messageScope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
+            var repository = messageScope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
             await repository.InsertMessageAsync(messageRecord, cancellationToken);
 
             // Upsert user into telegram_users table (centralized user tracking)
-            var telegramUserRepo = messageScope.ServiceProvider.GetRequiredService<TelegramUserRepository>();
+            var telegramUserRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
             var telegramUser = new TelegramGroupsAdmin.Telegram.Models.TelegramUser(
                 TelegramUserId: message.From!.Id,
                 Username: message.From.Username,
@@ -457,7 +457,7 @@ public partial class MessageProcessingService(
         try
         {
             using var scope = _scopeFactory.CreateScope();
-            var repository = scope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
+            var repository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
 
             // Get the old message from the database
             var oldMessage = await repository.GetMessageAsync(editedMessage.MessageId, cancellationToken);

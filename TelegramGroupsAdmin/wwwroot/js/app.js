@@ -261,3 +261,193 @@ window.scrollToMessage = (messageId) => {
         element.classList.remove('message-highlight');
     }, 2000);
 }
+
+// Insert text at cursor position in a specific input/textarea element
+// Used by WelcomeSystemConfig for variable chip insertion
+// Takes elementId to avoid focus issues when clicking buttons
+window.insertTextAtCursor = (text, elementId) => {
+    // If elementId is provided, use it; otherwise fall back to active element
+    let targetElement;
+
+    if (elementId) {
+        targetElement = document.getElementById(elementId);
+        if (!targetElement) {
+            console.warn(`Element with ID '${elementId}' not found`);
+            return;
+        }
+    } else {
+        targetElement = document.activeElement;
+        if (!targetElement || (targetElement.tagName !== 'INPUT' && targetElement.tagName !== 'TEXTAREA')) {
+            console.warn('No input or textarea is currently focused');
+            return;
+        }
+    }
+
+    // For MudBlazor TextFields, the actual input/textarea is inside a div
+    // Try to find it if we got a container element
+    if (targetElement.tagName !== 'INPUT' && targetElement.tagName !== 'TEXTAREA') {
+        const input = targetElement.querySelector('input, textarea');
+        if (input) {
+            targetElement = input;
+        } else {
+            console.warn('Could not find input or textarea element');
+            return;
+        }
+    }
+
+    const start = targetElement.selectionStart ?? targetElement.value?.length ?? 0;
+    const end = targetElement.selectionEnd ?? start;
+    const value = targetElement.value ?? '';
+
+    // Insert text at cursor position
+    const newValue = value.substring(0, start) + text + value.substring(end);
+    targetElement.value = newValue;
+
+    // Move cursor to end of inserted text
+    const newCursorPos = start + text.length;
+    targetElement.setSelectionRange(newCursorPos, newCursorPos);
+
+    // Trigger input event to update Blazor binding
+    targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+
+    // Keep focus on the element
+    targetElement.focus();
+};
+
+// Capture scroll state before DOM updates (for preserving position when new messages arrive)
+// TODO: Remove verbose console.log statements after polish phase - keep console.warn for errors only
+window.captureScrollState = (container) => {
+    if (!container) {
+        console.warn('[ScrollPreservation] Container element not found');
+        return { scrollTop: 0, scrollHeight: 0, clientHeight: 0 };
+    }
+
+    const state = {
+        scrollTop: container.scrollTop,
+        scrollHeight: container.scrollHeight,
+        clientHeight: container.clientHeight
+    };
+
+    // TODO: Remove this debug logging after verification in production
+    console.log('[ScrollPreservation] Captured state:', {
+        ...state,
+        scrollPercentage: ((state.scrollTop / (state.scrollHeight - state.clientHeight)) * 100).toFixed(2) + '%',
+        maxScroll: state.scrollHeight - state.clientHeight
+    });
+
+    return state;
+};
+
+// Restore scroll position after DOM updates (compensates for inserted content)
+window.restoreScrollState = (container, previousState) => {
+    if (!container || !previousState) {
+        console.warn('[ScrollPreservation] Container or previous state not found');
+        return;
+    }
+
+    // Calculate how much the content height changed
+    const newScrollHeight = container.scrollHeight;
+    const heightDifference = newScrollHeight - previousState.scrollHeight;
+
+    if (heightDifference <= 0) {
+        console.log('[ScrollPreservation] No height change, skipping adjustment');
+        return;
+    }
+
+    // For flex-direction: column-reverse:
+    // - scrollTop = 0 means scrolled to BOTTOM (newest messages visible)
+    // - scrollTop > 0 OR scrollTop < 0 means scrolled UP (viewing older messages)
+    // - CRITICAL: Some browsers use NEGATIVE scrollTop for column-reverse!
+    // - New content appears at visual BOTTOM when inserted at DOM index 0
+    // - When content grows, browser does NOT auto-adjust scrollTop
+
+    // Calculate distance from bottom (works for both positive and negative scrollTop)
+    // At bottom: scrollTop ≈ 0 (or very close to maxScroll in some browsers)
+    const maxScroll = previousState.scrollHeight - previousState.clientHeight;
+    const distanceFromBottom = Math.abs(previousState.scrollTop);
+    const distanceFromMax = Math.abs(previousState.scrollTop - maxScroll);
+
+    // User is at bottom if scrollTop is near 0 OR near maxScroll (browser-dependent)
+    const wasAtBottom = distanceFromBottom <= 5 || distanceFromMax <= 5;
+
+    // TODO: Remove this debug logging after verification in production
+    console.log('[ScrollPreservation] Bottom detection:', {
+        scrollTop: previousState.scrollTop,
+        maxScroll: maxScroll,
+        distanceFromBottom: distanceFromBottom,
+        distanceFromMax: distanceFromMax,
+        wasAtBottom: wasAtBottom
+    });
+
+    if (wasAtBottom) {
+        // User was watching conversation - let new message appear naturally
+        // Browser will show it at bottom (scrollTop stays near 0)
+        console.log('[ScrollPreservation] User at bottom, new message visible naturally');
+    } else {
+        // User was reading history - browser doesn't compensate in column-reverse
+        // We need to adjust scrollTop to maintain visual position
+        // For NEGATIVE scrollTop (some browsers): add height difference (becomes more negative)
+        // For POSITIVE scrollTop (other browsers): subtract height difference
+
+        // TODO: Remove this debug logging after verification in production
+        console.log('[ScrollPreservation] BEFORE adjustment:', {
+            currentScrollTop: container.scrollTop,
+            previousScrollTop: previousState.scrollTop,
+            previousScrollHeight: previousState.scrollHeight,
+            currentScrollHeight: container.scrollHeight,
+            heightDifference: heightDifference,
+            scrollTopDrift: container.scrollTop - previousState.scrollTop
+        });
+
+        // Adjust based on scrollTop polarity
+        let newScrollTop;
+        if (previousState.scrollTop < 0) {
+            // Negative scrollTop browser - ADD height to make MORE negative
+            newScrollTop = previousState.scrollTop - heightDifference;
+        } else {
+            // Positive scrollTop browser - SUBTRACT height
+            newScrollTop = Math.max(0, previousState.scrollTop - heightDifference);
+        }
+
+        // Set scroll position instantly (no smooth scrolling to avoid visual blip)
+        container.style.scrollBehavior = 'auto';
+        container.scrollTop = newScrollTop;
+
+        // Restore smooth scrolling for user interactions
+        setTimeout(() => {
+            container.style.scrollBehavior = '';
+        }, 0);
+
+        // TODO: Remove this debug logging after verification in production
+        console.log('[ScrollPreservation] AFTER adjustment:', {
+            oldScrollTop: previousState.scrollTop,
+            newScrollTop: newScrollTop,
+            actualScrollTop: container.scrollTop,
+            heightDifference: heightDifference,
+            adjustment: newScrollTop - previousState.scrollTop
+        });
+    }
+};
+
+// Restore scroll position after render cycle completes
+// Uses requestAnimationFrame to ensure browser has finished layout
+let scrollRestorationPending = false;
+
+window.restoreScrollStateAfterRender = (container, previousState) => {
+    // Prevent multiple simultaneous restorations
+    if (scrollRestorationPending) {
+        // TODO: Remove this debug logging after verification in production
+        console.log('[ScrollPreservation] Restoration already pending, skipping duplicate call');
+        return;
+    }
+
+    scrollRestorationPending = true;
+
+    // Use double requestAnimationFrame to ensure render + layout are complete
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            window.restoreScrollState(container, previousState);
+            scrollRestorationPending = false;
+        });
+    });
+};

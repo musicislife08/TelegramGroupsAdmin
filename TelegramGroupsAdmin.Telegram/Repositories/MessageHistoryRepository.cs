@@ -6,7 +6,7 @@ using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
-public class MessageHistoryRepository
+public class MessageHistoryRepository : IMessageHistoryRepository
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<MessageHistoryRepository> _logger;
@@ -208,11 +208,10 @@ public class MessageHistoryRepository
             replyToText: x.ReplyToText)).ToList();
     }
 
-    public async Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10, CancellationToken cancellationToken = default)
+    public async Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10, DateTimeOffset? beforeTimestamp = null, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var results = await (
-            from m in context.Messages
+        var query = from m in context.Messages
             where m.ChatId == chatId
             join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
             from chat in chatGroup.DefaultIfEmpty()
@@ -222,7 +221,6 @@ public class MessageHistoryRepository
             from parentMsg in parentGroup.DefaultIfEmpty()
             join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
             from parentUserInfo in parentUserGroup.DefaultIfEmpty()
-            orderby m.Timestamp descending
             select new
             {
                 Message = m,
@@ -233,11 +231,19 @@ public class MessageHistoryRepository
                 UserPhotoPath = user != null ? user.UserPhotoPath : null,
                 ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
                 ReplyToText = parentMsg != null ? parentMsg.MessageText : null
-            }
-        )
-        .AsNoTracking()
-        .Take(limit)
-        .ToListAsync(cancellationToken);
+            };
+
+        // Apply timestamp filter for pagination (get messages older than the specified timestamp)
+        if (beforeTimestamp.HasValue)
+        {
+            query = query.Where(x => x.Message.Timestamp < beforeTimestamp.Value);
+        }
+
+        var results = await query
+            .OrderByDescending(x => x.Message.Timestamp)
+            .AsNoTracking()
+            .Take(limit)
+            .ToListAsync(cancellationToken);
 
         return results.Select(x => x.Message.ToModel(
             chatName: x.ChatName,

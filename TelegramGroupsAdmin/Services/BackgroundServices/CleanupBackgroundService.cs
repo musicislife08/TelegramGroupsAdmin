@@ -32,7 +32,7 @@ public class CleanupBackgroundService : BackgroundService
 
                 // Create a scope to resolve the repository
                 await using var scope = _scopeFactory.CreateAsyncScope();
-                var repository = scope.ServiceProvider.GetRequiredService<MessageHistoryRepository>();
+                var repository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
 
                 var (deleted, imagePaths) = await repository.CleanupExpiredAsync();
 

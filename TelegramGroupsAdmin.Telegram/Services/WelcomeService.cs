@@ -189,7 +189,7 @@ public class WelcomeService : IWelcomeService
             // Phase 4.10: Check for impersonation (name + photo similarity vs admins)
             using var impersonationScope = _serviceProvider.CreateScope();
             var impersonationService = impersonationScope.ServiceProvider.GetRequiredService<IImpersonationDetectionService>();
-            var telegramUserRepo = impersonationScope.ServiceProvider.GetRequiredService<TelegramUserRepository>();
+            var telegramUserRepo = impersonationScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
             // Check if user should be screened for impersonation
             var shouldCheck = await impersonationService.ShouldCheckUserAsync(user.Id, chatMemberUpdate.Chat.Id);
@@ -465,17 +465,31 @@ public class WelcomeService : IWelcomeService
         CancellationToken cancellationToken = default)
     {
         var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
-        var messageText = config.ChatWelcomeTemplate.Replace("{username}", username);
 
-        // Add rules to chat message ONLY in ChatAcceptDeny mode
-        if (config.Mode == WelcomeMode.ChatAcceptDeny)
+        // In new structure:
+        // - Chat mode: Use MainWelcomeMessage (complete message)
+        // - DM mode: Use DmChatTeaserMessage (short prompt to check DM)
+        string messageText;
+
+        // Get chat name for variable substitution
+        var chatInfo = await botClient.GetChat(chatId, cancellationToken);
+        var chatName = chatInfo.Title ?? "this chat";
+
+        if (config.Mode == WelcomeMode.DmWelcome)
         {
-            messageText += $$"""
-
-
-                📜 **Rules:**
-                {{config.RulesText}}
-                """;
+            // DM mode: Use teaser message
+            messageText = config.DmChatTeaserMessage
+                .Replace("{username}", username)
+                .Replace("{chat_name}", chatName)
+                .Replace("{timeout}", config.TimeoutSeconds.ToString());
+        }
+        else
+        {
+            // Chat mode: Use main welcome message
+            messageText = config.MainWelcomeMessage
+                .Replace("{username}", username)
+                .Replace("{chat_name}", chatName)
+                .Replace("{timeout}", config.TimeoutSeconds.ToString());
         }
 
         // Build keyboard based on welcome mode
@@ -491,7 +505,7 @@ public class WelcomeService : IWelcomeService
             {
                 new[]
                 {
-                    InlineKeyboardButton.WithUrl("📖 Read Rules (Opens Bot Chat)", deepLink)
+                    InlineKeyboardButton.WithUrl(config.DmButtonText, deepLink)
                 }
             });
 
@@ -974,16 +988,16 @@ public class WelcomeService : IWelcomeService
         CancellationToken cancellationToken = default)
     {
         var chatName = await GetChatNameAsync(botClient, chatId, cancellationToken);
+        var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
 
-        // Send rules without button instructions (user already accepted in group)
-        // Just show the rules text, no action needed
-        var dmText = $$"""
-            Welcome to {{chatName}}! Here are our rules:
+        // Send main welcome message as confirmation (user already accepted in group)
+        var dmText = config.MainWelcomeMessage
+            .Replace("{username}", username)
+            .Replace("{chat_name}", chatName)
+            .Replace("{timeout}", config.TimeoutSeconds.ToString());
 
-            {{config.RulesText}}
-
-            ✅ You're all set! You can now participate in the chat.
-            """;
+        // Add confirmation footer
+        dmText += "\n\n✅ You're all set! You can now participate in the chat.";
 
         try
         {
@@ -1007,12 +1021,15 @@ public class WelcomeService : IWelcomeService
                 "Failed to send rules DM to user {UserId}, falling back to chat message",
                 user.Id);
 
-            // Fallback: Send rules in chat with auto-delete after 30 seconds
+            // Fallback: Send main welcome message in chat with auto-delete after 30 seconds
             try
             {
-                var fallbackText = config.ChatFallbackTemplate.Replace("{rules_text}", config.RulesText);
-                var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
-                var messageText = $"{username}, {fallbackText}";
+                var chatInfo = await botClient.GetChat(chatId, cancellationToken);
+
+                var messageText = config.MainWelcomeMessage
+                    .Replace("{username}", username)
+                    .Replace("{chat_name}", chatInfo.Title ?? "this chat")
+                    .Replace("{timeout}", config.TimeoutSeconds.ToString());
 
                 var fallbackMessage = await botClient.SendMessage(
                     chatId: chatId,

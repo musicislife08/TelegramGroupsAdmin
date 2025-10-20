@@ -36,6 +36,8 @@
 - **Email Verification**: 24h token (32 random bytes), login blocked until verified (except first Owner)
 - **TOTP Security**: IntermediateAuthService (5min tokens after password), 15min expiry for abandoned setups
 - **TickerQ Jobs**: All jobs re-throw exceptions for proper retry/logging. WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob. Jobs in main app for source generator, payloads in Abstractions.
+- **Infinite Scroll**: IntersectionObserver on scroll sentinel, timestamp-based pagination (`beforeTimestamp`), MudVirtualize, loads 50 messages/page
+- **Scroll Preservation**: Handles negative scrollTop (Chrome/Edge flex-reverse), captures state before DOM update, double requestAnimationFrame for layout completion, polarity-aware adjustment formula, 5px bottom threshold. TODO: Remove debug console.logs after production verification (app.js:318-440)
 
 ## API Endpoints
 - GET /health

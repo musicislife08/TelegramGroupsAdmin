@@ -5,8 +5,11 @@
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Components.Shared
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
-@inject MessageHistoryRepository MessageRepository
+@inject IMessageHistoryRepository MessageRepository
+@inject IManagedChatsRepository ChatsRepository
 @inject IMessageExportService ExportService
 @inject IJSRuntime JS
 @inject IDialogService DialogService
@@ -22,142 +25,155 @@
 
 <PageTitle>Messages - TelegramGroupsAdmin</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h4" Class="mb-4">Message History</MudText>
+@* Telegram Desktop Clone Layout *@
+<div class="telegram-layout">
+    @* Left Sidebar - Chat List *@
+    <div class="telegram-sidebar @(_selectedChatId.HasValue ? "has-selection" : "")">
+        <div class="sidebar-header">
+            <div class="sidebar-title">Chats</div>
+            <input type="text"
+                   class="sidebar-search"
+                   placeholder="Search chats..."
+                   @bind="_chatSearchText"
+                   @bind:event="oninput" />
+        </div>
 
-    @* Filters *@
-    <MessageFilters Filters="_filterState" OnFiltersChanged="ApplyFilters" />
+        <ChatList Chats="_filteredChats"
+                  SelectedChatId="_selectedChatId"
+                  MessageCounts="_chatMessageCounts"
+                  UnreadCounts="_chatUnreadCounts"
+                  LastMessagePreviews="_lastMessagePreviews"
+                  OnChatSelected="HandleChatSelected" />
+    </div>
 
-    @* Actions Bar *@
-    <MudPaper Class="pa-3 mb-4" Elevation="1">
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-            <MudStack Row="true" Spacing="2">
-                <MudButton Variant="Variant.Filled"
-                           Color="Color.Primary"
-                           StartIcon="@Icons.Material.Filled.Refresh"
-                           OnClick="LoadMessagesAsync"
-                           Disabled="_loading">
-                    Refresh
-                </MudButton>
-                @* Export buttons - Admin+ only (permission level >= 1) *@
-                @if (_userPermissionLevel >= 1)
-                {
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Secondary"
-                               StartIcon="@Icons.Material.Filled.Download"
-                               OnClick="ExportToCsvAsync"
-                               Disabled="_loading || _filteredMessages.Count == 0">
-                        Export CSV
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Secondary"
-                               StartIcon="@Icons.Material.Filled.DataObject"
-                               OnClick="ExportToJsonAsync"
-                               Disabled="_loading || _filteredMessages.Count == 0">
-                        Export JSON
-                    </MudButton>
-                }
-            </MudStack>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                Last updated: @_lastUpdate.ToString("HH:mm:ss")
-            </MudText>
-        </MudStack>
-    </MudPaper>
-
-    @* Loading State *@
-    @if (_loading)
-    {
-        <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
-    }
-
-    @* Message List *@
-    @if (_filteredMessages.Any())
-    {
-        <MudVirtualize Items="_filteredMessages" Context="message" OverscanCount="10">
-            <MessageBubbleTelegram Message="message"
-                                   SpamCheck="@GetSpamCheck(message.MessageId)"
-                                   EditCount="@GetEditCount(message.MessageId)"
-                                   ShowSpamActions="@(_userPermissionLevel >= 1)"
-                                   DetectionHistory="@GetDetectionHistory(message.MessageId)"
-                                   IsCurrentUser="@IsCurrentUserMessage(message.UserId)"
-                                   OnImageClick="HandleImageClick"
-                                   OnViewEdits="HandleViewEdits"
-                                   OnMarkAsSpam="HandleMarkAsSpam"
-                                   OnMarkAsHam="HandleMarkAsHam"
-                                   OnViewDetections="HandleViewDetections"
-                                   OnFilterByUser="HandleFilterByUser"
-                                   OnFilterByChat="HandleFilterByChat"
-                                   OnDeleteMessage="HandleDeleteMessage"
-                                   OnTempBan="HandleTempBan"
-                                   OnReplyClick="HandleReplyClick" />
-        </MudVirtualize>
-
-        @* Load More Button *@
-        @if (_hasMore && !HasActiveFilters())
+    @* Main Chat View *@
+    <div class="telegram-main @(_selectedChatId.HasValue ? "active" : "")">
+        @if (_selectedChatId.HasValue)
         {
-            <MudPaper Class="pa-4 mt-4" Elevation="0">
-                <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Primary"
-                               OnClick="LoadNextPageAsync"
-                               Disabled="_loadingMore"
-                               StartIcon="@Icons.Material.Filled.ExpandMore"
-                               FullWidth="true">
-                        @if (_loadingMore)
-                        {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                            <text>Loading...</text>
-                        }
-                        else
-                        {
-                            <text>Load More Messages</text>
-                        }
-                    </MudButton>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        Showing @_allMessages.Count messages
-                    </MudText>
-                </MudStack>
-            </MudPaper>
-        }
-    }
-    else if (!_loading)
-    {
-        <MudPaper Class="pa-8" Elevation="0">
-            <MudStack AlignItems="AlignItems.Center" Spacing="3">
-                <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Secondary" />
-                <MudText Typo="Typo.h6" Color="Color.Secondary">No messages found</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    @if (HasActiveFilters())
+            var selectedChat = _managedChats.FirstOrDefault(c => c.ChatId == _selectedChatId.Value);
+            if (selectedChat != null)
+            {
+                @* Chat Header *@
+                <ChatHeader ChatName="@selectedChat.ChatName"
+                            ChatIconPath="@selectedChat.ChatIconPath"
+                            ChatDescription="@GetChatDescription(selectedChat)"
+                            ShowBackButton="true"
+                            ShowMenuButton="false"
+                            OnBackClicked="HandleBackToChats" />
+
+                @* Messages Container *@
+                <div class="messages-container" @ref="_messagesContainer">
+                    @if (_loading)
                     {
-                        <text>Try adjusting your filters or refresh the data.</text>
+                        <div class="empty-state">
+                            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                        </div>
+                    }
+                    else if (_filteredMessages.Any())
+                    {
+                        <MudVirtualize Items="_filteredMessages" Context="message" OverscanCount="10">
+                            <MessageBubbleTelegram Message="message"
+                                                   SpamCheck="@GetSpamCheck(message.MessageId)"
+                                                   EditCount="@GetEditCount(message.MessageId)"
+                                                   ShowSpamActions="@(_userPermissionLevel >= 1)"
+                                                   DetectionHistory="@GetDetectionHistory(message.MessageId)"
+                                                   IsCurrentUser="@IsCurrentUserMessage(message.UserId)"
+                                                   OnImageClick="HandleImageClick"
+                                                   OnViewEdits="HandleViewEdits"
+                                                   OnMarkAsSpam="HandleMarkAsSpam"
+                                                   OnMarkAsHam="HandleMarkAsHam"
+                                                   OnViewDetections="HandleViewDetections"
+                                                   OnFilterByUser="HandleFilterByUser"
+                                                   OnFilterByChat="HandleFilterByChat"
+                                                   OnDeleteMessage="HandleDeleteMessage"
+                                                   OnTempBan="HandleTempBan"
+                                                   OnReplyClick="HandleReplyClick" />
+                        </MudVirtualize>
+
+                        @* Scroll Sentinel - triggers loading when scrolled near top (= bottom due to flex-reverse) *@
+                        @if (_hasMore)
+                        {
+                            <div class="scroll-sentinel" @ref="_scrollSentinel">
+                                @if (_loadingMore)
+                                {
+                                    <div class="load-more-container">
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                        <span class="loading-text">Loading older messages...</span>
+                                    </div>
+                                }
+                            </div>
+                        }
                     }
                     else
                     {
-                        <text>HistoryBot hasn't cached any messages yet.</text>
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <svg viewBox="0 0 24 24">
+                                    <path fill="currentColor" d="M20,2H4A2,2 0 0,0 2,4V22L6,18H20A2,2 0 0,0 22,16V4A2,2 0 0,0 20,2M6,9H18V11H6M14,14H6V12H14M18,8H6V6H18" />
+                                </svg>
+                            </div>
+                            <div class="empty-state-text">No messages yet</div>
+                            <div class="empty-state-subtext">Messages will appear here as they are received</div>
+                        </div>
                     }
-                </MudText>
-            </MudStack>
-        </MudPaper>
-    }
-</MudContainer>
+                </div>
+
+                @* Message Input Stub *@
+                <ChatInput />
+            }
+        }
+        else
+        {
+            @* Empty State - No Chat Selected *@
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <svg viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M20,2H4A2,2 0 0,0 2,4V22L6,18H20A2,2 0 0,0 22,16V4A2,2 0 0,0 20,2M6,9H18V11H6M14,14H6V12H14M18,8H6V6H18" />
+                    </svg>
+                </div>
+                <div class="empty-state-text">Select a chat to view messages</div>
+                <div class="empty-state-subtext">Choose a chat from the list to start viewing its message history</div>
+            </div>
+        }
+    </div>
+</div>
 
 @code {
+    // Chat state
+    private List<ManagedChatRecord> _managedChats = new();
+    private List<ManagedChatRecord> _filteredChats = new();
+    private string _chatSearchText = "";
+    private long? _selectedChatId = null;
+    private Dictionary<long, int> _chatMessageCounts = new();
+    private Dictionary<long, int> _chatUnreadCounts = new();
+    private Dictionary<long, string> _lastMessagePreviews = new();
+
+    // Message state (per-chat)
     private List<MessageRecord> _allMessages = new();
     private List<MessageRecord> _filteredMessages = new();
     private Dictionary<long, SpamCheckRecord> _spamChecks = new();
     private Dictionary<long, int> _editCounts = new();
     private Dictionary<long, List<DetectionResultRecord>> _detectionHistory = new();
-    private MessageFilterState _filterState = new();
-    private bool _loading = true;
+    private bool _loading = false;
     private bool _loadingMore = false;
     private bool _hasMore = true;
     private DateTime _lastUpdate = DateTime.Now;
+
+    // User state
     private int _userPermissionLevel = 0; // Default to ReadOnly
     private HashSet<long> _userTelegramIds = new(); // Current user's linked Telegram IDs
+
+    // Legacy filter state (not shown in UI for now, but kept for compatibility)
+    private MessageFilterState _filterState = new();
     private long? _highlightMessageId = null; // Message to scroll to and highlight
     private bool _firstRenderComplete = false; // Track if we've done the initial auto-scroll
     private long? _filterByUserId = null; // Track userId from query string for name lookup after load
     private const int PageSize = 50;
+
+    // Infinite scroll state
+    private ElementReference _messagesContainer;
+    private ElementReference _scrollSentinel;
+    private IJSObjectReference? _infiniteScrollModule;
 
     protected override async Task OnInitializedAsync()
     {
@@ -193,20 +209,46 @@
         // Subscribe to real-time updates
         MessageHistoryService.OnNewMessage += HandleNewMessage;
 
-        // Parse query string parameters and apply filters BEFORE loading messages
+        // Load managed chats
+        await LoadChatsAsync();
+
+        // Parse query string parameters to select chat if specified
         await ApplyQueryStringFiltersAsync();
 
-        await LoadMessagesAsync();
+        // If a chat was auto-selected from query string, load its messages
+        if (_selectedChatId.HasValue)
+        {
+            await LoadChatMessagesAsync(_selectedChatId.Value);
+        }
     }
 
     public void Dispose()
     {
         // Unsubscribe from events
         MessageHistoryService.OnNewMessage -= HandleNewMessage;
+
+        // Dispose JavaScript module
+        _infiniteScrollModule?.DisposeAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Initialize IntersectionObserver for infinite scroll
+        if (firstRender && _selectedChatId.HasValue && _hasMore)
+        {
+            try
+            {
+                _infiniteScrollModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/infinite-scroll.js");
+                await _infiniteScrollModule.InvokeVoidAsync("initializeIntersectionObserver",
+                    _scrollSentinel,
+                    DotNetObjectReference.Create(this));
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to initialize intersection observer for infinite scroll");
+            }
+        }
+
         // Only run once after the first render, and only if we have a highlight target
         if (firstRender && _highlightMessageId.HasValue && !_firstRenderComplete)
         {
@@ -294,8 +336,19 @@
         {
             try
             {
-                // Add to our list
-                _allMessages.Insert(0, message); // Add at beginning (most recent first)
+                // Only add message if it belongs to the currently selected chat
+                if (!_selectedChatId.HasValue || message.ChatId != _selectedChatId.Value)
+                {
+                    Logger.LogTrace("Ignoring new message {MessageId} from chat {ChatId} (currently viewing chat {SelectedChatId})",
+                        message.MessageId, message.ChatId, _selectedChatId);
+                    return;
+                }
+
+                // Capture scroll state before adding message
+                var scrollState = await JS.InvokeAsync<ScrollState>("captureScrollState", _messagesContainer);
+
+                // Add to our list at the beginning (most recent first)
+                _allMessages.Insert(0, message);
 
                 // Load spam check for this new message if it exists
                 var messageIds = new[] { message.MessageId };
@@ -312,8 +365,15 @@
                     _editCounts[kvp.Key] = kvp.Value;
                 }
 
-                // Reapply filters
+                // Reapply filters (this calls StateHasChanged internally)
                 ApplyFilters();
+
+                // Wait for browser to complete render cycle, then restore scroll
+                // Note: ApplyFilters already called StateHasChanged, so render is queued
+                await JS.InvokeVoidAsync("restoreScrollStateAfterRender", _messagesContainer, scrollState);
+
+                Logger.LogDebug("Added new real-time message {MessageId} to chat {ChatId} view",
+                    message.MessageId, message.ChatId);
             }
             catch (Exception ex)
             {
@@ -322,7 +382,86 @@
         });
     }
 
-    private async Task LoadMessagesAsync()
+    private async Task LoadChatsAsync()
+    {
+        try
+        {
+            _managedChats = await ChatsRepository.GetAllAsync();
+            ApplyChatFilter();
+
+            // Calculate message counts for each chat
+            await CalculateChatStatisticsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load managed chats");
+        }
+    }
+
+    private void ApplyChatFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_chatSearchText))
+        {
+            _filteredChats = _managedChats;
+        }
+        else
+        {
+            var searchLower = _chatSearchText.ToLower();
+            _filteredChats = _managedChats
+                .Where(c => c.ChatName?.ToLower().Contains(searchLower) == true)
+                .ToList();
+        }
+    }
+
+    private async Task CalculateChatStatisticsAsync()
+    {
+        try
+        {
+            foreach (var chat in _managedChats)
+            {
+                // Get total message count for this chat
+                var messages = await MessageRepository.GetMessagesByChatIdAsync(chat.ChatId, limit: 1);
+                if (messages.Any())
+                {
+                    // For now, just get recent count. TODO: Add proper total count query to repo
+                    var recentMessages = await MessageRepository.GetMessagesByChatIdAsync(chat.ChatId, limit: 100);
+                    _chatMessageCounts[chat.ChatId] = recentMessages.Count;
+
+                    // Get last message preview
+                    if (recentMessages.Any())
+                    {
+                        var lastMessage = recentMessages.First();
+                        var hasPhoto = !string.IsNullOrEmpty(lastMessage.PhotoFileId);
+                        var preview = lastMessage.MessageText ?? (hasPhoto ? "📷 Photo" : "Message");
+                        _lastMessagePreviews[chat.ChatId] = preview;
+                    }
+                }
+
+                // TODO: Implement read tracking for unread counts
+                _chatUnreadCounts[chat.ChatId] = 0; // Placeholder
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to calculate chat statistics");
+        }
+    }
+
+    private async Task HandleChatSelected(long chatId)
+    {
+        _selectedChatId = chatId;
+        await LoadChatMessagesAsync(chatId);
+    }
+
+    private void HandleBackToChats()
+    {
+        _selectedChatId = null;
+        _allMessages.Clear();
+        _filteredMessages.Clear();
+        StateHasChanged();
+    }
+
+    private async Task LoadChatMessagesAsync(long chatId)
     {
         _loading = true;
         _hasMore = true;
@@ -334,13 +473,13 @@
 
         try
         {
-            // Load first page of messages (most recent)
-            var firstPage = await MessageRepository.GetMessagesBeforeAsync(
-                beforeTimestamp: null,
+            // Load first page of messages for this chat
+            var firstPage = await MessageRepository.GetMessagesByChatIdAsync(
+                chatId,
                 limit: PageSize);
 
             _allMessages = firstPage;
-            _hasMore = firstPage.Count >= PageSize; // If we got a full page, there might be more
+            _hasMore = firstPage.Count >= PageSize; // More pages available if we got a full page
 
             // Load spam checks, edit counts, and detection history for these messages
             if (_allMessages.Any())
@@ -357,28 +496,11 @@
             }
 
             _lastUpdate = DateTime.Now;
-
-            // Update userId filter with actual username if we have it from query string
-            if (_filterByUserId.HasValue)
-            {
-                var userMessage = _allMessages.FirstOrDefault(m => m.UserId == _filterByUserId.Value);
-                if (userMessage != null)
-                {
-                    // Update filter with actual username instead of "User {id}"
-                    var actualName = userMessage.UserName ?? userMessage.FirstName ?? $"User {_filterByUserId.Value}";
-                    _filterState.UserName = actualName;
-                    Logger.LogDebug("Updated userId filter to actual name: {UserName}", actualName);
-
-                    // Clear the userId flag once we've updated the filter with the real name
-                    _filterByUserId = null;
-                }
-            }
-
             ApplyFilters();
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Unexpected error loading messages");
+            Logger.LogError(ex, "Unexpected error loading messages for chat {ChatId}", chatId);
         }
         finally
         {
@@ -387,9 +509,16 @@
         }
     }
 
-    private async Task LoadNextPageAsync()
+    private string GetChatDescription(ManagedChatRecord chat)
     {
-        if (!_hasMore || _loadingMore)
+        // Could show member count, last active, etc.
+        return chat.IsAdmin ? "Bot is admin" : "Bot is member";
+    }
+
+    [JSInvokable]
+    public async Task LoadOlderMessagesAsync()
+    {
+        if (_loadingMore || !_hasMore || !_selectedChatId.HasValue)
             return;
 
         _loadingMore = true;
@@ -397,28 +526,30 @@
 
         try
         {
-            // Get the oldest timestamp from current messages
-            var oldestTimestamp = _allMessages.Last().Timestamp;
-
-            // Load next page
-            var nextPage = await MessageRepository.GetMessagesBeforeAsync(
-                beforeTimestamp: oldestTimestamp,
-                limit: PageSize);
-
-            if (nextPage.Any())
+            // Get the timestamp of the oldest message currently loaded
+            var oldestMessage = _allMessages.LastOrDefault();
+            if (oldestMessage == null)
             {
-                // Append to existing messages
-                _allMessages.AddRange(nextPage);
+                _hasMore = false;
+                return;
+            }
 
-                // Check if there are more pages
-                _hasMore = nextPage.Count >= PageSize;
+            // Load older messages (before the oldest currently loaded)
+            var olderMessages = await MessageRepository.GetMessagesByChatIdAsync(
+                _selectedChatId.Value,
+                limit: PageSize,
+                beforeTimestamp: oldestMessage.Timestamp);
+
+            if (olderMessages.Any())
+            {
+                // Append to existing messages (older messages go at the end of the list)
+                _allMessages.AddRange(olderMessages);
 
                 // Load metadata for new messages
-                var newMessageIds = nextPage.Select(m => m.MessageId);
-                var newSpamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(newMessageIds);
-                var newEditCounts = await MessageRepository.GetEditCountsForMessagesAsync(newMessageIds);
+                var messageIds = olderMessages.Select(m => m.MessageId);
+                var newSpamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
+                var newEditCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
 
-                // Merge into existing dictionaries
                 foreach (var kvp in newSpamChecks)
                     _spamChecks[kvp.Key] = kvp.Value;
                 foreach (var kvp in newEditCounts)
@@ -427,20 +558,25 @@
                 // Load detection history for Admin+ users
                 if (_userPermissionLevel >= 1)
                 {
-                    await LoadDetectionHistoryAsync(newMessageIds);
+                    await LoadDetectionHistoryAsync(messageIds);
                 }
 
-                // Reapply filters to include new messages
+                // Check if there are more pages
+                _hasMore = olderMessages.Count >= PageSize;
+
                 ApplyFilters();
+
+                Logger.LogDebug("Loaded {Count} older messages, hasMore: {HasMore}", olderMessages.Count, _hasMore);
             }
             else
             {
                 _hasMore = false;
+                Logger.LogDebug("No more older messages to load");
             }
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error loading more messages");
+            Logger.LogError(ex, "Failed to load older messages for chat {ChatId}", _selectedChatId);
         }
         finally
         {
@@ -453,7 +589,7 @@
     {
         _filteredMessages = _allMessages
             .Where(m => _filterState.Matches(m, GetSpamCheck(m.MessageId)))
-            .ToList();
+            .ToList(); // Keep newest-first order from repo, CSS flex-direction: column-reverse displays newest at bottom
 
         // Additional userId filter from query string (if set and UserName filter is still active)
         if (_filterByUserId.HasValue && !string.IsNullOrEmpty(_filterState.UserName))
@@ -508,45 +644,7 @@
         }
     }
 
-    private async Task ExportToCsvAsync()
-    {
-        try
-        {
-            var spamChecks = new Dictionary<long, SpamCheckRecord?>();
-            var csvBytes = await ExportService.ExportToCsvAsync(_filteredMessages, spamChecks);
-
-            var fileName = $"messages_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
-            await DownloadFileAsync(fileName, csvBytes);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Unexpected error exporting messages to CSV");
-        }
-    }
-
-    private async Task ExportToJsonAsync()
-    {
-        try
-        {
-            var spamChecks = new Dictionary<long, SpamCheckRecord?>();
-            var jsonBytes = await ExportService.ExportToJsonAsync(_filteredMessages, spamChecks);
-
-            var fileName = $"messages_{DateTime.Now:yyyyMMdd_HHmmss}.json";
-            await DownloadFileAsync(fileName, jsonBytes);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Unexpected error exporting messages to JSON");
-        }
-    }
-
-    private async Task DownloadFileAsync(string fileName, byte[] data)
-    {
-        // Use native Blazor streaming - more efficient than base64 encoding
-        var fileStream = new MemoryStream(data);
-        using var streamRef = new DotNetStreamReference(stream: fileStream);
-        await JS.InvokeVoidAsync("downloadFileFromStream", fileName, streamRef);
-    }
+    // Export methods removed - TODO: Add per-chat export in context menu later
 
     private async Task HandleImageClick(MessageRecord message)
     {
@@ -950,33 +1048,11 @@
             var uri = new Uri(NavigationManager.Uri);
             var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
 
-            // Apply userId filter (from UserDetailDialog: /messages?userId=123)
-            if (query.TryGetValue("userId", out var userIdStr) && long.TryParse(userIdStr, out var userIdFilter))
-            {
-                // Store the userId for lookup after messages load
-                _filterByUserId = userIdFilter;
-                // Set a placeholder - will be updated with actual username after messages load
-                _filterState.UserName = $"User {userIdFilter}";
-                Logger.LogDebug("Applied userId filter: {UserId}", userIdFilter);
-            }
-
             // Apply chat filter (from ModerationReportCard: /messages?chat=123&highlight=456)
             if (query.TryGetValue("chat", out var chatIdStr) && long.TryParse(chatIdStr, out var chatIdFilter))
             {
-                // Load a message from this chat to get the chat name
-                var chatMessages = await MessageRepository.GetMessagesByChatIdAsync(chatIdFilter, limit: 1);
-
-                if (chatMessages.Any() && !string.IsNullOrEmpty(chatMessages.First().ChatName))
-                {
-                    _filterState.ChatName = chatMessages.First().ChatName;
-                    Logger.LogDebug("Applied chat filter: {ChatId} ({ChatName})", chatIdFilter, _filterState.ChatName);
-                }
-                else
-                {
-                    // Set a placeholder if no messages found yet
-                    _filterState.ChatName = $"Chat {chatIdFilter}";
-                    Logger.LogDebug("Applied chat filter with placeholder: {ChatId}", chatIdFilter);
-                }
+                _selectedChatId = chatIdFilter;
+                Logger.LogDebug("Auto-selected chat from query string: {ChatId}", chatIdFilter);
             }
 
             // Store highlight target (from ModerationReportCard or Users: highlight=456 or messageId=456)
@@ -990,6 +1066,8 @@
                 _highlightMessageId = messageId;
                 Logger.LogDebug("Will highlight message: {MessageId}", messageId);
             }
+
+            await Task.CompletedTask; // Satisfy async requirement
         }
         catch (Exception ex)
         {
@@ -1034,4 +1112,7 @@
             Logger.LogError(ex, "Failed to scroll to reply target message {MessageId}", targetMessageId);
         }
     }
+
+    // Scroll state for preserving position when new messages arrive
+    private record ScrollState(double ScrollTop, double ScrollHeight, double ClientHeight);
 }
