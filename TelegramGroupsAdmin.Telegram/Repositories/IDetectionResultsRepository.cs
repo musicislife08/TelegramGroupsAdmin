@@ -23,6 +23,12 @@ public interface IDetectionResultsRepository
     Task<List<DetectionResultRecord>> GetByMessageIdAsync(long messageId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get all detection results for multiple messages in a single batch query (avoids N+1 problem)
+    /// Returns dictionary keyed by message_id for efficient lookup in UI components
+    /// </summary>
+    Task<Dictionary<long, List<DetectionResultRecord>>> GetDetectionHistoryBatchAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get recent detection results with limit
     /// </summary>
     Task<List<DetectionResultRecord>> GetRecentAsync(int limit = 100, CancellationToken cancellationToken = default);

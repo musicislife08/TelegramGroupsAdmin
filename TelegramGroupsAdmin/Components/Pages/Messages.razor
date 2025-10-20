@@ -629,13 +629,13 @@
     {
         try
         {
-            foreach (var messageId in messageIds)
+            // Use batch query to avoid N+1 problem (single query instead of one per message)
+            var historyBatch = await DetectionResultsRepository.GetDetectionHistoryBatchAsync(messageIds);
+
+            // Merge results into _detectionHistory dictionary
+            foreach (var (messageId, history) in historyBatch)
             {
-                var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId);
-                if (history.Any())
-                {
-                    _detectionHistory[messageId] = history;
-                }
+                _detectionHistory[messageId] = history;
             }
         }
         catch (Exception ex)

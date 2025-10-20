@@ -123,6 +123,26 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return results;
     }
 
+    public async Task<Dictionary<long, List<DetectionResultRecord>>> GetDetectionHistoryBatchAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Convert to list to avoid multiple enumeration
+        var messageIdList = messageIds.ToList();
+
+        // Single query with WHERE message_id IN (...)
+        var results = await WithActorJoins(
+                context.DetectionResults.AsNoTracking().Where(dr => messageIdList.Contains(dr.MessageId)),
+                context)
+            .OrderByDescending(x => x.DetectedAt)
+            .ToListAsync(cancellationToken);
+
+        // Group by message_id for efficient lookup
+        return results
+            .GroupBy(r => r.MessageId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+    }
+
     public async Task<List<DetectionResultRecord>> GetRecentAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
