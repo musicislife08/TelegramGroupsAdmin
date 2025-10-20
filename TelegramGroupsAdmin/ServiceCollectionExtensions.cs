@@ -36,7 +36,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<Repositories.InviteRepository>();
         services.AddScoped<Repositories.VerificationTokenRepository>();
 
-        // Note: UserRepository, AuditLogRepository, MessageHistoryRepository are registered in TelegramGroupsAdmin.Telegram.Extensions.AddTelegramServices()
+        // Note: UserRepository, AuditLogRepository, IMessageHistoryRepository are registered in TelegramGroupsAdmin.Telegram.Extensions.AddTelegramServices()
 
         return services;
     }

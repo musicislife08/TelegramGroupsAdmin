@@ -10,7 +10,7 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 /// Repository for managing Telegram user records (profile photos, trust status, warnings).
 /// Centralized user tracking across all managed chats.
 /// </summary>
-public class TelegramUserRepository
+public class TelegramUserRepository : ITelegramUserRepository
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<TelegramUserRepository> _logger;

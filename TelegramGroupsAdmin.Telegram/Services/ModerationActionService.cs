@@ -24,7 +24,7 @@ public class ModerationActionService
 {
     private readonly IDetectionResultsRepository _detectionResultsRepository;
     private readonly IUserActionsRepository _userActionsRepository;
-    private readonly MessageHistoryRepository _messageHistoryRepository;
+    private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IManagedChatsRepository _managedChatsRepository;
     private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
     private readonly TelegramBotClientFactory _botClientFactory;
@@ -38,7 +38,7 @@ public class ModerationActionService
     public ModerationActionService(
         IDetectionResultsRepository detectionResultsRepository,
         IUserActionsRepository userActionsRepository,
-        MessageHistoryRepository messageHistoryRepository,
+        IMessageHistoryRepository messageHistoryRepository,
         IManagedChatsRepository managedChatsRepository,
         ITelegramUserMappingRepository telegramUserMappingRepository,
         TelegramBotClientFactory botClientFactory,

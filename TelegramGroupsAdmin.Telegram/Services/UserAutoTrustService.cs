@@ -16,14 +16,14 @@ public class UserAutoTrustService
     private readonly IDetectionResultsRepository _detectionResultsRepository;
     private readonly IUserActionsRepository _userActionsRepository;
     private readonly ISpamDetectionConfigRepository _spamDetectionConfigRepository;
-    private readonly AuditLogRepository _auditLogRepository;
+    private readonly IAuditLogRepository _auditLogRepository;
     private readonly ILogger<UserAutoTrustService> _logger;
 
     public UserAutoTrustService(
         IDetectionResultsRepository detectionResultsRepository,
         IUserActionsRepository userActionsRepository,
         ISpamDetectionConfigRepository spamDetectionConfigRepository,
-        AuditLogRepository auditLogRepository,
+        IAuditLogRepository auditLogRepository,
         ILogger<UserAutoTrustService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;

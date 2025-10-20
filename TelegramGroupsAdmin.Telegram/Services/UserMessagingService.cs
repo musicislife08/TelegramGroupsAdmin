@@ -70,11 +70,11 @@ public enum MessageDeliveryMethod
 
 public class UserMessagingService : IUserMessagingService
 {
-    private readonly TelegramUserRepository _telegramUserRepository;
+    private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly ILogger<UserMessagingService> _logger;
 
     public UserMessagingService(
-        TelegramUserRepository telegramUserRepository,
+        ITelegramUserRepository telegramUserRepository,
         ILogger<UserMessagingService> logger)
     {
         _telegramUserRepository = telegramUserRepository;

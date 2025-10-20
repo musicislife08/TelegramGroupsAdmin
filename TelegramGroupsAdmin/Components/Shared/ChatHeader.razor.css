@@ -1,0 +1,124 @@
+/* Chat Header Component - Telegram Desktop Style */
+
+.chat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: #17212b;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+    min-height: 64px;
+}
+
+/* Back Button (Mobile) */
+.back-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    margin-left: -8px;
+    color: #64b5f6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease;
+    border-radius: 50%;
+}
+
+.back-button:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.back-button:active {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.back-icon {
+    width: 24px;
+    height: 24px;
+}
+
+/* Chat Avatar */
+.chat-header-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.chat-header-avatar-fallback {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chat-header-icon {
+    width: 22px;
+    height: 22px;
+    color: white;
+    opacity: 0.9;
+}
+
+/* Chat Info */
+.chat-header-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.chat-header-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: white;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-header-subtitle {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Menu Button */
+.menu-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    margin-right: -8px;
+    color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    border-radius: 50%;
+}
+
+.menu-button:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+}
+
+.menu-button:active {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.menu-icon {
+    width: 24px;
+    height: 24px;
+}
+
+/* Hide back button on desktop */
+@media (min-width: 769px) {
+    .back-button {
+        display: none;
+    }
+}

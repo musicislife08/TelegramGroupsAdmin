@@ -6,9 +6,9 @@ namespace TelegramGroupsAdmin.Services;
 
 public class AuditService : IAuditService
 {
-    private readonly AuditLogRepository _repository;
+    private readonly IAuditLogRepository _repository;
 
-    public AuditService(AuditLogRepository repository)
+    public AuditService(IAuditLogRepository repository)
     {
         _repository = repository;
     }

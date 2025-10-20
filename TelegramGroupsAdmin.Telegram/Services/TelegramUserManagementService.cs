@@ -12,12 +12,12 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class TelegramUserManagementService
 {
-    private readonly TelegramUserRepository _userRepository;
+    private readonly ITelegramUserRepository _userRepository;
     private readonly IUserActionsRepository _userActionsRepository;
     private readonly ILogger<TelegramUserManagementService> _logger;
 
     public TelegramUserManagementService(
-        TelegramUserRepository userRepository,
+        ITelegramUserRepository userRepository,
         IUserActionsRepository userActionsRepository,
         ILogger<TelegramUserManagementService> logger)
     {

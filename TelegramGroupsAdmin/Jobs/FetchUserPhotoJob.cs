@@ -21,14 +21,14 @@ public class FetchUserPhotoJob(
     ILogger<FetchUserPhotoJob> logger,
     TelegramBotClientFactory botClientFactory,
     TelegramPhotoService photoService,
-    TelegramUserRepository telegramUserRepository,
+    ITelegramUserRepository telegramUserRepository,
     IPhotoHashService photoHashService,
     IOptions<TelegramOptions> telegramOptions)
 {
     private readonly ILogger<FetchUserPhotoJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly TelegramPhotoService _photoService = photoService;
-    private readonly TelegramUserRepository _telegramUserRepository = telegramUserRepository;
+    private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly IPhotoHashService _photoHashService = photoHashService;
     private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
 

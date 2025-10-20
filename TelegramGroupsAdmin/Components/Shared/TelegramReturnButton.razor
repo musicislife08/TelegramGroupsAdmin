@@ -1,0 +1,48 @@
+@* "Return to [Group]" button - dark blue-gray card style like Telegram *@
+
+<div class="telegram-return-button">
+    <div class="telegram-return-icon">💬</div>
+    <div class="telegram-return-text">Return to @GroupName</div>
+    <div class="telegram-return-arrow">↗</div>
+</div>
+
+<style>
+    .telegram-return-button {
+        background: #182533;
+        border-radius: 12px;
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 8px 0;
+        cursor: pointer;
+        transition: background 0.2s ease;
+    }
+
+    .telegram-return-button:hover {
+        background: #1f2f3f;
+    }
+
+    .telegram-return-icon {
+        font-size: 20px;
+        line-height: 1;
+    }
+
+    .telegram-return-text {
+        flex: 1;
+        color: white;
+        font-size: 15px;
+        font-weight: 400;
+    }
+
+    .telegram-return-arrow {
+        color: #708499;
+        font-size: 18px;
+        line-height: 1;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public string GroupName { get; set; } = "TSP Spam Bot Test Group";
+}

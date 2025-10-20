@@ -1,0 +1,506 @@
+@using TelegramGroupsAdmin.ContentDetection.Configuration
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@inject ISpamDetectionConfigRepository ConfigRepository
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<MudStack Spacing="4">
+    <!-- Action Buttons -->
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveConfiguration">
+                Save All Changes
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadConfiguration">
+                Reload
+            </MudButton>
+            @if (_config.TrainingMode)
+            {
+                <MudChip T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.Warning">Training Mode Active</MudChip>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <!-- Global Settings Card -->
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.h5" Color="Color.Primary">
+                <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-2" />
+                Global Detection Settings
+            </MudText>
+
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudSwitch T="bool" @bind-Value="_config.TrainingMode"
+                              Label="Training Mode"
+                              Color="Color.Warning" />
+                    <MudText Typo="Typo.caption" Class="ml-8 mud-text-secondary">
+                        @if (_config.TrainingMode)
+                        {
+                            <text>⚠️ All spam detections sent to review queue (no auto-ban)</text>
+                        }
+                        else
+                        {
+                            <text>Use this to validate detection before enabling auto-ban</text>
+                        }
+                    </MudText>
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudSwitch T="bool" @bind-Value="_config.FirstMessageOnly"
+                              Label="Check First Messages Only"
+                              Color="Color.Primary" />
+                    @if (_config.FirstMessageOnly)
+                    {
+                        <MudNumericField @bind-Value="_config.FirstMessagesCount"
+                                        Label="First Messages Count"
+                                        Min="1" Max="10"
+                                        Class="mt-2"
+                                        helperText="Number of first messages to check from each user" />
+                    }
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="_config.AutoBanThreshold"
+                                    Label="Auto-Ban Threshold"
+                                    Min="50" Max="100"
+                                    Disabled="@_config.TrainingMode"
+                                    HelperText="@(_config.TrainingMode ? "Disabled in training mode" : "Confidence >= this value triggers automatic ban")" />
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="_config.ReviewQueueThreshold"
+                                    Label="Review Queue Threshold"
+                                    Min="20" Max="80"
+                                    HelperText="Confidence >= this value goes to review queue" />
+                </MudItem>
+
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="_config.MinMessageLength"
+                                    Label="Minimum Message Length"
+                                    Min="10" Max="1000"
+                                    helperText="Skip expensive checks for messages shorter than this" />
+                </MudItem>
+            </MudGrid>
+        </MudStack>
+    </MudPaper>
+
+    <!-- Text Content Detection Header -->
+    <MudText Typo="Typo.h5" Color="Color.Primary" Class="mt-2">
+        <MudIcon Icon="@Icons.Material.Filled.TextFields" Class="mr-2" />
+        Text Content Detection
+    </MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary">
+        Configure text-based content detection algorithms. These checks analyze message text for spam patterns.
+    </MudText>
+
+    <!-- Stop Words Detection -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.StopWords.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Stop Words Detection</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.StopWords.Enabled ? Color.Success : Color.Default)">
+                        @(_config.StopWords.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                </MudStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/stopwords-config"))'>
+                    Configure
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        @if (_config.StopWords.Enabled)
+        {
+            <MudCardContent>
+                <MudNumericField @bind-Value="_config.StopWords.ConfidenceThreshold"
+                                Label="Confidence Threshold"
+                                Min="1" Max="100"
+                                Variant="Variant.Outlined"
+                                helperText="Confidence level when stop words are detected (0-100%)" />
+            </MudCardContent>
+        }
+    </MudCard>
+
+    <!-- CAS (Combot Anti-Spam) -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.Cas.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">CAS (Combot Anti-Spam)</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.Cas.Enabled ? Color.Success : Color.Default)">
+                        @(_config.Cas.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                </MudStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/cas"))'>
+                    Configure
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        @if (_config.Cas.Enabled)
+        {
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    External lookup for known spammers. Click "Configure" for API settings.
+                </MudText>
+            </MudCardContent>
+        }
+    </MudCard>
+
+    <!-- Similarity Detection -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.Similarity.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Similarity Detection (TF-IDF)</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.Similarity.Enabled ? Color.Success : Color.Default)">
+                        @(_config.Similarity.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                </MudStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/similarity"))'>
+                    Configure
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        @if (_config.Similarity.Enabled)
+        {
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Detects messages similar to known spam samples. Click "Configure" for threshold settings.
+                </MudText>
+            </MudCardContent>
+        }
+    </MudCard>
+
+    <!-- Bayes Classifier -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.Bayes.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Naive Bayes Classifier</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.Bayes.Enabled ? Color.Success : Color.Default)">
+                        @(_config.Bayes.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                </MudStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/bayes"))'>
+                    Configure
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        @if (_config.Bayes.Enabled)
+        {
+            <MudCardContent>
+                <MudNumericField @bind-Value="_config.Bayes.MinSpamProbability"
+                                Label="Minimum Spam Probability"
+                                Min="1.0" Max="99.0" Step="0.1"
+                                Variant="Variant.Outlined"
+                                helperText="Minimum probability (%) to classify as spam" />
+            </MudCardContent>
+        }
+    </MudCard>
+
+    <!-- Spacing Detection -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.Spacing.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Abnormal Spacing Detection</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.Spacing.Enabled ? Color.Success : Color.Default)">
+                        @(_config.Spacing.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                </MudStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/advanced#spacing"))'>
+                    Configure
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        @if (_config.Spacing.Enabled)
+        {
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Detects messages with unusual spacing patterns. Click "Configure" for detailed thresholds.
+                </MudText>
+            </MudCardContent>
+        }
+    </MudCard>
+
+    <!-- Invisible Characters -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.InvisibleChars.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Invisible Character Detection</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.InvisibleChars.Enabled ? Color.Success : Color.Default)">
+                        @(_config.InvisibleChars.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                </MudStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/advanced#invisible"))'>
+                    Configure
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        @if (_config.InvisibleChars.Enabled)
+        {
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Detects zero-width Unicode characters used by spammers (excludes legitimate emoji sequences).
+                </MudText>
+            </MudCardContent>
+        }
+    </MudCard>
+
+    <!-- Translation -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.Translation.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Foreign Language Translation</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.Translation.Enabled ? Color.Success : Color.Default)">
+                        @(_config.Translation.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                </MudStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/advanced#translation"))'>
+                    Configure
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        @if (_config.Translation.Enabled)
+        {
+            <MudCardContent>
+                <MudSwitch T="bool" @bind-Value="_config.Translation.CheckTranslatedContent"
+                          Label="Check Translated Content"
+                          Color="Color.Primary" />
+                <MudText Typo="Typo.caption" Class="ml-8 mud-text-secondary">
+                    Translates non-English messages to English before running spam checks
+                </MudText>
+            </MudCardContent>
+        }
+    </MudCard>
+
+    <!-- OpenAI -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool" @bind-Value="_config.OpenAI.Enabled" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">OpenAI Verification</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@(_config.OpenAI.Enabled ? Color.Success : Color.Default)">
+                        @(_config.OpenAI.Enabled ? "Enabled" : "Disabled")
+                    </MudChip>
+                </MudStack>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/advanced#openai"))'>
+                    Configure
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        @if (_config.OpenAI.Enabled)
+        {
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudSwitch T="bool" @bind-Value="_config.OpenAI.VetoMode"
+                                  Label="Veto Mode (Confirm Spam)"
+                                  Color="Color.Primary" />
+                        <MudText Typo="Typo.caption" Class="ml-8 mud-text-secondary">
+                            If enabled, OpenAI confirms spam. If disabled, OpenAI finds spam.
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudSwitch T="bool" @bind-Value="_config.OpenAI.CheckShortMessages"
+                                  Label="Check Short Messages"
+                                  Color="Color.Primary" />
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        }
+    </MudCard>
+
+    <!-- URL Content Detection Header -->
+    <MudText Typo="Typo.h5" Color="Color.Primary" Class="mt-4">
+        <MudIcon Icon="@Icons.Material.Filled.Link" Class="mr-2" />
+        URL Content Detection
+    </MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary">
+        Detect and block malicious URLs, phishing domains, and blocked websites.
+    </MudText>
+
+    <!-- URL Filtering Card -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Link" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">URL Filtering</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Always-Run Capable</MudChip>
+                </MudStack>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    540K+ blocked domains | 6 blocklists | Real-time domain reputation
+                </MudText>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Settings" OnClick="@(() => Navigation.NavigateTo("/settings/protection/url-filters"))">
+                    CONFIGURE →
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudText Typo="Typo.body2">
+                Blocks known malicious URLs using curated blocklists (abuse.ch, Phishtank, Cybercrime Tracker, etc.).
+                Supports hard mode (delete + ban) and soft mode (delete + notify). Can be configured as a critical check
+                to apply to all users including trusted/admin.
+            </MudText>
+        </MudCardContent>
+    </MudCard>
+
+    <!-- File Content Detection Header -->
+    <MudText Typo="Typo.h5" Color="Color.Primary" Class="mt-4">
+        <MudIcon Icon="@Icons.Material.Filled.Scanner" Class="mr-2" />
+        File Content Detection
+    </MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary">
+        Scan file attachments for malware, viruses, and malicious content.
+    </MudText>
+
+    <!-- File Scanning Card -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Scanner" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">File Scanning (ClamAV)</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Always-Run Capable</MudChip>
+                </MudStack>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    10M+ signatures | Tier 1 local scanning | &lt;55ms average scan time
+                </MudText>
+            </CardHeaderContent>
+            <CardHeaderActions>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Settings" OnClick="@(() => Navigation.NavigateTo("/settings/protection/file-scanning"))">
+                    CONFIGURE →
+                </MudButton>
+            </CardHeaderActions>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudText Typo="Typo.body2">
+                Scans uploaded files using ClamAV antivirus engine with 10M+ malware signatures. Supports up to 4.5GB files
+                (Telegram Premium limit). Results cached for 24 hours. Can be configured as a critical check to scan files
+                from all users including trusted/admin. Fail-open design ensures infrastructure issues don't block legitimate files.
+            </MudText>
+        </MudCardContent>
+    </MudCard>
+
+    <!-- Critical Checks Configuration Header -->
+    <MudText Typo="Typo.h5" Color="Color.Primary" Class="mt-4">
+        <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Class="mr-2" />
+        Critical Checks Configuration
+    </MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary">
+        Configure which checks run for ALL users (bypassing trust/admin exemptions).
+    </MudText>
+
+    <!-- Critical Checks Card -->
+    <MudCard Elevation="1">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h6">
+                    <MudIcon Icon="@Icons.Material.Filled.Security" Color="Color.Error" Class="mr-2" />
+                    Always-Run Checks (Bypass Trust/Admin Status)
+                </MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                <strong>Policy:</strong> Critical violations trigger message deletion + DM notification for ALL users.
+                Trusted/admin users are NOT banned or warned, but their violating messages are still deleted.
+            </MudAlert>
+
+            <CriticalChecks />
+        </MudCardContent>
+    </MudCard>
+
+    <!-- Save Button (Bottom) -->
+    <MudPaper Class="pa-4" Elevation="1">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveConfiguration" FullWidth="true">
+            Save All Changes
+        </MudButton>
+    </MudPaper>
+</MudStack>
+
+@code {
+    [Parameter]
+    public long? ChatId { get; set; }
+
+    private SpamDetectionConfig _config = new();
+    private bool _isSaving = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfiguration();
+    }
+
+    private async Task LoadConfiguration()
+    {
+        try
+        {
+            _config = ChatId.HasValue
+                ? await ConfigRepository.GetEffectiveConfigAsync(ChatId.Value)
+                : await ConfigRepository.GetGlobalConfigAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new SpamDetectionConfig();
+        }
+    }
+
+    private async Task SaveConfiguration()
+    {
+        if (_isSaving) return;
+
+        try
+        {
+            _isSaving = true;
+
+            if (ChatId.HasValue)
+            {
+                await ConfigRepository.UpdateChatConfigAsync(ChatId.Value, _config);
+                Snackbar.Add("Chat configuration saved successfully", Severity.Success);
+            }
+            else
+            {
+                await ConfigRepository.UpdateGlobalConfigAsync(_config);
+                Snackbar.Add("Global configuration saved successfully", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

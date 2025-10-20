@@ -1,0 +1,16 @@
+# Fake crypto stealer for testing YARA rules
+import os
+
+# Target multiple wallet paths
+wallet_paths = [
+    "\\Bitcoin\\wallet.dat",
+    "\\Ethereum\\keystore\\",
+    "\\Exodus\\exodus.wallet",
+    "\\atomic\\Local Storage\\"
+]
+
+# Harvest seed phrases
+keywords = ["seed phrase", "recovery phrase", "mnemonic"]
+
+# Exfiltration via webhook
+webhook_url = "https://discord.com/api/webhooks/fake"

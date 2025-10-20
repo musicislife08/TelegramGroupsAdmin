@@ -3,7 +3,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Services;
 
-public class UserManagementService(UserRepository userRepository, IAuditService auditLog) : IUserManagementService
+public class UserManagementService(IUserRepository userRepository, IAuditService auditLog) : IUserManagementService
 {
     public async Task<List<UserRecord>> GetAllUsersAsync(CancellationToken ct = default)
     {

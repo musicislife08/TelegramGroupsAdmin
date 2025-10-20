@@ -9,11 +9,11 @@ namespace TelegramGroupsAdmin.Services;
 /// </summary>
 public class MessageHistoryAdapter : ContentDetectionServices.IMessageHistoryService
 {
-    private readonly MessageHistoryRepository _repository;
+    private readonly IMessageHistoryRepository _repository;
     private readonly ILogger<MessageHistoryAdapter> _logger;
 
     public MessageHistoryAdapter(
-        MessageHistoryRepository repository,
+        IMessageHistoryRepository repository,
         ILogger<MessageHistoryAdapter> logger)
     {
         _repository = repository;

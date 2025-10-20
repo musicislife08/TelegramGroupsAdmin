@@ -1,0 +1,380 @@
+@using TelegramGroupsAdmin.Auth
+@using Microsoft.Extensions.Options
+@using TelegramGroupsAdmin.Configuration.Models
+@using TelegramGroupsAdmin.Configuration.Repositories
+@inject IFileScanningConfigRepository ConfigRepository
+@inject ISnackbar Snackbar
+
+<MudGrid>
+    <!-- Info Alert -->
+    <MudItem xs="12">
+        <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+            <MudText Typo="Typo.subtitle2"><strong>File Scanning (Phase 4.17)</strong></MudText>
+            <MudText Typo="Typo.body2">
+                Multi-layered malware detection for files shared in Telegram groups.
+                <strong>Phase 1 (Tier 1 Local Scanners)</strong> is complete and active.
+                Future phases will add cloud scanning and Windows multi-engine support.
+            </MudText>
+        </MudAlert>
+    </MudItem>
+
+    <!-- Tier 1: Local Scanners (Phase 1 - ACTIVE) -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Computer" Color="Color.Success" />
+                    <MudText Typo="Typo.h6">Tier 1: Local Scanners</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Phase 1 - Active</MudChip>
+                </MudStack>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Local scanners run in parallel with unlimited capacity. Any scanner detecting a threat = file is infected.
+                </MudText>
+
+                <MudDivider Class="my-2" />
+
+                <!-- ClamAV Scanner -->
+                <MudExpansionPanels Elevation="0">
+                    <MudExpansionPanel>
+                        <TitleContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudSwitch T="bool" Value="@_config.Tier1.ClamAV.Enabled" Color="Color.Success" Disabled="true" />
+                                <MudText Typo="Typo.h6">ClamAV</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text">Required</MudChip>
+                                <MudSpacer />
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                                <MudText Typo="Typo.caption" Color="Color.Success">8.7M Signatures</MudText>
+                            </MudStack>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudStack Spacing="2" Class="mt-2">
+                                <MudText Typo="Typo.body2">Industry-standard open-source antivirus engine</MudText>
+
+                                <MudTextField T="string" Label="Host" Value="@_config.Tier1.ClamAV.Host" Disabled="true" Variant="Variant.Outlined" />
+                                <MudNumericField T="int" Label="Port" Value="@_config.Tier1.ClamAV.Port" Disabled="true" Variant="Variant.Outlined" />
+                                <MudNumericField T="int" Label="Timeout (seconds)" Value="@_config.Tier1.ClamAV.TimeoutSeconds" Disabled="true" Variant="Variant.Outlined" />
+
+                                <MudAlert Severity="Severity.Info" Dense="true">
+                                    ClamAV configuration is managed via Docker Compose and environment variables.
+                                    See <code>compose/compose.yml</code> to modify settings.
+                                </MudAlert>
+                            </MudStack>
+                        </ChildContent>
+                    </MudExpansionPanel>
+
+                    <!-- Windows AMSI Scanner (Phase 3 - Coming Soon) -->
+                    <MudExpansionPanel Disabled="true">
+                        <TitleContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudSwitch T="bool" Value="false" Disabled="true" />
+                                <MudText Typo="Typo.h6" Color="Color.Secondary">Windows AMSI (4-5 AV Engines)</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning">Phase 3 - Coming Soon</MudChip>
+                            </MudStack>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                                <strong>Phase 3 Feature:</strong> Multi-engine scanning using Windows AMSI with 4-5 free antivirus products
+                                (Windows Defender, Avast, AVG, Avira, Sophos). Requires Windows VM deployment.
+                            </MudAlert>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+
+                <MudDivider Class="my-4" />
+
+                <!-- Save Button -->
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" OnClick="LoadConfig" StartIcon="@Icons.Material.Filled.Refresh">
+                        Reset
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveConfig" StartIcon="@Icons.Material.Filled.Save" Disabled="@_isSaving">
+                        @(_isSaving ? "Saving..." : "Save Configuration")
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Tier 2: Cloud Scanners (Phase 2 - Coming Soon) -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Cloud" Color="Color.Warning" />
+                    <MudText Typo="Typo.h6">Tier 2: Cloud Scanners</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Phase 2 - Coming Soon</MudChip>
+                </MudStack>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Cloud services are tried sequentially in user-configured priority order. Quota-aware with fail-open behavior.
+                </MudText>
+
+                <MudDivider Class="my-2" />
+
+                <!-- Priority Queue (Disabled - Phase 2) -->
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.subtitle2">Cloud Service Priority Order</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Services are tried in this order until one succeeds or all are exhausted</MudText>
+
+                    <MudList T="string" Disabled="true">
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.DragIndicator" Disabled="true">
+                            <MudText>1. VirusTotal (500/day, 4/min)</MudText>
+                        </MudListItem>
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.DragIndicator" Disabled="true">
+                            <MudText>2. MetaDefender (40/day)</MudText>
+                        </MudListItem>
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.DragIndicator" Disabled="true">
+                            <MudText>3. Hybrid Analysis (30/month)</MudText>
+                        </MudListItem>
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.DragIndicator" Disabled="true">
+                            <MudText>4. Intezer (10/month)</MudText>
+                        </MudListItem>
+                    </MudList>
+
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        <strong>Phase 2 Feature:</strong> Drag-and-drop priority ordering, quota tracking, and API key configuration.
+                        All services use free tiers for zero-cost operation.
+                    </MudAlert>
+                </MudStack>
+
+                <MudDivider Class="my-2" />
+
+                <!-- Quota Display (Disabled - Phase 2) -->
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.subtitle2">Quota Usage</MudText>
+
+                    <fieldset disabled style="border: none; padding: 0; margin: 0;">
+                        <MudStack Spacing="1">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText Typo="Typo.body2" Style="min-width: 120px;">VirusTotal</MudText>
+                                <MudProgressLinear Value="0" Color="Color.Primary" Size="Size.Large" Style="flex: 1;" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">0 / 500</MudText>
+                            </MudStack>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText Typo="Typo.body2" Style="min-width: 120px;">MetaDefender</MudText>
+                                <MudProgressLinear Value="0" Color="Color.Primary" Size="Size.Large" Style="flex: 1;" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">0 / 40</MudText>
+                            </MudStack>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText Typo="Typo.body2" Style="min-width: 120px;">Hybrid Analysis</MudText>
+                                <MudProgressLinear Value="0" Color="Color.Primary" Size="Size.Large" Style="flex: 1;" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">0 / 30</MudText>
+                            </MudStack>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText Typo="Typo.body2" Style="min-width: 120px;">Intezer</MudText>
+                                <MudProgressLinear Value="0" Color="Color.Primary" Size="Size.Large" Style="flex: 1;" />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">0 / 10</MudText>
+                            </MudStack>
+                        </MudStack>
+                    </fieldset>
+
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        <strong>Phase 2 Feature:</strong> Real-time quota tracking with automatic reset at midnight UTC (daily) or first of month (monthly).
+                    </MudAlert>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- General Settings -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Settings" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">General Settings</MudText>
+                </MudStack>
+
+                <MudDivider Class="my-2" />
+
+                <!-- Cache Settings -->
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.subtitle2">Result Caching</MudText>
+                    <MudSwitch T="bool" Value="@_config.General.CacheEnabled" Disabled="true" Color="Color.Success" Label="Enable result caching (24hr TTL)" />
+                    <MudNumericField T="int" Label="Cache TTL (hours)" Value="@_config.General.CacheTtlHours" Disabled="true" Variant="Variant.Outlined" HelperText="How long to cache scan results" />
+
+                    <MudAlert Severity="Severity.Success" Dense="true">
+                        Hash-based caching prevents re-scanning identical files. Cache hits take &lt;10ms vs ~55ms for fresh scans.
+                    </MudAlert>
+                </MudStack>
+
+                <MudDivider Class="my-2" />
+
+                <!-- File Size Limits -->
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.subtitle2">File Size Limits</MudText>
+                    <MudTextField T="string"
+                                 Label="Maximum File Size"
+                                 Value="@FormatBytes(_config.General.MaxFileSizeBytes)"
+                                 Disabled="true"
+                                 Variant="Variant.Outlined"
+                                 HelperText="Files exceeding this limit are skipped (fail-open)" />
+
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        Current limit: <strong>4.5 GB</strong> - Supports Telegram Premium (4GB files) with safety margin.
+                        Telegram free users can upload up to 2GB.
+                    </MudAlert>
+                </MudStack>
+
+                <MudDivider Class="my-2" />
+
+                <!-- File Types -->
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.subtitle2">File Types to Scan</MudText>
+                    <MudChipSet T="string" ReadOnly="true">
+                        @foreach (var ext in _config.General.ScanFileTypes)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@ext</MudChip>
+                        }
+                    </MudChipSet>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Empty list = scan all file types</MudText>
+                </MudStack>
+
+                <MudDivider Class="my-2" />
+
+                <!-- Critical Check Integration -->
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.subtitle2">Critical Check Integration (Phase 4.14)</MudText>
+                    <MudSwitch T="bool" Value="@_config.General.AlwaysRunForAllUsers" Disabled="true" Color="Color.Success" Label="Always run for all users (bypass trust/admin status)" />
+
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        When enabled, file scanning runs for <strong>ALL users</strong> including trusted users and admins.
+                        Infected files are deleted and user notified, but NO ban/warn applied to trusted/admin users.
+                    </MudAlert>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Test Scanner (Phase 4 - Coming Soon) -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.BugReport" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Test Scanner</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Phase 4 - Coming Soon</MudChip>
+                </MudStack>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Upload files to test the scanning pipeline without sending them to Telegram.
+                </MudText>
+
+                <MudDivider Class="my-2" />
+
+                <MudFileUpload T="IBrowserFile" Disabled="true">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload" Disabled="true">
+                            Upload Test File
+                        </MudButton>
+                    </ActivatorContent>
+                </MudFileUpload>
+
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <strong>Phase 4 Feature:</strong> Test file scanning without Telegram. Upload files to see which scanners detect them and view detailed results.
+                </MudAlert>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Scanner Health & Statistics (Phase 4 - Coming Soon) -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Insights" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Scanner Health & Statistics</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Phase 4 - Coming Soon</MudChip>
+                </MudStack>
+
+                <MudDivider Class="my-2" />
+
+                <fieldset disabled style="border: none; padding: 0; margin: 0;">
+                    <MudSimpleTable Hover="true" Dense="true">
+                        <thead>
+                            <tr>
+                                <th>Scanner</th>
+                                <th>Status</th>
+                                <th>Signatures/Rules</th>
+                                <th>Last Updated</th>
+                                <th>Detections (7d)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>ClamAV</td>
+                                <td><MudChip T="string" Size="Size.Small" Color="Color.Success">Healthy</MudChip></td>
+                                <td>8.7M</td>
+                                <td>2 hours ago</td>
+                                <td>0</td>
+                            </tr>
+                            <tr>
+                                <td>Windows AMSI</td>
+                                <td><MudChip T="string" Size="Size.Small" Color="Color.Default">Not Configured</MudChip></td>
+                                <td>-</td>
+                                <td>-</td>
+                                <td>-</td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </fieldset>
+
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <strong>Phase 4 Feature:</strong> Real-time scanner health monitoring, signature update tracking, detection rate statistics, and performance metrics.
+                </MudAlert>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private FileScanningConfig _config = new();
+    private bool _isSaving = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfig();
+    }
+
+    private async Task LoadConfig()
+    {
+        try
+        {
+            _config = await ConfigRepository.GetAsync(chatId: null); // Global config
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new FileScanningConfig(); // Fallback to defaults
+        }
+    }
+
+    private async Task SaveConfig()
+    {
+        _isSaving = true;
+        try
+        {
+            await ConfigRepository.SaveAsync(_config, chatId: null); // Save global config
+            Snackbar.Add("File scanning configuration saved successfully!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+}

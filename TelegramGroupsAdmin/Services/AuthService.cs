@@ -11,7 +11,7 @@ using DataModels = TelegramGroupsAdmin.Data.Models;
 namespace TelegramGroupsAdmin.Services;
 
 public class AuthService(
-    UserRepository userRepository,
+    IUserRepository userRepository,
     VerificationTokenRepository verificationTokenRepository,
     IAuditService auditLog,
     ITotpService totpService,

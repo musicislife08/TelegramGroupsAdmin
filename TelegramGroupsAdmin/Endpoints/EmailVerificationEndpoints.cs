@@ -18,7 +18,7 @@ public static class EmailVerificationEndpoints
     private static async Task<IResult> VerifyEmail(
         string token,
         VerificationTokenRepository verificationTokenRepository,
-        UserRepository userRepository,
+        IUserRepository userRepository,
         IAuditService auditLog,
         ILogger<Program> logger,
         CancellationToken ct)

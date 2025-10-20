@@ -33,10 +33,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserTagsRepository, UserTagsRepository>(); // Phase 4.12
         services.AddScoped<ITagDefinitionsRepository, TagDefinitionsRepository>(); // Phase 4.12
         services.AddScoped<IImpersonationAlertsRepository, ImpersonationAlertsRepository>(); // Phase 4.10
-        services.AddScoped<AuditLogRepository>();
-        services.AddScoped<UserRepository>();
-        services.AddScoped<MessageHistoryRepository>();
-        services.AddScoped<TelegramUserRepository>();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
+        services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
 
         // Telegram infrastructure
         services.AddSingleton<TelegramBotClientFactory>();

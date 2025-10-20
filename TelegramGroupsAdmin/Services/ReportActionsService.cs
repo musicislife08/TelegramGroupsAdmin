@@ -17,7 +17,7 @@ namespace TelegramGroupsAdmin.Services;
 public class ReportActionsService : IReportActionsService
 {
     private readonly IReportsRepository _reportsRepository;
-    private readonly MessageHistoryRepository _messageRepository;
+    private readonly IMessageHistoryRepository _messageRepository;
     private readonly ModerationActionService _moderationService;
     private readonly TelegramBotClientFactory _botFactory;
     private readonly TelegramOptions _telegramOptions;
@@ -25,7 +25,7 @@ public class ReportActionsService : IReportActionsService
 
     public ReportActionsService(
         IReportsRepository reportsRepository,
-        MessageHistoryRepository messageRepository,
+        IMessageHistoryRepository messageRepository,
         ModerationActionService moderationService,
         TelegramBotClientFactory botFactory,
         IOptions<TelegramOptions> telegramOptions,

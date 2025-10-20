@@ -1,0 +1,191 @@
+@* Compact Telegram message preview - just the message bubble without full chat UI *@
+
+<div class="telegram-compact-preview">
+    @if (ShowUserCommand)
+    {
+        <div class="telegram-message-wrapper telegram-user-message">
+            <div class="telegram-message-bubble telegram-bubble-user">
+                <div class="telegram-message-text">/start</div>
+                <div class="telegram-message-time">8:52 PM ✓✓</div>
+            </div>
+        </div>
+    }
+
+    <div class="telegram-message-wrapper telegram-bot-message">
+        <div class="telegram-message-bubble telegram-bubble-bot">
+            <div class="telegram-message-text">@PreviewText</div>
+            <div class="telegram-message-time">8:52 PM</div>
+        </div>
+    </div>
+
+    @* Inline keyboard buttons (rendered below the message) *@
+    @if (Buttons != null && Buttons.Any())
+    {
+        <div class="telegram-inline-keyboard">
+            @foreach (var buttonRow in Buttons)
+            {
+                <div class="telegram-button-row">
+                    @foreach (var button in buttonRow)
+                    {
+                        <button class="telegram-inline-button" type="button">
+                            @button
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (ShowWarning && HasInvalidVariables())
+    {
+        <div class="telegram-preview-warning">
+            ⚠️ Invalid or incomplete variables detected
+        </div>
+    }
+</div>
+
+<style>
+    .telegram-compact-preview {
+        background: #0e1621;
+        border-radius: 8px;
+        padding: 12px;
+        min-height: 80px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .telegram-message-wrapper {
+        display: flex;
+        margin-bottom: 6px;
+    }
+
+    .telegram-bot-message {
+        justify-content: flex-start;
+    }
+
+    .telegram-user-message {
+        justify-content: flex-end;
+    }
+
+    .telegram-message-bubble {
+        max-width: 85%;
+        padding: 7px 10px 5px 10px;
+        border-radius: 12px;
+        position: relative;
+        word-wrap: break-word;
+    }
+
+    .telegram-bubble-bot {
+        background: #182533;
+        color: white;
+        border-bottom-left-radius: 4px;
+    }
+
+    .telegram-bubble-user {
+        background: #8774e1;
+        color: white;
+        border-bottom-right-radius: 4px;
+    }
+
+    .telegram-message-text {
+        font-size: 14px;
+        line-height: 1.35;
+        white-space: pre-wrap;
+        margin-bottom: 2px;
+    }
+
+    .telegram-message-time {
+        font-size: 11px;
+        color: #708499;
+        text-align: right;
+        margin-top: 1px;
+    }
+
+    .telegram-bubble-user .telegram-message-time {
+        color: rgba(255,255,255,0.65);
+    }
+
+    .telegram-preview-warning {
+        background: rgba(255, 152, 0, 0.15);
+        border-left: 3px solid #ff9800;
+        color: #ffb74d;
+        padding: 6px 10px;
+        font-size: 12px;
+        margin-top: 8px;
+        border-radius: 4px;
+    }
+
+    .telegram-inline-keyboard {
+        max-width: 85%;
+        margin-top: 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .telegram-button-row {
+        display: flex;
+        gap: 4px;
+    }
+
+    .telegram-inline-button {
+        flex: 1;
+        background: #182533;
+        color: #6ab7ff;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        text-align: center;
+        transition: background 0.15s ease;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .telegram-inline-button:hover {
+        background: #1e2f3f;
+    }
+
+    .telegram-inline-button:active {
+        background: #248bf5;
+    }
+</style>
+
+@code {
+    [Parameter, EditorRequired]
+    public string PreviewText { get; set; } = string.Empty;
+
+    [Parameter]
+    public bool ShowUserCommand { get; set; } = true;
+
+    [Parameter]
+    public bool ShowWarning { get; set; } = false;
+
+    [Parameter]
+    public string[]? ValidVariables { get; set; }
+
+    /// <summary>
+    /// Inline keyboard buttons to display below the message.
+    /// Each array represents a row of buttons.
+    /// Example: new[] { new[] { "Accept", "Decline" } } creates one row with two buttons.
+    /// </summary>
+    [Parameter]
+    public string[][]? Buttons { get; set; }
+
+    private bool HasInvalidVariables()
+    {
+        if (string.IsNullOrEmpty(PreviewText) || ValidVariables == null) return false;
+
+        var matches = System.Text.RegularExpressions.Regex.Matches(PreviewText, @"\{([^}]*)\}");
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            var variableName = match.Groups[1].Value;
+            if (!ValidVariables.Contains(variableName))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}

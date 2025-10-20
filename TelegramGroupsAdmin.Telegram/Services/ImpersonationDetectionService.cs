@@ -70,10 +70,10 @@ public interface IImpersonationDetectionService
 public class ImpersonationDetectionService : IImpersonationDetectionService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
-    private readonly TelegramUserRepository _telegramUserRepository;
+    private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IChatAdminsRepository _chatAdminsRepository;
     private readonly IManagedChatsRepository _managedChatsRepository;
-    private readonly MessageHistoryRepository _messageHistoryRepository;
+    private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IPhotoHashService _photoHashService;
     private readonly IImpersonationAlertsRepository _impersonationAlertsRepository;
     private readonly ModerationActionService _moderationActionService;
@@ -90,10 +90,10 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
 
     public ImpersonationDetectionService(
         IDbContextFactory<AppDbContext> contextFactory,
-        TelegramUserRepository telegramUserRepository,
+        ITelegramUserRepository telegramUserRepository,
         IChatAdminsRepository chatAdminsRepository,
         IManagedChatsRepository managedChatsRepository,
-        MessageHistoryRepository messageHistoryRepository,
+        IMessageHistoryRepository messageHistoryRepository,
         IPhotoHashService photoHashService,
         IImpersonationAlertsRepository impersonationAlertsRepository,
         ModerationActionService moderationActionService,

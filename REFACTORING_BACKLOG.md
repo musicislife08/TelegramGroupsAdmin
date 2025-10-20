@@ -780,6 +780,45 @@ public class BanCommand : IBotCommand
 
 ---
 
+## Code Quality Notes
+
+### DI-1: Interface-Only Dependency Injection Audit
+
+**Date Added:** 2025-10-20
+**Status:** PENDING ⏳
+**Severity:** Best Practice | **Impact:** Testability, maintainability, proper DI patterns
+
+**Description:**
+Audit all dependency injection usage across the codebase to ensure interfaces are used instead of concrete types, unless there's a specific reason to inject concrete types (e.g., framework types, sealed types).
+
+**Progress So Far:**
+1. Created interfaces for 4 repositories that were missing them:
+   - `IAuditLogRepository` (5 methods)
+   - `IUserRepository` (24 methods)
+   - `IMessageHistoryRepository` (20 methods)
+   - `ITelegramUserRepository` (15 methods)
+2. Updated DI registrations for these 4 repositories to use interface-to-implementation mappings
+3. Systematically replaced concrete type injections for these 4 repositories using automated find/replace
+4. Verified runtime with `dotnet run --migrate-only` - all DI errors for these repositories resolved
+
+**Remaining Work:**
+- Audit all other services, repositories, and dependencies to verify they use interfaces
+- Check for any remaining concrete type injections (HttpClient, framework types are acceptable)
+- Verify all DI registrations follow `services.AddScoped<IFoo, Foo>()` pattern
+- Document any exceptions where concrete types are intentionally injected
+
+**Goal:**
+Ensure all application services inject interfaces only. This enables:
+- Better testability (can mock dependencies)
+- Clearer contracts between layers
+- Compile-time detection of missing DI registrations
+- Proper separation of concerns
+
+**Future Consideration:**
+When adding new repositories or services, always create an interface first and register with DI using `services.AddScoped<IFoo, Foo>()` pattern.
+
+---
+
 ## Notes
 
 - **Pre-production status:** Breaking changes are acceptable
@@ -787,6 +826,6 @@ public class BanCommand : IBotCommand
 - **No feature changes:** Pure refactoring, preserve all functionality
 - **Build quality:** Must maintain 0 errors, 0 warnings standard
 
-**Last Updated:** 2025-10-19
+**Last Updated:** 2025-10-20
 **Performance Analysis:** 2025-10-19 (reviewed and filtered based on deployment context)
 **Next Review:** After implementing Critical/High performance issues, or when extracting Telegram library to NuGet (re-evaluate L7 ConfigureAwait), or when adopting FUTURE-1 IDI pattern

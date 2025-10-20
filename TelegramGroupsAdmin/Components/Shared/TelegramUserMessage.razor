@@ -1,0 +1,46 @@
+@* Single user message bubble - right-aligned purple bubble like Telegram *@
+
+<div class="telegram-message-wrapper telegram-user-message">
+    <div class="telegram-message-bubble telegram-bubble-user">
+        <div class="telegram-message-text">@Text</div>
+        <div class="telegram-message-time">
+            @Time
+            @if (ShowCheckmarks)
+            {
+                <span class="telegram-checkmarks">✓✓</span>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .telegram-user-message {
+        justify-content: flex-end;
+    }
+
+    .telegram-bubble-user {
+        background: #8774e1;
+        color: white;
+        border-bottom-right-radius: 4px;
+    }
+
+    .telegram-bubble-user .telegram-message-time {
+        color: rgba(255,255,255,0.65);
+    }
+
+    .telegram-checkmarks {
+        margin-left: 2px;
+        color: rgba(255,255,255,0.7);
+    }
+</style>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Text { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Time { get; set; } = "8:52 PM";
+
+    [Parameter]
+    public bool ShowCheckmarks { get; set; } = true;
+}

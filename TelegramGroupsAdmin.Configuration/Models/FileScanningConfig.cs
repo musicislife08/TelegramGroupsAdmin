@@ -29,7 +29,8 @@ public class FileScanningConfig
 }
 
 /// <summary>
-/// Tier 1: Local scanner configuration (ClamAV, YARA, Windows AMSI)
+/// Tier 1: Local scanner configuration (ClamAV, Windows AMSI)
+/// Note: YARA was removed - ClamAV provides superior coverage with 10M+ signatures
 /// </summary>
 public class Tier1Config
 {
@@ -37,11 +38,6 @@ public class Tier1Config
     /// ClamAV scanner settings
     /// </summary>
     public ClamAVConfig ClamAV { get; set; } = new();
-
-    /// <summary>
-    /// YARA pattern matcher settings
-    /// </summary>
-    public YaraConfig Yara { get; set; } = new();
 
     /// <summary>
     /// Windows AMSI multi-engine scanner settings (optional)
@@ -73,32 +69,6 @@ public class ClamAVConfig
     /// Scan timeout in seconds
     /// </summary>
     public int TimeoutSeconds { get; set; } = 30;
-}
-
-/// <summary>
-/// YARA configuration
-/// </summary>
-public class YaraConfig
-{
-    /// <summary>
-    /// Enable/disable YARA scanning
-    /// </summary>
-    public bool Enabled { get; set; } = true;
-
-    /// <summary>
-    /// Path to YARA rules directory
-    /// </summary>
-    public string RulesPath { get; set; } = "/app/yara-rules";
-
-    /// <summary>
-    /// Scan timeout in seconds
-    /// </summary>
-    public int TimeoutSeconds { get; set; } = 10;
-
-    /// <summary>
-    /// Specific rule files to load (empty = load all .yar files)
-    /// </summary>
-    public List<string> RuleFiles { get; set; } = new();
 }
 
 /// <summary>

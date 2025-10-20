@@ -36,9 +36,18 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDomainFiltersRepository, DomainFiltersRepository>();
         services.AddScoped<ICachedBlockedDomainsRepository, CachedBlockedDomainsRepository>();
 
+        // Register file scanning repositories (Phase 4.17)
+        services.AddScoped<IFileScanResultRepository, FileScanResultRepository>();
+
         // Register URL filtering services (Phase 4.13)
         services.AddScoped<IBlocklistSyncService, BlocklistSyncService>();
         services.AddScoped<IUrlPreFilterService, UrlPreFilterService>();
+
+        // Register file scanning services (Phase 4.17 - Tier 1)
+        // Note: YARA was removed due to ARM compatibility issues - ClamAV provides superior coverage
+        services.AddScoped<ClamAVScannerService>();
+        services.AddScoped<Tier1VotingCoordinator>();
+        services.AddScoped<IFileScanningTestService, FileScanningTestService>();  // UI testing service
 
         // Register individual content checks
         // NOTE: Translation happens in ContentDetectionEngine preprocessing, not as a content check
@@ -53,6 +62,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IContentCheck, Checks.ThreatIntelSpamCheck>();
         services.AddScoped<IContentCheck, Checks.SeoScrapingSpamCheck>();
         services.AddScoped<IContentCheck, Checks.ImageSpamCheck>();
+        services.AddScoped<IContentCheck, Checks.FileScanningCheck>();  // Phase 4.17: File scanning (always_run=true)
 
         // Register HTTP client for external API calls
         services.AddHttpClient();

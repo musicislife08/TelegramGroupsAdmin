@@ -1,7 +1,7 @@
 ﻿@page "/"
 @using TelegramGroupsAdmin.Services
 @inject IAuthService AuthService
-@inject MessageHistoryRepository MessageRepository
+@inject IMessageHistoryRepository MessageRepository
 @inject NavigationManager Navigation
 @inject ILogger<Home> Logger
 @attribute [Authorize]

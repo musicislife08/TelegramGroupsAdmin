@@ -6,7 +6,7 @@ using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
-public class UserRepository
+public class UserRepository : IUserRepository
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<UserRepository> _logger;

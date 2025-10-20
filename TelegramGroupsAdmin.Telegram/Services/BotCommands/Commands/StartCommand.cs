@@ -14,12 +14,12 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 public class StartCommand : IBotCommand
 {
     private readonly IWelcomeResponsesRepository _welcomeResponsesRepository;
-    private readonly TelegramUserRepository _telegramUserRepository;
+    private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IServiceProvider _serviceProvider;
 
     public StartCommand(
         IWelcomeResponsesRepository welcomeResponsesRepository,
-        TelegramUserRepository telegramUserRepository,
+        ITelegramUserRepository telegramUserRepository,
         IServiceProvider serviceProvider)
     {
         _welcomeResponsesRepository = welcomeResponsesRepository;
@@ -112,15 +112,18 @@ public class StartCommand : IBotCommand
         // Get welcome config (using default for now - TODO: load from database)
         var config = WelcomeConfig.Default;
 
-        // Send rules text (without button)
+        // Send main welcome message in DM
         var chatName = chat.Title ?? "the chat";
-        var rulesText = config.DmTemplate
+        var username = message.From.Username != null ? $"@{message.From.Username}" : message.From.FirstName;
+
+        var messageText = config.MainWelcomeMessage
+            .Replace("{username}", username)
             .Replace("{chat_name}", chatName)
-            .Replace("{rules_text}", config.RulesText);
+            .Replace("{timeout}", config.TimeoutSeconds.ToString());
 
         await botClient.SendMessage(
             chatId: message.Chat.Id,
-            text: rulesText,
+            text: messageText,
             cancellationToken: cancellationToken);
 
         // Send Accept button in separate message (will be deleted after click)

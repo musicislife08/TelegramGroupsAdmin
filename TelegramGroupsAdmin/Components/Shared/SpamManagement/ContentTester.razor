@@ -1,0 +1,586 @@
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Services
+@using Microsoft.JSInterop
+@using TelegramGroupsAdmin.Telegram.Services
+@using TelegramGroupsAdmin.Telegram.Repositories
+@inject IContentCheckCoordinator ContentCheckCoordinator
+@inject IManagedChatsRepository ManagedChatsRepository
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<MudPaper Class="pa-4" Elevation="0">
+    <MudText Typo="Typo.h6" GutterBottom="true">Unified Content Tester</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        Test how content detection responds to complete messages (text + images + files + URLs).
+        Follows the exact same logic as real Telegram messages without executing actions.
+        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Info" Color="Color.Info">Tip: Paste images directly (Ctrl+V)</MudChip>
+    </MudText>
+
+    <MudGrid>
+        <!-- Chat Selector -->
+        <MudItem xs="12">
+            <MudSelect T="long?" @bind-Value="_selectedChatId" Label="Test Configuration" Variant="Variant.Outlined" AnchorOrigin="Origin.BottomCenter" ToStringFunc="@FormatChatSelection">
+                <MudSelectItem T="long?" Value="@((long?)null)">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@Icons.Material.Filled.Public" Size="Size.Small" />
+                        <MudText>Global Configuration</MudText>
+                    </MudStack>
+                </MudSelectItem>
+                @foreach (var chat in _managedChats)
+                {
+                    <MudSelectItem T="long?" Value="@((long?)chat.ChatId)">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" />
+                            <MudText>@chat.ChatName (@chat.ChatId)</MudText>
+                        </MudStack>
+                    </MudSelectItem>
+                }
+            </MudSelect>
+            <MudText Typo="Typo.caption" Class="mt-1">
+                Select which configuration to test against. Global uses default settings, specific chats use their overrides.
+            </MudText>
+        </MudItem>
+
+        <!-- Message Text -->
+        <MudItem xs="12">
+            <MudTextField
+                @bind-Value="_messageText"
+                Label="Message Text"
+                Variant="Variant.Outlined"
+                Lines="5"
+                HelperText="The message content to test (URLs will be extracted automatically)"
+                Immediate="true" />
+        </MudItem>
+
+        <!-- User Info -->
+        <MudItem xs="12" sm="6">
+            <MudTextField
+                @bind-Value="_userId"
+                Label="User ID (optional)"
+                Variant="Variant.Outlined"
+                HelperText="Telegram user ID to check trust/admin status"
+                Immediate="true" />
+        </MudItem>
+
+        <MudItem xs="12" sm="6">
+            <MudTextField
+                @bind-Value="_userName"
+                Label="Username (optional)"
+                Variant="Variant.Outlined"
+                HelperText="Telegram username (without at-sign)"
+                Immediate="true" />
+        </MudItem>
+
+        <!-- Image Upload -->
+        <MudItem xs="12">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Image (optional)</MudText>
+            <MudFileUpload T="IBrowserFile" Accept="image/*" @bind-Files="_selectedImage" MaximumFileCount="1">
+                <ActivatorContent>
+                    <MudButton HtmlTag="label"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.CloudUpload">
+                        Upload Image or Paste (Ctrl+V)
+                    </MudButton>
+                </ActivatorContent>
+            </MudFileUpload>
+            @if (_selectedImage != null)
+            {
+                <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.Image" OnClose="ClearImage" Class="mt-2">
+                    @_selectedImage.Name (@FormatFileSize(_selectedImage.Size))
+                </MudChip>
+            }
+            @if (_pastedImageData?.Length > 0)
+            {
+                <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.ContentPaste" OnClose="ClearPastedImage" Class="mt-2">
+                    Pasted image (@FormatFileSize(_pastedImageData.Length))
+                </MudChip>
+            }
+        </MudItem>
+
+        <!-- File Upload -->
+        <MudItem xs="12">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">File Attachment (optional)</MudText>
+            <MudFileUpload T="IBrowserFile" @bind-Files="_selectedFile" MaximumFileCount="1">
+                <ActivatorContent>
+                    <MudButton HtmlTag="label"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.UploadFile">
+                        Upload File (for malware scanning)
+                    </MudButton>
+                </ActivatorContent>
+            </MudFileUpload>
+            @if (_selectedFile != null)
+            {
+                <MudPaper Class="pa-3 mt-3" Outlined="true">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@GetFileIcon(_selectedFile.Name)" Size="Size.Large" Color="Color.Primary" />
+                        <MudStack Spacing="0" Style="flex: 1;">
+                            <MudText Typo="Typo.body1"><strong>@_selectedFile.Name</strong></MudText>
+                            <MudText Typo="Typo.caption">@FormatFileSize(_selectedFile.Size) • @_selectedFile.ContentType</MudText>
+                        </MudStack>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="ClearFile" />
+                    </MudStack>
+                </MudPaper>
+            }
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                <strong>Note:</strong> File scanning integration is not yet complete (Phase 4.14).
+                This tester currently only processes text + images + URLs. File support coming soon.
+            </MudAlert>
+        </MudItem>
+
+        <!-- Run Test Button -->
+        <MudItem xs="12">
+            <MudButton
+                Variant="Variant.Filled"
+                Color="Color.Primary"
+                Size="Size.Large"
+                StartIcon="@Icons.Material.Filled.PlayArrow"
+                OnClick="RunContentCheck"
+                Disabled="@(_isRunning || string.IsNullOrWhiteSpace(_messageText))">
+                @(_isRunning ? "Checking..." : "Run Content Check")
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_result != null)
+    {
+        <MudDivider Class="my-4" />
+
+        <!-- Overall Status -->
+        <MudAlert Severity="@GetOverallSeverity()" Variant="Variant.Filled" Class="mb-4">
+            <MudText Typo="Typo.h6">
+                @if (_result.HasCriticalViolations)
+                {
+                    <text>🚨 CRITICAL VIOLATIONS DETECTED</text>
+                }
+                else if (_result.SpamCheckSkipped)
+                {
+                    <text>✅ Checks Skipped (Trusted/Admin)</text>
+                }
+                else if (_result.IsSpam)
+                {
+                    <text>⚠️ SPAM DETECTED</text>
+                }
+                else
+                {
+                    <text>✅ Content Clean</text>
+                }
+            </MudText>
+        </MudAlert>
+
+        <!-- User Status -->
+        <MudPaper Class="pa-3 mb-3" Outlined="true">
+            <MudText Typo="Typo.subtitle1" Class="mb-2"><strong>User Status</strong></MudText>
+            <MudStack Spacing="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@(_result.IsUserTrusted ? Icons.Material.Filled.VerifiedUser : Icons.Material.Filled.Person)"
+                             Color="@(_result.IsUserTrusted ? Color.Success : Color.Default)" />
+                    <MudText Typo="Typo.body2">
+                        Trusted User: <strong>@(_result.IsUserTrusted ? "Yes" : "No")</strong>
+                    </MudText>
+                </MudStack>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@(_result.IsUserAdmin ? Icons.Material.Filled.AdminPanelSettings : Icons.Material.Filled.Person)"
+                             Color="@(_result.IsUserAdmin ? Color.Success : Color.Default)" />
+                    <MudText Typo="Typo.body2">
+                        Chat Admin: <strong>@(_result.IsUserAdmin ? "Yes" : "No")</strong>
+                    </MudText>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        <!-- Critical Violations (Priority 1) -->
+        @if (_result.HasCriticalViolations)
+        {
+            <MudPaper Class="pa-3 mb-3" Outlined="true" Style="border-left: 4px solid var(--mud-palette-error);">
+                <MudText Typo="Typo.h6" Color="Color.Error" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" />
+                    Critical Check Violations (Always Run)
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    These checks run for ALL users (including trusted/admin). Violations trigger immediate action.
+                </MudText>
+                @foreach (var violation in _result.CriticalCheckViolations)
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">@violation</MudAlert>
+                }
+            </MudPaper>
+        }
+
+        <!-- Regular Spam Detection Results -->
+        @if (!_result.SpamCheckSkipped && _result.SpamResult != null)
+        {
+            <MudPaper Class="pa-3 mb-3" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-2">Regular Spam Detection Results</MudText>
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.body1"><strong>Primary Reason:</strong> @_result.SpamResult.PrimaryReason</MudText>
+                    <MudText Typo="Typo.body2">
+                        <strong>Confidence:</strong> Max @_result.SpamResult.MaxConfidence% | Avg @_result.SpamResult.AvgConfidence% | Net @_result.SpamResult.NetConfidence | Flags @_result.SpamResult.SpamFlags
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        <strong>Determination:</strong> @(_result.SpamResult.IsSpam ? "SPAM" : "NOT SPAM")
+                    </MudText>
+                </MudStack>
+
+                <!-- Individual Check Results -->
+                <MudText Typo="Typo.subtitle1" Class="mt-3 mb-2">Individual Check Results</MudText>
+                <MudTable Items="_result.SpamResult.CheckResults" Hover="true" Dense="true" Striped="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Check Name</MudTh>
+                        <MudTh>Result</MudTh>
+                        <MudTh>Confidence</MudTh>
+                        <MudTh>Details</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.CheckName</MudTd>
+                        <MudTd>
+                            @switch (context.Result)
+                            {
+                                case CheckResultType.Spam:
+                                    <MudChip T="string" Color="Color.Error" Size="Size.Small">SPAM</MudChip>
+                                    break;
+                                case CheckResultType.Review:
+                                    <MudChip T="string" Color="Color.Warning" Size="Size.Small">REVIEW</MudChip>
+                                    break;
+                                default:
+                                    <MudChip T="string" Color="Color.Success" Size="Size.Small">CLEAN</MudChip>
+                                    break;
+                            }
+                        </MudTd>
+                        <MudTd>@context.Confidence%</MudTd>
+                        <MudTd>@context.Details</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+        else if (_result.SpamCheckSkipped)
+        {
+            <MudPaper Class="pa-3 mb-3" Outlined="true">
+                <MudText Typo="Typo.body1"><strong>Regular Spam Checks:</strong> Skipped</MudText>
+                <MudText Typo="Typo.body2" Class="mt-2">@_result.SkipReason</MudText>
+                @if (_result.HasCriticalViolations)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                        Regular spam checks were skipped due to user status, but critical check violations were found.
+                    </MudAlert>
+                }
+            </MudPaper>
+        }
+
+        <!-- Recommended Action -->
+        <MudPaper Class="pa-4 mb-3" Outlined="true" Style="background-color: var(--mud-palette-background-grey);">
+            <MudText Typo="Typo.h6" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Gavel" />
+                Recommended Action (What WOULD Happen)
+            </MudText>
+
+            @if (_result.HasCriticalViolations)
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-2">
+                    <MudText Typo="Typo.body1"><strong>Action:</strong> Delete Message + Send DM Notification</MudText>
+                    <MudText Typo="Typo.body2" Class="mt-1">
+                        Message would be immediately deleted from chat. User would receive a DM explaining the violation
+                        (or chat reply if DM disabled). Critical violations apply to ALL users.
+                    </MudText>
+                </MudAlert>
+                @if (_result.IsUserTrusted || _result.IsUserAdmin)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        <strong>Policy:</strong> Trusted/Admin users receive same deletion + DM notice, but are NOT banned or warned.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">
+                        <strong>Policy:</strong> Regular users: violation logged but no automatic ban/warn for critical checks.
+                    </MudAlert>
+                }
+            }
+            else if (_result.SpamCheckSkipped)
+            {
+                <MudAlert Severity="Severity.Success">
+                    <MudText Typo="Typo.body1"><strong>Action:</strong> Allow Message</MudText>
+                    <MudText Typo="Typo.body2" Class="mt-1">
+                        User is trusted/admin with no critical violations. Message would be allowed without further checks.
+                    </MudText>
+                </MudAlert>
+            }
+            else if (_result.SpamResult != null)
+            {
+                if (_result.SpamResult.NetConfidence >= 85 || _result.SpamResult.MaxConfidence >= 85)
+                {
+                    <MudAlert Severity="Severity.Error">
+                        <MudText Typo="Typo.body1"><strong>Action:</strong> Auto-Ban + Delete Message</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1">
+                            High confidence spam (net: @_result.SpamResult.NetConfidence, max: @_result.SpamResult.MaxConfidence%).
+                            User would be banned and message deleted immediately.
+                        </MudText>
+                    </MudAlert>
+                }
+                else if (_result.SpamResult.NetConfidence >= 50 || _result.SpamResult.MaxConfidence >= 50)
+                {
+                    <MudAlert Severity="Severity.Warning">
+                        <MudText Typo="Typo.body1"><strong>Action:</strong> Create Report for Admin Review</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1">
+                            Borderline spam (net: @_result.SpamResult.NetConfidence, max: @_result.SpamResult.MaxConfidence%).
+                            Report created for manual admin review in /reports queue.
+                        </MudText>
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Success">
+                        <MudText Typo="Typo.body1"><strong>Action:</strong> Allow Message</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1">
+                            Low spam confidence (net: @_result.SpamResult.NetConfidence, max: @_result.SpamResult.MaxConfidence%).
+                            Message allowed, detection result logged for training.
+                        </MudText>
+                    </MudAlert>
+                }
+            }
+
+            <MudDivider Class="my-3" />
+            <MudText Typo="Typo.caption">
+                <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                This shows what WOULD happen based on actual SpamActionService logic. No actions are executed in test mode.
+            </MudText>
+        </MudPaper>
+    }
+</MudPaper>
+
+@code {
+    // State
+    private long? _selectedChatId = null;
+    private List<TelegramGroupsAdmin.Telegram.Models.ManagedChatRecord> _managedChats = new();
+    private string _messageText = string.Empty;
+    private string? _userId;
+    private string? _userName;
+    private IBrowserFile? _selectedImage;
+    private byte[]? _pastedImageData;
+    private IBrowserFile? _selectedFile;
+    private bool _isRunning;
+    private ContentCheckCoordinatorResult? _result;
+
+    // JS interop for paste listener
+    private DotNetObjectReference<ContentTester>? _dotNetHelper;
+    private bool _pasteListenerSetup = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Load managed chats for dropdown
+        _managedChats = (await ManagedChatsRepository.GetAllAsync(CancellationToken.None)).ToList();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                _dotNetHelper = DotNetObjectReference.Create(this);
+                await JSRuntime.InvokeVoidAsync("setupPasteListener", _dotNetHelper);
+                _pasteListenerSetup = true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to setup paste listener: {ex.Message}");
+            }
+        }
+    }
+
+    [JSInvokable]
+    public Task OnImagePasted(string imageData)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(imageData)) return Task.CompletedTask;
+
+            var parts = imageData.Split(',');
+            if (parts.Length != 2)
+            {
+                Console.WriteLine($"Invalid image data format");
+                return Task.CompletedTask;
+            }
+
+            _pastedImageData = Convert.FromBase64String(parts[1]);
+
+            _ = InvokeAsync(() =>
+            {
+                Snackbar.Add("Image pasted successfully!", Severity.Success);
+                StateHasChanged();
+            });
+
+            return Task.CompletedTask;
+        }
+        catch (Exception ex)
+        {
+            _ = InvokeAsync(() => Snackbar.Add($"Failed to process pasted image: {ex.Message}", Severity.Warning));
+            return Task.CompletedTask;
+        }
+    }
+
+    private async Task RunContentCheck()
+    {
+        if (string.IsNullOrWhiteSpace(_messageText))
+        {
+            Snackbar.Add("Please enter message text to test", Severity.Warning);
+            return;
+        }
+
+        _isRunning = true;
+        _result = null;
+
+        try
+        {
+            // Prepare image stream (uploaded or pasted)
+            Stream? imageStream = null;
+            string? imageFileName = null;
+
+            if (_selectedImage != null)
+            {
+                imageStream = _selectedImage.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024); // 10MB
+                imageFileName = _selectedImage.Name;
+            }
+            else if (_pastedImageData != null)
+            {
+                imageStream = new MemoryStream(_pastedImageData);
+                imageFileName = "pasted-image.png";
+            }
+
+            // Extract URLs from text (simple regex)
+            var urls = ExtractUrls(_messageText);
+
+            // Build request - same structure as MessageProcessingService uses
+            var request = new ContentCheckRequest
+            {
+                Message = _messageText,
+                UserId = string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId),
+                UserName = _userName,
+                ChatId = _selectedChatId ?? 0, // 0 = global config
+                ImageData = imageStream,
+                ImageFileName = imageFileName,
+                Urls = urls
+            };
+
+            // Call the SAME coordinator that real messages use
+            _result = await ContentCheckCoordinator.CheckAsync(request, CancellationToken.None);
+
+            // Show summary
+            if (_result.HasCriticalViolations)
+            {
+                Snackbar.Add($"Critical violations detected: {_result.CriticalCheckViolations.Count}", Severity.Error);
+            }
+            else if (_result.SpamCheckSkipped)
+            {
+                Snackbar.Add("Spam checks skipped - user is trusted/admin", Severity.Info);
+            }
+            else if (_result.IsSpam)
+            {
+                Snackbar.Add("Spam detected!", Severity.Error);
+            }
+            else
+            {
+                Snackbar.Add("Content is clean", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error running content check: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isRunning = false;
+        }
+    }
+
+    private List<string> ExtractUrls(string text)
+    {
+        var urls = new List<string>();
+        var urlPattern = @"https?://[^\s]+";
+        var matches = System.Text.RegularExpressions.Regex.Matches(text, urlPattern);
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            urls.Add(match.Value);
+        }
+        return urls;
+    }
+
+    private Severity GetOverallSeverity()
+    {
+        if (_result == null) return Severity.Normal;
+        if (_result.HasCriticalViolations) return Severity.Error;
+        if (_result.SpamCheckSkipped) return Severity.Info;
+        return _result.IsSpam ? Severity.Error : Severity.Success;
+    }
+
+    private void ClearPastedImage()
+    {
+        _pastedImageData = null;
+        StateHasChanged();
+    }
+
+    private void ClearImage()
+    {
+        _selectedImage = null;
+        StateHasChanged();
+    }
+
+    private void ClearFile()
+    {
+        _selectedFile = null;
+        StateHasChanged();
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024.0):F1} MB";
+        return $"{bytes / (1024.0 * 1024.0 * 1024.0):F1} GB";
+    }
+
+    private string FormatChatSelection(long? chatId)
+    {
+        if (chatId == null)
+        {
+            return "Global Configuration";
+        }
+
+        var chat = _managedChats.FirstOrDefault(c => c.ChatId == chatId);
+        return chat != null ? $"{chat.ChatName} ({chat.ChatId})" : $"Chat {chatId}";
+    }
+
+    private string GetFileIcon(string fileName)
+    {
+        var ext = Path.GetExtension(fileName).ToLower();
+        return ext switch
+        {
+            ".pdf" => Icons.Material.Filled.PictureAsPdf,
+            ".doc" or ".docx" => Icons.Material.Filled.Description,
+            ".xls" or ".xlsx" => Icons.Material.Filled.TableChart,
+            ".zip" or ".rar" or ".7z" => Icons.Material.Filled.FolderZip,
+            ".jpg" or ".jpeg" or ".png" or ".gif" => Icons.Material.Filled.Image,
+            ".mp4" or ".avi" or ".mov" => Icons.Material.Filled.VideoFile,
+            ".mp3" or ".wav" => Icons.Material.Filled.AudioFile,
+            ".exe" or ".dll" => Icons.Material.Filled.WarningAmber,
+            _ => Icons.Material.Filled.InsertDriveFile
+        };
+    }
+
+    public void Dispose()
+    {
+        if (_pasteListenerSetup)
+        {
+            try
+            {
+                JSRuntime.InvokeVoidAsync("window.pasteListenerCleanup");
+            }
+            catch { }
+        }
+        _dotNetHelper?.Dispose();
+    }
+}

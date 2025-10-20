@@ -9,42 +9,58 @@ public class WelcomeConfig
     public bool Enabled { get; set; }
     public WelcomeMode Mode { get; set; } = WelcomeMode.ChatAcceptDeny;
     public int TimeoutSeconds { get; set; }
-    public string ChatWelcomeTemplate { get; set; } = string.Empty;
-    public string DmTemplate { get; set; } = string.Empty;
-    public string ChatFallbackTemplate { get; set; } = string.Empty;
-    public string AcceptButtonText { get; set; } = string.Empty;
-    public string DenyButtonText { get; set; } = string.Empty;
-    public string RulesText { get; set; } = string.Empty;
 
     /// <summary>
-    /// Default configuration (enabled for testing Phase 4.4)
+    /// Main welcome message shown to users. Used in all modes.
+    /// In Chat mode: Posted directly in group chat.
+    /// In DM mode: Sent in private DM when user clicks button.
+    /// In DM fallback: Posted in chat if DM fails.
+    /// Variables: {username}, {chat_name}, {timeout}
+    /// </summary>
+    public string MainWelcomeMessage { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Short teaser message shown in group chat for DM mode only.
+    /// Prompts user to click button to open DM and receive main message.
+    /// Variables: {username}, {timeout}
+    /// </summary>
+    public string DmChatTeaserMessage { get; set; } = string.Empty;
+
+    public string AcceptButtonText { get; set; } = string.Empty;
+    public string DenyButtonText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Text shown on the button in DM teaser message (DM mode only)
+    /// </summary>
+    public string DmButtonText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Default configuration
     /// </summary>
     public static WelcomeConfig Default => new()
     {
         Enabled = true,
-        Mode = WelcomeMode.ChatAcceptDeny, // Default to chat mode for backward compatibility
+        Mode = WelcomeMode.ChatAcceptDeny,
         TimeoutSeconds = 60,
-        ChatWelcomeTemplate = """
-            👋 Welcome {username}!
+        MainWelcomeMessage = """
+            👋 Welcome {username} to {chat_name}!
 
-            To participate in this chat, please read and accept our rules.
+            Please read and accept our community guidelines within {timeout} seconds or you will be temporarily removed.
 
-            📖 Click "Read Rules" below, then click the START button to receive the rules privately.
+            📖 Our Guidelines:
+            1. Be respectful to all members
+            2. No spam or self-promotion
+            3. Stay on topic
+
+            Click Accept below to continue participating in the chat.
             """,
-        DmTemplate = """
-            Welcome to {chat_name}! Here are our rules:
+        DmChatTeaserMessage = """
+            Welcome {username}! Click the button below to read the {chat_name} guidelines.
 
-            {rules_text}
-
-            ✅ Click "I Accept" below, or return to the chat to accept there.
-            """,
-        ChatFallbackTemplate = """
-            Thanks for accepting! Here are our rules:
-
-            {rules_text}
+            You have {timeout} seconds to respond.
             """,
         AcceptButtonText = "✅ I Accept",
         DenyButtonText = "❌ Decline",
-        RulesText = "1. Be respectful\n2. No spam\n3. Stay on topic"
+        DmButtonText = "📋 Read Guidelines"
     };
 }

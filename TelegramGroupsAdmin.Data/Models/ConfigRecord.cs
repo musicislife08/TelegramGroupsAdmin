@@ -56,6 +56,13 @@ public class ConfigRecordDto
     public string? BotProtectionConfig { get; set; }
 
     /// <summary>
+    /// File scanning configuration (JSONB)
+    /// Phase 4.17: File Scanning (ClamAV, YARA, cloud services)
+    /// </summary>
+    [Column("file_scanning_config", TypeName = "jsonb")]
+    public string? FileScanningConfig { get; set; }
+
+    /// <summary>
     /// Cached permanent invite link for this chat (NULL for global config or public chats)
     /// Used for return-to-chat buttons in DM notifications (welcome, tempban, etc.)
     /// Automatically created/reused by ChatInviteLinkService

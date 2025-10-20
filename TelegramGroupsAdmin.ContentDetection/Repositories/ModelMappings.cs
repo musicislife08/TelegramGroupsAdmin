@@ -63,4 +63,35 @@ internal static class ModelMappings
             ModifiedBy = model.ModifiedBy
         };
     }
+
+    // FileScanResult mappings (Phase 4.17: File Scanning)
+
+    public static DomainModels.FileScanResultModel ToModel(this DataModels.FileScanResultRecord dto)
+    {
+        return new DomainModels.FileScanResultModel(
+            Id: dto.Id,
+            FileHash: dto.FileHash,
+            Scanner: dto.Scanner,
+            Result: dto.Result,
+            ThreatName: dto.ThreatName,
+            ScanDurationMs: dto.ScanDurationMs,
+            ScannedAt: dto.ScannedAt,
+            MetadataJson: dto.Metadata
+        );
+    }
+
+    public static DataModels.FileScanResultRecord ToDto(this DomainModels.FileScanResultModel model)
+    {
+        return new()
+        {
+            Id = model.Id,
+            FileHash = model.FileHash,
+            Scanner = model.Scanner,
+            Result = model.Result,
+            ThreatName = model.ThreatName,
+            ScanDurationMs = model.ScanDurationMs,
+            ScannedAt = model.ScannedAt,
+            Metadata = model.MetadataJson
+        };
+    }
 }

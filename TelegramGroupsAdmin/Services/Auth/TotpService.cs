@@ -8,7 +8,7 @@ using TelegramGroupsAdmin.Data.Services;
 namespace TelegramGroupsAdmin.Services.Auth;
 
 public class TotpService(
-    UserRepository userRepository,
+    IUserRepository userRepository,
     IAuditService auditLog,
     ITotpProtectionService totpProtection,
     IPasswordHasher passwordHasher,

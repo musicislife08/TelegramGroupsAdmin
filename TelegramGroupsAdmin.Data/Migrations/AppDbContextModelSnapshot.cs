@@ -374,6 +374,10 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("NOW()");
 
+                    b.Property<string>("FileScanningConfig")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("file_scanning_config");
+
                     b.Property<string>("InviteLink")
                         .HasColumnType("text")
                         .HasColumnName("invite_link");

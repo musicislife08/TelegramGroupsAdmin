@@ -1,8 +1,11 @@
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Services
+@using Microsoft.JSInterop
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
 
 <MudPaper Class="pa-4" Elevation="@(ChatId.HasValue ? 0 : 1)">
     @if (!ChatId.HasValue)
@@ -59,45 +62,135 @@
                                      HelperText="Time before auto-kicking non-responsive users (10-300s)" />
                 </MudItem>
 
+                @* DM Chat Teaser - Only shown for DmWelcome mode - appears FIRST because it's shown first in actual flow *@
+                @if (_config.Mode == WelcomeMode.DmWelcome)
+                {
+                    <MudItem xs="12">
+                        <MudDivider Class="my-2" />
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Chat" Size="Size.Small" Class="mr-1" />
+                            DM Chat Teaser
+                        </MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                            Short message shown in group chat when user joins. Clicking the button opens the DM and sends the main message.
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption" Class="mb-2 mud-text-secondary">
+                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                            Available variables - click to insert:
+                        </MudText>
+                        <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mb-2">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" OnClick="@(() => InsertVariable("{username}"))">
+                                {username}
+                            </MudChip>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" OnClick="@(() => InsertVariable("{chat_name}"))">
+                                {chat_name}
+                            </MudChip>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" OnClick="@(() => InsertVariable("{timeout}"))">
+                                {timeout}
+                            </MudChip>
+                        </MudStack>
+                    </MudItem>
+                    <MudItem xs="12" lg="6">
+                        <MudTextField @bind-Value="_config.DmChatTeaserMessage"
+                                      id="dmTeaserInput"
+                                      Label="DM Chat Teaser"
+                                      Lines="3"
+                                      Immediate="true"
+                                      @onfocus="@(() => _lastFocusedInputId = "dmTeaserInput")"
+                                      HelperText="Prompt users to click button. Don't say 'I've sent you...' - clicking initiates the DM!" />
+                    </MudItem>
+                    <MudItem xs="12" lg="6">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">Live Preview (In Chat):</MudText>
+                        <TelegramMessagePreview PreviewText="@GetPreviewText(_config.DmChatTeaserMessage)"
+                                               ShowUserCommand="false"
+                                               ShowWarning="true"
+                                               Buttons="@GetDmTeaserButtons()" />
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                            Button text: "@_config.DmButtonText"
+                        </MudText>
+                    </MudItem>
+                }
+
+                @* Main Welcome Message - Always Visible *@
                 <MudItem xs="12">
-                    <MudTextField @bind-Value="_config.ChatWelcomeTemplate"
-                                  Label="Chat Welcome Message Template"
-                                  Lines="4"
-                                  HelperText="Supports {username} variable. Shown in group chat." />
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Message" Size="Size.Small" Class="mr-1" />
+                        Main Welcome Message
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                        Complete message shown to users. Used in Chat mode (posted to chat), DM mode (sent in DM), and DM fallback (if DM fails).
+                    </MudText>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudText Typo="Typo.caption" Class="mb-2 mud-text-secondary">
+                        <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                        Available variables - click to insert:
+                    </MudText>
+                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mb-2">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" OnClick="@(() => InsertVariable("{username}"))">
+                            {username}
+                        </MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" OnClick="@(() => InsertVariable("{chat_name}"))">
+                            {chat_name}
+                        </MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" OnClick="@(() => InsertVariable("{timeout}"))">
+                            {timeout}
+                        </MudChip>
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" lg="6">
+                    <MudTextField @bind-Value="_config.MainWelcomeMessage"
+                                  id="mainWelcomeInput"
+                                  Label="Main Welcome Message"
+                                  Lines="8"
+                                  Immediate="true"
+                                  @onfocus="@(() => _lastFocusedInputId = "mainWelcomeInput")"
+                                  HelperText="Complete message with greeting, rules/guidelines, and instructions." />
+                </MudItem>
+                <MudItem xs="12" lg="6">
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                        Live Preview (@(_config.Mode == WelcomeMode.DmWelcome ? "In DM" : "In Chat")):
+                    </MudText>
+                    <TelegramMessagePreview PreviewText="@GetPreviewText(_config.MainWelcomeMessage)"
+                                           ShowUserCommand="@(_config.Mode == WelcomeMode.DmWelcome)"
+                                           ShowWarning="true"
+                                           Buttons="@GetMainWelcomeButtons()" />
                 </MudItem>
 
                 <MudItem xs="12">
-                    <MudTextField @bind-Value="_config.DmTemplate"
-                                  Label="DM Template"
-                                  Lines="4"
-                                  HelperText="Supports {chat_name} and {rules_text} variables. Sent via direct message." />
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Small" Class="mr-1" />
+                        Button Customization
+                    </MudText>
                 </MudItem>
 
-                <MudItem xs="12">
-                    <MudTextField @bind-Value="_config.ChatFallbackTemplate"
-                                  Label="Chat Fallback Template"
-                                  Lines="4"
-                                  HelperText="Supports {rules_text} variable. Shown if DM fails (auto-deletes after 30s)." />
-                </MudItem>
-
-                <MudItem xs="12">
-                    <MudTextField @bind-Value="_config.RulesText"
-                                  Label="Rules Text"
-                                  Lines="6"
-                                  HelperText="Your group rules. Will be inserted into {rules_text} in templates." />
-                </MudItem>
-
-                <MudItem xs="12" md="6">
+                <MudItem xs="12" md="4">
                     <MudTextField @bind-Value="_config.AcceptButtonText"
                                   Label="Accept Button Text"
+                                  Immediate="true"
                                   HelperText="Text shown on the accept button" />
                 </MudItem>
 
-                <MudItem xs="12" md="6">
+                <MudItem xs="12" md="4">
                     <MudTextField @bind-Value="_config.DenyButtonText"
                                   Label="Deny Button Text"
+                                  Immediate="true"
                                   HelperText="Text shown on the deny button" />
                 </MudItem>
+
+                @if (_config.Mode == WelcomeMode.DmWelcome)
+                {
+                    <MudItem xs="12" md="4">
+                        <MudTextField @bind-Value="_config.DmButtonText"
+                                      Label="DM Button Text"
+                                      Immediate="true"
+                                      HelperText="Button text in chat teaser (DM mode only)" />
+                    </MudItem>
+                }
 
                 @if (!ChatId.HasValue)
                 {
@@ -126,17 +219,6 @@
                 }
             </MudGrid>
         </MudForm>
-
-        <MudDivider Class="my-4" />
-
-        <MudText Typo="Typo.subtitle2" GutterBottom="true">Preview</MudText>
-        <MudPaper Class="pa-3 mud-background-gray" Elevation="0">
-            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">Chat Welcome Message:</MudText>
-            <MudText Typo="Typo.body2" Class="mb-3">@GetPreviewText(_config.ChatWelcomeTemplate, "@testuser")</MudText>
-
-            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">Rules (sent via DM or fallback):</MudText>
-            <MudText Typo="Typo.body2" Style="white-space: pre-wrap">@_config.RulesText</MudText>
-        </MudPaper>
     }
     else
     {
@@ -157,15 +239,27 @@
     [Parameter]
     public EventCallback OnSaved { get; set; }
 
+    private WelcomeConfig? _config;
     private MudForm? _form;
     private bool _isValid = true;
     private bool _loading = true;
     private bool _saving = false;
-    private WelcomeConfig? _config;
+    private string? _lastFocusedInputId;
+    private const string _previewBotName = "tgadmin_test_bot";
+    private const string _previewChatName = "TSP Spam Bot Test Group";
 
     protected override async Task OnInitializedAsync()
     {
         await LoadConfig();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // No special initialization needed for now
+            // JS interop for cursor position will be called on-demand
+        }
     }
 
     private async Task LoadConfig()
@@ -173,13 +267,43 @@
         _loading = true;
         try
         {
-            // Load config - uses chatId if provided for per-chat config, otherwise global
-            _config = await ConfigService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, ChatId)
-                      ?? WelcomeConfig.Default;
+            var config = await ConfigService.GetAsync<WelcomeConfig>(ConfigType.Welcome, ChatId);
+
+            if (config == null)
+            {
+                // No config exists - use defaults
+                _config = WelcomeConfig.Default;
+            }
+            else if (string.IsNullOrEmpty(config.MainWelcomeMessage))
+            {
+                // Old config format detected (missing new fields) - migrate to defaults
+                _config = WelcomeConfig.Default;
+
+                // Preserve old settings
+                _config.Enabled = config.Enabled;
+                _config.Mode = config.Mode;
+                _config.TimeoutSeconds = config.TimeoutSeconds;
+                _config.AcceptButtonText = !string.IsNullOrEmpty(config.AcceptButtonText)
+                    ? config.AcceptButtonText
+                    : _config.AcceptButtonText;
+                _config.DenyButtonText = !string.IsNullOrEmpty(config.DenyButtonText)
+                    ? config.DenyButtonText
+                    : _config.DenyButtonText;
+
+                Snackbar.Add(
+                    "Welcome system updated! Template structure has changed. Please review and save the new configuration.",
+                    Severity.Info);
+            }
+            else
+            {
+                // New config format - load as-is
+                _config = config;
+            }
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to load configuration: {ex.Message}", Severity.Error);
+            _config = null;
         }
         finally
         {
@@ -187,6 +311,9 @@
         }
     }
 
+    /// <summary>
+    /// Public method to allow parent components to trigger save
+    /// </summary>
     public async Task SaveConfiguration()
     {
         await SaveConfig();
@@ -225,8 +352,78 @@
         Snackbar.Add("Defaults loaded. Click 'Save Configuration' to apply.", Severity.Info);
     }
 
-    private string GetPreviewText(string template, string username)
+    private string GetPreviewText(string? template)
     {
-        return template.Replace("{username}", username);
+        if (string.IsNullOrEmpty(template)) return "(empty template)";
+
+        var preview = template;
+
+        // Replace valid variables with sample data
+        preview = preview.Replace("{username}", "@SampleUser");
+        preview = preview.Replace("{chat_name}", "Sample Chat Group");
+        preview = preview.Replace("{timeout}", _config?.TimeoutSeconds.ToString() ?? "60");
+
+        // Highlight invalid/incomplete variables
+        var invalidVariablePattern = System.Text.RegularExpressions.Regex.Matches(preview, @"\{[^}]*\}");
+        if (invalidVariablePattern.Count > 0)
+        {
+            preview += "\n\n⚠️ Warning: Invalid variables remain in preview";
+        }
+
+        return preview;
+    }
+
+    private async Task InsertVariable(string variable)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(_lastFocusedInputId))
+            {
+                Snackbar.Add("Please click in a text field first, then click the variable chip.", Severity.Info);
+                return;
+            }
+
+            // Call JavaScript to insert variable at cursor position in the last focused input
+            await JSRuntime.InvokeVoidAsync("insertTextAtCursor", variable, _lastFocusedInputId);
+
+            Snackbar.Add($"Inserted {variable}", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to insert variable: {ex.Message}. Please copy/paste manually.", Severity.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Get button configuration for Main Welcome Message preview.
+    /// Shows Accept/Decline buttons in both modes:
+    /// - Chat mode: Buttons appear in chat below the message
+    /// - DM mode: Buttons appear in DM below the message (user accepts there)
+    /// </summary>
+    private string[][]? GetMainWelcomeButtons()
+    {
+        // Both modes show Accept/Decline buttons on the main welcome message
+        return new[]
+        {
+            new[] { _config?.AcceptButtonText ?? "✅ I Accept", _config?.DenyButtonText ?? "❌ Decline" }
+        };
+    }
+
+    /// <summary>
+    /// Get button configuration for DM Chat Teaser preview.
+    /// Shows the deep link button that opens the DM.
+    /// </summary>
+    private string[][]? GetDmTeaserButtons()
+    {
+        // Single button in one row
+        return new[]
+        {
+            new[] { _config?.DmButtonText ?? "📋 Read Guidelines" }
+        };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Cleanup if needed
     }
 }

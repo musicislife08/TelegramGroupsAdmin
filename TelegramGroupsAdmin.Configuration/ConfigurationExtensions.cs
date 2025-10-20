@@ -26,6 +26,9 @@ public static class ConfigurationExtensions
         services.AddScoped<IConfigRepository, ConfigRepository>();
         services.AddScoped<IConfigService, ConfigService>();
 
+        // File scanning configuration repository (Phase 4.17)
+        services.AddScoped<IFileScanningConfigRepository, FileScanningConfigRepository>();
+
         return services;
     }
 }

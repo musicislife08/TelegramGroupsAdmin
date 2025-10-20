@@ -6,9 +6,9 @@
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Telegram.Models
 @inject IAuditService AuditService
-@inject UserRepository UserRepository
+@inject IUserRepository UserRepository
 @inject IUserActionsRepository UserActionsRepository
-@inject TelegramUserRepository TelegramUserRepository
+@inject ITelegramUserRepository TelegramUserRepository
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
