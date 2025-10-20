@@ -158,6 +158,8 @@
     background: #0e1621;
     display: flex;
     flex-direction: column-reverse; /* Reverse so newest messages appear at bottom */
+    box-sizing: border-box; /* Include padding in flex calculation to prevent overflow */
+    min-height: 0; /* Allow flex item to shrink below content size */
 }
 
 /* Load More Container */
