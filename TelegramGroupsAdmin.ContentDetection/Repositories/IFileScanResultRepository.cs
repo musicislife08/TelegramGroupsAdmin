@@ -37,4 +37,12 @@ public interface IFileScanResultRepository
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Number of records deleted</returns>
     Task<int> CleanupExpiredResultsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Clear ALL cached scan results (for testing purposes)
+    /// WARNING: This removes all cache entries regardless of age
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Number of records deleted</returns>
+    Task<int> ClearAllCacheAsync(CancellationToken cancellationToken = default);
 }

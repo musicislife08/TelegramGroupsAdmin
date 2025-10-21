@@ -9,6 +9,7 @@
 @inject IFileScanningConfigRepository ConfigRepository
 @inject IFileScanQuotaRepository QuotaRepository
 @inject IDetectionResultsRepository DetectionResultsRepository
+@inject IFileScanResultRepository FileScanResultRepository
 @inject ClamAVScannerService ClamAVService
 @inject ISnackbar Snackbar
 @inject IConfiguration Configuration
@@ -193,12 +194,24 @@
 
                 <!-- Cache Settings -->
                 <MudStack Spacing="2">
-                    <MudText Typo="Typo.subtitle2">Result Caching</MudText>
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.subtitle2">Result Caching</MudText>
+                        <MudButton Variant="Variant.Outlined"
+                                  Color="Color.Warning"
+                                  Size="Size.Small"
+                                  StartIcon="@Icons.Material.Filled.DeleteSweep"
+                                  OnClick="ClearCache"
+                                  Disabled="@_isClearingCache">
+                            @(_isClearingCache ? "Clearing..." : "Clear Cache")
+                        </MudButton>
+                    </MudStack>
+
                     <MudSwitch T="bool" Value="@_config.General.CacheEnabled" Disabled="true" Color="Color.Success" Label="Enable result caching (24hr TTL)" />
                     <MudNumericField T="int" Label="Cache TTL (hours)" Value="@_config.General.CacheTtlHours" Disabled="true" Variant="Variant.Outlined" HelperText="How long to cache scan results" />
 
                     <MudAlert Severity="Severity.Success" Dense="true">
                         Hash-based caching prevents re-scanning identical files. Cache hits take &lt;10ms vs ~55ms for fresh scans.
+                        Use Clear Cache button to force re-scanning of files during testing.
                     </MudAlert>
                 </MudStack>
 
@@ -455,6 +468,7 @@
     private bool _isLoadingQuotas = false;
     private bool _isLoadingHealth = false;
     private bool _isLoadingScanResults = false;
+    private bool _isClearingCache = false;
     private bool _virusTotalConfigured = false;
 
     // Pagination for scan results
@@ -609,6 +623,24 @@
     {
         _currentPage = newPage;
         await LoadScanResults();
+    }
+
+    private async Task ClearCache()
+    {
+        _isClearingCache = true;
+        try
+        {
+            var count = await FileScanResultRepository.ClearAllCacheAsync();
+            Snackbar.Add($"Cleared {count} cached scan results", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error clearing cache: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isClearingCache = false;
+        }
     }
 
     private string FormatTimeUntilReset(DateTimeOffset windowEnd)

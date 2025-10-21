@@ -87,4 +87,27 @@ public class FileScanResultRepository : IFileScanResultRepository
 
         return expiredResults.Count;
     }
+
+    public async Task<int> ClearAllCacheAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+
+        var allResults = await context.FileScanResults
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!allResults.Any())
+        {
+            _logger.LogDebug("No scan results to clear");
+            return 0;
+        }
+
+        context.FileScanResults.RemoveRange(allResults);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogWarning("Cleared ALL {Count} cached scan results (testing/debugging operation)",
+            allResults.Count);
+
+        return allResults.Count;
+    }
 }
