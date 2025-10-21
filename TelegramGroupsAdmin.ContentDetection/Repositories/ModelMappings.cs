@@ -94,4 +94,35 @@ internal static class ModelMappings
             Metadata = model.MetadataJson
         };
     }
+
+    // FileScanQuota mappings (Phase 4.17 - Phase 2: Cloud Queue)
+
+    public static DomainModels.FileScanQuotaModel ToModel(this DataModels.FileScanQuotaRecord dto)
+    {
+        return new DomainModels.FileScanQuotaModel(
+            Id: dto.Id,
+            Service: dto.Service,
+            QuotaType: dto.QuotaType,
+            QuotaWindowStart: dto.QuotaWindowStart,
+            QuotaWindowEnd: dto.QuotaWindowEnd,
+            Count: dto.Count,
+            LimitValue: dto.LimitValue,
+            LastUpdated: dto.LastUpdated
+        );
+    }
+
+    public static DataModels.FileScanQuotaRecord ToDto(this DomainModels.FileScanQuotaModel model)
+    {
+        return new()
+        {
+            Id = model.Id,
+            Service = model.Service,
+            QuotaType = model.QuotaType,
+            QuotaWindowStart = model.QuotaWindowStart,
+            QuotaWindowEnd = model.QuotaWindowEnd,
+            Count = model.Count,
+            LimitValue = model.LimitValue,
+            LastUpdated = model.LastUpdated
+        };
+    }
 }

@@ -1,10 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Notifications;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -13,17 +15,23 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 /// </summary>
 public class StartCommand : IBotCommand
 {
+    private readonly ILogger<StartCommand> _logger;
     private readonly IWelcomeResponsesRepository _welcomeResponsesRepository;
     private readonly ITelegramUserRepository _telegramUserRepository;
+    private readonly IPendingNotificationsRepository _pendingNotificationsRepository;
     private readonly IServiceProvider _serviceProvider;
 
     public StartCommand(
+        ILogger<StartCommand> logger,
         IWelcomeResponsesRepository welcomeResponsesRepository,
         ITelegramUserRepository telegramUserRepository,
+        IPendingNotificationsRepository pendingNotificationsRepository,
         IServiceProvider serviceProvider)
     {
+        _logger = logger;
         _welcomeResponsesRepository = welcomeResponsesRepository;
         _telegramUserRepository = telegramUserRepository;
+        _pendingNotificationsRepository = pendingNotificationsRepository;
         _serviceProvider = serviceProvider;
     }
 
@@ -53,6 +61,9 @@ public class StartCommand : IBotCommand
         if (message.From != null)
         {
             await _telegramUserRepository.SetBotDmEnabledAsync(message.From.Id, enabled: true, cancellationToken);
+
+            // Deliver any pending notifications
+            await DeliverPendingNotificationsAsync(botClient, message.From.Id, cancellationToken);
         }
 
         // Check if this is a deep link for welcome system
@@ -159,5 +170,74 @@ public class StartCommand : IBotCommand
 
         // Don't return a message - the Accept button will trigger the final confirmation
         return new CommandResult(string.Empty, DeleteCommandMessage, DeleteResponseAfterSeconds);
+    }
+
+    /// <summary>
+    /// Deliver all pending notifications to user when they enable DMs
+    /// </summary>
+    private async Task DeliverPendingNotificationsAsync(
+        ITelegramBotClient botClient,
+        long telegramUserId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var pendingNotifications = await _pendingNotificationsRepository.GetPendingNotificationsForUserAsync(
+                telegramUserId,
+                cancellationToken);
+
+            if (!pendingNotifications.Any())
+            {
+                return; // No pending notifications
+            }
+
+            _logger.LogInformation(
+                "Delivering {Count} pending notifications to user {UserId}",
+                pendingNotifications.Count,
+                telegramUserId);
+
+            // Send each pending notification
+            foreach (var notification in pendingNotifications)
+            {
+                try
+                {
+                    await botClient.SendMessage(
+                        chatId: telegramUserId,
+                        text: notification.MessageText,
+                        cancellationToken: cancellationToken);
+
+                    // Delete successfully delivered notification
+                    await _pendingNotificationsRepository.DeletePendingNotificationAsync(
+                        notification.Id,
+                        cancellationToken);
+
+                    _logger.LogInformation(
+                        "Delivered pending {NotificationType} notification {Id} to user {UserId}",
+                        notification.NotificationType,
+                        notification.Id,
+                        telegramUserId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Failed to deliver pending notification {Id} to user {UserId}",
+                        notification.Id,
+                        telegramUserId);
+
+                    // Increment retry count but keep in queue
+                    await _pendingNotificationsRepository.IncrementRetryCountAsync(
+                        notification.Id,
+                        cancellationToken);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to process pending notifications for user {UserId}",
+                telegramUserId);
+        }
     }
 }

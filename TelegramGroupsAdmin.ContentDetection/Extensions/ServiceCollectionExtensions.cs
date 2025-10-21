@@ -38,15 +38,25 @@ public static class ServiceCollectionExtensions
 
         // Register file scanning repositories (Phase 4.17)
         services.AddScoped<IFileScanResultRepository, FileScanResultRepository>();
+        services.AddScoped<IFileScanQuotaRepository, FileScanQuotaRepository>();  // Phase 2: Cloud quota tracking
 
         // Register URL filtering services (Phase 4.13)
         services.AddScoped<IBlocklistSyncService, BlocklistSyncService>();
         services.AddScoped<IUrlPreFilterService, UrlPreFilterService>();
 
-        // Register file scanning services (Phase 4.17 - Tier 1)
+        // Register file scanning services (Phase 4.17 - Tier 1: Local scanners)
         // Note: YARA was removed due to ARM compatibility issues - ClamAV provides superior coverage
         services.AddScoped<ClamAVScannerService>();
         services.AddScoped<Tier1VotingCoordinator>();
+
+        // Register file scanning services (Phase 4.17 - Phase 2: Tier 2 cloud scanners)
+        services.AddScoped<VirusTotalScannerService>();
+        services.AddScoped<MetaDefenderScannerService>();
+        services.AddScoped<HybridAnalysisScannerService>();
+        services.AddScoped<IntezerScannerService>();
+        services.AddScoped<Tier2QueueCoordinator>();
+
+        // Register file scanning utilities
         services.AddScoped<IFileScanningTestService, FileScanningTestService>();  // UI testing service
 
         // Register individual content checks

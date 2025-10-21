@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
+using TelegramGroupsAdmin.Telegram.Services.Notifications;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 
@@ -33,6 +34,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserTagsRepository, UserTagsRepository>(); // Phase 4.12
         services.AddScoped<ITagDefinitionsRepository, TagDefinitionsRepository>(); // Phase 4.12
         services.AddScoped<IImpersonationAlertsRepository, ImpersonationAlertsRepository>(); // Phase 4.10
+        services.AddScoped<IPendingNotificationsRepository, PendingNotificationsRepository>(); // DM notification system
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
@@ -45,6 +47,14 @@ public static class ServiceCollectionExtensions
 
         // Content check coordination (Phase 4.14: filters trusted/admin users, runs critical checks for all)
         services.AddScoped<IContentCheckCoordinator, ContentCheckCoordinator>();
+
+        // DM delivery infrastructure (shared by notification system, welcome system, etc.)
+        // Singleton: Creates scopes internally for repository access
+        services.AddSingleton<IDmDeliveryService, DmDeliveryService>();
+
+        // Notification system (DM delivery with retry queue)
+        services.AddScoped<INotificationChannel, TelegramDmChannel>();
+        services.AddScoped<INotificationOrchestrator, NotificationOrchestrator>();
 
         // Moderation and user management services
         services.AddScoped<ModerationActionService>();
@@ -90,6 +100,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBotCommand, InviteCommand>(sp => sp.GetRequiredService<InviteCommand>());
         services.AddScoped<DeleteCommand>();
         services.AddScoped<IBotCommand, DeleteCommand>(sp => sp.GetRequiredService<DeleteCommand>());
+        services.AddScoped<MyStatusCommand>();
+        services.AddScoped<IBotCommand, MyStatusCommand>(sp => sp.GetRequiredService<MyStatusCommand>());
         services.AddSingleton<CommandRouter>();
 
         // Background services (refactored into smaller services)

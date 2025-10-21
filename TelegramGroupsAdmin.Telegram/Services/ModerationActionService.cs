@@ -13,6 +13,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Helpers;
+using TelegramGroupsAdmin.Telegram.Services.Notifications;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -33,6 +34,7 @@ public class ModerationActionService
     private readonly IServiceProvider _serviceProvider;
     private readonly IUserMessagingService _messagingService;
     private readonly IChatInviteLinkService _inviteLinkService;
+    private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly ILogger<ModerationActionService> _logger;
 
     public ModerationActionService(
@@ -47,6 +49,7 @@ public class ModerationActionService
         IServiceProvider serviceProvider,
         IUserMessagingService messagingService,
         IChatInviteLinkService inviteLinkService,
+        INotificationOrchestrator notificationOrchestrator,
         ILogger<ModerationActionService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;
@@ -60,6 +63,7 @@ public class ModerationActionService
         _serviceProvider = serviceProvider;
         _messagingService = messagingService;
         _inviteLinkService = inviteLinkService;
+        _notificationOrchestrator = notificationOrchestrator;
         _logger = logger;
     }
 
@@ -277,6 +281,9 @@ public class ModerationActionService
                 Success = true,
                 WarningCount = warnCount
             };
+
+            // 2.5. Send DM notification to user about the warning
+            await SendWarningNotificationAsync(userId, warnCount, reason, cancellationToken);
 
             // 3. Check if auto-ban threshold is reached
             var warningConfig = await _configService.GetEffectiveAsync<WarningSystemConfig>(ConfigType.Moderation, chatId)
@@ -901,6 +908,41 @@ public class ModerationActionService
 
         // Default: treat as system identifier
         return Actor.FromSystem(executorId);
+    }
+
+    /// <summary>
+    /// Send DM notification to user about receiving a warning
+    /// </summary>
+    private async Task SendWarningNotificationAsync(
+        long userId,
+        int warningCount,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var message = $"⚠️ **Warning Issued**\n\n" +
+                         $"You have received a warning.\n\n" +
+                         $"**Reason:** {reason}\n" +
+                         $"**Total Warnings:** {warningCount}\n\n" +
+                         $"Please review the group rules and avoid similar behavior in the future.\n\n" +
+                         $"💡 Use /mystatus to check your current status.";
+
+            var notification = new Notification("warning", message);
+
+            await _notificationOrchestrator.SendTelegramDmAsync(
+                userId,
+                notification,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Don't fail the warning if notification fails
+            _logger.LogWarning(
+                ex,
+                "Failed to send warning notification to user {UserId}",
+                userId);
+        }
     }
 }
 

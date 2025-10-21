@@ -9,7 +9,9 @@ using TelegramGroupsAdmin.ContentDetection.Services;
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
 /// <summary>
-/// File scanning check using Tier 1 local scanners (ClamAV + YARA)
+/// File scanning check using two-tier architecture:
+/// - Tier 1: Local scanners (ClamAV) run in parallel with OR voting
+/// - Tier 2: Cloud services (VirusTotal, MetaDefender, etc.) run sequentially in priority order (only if Tier 1 reports clean)
 /// Phase 4.17 - always_run=true (bypasses trust/admin exemptions)
 /// Implements hash-based caching with 24-hour TTL
 /// </summary>
@@ -18,6 +20,7 @@ public class FileScanningCheck : IContentCheck
     private readonly ILogger<FileScanningCheck> _logger;
     private readonly FileScanningConfig _config;
     private readonly Tier1VotingCoordinator _tier1Coordinator;
+    private readonly Tier2QueueCoordinator _tier2Coordinator;
     private readonly IFileScanResultRepository _scanResultRepository;
 
     public string CheckName => "FileScanning";
@@ -26,11 +29,13 @@ public class FileScanningCheck : IContentCheck
         ILogger<FileScanningCheck> logger,
         IOptions<FileScanningConfig> config,
         Tier1VotingCoordinator tier1Coordinator,
+        Tier2QueueCoordinator tier2Coordinator,
         IFileScanResultRepository scanResultRepository)
     {
         _logger = logger;
         _config = config.Value;
         _tier1Coordinator = tier1Coordinator;
+        _tier2Coordinator = tier2Coordinator;
         _scanResultRepository = scanResultRepository;
     }
 
@@ -130,13 +135,13 @@ public class FileScanningCheck : IContentCheck
                     req.CancellationToken);
             }
 
-            // Return result based on Tier 1 voting outcome
+            // Tier 1 detected threat - return immediately (no need for Tier 2)
             if (tier1Result.ThreatDetected)
             {
                 var threats = tier1Result.ThreatNames ?? new List<string>();
                 var detectedBy = tier1Result.DetectedBy ?? new List<string>();
 
-                _logger.LogWarning("File scanning THREAT for user {UserId}: {Threats} detected by {Scanners}",
+                _logger.LogWarning("File scanning THREAT for user {UserId}: {Threats} detected by {Scanners} (Tier 1)",
                     req.UserId,
                     string.Join(", ", threats),
                     string.Join(", ", detectedBy));
@@ -145,20 +150,89 @@ public class FileScanningCheck : IContentCheck
                 {
                     CheckName = CheckName,
                     Result = CheckResultType.Spam,  // Infected file = spam
-                    Details = $"Malware detected: {string.Join(", ", threats)} by {string.Join("+", detectedBy)} ({tier1Result.TotalDurationMs}ms)",
+                    Details = $"Malware detected: {string.Join(", ", threats)} by {string.Join("+", detectedBy)} (Tier 1, {tier1Result.TotalDurationMs}ms)",
                     Confidence = 100  // Virus scanner results are definitive
                 };
             }
 
-            // File is clean
-            _logger.LogInformation("File scanning CLEAN for user {UserId} (duration: {Duration}ms)",
-                req.UserId, tier1Result.TotalDurationMs);
+            // Tier 1 reported clean - proceed to Tier 2 cloud queue
+            _logger.LogInformation("Tier 1 scan CLEAN for user {UserId}, proceeding to Tier 2 cloud queue",
+                req.UserId);
+
+            var tier2Result = await _tier2Coordinator.ScanFileAsync(
+                req.FileBytes,
+                req.FileHash,
+                req.FileName,
+                req.CancellationToken);
+
+            // Cache Tier 2 cloud scan results
+            foreach (var cloudScanResult in tier2Result.CloudScanResults)
+            {
+                await _scanResultRepository.AddScanResultAsync(
+                    new FileScanResultModel(
+                        Id: 0,
+                        FileHash: req.FileHash,
+                        Scanner: cloudScanResult.ServiceName,
+                        Result: cloudScanResult.ResultType.ToString(),
+                        ThreatName: cloudScanResult.ThreatName,
+                        ScanDurationMs: cloudScanResult.ScanDurationMs,
+                        ScannedAt: DateTimeOffset.UtcNow,
+                        MetadataJson: cloudScanResult.Metadata != null
+                            ? System.Text.Json.JsonSerializer.Serialize(cloudScanResult.Metadata)
+                            : null
+                    ),
+                    req.CancellationToken);
+            }
+
+            // Cache hash lookup results (didn't require file upload, so store separately)
+            foreach (var (serviceName, hashLookup) in tier2Result.HashLookupResults)
+            {
+                await _scanResultRepository.AddScanResultAsync(
+                    new FileScanResultModel(
+                        Id: 0,
+                        FileHash: req.FileHash,
+                        Scanner: $"{serviceName} (hash lookup)",
+                        Result: hashLookup.Status.ToString(),
+                        ThreatName: hashLookup.ThreatName,
+                        ScanDurationMs: hashLookup.DurationMs,
+                        ScannedAt: DateTimeOffset.UtcNow,
+                        MetadataJson: hashLookup.Metadata != null
+                            ? System.Text.Json.JsonSerializer.Serialize(hashLookup.Metadata)
+                            : null
+                    ),
+                    req.CancellationToken);
+            }
+
+            // Return final result based on Tier 2 outcome
+            if (tier2Result.ThreatDetected)
+            {
+                var threats = tier2Result.ThreatNames ?? new List<string>();
+                var detectedBy = tier2Result.DetectedBy ?? new List<string>();
+
+                _logger.LogWarning("File scanning THREAT for user {UserId}: {Threats} detected by {Scanners} (Tier 2)",
+                    req.UserId,
+                    string.Join(", ", threats),
+                    string.Join(", ", detectedBy));
+
+                return new ContentCheckResponse
+                {
+                    CheckName = CheckName,
+                    Result = CheckResultType.Spam,  // Infected file = spam
+                    Details = $"Malware detected: {string.Join(", ", threats)} by {string.Join("+", detectedBy)} (Tier 2, {tier2Result.TotalDurationMs}ms)",
+                    Confidence = 100  // Virus scanner results are definitive
+                };
+            }
+
+            // File is clean (both Tier 1 and Tier 2)
+            int totalDuration = tier1Result.TotalDurationMs + tier2Result.TotalDurationMs;
+            _logger.LogInformation("File scanning CLEAN for user {UserId} (Tier 1 + Tier 2, total: {Duration}ms)",
+                req.UserId, totalDuration);
 
             return new ContentCheckResponse
             {
                 CheckName = CheckName,
                 Result = CheckResultType.Clean,
-                Details = $"File clean | Scanned by {tier1Result.ScannerResults.Count} scanner(s) ({tier1Result.TotalDurationMs}ms)",
+                Details = $"File clean | Tier 1: {tier1Result.ScannerResults.Count} scanner(s), Tier 2: {tier2Result.CloudScanResults.Count} service(s) ({totalDuration}ms)",
                 Confidence = 100  // Virus scanner results are definitive
             };
         }

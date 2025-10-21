@@ -65,6 +65,9 @@ public class AppDbContext : DbContext
     public DbSet<FileScanResultRecord> FileScanResults => Set<FileScanResultRecord>();
     public DbSet<FileScanQuotaRecord> FileScanQuotas => Set<FileScanQuotaRecord>();
 
+    // Notification tables
+    public DbSet<PendingNotificationRecord> PendingNotifications => Set<PendingNotificationRecord>();
+
     // TickerQ entities (background job system)
     public DbSet<TimeTickerEntity> TimeTickers => Set<TimeTickerEntity>();
     public DbSet<CronTickerEntity> CronTickers => Set<CronTickerEntity>();
@@ -455,6 +458,18 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<FileScanQuotaRecord>()
             .HasIndex(fsq => new { fsq.Service, fsq.QuotaType, fsq.QuotaWindowStart })
             .IsUnique();
+
+        // PendingNotifications indexes - lookup by user for delivery
+        modelBuilder.Entity<PendingNotificationRecord>()
+            .HasIndex(pn => pn.TelegramUserId);
+
+        // Index for cleanup job (find expired notifications)
+        modelBuilder.Entity<PendingNotificationRecord>()
+            .HasIndex(pn => pn.ExpiresAt);
+
+        // Index for analytics (notifications by type)
+        modelBuilder.Entity<PendingNotificationRecord>()
+            .HasIndex(pn => new { pn.NotificationType, pn.CreatedAt });
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)

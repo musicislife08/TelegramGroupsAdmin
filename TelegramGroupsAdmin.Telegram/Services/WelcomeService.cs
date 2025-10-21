@@ -31,6 +31,7 @@ public class WelcomeService : IWelcomeService
     private readonly TelegramOptions _telegramOptions;
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotProtectionService _botProtectionService;
+    private readonly IDmDeliveryService _dmDeliveryService;
 
     /// <summary>
     /// Static restricted permissions (all false) for new users awaiting welcome acceptance.
@@ -80,12 +81,14 @@ public class WelcomeService : IWelcomeService
         ILogger<WelcomeService> logger,
         IOptions<TelegramOptions> telegramOptions,
         IServiceProvider serviceProvider,
-        IBotProtectionService botProtectionService)
+        IBotProtectionService botProtectionService,
+        IDmDeliveryService dmDeliveryService)
     {
         _logger = logger;
         _telegramOptions = telegramOptions.Value;
         _serviceProvider = serviceProvider;
         _botProtectionService = botProtectionService;
+        _dmDeliveryService = dmDeliveryService;
     }
 
     private async Task<T> WithRepositoryAsync<T>(Func<IWelcomeResponsesRepository, CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
@@ -999,75 +1002,22 @@ public class WelcomeService : IWelcomeService
         // Add confirmation footer
         dmText += "\n\n✅ You're all set! You can now participate in the chat.";
 
-        try
-        {
-            // Try to send DM
-            await botClient.SendMessage(
-                chatId: user.Id,
-                text: dmText,
-                cancellationToken: cancellationToken);
+        // Delegate to DmDeliveryService with chat fallback and 30-second auto-delete
+        var result = await _dmDeliveryService.SendDmAsync(
+            telegramUserId: user.Id,
+            messageText: dmText,
+            fallbackChatId: chatId,
+            autoDeleteSeconds: 30,
+            cancellationToken: cancellationToken);
 
-            _logger.LogInformation(
-                "Sent rules DM to user {UserId} (@{Username})",
-                user.Id,
-                user.Username);
+        _logger.LogInformation(
+            "Rules sent to user {UserId} (@{Username}): DmSent={DmSent}, FallbackUsed={FallbackUsed}",
+            user.Id,
+            user.Username,
+            result.DmSent,
+            result.FallbackUsed);
 
-            return (DmSent: true, DmFallback: false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to send rules DM to user {UserId}, falling back to chat message",
-                user.Id);
-
-            // Fallback: Send main welcome message in chat with auto-delete after 30 seconds
-            try
-            {
-                var chatInfo = await botClient.GetChat(chatId, cancellationToken);
-
-                var messageText = config.MainWelcomeMessage
-                    .Replace("{username}", username)
-                    .Replace("{chat_name}", chatInfo.Title ?? "this chat")
-                    .Replace("{timeout}", config.TimeoutSeconds.ToString());
-
-                var fallbackMessage = await botClient.SendMessage(
-                    chatId: chatId,
-                    text: messageText,
-                    cancellationToken: cancellationToken);
-
-                _logger.LogInformation(
-                    "Sent fallback rules in chat {ChatId} for user {UserId}, will delete in 30 seconds",
-                    chatId,
-                    user.Id);
-
-                // Auto-delete fallback message after 30 seconds via TickerQ
-                var fallbackDeletePayload = new DeleteMessagePayload(
-                    chatId,
-                    fallbackMessage.MessageId,
-                    "fallback_rules"
-                );
-
-                await TickerQHelper.ScheduleJobAsync(
-                    _serviceProvider,
-                    _logger,
-                    "DeleteMessage",
-                    fallbackDeletePayload,
-                    delaySeconds: 30,
-                    retries: 0);
-
-                return (DmSent: false, DmFallback: true);
-            }
-            catch (Exception fallbackEx)
-            {
-                _logger.LogError(
-                    fallbackEx,
-                    "Failed to send rules fallback message in chat {ChatId}",
-                    chatId);
-
-                return (DmSent: false, DmFallback: false);
-            }
-        }
+        return (DmSent: result.DmSent, DmFallback: result.FallbackUsed);
     }
 
     private async Task HandleUserLeftAsync(long chatId, long userId, CancellationToken cancellationToken = default)
