@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration.Models;
@@ -21,33 +20,24 @@ public class VirusTotalScannerService : ICloudScannerService
     private readonly FileScanningConfig _config;
     private readonly IFileScanQuotaRepository _quotaRepository;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IConfiguration _configuration;
 
     private const int MinEngineThreshold = 2;  // Consider malicious if >= 2 engines detect it
 
     public string ServiceName => "VirusTotal";
 
-    public bool IsEnabled
-    {
-        get
-        {
-            var apiKey = _configuration["VirusTotal:ApiKey"];
-            return _config.Tier2.VirusTotal.Enabled && !string.IsNullOrWhiteSpace(apiKey);
-        }
-    }
+    // Only check database config - API key is configured in named HttpClient
+    public bool IsEnabled => _config.Tier2.VirusTotal.Enabled;
 
     public VirusTotalScannerService(
         ILogger<VirusTotalScannerService> logger,
         IOptions<FileScanningConfig> config,
         IFileScanQuotaRepository quotaRepository,
-        IHttpClientFactory httpClientFactory,
-        IConfiguration configuration)
+        IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
         _config = config.Value;
         _quotaRepository = quotaRepository;
         _httpClientFactory = httpClientFactory;
-        _configuration = configuration;
     }
 
     public async Task<CloudHashLookupResult?> LookupHashAsync(
