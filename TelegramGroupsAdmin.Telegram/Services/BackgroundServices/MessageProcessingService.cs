@@ -288,6 +288,21 @@ public partial class MessageProcessingService(
                     cancellationToken);
             }
 
+            // Phase 4.14: Schedule file scanning for attachments (Document, Video, Audio, Voice, Sticker)
+            // Photos are handled separately above (image spam detection via OpenAI Vision)
+            if (HasFileAttachment(message, out var fileId, out var fileSize, out var fileName, out var contentType))
+            {
+                await ScheduleFileScanJobAsync(
+                    message.MessageId,
+                    message.Chat.Id,
+                    message.From!.Id,
+                    fileId!,
+                    fileSize,
+                    fileName,
+                    contentType,
+                    cancellationToken);
+            }
+
             // Calculate content hash for spam correlation
             var urlsJson = urls != null ? JsonSerializer.Serialize(urls) : "";
             var contentHash = ComputeContentHash(text ?? "", urlsJson);
@@ -808,5 +823,126 @@ public partial class MessageProcessingService(
             photoPayload,
             delaySeconds: 0,
             retries: 2);
+    }
+
+    /// <summary>
+    /// Schedule file scanning via TickerQ with 0s delay for instant execution
+    /// Phase 4.14: Downloads file to temp, scans with ClamAV+VirusTotal, deletes if infected
+    /// Temp file deleted after scan (no persistent storage)
+    /// </summary>
+    private async Task ScheduleFileScanJobAsync(
+        long messageId,
+        long chatId,
+        long userId,
+        string fileId,
+        long fileSize,
+        string? fileName,
+        string? contentType,
+        CancellationToken cancellationToken = default)
+    {
+        var scanPayload = new TelegramGroupsAdmin.Telegram.Abstractions.Jobs.FileScanJobPayload(
+            MessageId: messageId,
+            ChatId: chatId,
+            UserId: userId,
+            FileId: fileId,
+            FileSize: fileSize,
+            FileName: fileName,
+            ContentType: contentType
+        );
+
+        logger.LogInformation(
+            "Scheduling file scan for '{FileName}' ({FileSize} bytes) from user {UserId} in chat {ChatId}",
+            fileName ?? "unknown",
+            fileSize,
+            userId,
+            chatId);
+
+        await TickerQHelper.ScheduleJobAsync(
+            serviceProvider,
+            logger,
+            "FileScan",
+            scanPayload,
+            delaySeconds: 0,
+            retries: 3); // Higher retries than photo fetch (ClamAV restart, VT rate limit scenarios)
+    }
+
+    /// <summary>
+    /// Check if message has a scannable file attachment (Document, Video, Audio, Voice, Sticker)
+    /// Photos are handled separately via image spam detection (OpenAI Vision)
+    /// Returns true if file found, with out parameters for file metadata
+    /// </summary>
+    private static bool HasFileAttachment(
+        Message message,
+        out string? fileId,
+        out long fileSize,
+        out string? fileName,
+        out string? contentType)
+    {
+        fileId = null;
+        fileSize = 0;
+        fileName = null;
+        contentType = null;
+
+        // Document (PDF, DOCX, EXE, ZIP, etc.)
+        if (message.Document != null)
+        {
+            fileId = message.Document.FileId;
+            fileSize = message.Document.FileSize ?? 0;
+            fileName = message.Document.FileName;
+            contentType = message.Document.MimeType;
+            return true;
+        }
+
+        // Video file
+        if (message.Video != null)
+        {
+            fileId = message.Video.FileId;
+            fileSize = message.Video.FileSize ?? 0;
+            fileName = message.Video.FileName ?? $"video_{message.Video.FileUniqueId}.mp4";
+            contentType = message.Video.MimeType ?? "video/mp4";
+            return true;
+        }
+
+        // Audio file
+        if (message.Audio != null)
+        {
+            fileId = message.Audio.FileId;
+            fileSize = message.Audio.FileSize ?? 0;
+            fileName = message.Audio.FileName ?? message.Audio.Title ?? $"audio_{message.Audio.FileUniqueId}.mp3";
+            contentType = message.Audio.MimeType ?? "audio/mpeg";
+            return true;
+        }
+
+        // Voice message
+        if (message.Voice != null)
+        {
+            fileId = message.Voice.FileId;
+            fileSize = message.Voice.FileSize ?? 0;
+            fileName = $"voice_{message.Voice.FileUniqueId}.ogg";
+            contentType = message.Voice.MimeType ?? "audio/ogg";
+            return true;
+        }
+
+        // Sticker (can contain exploits)
+        if (message.Sticker != null)
+        {
+            fileId = message.Sticker.FileId;
+            fileSize = message.Sticker.FileSize ?? 0;
+            fileName = $"sticker_{message.Sticker.FileUniqueId}.webp";
+            contentType = "image/webp"; // Telegram stickers are WebP format
+            return true;
+        }
+
+        // Video note (circular video message)
+        if (message.VideoNote != null)
+        {
+            fileId = message.VideoNote.FileId;
+            fileSize = message.VideoNote.FileSize ?? 0;
+            fileName = $"videonote_{message.VideoNote.FileUniqueId}.mp4";
+            contentType = "video/mp4";
+            return true;
+        }
+
+        return false;
     }
 }

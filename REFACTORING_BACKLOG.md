@@ -61,6 +61,98 @@ await repository.InsertAsync(...).ConfigureAwait(false);
 
 ---
 
+### ARCH-2: Replace Task.Run Fire-and-Forget with TickerQ Jobs for Spam Detection
+
+**Project:** TelegramGroupsAdmin.Telegram
+**Files:** MessageProcessingService.cs (lines 436, 529)
+**Severity:** Medium | **Impact:** Reliability, Retry Logic, Exception Handling
+
+**Status:** DEFERRED - Works acceptably, but has technical debt and missed retry opportunities
+
+**Current Issue:**
+```csharp
+// Line 436 - MessageProcessingService.cs
+_ = Task.Run(async () =>
+{
+    await RunSpamDetectionAsync(botClient, message, text, editVersion: 0, CancellationToken.None);
+}, CancellationToken.None);
+```
+
+**Problems:**
+1. **Task.Run Anti-Pattern**: Wastes thread pool thread in async method
+2. **Silent Exception Swallowing**: Discarded task (`_=`) loses all error information
+3. **No Retry Logic**: OpenAI 429 (rate limit) → fail-open immediately, never retries (could retry in 60s for accurate verdict)
+4. **CancellationToken.None**: Spam detection continues even during shutdown
+5. **No Backpressure**: Under heavy load, unbounded fire-and-forget can queue thousands of tasks
+
+**Recommended Fix - TickerQ Job Pattern:**
+
+```csharp
+// MessageProcessingService.cs - Replace Task.Run
+await ScheduleSpamDetectionJobAsync(message.MessageId, text, cancellationToken);
+
+// New: TelegramGroupsAdmin.Telegram.Jobs/SpamDetectionJob.cs
+[TickerFunction(Key = "spam_detection_{MessageId}")]
+public async Task ExecuteAsync(TickerFunctionContext<SpamDetectionJobPayload> context)
+{
+    var payload = context.Payload;
+
+    try
+    {
+        await RunSpamDetectionAsync(payload.MessageId, payload.Text, payload.EditVersion, context.CancellationToken);
+    }
+    catch (HttpRequestException ex) when (IsRetriableHttpError(ex))
+    {
+        // OpenAI 429 rate limit, 504 gateway timeout, etc.
+        throw; // TickerQ will retry with exponential backoff
+    }
+    catch (TimeoutException)
+    {
+        // Network timeout - retry
+        throw;
+    }
+    catch (Exception ex)
+    {
+        // Permanent failures (401 auth, 400 bad request) - don't retry
+        _logger.LogError(ex, "Spam detection failed permanently for message {MessageId}", payload.MessageId);
+        // Don't throw - allows TickerQ to mark job as completed (failed but handled)
+    }
+}
+
+private bool IsRetriableHttpError(HttpRequestException ex)
+{
+    // Retry on: 429 (rate limit), 5xx (server errors)
+    // Don't retry: 401/403 (auth), 400 (bad request)
+    return ex.StatusCode == (HttpStatusCode)429 ||
+           ((int?)ex.StatusCode >= 500 && (int?)ex.StatusCode < 600);
+}
+```
+
+**Benefits:**
+- **Persistence**: Job survives app restarts (OpenAI calls can take 1-3 seconds)
+- **Smart Retry**: OpenAI 429 rate limit → Retry in 60s → Get accurate spam verdict instead of fail-open false negative
+- **Exception Capture**: All exceptions logged properly instead of silently swallowed
+- **Backpressure**: TickerQ queue naturally limits concurrent spam checks
+- **Monitoring**: Can query pending spam detection jobs, track retry counts
+- **Cancellation Support**: Respects cancellation during shutdown
+
+**Retry Configuration:**
+- Max retries: 2 (it's just spam, not critical like file scanning)
+- Backoff: Fixed delay (60s, 120s) - matches typical rate limit windows
+- Retry only on: 429 rate limit, 5xx server errors, network timeouts
+- Don't retry: 401/403 auth errors, 400 bad request
+
+**Expected Improvement:**
+- **Accuracy**: 5-10% improvement in spam detection (fewer false negatives from rate limits)
+- **Reliability**: No silent failures, proper error logging
+- **Operations**: Visibility into pending/failed spam checks
+
+**Priority:** Medium - Current fire-and-forget works but misses retry opportunities. File scanning (Phase 4.14) has higher priority and should use TickerQ pattern from the start. Consider implementing after FileScanJob is proven successful.
+
+**Related Work:** FileScanJob (Phase 4.14) will establish the TickerQ pattern for critical async work. Once proven, applying same pattern to spam detection is low risk.
+
+---
+
 ## Performance Optimization Issues
 
 The following performance issues were identified by comprehensive analysis across all 7 projects on 2025-10-19, then reviewed and filtered based on actual deployment context.
