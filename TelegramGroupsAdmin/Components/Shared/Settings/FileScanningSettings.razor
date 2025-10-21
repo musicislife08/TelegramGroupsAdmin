@@ -70,17 +70,6 @@
                     </MudExpansionPanel>
                 </MudExpansionPanels>
 
-                <MudDivider Class="my-4" />
-
-                <!-- Save Button -->
-                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
-                    <MudButton Variant="Variant.Outlined" OnClick="LoadConfig" StartIcon="@Icons.Material.Filled.Refresh">
-                        Reset
-                    </MudButton>
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveConfig" StartIcon="@Icons.Material.Filled.Save" Disabled="@_isSaving">
-                        @(_isSaving ? "Saving..." : "Save Configuration")
-                    </MudButton>
-                </MudStack>
             </MudStack>
         </MudPaper>
     </MudItem>
@@ -105,7 +94,7 @@
                     <MudExpansionPanel>
                         <TitleContent>
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudSwitch T="bool" @bind-Value="@_config.Tier2.VirusTotal.Enabled" Color="Color.Success" />
+                                <MudSwitch T="bool" Value="@_config.Tier2.VirusTotal.Enabled" ValueChanged="OnVirusTotalEnabledChanged" Color="Color.Success" />
                                 <MudText Typo="Typo.h6">VirusTotal</MudText>
                                 <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text">70+ Engines</MudChip>
                                 <MudSpacer />
@@ -117,6 +106,10 @@
                                 {
                                     <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Title="API Key Missing" />
                                 }
+                                @if (_isSaving)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                }
                             </MudStack>
                         </TitleContent>
                         <ChildContent>
@@ -124,8 +117,8 @@
                                 <MudText Typo="Typo.body2">Multi-engine cloud scanning with 70+ antivirus engines</MudText>
 
                                 <MudStack Row="true" Spacing="2">
-                                    <MudNumericField T="int" Label="Daily Limit" @bind-Value="@_config.Tier2.VirusTotal.DailyLimit" Variant="Variant.Outlined" HelperText="Free tier: 500 requests/day" />
-                                    <MudNumericField T="int" Label="Rate Limit (/min)" @bind-Value="@_config.Tier2.VirusTotal.PerMinuteLimit" Variant="Variant.Outlined" HelperText="Free tier: 4 requests/minute" />
+                                    <MudNumericField T="int" Label="Daily Limit" Value="@_config.Tier2.VirusTotal.DailyLimit" ValueChanged="OnDailyLimitChanged" Variant="Variant.Outlined" HelperText="Free tier: 500 requests/day" />
+                                    <MudNumericField T="int" Label="Rate Limit (/min)" Value="@_config.Tier2.VirusTotal.PerMinuteLimit" ValueChanged="OnPerMinuteLimitChanged" Variant="Variant.Outlined" HelperText="Free tier: 4 requests/minute" />
                                 </MudStack>
 
                                 <MudAlert Severity="_virusTotalConfigured ? Severity.Success : Severity.Warning" Dense="true">
@@ -516,22 +509,40 @@
         _virusTotalConfigured = !string.IsNullOrWhiteSpace(apiKey);
     }
 
-    private async Task SaveConfig()
+    private async Task SaveConfigAsync()
     {
         _isSaving = true;
         try
         {
             await ConfigRepository.SaveAsync(_config, chatId: null); // Save global config
-            Snackbar.Add("File scanning configuration saved successfully!", Severity.Success);
+            Snackbar.Add("Settings saved", Severity.Success);
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error saving configuration: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Error saving: {ex.Message}", Severity.Error);
         }
         finally
         {
             _isSaving = false;
         }
+    }
+
+    private async Task OnVirusTotalEnabledChanged(bool enabled)
+    {
+        _config.Tier2.VirusTotal.Enabled = enabled;
+        await SaveConfigAsync();
+    }
+
+    private async Task OnDailyLimitChanged(int limit)
+    {
+        _config.Tier2.VirusTotal.DailyLimit = limit;
+        await SaveConfigAsync();
+    }
+
+    private async Task OnPerMinuteLimitChanged(int limit)
+    {
+        _config.Tier2.VirusTotal.PerMinuteLimit = limit;
+        await SaveConfigAsync();
     }
 
     private string FormatBytes(long bytes)
