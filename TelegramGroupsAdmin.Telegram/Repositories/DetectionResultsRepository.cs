@@ -456,4 +456,51 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return detectionResult.Id;
     }
 
+    // ====================================================================================
+    // File Scanning UI Methods (Phase 4.22)
+    // ====================================================================================
+
+    public async Task<List<DetectionResultRecord>> GetFileScanResultsAsync(
+        int limit = 50,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var results = await WithActorJoins(
+                context.DetectionResults.AsNoTracking().Where(dr => dr.DetectionSource == "file_scan"),
+                context)
+            .OrderByDescending(dr => dr.DetectedAt)
+            .Skip(offset)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        return results;
+    }
+
+    public async Task<Dictionary<string, int>> GetFileScanStatsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var sevenDaysAgo = DateTimeOffset.UtcNow.AddDays(-7);
+
+        var stats = await context.DetectionResults
+            .Where(dr => dr.DetectionSource == "file_scan" &&
+                        dr.IsSpam == true && // Only infected files
+                        dr.DetectedAt >= sevenDaysAgo)
+            .GroupBy(dr => dr.DetectionMethod)
+            .Select(g => new { Scanner = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        return stats.ToDictionary(s => s.Scanner ?? "Unknown", s => s.Count);
+    }
+
+    public async Task<int> GetFileScanResultsCountAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.DetectionResults
+            .Where(dr => dr.DetectionSource == "file_scan")
+            .CountAsync(cancellationToken);
+    }
+
 }

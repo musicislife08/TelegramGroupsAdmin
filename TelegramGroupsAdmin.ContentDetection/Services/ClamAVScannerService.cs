@@ -154,4 +154,57 @@ public class ClamAVScannerService : IFileScannerService
             };
         }
     }
+
+    /// <summary>
+    /// Check ClamAV daemon health and get version/signature info (Phase 4.22)
+    /// </summary>
+    /// <returns>Health check result with version and signature count</returns>
+    public async Task<ClamAVHealthResult> GetHealthAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // Ping ClamAV daemon
+            var pingResult = await _clamClient.PingAsync(cancellationToken);
+            if (!pingResult)
+            {
+                return new ClamAVHealthResult
+                {
+                    IsHealthy = false,
+                    ErrorMessage = $"ClamAV daemon not responding at {_config.Tier1.ClamAV.Host}:{_config.Tier1.ClamAV.Port}"
+                };
+            }
+
+            // Get version information (includes signature count)
+            var versionResult = await _clamClient.GetVersionAsync(cancellationToken);
+
+            return new ClamAVHealthResult
+            {
+                IsHealthy = true,
+                Version = versionResult ?? "Unknown",
+                Host = _config.Tier1.ClamAV.Host,
+                Port = _config.Tier1.ClamAV.Port
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking ClamAV health");
+            return new ClamAVHealthResult
+            {
+                IsHealthy = false,
+                ErrorMessage = ex.Message
+            };
+        }
+    }
+}
+
+/// <summary>
+/// ClamAV health check result (Phase 4.22)
+/// </summary>
+public class ClamAVHealthResult
+{
+    public bool IsHealthy { get; set; }
+    public string? Version { get; set; }
+    public string? Host { get; set; }
+    public int Port { get; set; }
+    public string? ErrorMessage { get; set; }
 }

@@ -241,4 +241,19 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
 
         return (firstOfMonth, firstOfNextMonth);
     }
+
+    public async Task<List<FileScanQuotaModel>> GetAllActiveQuotasAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+
+        // Get all quotas where window_end > now (still active)
+        var quotas = await context.FileScanQuotas
+            .Where(q => q.QuotaWindowEnd > now)
+            .OrderBy(q => q.Service)
+            .ThenBy(q => q.QuotaType)
+            .ToListAsync(cancellationToken);
+
+        return quotas.Select(q => q.ToModel()).ToList();
+    }
 }

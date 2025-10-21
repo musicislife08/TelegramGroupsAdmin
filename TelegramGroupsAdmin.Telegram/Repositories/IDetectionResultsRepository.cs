@@ -100,4 +100,37 @@ public interface IDetectionResultsRepository
     /// Returns the ID of the created detection_result
     /// </summary>
     Task<long> AddManualTrainingSampleAsync(string messageText, bool isSpam, string source, int? confidence, string? addedBy, CancellationToken cancellationToken = default);
+
+    // ====================================================================================
+    // File Scanning UI Methods (Phase 4.22)
+    // ====================================================================================
+
+    /// <summary>
+    /// Get file scan results for UI display (paginated)
+    /// Filters by detection_source='file_scan' only
+    /// </summary>
+    /// <param name="limit">Maximum number of results to return</param>
+    /// <param name="offset">Number of results to skip (for pagination)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of file scan detection results ordered by detected_at DESC</returns>
+    Task<List<DetectionResultRecord>> GetFileScanResultsAsync(
+        int limit = 50,
+        int offset = 0,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get file scan statistics for UI dashboard (7-day window)
+    /// Returns counts grouped by scanner (ClamAV, VirusTotal) for infected files only
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Dictionary keyed by detection_method (scanner name) with count of detections</returns>
+    Task<Dictionary<string, int>> GetFileScanStatsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get total count of file scan results (for pagination)
+    /// Filters by detection_source='file_scan' only
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Total count of file scan results</returns>
+    Task<int> GetFileScanResultsCountAsync(CancellationToken cancellationToken = default);
 }

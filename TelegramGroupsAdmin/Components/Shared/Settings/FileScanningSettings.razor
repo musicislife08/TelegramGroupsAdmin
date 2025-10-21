@@ -2,8 +2,14 @@
 @using Microsoft.Extensions.Options
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Configuration.Repositories
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Services
 @inject IFileScanningConfigRepository ConfigRepository
+@inject IFileScanQuotaRepository QuotaRepository
+@inject ClamAVScannerService ClamAVService
 @inject ISnackbar Snackbar
+@inject IConfiguration Configuration
 
 <MudGrid>
     <!-- Info Alert -->
@@ -78,81 +84,103 @@
         </MudPaper>
     </MudItem>
 
-    <!-- Tier 2: Cloud Scanners (Phase 2 - Coming Soon) -->
+    <!-- Tier 2: Cloud Scanners (VirusTotal Active) -->
     <MudItem xs="12">
         <MudPaper Class="pa-4" Elevation="2">
             <MudStack Spacing="3">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.Cloud" Color="Color.Warning" />
+                    <MudIcon Icon="@Icons.Material.Filled.Cloud" Color="Color.Success" />
                     <MudText Typo="Typo.h6">Tier 2: Cloud Scanners</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Phase 2 - Coming Soon</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">VirusTotal Active</MudChip>
                 </MudStack>
                 <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    Cloud services are tried sequentially in user-configured priority order. Quota-aware with fail-open behavior.
+                    VirusTotal provides multi-engine scanning with 70+ antivirus engines. Used as fallback when Tier 1 finds nothing.
                 </MudText>
 
                 <MudDivider Class="my-2" />
 
-                <!-- Priority Queue (Disabled - Phase 2) -->
-                <MudStack Spacing="2">
-                    <MudText Typo="Typo.subtitle2">Cloud Service Priority Order</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Services are tried in this order until one succeeds or all are exhausted</MudText>
+                <!-- VirusTotal Scanner -->
+                <MudExpansionPanels Elevation="0">
+                    <MudExpansionPanel>
+                        <TitleContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudSwitch T="bool" @bind-Value="@_config.Tier2.VirusTotal.Enabled" Color="Color.Success" />
+                                <MudText Typo="Typo.h6">VirusTotal</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text">70+ Engines</MudChip>
+                                <MudSpacer />
+                                @if (_virusTotalConfigured)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Title="API Key Configured" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Title="API Key Missing" />
+                                }
+                            </MudStack>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudStack Spacing="2" Class="mt-2">
+                                <MudText Typo="Typo.body2">Multi-engine cloud scanning with 70+ antivirus engines</MudText>
 
-                    <MudList T="string" Disabled="true">
-                        <MudListItem T="string" Icon="@Icons.Material.Filled.DragIndicator" Disabled="true">
-                            <MudText>1. VirusTotal (500/day, 4/min)</MudText>
-                        </MudListItem>
-                        <MudListItem T="string" Icon="@Icons.Material.Filled.DragIndicator" Disabled="true">
-                            <MudText>2. MetaDefender (40/day)</MudText>
-                        </MudListItem>
-                        <MudListItem T="string" Icon="@Icons.Material.Filled.DragIndicator" Disabled="true">
-                            <MudText>3. Hybrid Analysis (30/month)</MudText>
-                        </MudListItem>
-                        <MudListItem T="string" Icon="@Icons.Material.Filled.DragIndicator" Disabled="true">
-                            <MudText>4. Intezer (10/month)</MudText>
-                        </MudListItem>
-                    </MudList>
+                                <MudStack Row="true" Spacing="2">
+                                    <MudNumericField T="int" Label="Daily Limit" @bind-Value="@_config.Tier2.VirusTotal.DailyLimit" Variant="Variant.Outlined" HelperText="Free tier: 500 requests/day" />
+                                    <MudNumericField T="int" Label="Rate Limit (/min)" @bind-Value="@_config.Tier2.VirusTotal.PerMinuteLimit" Variant="Variant.Outlined" HelperText="Free tier: 4 requests/minute" />
+                                </MudStack>
 
-                    <MudAlert Severity="Severity.Info" Dense="true">
-                        <strong>Phase 2 Feature:</strong> Drag-and-drop priority ordering, quota tracking, and API key configuration.
-                        All services use free tiers for zero-cost operation.
-                    </MudAlert>
-                </MudStack>
+                                <MudAlert Severity="_virusTotalConfigured ? Severity.Success : Severity.Warning" Dense="true">
+                                    @if (_virusTotalConfigured)
+                                    {
+                                        <text><strong>Configured:</strong> API key set via environment variable VIRUSTOTAL__APIKEY</text>
+                                    }
+                                    else
+                                    {
+                                        <text><strong>Not Configured:</strong> Set VIRUSTOTAL__APIKEY environment variable. VirusTotal will be skipped until configured.</text>
+                                    }
+                                </MudAlert>
+                            </MudStack>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
 
                 <MudDivider Class="my-2" />
 
-                <!-- Quota Display (Disabled - Phase 2) -->
+                <!-- Quota Usage -->
                 <MudStack Spacing="2">
-                    <MudText Typo="Typo.subtitle2">Quota Usage</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText Typo="Typo.subtitle2">Quota Usage</MudText>
+                        <MudSpacer />
+                        <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadQuotas" Disabled="@_isLoadingQuotas">
+                            Refresh
+                        </MudButton>
+                    </MudStack>
 
-                    <fieldset disabled style="border: none; padding: 0; margin: 0;">
+                    @if (_isLoadingQuotas)
+                    {
+                        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                    }
+                    else if (_quotas.Count > 0)
+                    {
                         <MudStack Spacing="1">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudText Typo="Typo.body2" Style="min-width: 120px;">VirusTotal</MudText>
-                                <MudProgressLinear Value="0" Color="Color.Primary" Size="Size.Large" Style="flex: 1;" />
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">0 / 500</MudText>
-                            </MudStack>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudText Typo="Typo.body2" Style="min-width: 120px;">MetaDefender</MudText>
-                                <MudProgressLinear Value="0" Color="Color.Primary" Size="Size.Large" Style="flex: 1;" />
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">0 / 40</MudText>
-                            </MudStack>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudText Typo="Typo.body2" Style="min-width: 120px;">Hybrid Analysis</MudText>
-                                <MudProgressLinear Value="0" Color="Color.Primary" Size="Size.Large" Style="flex: 1;" />
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">0 / 30</MudText>
-                            </MudStack>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudText Typo="Typo.body2" Style="min-width: 120px;">Intezer</MudText>
-                                <MudProgressLinear Value="0" Color="Color.Primary" Size="Size.Large" Style="flex: 1;" />
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">0 / 10</MudText>
-                            </MudStack>
-                        </MudStack>
-                    </fieldset>
+                            @foreach (var quota in _quotas.Where(q => q.Service == "VirusTotal"))
+                            {
+                                var percentage = quota.LimitValue > 0 ? (double)quota.Count / quota.LimitValue * 100 : 0;
+                                var progressColor = percentage < 50 ? Color.Success : (percentage < 80 ? Color.Warning : Color.Error);
 
-                    <MudAlert Severity="Severity.Info" Dense="true">
-                        <strong>Phase 2 Feature:</strong> Real-time quota tracking with automatic reset at midnight UTC (daily) or first of month (monthly).
-                    </MudAlert>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudText Typo="Typo.body2" Style="min-width: 120px;">VirusTotal (@quota.QuotaType)</MudText>
+                                    <MudProgressLinear Value="@percentage" Color="@progressColor" Size="Size.Large" Style="flex: 1;" />
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="min-width: 80px;">@quota.Count / @quota.LimitValue</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="min-width: 120px;">Resets: @FormatTimeUntilReset(quota.QuotaWindowEnd)</MudText>
+                                </MudStack>
+                            }
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true">
+                            No quota usage yet. Quotas will appear after first file scan using VirusTotal.
+                        </MudAlert>
+                    }
                 </MudStack>
             </MudStack>
         </MudPaper>
@@ -317,11 +345,16 @@
 
 @code {
     private FileScanningConfig _config = new();
+    private List<FileScanQuotaModel> _quotas = new();
     private bool _isSaving = false;
+    private bool _isLoadingQuotas = false;
+    private bool _virusTotalConfigured = false;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadConfig();
+        await LoadQuotas();
+        CheckVirusTotalConfiguration();
     }
 
     private async Task LoadConfig()
@@ -335,6 +368,30 @@
             Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
             _config = new FileScanningConfig(); // Fallback to defaults
         }
+    }
+
+    private async Task LoadQuotas()
+    {
+        _isLoadingQuotas = true;
+        try
+        {
+            _quotas = await QuotaRepository.GetAllActiveQuotasAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading quota data: {ex.Message}", Severity.Error);
+            _quotas = new List<FileScanQuotaModel>();
+        }
+        finally
+        {
+            _isLoadingQuotas = false;
+        }
+    }
+
+    private void CheckVirusTotalConfiguration()
+    {
+        var apiKey = Configuration["VirusTotal:ApiKey"];
+        _virusTotalConfigured = !string.IsNullOrWhiteSpace(apiKey);
     }
 
     private async Task SaveConfig()
@@ -366,5 +423,15 @@
             len = len / 1024;
         }
         return $"{len:0.##} {sizes[order]}";
+    }
+
+    private string FormatTimeUntilReset(DateTimeOffset windowEnd)
+    {
+        var timeUntil = windowEnd - DateTimeOffset.UtcNow;
+        if (timeUntil.TotalHours < 1)
+            return $"{(int)timeUntil.TotalMinutes}m";
+        if (timeUntil.TotalDays < 1)
+            return $"{(int)timeUntil.TotalHours}h {timeUntil.Minutes}m";
+        return $"{(int)timeUntil.TotalDays}d {timeUntil.Hours}h";
     }
 }

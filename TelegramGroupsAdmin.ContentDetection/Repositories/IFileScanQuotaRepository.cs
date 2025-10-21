@@ -57,4 +57,10 @@ public interface IFileScanQuotaRepository
         string serviceName,
         string quotaType,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get all active quotas for UI dashboard display (Phase 4.22)
+    /// Returns all quota records within their current windows
+    /// </summary>
+    Task<List<FileScanQuotaModel>> GetAllActiveQuotasAsync(CancellationToken cancellationToken = default);
 }
