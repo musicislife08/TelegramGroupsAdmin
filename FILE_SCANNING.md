@@ -1027,41 +1027,46 @@ Fully automate the setup of a Windows VM for file scanning with AMSI multi-engin
 
 ## 8. Deployment Scenarios
 
-### Scenario 1: Linux-Only Minimal
+### Scenario 1: Recommended - ClamAV + VirusTotal ✅
 
 **Configuration**:
-- Tier 1: ClamAV
-- Tier 2: VirusTotal only (optional)
+- Tier 1: ClamAV only
+- Tier 2: VirusTotal (primary cloud service)
 
-**Coverage**:
-- Local detection: ~95-97%
-- With VT fallback: ~96-98%
+**Coverage**: ~96-98% (excellent for group moderation)
 
 **Cost**: $0 (all free)
 
 **Resources**:
-- RAM: ~250MB (ClamAV)
+- RAM: ~1.2GB (ClamAV signatures)
 - CPU: 1-2 cores sufficient
 - Disk: ~500MB
 
 **Monthly Capacity**:
-- Local: Unlimited
-- Cloud: 15,000 files/month (VT)
+- Local: Unlimited (ClamAV)
+- Cloud: 15,000 files/month (VirusTotal 500/day)
 
 **When to Use**:
-- Default deployment for most users
-- Linux-only infrastructure
-- Minimal resource footprint desired
-- 95-97% coverage acceptable
+- **DEFAULT DEPLOYMENT** - Best balance of coverage, cost, and simplicity
+- Linux-only infrastructure (no Windows VM needed)
+- Minimal maintenance burden
+- 96-98% coverage is acceptable for Telegram group moderation
 
-**Setup Time**: ~1 hour
+**Setup Time**: ~1 hour (Docker Compose + VirusTotal API key)
+
+**Why This is Enough**:
+- ClamAV catches 95-97% of threats locally (10M+ signatures)
+- VirusTotal adds 1-2% with 70+ engine consensus
+- False positive rate is low
+- Setup is simple and maintainable
+- No Windows licensing concerns
 
 ---
 
-### Scenario 2: Linux + Cloud (No Windows)
+### Scenario 2: Maximum Cloud Coverage (Future Enhancement)
 
 **Configuration**:
-- Tier 1: ClamAV
+- Tier 1: ClamAV only
 - Tier 2: VirusTotal + MetaDefender + Hybrid Analysis + Intezer
 
 **Coverage**: ~98-99%
@@ -1069,7 +1074,7 @@ Fully automate the setup of a Windows VM for file scanning with AMSI multi-engin
 **Cost**: $0 (all free tiers)
 
 **Resources**:
-- RAM: ~250MB
+- RAM: ~1.2GB
 - CPU: 1-2 cores
 - Disk: ~500MB
 
@@ -1078,53 +1083,41 @@ Fully automate the setup of a Windows VM for file scanning with AMSI multi-engin
 - Cloud: 16,240 files/month (all services combined)
 
 **When to Use**:
-- Maximum coverage without Windows
+- Higher threat environment (under active attack)
 - Moderate file volume (< 500 files/day)
-- Free tier cloud services acceptable
+- Want maximum free coverage without infrastructure changes
+- Willing to register multiple API keys
 
-**Setup Time**: ~2 hours (API key registration for each service)
+**Setup Time**: ~2-3 hours (API key registration for 4 cloud services)
 
----
-
-### Scenario 3: Linux + Windows Multi-Engine
-
-**Configuration**:
-- Tier 1: ClamAV + Windows AMSI (4-5 AVs)
-- Tier 2: VirusTotal only or disabled
-
-**Coverage**: ~99-99.5%
-
-**Cost**: $0 (assuming existing Windows VM)
-
-**Resources**:
-- Linux: ~250MB RAM
-- Windows VM: 2-3GB RAM, 2 vCPU, 20GB disk
-
-**Effective Scanning Engines**: 6-7 independent engines
-
-**Monthly Capacity**:
-- Local: Unlimited
-- Cloud: 0-15,000 (depending on Tier 2 config)
-
-**When to Use**:
-- Windows infrastructure already available
-- Maximum local detection desired
-- Minimize cloud API dependency
-- Highest coverage priority
-
-**Setup Time**: ~4-6 hours (Windows VM setup + AV installation)
+**Note**: MetaDefender, Hybrid Analysis, and Intezer are currently stub implementations. Complete API integration is pending (low priority).
 
 ---
 
-### Scenario 4: Maximum Coverage (All Engines)
+### ~~Scenario 3: Linux + Windows Multi-Engine~~ ❌ **DEFERRED**
 
-**Configuration**:
-- Tier 1: ClamAV + Windows AMSI (5 AVs)
-- Tier 2: VirusTotal + MetaDefender + Hybrid Analysis + Intezer
+**Status**: Not implemented (Phase 3 deferred indefinitely)
 
-**Coverage**: ~99.8% (rivals commercial solutions)
+**Original Coverage**: ~99-99.5%
 
-**Cost**: $0 (all free tiers)
+**Why Deferred**:
+- Marginal improvement (1-2%) over Scenario 1
+- Significant complexity (Windows VM, multiple AV installations)
+- Licensing concerns for free AVs on Windows Server
+- AMSI multi-engine behavior inconsistent
+- Maintenance burden not justified for use case
+
+**Alternative**: If higher coverage needed, implement Scenario 2 (additional cloud services) instead of Windows AMSI.
+
+---
+
+### ~~Scenario 4: Maximum Coverage (All Engines)~~ ❌ **DEFERRED**
+
+**Status**: Not implemented (depends on Phase 3 Windows AMSI)
+
+**Original Coverage**: ~99.8%
+
+**Why Deferred**: Same rationale as Scenario 3. Current recommended deployment (Scenario 1) provides sufficient coverage for Telegram group moderation.
 
 **Resources**:
 - Linux: ~250MB RAM
@@ -1466,51 +1459,26 @@ Phase 2 delivers a production-ready cloud scanning queue that extends detection 
 
 ---
 
-### Phase 3: Windows AMSI API (Optional)
+### Phase 3: Windows AMSI API ❌ **NOT IMPLEMENTED**
 
-**Objectives**:
-- Build Windows scanning microservice
-- Integrate AMSI multi-engine scanning
-- Deploy to Windows VM
+**Status**: Deferred indefinitely (October 21, 2025)
 
-**Tasks (Windows API)**:
-1. Create .NET 10 Minimal API project
-2. AMSI integration (MVsDotNetAMSIClient or P/Invoke)
-3. POST /api/scan/amsi endpoint implementation
-4. GET /api/health endpoint (enumerate providers)
-5. Temporary file handling and cleanup
-6. Error handling and logging
-7. Windows Service installation support
-8. Configuration file support
+**Rationale**:
+- ClamAV + VirusTotal already provides **96-98% detection coverage**
+- Marginal improvement (~1-2%) not worth the complexity
+- Windows VM adds infrastructure cost and maintenance burden
+- Free AV licensing restrictions for server deployment unclear
+- AMSI multi-engine behavior inconsistent (may only use one AV)
+- Current solution is "good enough" for Telegram group moderation use case
 
-**Tasks (Main App Integration)**:
-1. IWindowsDefenderClient interface
-2. HTTP client implementation
-3. Add to Tier 1 scanner list
-4. Configuration binding
-5. Health check integration
+**Decision**: Focus on completing Phase 4.14 (MessageProcessingService integration) instead of adding Windows AMSI. If detection coverage proves insufficient in production, we can revisit this phase.
 
-**Tasks (Deployment)**:
-1. Windows VM provisioning
-2. Install free AVs (Avast, AVG, Avira, Sophos)
-3. Deploy API to VM
-4. Configure firewall
-5. Verify AMSI providers registered
+**Stub Cleanup Required**:
+- WindowsAMSI configuration options (keep for future, mark as "not implemented")
+- Tier1VotingCoordinator already single-scanner ready (no changes needed)
+- UI toggle for Windows AMSI (disable/hide in settings)
 
-**Testing**:
-- AMSI provider enumeration
-- Multi-engine detection verification
-- Network connectivity from main app
-- Health check endpoint validation
-- Known malware sample testing
-
-**Deliverables**:
-- Windows Scanner API deployed on VM
-- 4-5 AMSI providers active
-- Main app integrated with Windows scanner
-- 99-99.5% detection coverage (7 engines)
-
-**Estimated Effort**: Moderate to significant implementation
+**Alternative**: If higher coverage needed in future, consider paid Tier 2 cloud services (MetaDefender Pro, etc.) instead of Windows AMSI infrastructure
 
 ---
 

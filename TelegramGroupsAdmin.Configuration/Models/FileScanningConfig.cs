@@ -29,8 +29,9 @@ public class FileScanningConfig
 }
 
 /// <summary>
-/// Tier 1: Local scanner configuration (ClamAV, Windows AMSI)
+/// Tier 1: Local scanner configuration (ClamAV only)
 /// Note: YARA was removed - ClamAV provides superior coverage with 10M+ signatures
+/// Note: Windows AMSI was removed - ClamAV + VirusTotal provides 96-98% coverage (sufficient for use case)
 /// </summary>
 public class Tier1Config
 {
@@ -38,11 +39,6 @@ public class Tier1Config
     /// ClamAV scanner settings
     /// </summary>
     public ClamAVConfig ClamAV { get; set; } = new();
-
-    /// <summary>
-    /// Windows AMSI multi-engine scanner settings (optional)
-    /// </summary>
-    public WindowsAmsiConfig WindowsAmsi { get; set; } = new();
 }
 
 /// <summary>
@@ -69,32 +65,6 @@ public class ClamAVConfig
     /// Scan timeout in seconds
     /// </summary>
     public int TimeoutSeconds { get; set; } = 30;
-}
-
-/// <summary>
-/// Windows AMSI configuration (optional, only if Windows VM available)
-/// </summary>
-public class WindowsAmsiConfig
-{
-    /// <summary>
-    /// Enable/disable Windows AMSI scanning
-    /// </summary>
-    public bool Enabled { get; set; } = false;
-
-    /// <summary>
-    /// Windows Scanner API URL
-    /// </summary>
-    public string ApiUrl { get; set; } = "http://windows-scanner.local:5000";
-
-    /// <summary>
-    /// Scan timeout in seconds
-    /// </summary>
-    public int TimeoutSeconds { get; set; } = 30;
-
-    /// <summary>
-    /// Optional API key for authentication
-    /// </summary>
-    public string? ApiKey { get; set; }
 }
 
 /// <summary>
