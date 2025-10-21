@@ -8,7 +8,7 @@ public record CachedBlockedDomain(
     long Id,
     string Domain,
     BlockMode BlockMode,
-    long? ChatId,
+    long ChatId,  // 0 = global, non-zero = chat-specific
     long? SourceSubscriptionId,
     DateTimeOffset FirstSeen,
     DateTimeOffset LastVerified,

@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Models;
 /// </summary>
 public record BlocklistSubscription(
     long Id,
-    long? ChatId,
+    long ChatId,  // 0 = global, non-zero = chat-specific
     string Name,
     string Url,
     BlocklistFormat Format,

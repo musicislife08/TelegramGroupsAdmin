@@ -7,21 +7,58 @@
     <MudStack Spacing="3">
         <MudText Typo="Typo.h6" Color="Color.Primary">Spam Similarity Detection</MudText>
 
-        <MudSwitch T="bool" @bind-Value="_config.Similarity.Enabled"
-                  Label="Enable Similarity Check"
-                  Color="Color.Primary" />
-
-        @if (_config.Similarity.Enabled)
+        @if (!_isGlobalView)
         {
-            <MudSlider @bind-Value="_config.Similarity.Threshold"
+            <!-- Override Toggle (only for chat-specific configs) -->
+            <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
+                <MudSwitch T="bool" @bind-Value="_config.Similarity.UseGlobal"
+                          Label="@(_config.Similarity.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
+                          Color="@(_config.Similarity.UseGlobal ? Color.Default : Color.Primary)" />
+                @if (_config.Similarity.UseGlobal)
+                {
+                    <MudText Typo="Typo.caption" Class="mt-1">
+                        This chat is using the global similarity configuration. Toggle off to customize.
+                    </MudText>
+                }
+            </MudPaper>
+        }
+
+        @{
+            var activeConfig = (_isGlobalView || !_config.Similarity.UseGlobal) ? _config.Similarity : _globalConfig.Similarity;
+            var isReadOnly = !_isGlobalView && _config.Similarity.UseGlobal;
+        }
+
+        <MudSwitch T="bool" @bind-Value="activeConfig.Enabled"
+                  Label="Enable Similarity Check"
+                  Color="Color.Primary"
+                  Disabled="@isReadOnly" />
+
+        @if (activeConfig.Enabled)
+        {
+            <MudSlider @bind-Value="activeConfig.Threshold"
                       Min="0.1" Max="1.0" Step="0.05"
-                      TickMarks="true" TickMarkLabels="@_similarityLabels">
-                <MudText>Similarity Threshold: @_config.Similarity.Threshold.ToString("F2")</MudText>
+                      TickMarks="true" TickMarkLabels="@_similarityLabels"
+                      Disabled="@isReadOnly">
+                <MudText>Similarity Threshold: @activeConfig.Threshold.ToString("F2")</MudText>
             </MudSlider>
 
             <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                Messages with similarity >= this threshold to known spam samples will be flagged
+                @if (isReadOnly)
+                {
+                    <text>Using global value: @activeConfig.Threshold.ToString("F2")</text>
+                }
+                else
+                {
+                    <text>Messages with similarity >= this threshold to known spam samples will be flagged</text>
+                }
             </MudText>
+        }
+
+        @if (!_isGlobalView && !_config.Similarity.UseGlobal && _globalConfig.Similarity.Enabled != _config.Similarity.Enabled)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Global setting: @(_globalConfig.Similarity.Enabled ? "Enabled" : "Disabled")
+            </MudAlert>
         }
     </MudStack>
 </MudPaper>
@@ -31,6 +68,8 @@
     public long? ChatId { get; set; }
 
     private SpamDetectionConfig _config = new();
+    private SpamDetectionConfig _globalConfig = new();
+    private bool _isGlobalView => !ChatId.HasValue || ChatId.Value == 0;
     private readonly string[] _similarityLabels = { "0.1", "0.3", "0.5", "0.7", "0.9" };
 
     protected override async Task OnInitializedAsync()
@@ -42,19 +81,37 @@
     {
         try
         {
-            _config = ChatId.HasValue
-                ? await ConfigRepository.GetEffectiveConfigAsync(ChatId.Value)
-                : await ConfigRepository.GetGlobalConfigAsync();
+            // Always load global config for comparison/fallback
+            _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
+
+            if (_isGlobalView)
+            {
+                // Editing global config directly
+                _config = _globalConfig;
+            }
+            else
+            {
+                // Load chat-specific config (which may have UseGlobal flags set)
+                var chatConfig = await ConfigRepository.GetByChatIdAsync(ChatId!.Value);
+                _config = chatConfig ?? new SpamDetectionConfig();
+            }
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
             _config = new SpamDetectionConfig();
-        }
-        finally
-        {
+            _globalConfig = new SpamDetectionConfig();
         }
     }
 
-    public SpamDetectionConfig GetConfig() => _config;
+    public SpamDetectionConfig GetConfig()
+    {
+        // Ensure global configs always have UseGlobal=true
+        if (_isGlobalView)
+        {
+            _config.Similarity.UseGlobal = true;
+        }
+
+        return _config;
+    }
 }

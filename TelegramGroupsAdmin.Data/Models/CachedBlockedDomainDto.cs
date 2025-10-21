@@ -24,7 +24,7 @@ public class CachedBlockedDomainDto
     public int BlockMode { get; set; }  // BlockMode enum (Hard=2, Soft=1)
 
     [Column("chat_id")]
-    public long? ChatId { get; set; }  // NULL = global
+    public long ChatId { get; set; } = 0;  // 0 = global, non-zero = chat-specific
 
     [Column("source_subscription_id")]
     public long? SourceSubscriptionId { get; set; }  // FK to blocklist_subscriptions, NULL for manual

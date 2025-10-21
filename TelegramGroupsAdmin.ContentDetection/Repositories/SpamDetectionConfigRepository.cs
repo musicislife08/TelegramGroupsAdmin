@@ -106,37 +106,106 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
     }
 
     /// <summary>
-    /// Get effective configuration for a specific chat (chat-specific overrides, falls back to global defaults)
-    /// Uses a SINGLE SQL query that returns chat-specific config if exists, otherwise global config
-    /// SQL: WHERE chat_id IN ({chatId}, 0) ORDER BY chat_id = {chatId} DESC, last_updated DESC LIMIT 1
+    /// Get the raw chat-specific configuration (without merging with global)
+    /// Returns null if no chat-specific config exists
+    /// Used by UI components to preserve UseGlobal flags when editing
+    /// </summary>
+    public async Task<SpamDetectionConfig?> GetByChatIdAsync(long chatId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var entity = await context.SpamDetectionConfigs
+                .AsNoTracking()
+                .Where(c => c.ChatId == chatId)
+                .OrderByDescending(c => c.LastUpdated)
+                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+
+            if (entity == null || string.IsNullOrEmpty(entity.ConfigJson))
+            {
+                _logger.LogDebug("No chat-specific config found for chat {ChatId}", chatId);
+                return null;
+            }
+
+            var config = JsonSerializer.Deserialize<SpamDetectionConfig>(entity.ConfigJson, JsonOptions);
+            _logger.LogDebug("Loaded raw chat config for {ChatId}", chatId);
+            return config;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to retrieve chat config for chat {ChatId}", chatId);
+            return null; // Return null on error
+        }
+    }
+
+    /// <summary>
+    /// Get effective configuration for a specific chat with section-by-section fallback to global config
+    /// NEW: Supports granular overrides via UseGlobal flags in each sub-config
+    /// Loads both global and chat configs, then merges section-by-section based on UseGlobal flags
     /// </summary>
     public async Task<SpamDetectionConfig> GetEffectiveConfigAsync(long chatId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            // Single query: try chat-specific first, then global, using ORDER BY to prioritize
-            // This generates: WHERE chat_id IN ({chatId}, 0) ORDER BY (CASE WHEN chat_id = {chatId} THEN 0 ELSE 1 END), last_updated DESC LIMIT 1
-            var entity = await context.SpamDetectionConfigs
+            // Load both global (chat_id=0) and chat-specific configs
+            var entities = await context.SpamDetectionConfigs
                 .AsNoTracking()
-                .Where(c => c.ChatId == chatId || c.ChatId == 0)
-                .OrderBy(c => c.ChatId == chatId ? 0 : 1)  // Chat-specific (0) comes before global (1)
-                .ThenByDescending(c => c.LastUpdated)      // Most recent if multiple entries
-                .FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+                .Where(c => c.ChatId == 0 || c.ChatId == chatId)
+                .OrderByDescending(c => c.LastUpdated)  // Most recent first
+                .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-            if (entity == null || string.IsNullOrEmpty(entity.ConfigJson))
+            var globalEntity = entities.FirstOrDefault(e => e.ChatId == 0);
+            var chatEntity = entities.FirstOrDefault(e => e.ChatId == chatId);
+
+            // If no global config exists, return defaults
+            if (globalEntity == null || string.IsNullOrEmpty(globalEntity.ConfigJson))
             {
-                // No config found at all (neither chat-specific nor global)
-                _logger.LogWarning("No config found for chat {ChatId} or global, returning defaults", chatId);
+                _logger.LogWarning("No global config found, returning defaults");
                 return new SpamDetectionConfig();
             }
 
-            var config = JsonSerializer.Deserialize<SpamDetectionConfig>(entity.ConfigJson, JsonOptions);
+            var globalConfig = JsonSerializer.Deserialize<SpamDetectionConfig>(globalEntity.ConfigJson, JsonOptions) ?? new SpamDetectionConfig();
 
-            _logger.LogDebug("Loaded effective config for chat {ChatId} (source: {SourceChatId})",
-                chatId, entity.ChatId);
+            // If no chat-specific config, return global as-is
+            if (chatEntity == null || string.IsNullOrEmpty(chatEntity.ConfigJson))
+            {
+                _logger.LogDebug("No chat-specific config for {ChatId}, using global", chatId);
+                return globalConfig;
+            }
 
-            return config ?? new SpamDetectionConfig();
+            var chatConfig = JsonSerializer.Deserialize<SpamDetectionConfig>(chatEntity.ConfigJson, JsonOptions) ?? new SpamDetectionConfig();
+
+            // Merge section-by-section based on UseGlobal flags
+            var merged = new SpamDetectionConfig
+            {
+                // Top-level properties - always from chat config when it exists
+                FirstMessageOnly = chatConfig.FirstMessageOnly,
+                FirstMessagesCount = chatConfig.FirstMessagesCount,
+                MinMessageLength = chatConfig.MinMessageLength,
+                AutoBanThreshold = chatConfig.AutoBanThreshold,
+                ReviewQueueThreshold = chatConfig.ReviewQueueThreshold,
+                MaxConfidenceVetoThreshold = chatConfig.MaxConfidenceVetoThreshold,
+                TrainingMode = chatConfig.TrainingMode,
+
+                // Section-by-section merge based on UseGlobal flags
+                StopWords = chatConfig.StopWords.UseGlobal ? globalConfig.StopWords : chatConfig.StopWords,
+                Similarity = chatConfig.Similarity.UseGlobal ? globalConfig.Similarity : chatConfig.Similarity,
+                Cas = chatConfig.Cas.UseGlobal ? globalConfig.Cas : chatConfig.Cas,
+                Bayes = chatConfig.Bayes.UseGlobal ? globalConfig.Bayes : chatConfig.Bayes,
+                InvisibleChars = chatConfig.InvisibleChars.UseGlobal ? globalConfig.InvisibleChars : chatConfig.InvisibleChars,
+                Translation = chatConfig.Translation.UseGlobal ? globalConfig.Translation : chatConfig.Translation,
+                Spacing = chatConfig.Spacing.UseGlobal ? globalConfig.Spacing : chatConfig.Spacing,
+                OpenAI = chatConfig.OpenAI.UseGlobal ? globalConfig.OpenAI : chatConfig.OpenAI,
+                UrlBlocklist = chatConfig.UrlBlocklist.UseGlobal ? globalConfig.UrlBlocklist : chatConfig.UrlBlocklist,
+                ThreatIntel = chatConfig.ThreatIntel.UseGlobal ? globalConfig.ThreatIntel : chatConfig.ThreatIntel,
+                SeoScraping = chatConfig.SeoScraping.UseGlobal ? globalConfig.SeoScraping : chatConfig.SeoScraping,
+                ImageSpam = chatConfig.ImageSpam.UseGlobal ? globalConfig.ImageSpam : chatConfig.ImageSpam
+            };
+
+            _logger.LogDebug("Loaded merged config for chat {ChatId} (global + chat overrides)", chatId);
+
+            return merged;
         }
         catch (Exception ex)
         {

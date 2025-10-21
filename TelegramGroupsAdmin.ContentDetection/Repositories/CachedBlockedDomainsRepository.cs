@@ -19,14 +19,20 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         _context = context;
     }
 
-    public async Task<List<CachedBlockedDomain>> GetAllAsync(long? chatId = null, BlockMode? blockMode = null, CancellationToken cancellationToken = default)
+    public async Task<List<CachedBlockedDomain>> GetAllAsync(long chatId = 0, BlockMode? blockMode = null, CancellationToken cancellationToken = default)
     {
         var query = _context.CachedBlockedDomains
             .AsQueryable();
 
-        if (chatId.HasValue)
+        if (chatId == 0)
         {
-            query = query.Where(cbd => cbd.ChatId == null || cbd.ChatId == chatId.Value);
+            // Global only
+            query = query.Where(cbd => cbd.ChatId == 0);
+        }
+        else
+        {
+            // Global + chat-specific
+            query = query.Where(cbd => cbd.ChatId == 0 || cbd.ChatId == chatId);
         }
 
         if (blockMode.HasValue)
@@ -46,7 +52,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         var dto = await _context.CachedBlockedDomains
             .FirstOrDefaultAsync(cbd =>
                 cbd.Domain == domain &&
-                (cbd.ChatId == null || cbd.ChatId == chatId) &&
+                (cbd.ChatId == 0 || cbd.ChatId == chatId) &&
                 cbd.BlockMode == (int)blockMode,
                 cancellationToken).ConfigureAwait(false);
 
@@ -62,7 +68,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         var dto = await _context.CachedBlockedDomains
             .FirstOrDefaultAsync(cbd =>
                 cbd.Domain == domain &&
-                (cbd.ChatId == null || cbd.ChatId == chatId) &&
+                (cbd.ChatId == 0 || cbd.ChatId == chatId) &&
                 cbd.BlockMode == (int)BlockMode.Hard,
                 cancellationToken).ConfigureAwait(false);
 
@@ -71,19 +77,74 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
 
     public async Task BulkInsertAsync(List<CachedBlockedDomain> domains, CancellationToken cancellationToken = default)
     {
-        var dtos = domains.Select(d => new CachedBlockedDomainDto
-        {
-            ChatId = d.ChatId,
-            Domain = NormalizeDomain(d.Domain),
-            BlockMode = (int)d.BlockMode,
-            SourceSubscriptionId = d.SourceSubscriptionId,
-            FirstSeen = d.FirstSeen,
-            LastVerified = d.LastVerified,
-            Notes = d.Notes
-        }).ToList();
+        if (domains.Count == 0)
+            return;
 
-        await _context.CachedBlockedDomains.AddRangeAsync(dtos, cancellationToken).ConfigureAwait(false);
-        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        // Use PostgreSQL UPSERT (ON CONFLICT DO UPDATE) to handle duplicates
+        // The unique constraint is on (domain, block_mode, chat_id)
+        // Strategy: Update last_verified on conflict to keep data fresh
+
+        // IMPORTANT: Deduplicate in-memory first!
+        // Blocklists can contain duplicate domains, and PostgreSQL UPSERT
+        // cannot handle duplicates within the same INSERT batch
+        var dtos = domains
+            .Select(d => new CachedBlockedDomainDto
+            {
+                ChatId = d.ChatId,
+                Domain = NormalizeDomain(d.Domain),
+                BlockMode = (int)d.BlockMode,
+                SourceSubscriptionId = d.SourceSubscriptionId,
+                FirstSeen = d.FirstSeen,
+                LastVerified = d.LastVerified,
+                Notes = d.Notes
+            })
+            .GroupBy(d => new { d.Domain, d.BlockMode, d.ChatId })
+            .Select(g => g.First()) // Keep first occurrence of each (domain, block_mode, chat_id) combination
+            .ToList();
+
+        if (dtos.Count == 0)
+            return;
+
+        // Use PostgreSQL bulk UPSERT with UNNEST for maximum performance
+        // This inserts all domains in a single query with ON CONFLICT handling
+        var domainNames = dtos.Select(d => d.Domain).ToArray();
+        var blockModes = dtos.Select(d => d.BlockMode).ToArray();
+        var chatIds = dtos.Select(d => d.ChatId).ToArray();
+        var sourceIds = dtos.Select(d => d.SourceSubscriptionId).ToArray();
+        var firstSeens = dtos.Select(d => d.FirstSeen).ToArray();
+        var lastVerifieds = dtos.Select(d => d.LastVerified).ToArray();
+        var notesArray = dtos.Select(d => d.Notes).ToArray();
+
+        var sql = @"
+            INSERT INTO cached_blocked_domains
+                (domain, block_mode, chat_id, source_subscription_id, first_seen, last_verified, notes)
+            SELECT * FROM UNNEST(
+                @p0::text[],
+                @p1::integer[],
+                @p2::bigint[],
+                @p3::bigint[],
+                @p4::timestamp with time zone[],
+                @p5::timestamp with time zone[],
+                @p6::text[]
+            )
+            ON CONFLICT (domain, block_mode, chat_id)
+            DO UPDATE SET
+                last_verified = EXCLUDED.last_verified,
+                source_subscription_id = EXCLUDED.source_subscription_id";
+
+        // Build parameters array (excluding cancellationToken)
+        var parameters = new object[]
+        {
+            domainNames,
+            blockModes,
+            chatIds,
+            sourceIds,
+            firstSeens,
+            lastVerifieds,
+            notesArray
+        };
+
+        await _context.Database.ExecuteSqlRawAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DeleteBySourceAsync(string sourceType, long sourceId, CancellationToken cancellationToken = default)
@@ -95,26 +156,38 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
             .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task DeleteAllAsync(long? chatId = null, CancellationToken cancellationToken = default)
+    public async Task DeleteAllAsync(long chatId = 0, CancellationToken cancellationToken = default)
     {
         var query = _context.CachedBlockedDomains.AsQueryable();
 
-        if (chatId.HasValue)
+        if (chatId == 0)
         {
-            query = query.Where(cbd => cbd.ChatId == chatId.Value);
+            // Delete global only
+            query = query.Where(cbd => cbd.ChatId == 0);
+        }
+        else
+        {
+            // Delete chat-specific only (preserve global)
+            query = query.Where(cbd => cbd.ChatId == chatId);
         }
 
         // Use ExecuteDeleteAsync to avoid loading entities into memory and prevent concurrency issues
         await query.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<UrlFilterStats> GetStatsAsync(long? chatId = null, CancellationToken cancellationToken = default)
+    public async Task<UrlFilterStats> GetStatsAsync(long chatId = 0, CancellationToken cancellationToken = default)
     {
         var query = _context.CachedBlockedDomains.AsQueryable();
 
-        if (chatId.HasValue)
+        if (chatId == 0)
         {
-            query = query.Where(cbd => cbd.ChatId == null || cbd.ChatId == chatId.Value);
+            // Global only
+            query = query.Where(cbd => cbd.ChatId == 0);
+        }
+        else
+        {
+            // Global + chat-specific
+            query = query.Where(cbd => cbd.ChatId == 0 || cbd.ChatId == chatId);
         }
 
         var totalCachedDomains = await query.CountAsync(cancellationToken).ConfigureAwait(false);

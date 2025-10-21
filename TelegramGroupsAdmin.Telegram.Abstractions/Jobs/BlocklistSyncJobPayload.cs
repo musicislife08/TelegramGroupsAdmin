@@ -12,9 +12,9 @@ public class BlocklistSyncJobPayload
     public long? SubscriptionId { get; set; }
 
     /// <summary>
-    /// Optional: Sync only subscriptions for a specific chat (null = global)
+    /// Chat ID for sync (0 = global, non-zero = chat-specific)
     /// </summary>
-    public long? ChatId { get; set; }
+    public long ChatId { get; set; } = 0;
 
     /// <summary>
     /// Whether to force a full cache rebuild (delete all + re-sync)

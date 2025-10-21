@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Models;
 /// </summary>
 public record DomainFilter(
     long Id,
-    long? ChatId,
+    long ChatId,  // 0 = global, non-zero = chat-specific
     string Domain,
     DomainFilterType FilterType,
     BlockMode BlockMode,  // Ignored for whitelist

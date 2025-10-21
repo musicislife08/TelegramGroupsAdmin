@@ -7,24 +7,57 @@
     <MudStack Spacing="3">
         <MudText Typo="Typo.h6" Color="Color.Primary">CAS (Combot Anti-Spam)</MudText>
 
-        <MudSwitch T="bool" @bind-Value="_config.Cas.Enabled"
-                  Label="Enable CAS Check"
-                  Color="Color.Primary" />
-
-        @if (_config.Cas.Enabled)
+        @if (!_isGlobalView)
         {
-            <MudTextField @bind-Value="_config.Cas.ApiUrl"
-                         Label="CAS API URL"
-                         helperText="API endpoint for CAS lookups" />
+            <!-- Override Toggle (only for chat-specific configs) -->
+            <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
+                <MudSwitch T="bool" @bind-Value="_config.Cas.UseGlobal"
+                          Label="@(_config.Cas.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
+                          Color="@(_config.Cas.UseGlobal ? Color.Default : Color.Primary)" />
+                @if (_config.Cas.UseGlobal)
+                {
+                    <MudText Typo="Typo.caption" Class="mt-1">
+                        This chat is using the global CAS configuration. Toggle off to customize.
+                    </MudText>
+                }
+            </MudPaper>
+        }
 
-            <MudNumericField @bind-Value="_timeoutSeconds"
+        @{
+            var activeConfig = (_isGlobalView || !_config.Cas.UseGlobal) ? _config.Cas : _globalConfig.Cas;
+            var isReadOnly = !_isGlobalView && _config.Cas.UseGlobal;
+            var activeTimeoutSeconds = (int)activeConfig.Timeout.TotalSeconds;
+        }
+
+        <MudSwitch T="bool" @bind-Value="activeConfig.Enabled"
+                  Label="Enable CAS Check"
+                  Color="Color.Primary"
+                  Disabled="@isReadOnly" />
+
+        @if (activeConfig.Enabled)
+        {
+            <MudTextField @bind-Value="activeConfig.ApiUrl"
+                         Label="CAS API URL"
+                         Disabled="@isReadOnly"
+                         HelperText="@(isReadOnly ? $"Using global value" : "API endpoint for CAS lookups")" />
+
+            <MudNumericField @bind-Value="activeTimeoutSeconds"
                             Label="Timeout (seconds)"
                             Min="1" Max="30"
-                            helperText="Request timeout for CAS API calls" />
+                            Disabled="@isReadOnly"
+                            HelperText="@(isReadOnly ? $"Using global value: {activeTimeoutSeconds}s" : "Request timeout for CAS API calls")" />
 
-            <MudTextField @bind-Value="_config.Cas.UserAgent"
+            <MudTextField @bind-Value="activeConfig.UserAgent"
                          Label="User Agent (Optional)"
-                         helperText="Custom User-Agent header for requests" />
+                         Disabled="@isReadOnly"
+                         HelperText="@(isReadOnly ? "Using global value" : "Custom User-Agent header for requests")" />
+        }
+
+        @if (!_isGlobalView && !_config.Cas.UseGlobal && _globalConfig.Cas.Enabled != _config.Cas.Enabled)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Global setting: @(_globalConfig.Cas.Enabled ? "Enabled" : "Disabled")
+            </MudAlert>
         }
     </MudStack>
 </MudPaper>
@@ -34,7 +67,8 @@
     public long? ChatId { get; set; }
 
     private SpamDetectionConfig _config = new();
-    private int _timeoutSeconds = 5;
+    private SpamDetectionConfig _globalConfig = new();
+    private bool _isGlobalView => !ChatId.HasValue || ChatId.Value == 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -45,25 +79,37 @@
     {
         try
         {
-            _config = ChatId.HasValue
-                ? await ConfigRepository.GetEffectiveConfigAsync(ChatId.Value)
-                : await ConfigRepository.GetGlobalConfigAsync();
+            // Always load global config for comparison/fallback
+            _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
 
-            _timeoutSeconds = (int)_config.Cas.Timeout.TotalSeconds;
+            if (_isGlobalView)
+            {
+                // Editing global config directly
+                _config = _globalConfig;
+            }
+            else
+            {
+                // Load chat-specific config (which may have UseGlobal flags set)
+                var chatConfig = await ConfigRepository.GetByChatIdAsync(ChatId!.Value);
+                _config = chatConfig ?? new SpamDetectionConfig();
+            }
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
             _config = new SpamDetectionConfig();
-        }
-        finally
-        {
+            _globalConfig = new SpamDetectionConfig();
         }
     }
 
     public SpamDetectionConfig GetConfig()
     {
-        _config.Cas.Timeout = TimeSpan.FromSeconds(_timeoutSeconds);
+        // Ensure global configs always have UseGlobal=true
+        if (_isGlobalView)
+        {
+            _config.Cas.UseGlobal = true;
+        }
+
         return _config;
     }
 }

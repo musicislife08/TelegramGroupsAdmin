@@ -21,8 +21,10 @@ public interface IBlocklistSyncService
     /// <summary>
     /// Force full rebuild of cached_blocked_domains from all enabled sources
     /// Used when domain_filters change or admin requests full resync
+    /// If chatId = 0: Rebuilds global cache only
+    /// If chatId > 0: Rebuilds cache for that chat
     /// </summary>
-    Task RebuildCacheAsync(long? chatId = null, CancellationToken cancellationToken = default);
+    Task RebuildCacheAsync(long chatId = 0, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Remove cached domains for a specific subscription (cleanup on disable/delete)

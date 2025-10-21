@@ -19,14 +19,20 @@ public class DomainFiltersRepository : IDomainFiltersRepository
         _context = context;
     }
 
-    public async Task<List<DomainFilter>> GetAllAsync(long? chatId = null, CancellationToken cancellationToken = default)
+    public async Task<List<DomainFilter>> GetAllAsync(long chatId = 0, CancellationToken cancellationToken = default)
     {
         var query = _context.DomainFilters
             .AsQueryable();
 
-        if (chatId.HasValue)
+        if (chatId == 0)
         {
-            query = query.Where(df => df.ChatId == chatId.Value);
+            // Global only
+            query = query.Where(df => df.ChatId == 0);
+        }
+        else
+        {
+            // Global + chat-specific (for UI display/merging)
+            query = query.Where(df => df.ChatId == 0 || df.ChatId == chatId);
         }
 
         var dtos = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -36,7 +42,7 @@ public class DomainFiltersRepository : IDomainFiltersRepository
     public async Task<List<DomainFilter>> GetEffectiveAsync(long chatId, DomainFilterType? filterType = null, BlockMode? blockMode = null, CancellationToken cancellationToken = default)
     {
         var query = _context.DomainFilters
-            .Where(df => df.ChatId == null || df.ChatId == chatId)  // Global OR chat-specific
+            .Where(df => df.ChatId == 0 || df.ChatId == chatId)  // Global (0) OR chat-specific
             .Where(df => df.Enabled);
 
         if (filterType.HasValue)

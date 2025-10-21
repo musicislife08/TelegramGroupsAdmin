@@ -19,6 +19,12 @@ public interface ISpamDetectionConfigRepository
     Task<bool> UpdateGlobalConfigAsync(SpamDetectionConfig config, string? updatedBy = null, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get the raw chat-specific configuration (without merging with global)
+    /// Returns null if no chat-specific config exists
+    /// </summary>
+    Task<SpamDetectionConfig?> GetByChatIdAsync(long chatId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get effective configuration for a specific chat (chat-specific overrides, falls back to global defaults)
     /// </summary>
     Task<SpamDetectionConfig> GetEffectiveConfigAsync(long chatId, CancellationToken cancellationToken = default);

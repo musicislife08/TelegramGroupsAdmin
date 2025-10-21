@@ -19,14 +19,20 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
         _context = context;
     }
 
-    public async Task<List<BlocklistSubscription>> GetAllAsync(long? chatId = null, CancellationToken cancellationToken = default)
+    public async Task<List<BlocklistSubscription>> GetAllAsync(long chatId = 0, CancellationToken cancellationToken = default)
     {
         var query = _context.BlocklistSubscriptions
             .AsQueryable();
 
-        if (chatId.HasValue)
+        if (chatId == 0)
         {
-            query = query.Where(bs => bs.ChatId == chatId.Value);
+            // Global only
+            query = query.Where(bs => bs.ChatId == 0);
+        }
+        else
+        {
+            // Global + chat-specific (for UI display/merging)
+            query = query.Where(bs => bs.ChatId == 0 || bs.ChatId == chatId);
         }
 
         var dtos = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -36,7 +42,7 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
     public async Task<List<BlocklistSubscription>> GetEffectiveAsync(long chatId, BlockMode? blockMode = null, CancellationToken cancellationToken = default)
     {
         var query = _context.BlocklistSubscriptions
-            .Where(bs => bs.ChatId == null || bs.ChatId == chatId)  // Global OR chat-specific
+            .Where(bs => bs.ChatId == 0 || bs.ChatId == chatId)  // Global (0) OR chat-specific
             .Where(bs => bs.Enabled);
 
         if (blockMode.HasValue)
@@ -130,14 +136,20 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
         }
     }
 
-    public async Task<List<BlocklistSubscription>> FindByUrlAsync(string url, long? chatId = null, CancellationToken cancellationToken = default)
+    public async Task<List<BlocklistSubscription>> FindByUrlAsync(string url, long chatId = 0, CancellationToken cancellationToken = default)
     {
         var query = _context.BlocklistSubscriptions
             .Where(bs => bs.Url == url);
 
-        if (chatId.HasValue)
+        if (chatId == 0)
         {
-            query = query.Where(bs => bs.ChatId == null || bs.ChatId == chatId.Value);
+            // Global only
+            query = query.Where(bs => bs.ChatId == 0);
+        }
+        else
+        {
+            // Global + chat-specific
+            query = query.Where(bs => bs.ChatId == 0 || bs.ChatId == chatId);
         }
 
         var dtos = await query.ToListAsync(cancellationToken).ConfigureAwait(false);

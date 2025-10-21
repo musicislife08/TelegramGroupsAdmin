@@ -15,7 +15,7 @@ public class DomainFilterDto
     public long Id { get; set; }
 
     [Column("chat_id")]
-    public long? ChatId { get; set; }
+    public long ChatId { get; set; } = 0;  // 0 = global, non-zero = chat-specific
 
     [Column("domain")]
     [Required]

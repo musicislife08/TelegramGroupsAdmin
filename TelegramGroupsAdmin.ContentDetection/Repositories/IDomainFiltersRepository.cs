@@ -10,9 +10,11 @@ namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 public interface IDomainFiltersRepository
 {
     /// <summary>
-    /// Get all domain filters (global and chat-specific)
+    /// Get all domain filters
+    /// If chatId = 0: Returns global only
+    /// If chatId > 0: Returns global + chat-specific (for display/merging in UI)
     /// </summary>
-    Task<List<DomainFilter>> GetAllAsync(long? chatId = null, CancellationToken cancellationToken = default);
+    Task<List<DomainFilter>> GetAllAsync(long chatId = 0, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get effective domain filters for a chat (merges global + chat-specific)

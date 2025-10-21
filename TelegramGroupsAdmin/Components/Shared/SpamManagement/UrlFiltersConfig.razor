@@ -215,7 +215,7 @@
 
 @code {
     [Parameter]
-    public long? ChatId { get; set; }
+    public long ChatId { get; set; } = 0;  // 0 = global, non-zero = chat-specific
 
     private List<BlocklistSubscription> _builtInBlocklists = new();
     private List<BlocklistSubscription> _customSubscriptions = new();

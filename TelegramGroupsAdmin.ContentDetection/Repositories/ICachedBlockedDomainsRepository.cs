@@ -10,9 +10,11 @@ namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 public interface ICachedBlockedDomainsRepository
 {
     /// <summary>
-    /// Get all cached blocked domains for a chat (global + chat-specific)
+    /// Get all cached blocked domains
+    /// If chatId = 0: Returns global only
+    /// If chatId > 0: Returns global + chat-specific
     /// </summary>
-    Task<List<CachedBlockedDomain>> GetAllAsync(long? chatId = null, BlockMode? blockMode = null, CancellationToken cancellationToken = default);
+    Task<List<CachedBlockedDomain>> GetAllAsync(long chatId = 0, BlockMode? blockMode = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Search cached domains by domain name (for domain lookup tool)
@@ -37,11 +39,15 @@ public interface ICachedBlockedDomainsRepository
 
     /// <summary>
     /// Delete all cached domains for a chat (for full resync)
+    /// If chatId = 0: Deletes global only
+    /// If chatId > 0: Deletes chat-specific only (preserves global)
     /// </summary>
-    Task DeleteAllAsync(long? chatId = null, CancellationToken cancellationToken = default);
+    Task DeleteAllAsync(long chatId = 0, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get domain statistics for UI display
+    /// If chatId = 0: Stats for global only
+    /// If chatId > 0: Stats for global + chat-specific
     /// </summary>
-    Task<UrlFilterStats> GetStatsAsync(long? chatId = null, CancellationToken cancellationToken = default);
+    Task<UrlFilterStats> GetStatsAsync(long chatId = 0, CancellationToken cancellationToken = default);
 }

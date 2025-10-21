@@ -115,6 +115,12 @@ public class SpamDetectionConfig
 public class StopWordsConfig
 {
     /// <summary>
+    /// Whether to use global configuration instead of chat-specific overrides
+    /// Always true for global config (chat_id=0), can be true/false for chat configs
+    /// </summary>
+    public bool UseGlobal { get; set; } = true;
+
+    /// <summary>
     /// Whether stop words check is enabled
     /// </summary>
     public bool Enabled { get; set; } = true;
@@ -130,6 +136,12 @@ public class StopWordsConfig
 /// </summary>
 public class SimilarityConfig
 {
+    /// <summary>
+    /// Whether to use global configuration instead of chat-specific overrides
+    /// Always true for global config (chat_id=0), can be true/false for chat configs
+    /// </summary>
+    public bool UseGlobal { get; set; } = true;
+
     /// <summary>
     /// Whether similarity check is enabled
     /// </summary>
@@ -151,6 +163,12 @@ public class SimilarityConfig
 /// </summary>
 public class CasConfig
 {
+    /// <summary>
+    /// Whether to use global configuration instead of chat-specific overrides
+    /// Always true for global config (chat_id=0), can be true/false for chat configs
+    /// </summary>
+    public bool UseGlobal { get; set; } = true;
+
     /// <summary>
     /// Whether CAS check is enabled
     /// </summary>
@@ -178,6 +196,12 @@ public class CasConfig
 public class BayesConfig
 {
     /// <summary>
+    /// Whether to use global configuration instead of chat-specific overrides
+    /// Always true for global config (chat_id=0), can be true/false for chat configs
+    /// </summary>
+    public bool UseGlobal { get; set; } = true;
+
+    /// <summary>
     /// Whether Bayes check is enabled
     /// </summary>
     public bool Enabled { get; set; } = true;
@@ -199,6 +223,12 @@ public class BayesConfig
 public class InvisibleCharsConfig
 {
     /// <summary>
+    /// Whether to use global configuration instead of chat-specific overrides
+    /// Always true for global config (chat_id=0), can be true/false for chat configs
+    /// </summary>
+    public bool UseGlobal { get; set; } = true;
+
+    /// <summary>
     /// Whether invisible character detection is enabled
     /// </summary>
     public bool Enabled { get; set; } = true;
@@ -209,6 +239,12 @@ public class InvisibleCharsConfig
 /// </summary>
 public class TranslationConfig
 {
+    /// <summary>
+    /// Whether to use global configuration instead of chat-specific overrides
+    /// Always true for global config (chat_id=0), can be true/false for chat configs
+    /// </summary>
+    public bool UseGlobal { get; set; } = true;
+
     /// <summary>
     /// Whether translation is enabled
     /// </summary>
@@ -243,6 +279,12 @@ public class TranslationConfig
 /// </summary>
 public class SpacingConfig
 {
+    /// <summary>
+    /// Whether to use global configuration instead of chat-specific overrides
+    /// Always true for global config (chat_id=0), can be true/false for chat configs
+    /// </summary>
+    public bool UseGlobal { get; set; } = true;
+
     /// <summary>
     /// Whether spacing check is enabled
     /// </summary>
@@ -279,6 +321,12 @@ public class SpacingConfig
 /// </summary>
 public class OpenAIConfig
 {
+    /// <summary>
+    /// Whether to use global configuration instead of chat-specific overrides
+    /// Always true for global config (chat_id=0), can be true/false for chat configs
+    /// </summary>
+    public bool UseGlobal { get; set; } = true;
+
     /// <summary>
     /// Whether OpenAI check is enabled
     /// </summary>
@@ -318,6 +366,12 @@ public class OpenAIConfig
 public class UrlBlocklistConfig
 {
     /// <summary>
+    /// Whether to use global configuration instead of chat-specific overrides
+    /// Always true for global config (chat_id=0), can be true/false for chat configs
+    /// </summary>
+    public bool UseGlobal { get; set; } = true;
+
+    /// <summary>
     /// Whether URL blocklist checking is enabled
     /// </summary>
     public bool Enabled { get; set; } = true;
@@ -333,6 +387,12 @@ public class UrlBlocklistConfig
 /// </summary>
 public class ThreatIntelConfig
 {
+    /// <summary>
+    /// Whether to use global configuration instead of chat-specific overrides
+    /// Always true for global config (chat_id=0), can be true/false for chat configs
+    /// </summary>
+    public bool UseGlobal { get; set; } = true;
+
     /// <summary>
     /// Whether threat intelligence checking is enabled
     /// </summary>
@@ -355,6 +415,12 @@ public class ThreatIntelConfig
 public class SeoScrapingConfig
 {
     /// <summary>
+    /// Whether to use global configuration instead of chat-specific overrides
+    /// Always true for global config (chat_id=0), can be true/false for chat configs
+    /// </summary>
+    public bool UseGlobal { get; set; } = true;
+
+    /// <summary>
     /// Whether SEO scraping is enabled
     /// </summary>
     public bool Enabled { get; set; } = true;
@@ -370,6 +436,12 @@ public class SeoScrapingConfig
 /// </summary>
 public class ImageSpamConfig
 {
+    /// <summary>
+    /// Whether to use global configuration instead of chat-specific overrides
+    /// Always true for global config (chat_id=0), can be true/false for chat configs
+    /// </summary>
+    public bool UseGlobal { get; set; } = true;
+
     /// <summary>
     /// Whether image spam detection is enabled
     /// </summary>

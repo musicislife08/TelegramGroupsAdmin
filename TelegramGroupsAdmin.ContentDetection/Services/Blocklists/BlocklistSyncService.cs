@@ -132,9 +132,9 @@ public class BlocklistSyncService : IBlocklistSyncService
         }
     }
 
-    public async Task RebuildCacheAsync(long? chatId = null, CancellationToken cancellationToken = default)
+    public async Task RebuildCacheAsync(long chatId = 0, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Starting full cache rebuild for chatId={ChatId}", chatId?.ToString() ?? "global");
+        _logger.LogInformation("Starting full cache rebuild for chatId={ChatId}", chatId == 0 ? "global" : chatId.ToString());
 
         // Get enabled subscription IDs using a separate scope
         List<long> enabledSubscriptionIds;
@@ -237,7 +237,7 @@ public class BlocklistSyncService : IBlocklistSyncService
     /// Sync manual domain filters (blacklist entries) into cache
     /// Note: Whitelist entries are NOT cached - they're checked separately in real-time
     /// </summary>
-    private async Task SyncManualFiltersAsync(long? chatId, CancellationToken cancellationToken)
+    private async Task SyncManualFiltersAsync(long chatId, CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var filtersRepo = scope.ServiceProvider.GetRequiredService<IDomainFiltersRepository>();

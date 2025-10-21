@@ -10,9 +10,11 @@ namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 public interface IBlocklistSubscriptionsRepository
 {
     /// <summary>
-    /// Get all blocklist subscriptions (global and chat-specific)
+    /// Get all blocklist subscriptions
+    /// If chatId = 0: Returns global only
+    /// If chatId > 0: Returns global + chat-specific (for display/merging in UI)
     /// </summary>
-    Task<List<BlocklistSubscription>> GetAllAsync(long? chatId = null, CancellationToken cancellationToken = default);
+    Task<List<BlocklistSubscription>> GetAllAsync(long chatId = 0, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get effective subscriptions for a chat (merges global + chat-specific)
@@ -48,5 +50,5 @@ public interface IBlocklistSubscriptionsRepository
     /// Check if a URL already exists in subscriptions (for duplicate detection)
     /// Returns all matching subscriptions (global + chat-specific)
     /// </summary>
-    Task<List<BlocklistSubscription>> FindByUrlAsync(string url, long? chatId = null, CancellationToken cancellationToken = default);
+    Task<List<BlocklistSubscription>> FindByUrlAsync(string url, long chatId = 0, CancellationToken cancellationToken = default);
 }
