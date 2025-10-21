@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration.Models;
@@ -20,26 +21,33 @@ public class VirusTotalScannerService : ICloudScannerService
     private readonly FileScanningConfig _config;
     private readonly IFileScanQuotaRepository _quotaRepository;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly string? _apiKey;
+    private readonly IConfiguration _configuration;
 
-    private const string BaseUrl = "https://www.virustotal.com/api/v3";
     private const int MinEngineThreshold = 2;  // Consider malicious if >= 2 engines detect it
 
     public string ServiceName => "VirusTotal";
 
-    public bool IsEnabled => _config.Tier2.VirusTotal.Enabled && !string.IsNullOrWhiteSpace(_apiKey);
+    public bool IsEnabled
+    {
+        get
+        {
+            var apiKey = _configuration["VirusTotal:ApiKey"];
+            return _config.Tier2.VirusTotal.Enabled && !string.IsNullOrWhiteSpace(apiKey);
+        }
+    }
 
     public VirusTotalScannerService(
         ILogger<VirusTotalScannerService> logger,
         IOptions<FileScanningConfig> config,
         IFileScanQuotaRepository quotaRepository,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration)
     {
         _logger = logger;
         _config = config.Value;
         _quotaRepository = quotaRepository;
         _httpClientFactory = httpClientFactory;
-        _apiKey = Environment.GetEnvironmentVariable("VIRUSTOTAL__APIKEY");
+        _configuration = configuration;
     }
 
     public async Task<CloudHashLookupResult?> LookupHashAsync(
@@ -69,10 +77,10 @@ public class VirusTotalScannerService : ICloudScannerService
             }
 
             // GET /files/{hash} - hash lookup (doesn't require file upload)
-            var client = _httpClientFactory.CreateClient();
-            client.DefaultRequestHeaders.Add("x-apikey", _apiKey);
+            // Use named "VirusTotal" HttpClient (configured with BaseUrl, API key, and rate limiting)
+            var client = _httpClientFactory.CreateClient("VirusTotal");
 
-            var requestUrl = $"{BaseUrl}/files/{fileHash}";
+            var requestUrl = $"files/{fileHash}";
             _logger.LogDebug("VirusTotal hash lookup: GET {Url}", requestUrl);
 
             var response = await client.GetAsync(requestUrl, cancellationToken);
@@ -252,13 +260,13 @@ public class VirusTotalScannerService : ICloudScannerService
             }
 
             // POST /files - upload file for scanning
-            var client = _httpClientFactory.CreateClient();
-            client.DefaultRequestHeaders.Add("x-apikey", _apiKey);
+            // Use named "VirusTotal" HttpClient (configured with BaseUrl, API key, and rate limiting)
+            var client = _httpClientFactory.CreateClient("VirusTotal");
 
             using var content = new MultipartFormDataContent();
             content.Add(new ByteArrayContent(fileBytes), "file", fileName ?? "unknown");
 
-            var requestUrl = $"{BaseUrl}/files";
+            var requestUrl = "files";
             _logger.LogDebug("VirusTotal file upload: POST {Url} (size: {Size} bytes)", requestUrl, fileBytes.Length);
 
             var response = await client.PostAsync(requestUrl, content, cancellationToken);
@@ -322,7 +330,7 @@ public class VirusTotalScannerService : ICloudScannerService
             {
                 await Task.Delay(pollDelayMs, cancellationToken);
 
-                var analysisResponse = await client.GetAsync($"{BaseUrl}/analyses/{analysisId}", cancellationToken);
+                var analysisResponse = await client.GetAsync($"analyses/{analysisId}", cancellationToken);
 
                 if (!analysisResponse.IsSuccessStatusCode)
                 {
