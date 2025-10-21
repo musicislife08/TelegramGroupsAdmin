@@ -96,14 +96,14 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 **4.11** ✅: Warning System - Count-based, auto-ban threshold, UI removal
 **4.12** ✅: Admin Notes & Tags - Actor system, TagManagement UI, color-coded chips
 **4.13** ✅: URL Filtering - 540K domains, 6 blocklists, hard/soft modes, <1ms lookups
-**4.17** ✅: File Scanning Phase 1+2 - ClamAV Tier 1, VirusTotal+cloud queue Tier 2, 98-99% coverage, 16K files/month quota. FileScanJob scheduled via TickerQ (5s polling), media files excluded (only Document attachments scanned), Actor.FromSystem("file_scanner")
+**4.14** ✅: Critical Checks Infrastructure - FileScanningCheck always_run=true (bypasses trust/admin), MessageProcessingService integration, FileScanJob end-to-end flow (download→hash→scan→delete if infected→DM notify), DM fallback to chat reply (bot_dm_enabled), detection_results audit trail
+**4.17** ✅: File Scanning Phase 1+2 - ClamAV Tier 1, VirusTotal+cloud queue Tier 2, 96-98% coverage, 16K files/month quota. FileScanJob scheduled via TickerQ (5s polling), media files excluded (only Document attachments scanned), Actor.FromSystem("file_scanner"), SHA256 caching (24hr TTL), fail-open errors
 **4.19** ✅: Actor System - Exclusive Arc (web/telegram/system), 5 tables, LEFT JOIN
 **4.20** ✅: DM Notification System - IDmDeliveryService, INotificationOrchestrator, pending_notifications queue, /mystatus command, warning notifications
 **4.21** ✅: Media Attachment Support - TelegramMediaService, MediaType enum (Data+Telegram layers), 7 media types (Animation/Video/Audio/Voice/Sticker/VideoNote/Document), messages table media fields, MessageBubbleTelegram UI components, HTML5 video/audio controls, file size/duration formatting
 
 **Pending**:
 **4.9**: Bot connection management - Hot-reload, IBotLifecycleService, /settings#bot-connection (Owner-only)
-**4.14**: Critical Checks Infrastructure - Configurable always-run checks (bypass trust/admin status), content_check_configs.always_run column, ContentCheckCoordinator refactor (filter by always_run), ContentActionService.HandleCriticalCheckViolationAsync (delete+DM notice, NO ban/warn for trusted/admin), /settings#critical-checks UI (per-check toggles), DM fallback to chat reply (bot_dm_enabled). Policy: URL filtering + file scanning always run for ALL users
 **4.15**: Report Aggregation - Multi-report auto-escalation (3 unique in 1hr→action), confidence boost (+15/report), reporter accuracy scoring, false report protection, /reports#analytics
 **4.16**: Appeal System - DM channel establishment, appeals queue /reports#appeals, approve/deny workflow, max 2 appeals/ban, 30-day expiration
 **4.17.3**: File Scanning Phase 3 - Windows AMSI API (optional multi-AV), local voting system. See FILE_SCANNING.md

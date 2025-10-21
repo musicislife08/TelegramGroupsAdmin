@@ -1333,14 +1333,18 @@ Phase 1 delivers a production-ready file scanning system using ClamAV as the sol
 - ✅ ClamAV container health checks passing
 - ✅ EICAR test file detection confirmed
 - ✅ Test infrastructure created ([TelegramGroupsAdmin.Tests.Integration/](TelegramGroupsAdmin.Tests.Integration/))
-- ⏳ End-to-end Telegram integration pending (Phase 4.14 - Critical Checks Infrastructure)
+- ✅ End-to-end Telegram integration complete (Phase 4.14 - Critical Checks Infrastructure)
 
-**Remaining Integration Work** (Phase 4.14):
-- ⏳ Telegram file attachment extraction in MessageProcessingService
-- ⏳ SHA256 hash calculation for uploaded files
-- ⏳ Call `FileScanningCheck.CheckAsync()` from message processor
-- ⏳ Infected file action handling via ContentActionService (delete + DM notice, no ban/warn for trusted/admin)
-- ⏳ Bot DM fallback to chat reply when bot_dm_enabled=false
+**Phase 4.14 Integration** (Complete October 21, 2025):
+
+- ✅ Telegram file attachment extraction in MessageProcessingService (Document type only, media excluded)
+- ✅ SHA256 hash calculation for uploaded files
+- ✅ FileScanJob scheduled via TickerQ with 5s polling (instant execution)
+- ✅ Download→Hash→Scan→Action flow in FileScanJob.ExecuteAsync()
+- ✅ Infected file handling: Delete message, DM user, log to detection_results
+- ✅ Bot DM fallback to chat reply when bot_dm_enabled=false
+- ✅ Actor.FromSystem("file_scanner") for audit trail
+- ✅ Temporary file cleanup (deleted after scan regardless of result)
 
 **Key Design Decisions**:
 - **YARA removed**: Redundant with ClamAV, ARM incompatibility, maintenance burden
