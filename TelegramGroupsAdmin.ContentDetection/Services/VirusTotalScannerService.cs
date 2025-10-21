@@ -320,15 +320,17 @@ public class VirusTotalScannerService : ICloudScannerService
                 cancellationToken);
 
             // Poll for analysis results (with timeout)
-            // Be conservative with API quota - each poll costs 1 API request
-            // VirusTotal analysis typically takes 10-60 seconds
+            // Be VERY conservative with API quota - each poll costs 1 API request
+            // VirusTotal FREE TIER: Analysis can take 2-10+ minutes during queue backlog
+            // Premium users get instant analysis, free tier is deprioritized
+            // This is a background job - no user waiting, so prioritize quota conservation
             // Goal: 2-3 total requests per file (1 upload + 1-2 polls)
-            const int maxPolls = 3;  // Only 3 poll attempts
-            const int pollDelayMs = 15000;  // Wait 15 seconds between polls
+            const int maxPolls = 5;  // Up to 5 poll attempts
+            var pollDelay = TimeSpan.FromMinutes(2);  // Wait 2 minutes between polls (10 min total timeout)
 
             for (int i = 0; i < maxPolls; i++)
             {
-                await Task.Delay(pollDelayMs, cancellationToken);
+                await Task.Delay(pollDelay, cancellationToken);
 
                 var analysisResponse = await client.GetAsync($"analyses/{analysisId}", cancellationToken);
 
