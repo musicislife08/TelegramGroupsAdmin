@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Repositories;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -13,19 +13,19 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 public class Tier2QueueCoordinator
 {
     private readonly ILogger<Tier2QueueCoordinator> _logger;
-    private readonly FileScanningConfig _config;
+    private readonly IFileScanningConfigRepository _configRepository;
     private readonly Dictionary<string, ICloudScannerService> _cloudScanners;
 
     public Tier2QueueCoordinator(
         ILogger<Tier2QueueCoordinator> logger,
-        IOptions<FileScanningConfig> config,
+        IFileScanningConfigRepository configRepository,
         VirusTotalScannerService virusTotalScanner,
         MetaDefenderScannerService metaDefenderScanner,
         HybridAnalysisScannerService hybridAnalysisScanner,
         IntezerScannerService intezerScanner)
     {
         _logger = logger;
-        _config = config.Value;
+        _configRepository = configRepository;
 
         // Register all cloud scanners by name
         _cloudScanners = new Dictionary<string, ICloudScannerService>(StringComparer.OrdinalIgnoreCase)
@@ -47,6 +47,9 @@ public class Tier2QueueCoordinator
         string? fileName = null,
         CancellationToken cancellationToken = default)
     {
+        // Load config from database
+        var config = await _configRepository.GetAsync(chatId: null, cancellationToken).ConfigureAwait(false);
+
         _logger.LogInformation("Starting Tier 2 cloud queue scan (file: {FileName}, hash: {Hash}, size: {Size} bytes)",
             fileName ?? "unknown", fileHash[..16] + "...", fileBytes.Length);
 
@@ -55,7 +58,7 @@ public class Tier2QueueCoordinator
         var hashLookupResults = new List<(string ServiceName, CloudHashLookupResult Result)>();
 
         // Try each cloud service in configured priority order
-        foreach (var serviceName in _config.Tier2.CloudQueuePriority)
+        foreach (var serviceName in config.Tier2.CloudQueuePriority)
         {
             if (!_cloudScanners.TryGetValue(serviceName, out var scanner))
             {
@@ -184,7 +187,7 @@ public class Tier2QueueCoordinator
         // All services exhausted or failed
         var failOpenDuration = (int)(DateTimeOffset.UtcNow - startTime).TotalMilliseconds;
 
-        if (_config.Tier2.FailOpenWhenExhausted)
+        if (config.Tier2.FailOpenWhenExhausted)
         {
             _logger.LogWarning("All Tier 2 cloud services exhausted/failed, failing OPEN (allowing file)");
 

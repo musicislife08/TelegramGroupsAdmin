@@ -2,8 +2,8 @@ using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -17,7 +17,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 public class VirusTotalScannerService : ICloudScannerService
 {
     private readonly ILogger<VirusTotalScannerService> _logger;
-    private readonly FileScanningConfig _config;
+    private readonly IFileScanningConfigRepository _configRepository;
     private readonly IFileScanQuotaRepository _quotaRepository;
     private readonly IHttpClientFactory _httpClientFactory;
 
@@ -25,17 +25,18 @@ public class VirusTotalScannerService : ICloudScannerService
 
     public string ServiceName => "VirusTotal";
 
-    // Only check database config - API key is configured in named HttpClient
-    public bool IsEnabled => _config.Tier2.VirusTotal.Enabled;
+    // IsEnabled will be checked by loading config at scan time
+    // TODO: Replace with IOptionsSnapshot when switching to provider pattern
+    public bool IsEnabled => true;  // Actual check happens in methods after loading config
 
     public VirusTotalScannerService(
         ILogger<VirusTotalScannerService> logger,
-        IOptions<FileScanningConfig> config,
+        IFileScanningConfigRepository configRepository,
         IFileScanQuotaRepository quotaRepository,
         IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
-        _config = config.Value;
+        _configRepository = configRepository;
         _quotaRepository = quotaRepository;
         _httpClientFactory = httpClientFactory;
     }
@@ -44,7 +45,10 @@ public class VirusTotalScannerService : ICloudScannerService
         string fileHash,
         CancellationToken cancellationToken = default)
     {
-        if (!IsEnabled)
+        // Load config from database
+        var config = await _configRepository.GetAsync(chatId: null, cancellationToken).ConfigureAwait(false);
+
+        if (!config.Tier2.VirusTotal.Enabled)
         {
             _logger.LogDebug("VirusTotal is disabled, skipping hash lookup");
             return null;
@@ -97,7 +101,7 @@ public class VirusTotalScannerService : ICloudScannerService
                 await _quotaRepository.IncrementQuotaUsageAsync(
                     ServiceName,
                     "daily",
-                    _config.Tier2.VirusTotal.DailyLimit,
+                    config.Tier2.VirusTotal.DailyLimit,
                     cancellationToken);
 
                 return new CloudHashLookupResult
@@ -140,7 +144,7 @@ public class VirusTotalScannerService : ICloudScannerService
             await _quotaRepository.IncrementQuotaUsageAsync(
                 ServiceName,
                 "daily",
-                _config.Tier2.VirusTotal.DailyLimit,
+                config.Tier2.VirusTotal.DailyLimit,
                 cancellationToken);
 
             // Determine status based on detection count
@@ -216,7 +220,10 @@ public class VirusTotalScannerService : ICloudScannerService
         string? fileName = null,
         CancellationToken cancellationToken = default)
     {
-        if (!IsEnabled)
+        // Load config from database
+        var config = await _configRepository.GetAsync(chatId: null, cancellationToken).ConfigureAwait(false);
+
+        if (!config.Tier2.VirusTotal.Enabled)
         {
             return new CloudScanResult
             {
@@ -309,7 +316,7 @@ public class VirusTotalScannerService : ICloudScannerService
             await _quotaRepository.IncrementQuotaUsageAsync(
                 ServiceName,
                 "daily",
-                _config.Tier2.VirusTotal.DailyLimit,
+                config.Tier2.VirusTotal.DailyLimit,
                 cancellationToken);
 
             // Poll for analysis results (with timeout)
