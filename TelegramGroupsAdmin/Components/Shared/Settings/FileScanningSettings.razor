@@ -271,6 +271,13 @@
                 <MudDivider Class="my-2" />
 
                 <fieldset disabled style="border: none; padding: 0; margin: 0;">
+                    <!-- TODO (Phase 4): Replace hardcoded values with real data
+                         - ClamAV: Query daemon for signature count/version (RELOAD command or VERSION)
+                         - ClamAV Last Updated: Parse signature timestamp from freshclam logs or database
+                         - VirusTotal: Store API metadata, track engine count dynamically
+                         - Detections: Query file_scan_results table with 7-day window WHERE result='Infected'
+                         - Consider creating file_scanning_health table to cache these metrics
+                    -->
                     <MudSimpleTable Hover="true" Dense="true">
                         <thead>
                             <tr>
@@ -285,16 +292,16 @@
                             <tr>
                                 <td>ClamAV</td>
                                 <td><MudChip T="string" Size="Size.Small" Color="Color.Success">Healthy</MudChip></td>
-                                <td>10M+</td>
-                                <td>2 hours ago</td>
-                                <td>0</td>
+                                <td>10M+</td> <!-- TODO: Get from ClamAV daemon -->
+                                <td>2 hours ago</td> <!-- TODO: Get from signature timestamp -->
+                                <td>0</td> <!-- TODO: Query file_scan_results WHERE scanner='ClamAV' AND result='Infected' AND scanned_at > NOW() - INTERVAL '7 days' -->
                             </tr>
                             <tr>
                                 <td>VirusTotal</td>
                                 <td><MudChip T="string" Size="Size.Small" Color="Color.Success">Ready</MudChip></td>
-                                <td>70+ Engines</td>
-                                <td>Real-time</td>
-                                <td>0</td>
+                                <td>70+ Engines</td> <!-- TODO: Get from VirusTotal API metadata (last scan response) -->
+                                <td>Real-time</td> <!-- TODO: Show last API call timestamp from file_scan_quota table -->
+                                <td>0</td> <!-- TODO: Query file_scan_results WHERE scanner='VirusTotal' AND result='Infected' AND scanned_at > NOW() - INTERVAL '7 days' -->
                             </tr>
                         </tbody>
                     </MudSimpleTable>
