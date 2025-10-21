@@ -209,7 +209,15 @@ public static class ModelMappings
         DeletionSource: data.DeletionSource,
         ReplyToMessageId: data.ReplyToMessageId,
         ReplyToUser: replyToUser,
-        ReplyToText: replyToText
+        ReplyToText: replyToText,
+        // Media attachment fields (Phase 4.X) - convert Data enum to UI enum
+        MediaType: data.MediaType.HasValue ? (UiModels.MediaType?)data.MediaType.Value : null,
+        MediaFileId: data.MediaFileId,
+        MediaFileSize: data.MediaFileSize,
+        MediaFileName: data.MediaFileName,
+        MediaMimeType: data.MediaMimeType,
+        MediaLocalPath: data.MediaLocalPath,
+        MediaDuration: data.MediaDuration
     );
 
     public static DataModels.MessageRecordDto ToDto(this UiModels.MessageRecord ui) => new()
@@ -228,7 +236,15 @@ public static class ModelMappings
         PhotoThumbnailPath = ui.PhotoThumbnailPath,
         DeletedAt = ui.DeletedAt,
         DeletionSource = ui.DeletionSource,
-        ReplyToMessageId = ui.ReplyToMessageId
+        ReplyToMessageId = ui.ReplyToMessageId,
+        // Media attachment fields (Phase 4.X) - convert UI enum to Data enum
+        MediaType = ui.MediaType.HasValue ? (DataModels.MediaType?)ui.MediaType.Value : null,
+        MediaFileId = ui.MediaFileId,
+        MediaFileSize = ui.MediaFileSize,
+        MediaFileName = ui.MediaFileName,
+        MediaMimeType = ui.MediaMimeType,
+        MediaLocalPath = ui.MediaLocalPath,
+        MediaDuration = ui.MediaDuration
     };
 
     // Note: PhotoMessageRecord, HistoryStats, SpamCheckRecord are UI-only models

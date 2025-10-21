@@ -137,6 +137,9 @@ public static class ServiceCollectionExtensions
         // Telegram photo service (chat icons, user profile photos)
         services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.TelegramPhotoService>();
 
+        // Telegram media service (Phase 4.X: GIF, Video, Audio, Voice, Sticker, VideoNote, Document downloads)
+        services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.TelegramMediaService>();
+
         // Runtime logging configuration service (Phase 4.7)
         services.AddSingleton<IRuntimeLoggingService, RuntimeLoggingService>();
 
@@ -276,6 +279,11 @@ public static class ServiceCollectionExtensions
         {
             // Max concurrent jobs
             options.SetMaxConcurrency(4);
+
+            // Polling interval: Check for due jobs every 5 seconds (default is 60s)
+            // For smaller apps like this, faster polling improves responsiveness without significant overhead
+            // File scanning feels more immediate (5s vs 60s delay)
+            options.UpdateMissedJobCheckDelay(TimeSpan.FromSeconds(5));
 
             // Use EF Core for persistence (PostgreSQL via AppDbContext)
             options.AddOperationalStore<TelegramGroupsAdmin.Data.AppDbContext>(efOptions =>

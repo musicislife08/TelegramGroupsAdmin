@@ -2,6 +2,7 @@ namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
 /// Message record for UI display
+/// Phase 4.X: Added media attachment support (GIF, Video, Audio, Voice, Sticker, VideoNote, Document)
 /// </summary>
 public record MessageRecord(
     long MessageId,
@@ -25,5 +26,13 @@ public record MessageRecord(
     string? DeletionSource,
     long? ReplyToMessageId,
     string? ReplyToUser,
-    string? ReplyToText
+    string? ReplyToText,
+    // Media attachment fields (Phase 4.X)
+    MediaType? MediaType,       // Type of media attachment (Animation, Video, Audio, Voice, Sticker, VideoNote, Document)
+    string? MediaFileId,        // Telegram file ID for re-downloading
+    long? MediaFileSize,        // File size in bytes
+    string? MediaFileName,      // Original file name (for documents)
+    string? MediaMimeType,      // MIME type (e.g., "video/mp4", "audio/ogg")
+    string? MediaLocalPath,     // Local storage path (e.g., "/data/media/...")
+    int? MediaDuration          // Duration in seconds (for audio/video)
 );

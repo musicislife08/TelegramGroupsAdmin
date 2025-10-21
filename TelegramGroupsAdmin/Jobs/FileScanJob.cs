@@ -6,7 +6,7 @@ using TickerQ.Utilities.Models;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.ContentDetection.Checks;
+using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -27,16 +27,18 @@ namespace TelegramGroupsAdmin.Jobs;
 public class FileScanJob(
     ILogger<FileScanJob> logger,
     TelegramBotClientFactory botClientFactory,
-    FileScanningCheck fileScanningCheck,
+    IEnumerable<IContentCheck> contentChecks,
     ITelegramUserRepository telegramUserRepository,
     IMessageHistoryRepository messageHistoryRepository,
+    IDetectionResultsRepository detectionResultsRepository,
     IOptions<TelegramOptions> telegramOptions)
 {
     private readonly ILogger<FileScanJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly FileScanningCheck _fileScanningCheck = fileScanningCheck;
+    private readonly IContentCheck _fileScanningCheck = contentChecks.First(c => c.CheckName == "FileScanning");
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
+    private readonly IDetectionResultsRepository _detectionResultsRepository = detectionResultsRepository;
     private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
 
     /// <summary>
@@ -127,7 +129,32 @@ public class FileScanJob(
                 scanResult.Confidence,
                 scanResult.Details);
 
-            // Step 5: Take action if file is infected
+            // Step 5: Save detection history (for both clean and infected files)
+            var detectionRecord = new Telegram.Models.DetectionResultRecord
+            {
+                MessageId = payload.MessageId,
+                UserId = payload.UserId,
+                DetectedAt = DateTimeOffset.UtcNow,
+                DetectionSource = "file_scan", // Phase 4.14
+                DetectionMethod = "FileScanningCheck",
+                IsSpam = scanResult.Result == CheckResultType.Spam,
+                Confidence = scanResult.Confidence,
+                Reason = scanResult.Details,
+                NetConfidence = scanResult.Result == CheckResultType.Spam ? scanResult.Confidence : -scanResult.Confidence,
+                CheckResultsJson = null, // File scanning is a single check, no aggregation
+                UsedForTraining = false, // File scans don't train spam detection
+                MessageText = $"File: {payload.FileName ?? "unknown"} ({payload.FileSize} bytes)",
+                AddedBy = Core.Models.Actor.FromSystem("file_scanner")
+            };
+
+            await _detectionResultsRepository.InsertAsync(detectionRecord, cancellationToken);
+
+            _logger.LogInformation(
+                "Created detection history record for file scan: message {MessageId}, result={Result}",
+                payload.MessageId,
+                scanResult.Result);
+
+            // Step 6: Take action if file is infected
             if (scanResult.Result == CheckResultType.Spam) // "Spam" = Infected for file scanning
             {
                 await HandleInfectedFileAsync(botClient, payload, scanResult, cancellationToken);

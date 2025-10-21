@@ -64,6 +64,84 @@
                          @onclick="() => OnImageClick.InvokeAsync(Message)" />
                 }
 
+                @* Media Attachments (Phase 4.X: GIF, Video, Audio, Voice, Sticker, VideoNote, Document) *@
+                @if (Message.MediaType.HasValue && !string.IsNullOrEmpty(Message.MediaLocalPath))
+                {
+                    @switch (Message.MediaType.Value)
+                    {
+                        case TelegramGroupsAdmin.Telegram.Models.MediaType.Animation:
+                            <video src="@GetImagePath(Message.MediaLocalPath)"
+                                   class="tg-media tg-animation"
+                                   autoplay loop muted playsinline
+                                   title="GIF Animation">
+                            </video>
+                            break;
+
+                        case TelegramGroupsAdmin.Telegram.Models.MediaType.Video:
+                            <video src="@GetImagePath(Message.MediaLocalPath)"
+                                   class="tg-media tg-video"
+                                   controls preload="metadata"
+                                   title="@(Message.MediaFileName ?? "Video")">
+                            </video>
+                            break;
+
+                        case TelegramGroupsAdmin.Telegram.Models.MediaType.Audio:
+                            <div class="tg-audio-container">
+                                <div class="tg-audio-icon">🎵</div>
+                                <audio src="@GetImagePath(Message.MediaLocalPath)"
+                                       class="tg-audio"
+                                       controls preload="metadata"
+                                       title="@(Message.MediaFileName ?? "Audio")">
+                                </audio>
+                            </div>
+                            break;
+
+                        case TelegramGroupsAdmin.Telegram.Models.MediaType.Voice:
+                            <div class="tg-voice-container">
+                                <div class="tg-voice-icon">🎤</div>
+                                <audio src="@GetImagePath(Message.MediaLocalPath)"
+                                       class="tg-voice"
+                                       controls preload="metadata"
+                                       title="Voice message (@FormatDuration(Message.MediaDuration))">
+                                </audio>
+                                @if (Message.MediaDuration.HasValue)
+                                {
+                                    <span class="tg-voice-duration">@FormatDuration(Message.MediaDuration.Value)</span>
+                                }
+                            </div>
+                            break;
+
+                        case TelegramGroupsAdmin.Telegram.Models.MediaType.Sticker:
+                            <img src="@GetImagePath(Message.MediaLocalPath)"
+                                 alt="Sticker"
+                                 class="tg-media tg-sticker"
+                                 loading="lazy" />
+                            break;
+
+                        case TelegramGroupsAdmin.Telegram.Models.MediaType.VideoNote:
+                            <video src="@GetImagePath(Message.MediaLocalPath)"
+                                   class="tg-media tg-videonote"
+                                   controls preload="metadata"
+                                   title="Video message">
+                            </video>
+                            break;
+                    }
+                }
+                else if (Message.MediaType == TelegramGroupsAdmin.Telegram.Models.MediaType.Document)
+                {
+                    @* Document: Show icon + filename (no download, file scanner handles security) *@
+                    <div class="tg-document-container">
+                        <div class="tg-document-icon">📎</div>
+                        <div class="tg-document-info">
+                            <div class="tg-document-name">@(Message.MediaFileName ?? "Document")</div>
+                            @if (Message.MediaFileSize.HasValue)
+                            {
+                                <div class="tg-document-size">@FormatFileSize(Message.MediaFileSize.Value)</div>
+                            }
+                        </div>
+                    </div>
+                }
+
                 @* Message Text *@
                 @if (!string.IsNullOrEmpty(Message.MessageText))
                 {
@@ -285,5 +363,39 @@
 
         var latest = DetectionHistory.OrderByDescending(d => d.DetectedAt).First();
         return latest.DetectionSource == "manual" && !latest.IsSpam;
+    }
+
+    /// <summary>
+    /// Format duration in seconds to MM:SS format
+    /// Phase 4.X: Used for audio/voice/video duration display
+    /// </summary>
+    private string FormatDuration(int? seconds)
+    {
+        if (!seconds.HasValue || seconds.Value < 0)
+            return "0:00";
+
+        var duration = TimeSpan.FromSeconds(seconds.Value);
+        return duration.TotalHours >= 1
+            ? duration.ToString(@"h\:mm\:ss")  // 1:23:45 for long files
+            : duration.ToString(@"m\:ss");      // 3:45 for short files
+    }
+
+    /// <summary>
+    /// Format file size in bytes to human-readable format (KB, MB, GB)
+    /// Phase 4.X: Used for document file size display
+    /// </summary>
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        double len = bytes;
+        int order = 0;
+
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+
+        return $"{len:0.##} {sizes[order]}";
     }
 }

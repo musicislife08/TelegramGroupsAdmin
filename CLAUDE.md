@@ -4,13 +4,13 @@
 .NET 10.0 RC2 (10.0.100-rc.2.25502.107), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 10.0 RC2, TickerQ 2.5.3, OpenAI API, VirusTotal, SendGrid
 
 ## Projects
-- **TelegramGroupsAdmin**: Main app, Blazor+API, TickerQ jobs (WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob, TempbanExpiryJob)
+- **TelegramGroupsAdmin**: Main app, Blazor+API, TickerQ jobs (WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob, TempbanExpiryJob, FileScanJob)
 - **TelegramGroupsAdmin.Configuration**: Config IOptions classes, AddApplicationConfiguration()
 - **TelegramGroupsAdmin.Data**: EF Core DbContext, migrations, Data Protection (internal to repos)
-- **TelegramGroupsAdmin.Telegram**: Bot services, 14 commands, repos, orchestrators, DM notifications, AddTelegramServices()
+- **TelegramGroupsAdmin.Telegram**: Bot services, 14 commands, repos, orchestrators, DM notifications, TelegramMediaService, AddTelegramServices()
 - **TelegramGroupsAdmin.Telegram.Abstractions**: TelegramBotClientFactory, job payloads (breaks circular deps)
 - **TelegramGroupsAdmin.SpamDetection**: 9 spam algorithms, self-contained, database-driven
-- **TelegramGroupsAdmin.ContentDetection**: URL filtering (blocklists, domain filters), impersonation detection (photo hash, Levenshtein), AddContentDetectionServices()
+- **TelegramGroupsAdmin.ContentDetection**: URL filtering (blocklists, domain filters), impersonation detection (photo hash, Levenshtein), file scanning (ClamAV+VirusTotal), AddContentDetectionServices()
 
 ## Architecture Patterns
 **Extension Methods**: ServiceCollectionExtensions (AddBlazorServices, AddCookieAuthentication, AddApplicationServices, AddHttpClients, AddTelegramServices, AddRepositories, AddTgSpamWebDataServices, AddTickerQBackgroundJobs), WebApplicationExtensions (ConfigurePipeline, MapApiEndpoints, RunDatabaseMigrationsAsync), ConfigurationExtensions (AddApplicationConfiguration)
@@ -21,7 +21,7 @@
 
 **Background Services** (composition pattern):
 1. TelegramAdminBotService - Bot polling, update routing (5 types), command registration, health checks every 1 min
-2. MessageProcessingService - New messages, edits, image download, spam orchestration, URL extraction, user photo scheduling
+2. MessageProcessingService - New messages, edits, media download (Animation/Video/Audio/Voice/Sticker/VideoNote), spam orchestration, URL extraction, user photo scheduling, file scan scheduling
 3. ChatManagementService - MyChatMember, admin cache, health checks (permissions + invite link validation), chat names
 4. SpamActionService - Training QC, auto-ban (cross-chat), borderline reports
 5. CleanupBackgroundService - Message retention (keeps spam/ham samples)
@@ -35,10 +35,11 @@
 - **Edit Detection**: On edit → message_edits, update messages, re-run spam detection, action if spam
 - **Email Verification**: 24h token (32 random bytes), login blocked until verified (except first Owner)
 - **TOTP Security**: IntermediateAuthService (5min tokens after password), 15min expiry for abandoned setups
-- **TickerQ Jobs**: All jobs re-throw exceptions for proper retry/logging. WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob. Jobs in main app for source generator, payloads in Abstractions.
+- **TickerQ Jobs**: All jobs re-throw exceptions for proper retry/logging. WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob, TempbanExpiryJob, FileScanJob. Jobs in main app for source generator, payloads in Abstractions. Polling interval: 5s (default 60s) via UpdateMissedJobCheckDelay().
 - **Infinite Scroll**: IntersectionObserver on scroll sentinel, timestamp-based pagination (`beforeTimestamp`), MudVirtualize, loads 50 messages/page
 - **Scroll Preservation**: Handles negative scrollTop (Chrome/Edge flex-reverse), captures state before DOM update, double requestAnimationFrame for layout completion, polarity-aware adjustment formula, 5px bottom threshold. TODO: Remove debug console.logs after production verification (app.js:318-440)
 - **DM Notifications**: IDmDeliveryService (Singleton, creates scopes), pending_notifications (30d expiry), auto-delivery on `/start`. Account linking (`/link`) separate from DM setup. Future: Notification preferences UI with deep link to enable bot DMs.
+- **Media Attachments**: TelegramMediaService downloads and saves media (Animation/Video/Audio/Voice/Sticker/VideoNote) to /data/media, stored in messages table. Documents metadata-only (no download for display, file scanner handles temp download). MediaType enum duplicated in Data/Telegram layers (architectural boundary). UI displays media with HTML5 elements (video/audio controls, autoplay for GIFs).
 
 ## API Endpoints
 - GET /health
@@ -95,9 +96,10 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 **4.11** ✅: Warning System - Count-based, auto-ban threshold, UI removal
 **4.12** ✅: Admin Notes & Tags - Actor system, TagManagement UI, color-coded chips
 **4.13** ✅: URL Filtering - 540K domains, 6 blocklists, hard/soft modes, <1ms lookups
-**4.17** ✅: File Scanning Phase 1+2 - ClamAV Tier 1, VirusTotal+cloud queue Tier 2, 98-99% coverage, 16K files/month quota
+**4.17** ✅: File Scanning Phase 1+2 - ClamAV Tier 1, VirusTotal+cloud queue Tier 2, 98-99% coverage, 16K files/month quota. FileScanJob scheduled via TickerQ (5s polling), media files excluded (only Document attachments scanned), Actor.FromSystem("file_scanner")
 **4.19** ✅: Actor System - Exclusive Arc (web/telegram/system), 5 tables, LEFT JOIN
 **4.20** ✅: DM Notification System - IDmDeliveryService, INotificationOrchestrator, pending_notifications queue, /mystatus command, warning notifications
+**4.21** ✅: Media Attachment Support - TelegramMediaService, MediaType enum (Data+Telegram layers), 7 media types (Animation/Video/Audio/Voice/Sticker/VideoNote/Document), messages table media fields, MessageBubbleTelegram UI components, HTML5 video/audio controls, file size/duration formatting
 
 **Pending**:
 **4.9**: Bot connection management - Hot-reload, IBotLifecycleService, /settings#bot-connection (Owner-only)

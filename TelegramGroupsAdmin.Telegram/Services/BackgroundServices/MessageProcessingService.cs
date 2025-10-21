@@ -29,12 +29,14 @@ public partial class MessageProcessingService(
     ChatManagementService chatManagementService,
     SpamActionService spamActionService,
     TelegramPhotoService telegramPhotoService,
+    TelegramMediaService telegramMediaService,
     IServiceProvider serviceProvider,
     ILogger<MessageProcessingService> logger)
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
     private readonly TelegramPhotoService _photoService = telegramPhotoService;
+    private readonly TelegramMediaService _mediaService = telegramMediaService;
 
     // Events for real-time UI updates
     public event Action<MessageRecord>? OnNewMessage;
@@ -288,8 +290,43 @@ public partial class MessageProcessingService(
                     cancellationToken);
             }
 
-            // Phase 4.14: Schedule file scanning for attachments (Document, Video, Audio, Voice, Sticker)
+            // Phase 4.X: Download and save media attachments (GIF, Video, Audio, Voice, Sticker, VideoNote)
+            MediaType? mediaType = null;
+            string? mediaFileId = null;
+            long? mediaFileSize = null;
+            string? mediaFileName = null;
+            string? mediaMimeType = null;
+            string? mediaLocalPath = null;
+            int? mediaDuration = null;
+
+            var mediaInfo = DetectMediaAttachment(message);
+            if (mediaInfo.HasValue)
+            {
+                mediaType = mediaInfo.Value.MediaType;
+                mediaFileId = mediaInfo.Value.FileId;
+                mediaFileSize = mediaInfo.Value.FileSize;
+                mediaFileName = mediaInfo.Value.FileName;
+                mediaMimeType = mediaInfo.Value.MimeType;
+                mediaDuration = mediaInfo.Value.Duration;
+
+                // Download and save media file (EXCEPT Documents - metadata only for Documents)
+                // Document files are only downloaded temporarily by the file scanner for malware detection
+                if (mediaInfo.Value.MediaType != MediaType.Document)
+                {
+                    mediaLocalPath = await _mediaService.DownloadAndSaveMediaAsync(
+                        mediaInfo.Value.FileId,
+                        mediaInfo.Value.MediaType,
+                        mediaInfo.Value.FileName,
+                        message.Chat.Id,
+                        message.MessageId,
+                        cancellationToken);
+                }
+                // For Documents: mediaLocalPath stays null, UI will show filename/icon only
+            }
+
+            // Phase 4.14: Schedule file scanning for Document attachments only
             // Photos are handled separately above (image spam detection via OpenAI Vision)
+            // Media files (GIF/Video/Audio/Voice/Sticker) are NOT scanned (cannot contain executable malware)
             if (HasFileAttachment(message, out var fileId, out var fileSize, out var fileName, out var contentType))
             {
                 await ScheduleFileScanJobAsync(
@@ -335,7 +372,15 @@ public partial class MessageProcessingService(
                 DeletionSource: null,
                 ReplyToMessageId: message.ReplyToMessage?.MessageId,
                 ReplyToUser: null, // Populated by repository queries via JOIN
-                ReplyToText: null // Populated by repository queries via JOIN
+                ReplyToText: null, // Populated by repository queries via JOIN
+                // Media attachment fields (Phase 4.X)
+                MediaType: mediaType,
+                MediaFileId: mediaFileId,
+                MediaFileSize: mediaFileSize,
+                MediaFileName: mediaFileName,
+                MediaMimeType: mediaMimeType,
+                MediaLocalPath: mediaLocalPath,
+                MediaDuration: mediaDuration
             );
 
             // Save message to database using a scoped repository
@@ -867,9 +912,14 @@ public partial class MessageProcessingService(
     }
 
     /// <summary>
-    /// Check if message has a scannable file attachment (Document, Video, Audio, Voice, Sticker)
+    /// Check if message has a scannable file attachment (Document type only)
+    /// Phase 4.14: Only scan documents (PDF, EXE, ZIP, Office files, etc.)
+    /// Excludes: Animation/GIF, Video, Audio, Voice, Sticker, VideoNote (media files cannot contain executable malware)
     /// Photos are handled separately via image spam detection (OpenAI Vision)
-    /// Returns true if file found, with out parameters for file metadata
+    /// Returns true if scannable document found, with out parameters for file metadata
+    ///
+    /// IMPORTANT: Telegram sends GIFs with BOTH Animation and Document properties set.
+    /// We must check for media properties first to avoid scanning GIFs as documents.
     /// </summary>
     private static bool HasFileAttachment(
         Message message,
@@ -883,7 +933,21 @@ public partial class MessageProcessingService(
         fileName = null;
         contentType = null;
 
-        // Document (PDF, DOCX, EXE, ZIP, etc.)
+        // CRITICAL: Check if this is actually a media file BEFORE checking Document
+        // Telegram populates BOTH Animation+Document for GIFs, Video+Document for videos, etc.
+        // We only want to scan pure Document attachments (PDFs, executables, Office files)
+        if (message.Animation != null ||
+            message.Video != null ||
+            message.Audio != null ||
+            message.Voice != null ||
+            message.Sticker != null ||
+            message.VideoNote != null)
+        {
+            return false; // This is a media file, not a scannable document
+        }
+
+        // Only scan pure Document type (PDF, DOCX, EXE, ZIP, APK, etc.)
+        // Media files cannot contain executable malware
         if (message.Document != null)
         {
             fileId = message.Document.FileId;
@@ -893,56 +957,110 @@ public partial class MessageProcessingService(
             return true;
         }
 
-        // Video file
+        return false;
+    }
+
+    /// <summary>
+    /// Detect media attachment in message and extract metadata
+    /// Phase 4.X: Handles Animation (GIF), Video, Audio, Voice, Sticker, VideoNote, Document
+    /// Documents: Metadata saved (filename, size) but NOT downloaded (file scanner handles temporary download for scanning only)
+    /// Returns null if no media attachment found, otherwise returns media info struct
+    /// </summary>
+    private static (MediaType MediaType, string FileId, long FileSize, string? FileName, string? MimeType, int? Duration)? DetectMediaAttachment(Message message)
+    {
+        // Animation (GIF)
+        if (message.Animation != null)
+        {
+            return (
+                MediaType.Animation,
+                message.Animation.FileId,
+                message.Animation.FileSize ?? 0,
+                message.Animation.FileName,
+                message.Animation.MimeType ?? "video/mp4",
+                message.Animation.Duration
+            );
+        }
+
+        // Video
         if (message.Video != null)
         {
-            fileId = message.Video.FileId;
-            fileSize = message.Video.FileSize ?? 0;
-            fileName = message.Video.FileName ?? $"video_{message.Video.FileUniqueId}.mp4";
-            contentType = message.Video.MimeType ?? "video/mp4";
-            return true;
+            return (
+                MediaType.Video,
+                message.Video.FileId,
+                message.Video.FileSize ?? 0,
+                message.Video.FileName,
+                message.Video.MimeType ?? "video/mp4",
+                message.Video.Duration
+            );
         }
 
-        // Audio file
+        // Audio (music files with metadata)
         if (message.Audio != null)
         {
-            fileId = message.Audio.FileId;
-            fileSize = message.Audio.FileSize ?? 0;
-            fileName = message.Audio.FileName ?? message.Audio.Title ?? $"audio_{message.Audio.FileUniqueId}.mp3";
-            contentType = message.Audio.MimeType ?? "audio/mpeg";
-            return true;
+            return (
+                MediaType.Audio,
+                message.Audio.FileId,
+                message.Audio.FileSize ?? 0,
+                message.Audio.FileName ?? message.Audio.Title ?? $"audio_{message.Audio.FileUniqueId}.mp3",
+                message.Audio.MimeType ?? "audio/mpeg",
+                message.Audio.Duration
+            );
         }
 
-        // Voice message
+        // Voice message (OGG format voice note)
         if (message.Voice != null)
         {
-            fileId = message.Voice.FileId;
-            fileSize = message.Voice.FileSize ?? 0;
-            fileName = $"voice_{message.Voice.FileUniqueId}.ogg";
-            contentType = message.Voice.MimeType ?? "audio/ogg";
-            return true;
+            return (
+                MediaType.Voice,
+                message.Voice.FileId,
+                message.Voice.FileSize ?? 0,
+                $"voice_{message.Voice.FileUniqueId}.ogg",
+                message.Voice.MimeType ?? "audio/ogg",
+                message.Voice.Duration
+            );
         }
 
-        // Sticker (can contain exploits)
+        // Sticker (WebP format)
         if (message.Sticker != null)
         {
-            fileId = message.Sticker.FileId;
-            fileSize = message.Sticker.FileSize ?? 0;
-            fileName = $"sticker_{message.Sticker.FileUniqueId}.webp";
-            contentType = "image/webp"; // Telegram stickers are WebP format
-            return true;
+            return (
+                MediaType.Sticker,
+                message.Sticker.FileId,
+                message.Sticker.FileSize ?? 0,
+                $"sticker_{message.Sticker.FileUniqueId}.webp",
+                "image/webp",
+                null // Stickers don't have duration
+            );
         }
 
         // Video note (circular video message)
         if (message.VideoNote != null)
         {
-            fileId = message.VideoNote.FileId;
-            fileSize = message.VideoNote.FileSize ?? 0;
-            fileName = $"videonote_{message.VideoNote.FileUniqueId}.mp4";
-            contentType = "video/mp4";
-            return true;
+            return (
+                MediaType.VideoNote,
+                message.VideoNote.FileId,
+                message.VideoNote.FileSize ?? 0,
+                $"videonote_{message.VideoNote.FileUniqueId}.mp4",
+                "video/mp4",
+                message.VideoNote.Duration
+            );
         }
 
-        return false;
+        // Document attachments: Save metadata ONLY (filename, size, MIME type)
+        // DON'T download for display - file scanner handles temporary download for malware scanning
+        // UI will show document icon with filename but no preview/download link
+        if (message.Document != null)
+        {
+            return (
+                MediaType.Document,
+                message.Document.FileId,
+                message.Document.FileSize ?? 0,
+                message.Document.FileName ?? "document",
+                message.Document.MimeType,
+                null // Documents don't have duration
+            );
+        }
+
+        return null;
     }
 }

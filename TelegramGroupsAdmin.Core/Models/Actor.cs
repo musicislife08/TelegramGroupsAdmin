@@ -89,6 +89,7 @@ public record Actor
         {
             "auto_detection" => "Auto-Detection",
             "bot_protection" => "Bot Protection",
+            "file_scanner" => "File Scanner",
             "initial_seed" => "Initial Seed",
             "web_admin" => "Web Admin (Legacy)",
             "unknown" => "Unknown",

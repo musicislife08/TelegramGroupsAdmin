@@ -56,6 +56,32 @@ public class MessageRecordDto
     [Column("reply_to_message_id")]
     public long? ReplyToMessageId { get; set; }
 
+    // Media attachment fields (Phase 4.X: Media support for GIF, Video, Audio, Voice, Sticker, VideoNote, Document)
+    [Column("media_type")]
+    public MediaType? MediaType { get; set; }  // EF Core stores enum as integer in database
+
+    [Column("media_file_id")]
+    [MaxLength(200)]
+    public string? MediaFileId { get; set; }  // Telegram file ID for re-downloading
+
+    [Column("media_file_size")]
+    public long? MediaFileSize { get; set; }  // File size in bytes
+
+    [Column("media_file_name")]
+    [MaxLength(500)]
+    public string? MediaFileName { get; set; }  // Original file name (especially for documents)
+
+    [Column("media_mime_type")]
+    [MaxLength(100)]
+    public string? MediaMimeType { get; set; }  // MIME type (e.g., "video/mp4", "audio/ogg", "application/pdf")
+
+    [Column("media_local_path")]
+    [MaxLength(500)]
+    public string? MediaLocalPath { get; set; }  // Local storage path in /data directory
+
+    [Column("media_duration")]
+    public int? MediaDuration { get; set; }  // Duration in seconds (for audio/video files)
+
     // Navigation properties
     public virtual ICollection<DetectionResultRecordDto> DetectionResults { get; set; } = [];
     public virtual ICollection<MessageEditRecordDto> MessageEdits { get; set; } = [];
