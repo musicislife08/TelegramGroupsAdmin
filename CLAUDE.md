@@ -7,7 +7,7 @@
 - **TelegramGroupsAdmin**: Main app, Blazor+API, TickerQ jobs (WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob, TempbanExpiryJob)
 - **TelegramGroupsAdmin.Configuration**: Config IOptions classes, AddApplicationConfiguration()
 - **TelegramGroupsAdmin.Data**: EF Core DbContext, migrations, Data Protection (internal to repos)
-- **TelegramGroupsAdmin.Telegram**: Bot services, 13 commands, repos, orchestrators, AddTelegramServices()
+- **TelegramGroupsAdmin.Telegram**: Bot services, 14 commands, repos, orchestrators, DM notifications, AddTelegramServices()
 - **TelegramGroupsAdmin.Telegram.Abstractions**: TelegramBotClientFactory, job payloads (breaks circular deps)
 - **TelegramGroupsAdmin.SpamDetection**: 9 spam algorithms, self-contained, database-driven
 - **TelegramGroupsAdmin.ContentDetection**: URL filtering (blocklists, domain filters), impersonation detection (photo hash, Levenshtein), AddContentDetectionServices()
@@ -38,6 +38,7 @@
 - **TickerQ Jobs**: All jobs re-throw exceptions for proper retry/logging. WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob. Jobs in main app for source generator, payloads in Abstractions.
 - **Infinite Scroll**: IntersectionObserver on scroll sentinel, timestamp-based pagination (`beforeTimestamp`), MudVirtualize, loads 50 messages/page
 - **Scroll Preservation**: Handles negative scrollTop (Chrome/Edge flex-reverse), captures state before DOM update, double requestAnimationFrame for layout completion, polarity-aware adjustment formula, 5px bottom threshold. TODO: Remove debug console.logs after production verification (app.js:318-440)
+- **DM Notifications**: IDmDeliveryService (Singleton, creates scopes), pending_notifications (30d expiry), auto-delivery on `/start`. Account linking (`/link`) separate from DM setup. Future: Notification preferences UI with deep link to enable bot DMs.
 
 ## API Endpoints
 - GET /health
@@ -94,14 +95,16 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 **4.11** ✅: Warning System - Count-based, auto-ban threshold, UI removal
 **4.12** ✅: Admin Notes & Tags - Actor system, TagManagement UI, color-coded chips
 **4.13** ✅: URL Filtering - 540K domains, 6 blocklists, hard/soft modes, <1ms lookups
+**4.17** ✅: File Scanning Phase 1+2 - ClamAV Tier 1, VirusTotal+cloud queue Tier 2, 98-99% coverage, 16K files/month quota
 **4.19** ✅: Actor System - Exclusive Arc (web/telegram/system), 5 tables, LEFT JOIN
+**4.20** ✅: DM Notification System - IDmDeliveryService, INotificationOrchestrator, pending_notifications queue, /mystatus command, warning notifications
 
 **Pending**:
 **4.9**: Bot connection management - Hot-reload, IBotLifecycleService, /settings#bot-connection (Owner-only)
 **4.14**: Critical Checks Infrastructure - Configurable always-run checks (bypass trust/admin status), content_check_configs.always_run column, ContentCheckCoordinator refactor (filter by always_run), ContentActionService.HandleCriticalCheckViolationAsync (delete+DM notice, NO ban/warn for trusted/admin), /settings#critical-checks UI (per-check toggles), DM fallback to chat reply (bot_dm_enabled). Policy: URL filtering + file scanning always run for ALL users
 **4.15**: Report Aggregation - Multi-report auto-escalation (3 unique in 1hr→action), confidence boost (+15/report), reporter accuracy scoring, false report protection, /reports#analytics
 **4.16**: Appeal System - DM channel establishment, appeals queue /reports#appeals, approve/deny workflow, max 2 appeals/ban, 30-day expiration
-**4.17**: File Scanning - **Phase 1 ✅**: ClamAV Tier 1 scanner (10M+ signatures, 95-97% coverage, hash caching, fail-open). **Phase 2 ✅**: Cloud queue (VirusTotal fully implemented with hash-first optimization, MetaDefender/HybridAnalysis/Intezer stubs, quota tracking, sequential priority execution, 98-99% coverage). **Phase 3** ⏳: Windows AMSI API (optional). FileScanningCheck always_run=true. See FILE_SCANNING.md for complete architecture and Phase 2 completion details
+**4.17.3**: File Scanning Phase 3 - Windows AMSI API (optional multi-AV), local voting system. See FILE_SCANNING.md
 **4.18**: Forum/Topics Support - Pass message_thread_id in bot replies, store in messages table, update MessageProcessingService
 
 ### Phase 5: Analytics & Data Aggregation 🔮
