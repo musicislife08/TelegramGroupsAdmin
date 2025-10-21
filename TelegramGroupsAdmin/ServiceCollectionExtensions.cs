@@ -166,7 +166,8 @@ public static class ServiceCollectionExtensions
             client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; SeoPreviewScraper/1.0)");
         });
 
-        // VirusTotal rate limiter
+        // VirusTotal rate limiter (4 requests/minute free tier)
+        // Queue up to 10 requests to handle burst during file upload + analysis polling
         var limiter = PartitionedRateLimiter.Create<HttpRequestMessage, string>(_ =>
             RateLimitPartition.GetSlidingWindowLimiter(
                 partitionKey: "virustotal",
@@ -174,9 +175,9 @@ public static class ServiceCollectionExtensions
                 {
                     PermitLimit = 4,
                     Window = TimeSpan.FromMinutes(1),
-                    SegmentsPerWindow = 1,
+                    SegmentsPerWindow = 4,  // 15-second segments for smoother rate limiting
                     QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                    QueueLimit = 0
+                    QueueLimit = 10  // Queue up to 10 requests (analysis polling can generate 5-10 requests per file)
                 }));
 
         var limiterOptions = new RateLimiterStrategyOptions

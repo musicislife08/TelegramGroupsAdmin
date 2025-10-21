@@ -320,8 +320,9 @@ public class VirusTotalScannerService : ICloudScannerService
                 cancellationToken);
 
             // Poll for analysis results (with timeout)
-            const int maxPolls = 10;
-            const int pollDelayMs = 2000;
+            // VirusTotal analysis typically takes 5-30 seconds, so poll every 5 seconds
+            const int maxPolls = 6;  // 30 second total timeout
+            const int pollDelayMs = 5000;  // 5 seconds between polls
 
             for (int i = 0; i < maxPolls; i++)
             {
