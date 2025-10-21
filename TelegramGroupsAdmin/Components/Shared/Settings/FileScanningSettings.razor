@@ -344,32 +344,6 @@
         </MudPaper>
     </MudItem>
 
-    <!-- Test Scanner (Available via Content Tester) -->
-    <MudItem xs="12">
-        <MudPaper Class="pa-4" Elevation="2">
-            <MudStack Spacing="3">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudIcon Icon="@Icons.Material.Filled.Science" Color="Color.Success" />
-                    <MudText Typo="Typo.h6">Test File Scanning</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Available</MudChip>
-                </MudStack>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    Test file scanning without sending files to Telegram using the Content Tester page.
-                </MudText>
-
-                <MudDivider Class="my-2" />
-
-                <MudAlert Severity="Severity.Success" Dense="true" Icon="@Icons.Material.Filled.Info">
-                    File scanning testing is available via the <strong>Content Tester</strong> tool. Navigate to Settings → Content Tester to upload test files and see detailed scan results from ClamAV and VirusTotal.
-                </MudAlert>
-
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Science" Href="/settings#content-tester">
-                    Open Content Tester
-                </MudButton>
-            </MudStack>
-        </MudPaper>
-    </MudItem>
-
     <!-- Scanner Health & Statistics (Active) -->
     <MudItem xs="12">
         <MudPaper Class="pa-4" Elevation="2">

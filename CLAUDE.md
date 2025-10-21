@@ -101,6 +101,7 @@ Not implemented: Chat delegation, templates, bulk UI (already automatic)
 **4.19** ✅: Actor System - Exclusive Arc (web/telegram/system), 5 tables, LEFT JOIN
 **4.20** ✅: DM Notification System - IDmDeliveryService, INotificationOrchestrator, pending_notifications queue, /mystatus command, warning notifications
 **4.21** ✅: Media Attachment Support - TelegramMediaService, MediaType enum (Data+Telegram layers), 7 media types (Animation/Video/Audio/Voice/Sticker/VideoNote/Document), messages table media fields, MessageBubbleTelegram UI components, HTML5 video/audio controls, file size/duration formatting
+**4.22** ✅: File Scanning UI & Monitoring - FileScanningSettings.razor complete, VirusTotal config UI (enable/disable, daily/per-minute limits, API key status), real-time quota display (color-coded progress bars, manual refresh), scanner health dashboard (ClamAV ping+version, VirusTotal status, 7-day detection stats), paginated scan results log (20/page, timestamp/user/scanner/result/details/confidence), GetFileScanResultsAsync/GetFileScanStatsAsync/GetAllActiveQuotasAsync repository methods, ClamAVHealthResult model
 
 **Pending**:
 **4.9**: Bot connection management - Hot-reload, IBotLifecycleService, /settings#bot-connection (Owner-only)
