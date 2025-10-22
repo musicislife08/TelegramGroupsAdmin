@@ -194,42 +194,64 @@ When adding new repositories or services, always create an interface first and r
 ### ARCH-1: Move Shared Code to Core Library
 
 **Date Added:** 2025-10-21
-**Status:** PENDING ⏳
-**Severity:** Architecture | **Impact:** Better separation of concerns, reduced coupling, proper layering
+**Audit Completed:** 2025-10-21
+**Status:** IN PROGRESS 🔧
+**Severity:** Architecture | **Impact:** Eliminates 150-200 lines duplicated code, breaks coupling
 
-**Description:**
-Audit all domain-specific libraries (especially TelegramGroupsAdmin.Telegram, TelegramGroupsAdmin.ContentDetection, TelegramGroupsAdmin.SpamDetection) to identify shared utilities, common helpers, and cross-cutting concerns that should live in TelegramGroupsAdmin.Core instead.
+**Current Core Status:**
+TelegramGroupsAdmin.Core is minimal - only contains Actor model. Significant opportunity for consolidation.
 
-**Examples of Shared Code:**
-- String utilities used by multiple libraries
-- Date/time helpers
-- Common extension methods
-- Shared validation logic
-- Cross-library constants or enums
-- Generic result/error types
+**HIGH PRIORITY (Move Immediately)** ⚠️
 
-**Current State:**
-- Core library exists but may be underutilized
-- Domain libraries (Telegram, ContentDetection, etc.) may contain utilities that other libraries need
-- Risk of circular dependencies or code duplication
+1. **URL Extraction (4-way duplication)**
+   - **Files**: UrlPreFilterService.cs, MessageProcessingService.cs, SeoScrapingSpamCheck.cs, UrlBlocklistSpamCheck.cs
+   - **Libraries**: ContentDetection, Telegram, SpamDetection (2x)
+   - **Issue**: Same regex URL extraction logic duplicated 4 times
+   - **Move to**: Core.Utilities.UrlUtilities.ExtractUrls()
+   - **Impact**: Bug fixes only need applying once
 
-**Goal:**
-- Core contains all truly shared, domain-agnostic code
-- Domain libraries only contain domain-specific logic
-- Clear dependency flow: Domain libraries → Core (never Core → Domain)
-- Easier to extract libraries to NuGet packages in future
+2. **Duration Parsing (Exact 44-line duplicate)**
+   - **Files**: TempBanCommand.cs, MuteCommand.cs
+   - **Library**: Telegram
+   - **Issue**: Identical ParseDuration() method copied between commands
+   - **Move to**: Core.Utilities.TimeSpanUtilities.ParseDuration()
+   - **Impact**: Maintenance burden eliminated
 
-**Audit Checklist:**
-1. Review all files in TelegramGroupsAdmin.Telegram for shared utilities
-2. Review all files in TelegramGroupsAdmin.ContentDetection for shared utilities
-3. Review all files in TelegramGroupsAdmin.SpamDetection for shared utilities
-4. Review all files in TelegramGroupsAdmin.Data for shared utilities
-5. Identify candidates for Core migration
-6. Create Core utilities namespace structure (e.g., Core.Extensions, Core.Utilities)
-7. Move shared code to Core with proper unit tests
-8. Update all references across libraries
+**MEDIUM PRIORITY (Move During Related Work)**
 
-**Priority:** Medium - Implement before extracting any library to NuGet
+3. **TickerQHelper**
+   - **File**: TickerQHelper.cs
+   - **Library**: Telegram
+   - **Used by**: Main App
+   - **Issue**: Creates coupling - Main App depends on Telegram for utility
+   - **Move to**: Core.BackgroundJobs.TickerQUtilities
+   - **Impact**: Breaks circular dependency risk
+
+4. **SHA256 Hashing (Duplication)**
+   - **Files**: FileScanJob.cs, MessageProcessingService.cs
+   - **Library**: Telegram
+   - **Issue**: Duplicated hash computation logic
+   - **Move to**: Core.Utilities.HashUtilities.ComputeSHA256()
+   - **Impact**: Consistent hashing implementation
+
+**Recommended Core Structure:**
+```
+TelegramGroupsAdmin.Core/
+  Models/
+    Actor.cs (✅ exists)
+  Utilities/
+    UrlUtilities.cs (NEW)
+    TimeSpanUtilities.cs (NEW)
+    HashUtilities.cs (NEW)
+  BackgroundJobs/
+    TickerQUtilities.cs (MOVED)
+```
+
+**Implementation Phases:**
+- Phase 1 (HIGH): 2-4 hours - UrlUtilities, TimeSpanUtilities
+- Phase 2 (MEDIUM): 1-2 hours - TickerQUtilities, HashUtilities
+
+**Priority:** High for Phase 1 (code duplication), Medium for Phase 2
 
 ---
 
