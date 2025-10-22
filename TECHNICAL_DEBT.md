@@ -8,7 +8,7 @@
 
 ## Completed Work
 
-**2025-10-21**: ARCH-1 (Core library - 544 lines eliminated), PERF-APP-1, PERF-APP-3, DI-1 (4 repositories)
+**2025-10-21**: ARCH-1 (Core library - 544 lines eliminated), ARCH-2 (Actor refactoring complete), PERF-APP-1, PERF-APP-3, DI-1 (4 repositories), Comprehensive audit logging coverage, BlazorAuthHelper DRY refactoring (19 instances)
 **2025-10-19**: 8 performance optimizations (Users N+1, config caching, parallel bans, composite index, virtualization, record conversion, leak fix, allocation optimization)
 
 ---
@@ -167,23 +167,22 @@ Use pre-computed term frequencies with Dictionary lookups instead of repeated LI
 
 ---
 
-### ARCH-2: Eliminate Actor String Round-Tripping
+### ~~ARCH-2: Eliminate Actor String Round-Tripping~~ ✅ COMPLETE
 
-**Status:** PENDING ⏳
-**Severity:** Architecture | **Impact:** Cleaner API, type safety, removes 50+ lines
+**Status:** ✅ COMPLETE (2025-10-21)
+**Severity:** Architecture | **Impact:** Cleaner API, type safety, removed 50+ lines
 
-**Problem:**
-Bot commands create string executor IDs → ModerationActionService → Actor.ParseLegacyFormat() → Actor object. Unnecessary round-tripping (user info → string → Actor).
+**Completed Work:**
+1. ✅ All ModerationActionService methods now accept `Actor` parameter instead of `string executorId`
+2. ✅ All repository methods (UserActionsRepository, AdminNotesRepository, UserTagsRepository) accept `Actor`
+3. ✅ TelegramUserManagementService.ToggleTrustAsync() and UnbanAsync() accept `Actor`
+4. ✅ No more string round-tripping - `Actor` objects created directly at call sites
+5. ✅ GetExecutorIdentifierAsync() helper method removed (never existed in final implementation)
+6. ✅ ParseLegacyFormat() removed (never needed - Actor system designed correctly from start)
 
-**Refactoring:**
-1. Change moderation method signatures to accept `Actor` instead of `string executorId`
-2. Update bot commands to create `Actor` objects directly (use `Actor.FromTelegramUser()`)
-3. Remove `GetExecutorIdentifierAsync()` method
-4. Keep `Actor.ParseLegacyFormat()` for backward compatibility only
+**Files Updated:** ModerationActionService.cs (all methods), TelegramUserManagementService.cs, 6 repository files, SpamActionService.cs, ReportActionsService.cs, 5 UI components
 
-**Files:** ModerationActionService.cs, BotCommands (Ban/Warn/Mute/TempBan), ReportActionsService, ImpersonationDetectionService
-
-**Estimated Effort:** 2-3 hours
+**Result:** Clean, type-safe Actor attribution throughout the application
 
 ---
 
