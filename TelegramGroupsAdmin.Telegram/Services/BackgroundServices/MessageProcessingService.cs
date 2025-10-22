@@ -13,7 +13,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Helpers;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
-
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 
@@ -267,7 +267,7 @@ public partial class MessageProcessingService(
             }
 
             // Extract URLs from message text
-            var urls = text != null ? ExtractUrls(text) : null;
+            var urls = UrlUtilities.ExtractUrls(text);
 
             // Get photo file ID if present and download image
             string? photoFileId = null;
@@ -546,8 +546,8 @@ public partial class MessageProcessingService(
                 : DateTimeOffset.UtcNow;
 
             // Extract URLs and calculate content hashes
-            var oldUrls = oldText != null ? ExtractUrls(oldText) : null;
-            var newUrls = newText != null ? ExtractUrls(newText) : null;
+            var oldUrls = UrlUtilities.ExtractUrls(oldText);
+            var newUrls = UrlUtilities.ExtractUrls(newText);
 
             var oldContentHash = ComputeContentHash(oldText ?? "", oldUrls != null ? JsonSerializer.Serialize(oldUrls) : "");
             var newContentHash = ComputeContentHash(newText ?? "", newUrls != null ? JsonSerializer.Serialize(newUrls) : "");
@@ -718,19 +718,6 @@ public partial class MessageProcessingService(
         }
     }
 
-    /// <summary>
-    /// Extract URLs from message text
-    /// </summary>
-    private static List<string>? ExtractUrls(string text)
-    {
-        var matches = UrlRegex().Matches(text);
-        return matches.Count > 0
-            ? matches.Select(m => m.Value).ToList()
-            : null;
-    }
-
-    [GeneratedRegex(@"https?://[^\s\]\)\>]+", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
-    private static partial Regex UrlRegex();
 
     /// <summary>
     /// Download and process image from Telegram (full + thumbnail)

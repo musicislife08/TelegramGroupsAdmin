@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
@@ -18,7 +19,6 @@ public partial class UrlBlocklistSpamCheck(
     ICachedBlockedDomainsRepository cacheRepo,
     IDomainFiltersRepository filtersRepo) : IContentCheck
 {
-    private static readonly Regex UrlRegex = CompiledUrlRegex();
     private static readonly Regex DomainRegex = CompiledDomainRegex();
 
     public string CheckName => "UrlFilters";
@@ -148,9 +148,13 @@ public partial class UrlBlocklistSpamCheck(
     {
         var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Extract full URLs
-        foreach (Match m in UrlRegex.Matches(message))
-            found.Add(m.Value);
+        // Extract full URLs using shared utility
+        var urls = UrlUtilities.ExtractUrls(message);
+        if (urls != null)
+        {
+            foreach (var url in urls)
+                found.Add(url);
+        }
 
         // Extract standalone domains
         foreach (Match m in DomainRegex.Matches(message))
@@ -177,9 +181,6 @@ public partial class UrlBlocklistSpamCheck(
         // Otherwise assume it's already a domain
         return urlOrDomain;
     }
-
-    [GeneratedRegex(@"https?://[^\s\]\)\>]+", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
-    private static partial Regex CompiledUrlRegex();
 
     [GeneratedRegex(@"\b[\w\-_.]+\.[a-z]{2,}\b", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
     private static partial Regex CompiledDomainRegex();

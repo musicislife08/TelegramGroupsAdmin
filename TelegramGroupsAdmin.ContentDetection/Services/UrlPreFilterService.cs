@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -41,7 +42,7 @@ public class UrlPreFilterService : IUrlPreFilterService
         }
 
         // Extract URLs from message
-        var urls = ExtractUrls(messageText);
+        var urls = UrlUtilities.ExtractUrls(messageText) ?? [];
         if (urls.Count == 0)
         {
             return new HardBlockResult(ShouldBlock: false, Reason: null, BlockedDomain: null);
@@ -96,26 +97,6 @@ public class UrlPreFilterService : IUrlPreFilterService
         return new HardBlockResult(ShouldBlock: false, Reason: null, BlockedDomain: null);
     }
 
-    /// <summary>
-    /// Extract URLs from message text
-    /// Simple regex-based extraction (http/https URLs)
-    /// </summary>
-    private static List<string> ExtractUrls(string text)
-    {
-        var urls = new List<string>();
-
-        // Match http/https URLs
-        var urlPattern = @"https?://[^\s]+";
-        var matches = System.Text.RegularExpressions.Regex.Matches(text, urlPattern,
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        foreach (System.Text.RegularExpressions.Match match in matches)
-        {
-            urls.Add(match.Value);
-        }
-
-        return urls;
-    }
 
     /// <summary>
     /// Extract domain from URL

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
@@ -17,8 +18,6 @@ public partial class SeoScrapingSpamCheck(
     IHttpClientFactory httpClientFactory) : IContentCheck
 {
     private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
-
-    private static readonly Regex UrlRegex = CompiledUrlRegex();
 
     // Suspicious patterns from existing SpamCheckService
     private static readonly Regex[] SuspiciousPatterns =
@@ -62,7 +61,7 @@ public partial class SeoScrapingSpamCheck(
         }
 
         // Only run if message contains URLs
-        return UrlRegex.IsMatch(request.Message);
+        return UrlUtilities.ExtractUrls(request.Message) != null;
     }
 
     /// <summary>
@@ -79,7 +78,7 @@ public partial class SeoScrapingSpamCheck(
             _httpClient.DefaultRequestHeaders.Clear();
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (TelegramGroupsAdmin/1.0)");
 
-            var urls = ExtractUrls(req.Message);
+            var urls = UrlUtilities.ExtractUrls(req.Message) ?? [];
 
             foreach (var url in urls)
             {
@@ -230,23 +229,6 @@ public partial class SeoScrapingSpamCheck(
             .Aggregate(new StringBuilder(), (sb, c) => sb.Append(c), sb => sb.ToString());
     }
 
-    /// <summary>
-    /// Extract URLs from message text
-    /// </summary>
-    private static List<string> ExtractUrls(string message)
-    {
-        var urls = new List<string>();
-
-        foreach (Match match in UrlRegex.Matches(message))
-        {
-            urls.Add(match.Value);
-        }
-
-        return urls;
-    }
-
-    [GeneratedRegex(@"https?://[^\s\]\)\>]+", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
-    private static partial Regex CompiledUrlRegex();
 
     [GeneratedRegex(@"i\s+deposited\s+\$?\d+.*got\s+\$?\d+", RegexOptions.IgnoreCase | RegexOptions.Compiled, "en-US")]
     private static partial Regex DepositedRegex();
