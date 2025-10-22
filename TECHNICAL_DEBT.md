@@ -195,27 +195,28 @@ When adding new repositories or services, always create an interface first and r
 
 **Date Added:** 2025-10-21
 **Audit Completed:** 2025-10-21
-**Status:** IN PROGRESS 🔧
-**Severity:** Architecture | **Impact:** Eliminates 150-200 lines duplicated code, breaks coupling
+**Phase 1 Completed:** 2025-10-21
+**Status:** PHASE 1 COMPLETE ✅ | Phase 2 pending
+**Severity:** Architecture | **Impact:** Eliminated 138-148 lines duplicated code, Phase 2 will break coupling
 
 **Current Core Status:**
-TelegramGroupsAdmin.Core is minimal - only contains Actor model. Significant opportunity for consolidation.
+TelegramGroupsAdmin.Core expanded with Utilities namespace. Phase 1 eliminated all HIGH priority duplications.
 
 **HIGH PRIORITY (Move Immediately)** ⚠️
 
-1. **URL Extraction (4-way duplication)**
+1. ✅ **URL Extraction (4-way duplication)** - COMPLETED 2025-10-21
    - **Files**: UrlPreFilterService.cs, MessageProcessingService.cs, SeoScrapingSpamCheck.cs, UrlBlocklistSpamCheck.cs
    - **Libraries**: ContentDetection, Telegram, SpamDetection (2x)
    - **Issue**: Same regex URL extraction logic duplicated 4 times
-   - **Move to**: Core.Utilities.UrlUtilities.ExtractUrls()
-   - **Impact**: Bug fixes only need applying once
+   - **Moved to**: Core.Utilities.UrlUtilities.ExtractUrls()
+   - **Impact**: Eliminated ~50-60 lines of duplicated code, bug fixes only need applying once
 
-2. **Duration Parsing (Exact 44-line duplicate)**
+2. ✅ **Duration Parsing (Exact 44-line duplicate)** - COMPLETED 2025-10-21
    - **Files**: TempBanCommand.cs, MuteCommand.cs
    - **Library**: Telegram
-   - **Issue**: Identical ParseDuration() method copied between commands
-   - **Move to**: Core.Utilities.TimeSpanUtilities.ParseDuration()
-   - **Impact**: Maintenance burden eliminated
+   - **Issue**: Identical ParseDuration() and FormatDuration() methods copied between commands
+   - **Moved to**: Core.Utilities.TimeSpanUtilities (TryParseDuration() + FormatDuration())
+   - **Impact**: Eliminated 88 lines total (44 per command), maintenance burden eliminated
 
 **MEDIUM PRIORITY (Move During Related Work)**
 

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -68,7 +69,7 @@ public class MuteCommand : IBotCommand
         if (args.Length > 0)
         {
             var durationArg = args[0].ToLower();
-            if (TryParseDuration(durationArg, out var parsedDuration))
+            if (TimeSpanUtilities.TryParseDuration(durationArg, out var parsedDuration))
             {
                 duration = parsedDuration;
                 reason = args.Length > 1 ? string.Join(" ", args.Skip(1)) : null;
@@ -80,7 +81,7 @@ public class MuteCommand : IBotCommand
             }
         }
 
-        reason ??= $"Muted for {FormatDuration(duration)}";
+        reason ??= $"Muted for {TimeSpanUtilities.FormatDuration(duration)}";
 
         try
         {
@@ -107,7 +108,7 @@ public class MuteCommand : IBotCommand
 
             // Build success message
             var response = $"🔇 User @{targetUser.Username ?? targetUser.Id.ToString()} muted in {result.ChatsAffected} chat(s)\n" +
-                          $"Duration: {FormatDuration(duration)}\n" +
+                          $"Duration: {TimeSpanUtilities.FormatDuration(duration)}\n" +
                           $"Reason: {reason}\n" +
                           $"⚠️ Will be automatically unmuted at {DateTimeOffset.UtcNow.Add(duration):yyyy-MM-dd HH:mm} UTC";
 
@@ -124,48 +125,4 @@ public class MuteCommand : IBotCommand
         }
     }
 
-    private static bool TryParseDuration(string input, out TimeSpan duration)
-    {
-        duration = TimeSpan.Zero;
-
-        // Support formats: 5m, 1h, 24h, 5min, 1hr, 1hour, 24hours
-        input = input.ToLower().Trim();
-
-        if (input.EndsWith("m") || input.EndsWith("min") || input.EndsWith("mins"))
-        {
-            var numberPart = input.TrimEnd('m', 'i', 'n', 's');
-            if (int.TryParse(numberPart, out var minutes))
-            {
-                duration = TimeSpan.FromMinutes(minutes);
-                return true;
-            }
-        }
-        else if (input.EndsWith("h") || input.EndsWith("hr") || input.EndsWith("hrs") || input.EndsWith("hour") || input.EndsWith("hours"))
-        {
-            var numberPart = input.TrimEnd('h', 'r', 's', 'o', 'u');
-            if (int.TryParse(numberPart, out var hours))
-            {
-                duration = TimeSpan.FromHours(hours);
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static string FormatDuration(TimeSpan duration)
-    {
-        if (duration.TotalMinutes < 60)
-        {
-            return $"{(int)duration.TotalMinutes} minute{((int)duration.TotalMinutes != 1 ? "s" : "")}";
-        }
-        else if (duration.TotalHours < 24)
-        {
-            return $"{(int)duration.TotalHours} hour{((int)duration.TotalHours != 1 ? "s" : "")}";
-        }
-        else
-        {
-            return $"{(int)duration.TotalDays} day{((int)duration.TotalDays != 1 ? "s" : "")}";
-        }
-    }
 }
