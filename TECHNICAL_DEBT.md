@@ -22,61 +22,6 @@ The following performance issues were identified by comprehensive analysis acros
 
 Issues are organized by severity and realistic impact for this deployment scale.
 
-### Critical Priority (1 issue)
-
-#### PERF-TG-2: Sequential Chat Bans Block Spam Detection
-
-**Project:** TelegramGroupsAdmin.Telegram
-**Files:** ModerationActionService.cs (lines 121-136, 201-216)
-**Severity:** Critical | **Impact:** 60% time reduction for multi-chat bans
-
-**Description:**
-When auto-banning a spammer from 10+ chats, the code executes bans sequentially. Each Telegram API call takes ~500ms, so 10 chats = 5 seconds blocking the spam detection thread while other messages pile up.
-
-**Reality Check:** With 10+ chats, every auto-ban causes a 5-second delay before processing the next message. Parallel execution respects Telegram rate limits while being much faster.
-
-**Current Code:**
-```csharp
-foreach (var chat in allChats.Where(c => c.IsActive))
-{
-    await botClient.BanChatMember(chatId: chat.ChatId, userId: userId);
-    result.ChatsAffected++;
-}
-```
-
-**Recommended Fix:**
-```csharp
-var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
-
-// Parallel execution with concurrency limit (respects Telegram rate limits)
-var semaphore = new SemaphoreSlim(3); // Max 3 concurrent API calls
-var banTasks = activeChatIds.Select(async chatId =>
-{
-    await semaphore.WaitAsync(cancellationToken);
-    try
-    {
-        await botClient.BanChatMember(chatId: chatId, userId: userId, cancellationToken: cancellationToken);
-        return true;
-    }
-    catch (Exception ex)
-    {
-        _logger.LogWarning(ex, "Failed to ban user {UserId} from chat {ChatId}", userId, chatId);
-        return false;
-    }
-    finally
-    {
-        semaphore.Release();
-    }
-});
-
-var banResults = await Task.WhenAll(banTasks);
-result.ChatsAffected = banResults.Count(success => success);
-```
-
-**Expected Gain:** 60% time reduction (10 chats: 5 seconds → 2 seconds with 3 concurrent bans), spam detection thread unblocked faster
-
----
-
 ### High Priority (2 issues)
 
 #### PERF-APP-1: N+1 Detection History Loading on Messages Page
@@ -300,24 +245,21 @@ Use pre-computed term frequencies with Dictionary lookups instead of repeated LI
 
 | Priority | Count | Realistic Impact for This Deployment |
 |----------|-------|--------------------------------------|
-| Critical | 1 | **Massive improvement** - Speeds up auto-bans by 60% |
 | High | 2 | **Significant improvement** - Primary moderation page faster, snappier UI |
 | Medium | 4 | **Moderate improvement** - Future-proofs growth, optimizes analytics |
 
-**Total Issues:** 7 actionable (down from 52 initial findings)
-**Completed:** 7 optimizations (Users N+1, config caching, composite index, virtualization, record conversion, leak fix, allocation optimization)
+**Total Issues:** 6 actionable (down from 52 initial findings)
+**Completed:** 8 optimizations (Users N+1, config caching, parallel bans, composite index, virtualization, record conversion, leak fix, allocation optimization)
 **Removed:** 38 false positives (micro-optimizations, wrong usage assumptions, rare operations)
 
 **Estimated Performance Gains:**
-- **Critical issues:** 50-70% faster database operations, 10-20 second page loads → 200-300ms
 - **High issues:** 2-3 second Messages page → 100-200ms, snappier UI
 - **Medium issues:** Future-proofing and polish (10x stop word growth, analytics optimization)
 
 **Implementation Priority:**
-1. **PERF-TG-2** (Critical) - Parallel bans (5 seconds → 2 seconds, unblocks spam detection)
-2. **PERF-APP-1** (High) - Messages page N+1 (primary tool, 50 queries → 1)
-3. **PERF-APP-3** (High) - StateHasChanged batching (snappier UI for heavy web usage)
-4. Medium - Implement opportunistically during related refactoring
+1. **PERF-APP-1** (High) - Messages page N+1 (primary tool, 50 queries → 1)
+2. **PERF-APP-3** (High) - StateHasChanged batching (snappier UI for heavy web usage)
+3. Medium - Implement opportunistically during related refactoring
 
 **Testing Strategy:**
 - Use `dotnet run --migrate-only` to verify database migrations

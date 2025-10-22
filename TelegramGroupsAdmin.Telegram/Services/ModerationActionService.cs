@@ -121,23 +121,36 @@ public class ModerationActionService
             await _userActionsRepository.ExpireTrustsForUserAsync(userId, chatId: null, cancellationToken);
             result.TrustRemoved = true;
 
-            // 5. Ban user globally across all managed chats
+            // 5. Ban user globally across all managed chats (PERF-TG-2: parallel execution with concurrency limit)
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
-            foreach (var chat in allChats.Where(c => c.IsActive))
+            var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
+
+            // Parallel execution with concurrency limit (respects Telegram rate limits)
+            using var semaphore = new SemaphoreSlim(3); // Max 3 concurrent API calls
+            var banTasks = activeChatIds.Select(async chatId =>
             {
+                await semaphore.WaitAsync(cancellationToken);
                 try
                 {
                     await botClient.BanChatMember(
-                        chatId: chat.ChatId,
+                        chatId: chatId,
                         userId: userId,
                         cancellationToken: cancellationToken);
-                    result.ChatsAffected++;
+                    return true;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to ban user {UserId} from chat {ChatId}", userId, chat.ChatId);
+                    _logger.LogWarning(ex, "Failed to ban user {UserId} from chat {ChatId}", userId, chatId);
+                    return false;
                 }
-            }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            var banResults = await Task.WhenAll(banTasks);
+            result.ChatsAffected = banResults.Count(success => success);
 
             // 6. Record ban action
             var banAction = new UserActionRecord(
@@ -201,23 +214,35 @@ public class ModerationActionService
             await _userActionsRepository.ExpireTrustsForUserAsync(userId, chatId: null, cancellationToken);
             result.TrustRemoved = true;
 
-            // Ban globally
+            // Ban globally (PERF-TG-2: parallel execution with concurrency limit)
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
-            foreach (var chat in allChats.Where(c => c.IsActive))
+            var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
+
+            using var semaphore = new SemaphoreSlim(3);
+            var banTasks = activeChatIds.Select(async chatId =>
             {
+                await semaphore.WaitAsync(cancellationToken);
                 try
                 {
                     await botClient.BanChatMember(
-                        chatId: chat.ChatId,
+                        chatId: chatId,
                         userId: userId,
                         cancellationToken: cancellationToken);
-                    result.ChatsAffected++;
+                    return true;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to ban user {UserId} from chat {ChatId}", userId, chat.ChatId);
+                    _logger.LogWarning(ex, "Failed to ban user {UserId} from chat {ChatId}", userId, chatId);
+                    return false;
                 }
-            }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            var banResults = await Task.WhenAll(banTasks);
+            result.ChatsAffected = banResults.Count(success => success);
 
             // Record ban action
             var banAction = new UserActionRecord(
@@ -382,24 +407,36 @@ public class ModerationActionService
             // Expire all active bans
             await _userActionsRepository.ExpireBansForUserAsync(userId, chatId: null, cancellationToken);
 
-            // Unban from all chats
+            // Unban from all chats (PERF-TG-2: parallel execution with concurrency limit)
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
-            foreach (var chat in allChats.Where(c => c.IsActive))
+            var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
+
+            using var semaphore = new SemaphoreSlim(3);
+            var unbanTasks = activeChatIds.Select(async chatId =>
             {
+                await semaphore.WaitAsync(cancellationToken);
                 try
                 {
                     await botClient.UnbanChatMember(
-                        chatId: chat.ChatId,
+                        chatId: chatId,
                         userId: userId,
                         onlyIfBanned: true,
                         cancellationToken: cancellationToken);
-                    result.ChatsAffected++;
+                    return true;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to unban user {UserId} from chat {ChatId}", userId, chat.ChatId);
+                    _logger.LogWarning(ex, "Failed to unban user {UserId} from chat {ChatId}", userId, chatId);
+                    return false;
                 }
-            }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            var unbanResults = await Task.WhenAll(unbanTasks);
+            result.ChatsAffected = unbanResults.Count(success => success);
 
             // Record unban action
             var unbanAction = new UserActionRecord(
@@ -509,23 +546,35 @@ public class ModerationActionService
             var result = new ModerationResult();
             var expiresAt = DateTimeOffset.UtcNow.Add(duration);
 
-            // Temp ban globally (permanent ban, will be lifted by background job)
+            // Temp ban globally (permanent ban, will be lifted by background job) (PERF-TG-2: parallel execution)
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
-            foreach (var chat in allChats.Where(c => c.IsActive))
+            var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
+
+            using var semaphore = new SemaphoreSlim(3);
+            var banTasks = activeChatIds.Select(async chatId =>
             {
+                await semaphore.WaitAsync(cancellationToken);
                 try
                 {
                     await botClient.BanChatMember(
-                        chatId: chat.ChatId,
+                        chatId: chatId,
                         userId: userId,
                         cancellationToken: cancellationToken);
-                    result.ChatsAffected++;
+                    return true;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to temp ban user {UserId} from chat {ChatId}", userId, chat.ChatId);
+                    _logger.LogWarning(ex, "Failed to temp ban user {UserId} from chat {ChatId}", userId, chatId);
+                    return false;
                 }
-            }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            var banResults = await Task.WhenAll(banTasks);
+            result.ChatsAffected = banResults.Count(success => success);
 
             // Record temp ban action
             var banAction = new UserActionRecord(
@@ -623,14 +672,18 @@ public class ModerationActionService
             var result = new ModerationResult();
             var expiresAt = DateTimeOffset.UtcNow.Add(duration);
 
-            // Restrict user globally (Telegram API handles auto-unrestrict via until_date)
+            // Restrict user globally (Telegram API handles auto-unrestrict via until_date) (PERF-TG-2: parallel execution)
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
-            foreach (var chat in allChats.Where(c => c.IsActive))
+            var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
+
+            using var semaphore = new SemaphoreSlim(3);
+            var restrictTasks = activeChatIds.Select(async chatId =>
             {
+                await semaphore.WaitAsync(cancellationToken);
                 try
                 {
                     await botClient.RestrictChatMember(
-                        chatId: chat.ChatId,
+                        chatId: chatId,
                         userId: userId,
                         permissions: new global::Telegram.Bot.Types.ChatPermissions
                         {
@@ -651,13 +704,21 @@ public class ModerationActionService
                         },
                         untilDate: expiresAt.DateTime,
                         cancellationToken: cancellationToken);
-                    result.ChatsAffected++;
+                    return true;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to restrict user {UserId} in chat {ChatId}", userId, chat.ChatId);
+                    _logger.LogWarning(ex, "Failed to restrict user {UserId} in chat {ChatId}", userId, chatId);
+                    return false;
                 }
-            }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            var restrictResults = await Task.WhenAll(restrictTasks);
+            result.ChatsAffected = restrictResults.Count(success => success);
 
             // Record mute action
             var muteAction = new UserActionRecord(
