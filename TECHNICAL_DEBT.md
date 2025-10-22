@@ -85,65 +85,6 @@ public async Task UpdateAsync<T>(ConfigType configType, long? chatId, T value)
 
 ---
 
-#### PERF-DATA-1: N+1 Query in TelegramUserRepository.GetAllWithStatsAsync
-
-**Project:** TelegramGroupsAdmin.Data
-**Files:** TelegramUserRepository.cs (lines 186-239)
-**Severity:** Critical | **Impact:** 99% query reduction (2000+ queries → 3)
-
-**Description:**
-The `/users` page loads user statistics with N+1 query pattern. With 1000+ users, it executes separate queries for ChatCount and WarningCount for each user, resulting in **2000+ database queries** with 10-20 second page load times.
-
-**Reality Check:** This is the single worst performance issue in the codebase. With your 1000+ user database, loading the Users page is currently unusable.
-
-**Current Code:**
-```csharp
-var users = await context.TelegramUsers
-    .Select(u => new TelegramUserListItem
-    {
-        TelegramUserId = u.TelegramUserId,
-        // ... other fields ...
-        ChatCount = context.Messages
-            .Where(m => m.UserId == u.TelegramUserId)
-            .Select(m => m.ChatId)
-            .Distinct()
-            .Count(),  // N+1 query (1000 times)
-        WarningCount = context.UserActions
-            .Count(ua => ua.UserId == u.TelegramUserId && ...)  // N+1 query (1000 times)
-    })
-    .ToListAsync();
-```
-
-**Recommended Fix:**
-```csharp
-// Pre-compute stats in separate queries (3 total queries instead of 2000+)
-var chatCounts = await context.Messages
-    .GroupBy(m => m.UserId)
-    .Select(g => new { UserId = g.Key, Count = g.Select(m => m.ChatId).Distinct().Count() })
-    .ToDictionaryAsync(x => x.UserId, x => x.Count, cancellationToken);
-
-var warningCounts = await context.UserActions
-    .Where(ua => ua.Type == UserActionType.Warning)
-    .GroupBy(ua => ua.UserId)
-    .Select(g => new { UserId = g.Key, Count = g.Count() })
-    .ToDictionaryAsync(x => x.UserId, x => x.Count, cancellationToken);
-
-// Single query for users (dictionary lookups are O(1))
-var users = await context.TelegramUsers
-    .Select(u => new TelegramUserListItem
-    {
-        TelegramUserId = u.TelegramUserId,
-        // ... other fields ...
-        ChatCount = chatCounts.GetValueOrDefault(u.TelegramUserId, 0),
-        WarningCount = warningCounts.GetValueOrDefault(u.TelegramUserId, 0)
-    })
-    .ToListAsync(cancellationToken);
-```
-
-**Expected Gain:** 99% query reduction (2000+ queries → 3 queries), page load 10-20 seconds → 200-300ms
-
----
-
 #### PERF-TG-2: Sequential Chat Bans Block Spam Detection
 
 **Project:** TelegramGroupsAdmin.Telegram
@@ -420,12 +361,12 @@ Use pre-computed term frequencies with Dictionary lookups instead of repeated LI
 
 | Priority | Count | Realistic Impact for This Deployment |
 |----------|-------|--------------------------------------|
-| Critical | 3 | **Massive improvement** - Fixes 2000+ query N+1, enables config caching, speeds up auto-bans by 60% |
+| Critical | 2 | **Massive improvement** - Enables config caching, speeds up auto-bans by 60% |
 | High | 2 | **Significant improvement** - Primary moderation page faster, snappier UI |
 | Medium | 4 | **Moderate improvement** - Future-proofs growth, optimizes analytics |
 
-**Total Issues:** 9 actionable (down from 52 initial findings)
-**Completed:** 5 quick wins (composite index, virtualization, record conversion, leak fix, allocation optimization)
+**Total Issues:** 8 actionable (down from 52 initial findings)
+**Completed:** 6 optimizations (N+1 query fix, composite index, virtualization, record conversion, leak fix, allocation optimization)
 **Removed:** 38 false positives (micro-optimizations, wrong usage assumptions, rare operations)
 
 **Estimated Performance Gains:**
@@ -434,12 +375,11 @@ Use pre-computed term frequencies with Dictionary lookups instead of repeated LI
 - **Medium issues:** Future-proofing and polish (10x stop word growth, analytics optimization)
 
 **Implementation Priority:**
-1. **PERF-DATA-1** (Critical) - Fixes unusable Users page (2000+ queries → 3)
-2. **PERF-CFG-1** (Critical) - Config caching with invalidation (200 queries/hr → 10-15)
-3. **PERF-TG-2** (Critical) - Parallel bans (5 seconds → 2 seconds, unblocks spam detection)
-4. **PERF-APP-1** (High) - Messages page N+1 (primary tool, 50 queries → 1)
-5. **PERF-APP-3** (High) - StateHasChanged batching (snappier UI for heavy web usage)
-6. Medium - Implement opportunistically during related refactoring
+1. **PERF-CFG-1** (Critical) - Config caching with invalidation (200 queries/hr → 10-15)
+2. **PERF-TG-2** (Critical) - Parallel bans (5 seconds → 2 seconds, unblocks spam detection)
+3. **PERF-APP-1** (High) - Messages page N+1 (primary tool, 50 queries → 1)
+4. **PERF-APP-3** (High) - StateHasChanged batching (snappier UI for heavy web usage)
+5. Medium - Implement opportunistically during related refactoring
 
 **Testing Strategy:**
 - Use `dotnet run --migrate-only` to verify database migrations
