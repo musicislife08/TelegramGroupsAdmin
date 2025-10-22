@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -63,7 +64,7 @@ public class AdminNotesRepository : IAdminNotesRepository
         return true;
     }
 
-    public async Task<bool> DeleteNoteAsync(long noteId, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteNoteAsync(long noteId, Actor deletedBy, CancellationToken cancellationToken = default)
     {
         var note = await _context.AdminNotes
             .FirstOrDefaultAsync(n => n.Id == noteId, cancellationToken);
@@ -86,7 +87,7 @@ public class AdminNotesRepository : IAdminNotesRepository
         return notes.Select(n => n.ToModel()).ToList();
     }
 
-    public async Task<bool> TogglePinAsync(long noteId, CancellationToken cancellationToken = default)
+    public async Task<bool> TogglePinAsync(long noteId, Actor toggledBy, CancellationToken cancellationToken = default)
     {
         var note = await _context.AdminNotes
             .FirstOrDefaultAsync(n => n.Id == noteId, cancellationToken);

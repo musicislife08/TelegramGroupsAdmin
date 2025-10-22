@@ -2,9 +2,9 @@
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Services
 @using DataModels = TelegramGroupsAdmin.Data.Models
 @using TelegramGroupsAdmin.Helpers
-@using Microsoft.AspNetCore.Components.Authorization
 @using MudBlazor
 @inject TelegramUserManagementService UserManagementService
 @inject ModerationActionService ModerationService
@@ -12,7 +12,7 @@
 @inject IUserTagsRepository UserTagsRepository
 @inject ITagDefinitionsRepository TagDefinitionsRepository
 @inject IUserActionsRepository UserActionsRepository
-@inject AuthenticationStateProvider AuthStateProvider
+@inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
@@ -468,15 +468,17 @@
     {
         if (_userDetail == null) return;
 
-        // Get current user ID for audit trail
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (executorId == null)
+        // Get Actor for audit trail
+        Actor executor;
+        try
         {
-            Snackbar.Add("Authentication error: User ID not found", Severity.Error);
+            executor = await AuthHelper.GetCurrentActorAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
             return;
         }
-        var executor = Core.Models.Actor.FromWebUser(executorId);
 
         var action = _userDetail.IsTrusted ? "remove trust from" : "trust";
         var success = await UserManagementService.ToggleTrustAsync(_userDetail.TelegramUserId, executor);
@@ -514,15 +516,17 @@
 
         try
         {
-            // Get current user ID for audit trail
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (executorId == null)
+            // Get Actor for audit trail
+            Actor executor;
+            try
             {
-                Snackbar.Add("Authentication error: User ID not found", Severity.Error);
+                executor = await AuthHelper.GetCurrentActorAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
                 return;
             }
-            var executor = Core.Models.Actor.FromWebUser(executorId);
 
             // Unban the user
             var result = await ModerationService.UnbanUserAsync(
@@ -573,15 +577,17 @@
 
         try
         {
-            // Get current user ID for audit trail
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (executorId == null)
+            // Get Actor for audit trail
+            Actor executor;
+            try
             {
-                Snackbar.Add("Authentication error: User ID not found", Severity.Error);
+                executor = await AuthHelper.GetCurrentActorAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
                 return;
             }
-            var executor = Core.Models.Actor.FromWebUser(executorId);
 
             // Call moderation service to temp ban the user
             var banResult = await ModerationService.TempBanUserAsync(
@@ -840,18 +846,14 @@
 
         if (result != null && !result.Canceled && result.Data is string noteText && !string.IsNullOrWhiteSpace(noteText))
         {
-            // Get current user ID for audit trail
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            var userEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+            // Get Actor for audit trail
+            Actor? actor = await AuthHelper.TryGetCurrentActorAsync();
 
             var note = new AdminNote
             {
                 TelegramUserId = UserId,
                 NoteText = noteText.Trim(),
-                CreatedBy = !string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out _)
-                    ? Actor.FromWebUser(userId, userEmail)
-                    : Actor.FromSystem("unknown"),
+                CreatedBy = actor ?? Actor.FromSystem("unknown"),
                 CreatedAt = DateTimeOffset.UtcNow,
                 IsPinned = false
             };
@@ -864,7 +866,19 @@
 
     private async Task ToggleNotePin(AdminNote note)
     {
-        await AdminNotesRepository.TogglePinAsync(note.Id);
+        // Get Actor for audit trail
+        Actor actor;
+        try
+        {
+            actor = await AuthHelper.GetCurrentActorAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
+
+        await AdminNotesRepository.TogglePinAsync(note.Id, actor);
         Snackbar.Add(note.IsPinned ? "Note unpinned" : "Note pinned", Severity.Info);
         await LoadUserDetailAsync();
     }
@@ -883,7 +897,19 @@
 
         if (result != null && !result.Canceled)
         {
-            await AdminNotesRepository.DeleteNoteAsync(note.Id);
+            // Get Actor for audit trail
+            Actor actor;
+            try
+            {
+                actor = await AuthHelper.GetCurrentActorAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+                return;
+            }
+
+            await AdminNotesRepository.DeleteNoteAsync(note.Id, actor);
             Snackbar.Add("Note deleted", Severity.Success);
             await LoadUserDetailAsync();
         }
@@ -910,14 +936,8 @@
 
         if (result != null && !result.Canceled && result.Data is TagSelectionDialog.TagSelectionResult tagResult)
         {
-            // Get current user ID for audit trail
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            var userEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
-
-            var actor = !string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out _)
-                ? Actor.FromWebUser(userId, userEmail)
-                : Actor.FromSystem("unknown");
+            // Get Actor for audit trail
+            var actor = await AuthHelper.TryGetCurrentActorAsync() ?? Actor.FromSystem("unknown");
 
             // Add all selected tags
             var addedCount = 0;
@@ -947,7 +967,19 @@
 
     private async Task DeleteTag(UserTag tag)
     {
-        await UserTagsRepository.DeleteTagAsync(tag.Id);
+        // Get Actor for audit trail
+        Actor actor;
+        try
+        {
+            actor = await AuthHelper.GetCurrentActorAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
+
+        await UserTagsRepository.DeleteTagAsync(tag.Id, actor);
         Snackbar.Add("Tag removed", Severity.Success);
         await LoadUserDetailAsync();
     }
@@ -984,7 +1016,19 @@
         {
             try
             {
-                await UserActionsRepository.ExpireActionAsync(action.Id);
+                // Get Actor for audit trail
+                Actor actor;
+                try
+                {
+                    actor = await AuthHelper.GetCurrentActorAsync();
+                }
+                catch (InvalidOperationException ex)
+                {
+                    Snackbar.Add(ex.Message, Severity.Error);
+                    return;
+                }
+
+                await UserActionsRepository.ExpireActionAsync(action.Id, actor);
                 Snackbar.Add("Warning removed successfully", Severity.Success);
                 await LoadUserDetailAsync(); // Refresh to update warning count
             }

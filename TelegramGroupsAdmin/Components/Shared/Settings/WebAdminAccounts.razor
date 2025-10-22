@@ -1,10 +1,9 @@
-@using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Components.Shared
 @inject IUserManagementService UserManagementService
 @inject IInviteService InviteService
-@inject AuthenticationStateProvider AuthStateProvider
+@inject BlazorAuthHelper AuthHelper
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -173,17 +172,8 @@
     protected override async Task OnInitializedAsync()
     {
         // Get current user info
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        if (user.Identity?.IsAuthenticated == true)
-        {
-            _currentUserId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
-            if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
-            {
-                _currentUserPermissionLevel = level;
-            }
-        }
+        _currentUserId = await AuthHelper.GetCurrentUserIdAsync();
+        _currentUserPermissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
 
         await LoadUsersAsync();
     }

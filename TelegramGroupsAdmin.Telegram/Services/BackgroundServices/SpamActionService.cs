@@ -95,7 +95,13 @@ public class SpamActionService(
                     cancellationToken);
 
                 // Delete the message
-                await moderationActionService.DeleteMessageAsync(message.MessageId, message.Chat.Id, cancellationToken);
+                await moderationActionService.DeleteMessageAsync(
+                    messageId: message.MessageId,
+                    chatId: message.Chat.Id,
+                    userId: message.From!.Id,
+                    deletedBy: Actor.AutoDetection,
+                    reason: "Hard block policy violation (automated spam filter)",
+                    cancellationToken: cancellationToken);
 
                 logger.LogInformation(
                     "Deleted hard block message {MessageId} and banned user {UserId} (policy violation)",
@@ -111,7 +117,13 @@ public class SpamActionService(
                     message.MessageId, message.From?.Id, message.Chat.Id, malwareResult.Details);
 
                 // Delete the malware-containing message
-                await moderationActionService.DeleteMessageAsync(message.MessageId, message.Chat.Id, cancellationToken);
+                await moderationActionService.DeleteMessageAsync(
+                    messageId: message.MessageId,
+                    chatId: message.Chat.Id,
+                    userId: message.From!.Id,
+                    deletedBy: Actor.FileScanner,
+                    reason: $"Malware detected: {malwareResult.Details}",
+                    cancellationToken: cancellationToken);
 
                 // Create critical alert for admin review
                 await CreateBorderlineReportAsync(
@@ -172,7 +184,13 @@ public class SpamActionService(
                     cancellationToken);
 
                 // Delete the spam message from the chat
-                await moderationActionService.DeleteMessageAsync(message.MessageId, message.Chat.Id, cancellationToken);
+                await moderationActionService.DeleteMessageAsync(
+                    messageId: message.MessageId,
+                    chatId: message.Chat.Id,
+                    userId: message.From!.Id,
+                    deletedBy: Actor.AutoDetection,
+                    reason: $"Auto-ban triggered (net confidence: {spamResult.NetConfidence}%, OpenAI confirmed)",
+                    cancellationToken: cancellationToken);
 
                 logger.LogInformation(
                     "Deleted spam message {MessageId} from chat {ChatId} (auto-ban)",

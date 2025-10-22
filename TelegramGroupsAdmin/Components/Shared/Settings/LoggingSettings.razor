@@ -1,7 +1,11 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Configuration.Models
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Telegram.Models
 @using Microsoft.Extensions.Logging
 @inject IRuntimeLoggingService RuntimeLoggingService
+@inject IAuditService AuditService
+@inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 
 <MudStack Spacing="4">
@@ -231,6 +235,18 @@
         try
         {
             await RuntimeLoggingService.UpdateConfigAsync(_config);
+
+            // Create audit log entry
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    userId,
+                    null,
+                    $"logging:default={_config.DefaultLevel}:overrides={_config.Overrides.Count}");
+            }
+
             Snackbar.Add("Settings saved", Severity.Success);
         }
         catch (Exception ex)

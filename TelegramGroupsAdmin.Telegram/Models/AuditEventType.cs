@@ -91,5 +91,11 @@ public enum AuditEventType
     SecuritySettingsChanged = 24,
 
     /// <summary>Integration settings changed</summary>
-    IntegrationSettingsChanged = 25
+    IntegrationSettingsChanged = 25,
+
+    /// <summary>System configuration changed (spam detection, file scanning, logging, etc.)</summary>
+    ConfigurationChanged = 26,
+
+    /// <summary>Report reviewed and actioned (spam/ban/warn/dismiss)</summary>
+    ReportReviewed = 27
 }

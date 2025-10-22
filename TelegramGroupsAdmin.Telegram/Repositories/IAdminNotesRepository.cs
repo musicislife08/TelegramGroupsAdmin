@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -30,7 +31,7 @@ public interface IAdminNotesRepository
     /// <summary>
     /// Delete a note
     /// </summary>
-    Task<bool> DeleteNoteAsync(long noteId, CancellationToken cancellationToken = default);
+    Task<bool> DeleteNoteAsync(long noteId, Actor deletedBy, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get all pinned notes for a user
@@ -40,5 +41,5 @@ public interface IAdminNotesRepository
     /// <summary>
     /// Toggle pin status for a note
     /// </summary>
-    Task<bool> TogglePinAsync(long noteId, CancellationToken cancellationToken = default);
+    Task<bool> TogglePinAsync(long noteId, Actor toggledBy, CancellationToken cancellationToken = default);
 }

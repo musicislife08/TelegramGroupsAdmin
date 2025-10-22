@@ -495,6 +495,9 @@ public class ModerationActionService
     public async Task<ModerationResult> DeleteMessageAsync(
         long messageId,
         long chatId,
+        long userId,
+        Actor deletedBy,
+        string? reason = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -518,7 +521,25 @@ public class ModerationActionService
             // 2. Mark message as deleted in database
             await _messageHistoryRepository.MarkMessageAsDeletedAsync(messageId, "manual_ui_delete");
 
-            _logger.LogInformation("Deleted message {MessageId} from chat {ChatId} via UI", messageId, chatId);
+            // 3. Record delete action for audit trail
+            var deleteAction = new UserActionRecord(
+                Id: 0,
+                UserId: userId,
+                ActionType: UserActionType.Delete,
+                MessageId: messageId,
+                IssuedBy: deletedBy,
+                IssuedAt: DateTimeOffset.UtcNow,
+                ExpiresAt: null,
+                Reason: reason ?? "Manual message deletion"
+            );
+            await _userActionsRepository.InsertAsync(deleteAction, cancellationToken);
+
+            _logger.LogInformation(
+                "Deleted message {MessageId} from chat {ChatId} by {DeletedBy}. Reason: {Reason}",
+                messageId,
+                chatId,
+                deletedBy,
+                reason ?? "Manual deletion");
 
             result.Success = true;
             return result;

@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -59,9 +60,9 @@ public interface IUserActionsRepository
 
     /// <summary>
     /// Remove (soft delete) an action by setting expires_at to now
-    /// Used for unban, removing trust, etc.
+    /// Used for removing warnings, creating audit trail of who removed it
     /// </summary>
-    Task ExpireActionAsync(long actionId, CancellationToken cancellationToken = default);
+    Task ExpireActionAsync(long actionId, Actor expiredBy, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Remove all active bans for a user (used for unban command)

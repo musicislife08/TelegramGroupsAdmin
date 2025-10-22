@@ -21,5 +21,11 @@ public enum UserActionType
     Unban = 4,
 
     /// <summary>Remove trust from user</summary>
-    Untrust = 5
+    Untrust = 5,
+
+    /// <summary>Delete message (manual admin deletion)</summary>
+    Delete = 6,
+
+    /// <summary>Remove warning from user</summary>
+    RemoveWarning = 7
 }

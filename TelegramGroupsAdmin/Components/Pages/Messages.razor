@@ -1,12 +1,12 @@
 @page "/messages"
 @using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.JSInterop
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Components.Shared
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Core.Models
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
 @inject IMessageHistoryRepository MessageRepository
 @inject IManagedChatsRepository ChatsRepository
@@ -14,7 +14,7 @@
 @inject IJSRuntime JS
 @inject IDialogService DialogService
 @inject IMessageHistoryService MessageHistoryService
-@inject AuthenticationStateProvider AuthStateProvider
+@inject BlazorAuthHelper AuthHelper
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject ModerationActionService ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
@@ -178,19 +178,8 @@
     protected override async Task OnInitializedAsync()
     {
         // Get user permission level and ID
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        string? userId = null;
-
-        if (user.Identity?.IsAuthenticated == true)
-        {
-            userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
-            if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
-            {
-                _userPermissionLevel = level;
-            }
-        }
+        var userId = await AuthHelper.GetCurrentUserIdAsync();
+        _userPermissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
 
         // Load current user's linked Telegram accounts for message alignment
         if (!string.IsNullOrEmpty(userId))
@@ -727,14 +716,17 @@
         try
         {
             // Get current user ID for audit trail
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (executorId == null)
+            // Get executor Actor from authentication state
+            Actor executor;
+            try
             {
-                Snackbar.Add("Authentication error: User ID not found", Severity.Error);
+                executor = await AuthHelper.GetCurrentActorAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
                 return;
             }
-            var executor = Core.Models.Actor.FromWebUser(executorId);
 
             // Call moderation service (deletes message, bans user globally, creates detection result)
             var result = await ModerationService.MarkAsSpamAndBanAsync(
@@ -794,14 +786,17 @@
         try
         {
             // Get current user ID for audit trail
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (executorId == null)
+            // Get executor Actor from authentication state
+            Actor executor;
+            try
             {
-                Snackbar.Add("Authentication error: User ID not found", Severity.Error);
+                executor = await AuthHelper.GetCurrentActorAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
                 return;
             }
-            var executor = Core.Models.Actor.FromWebUser(executorId);
 
             // Check if this was previously marked as spam (false positive correction scenario)
             var wasPreviouslySpam = GetSpamCheck(message.MessageId)?.IsSpam == true;
@@ -950,10 +945,25 @@
 
         try
         {
+            // Get executor Actor from authentication state
+            Actor executor;
+            try
+            {
+                executor = await AuthHelper.GetCurrentActorAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+                return;
+            }
+
             // Call moderation service to delete the message (service handles bot client internally)
             var result = await ModerationService.DeleteMessageAsync(
-                message.MessageId,
-                message.ChatId);
+                messageId: message.MessageId,
+                chatId: message.ChatId,
+                userId: message.UserId,
+                deletedBy: executor,
+                reason: "Manual deletion from Messages UI");
 
             if (result.Success)
             {
@@ -1026,14 +1036,17 @@
         try
         {
             // Get current user ID for audit trail
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            if (executorId == null)
+            // Get executor Actor from authentication state
+            Actor executor;
+            try
             {
-                Snackbar.Add("Authentication error: User ID not found", Severity.Error);
+                executor = await AuthHelper.GetCurrentActorAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
                 return;
             }
-            var executor = Core.Models.Actor.FromWebUser(executorId);
 
             // Call moderation service to temp ban the user
             var banResult = await ModerationService.TempBanUserAsync(

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -50,7 +51,7 @@ public class UserTagsRepository : IUserTagsRepository
         return dto.Id;
     }
 
-    public async Task<bool> DeleteTagAsync(long tagId, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteTagAsync(long tagId, Actor deletedBy, CancellationToken cancellationToken = default)
     {
         var tag = await _context.UserTags
             .FirstOrDefaultAsync(t => t.Id == tagId, cancellationToken);

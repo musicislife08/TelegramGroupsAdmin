@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
@@ -130,7 +131,7 @@ public class UserActionsRepository : IUserActionsRepository
         return count;
     }
 
-    public async Task ExpireActionAsync(long actionId, CancellationToken cancellationToken = default)
+    public async Task ExpireActionAsync(long actionId, Actor expiredBy, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.UserActions.FindAsync([actionId], cancellationToken);
@@ -139,7 +140,12 @@ public class UserActionsRepository : IUserActionsRepository
             entity.ExpiresAt = DateTimeOffset.UtcNow;
             await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogDebug("Expired action {ActionId}", actionId);
+            _logger.LogInformation(
+                "Expired action {ActionId} ({ActionType} for user {UserId}) by {ExpiredBy}",
+                actionId,
+                entity.ActionType,
+                entity.UserId,
+                expiredBy);
         }
     }
 

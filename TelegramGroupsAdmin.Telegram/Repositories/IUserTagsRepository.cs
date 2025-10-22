@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -25,7 +26,7 @@ public interface IUserTagsRepository
     /// <summary>
     /// Delete a tag
     /// </summary>
-    Task<bool> DeleteTagAsync(long tagId, CancellationToken cancellationToken = default);
+    Task<bool> DeleteTagAsync(long tagId, Actor deletedBy, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get all users with a specific tag name

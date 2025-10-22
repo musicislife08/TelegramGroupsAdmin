@@ -6,11 +6,16 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Services
 @using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Services
 @inject IFileScanningConfigRepository ConfigRepository
 @inject IFileScanQuotaRepository QuotaRepository
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject IFileScanResultRepository FileScanResultRepository
 @inject ClamAVScannerService ClamAVService
+@inject IAuditService AuditService
+@inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject IConfiguration Configuration
 
@@ -529,6 +534,18 @@
         try
         {
             await ConfigRepository.SaveAsync(_config, chatId: null); // Save global config
+
+            // Create audit log entry
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    userId,
+                    null,
+                    $"file_scanning:vt_enabled={_config.Tier2.VirusTotal.Enabled}:daily={_config.Tier2.VirusTotal.DailyLimit}:permin={_config.Tier2.VirusTotal.PerMinuteLimit}");
+            }
+
             Snackbar.Add("Settings saved", Severity.Success);
         }
         catch (Exception ex)

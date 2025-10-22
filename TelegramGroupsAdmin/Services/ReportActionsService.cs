@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Services;
@@ -21,6 +22,7 @@ public class ReportActionsService : IReportActionsService
     private readonly ModerationActionService _moderationService;
     private readonly TelegramBotClientFactory _botFactory;
     private readonly TelegramOptions _telegramOptions;
+    private readonly IAuditService _auditService;
     private readonly ILogger<ReportActionsService> _logger;
 
     public ReportActionsService(
@@ -29,6 +31,7 @@ public class ReportActionsService : IReportActionsService
         ModerationActionService moderationService,
         TelegramBotClientFactory botFactory,
         IOptions<TelegramOptions> telegramOptions,
+        IAuditService auditService,
         ILogger<ReportActionsService> logger)
     {
         _reportsRepository = reportsRepository;
@@ -36,6 +39,7 @@ public class ReportActionsService : IReportActionsService
         _moderationService = moderationService;
         _botFactory = botFactory;
         _telegramOptions = telegramOptions.Value;
+        _auditService = auditService;
         _logger = logger;
     }
 
@@ -81,6 +85,13 @@ public class ReportActionsService : IReportActionsService
             reviewerId,
             "spam",
             $"User banned from {result.ChatsAffected} chats, message deleted");
+
+        // Create audit log entry
+        await _auditService.LogEventAsync(
+            AuditEventType.ReportReviewed,
+            reviewerId,
+            message.UserId.ToString(),
+            $"spam:report#{reportId}:chats{result.ChatsAffected}");
 
         // Reply to original /report command
         await SendReportReplyAsync(
@@ -148,6 +159,13 @@ public class ReportActionsService : IReportActionsService
             "ban",
             $"User banned from {result.ChatsAffected} chats");
 
+        // Create audit log entry
+        await _auditService.LogEventAsync(
+            AuditEventType.ReportReviewed,
+            reviewerId,
+            message.UserId.ToString(),
+            $"ban:report#{reportId}:chats{result.ChatsAffected}");
+
         // Reply to original /report command
         await SendReportReplyAsync(
             report,
@@ -192,6 +210,13 @@ public class ReportActionsService : IReportActionsService
             "warn",
             $"User {message.UserId} warned");
 
+        // Create audit log entry
+        await _auditService.LogEventAsync(
+            AuditEventType.ReportReviewed,
+            reviewerId,
+            message.UserId.ToString(),
+            $"warn:report#{reportId}:warnings{result.WarningCount}");
+
         // Reply to original /report command
         await SendReportReplyAsync(
             report,
@@ -213,6 +238,13 @@ public class ReportActionsService : IReportActionsService
             reviewerId,
             "dismiss",
             reason ?? "No action needed");
+
+        // Create audit log entry
+        await _auditService.LogEventAsync(
+            AuditEventType.ReportReviewed,
+            reviewerId,
+            null,
+            $"dismiss:report#{reportId}:{reason ?? "no_action"}");
 
         // Reply to original /report command
         await SendReportReplyAsync(
