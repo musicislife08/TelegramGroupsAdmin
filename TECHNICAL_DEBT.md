@@ -191,6 +191,48 @@ When adding new repositories or services, always create an interface first and r
 
 ---
 
+### ARCH-1: Move Shared Code to Core Library
+
+**Date Added:** 2025-10-21
+**Status:** PENDING ⏳
+**Severity:** Architecture | **Impact:** Better separation of concerns, reduced coupling, proper layering
+
+**Description:**
+Audit all domain-specific libraries (especially TelegramGroupsAdmin.Telegram, TelegramGroupsAdmin.ContentDetection, TelegramGroupsAdmin.SpamDetection) to identify shared utilities, common helpers, and cross-cutting concerns that should live in TelegramGroupsAdmin.Core instead.
+
+**Examples of Shared Code:**
+- String utilities used by multiple libraries
+- Date/time helpers
+- Common extension methods
+- Shared validation logic
+- Cross-library constants or enums
+- Generic result/error types
+
+**Current State:**
+- Core library exists but may be underutilized
+- Domain libraries (Telegram, ContentDetection, etc.) may contain utilities that other libraries need
+- Risk of circular dependencies or code duplication
+
+**Goal:**
+- Core contains all truly shared, domain-agnostic code
+- Domain libraries only contain domain-specific logic
+- Clear dependency flow: Domain libraries → Core (never Core → Domain)
+- Easier to extract libraries to NuGet packages in future
+
+**Audit Checklist:**
+1. Review all files in TelegramGroupsAdmin.Telegram for shared utilities
+2. Review all files in TelegramGroupsAdmin.ContentDetection for shared utilities
+3. Review all files in TelegramGroupsAdmin.SpamDetection for shared utilities
+4. Review all files in TelegramGroupsAdmin.Data for shared utilities
+5. Identify candidates for Core migration
+6. Create Core utilities namespace structure (e.g., Core.Extensions, Core.Utilities)
+7. Move shared code to Core with proper unit tests
+8. Update all references across libraries
+
+**Priority:** Medium - Implement before extracting any library to NuGet
+
+---
+
 ## Notes
 
 - **Pre-production status:** Breaking changes are acceptable
