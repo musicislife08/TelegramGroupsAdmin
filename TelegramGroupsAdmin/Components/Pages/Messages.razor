@@ -367,11 +367,11 @@
                     _editCounts[kvp.Key] = kvp.Value;
                 }
 
-                // Reapply filters (this calls StateHasChanged internally)
+                // Reapply filters and trigger re-render
                 ApplyFilters();
+                StateHasChanged();
 
                 // Wait for browser to complete render cycle, then restore scroll
-                // Note: ApplyFilters already called StateHasChanged, so render is queued
                 await JS.InvokeVoidAsync("restoreScrollStateAfterRender", _messagesContainer, scrollState);
 
                 Logger.LogDebug("Added new real-time message {MessageId} to chat {ChatId} view",
@@ -465,12 +465,12 @@
 
     private async Task LoadChatMessagesAsync(long chatId)
     {
+        // PERF-APP-3: Set loading state without intermediate render
         _loading = true;
         _hasMore = true;
         _allMessages.Clear();
         _spamChecks.Clear();
         _editCounts.Clear();
-        StateHasChanged();
 
         try
         {
@@ -483,16 +483,26 @@
             _allMessages = firstPage;
             _hasMore = firstPage.Count >= PageSize; // More pages available if we got a full page
 
-            // Load edit counts for these messages (spam checks now included in wrapper.DetectionResults)
+            // PERF-APP-3: Load edit counts and spam checks in parallel
             if (_allMessages.Any())
             {
-                var messageIds = _allMessages.Select(m => m.Message.MessageId);
-                _editCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+                var messageIds = _allMessages.Select(m => m.Message.MessageId).ToList();
 
-                // For non-admin users (who don't get detection history), still load spam checks
-                if (_userPermissionLevel < 1)
+                if (_userPermissionLevel >= 1)
                 {
-                    _spamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
+                    // Admin: Only load edit counts (detection history already in wrapper)
+                    _editCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+                }
+                else
+                {
+                    // Non-admin: Load both edit counts and spam checks in parallel
+                    var editCountsTask = MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+                    var spamChecksTask = MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
+
+                    await Task.WhenAll(editCountsTask, spamChecksTask);
+
+                    _editCounts = await editCountsTask;
+                    _spamChecks = await spamChecksTask;
                 }
             }
 
@@ -505,6 +515,7 @@
         }
         finally
         {
+            // PERF-APP-3: Single render after all data loaded
             _loading = false;
             StateHasChanged();
         }
@@ -522,8 +533,8 @@
         if (_loadingMore || !_hasMore || !_selectedChatId.HasValue)
             return;
 
+        // PERF-APP-3: Set loading state without intermediate render
         _loadingMore = true;
-        StateHasChanged();
 
         try
         {
@@ -552,17 +563,29 @@
                 // Append to existing messages (older messages go at the end of the list)
                 _allMessages.AddRange(olderMessages);
 
-                // Load edit counts for new messages (spam checks now included in wrapper.DetectionResults)
-                var messageIds = olderMessages.Select(m => m.Message.MessageId);
-                var newEditCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+                // PERF-APP-3: Load edit counts and spam checks in parallel
+                var messageIds = olderMessages.Select(m => m.Message.MessageId).ToList();
 
-                foreach (var kvp in newEditCounts)
-                    _editCounts[kvp.Key] = kvp.Value;
-
-                // For non-admin users, still load spam checks separately
-                if (_userPermissionLevel < 1)
+                if (_userPermissionLevel >= 1)
                 {
-                    var newSpamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
+                    // Admin: Only load edit counts (detection history already in wrapper)
+                    var newEditCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+                    foreach (var kvp in newEditCounts)
+                        _editCounts[kvp.Key] = kvp.Value;
+                }
+                else
+                {
+                    // Non-admin: Load both edit counts and spam checks in parallel
+                    var editCountsTask = MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+                    var spamChecksTask = MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
+
+                    await Task.WhenAll(editCountsTask, spamChecksTask);
+
+                    var newEditCounts = await editCountsTask;
+                    foreach (var kvp in newEditCounts)
+                        _editCounts[kvp.Key] = kvp.Value;
+
+                    var newSpamChecks = await spamChecksTask;
                     foreach (var kvp in newSpamChecks)
                         _spamChecks[kvp.Key] = kvp.Value;
                 }
@@ -586,6 +609,7 @@
         }
         finally
         {
+            // PERF-APP-3: Single render after all data loaded
             _loadingMore = false;
             StateHasChanged();
         }
@@ -610,7 +634,7 @@
             _filterByUserId = null;
         }
 
-        StateHasChanged();
+        // Note: Callers must call StateHasChanged() after ApplyFilters() to trigger re-render
     }
 
     private SpamCheckRecord? GetSpamCheck(long messageId)
