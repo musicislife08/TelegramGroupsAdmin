@@ -197,11 +197,12 @@ When adding new repositories or services, always create an interface first and r
 **Audit Completed:** 2025-10-21
 **Phase 1 Completed:** 2025-10-21
 **Phase 2 Completed:** 2025-10-21
+**Phase 3 Completed:** 2025-10-21
 **Status:** COMPLETE ✅
-**Severity:** Architecture | **Impact:** Eliminated 260-280 lines duplicated code, broke circular dependencies
+**Severity:** Architecture | **Impact:** Eliminated 544-574 lines duplicated code, broke circular dependencies
 
 **Final Core Status:**
-TelegramGroupsAdmin.Core fully established as shared utilities layer. All HIGH and MEDIUM priority items complete.
+TelegramGroupsAdmin.Core fully established as shared utilities layer. All HIGH, MEDIUM, and Phase 3 items complete.
 
 **HIGH PRIORITY (Move Immediately)** ⚠️
 
@@ -236,15 +237,65 @@ TelegramGroupsAdmin.Core fully established as shared utilities layer. All HIGH a
    - **Moved to**: Core.Utilities.HashUtilities (ComputeSHA256Async + ComputeSHA256)
    - **Impact**: Eliminated ~10 lines duplication, consistent hashing implementation
 
+**PHASE 3 (Final Telegram Audit)** 🎯
+
+5. ✅ **FormatDuration Duplicate** - COMPLETED 2025-10-21
+   - **File**: ModerationActionService.cs
+   - **Library**: Telegram
+   - **Issue**: Private duplicate of TimeSpanUtilities.FormatDuration()
+   - **Moved to**: Core.Utilities.TimeSpanUtilities (already existed)
+   - **Impact**: Eliminated 15 lines duplicate code
+
+6. ✅ **Bitwise Operations** - COMPLETED 2025-10-21
+   - **File**: PhotoHashService.cs
+   - **Library**: Telegram → Core
+   - **Issue**: Generic bitwise operations (HammingDistance, PopCount)
+   - **Moved to**: Core.Utilities.BitwiseUtilities
+   - **Impact**: Eliminated 22 lines, reusable for checksums/integrity verification
+
+7. ✅ **String Utilities** - COMPLETED 2025-10-21
+   - **Files**: ImpersonationDetectionService.cs
+   - **Library**: Telegram → Core
+   - **Issue**: Generic string algorithms (Levenshtein distance, name similarity)
+   - **Moved to**: Core.Utilities.StringUtilities
+   - **Impact**: Eliminated 49 lines, reusable for fuzzy matching/search
+
+8. ✅ **Content Hash Extension** - COMPLETED 2025-10-21
+   - **File**: MessageProcessingService.cs
+   - **Library**: Telegram → Core
+   - **Issue**: Message content hashing logic
+   - **Moved to**: Core.Utilities.HashUtilities.ComputeContentHash()
+   - **Impact**: Eliminated 4 lines, consistent hash normalization
+
+9. ✅ **Actor.ParseLegacyFormat** - COMPLETED 2025-10-21
+   - **File**: ModerationActionService.cs
+   - **Library**: Telegram → Core
+   - **Issue**: ConvertToActor logic duplicated, Actor belongs in Core
+   - **Moved to**: Core.Models.Actor.ParseLegacyFormat()
+   - **Impact**: Eliminated 44 lines, documented ARCH-2 for future refactoring
+
+10. ✅ **PhotoHashService** - COMPLETED 2025-10-21
+    - **Files**: PhotoHashService.cs, IPhotoHashService.cs
+    - **Library**: Telegram → Core.Services
+    - **Used by**: FetchUserPhotoJob (main app), ImpersonationDetectionService
+    - **Issue**: Main app job uses it, should be in Core
+    - **Moved to**: Core.Services.PhotoHashService
+    - **Impact**: Eliminated ~150 lines duplication, proper layering
+
 **Final Core Structure:**
 ```
 TelegramGroupsAdmin.Core/
   Models/
-    Actor.cs (✅ exists)
+    Actor.cs (✅ exists, extended Phase 3)
   Utilities/
     UrlUtilities.cs (✅ created Phase 1)
     TimeSpanUtilities.cs (✅ created Phase 1)
-    HashUtilities.cs (✅ created Phase 2)
+    HashUtilities.cs (✅ created Phase 2, extended Phase 3)
+    BitwiseUtilities.cs (✅ created Phase 3)
+    StringUtilities.cs (✅ created Phase 3)
+  Services/
+    IPhotoHashService.cs (✅ moved Phase 3)
+    PhotoHashService.cs (✅ moved Phase 3)
   BackgroundJobs/
     TickerQUtilities.cs (✅ moved Phase 2)
 ```
@@ -252,12 +303,89 @@ TelegramGroupsAdmin.Core/
 **Implementation Complete:**
 - Phase 1 (HIGH): UrlUtilities, TimeSpanUtilities - ~138-148 lines eliminated
 - Phase 2 (MEDIUM): TickerQUtilities, HashUtilities - ~126 lines eliminated
-- **Total**: 260-280 lines of duplicated code eliminated
+- Phase 3 (Final Audit): BitwiseUtilities, StringUtilities, PhotoHashService, Actor.ParseLegacyFormat - ~284 lines eliminated
+- **Total**: 544-574 lines of duplicated code eliminated
 
 **Packages Added to Core:**
 - Microsoft.Extensions.DependencyInjection.Abstractions 9.0.10
 - Microsoft.Extensions.Logging.Abstractions 9.0.10
 - TickerQ 2.5.3
+- SixLabors.ImageSharp 3.1.11
+
+---
+
+### ARCH-2: Eliminate Actor String Round-Tripping
+
+**Date Added:** 2025-10-21
+**Status:** PENDING ⏳
+**Severity:** Architecture | **Impact:** Cleaner moderation API, eliminates unnecessary string conversions
+
+**Current Architecture:**
+Bot commands and web services create string-based executor IDs, pass them to `ModerationActionService`, which then parses them back into `Actor` objects using `Actor.ParseLegacyFormat()`.
+
+**The Problem:**
+```
+BotCommand → GetExecutorIdentifierAsync() → string ID ("telegram:123456789")
+          → BanUserAsync(string executorId)
+          → Actor.ParseLegacyFormat(executorId) → Actor object
+```
+
+This is unnecessary round-tripping. We convert user info → string → Actor when we could go directly from user info → Actor.
+
+**Files Affected:**
+- `ModerationActionService.cs`: All moderation methods (BanUserAsync, WarnUserAsync, RestrictUserAsync, TempBanUserAsync)
+- `GetExecutorIdentifierAsync()`: Creates string IDs from Telegram user info
+- All callers: BotCommands (BanCommand, WarnCommand, MuteCommand, TempBanCommand), ReportActionsService, ImpersonationDetectionService
+
+**Current String Formats:**
+- Web users: GUID strings (`"550e8400-e29b-41d4-a716-446655440000"`)
+- Telegram users: `"telegram:@username"` or `"telegram:123456789"`
+- System: `"system:identifier"`
+
+**Proposed Refactoring:**
+
+1. **Change moderation method signatures** to accept `Actor` instead of `string executorId`:
+   ```csharp
+   // Before
+   Task<ModerationResult> BanUserAsync(..., string executorId, ...)
+
+   // After
+   Task<ModerationResult> BanUserAsync(..., Actor executor, ...)
+   ```
+
+2. **Update bot commands** to create `Actor` objects directly:
+   ```csharp
+   // Before
+   var executorId = await _moderationService.GetExecutorIdentifierAsync(
+       message.From!.Id, message.From.Username, cancellationToken);
+   await _moderationService.BanUserAsync(..., executorId, ...);
+
+   // After
+   var executor = Actor.FromTelegramUser(
+       message.From!.Id, message.From.Username, message.From.FirstName);
+   await _moderationService.BanUserAsync(..., executor, ...);
+   ```
+
+3. **Remove `GetExecutorIdentifierAsync()`** - no longer needed
+
+4. **Keep `Actor.ParseLegacyFormat()`** for:
+   - Database migration scripts (if needed)
+   - API backward compatibility (if exposing to external systems)
+   - Can be moved out of hot path
+
+**Benefits:**
+- Eliminates 2 string conversion operations per moderation action
+- Clearer API (Actor objects are self-documenting)
+- Type safety (can't pass malformed executor strings)
+- Removes 50+ lines of string manipulation code
+
+**Estimated Effort:** 2-3 hours
+- Update 4 moderation method signatures
+- Update ~10 call sites (bot commands + services)
+- Remove GetExecutorIdentifierAsync helper
+- Test all moderation flows
+
+**Priority:** Medium - Architecture cleanup, no functional impact
 
 ---
 

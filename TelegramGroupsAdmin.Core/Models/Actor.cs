@@ -52,6 +52,58 @@ public record Actor
     // ============================================================================
 
     /// <summary>
+    /// Parse legacy executor ID string format and convert to Actor object
+    /// Supports multiple legacy formats: "system:identifier", "telegram:userid", GUIDs, etc.
+    /// </summary>
+    /// <param name="executorId">Legacy executor ID string</param>
+    /// <returns>Parsed Actor object</returns>
+    public static Actor ParseLegacyFormat(string? executorId)
+    {
+        if (string.IsNullOrEmpty(executorId))
+        {
+            return FromSystem("unknown");
+        }
+
+        // System identifiers (format: "system:identifier" or legacy patterns)
+        if (executorId.StartsWith("system:", StringComparison.OrdinalIgnoreCase))
+        {
+            var identifier = executorId.Substring(7); // Remove "system:" prefix
+            return FromSystem(identifier);
+        }
+
+        // Check if it's a GUID (web user ID)
+        if (Guid.TryParse(executorId, out _))
+        {
+            return FromWebUser(executorId);
+        }
+
+        // Telegram user identifiers (format: "telegram:@username" or "telegram:userid")
+        if (executorId.StartsWith("telegram:", StringComparison.OrdinalIgnoreCase))
+        {
+            var telegramPart = executorId.Substring(9); // Remove "telegram:" prefix
+            if (telegramPart.StartsWith("@"))
+            {
+                // Username format - store as system identifier for now
+                return FromSystem(executorId);
+            }
+            if (long.TryParse(telegramPart, out var telegramUserId))
+            {
+                // User ID format
+                return FromTelegramUser(telegramUserId);
+            }
+        }
+
+        // Legacy patterns from old system
+        if (executorId == "Auto-Detection" || executorId == "Web Admin")
+        {
+            return FromSystem(executorId.ToLowerInvariant().Replace(" ", "_"));
+        }
+
+        // Default: treat as system identifier
+        return FromSystem(executorId);
+    }
+
+    /// <summary>
     /// Create actor from web user
     /// </summary>
     public static Actor FromWebUser(string userId, string? email = null)

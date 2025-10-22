@@ -342,7 +342,7 @@ public partial class MessageProcessingService(
 
             // Calculate content hash for spam correlation
             var urlsJson = urls != null ? JsonSerializer.Serialize(urls) : "";
-            var contentHash = ComputeContentHash(text ?? "", urlsJson);
+            var contentHash = HashUtilities.ComputeContentHash(text ?? "", urlsJson);
 
             // Check if chat icon is cached on disk
             var chatIconFileName = $"{Math.Abs(message.Chat.Id)}.jpg";
@@ -549,8 +549,8 @@ public partial class MessageProcessingService(
             var oldUrls = UrlUtilities.ExtractUrls(oldText);
             var newUrls = UrlUtilities.ExtractUrls(newText);
 
-            var oldContentHash = ComputeContentHash(oldText ?? "", oldUrls != null ? JsonSerializer.Serialize(oldUrls) : "");
-            var newContentHash = ComputeContentHash(newText ?? "", newUrls != null ? JsonSerializer.Serialize(newUrls) : "");
+            var oldContentHash = HashUtilities.ComputeContentHash(oldText ?? "", oldUrls != null ? JsonSerializer.Serialize(oldUrls) : "");
+            var newContentHash = HashUtilities.ComputeContentHash(newText ?? "", newUrls != null ? JsonSerializer.Serialize(newUrls) : "");
 
             // Create edit record
             var editRecord = new MessageEditRecord(
@@ -807,14 +807,6 @@ public partial class MessageProcessingService(
         }
     }
 
-    /// <summary>
-    /// Compute content hash for message (used for spam correlation)
-    /// </summary>
-    private static string ComputeContentHash(string messageText, string urls)
-    {
-        var normalized = $"{messageText.ToLowerInvariant().Trim()}{urls.ToLowerInvariant().Trim()}";
-        return HashUtilities.ComputeSHA256(normalized);
-    }
 
     /// <summary>
     /// Schedule a message for deletion via TickerQ

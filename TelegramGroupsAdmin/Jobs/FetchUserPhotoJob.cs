@@ -4,6 +4,7 @@ using TickerQ.Utilities.Base;
 using TickerQ.Utilities.Models;
 using Telegram.Bot;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;

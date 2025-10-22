@@ -1,8 +1,8 @@
-namespace TelegramGroupsAdmin.Telegram.Services;
+namespace TelegramGroupsAdmin.Core.Services;
 
 /// <summary>
 /// Service for computing and comparing perceptual hashes (pHash) of images
-/// Used for detecting impersonation via stolen profile photos
+/// Used for detecting impersonation via stolen profile photos, duplicate images, visual similarity
 /// </summary>
 public interface IPhotoHashService
 {

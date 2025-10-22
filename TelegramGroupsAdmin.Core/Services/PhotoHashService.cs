@@ -2,8 +2,9 @@ using Microsoft.Extensions.Logging;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using TelegramGroupsAdmin.Core.Utilities;
 
-namespace TelegramGroupsAdmin.Telegram.Services;
+namespace TelegramGroupsAdmin.Core.Services;
 
 /// <summary>
 /// Service for computing and comparing perceptual hashes (pHash) of images
@@ -97,44 +98,12 @@ public class PhotoHashService : IPhotoHashService
             throw new ArgumentException("Photo hashes must be exactly 8 bytes (64 bits)");
         }
 
-        var hammingDistance = HammingDistance(hash1, hash2);
+        var hammingDistance = BitwiseUtilities.HammingDistance(hash1, hash2);
 
         // Convert Hamming distance to similarity score
         // Distance 0 = 100% similar, Distance 64 = 0% similar
         var similarity = 1.0 - (hammingDistance / 64.0);
 
         return similarity;
-    }
-
-    /// <summary>
-    /// Calculates Hamming distance (number of differing bits) between two byte arrays
-    /// </summary>
-    private int HammingDistance(byte[] hash1, byte[] hash2)
-    {
-        int distance = 0;
-        for (int i = 0; i < hash1.Length; i++)
-        {
-            // XOR gives 1 for differing bits, 0 for matching bits
-            var xor = hash1[i] ^ hash2[i];
-
-            // Count number of 1 bits (population count)
-            distance += PopCount(xor);
-        }
-        return distance;
-    }
-
-    /// <summary>
-    /// Counts the number of set bits in a byte (population count)
-    /// Uses Brian Kernighan's algorithm
-    /// </summary>
-    private int PopCount(int value)
-    {
-        int count = 0;
-        while (value != 0)
-        {
-            value &= (value - 1); // Clear the lowest set bit
-            count++;
-        }
-        return count;
     }
 }

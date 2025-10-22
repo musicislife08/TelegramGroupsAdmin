@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.ContentDetection.Configuration;
@@ -194,7 +196,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             // Check name similarity (50 points)
             if (!string.IsNullOrWhiteSpace(firstName) && !string.IsNullOrWhiteSpace(admin.FirstName))
             {
-                var similarity = CalculateNameSimilarity(
+                var similarity = StringUtilities.CalculateNameSimilarity(
                     firstName, lastName,
                     admin.FirstName, admin.LastName);
 
@@ -372,65 +374,6 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         return admins;
     }
 
-    /// <summary>
-    /// Calculate name similarity using normalized Levenshtein distance
-    /// Returns 0.0 (completely different) to 1.0 (identical)
-    /// </summary>
-    private double CalculateNameSimilarity(
-        string? firstName1, string? lastName1,
-        string? firstName2, string? lastName2)
-    {
-        // Normalize names (combine first+last, lowercase, trim whitespace)
-        var name1 = $"{firstName1} {lastName1}".ToLowerInvariant().Trim();
-        var name2 = $"{firstName2} {lastName2}".ToLowerInvariant().Trim();
-
-        if (string.IsNullOrWhiteSpace(name1) || string.IsNullOrWhiteSpace(name2))
-            return 0.0;
-
-        var distance = LevenshteinDistance(name1, name2);
-        var maxLength = Math.Max(name1.Length, name2.Length);
-
-        // Convert distance to similarity (0 distance = 100% similar)
-        return 1.0 - ((double)distance / maxLength);
-    }
-
-    /// <summary>
-    /// Compute Levenshtein distance (edit distance) between two strings
-    /// </summary>
-    private int LevenshteinDistance(string source, string target)
-    {
-        if (string.IsNullOrEmpty(source))
-            return target?.Length ?? 0;
-
-        if (string.IsNullOrEmpty(target))
-            return source.Length;
-
-        var matrix = new int[source.Length + 1, target.Length + 1];
-
-        // Initialize first row and column
-        for (int i = 0; i <= source.Length; i++)
-            matrix[i, 0] = i;
-
-        for (int j = 0; j <= target.Length; j++)
-            matrix[0, j] = j;
-
-        // Fill matrix
-        for (int i = 1; i <= source.Length; i++)
-        {
-            for (int j = 1; j <= target.Length; j++)
-            {
-                var cost = source[i - 1] == target[j - 1] ? 0 : 1;
-
-                matrix[i, j] = Math.Min(
-                    Math.Min(
-                        matrix[i - 1, j] + 1,      // Deletion
-                        matrix[i, j - 1] + 1),     // Insertion
-                    matrix[i - 1, j - 1] + cost);  // Substitution
-            }
-        }
-
-        return matrix[source.Length, target.Length];
-    }
 
     /// <summary>
     /// Internal data structure for admin user data

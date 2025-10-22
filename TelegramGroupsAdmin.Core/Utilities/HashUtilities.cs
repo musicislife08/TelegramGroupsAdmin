@@ -32,4 +32,17 @@ public static class HashUtilities
         var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(content));
         return Convert.ToHexString(hashBytes);
     }
+
+    /// <summary>
+    /// Compute SHA256 hash of message content (text + URLs) for duplicate detection
+    /// Normalizes content to lowercase and trims whitespace before hashing
+    /// </summary>
+    /// <param name="messageText">Message text content</param>
+    /// <param name="urls">URLs extracted from message (typically JSON-serialized)</param>
+    /// <returns>Uppercase hex string representation of SHA256 hash</returns>
+    public static string ComputeContentHash(string messageText, string urls)
+    {
+        var normalized = $"{messageText.ToLowerInvariant().Trim()}{urls.ToLowerInvariant().Trim()}";
+        return ComputeSHA256(normalized);
+    }
 }
