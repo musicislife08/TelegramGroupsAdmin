@@ -51,7 +51,7 @@
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
         <MudTabPanel Text="All" Icon="@Icons.Material.Filled.People" BadgeData="@FilteredAllUsers.Count">
-            <MudTable Items="@FilteredAllUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+            <MudTable Items="@FilteredAllUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true" Virtualize="true" FixedHeader="true" Height="600px">
                 <HeaderContent>
                     <MudTh>User</MudTh>
                     <MudTh>Status</MudTh>
@@ -115,7 +115,7 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Flagged" Icon="@Icons.Material.Filled.Flag" BadgeData="@FilteredFlaggedUsers.Count" BadgeColor="Color.Warning">
-            <MudTable Items="@FilteredFlaggedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+            <MudTable Items="@FilteredFlaggedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true" Virtualize="true" FixedHeader="true" Height="600px">
                 <HeaderContent>
                     <MudTh>User</MudTh>
                     <MudTh>Status</MudTh>
@@ -161,7 +161,7 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Trusted" Icon="@Icons.Material.Filled.VerifiedUser" BadgeData="@FilteredTrustedUsers.Count" BadgeColor="Color.Success">
-            <MudTable Items="@FilteredTrustedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+            <MudTable Items="@FilteredTrustedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true" Virtualize="true" FixedHeader="true" Height="600px">
                 <HeaderContent>
                     <MudTh>User</MudTh>
                     <MudTh>Chats</MudTh>
@@ -202,7 +202,7 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Banned" Icon="@Icons.Material.Filled.Block" BadgeData="@FilteredBannedUsersWithDetails.Count" BadgeColor="Color.Error">
-            <MudTable Items="@FilteredBannedUsersWithDetails" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
+            <MudTable Items="@FilteredBannedUsersWithDetails" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true" Virtualize="true" FixedHeader="true" Height="600px">
                 <HeaderContent>
                     <MudTh>User</MudTh>
                     <MudTh>Ban Date</MudTh>

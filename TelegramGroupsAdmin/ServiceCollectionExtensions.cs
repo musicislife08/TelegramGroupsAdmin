@@ -248,20 +248,16 @@ public static class ServiceCollectionExtensions
         // Set restrictive permissions on keys directory (Linux/macOS only)
         if (!OperatingSystem.IsWindows())
         {
-            // Get logger from service provider (early in startup, before app is built)
-            var serviceProvider = services.BuildServiceProvider();
-            var logger = serviceProvider.GetService<ILogger<IServiceCollection>>();
-
             try
             {
                 // chmod 700 - only owner can read/write/execute
                 File.SetUnixFileMode(dataProtectionKeysPath,
                     UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-                logger?.LogInformation("Set permissions on {KeysPath} to 700", dataProtectionKeysPath);
+                Console.WriteLine($"[DataProtection] Set permissions on {dataProtectionKeysPath} to 700");
             }
             catch (Exception ex)
             {
-                logger?.LogWarning(ex, "Failed to set Unix permissions on {KeysPath}", dataProtectionKeysPath);
+                Console.WriteLine($"[DataProtection] Warning: Failed to set Unix permissions on {dataProtectionKeysPath}: {ex.Message}");
             }
         }
 

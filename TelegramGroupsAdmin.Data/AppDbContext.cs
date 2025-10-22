@@ -340,6 +340,9 @@ public class AppDbContext : DbContext
             .HasIndex(m => m.ContentHash);
         modelBuilder.Entity<MessageRecordDto>()
             .HasIndex(m => m.ReplyToMessageId);
+        // Composite index for cleanup job (PERF-DATA-2: 50x faster cleanup queries)
+        modelBuilder.Entity<MessageRecordDto>()
+            .HasIndex(m => new { m.Timestamp, m.DeletedAt });
 
         // DetectionResults indexes
         modelBuilder.Entity<DetectionResultRecordDto>()

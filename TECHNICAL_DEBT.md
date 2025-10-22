@@ -10,149 +10,6 @@
 ## Executive Summary
 
 **Overall Code Quality:** 88/100 (Excellent)
-
-The codebase demonstrates strong adherence to modern C# practices with all critical, high, and medium priority issues resolved.
-
-**Key Strengths:**
-
-- ✅ Modern C# 12/13 features (collection expressions, file-scoped namespaces, switch expressions)
-- ✅ Proper async/await patterns throughout
-- ✅ Strong architectural separation (UI/Data models, 3-tier pattern)
-- ✅ Comprehensive null safety with nullable reference types
-- ✅ Good use of EF Core patterns (AsNoTracking, proper indexing)
-- ✅ One-class-per-file architecture (400+ files)
-
-**Current Status:**
-
-- **Critical:** 0 (all resolved)
-- **High:** 0 (all resolved)
-- **Medium:** 0 (all resolved)
-- **Low:** 1 deferred (L7 - ConfigureAwait, marginal benefit for ASP.NET apps)
-- **Architectural:** 0 (ARCH-1 completed)
-- **Performance:** 14 actionable optimization opportunities (3 Critical, 3 High, 5 Medium, 3 Low)
-  - *Note: 38 false positives removed from initial 52 findings after deployment context review*
-
-**Completed Performance Gains:** 30-50% improvement in high-traffic operations ✅
-**Potential Additional Gains:** 50-70% improvement in database operations (fixing 2000+ query N+1), 60% faster auto-bans, snappier UI
-
----
-
-## Deferred Issues
-
-### L7: ConfigureAwait(false) for Library Code
-
-**Project:** TelegramGroupsAdmin.Telegram
-**Location:** Throughout all services
-**Severity:** Low | **Impact:** Best Practice
-
-**Status:** DEFERRED - Minimal benefit for ASP.NET Core applications (only valuable for pure library code)
-
-**Rationale:** TelegramGroupsAdmin.Telegram is used primarily within ASP.NET Core context where ConfigureAwait(false) provides no meaningful benefit. Consider only if extracting to standalone NuGet package.
-
-**Original Recommendation:**
-
-```csharp
-await botClient.SendMessage(...).ConfigureAwait(false);
-await repository.InsertAsync(...).ConfigureAwait(false);
-```
-
-**Impact:** Minor performance in non-ASP.NET contexts only
-**Note:** Not critical for .NET Core, primarily relevant for pure library code consumed by various application types
-
----
-
-### ARCH-2: Replace Task.Run Fire-and-Forget with TickerQ Jobs for Spam Detection
-
-**Project:** TelegramGroupsAdmin.Telegram
-**Files:** MessageProcessingService.cs (lines 436, 529)
-**Severity:** Medium | **Impact:** Reliability, Retry Logic, Exception Handling
-
-**Status:** DEFERRED - Works acceptably, but has technical debt and missed retry opportunities
-
-**Current Issue:**
-```csharp
-// Line 436 - MessageProcessingService.cs
-_ = Task.Run(async () =>
-{
-    await RunSpamDetectionAsync(botClient, message, text, editVersion: 0, CancellationToken.None);
-}, CancellationToken.None);
-```
-
-**Problems:**
-1. **Task.Run Anti-Pattern**: Wastes thread pool thread in async method
-2. **Silent Exception Swallowing**: Discarded task (`_=`) loses all error information
-3. **No Retry Logic**: OpenAI 429 (rate limit) → fail-open immediately, never retries (could retry in 60s for accurate verdict)
-4. **CancellationToken.None**: Spam detection continues even during shutdown
-5. **No Backpressure**: Under heavy load, unbounded fire-and-forget can queue thousands of tasks
-
-**Recommended Fix - TickerQ Job Pattern:**
-
-```csharp
-// MessageProcessingService.cs - Replace Task.Run
-await ScheduleSpamDetectionJobAsync(message.MessageId, text, cancellationToken);
-
-// New: TelegramGroupsAdmin.Telegram.Jobs/SpamDetectionJob.cs
-[TickerFunction(Key = "spam_detection_{MessageId}")]
-public async Task ExecuteAsync(TickerFunctionContext<SpamDetectionJobPayload> context)
-{
-    var payload = context.Payload;
-
-    try
-    {
-        await RunSpamDetectionAsync(payload.MessageId, payload.Text, payload.EditVersion, context.CancellationToken);
-    }
-    catch (HttpRequestException ex) when (IsRetriableHttpError(ex))
-    {
-        // OpenAI 429 rate limit, 504 gateway timeout, etc.
-        throw; // TickerQ will retry with exponential backoff
-    }
-    catch (TimeoutException)
-    {
-        // Network timeout - retry
-        throw;
-    }
-    catch (Exception ex)
-    {
-        // Permanent failures (401 auth, 400 bad request) - don't retry
-        _logger.LogError(ex, "Spam detection failed permanently for message {MessageId}", payload.MessageId);
-        // Don't throw - allows TickerQ to mark job as completed (failed but handled)
-    }
-}
-
-private bool IsRetriableHttpError(HttpRequestException ex)
-{
-    // Retry on: 429 (rate limit), 5xx (server errors)
-    // Don't retry: 401/403 (auth), 400 (bad request)
-    return ex.StatusCode == (HttpStatusCode)429 ||
-           ((int?)ex.StatusCode >= 500 && (int?)ex.StatusCode < 600);
-}
-```
-
-**Benefits:**
-- **Persistence**: Job survives app restarts (OpenAI calls can take 1-3 seconds)
-- **Smart Retry**: OpenAI 429 rate limit → Retry in 60s → Get accurate spam verdict instead of fail-open false negative
-- **Exception Capture**: All exceptions logged properly instead of silently swallowed
-- **Backpressure**: TickerQ queue naturally limits concurrent spam checks
-- **Monitoring**: Can query pending spam detection jobs, track retry counts
-- **Cancellation Support**: Respects cancellation during shutdown
-
-**Retry Configuration:**
-- Max retries: 2 (it's just spam, not critical like file scanning)
-- Backoff: Fixed delay (60s, 120s) - matches typical rate limit windows
-- Retry only on: 429 rate limit, 5xx server errors, network timeouts
-- Don't retry: 401/403 auth errors, 400 bad request
-
-**Expected Improvement:**
-- **Accuracy**: 5-10% improvement in spam detection (fewer false negatives from rate limits)
-- **Reliability**: No silent failures, proper error logging
-- **Operations**: Visibility into pending/failed spam checks
-
-**Priority:** Medium - Current fire-and-forget works but misses retry opportunities. File scanning (Phase 4.14) has higher priority and should use TickerQ pattern from the start. Consider implementing after FileScanJob is proven successful.
-
-**Related Work:** FileScanJob (Phase 4.14) will establish the TickerQ pattern for critical async work. Once proven, applying same pattern to spam detection is low risk.
-
----
-
 ## Performance Optimization Issues
 
 The following performance issues were identified by comprehensive analysis across all 7 projects on 2025-10-19, then reviewed and filtered based on actual deployment context.
@@ -394,39 +251,6 @@ public async Task<List<DetectionResultRecord>> GetByMessageIdsAsync(
 
 ---
 
-#### PERF-DATA-2: Missing Composite Index for Message Cleanup
-
-**Project:** TelegramGroupsAdmin.Data
-**Files:** MessageHistoryRepository.cs (lines 64-66)
-**Severity:** High | **Impact:** 50x faster cleanup queries
-
-**Description:**
-The cleanup job queries messages by timestamp and `is_deleted` status without a composite index. With 10K-100K+ messages (likely at your scale), this causes full table scans that can block other queries.
-
-**Reality Check:** Your message retention settings mean the cleanup job runs periodically on a growing dataset. Without this index, cleanup gets slower over time and can cause timeouts.
-
-**Current Query:**
-```csharp
-var cutoff = DateTimeOffset.UtcNow.AddHours(-retentionHours);
-var deleted = await context.Messages
-    .Where(m => m.Timestamp < cutoff && !m.IsDeleted)
-    .ExecuteDeleteAsync(cancellationToken);
-```
-
-**Recommended Fix:**
-
-Add migration:
-```csharp
-migrationBuilder.CreateIndex(
-    name: "IX_messages_timestamp_isdeleted",
-    table: "messages",
-    columns: new[] { "timestamp", "is_deleted" });
-```
-
-**Expected Gain:** 5-10 seconds → 100ms for cleanup on 50K+ message tables, prevents query timeouts
-
----
-
 #### PERF-APP-3: Excessive StateHasChanged() Calls in Messages.razor
 
 **Project:** TelegramGroupsAdmin (Main App)
@@ -572,32 +396,6 @@ var config = JsonSerializer.Deserialize(json, ConfigJsonContext.Default.SpamDete
 
 ---
 
-#### PERF-APP-4: Virtualization for Large Lists
-
-**Project:** TelegramGroupsAdmin (Main App)
-**Files:** Messages.razor, Users.razor
-**Severity:** Medium | **Impact:** 70% faster rendering for 1000+ rows
-
-**Description:**
-MudTable components don't use virtualization for large datasets. With 1000+ users, rendering the full Users page causes slow initial render and high memory usage.
-
-**Reality Check:** At 1000+ users, the Users table tries to render all 1000 rows at once. Virtualization renders only visible rows (typically 20-50), dramatically improving performance.
-
-**Recommended Fix:**
-```razor
-<MudTable Items="@_users"
-          Virtualize="true"
-          FixedHeader="true"
-          Height="600px"
-          Dense="true">
-    @* table content *@
-</MudTable>
-```
-
-**Expected Gain:** 70% faster rendering (5 seconds → 1.5 seconds for 1000 rows), 80% less memory usage
-
----
-
 #### PERF-CD-4: TF-IDF Vector Calculation Optimization
 
 **Project:** TelegramGroupsAdmin.ContentDetection
@@ -616,103 +414,6 @@ Use pre-computed term frequencies with Dictionary lookups instead of repeated LI
 
 ---
 
-### Low Priority (3 issues)
-
-#### PERF-APP-2: BuildServiceProvider() During Startup (Code Correctness)
-
-**Project:** TelegramGroupsAdmin (Main App)
-**Files:** ServiceCollectionExtensions.cs (line 248)
-**Severity:** Low | **Impact:** Memory leak prevention (correctness issue, not performance)
-
-**Description:**
-BuildServiceProvider() during ConfigureServices creates a temporary service provider that is never disposed, causing a memory leak. At homelab scale (single instance), this is unlikely to cause problems, but it's a code smell that's easy to fix.
-
-**Reality Check:** This isn't a performance issue for your deployment (single homelab instance), but it's incorrect code. The fix is trivial - just move logging to after the container is built.
-
-**Current Code:**
-```csharp
-// In ConfigureServices
-var sp = services.BuildServiceProvider();  // Creates temporary container (leaked)
-var logger = sp.GetRequiredService<ILogger<SomeClass>>();
-logger.LogInformation("Starting up...");
-```
-
-**Recommended Fix:**
-```csharp
-// In Program.cs, AFTER app is built:
-var app = builder.Build();
-
-// Now container is built, use ILogger properly
-var logger = app.Services.GetRequiredService<ILogger<Program>>();
-logger.LogInformation("TelegramGroupsAdmin started at {Time}", DateTimeOffset.UtcNow);
-
-// Or use IHostApplicationLifetime for startup logging:
-app.Lifetime.ApplicationStarted.Register(() =>
-{
-    var logger = app.Services.GetRequiredService<ILogger<Program>>();
-    logger.LogInformation("Application fully started and ready");
-});
-```
-
-**Expected Gain:** Eliminates memory leak (500KB-1MB per instance), fixes code smell, proper logging practice
-
----
-
-#### PERF-ABS-1: Lambda Allocation in TelegramBotClientFactory.GetOrCreate
-
-**Project:** TelegramGroupsAdmin.Telegram.Abstractions
-**Files:** TelegramBotClientFactory.cs (line 12)
-**Severity:** Low | **Impact:** <0.5% improvement
-
-**Description:**
-GetOrAdd lambda allocates on every call even when key exists. With single bot token (99.9% cache hit rate), this is pure micro-optimization.
-
-**Reality Check:** At 100-1000 messages/day, even assuming GetOrCreate is called for every message (it's not), this saves ~16-160 bytes/day. Negligible, but the fix is simple.
-
-**Recommended Fix:**
-```csharp
-public ITelegramBotClient GetOrCreate(string botToken)
-{
-    // Fast path: TryGetValue is lock-free and allocation-free (99.9% hit rate)
-    if (_clients.TryGetValue(botToken, out var existingClient))
-        return existingClient;
-
-    // Slow path: Only called once per bot token (first call only)
-    return _clients.GetOrAdd(botToken, static token => new TelegramBotClient(token));
-}
-```
-
-**Expected Gain:** Eliminates ~16-40 bytes allocation per call (negligible impact, but clean code)
-
----
-
-#### PERF-ABS-2: BlocklistSyncJobPayload Should Be Record
-
-**Project:** TelegramGroupsAdmin.Telegram.Abstractions
-**Files:** BlocklistSyncJobPayload.cs
-**Severity:** Very Low | **Impact:** <0.1% improvement
-
-**Description:**
-BlocklistSyncJobPayload is a mutable class while other payloads are immutable records. Records provide better serialization performance and consistency.
-
-**Reality Check:** Blocklist sync job runs infrequently (hours between runs), so serialization performance doesn't matter. This is purely for code consistency.
-
-**Recommended Fix:**
-```csharp
-/// <summary>
-/// Payload for BlocklistSyncJob (Phase 4.13: URL Filtering)
-/// </summary>
-public record BlocklistSyncJobPayload(
-    long? SubscriptionId = null,
-    long? ChatId = null,
-    bool ForceRebuild = false
-);
-```
-
-**Expected Gain:** 5-10% faster serialization for this job (runs infrequently, negligible impact), improves code consistency
-
----
-
 ## Performance Optimization Summary
 
 **Deployment Context:** 10+ chats, 100-1000 messages/day (10-50 spam checks/day on new users), 1000+ users, Messages page primary tool
@@ -720,27 +421,25 @@ public record BlocklistSyncJobPayload(
 | Priority | Count | Realistic Impact for This Deployment |
 |----------|-------|--------------------------------------|
 | Critical | 3 | **Massive improvement** - Fixes 2000+ query N+1, enables config caching, speeds up auto-bans by 60% |
-| High | 3 | **Significant improvement** - Primary moderation page faster, prevents cleanup timeouts, snappier UI |
-| Medium | 5 | **Moderate improvement** - Future-proofs growth, optimizes analytics, better rendering for large lists |
-| Low | 3 | **Negligible improvement** - Code quality fixes, micro-optimizations with no user-visible impact |
+| High | 2 | **Significant improvement** - Primary moderation page faster, snappier UI |
+| Medium | 4 | **Moderate improvement** - Future-proofs growth, optimizes analytics |
 
-**Total Issues:** 14 actionable (down from 52 initial findings)
+**Total Issues:** 9 actionable (down from 52 initial findings)
+**Completed:** 5 quick wins (composite index, virtualization, record conversion, leak fix, allocation optimization)
 **Removed:** 38 false positives (micro-optimizations, wrong usage assumptions, rare operations)
 
 **Estimated Performance Gains:**
 - **Critical issues:** 50-70% faster database operations, 10-20 second page loads → 200-300ms
-- **High issues:** 2-3 second Messages page → 100-200ms, prevents future issues (cleanup timeouts)
-- **Medium issues:** Future-proofing and polish (10x stop word growth, 1000+ row virtualization)
-- **Low issues:** Code correctness, no measurable performance impact
+- **High issues:** 2-3 second Messages page → 100-200ms, snappier UI
+- **Medium issues:** Future-proofing and polish (10x stop word growth, analytics optimization)
 
 **Implementation Priority:**
 1. **PERF-DATA-1** (Critical) - Fixes unusable Users page (2000+ queries → 3)
 2. **PERF-CFG-1** (Critical) - Config caching with invalidation (200 queries/hr → 10-15)
 3. **PERF-TG-2** (Critical) - Parallel bans (5 seconds → 2 seconds, unblocks spam detection)
 4. **PERF-APP-1** (High) - Messages page N+1 (primary tool, 50 queries → 1)
-5. **PERF-DATA-2** (High) - Composite index (prevents future cleanup timeouts)
-6. **PERF-APP-3** (High) - StateHasChanged batching (snappier UI for heavy web usage)
-7. Medium/Low - Implement opportunistically during related refactoring
+5. **PERF-APP-3** (High) - StateHasChanged batching (snappier UI for heavy web usage)
+6. Medium - Implement opportunistically during related refactoring
 
 **Testing Strategy:**
 - Use `dotnet run --migrate-only` to verify database migrations
@@ -757,122 +456,6 @@ public record BlocklistSyncJobPayload(
 - String allocations in commands (bytes/day savings)
 
 ---
-
-
-
-### FUTURE-1: Interface Default Implementations (IDI) Pattern
-
-**Technology:** C# 8.0+ Interface Default Methods
-**Status:** DOCUMENTED (Not Yet Adopted)
-**Target:** Post-ARCH-1 completion
-
-**Pattern Overview:**
-
-C# 8.0+ supports default method implementations in interfaces. This would be an **exception to strict one-class-per-file** once adopted.
-
-**Example:**
-
-```csharp
-// File: IBotCommand.cs (contains interface + default implementations)
-public interface IBotCommand
-{
-    string CommandName { get; }
-    Task<bool> ExecuteAsync(Message message, CancellationToken ct);
-
-    // Default implementations (shared behavior)
-    bool IsAuthorized(Message message) => true;
-
-    string GetHelpText() => $"/{CommandName} - No help available";
-
-    async Task<bool> ValidatePermissionsAsync(long chatId, long userId)
-    {
-        // Default permission check logic
-        return true;
-    }
-}
-
-// File: BanCommand.cs (only overrides what's needed)
-public class BanCommand : IBotCommand
-{
-    public string CommandName => "ban";
-
-    public async Task<bool> ExecuteAsync(Message message, CancellationToken ct)
-    {
-        // Custom implementation
-    }
-
-    // Inherits default IsAuthorized(), GetHelpText(), ValidatePermissionsAsync()
-}
-```
-
-**Benefits:**
-
-- Reduces boilerplate across 13 bot commands
-- Single source of truth for common behavior
-- Default fail-open logic for spam checks
-- Shared repository patterns
-
-**Candidate Interfaces:**
-
-1. **IBotCommand** (13 implementations) - Authorization, help text, validation (~150-200 lines saved)
-2. **ISpamCheck** (9 implementations) - Fail-open error handling, logging (~100-150 lines saved)
-3. **IRepository** (20+ implementations) - AsNoTracking, Include patterns (~200-300 lines saved)
-
-**When to Adopt:**
-
-- After ARCH-1 completes (clean baseline established) ✅
-- When duplicate patterns clear across 3+ implementations
-- When default behavior is truly universal
-
-**File Naming Convention:**
-
-- Interface with defaults: `IBotCommand.cs` (single file - exception to one-class-per-file)
-- Implementations: `BanCommand.cs`, `WarnCommand.cs` (separate files)
-
-**Expected Impact:**
-
-- ~500-800 lines of duplicate code eliminated
-- Improved consistency (default behavior enforced)
-- Easier to add new implementations
-
-**Tracking:** FUTURE-1
-
----
-
-## Summary Statistics
-
-| Priority | Count | Status |
-|----------|-------|--------|
-| Critical (Refactoring) | 0 | All resolved ✅ |
-| High (Refactoring) | 0 | All resolved ✅ |
-| Medium (Refactoring) | 0 | All resolved ✅ |
-| Low (Refactoring) | 1 | L7 deferred (minimal benefit for ASP.NET Core) |
-| Architectural | 0 | ARCH-1 completed ✅ |
-| Performance - Critical | 3 | **Actionable** (PERF-CFG-1, PERF-DATA-1, PERF-TG-2) |
-| Performance - High | 3 | **Actionable** (PERF-APP-1, PERF-DATA-2, PERF-APP-3) |
-| Performance - Medium | 5 | **Actionable** (future-proofing, analytics, virtualization) |
-| Performance - Low | 3 | **Actionable** (code quality, micro-optimizations) |
-| Performance - Removed | 38 | False positives (wrong usage assumptions, micro-optimizations) |
-| Future | 1 | FUTURE-1 documented (not yet adopted) |
-
-**Completed Refactoring Issues:** 25 (7 High + 14 Medium + 3 Low + 1 Architectural)
-**Refactoring Issues Remaining:** 1 deferred (L7 - low priority, minimal benefit)
-
-**Performance Issues:** 14 actionable opportunities (down from 52 initial findings)
-- **Deployment-specific filtering:** Removed 38 false positives based on actual scale (10+ chats, 10-50 spam checks/day on new users only, 1000+ users, Messages page primary tool)
-- **Critical impact:** Fixes unusable Users page (2000+ queries), enables config caching, parallelizes multi-chat bans
-- **See:** Performance Optimization Issues section for detailed analysis
-
-**Achievements:**
-
-- ✅ Performance: 30-50% improvement in command routing, 15-20% in queries
-- ✅ Code Organization: One-class-per-file for all 400+ files
-- ✅ Build Quality: 0 errors, 0 warnings maintained
-- ✅ Code Quality Score: 88/100 (Excellent)
-
----
-
-## Code Quality Notes
 
 ### DI-1: Interface-Only Dependency Injection Audit
 

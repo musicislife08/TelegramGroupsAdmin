@@ -72,82 +72,25 @@
 
 ## Development Roadmap
 
-### Phase 1: Foundation ✅
-Blazor UI, auth+TOTP, user mgmt, invite system, audit, message history+export, email verification, spam detection
+### Complete ✅
+**Phase 1-3**: Foundation (Blazor UI, auth+TOTP, user mgmt, audit), 9 spam algorithms (CAS, Bayes, TF-IDF, OpenAI, VirusTotal, Vision), cross-chat bans
+**Phase 4** (17 items): TickerQ jobs, unified configs (JSONB), Telegram library, welcome system, /tempban, logging UI, settings UI, anti-impersonation (pHash), warning system, URL filtering (540K domains, 6 blocklists), file scanning (ClamAV+VirusTotal 96-98%, 16K files/month), file scan UI, DM notifications, media attachments (7 types), bot auto-ban
 
-### Phase 2: Unified Telegram Bot ✅
-9 spam algorithms (StopWords, CAS, Similarity, Bayes, MultiLanguage, Spacing, OpenAI, VirusTotal, Vision), weighted confidence aggregation, two-tier decision (net>50 OR max>85→OpenAI veto), auto-ban/reports, 9 bot commands, backup/restore (gzip 81%), photo caching (chat icons + user photos via TickerQ), telegram_users normalization (LEFT JOIN), training data (191 spam + 26 ham)
+### Pending ⏳
+**4.9**: Bot hot-reload, **4.12**: Tag mgmt UI (Settings page - 90% complete), **4.15**: Report aggregation, **4.16**: Appeal system, **4.17.3**: Windows AMSI (deferred), **4.18**: Forum/topics support
 
-### Phase 3: Advanced Multi-Chat ✅
-Cross-chat spam detection (global bans), shared blacklist (user_actions, stop_words), global auto-apply
-Not implemented: Chat delegation, templates, bulk UI (already automatic)
-
-### Phase 4: Infrastructure & Configuration ⏳
-**4.1** ✅: TickerQ PostgreSQL job queue
-**4.2** ✅: Unified configs (JSONB, global+chat), IConfigService, auto-merging
-**4.2.1** ✅: Timestamps bigint→timestamptz, DTOs→DateTimeOffset
-**4.3** ✅: TelegramGroupsAdmin.Telegram library extraction, AddTelegramServices()
-**4.4** ✅: Welcome system - TickerQ jobs, DM modes, invite caching, templates
-**4.5** ✅: OpenAI tri-state (spam/clean/review), modular prompts
-**4.6** ✅: /tempban - Duration parsing, TempbanExpiryJob, DM notifications
-**4.7** ✅: Runtime Logging - /settings#logging, configs JSONB
-**4.8** ✅: Settings UI - All tabs, nested sidebar nav
-**4.10** ✅: Anti-Impersonation - Composite scoring (name+photo), pHash, Reports queue
-**4.11** ✅: Warning System - Count-based, auto-ban threshold, UI removal
-**4.12** ✅: Admin Notes & Tags - Actor system, TagManagement UI, color-coded chips
-**4.13** ✅: URL Filtering - 540K domains, 6 blocklists, hard/soft modes, <1ms lookups
-**4.14** ✅: Critical Checks Infrastructure - FileScanningCheck always_run=true (bypasses trust/admin), MessageProcessingService integration, FileScanJob end-to-end flow (download→hash→scan→delete if infected→DM notify), DM fallback to chat reply (bot_dm_enabled), detection_results audit trail
-**4.17** ✅: File Scanning Phase 1+2 - ClamAV Tier 1, VirusTotal+cloud queue Tier 2, 96-98% coverage, 16K files/month quota. FileScanJob scheduled via TickerQ (5s polling), media files excluded (only Document attachments scanned), Actor.FromSystem("file_scanner"), SHA256 caching (24hr TTL), fail-open errors
-**4.19** ✅: Actor System - Exclusive Arc (web/telegram/system), 5 tables, LEFT JOIN
-**4.20** ✅: DM Notification System - IDmDeliveryService, INotificationOrchestrator, pending_notifications queue, /mystatus command, warning notifications
-**4.21** ✅: Media Attachment Support - TelegramMediaService, MediaType enum (Data+Telegram layers), 7 media types (Animation/Video/Audio/Voice/Sticker/VideoNote/Document), messages table media fields, MessageBubbleTelegram UI components, HTML5 video/audio controls, file size/duration formatting
-**4.22** ✅: File Scanning UI & Monitoring - FileScanningSettings.razor complete, VirusTotal config UI (enable/disable, daily/per-minute limits, API key status), real-time quota display (color-coded progress bars, manual refresh), scanner health dashboard (ClamAV ping+version, VirusTotal status, 7-day detection stats), paginated scan results log (20/page, timestamp/user/scanner/result/details/confidence), GetFileScanResultsAsync/GetFileScanStatsAsync/GetAllActiveQuotasAsync repository methods, ClamAVHealthResult model
-
-**Pending**:
-**4.9**: Bot connection management - Hot-reload, IBotLifecycleService, /settings#bot-connection (Owner-only)
-**4.15**: Report Aggregation - Multi-report auto-escalation (3 unique in 1hr→action), confidence boost (+15/report), reporter accuracy scoring, false report protection, /reports#analytics
-**4.16**: Appeal System - DM channel establishment, appeals queue /reports#appeals, approve/deny workflow, max 2 appeals/ban, 30-day expiration
-**4.17.3**: File Scanning Phase 3 - Windows AMSI API (optional multi-AV), local voting system. See FILE_SCANNING.md
-**4.18**: Forum/Topics Support - Pass message_thread_id in bot replies, store in messages table, update MessageProcessingService
-
-### Phase 5: Analytics & Data Aggregation 🔮
-**5.1**: Analytics repo (time-series queries, false positive/negative rates, per-check performance)
-**5.2**: TickerQ daily aggregation (analytics_daily_stats, api_usage_stats, check_performance_stats, weekly/monthly rollups)
-**5.3**: Analytics UI (/analytics#trends - volume/ratios/patterns, /analytics#performance - accuracy/check perf/confidence)
-**5.4**: Charting library (MudBlazor Charts or ApexCharts.Blazor)
-**5.5**: User Reputation/Auto-Trust - Auto-whitelist (7 days+50 clean msgs+0 warnings), UI approval, per-chat thresholds, warning system integration, builds on manual whitelist
-**5.6**: Forwarded Message Spam - Track spam channels, mass-forward detection (same forward 5+ users), channel blacklist (CAS+custom spam_sources), auto-delete blacklisted forwards
-**5.10**: Smart Multi-Language - Non-English detection, whitelist bypass trusted users, spam detection first, helpful DM in user's language, warning integration (3+ violations→mute), database templates+OpenAI translation, cached common (Spanish/Russian/Chinese)
-
-### Phase 6: ML-Powered Insights 🔮
-**6.1**: Insights service (manual override analysis, check performance, stop word suggestions, pattern detection/ML clustering, auto-trust effectiveness)
-**6.2**: OpenAI recommendations (ML→natural language, Apply buttons, priority levels)
-**6.3**: Insights dashboard (/analytics#insights - config/performance/cost/patterns/auto-trust cards, historical tracking)
-**6.4**: Background insights (TickerQ daily job, high-priority notifications)
-
-### Phase 7: Advanced Features 🔮
-ML-based spam (10th algorithm using historical), sentiment analysis (shelved - false positives), API for third-party (not needed)
-
-### Phase 8: WTelegram User Account Integration 🔮
-**See:** WTELEGRAM_INTEGRATION.md for detailed planning
-
-### Phase 9: Mobile Web Support 🔮
-Responsive Blazor UI, touch-friendly interactions, PWA support, mobile-first critical paths (reports/users/messages)
-
-## Phase 6: Optional Protections (Open Source)
-**6.1** ✅: Bot Auto-Ban - BotProtectionService, /settings#telegram-general
-**6.2**: Raid Detection - Semantic similarity, sliding window, temp lockdown, OpenAI/Ollama
-**6.3**: Bio Spam Check - Analyze bio/name on join, 30-day cache, 10th spam algo
-**6.4**: Scheduled Messages - /schedule command, recurring cron, TickerQ pattern
-
-**Open Source Prep**:
-**4.16**: OpenAI-Compatible API - BaseUrl config, Ollama/LM Studio, local LLM support (removes API barrier)
+### Future 🔮
+**Phase 5**: Analytics (time-series, auto-trust, forwarded spam, multi-language DMs)
+**Phase 6**: ML insights (pattern detection, OpenAI recommendations), raid detection, bio spam, scheduled messages
+**Phase 7**: ML-based spam (10th algorithm)
+**Phase 8**: WTelegram integration (see WTELEGRAM_INTEGRATION.md)
+**Phase 9**: Mobile web support
 
 ## Code Quality
-**See:** REFACTORING_BACKLOG.md (88/100 score)
+88/100 score. See TECHNICAL_DEBT.md for DI audit (partial) + 14 performance optimizations
 
 ## Next Steps
-MVP Complete ✅ (Oct 17) - Phase 4.14 Critical Checks Infrastructure, Phase 4.15-4.18 pending
+MVP Complete ✅ - Pending: 4.9, 4.15-4.18
 
 ## CRITICAL RULES
 - Never run app in normal mode (only one instance allowed, user runs in Rider for debugging)
