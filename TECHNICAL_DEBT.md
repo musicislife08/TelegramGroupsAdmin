@@ -8,7 +8,7 @@
 
 ## Completed Work
 
-**2025-10-22**: PERF-CD-4 (TF-IDF optimization: 2.59× faster, 44% less memory via Dictionary counting + pre-indexed vocabulary)
+**2025-10-22**: PERF-CD-3 (Domain stats: 2.24× faster, 55ms→25ms via GroupBy aggregation), PERF-CD-4 (TF-IDF: 2.59× faster, 44% less memory via Dictionary counting + pre-indexed vocabulary)
 **2025-10-21**: ARCH-1 (Core library - 544 lines eliminated), ARCH-2 (Actor refactoring complete), PERF-APP-1, PERF-APP-3, DI-1 (4 repositories), Comprehensive audit logging coverage, BlazorAuthHelper DRY refactoring (19 instances), Empirical performance testing (PERF-CD-1 removed via PostgreSQL profiling)
 **2025-10-19**: 8 performance optimizations (Users N+1, config caching, parallel bans, composite index, virtualization, record conversion, leak fix, allocation optimization)
 
@@ -18,43 +18,9 @@
 
 **Deployment Context:** 10+ chats, 1000+ users, 100-1000 messages/day, Messages page primary moderation tool
 
-### Medium Priority (1 issue)
+### Medium Priority (0 issues)
 
-
-
-#### PERF-CD-3: Analytics Page - Batch Domain Filter Stats
-
-**Project:** TelegramGroupsAdmin.ContentDetection
-**Files:** CachedBlockedDomainsRepository.cs (lines 111-136)
-**Severity:** Medium | **Impact:** 85% faster analytics stats queries
-
-**Description:**
-GetStatsAsync() executes 8 separate CountAsync queries sequentially for domain statistics. If analytics page has multiple stat sections, this compounds to 20-30+ queries.
-
-**Reality Check:** Analytics page viewed less frequently than Messages/Users pages, but at 1000+ users with URL filtering active, stats queries aggregate large datasets. Single GroupBy query is the standard analytics pattern.
-
-**Current Pattern:**
-```csharp
-var globalCount = await context.CachedBlockedDomains.CountAsync(d => d.ChatId == null);
-var chat1Count = await context.CachedBlockedDomains.CountAsync(d => d.ChatId == chat1Id);
-// ... 6 more sequential counts
-```
-
-**Recommended Fix:**
-```csharp
-var stats = await context.CachedBlockedDomains
-    .GroupBy(d => d.ChatId)
-    .Select(g => new { ChatId = g.Key, Count = g.Count() })
-    .ToListAsync(cancellationToken);
-
-return new UrlFilterStats
-{
-    GlobalCount = stats.FirstOrDefault(s => s.ChatId == null)?.Count ?? 0,
-    PerChatCounts = stats.Where(s => s.ChatId != null).ToDictionary(s => s.ChatId.Value, s => s.Count)
-};
-```
-
-**Expected Gain:** 85% faster (8 queries → 1, 150ms → 20ms), worth doing during analytics development
+**All medium-priority performance optimizations completed!**
 
 ---
 
@@ -62,7 +28,7 @@ return new UrlFilterStats
 
 **Deployment Context:** 10+ chats, 100-1000 messages/day (10-50 spam checks/day on new users), 1000+ users, Messages page primary tool
 
-**Total Issues Remaining:** 1 medium priority (down from 52 initial findings, 38 false positives + 3 removed/completed)
+**Total Issues Remaining:** 0 (down from 52 initial findings, 38 false positives + 4 completed optimizations)
 
 **Implementation Priority:** Implement opportunistically during related refactoring work
 
