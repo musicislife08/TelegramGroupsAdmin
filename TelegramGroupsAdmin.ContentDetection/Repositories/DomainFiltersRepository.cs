@@ -162,6 +162,6 @@ public class DomainFiltersRepository : IDomainFiltersRepository
             return Actor.FromTelegramUser(dto.TelegramUserId.Value);
         }
 
-        return Actor.FromSystem("unknown");
+        return Actor.Unknown;
     }
 }

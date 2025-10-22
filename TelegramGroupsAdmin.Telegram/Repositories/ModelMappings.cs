@@ -42,7 +42,7 @@ public static class ModelMappings
         }
 
         // Should never happen due to CHECK constraint, but handle gracefully
-        return Actor.FromSystem("unknown");
+        return Actor.Unknown;
     }
 
     /// <summary>

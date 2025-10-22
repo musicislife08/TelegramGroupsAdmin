@@ -20,6 +20,7 @@
 @inject ITelegramUserMappingRepository TelegramMappingRepository
 @inject NavigationManager NavigationManager
 @inject ILogger<Messages> Logger
+@inject ISnackbar Snackbar
 @attribute [Authorize]
 @implements IDisposable
 
@@ -728,13 +729,19 @@
             // Get current user ID for audit trail
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (executorId == null)
+            {
+                Snackbar.Add("Authentication error: User ID not found", Severity.Error);
+                return;
+            }
+            var executor = Core.Models.Actor.FromWebUser(executorId);
 
             // Call moderation service (deletes message, bans user globally, creates detection result)
             var result = await ModerationService.MarkAsSpamAndBanAsync(
                 message.MessageId,
                 message.UserId,
                 message.ChatId,
-                executorId,
+                executor,
                 "Manually marked as spam by admin via UI");
 
             if (result.Success)
@@ -789,6 +796,12 @@
             // Get current user ID for audit trail
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (executorId == null)
+            {
+                Snackbar.Add("Authentication error: User ID not found", Severity.Error);
+                return;
+            }
+            var executor = Core.Models.Actor.FromWebUser(executorId);
 
             // Check if this was previously marked as spam (false positive correction scenario)
             var wasPreviouslySpam = GetSpamCheck(message.MessageId)?.IsSpam == true;
@@ -807,9 +820,7 @@
                 // IsSpam computed from net_confidence (-100 = strong ham)
                 Confidence = 0, // 0% spam (ham)
                 Reason = reason,
-                AddedBy = !string.IsNullOrEmpty(executorId) && Guid.TryParse(executorId, out _)
-                    ? Actor.FromWebUser(executorId)
-                    : Actor.FromSystem("unknown"),
+                AddedBy = executor,
                 UserId = message.UserId,
                 UsedForTraining = true, // Manual decisions are always training-worthy
                 NetConfidence = -100, // Strong ham signal (manual admin decision)
@@ -824,7 +835,7 @@
             {
                 var unbanResult = await ModerationService.UnbanUserAsync(
                     message.UserId,
-                    executorId,
+                    executor,
                     "False positive correction - message marked as ham by admin via UI",
                     restoreTrust: true); // Restore trust to bypass future spam checks
 
@@ -1017,12 +1028,18 @@
             // Get current user ID for audit trail
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (executorId == null)
+            {
+                Snackbar.Add("Authentication error: User ID not found", Severity.Error);
+                return;
+            }
+            var executor = Core.Models.Actor.FromWebUser(executorId);
 
             // Call moderation service to temp ban the user
             var banResult = await ModerationService.TempBanUserAsync(
                 message.UserId,
                 message.MessageId,
-                executorId,
+                executor,
                 tempBanResult.Reason,
                 tempBanResult.Duration);
 

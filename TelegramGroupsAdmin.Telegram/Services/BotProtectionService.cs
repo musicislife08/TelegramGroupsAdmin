@@ -145,7 +145,7 @@ public class BotProtectionService : IBotProtectionService
                 UserId: bot.Id,
                 ActionType: UserActionType.Ban,
                 MessageId: null,
-                IssuedBy: Actor.FromSystem("bot_protection"),
+                IssuedBy: Actor.BotProtection,
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Permanent ban
                 Reason: $"Unauthorized bot: {reason}"

@@ -81,7 +81,7 @@ public class UserAutoTrustService
                 UserId: userId,
                 ActionType: UserActionType.Trust,
                 MessageId: null,
-                IssuedBy: Actor.FromSystem("auto_trust"), // System-issued
+                IssuedBy: Actor.AutoTrust, // System-issued
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Permanent (until revoked)
                 Reason: $"Auto-trusted after {config.FirstMessagesCount} non-spam messages"

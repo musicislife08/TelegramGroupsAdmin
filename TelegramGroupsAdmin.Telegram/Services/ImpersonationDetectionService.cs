@@ -307,11 +307,12 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                 var reason = $"Auto-banned: Impersonation detected (name match: {result.NameMatch}, photo match: {result.PhotoMatch}, score: {result.TotalScore})";
 
                 var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+                var executor = Core.Models.Actor.Impersonation;
                 var banResult = await _moderationActionService.BanUserAsync(
                     botClient: botClient,
                     userId: result.SuspectedUserId,
                     messageId: null,
-                    executorId: "system:impersonation",
+                    executor: executor,
                     reason: reason);
 
                 if (banResult.Success)

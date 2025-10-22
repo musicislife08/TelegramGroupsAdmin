@@ -83,11 +83,11 @@ public class TrustCommand : IBotCommand
             return new CommandResult($"ℹ️ User @{targetUser.Username ?? targetUser.Id.ToString()} is already trusted.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
-        // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
-        string executorId = await _moderationService.GetExecutorIdentifierAsync(
+        // Create executor actor from Telegram user
+        var executor = Core.Models.Actor.FromTelegramUser(
             message.From!.Id,
             message.From.Username,
-            cancellationToken);
+            message.From.FirstName);
 
         // Build reason with chat context
         var chatName = message.Chat.Title ?? message.Chat.Username ?? message.Chat.Id.ToString();
@@ -96,7 +96,7 @@ public class TrustCommand : IBotCommand
         // Execute trust action via centralized service
         var result = await _moderationService.TrustUserAsync(
             userId: targetUser.Id,
-            executorId: executorId,
+            executor: executor,
             reason: reason,
             cancellationToken: cancellationToken);
 

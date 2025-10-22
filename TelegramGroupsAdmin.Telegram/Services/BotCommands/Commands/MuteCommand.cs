@@ -85,18 +85,18 @@ public class MuteCommand : IBotCommand
 
         try
         {
-            // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
-            var executorId = await _moderationService.GetExecutorIdentifierAsync(
+            // Get executor actor
+            var executor = Core.Models.Actor.FromTelegramUser(
                 message.From!.Id,
                 message.From.Username,
-                cancellationToken);
+                message.From.FirstName);
 
             // Execute mute via ModerationActionService
             var result = await _moderationService.RestrictUserAsync(
                 botClient,
                 targetUser.Id,
                 message.ReplyToMessage.MessageId,
-                executorId,
+                executor,
                 reason,
                 duration,
                 cancellationToken);

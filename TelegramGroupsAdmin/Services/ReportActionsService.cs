@@ -55,13 +55,16 @@ public class ReportActionsService : IReportActionsService
 
         var botClient = _botFactory.GetOrCreate(_telegramOptions.BotToken);
 
+        // Create executor actor from web user
+        var executor = Core.Models.Actor.FromWebUser(reviewerId);
+
         // Execute spam + ban action via ModerationActionService
         var result = await _moderationService.MarkAsSpamAndBanAsync(
             botClient: botClient,
             messageId: report.MessageId,
             userId: message.UserId,
             chatId: report.ChatId,
-            executorId: reviewerId,
+            executor: executor,
             reason: $"Report #{reportId} - spam/abuse",
             cancellationToken: default);
 
@@ -101,12 +104,15 @@ public class ReportActionsService : IReportActionsService
 
         var botClient = _botFactory.GetOrCreate(_telegramOptions.BotToken);
 
+        // Create executor actor from web user
+        var executor = Core.Models.Actor.FromWebUser(reviewerId);
+
         // Execute ban action via ModerationActionService
         var result = await _moderationService.BanUserAsync(
             botClient: botClient,
             userId: message.UserId,
             messageId: report.MessageId,
-            executorId: reviewerId,
+            executor: executor,
             reason: $"Report #{reportId} - spam/abuse",
             cancellationToken: default);
 
@@ -162,11 +168,14 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Message {report.MessageId} not found");
         }
 
+        // Create executor actor from web user
+        var executor = Core.Models.Actor.FromWebUser(reviewerId);
+
         // Execute warn action via ModerationActionService
         var result = await _moderationService.WarnUserAsync(
             userId: message.UserId,
             messageId: report.MessageId,
-            executorId: reviewerId,
+            executor: executor,
             reason: $"Report #{reportId} - inappropriate behavior");
 
         if (!result.Success)

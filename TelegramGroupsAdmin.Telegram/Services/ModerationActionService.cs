@@ -77,7 +77,7 @@ public class ModerationActionService
         long messageId,
         long userId,
         long chatId,
-        string? executorId, // Web app user ID or null
+        Actor executor,
         string reason,
         CancellationToken cancellationToken = default)
     {
@@ -109,7 +109,7 @@ public class ModerationActionService
                 // IsSpam computed from net_confidence (100 = strong spam)
                 Confidence = 100, // 100% spam
                 Reason = reason,
-                AddedBy = Actor.ParseLegacyFormat(executorId),
+                AddedBy = executor,
                 UserId = userId,
                 UsedForTraining = true, // Manual decisions are always training-worthy
                 NetConfidence = 100, // Strong spam signal (manual admin decision)
@@ -159,7 +159,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Ban,
                 MessageId: messageId,
-                IssuedBy: Actor.ParseLegacyFormat(executorId),
+                IssuedBy: executor,
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Permanent ban
                 Reason: reason
@@ -187,12 +187,12 @@ public class ModerationActionService
         long messageId,
         long userId,
         long chatId,
-        string? executorId,
+        Actor executor,
         string reason,
         CancellationToken cancellationToken = default)
     {
         var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
-        return await MarkAsSpamAndBanAsync(botClient, messageId, userId, chatId, executorId, reason, cancellationToken);
+        return await MarkAsSpamAndBanAsync(botClient, messageId, userId, chatId, executor, reason, cancellationToken);
     }
 
     /// <summary>
@@ -203,7 +203,7 @@ public class ModerationActionService
         ITelegramBotClient botClient,
         long userId,
         long? messageId,
-        string? executorId,
+        Actor executor,
         string reason,
         CancellationToken cancellationToken = default)
     {
@@ -251,7 +251,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Ban,
                 MessageId: messageId,
-                IssuedBy: Actor.ParseLegacyFormat(executorId),
+                IssuedBy: executor,
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null,
                 Reason: reason
@@ -277,7 +277,7 @@ public class ModerationActionService
     public async Task<ModerationResult> WarnUserAsync(
         long userId,
         long? messageId,
-        string? executorId,
+        Actor executor,
         string reason,
         long? chatId = null,
         CancellationToken cancellationToken = default)
@@ -290,7 +290,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Warn,
                 MessageId: messageId,
-                IssuedBy: Actor.ParseLegacyFormat(executorId),
+                IssuedBy: executor,
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null,
                 Reason: reason
@@ -323,11 +323,12 @@ public class ModerationActionService
                 var autoBanReason = warningConfig.AutoBanReason.Replace("{count}", warnCount.ToString());
                 var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
 
+                var autoBanExecutor = Actor.AutoBan;
                 var banResult = await BanUserAsync(
                     botClient: botClient,
                     userId: userId,
                     messageId: messageId,
-                    executorId: "system:auto-ban",
+                    executor: autoBanExecutor,
                     reason: autoBanReason,
                     cancellationToken: cancellationToken);
 
@@ -360,7 +361,7 @@ public class ModerationActionService
     /// </summary>
     public async Task<ModerationResult> TrustUserAsync(
         long userId,
-        string? executorId,
+        Actor executor,
         string reason,
         CancellationToken cancellationToken = default)
     {
@@ -371,7 +372,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Trust,
                 MessageId: null,
-                IssuedBy: Actor.ParseLegacyFormat(executorId),
+                IssuedBy: executor,
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null,
                 Reason: reason
@@ -396,7 +397,7 @@ public class ModerationActionService
     public async Task<ModerationResult> UnbanUserAsync(
         ITelegramBotClient botClient,
         long userId,
-        string? executorId,
+        Actor executor,
         string reason,
         bool restoreTrust = false,
         CancellationToken cancellationToken = default)
@@ -445,7 +446,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Unban,
                 MessageId: null,
-                IssuedBy: Actor.ParseLegacyFormat(executorId),
+                IssuedBy: executor,
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null,
                 Reason: reason
@@ -455,7 +456,7 @@ public class ModerationActionService
             // Optionally restore trust (for false positive corrections)
             if (restoreTrust)
             {
-                await TrustUserAsync(userId, executorId, "Trust restored after unban (false positive correction)", cancellationToken);
+                await TrustUserAsync(userId, executor, "Trust restored after unban (false positive correction)", cancellationToken);
                 result.TrustRestored = true;
             }
 
@@ -478,13 +479,13 @@ public class ModerationActionService
     /// </summary>
     public async Task<ModerationResult> UnbanUserAsync(
         long userId,
-        string? executorId,
+        Actor executor,
         string reason,
         bool restoreTrust = false,
         CancellationToken cancellationToken = default)
     {
         var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
-        return await UnbanUserAsync(botClient, userId, executorId, reason, restoreTrust, cancellationToken);
+        return await UnbanUserAsync(botClient, userId, executor, reason, restoreTrust, cancellationToken);
     }
 
     /// <summary>
@@ -537,7 +538,7 @@ public class ModerationActionService
         ITelegramBotClient botClient,
         long userId,
         long? messageId,
-        string? executorId,
+        Actor executor,
         string reason,
         TimeSpan duration,
         CancellationToken cancellationToken = default)
@@ -583,7 +584,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Ban,
                 MessageId: messageId,
-                IssuedBy: Actor.ParseLegacyFormat(executorId),
+                IssuedBy: executor,
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: expiresAt,
                 Reason: reason
@@ -646,13 +647,13 @@ public class ModerationActionService
     public async Task<ModerationResult> TempBanUserAsync(
         long userId,
         long? messageId,
-        string? executorId,
+        Actor executor,
         string reason,
         TimeSpan duration,
         CancellationToken cancellationToken = default)
     {
         var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
-        return await TempBanUserAsync(botClient, userId, messageId, executorId, reason, duration, cancellationToken);
+        return await TempBanUserAsync(botClient, userId, messageId, executor, reason, duration, cancellationToken);
     }
 
     /// <summary>
@@ -663,7 +664,7 @@ public class ModerationActionService
         ITelegramBotClient botClient,
         long userId,
         long? messageId,
-        string? executorId,
+        Actor executor,
         string reason,
         TimeSpan duration,
         CancellationToken cancellationToken = default)
@@ -727,7 +728,7 @@ public class ModerationActionService
                 UserId: userId,
                 ActionType: UserActionType.Mute,
                 MessageId: messageId,
-                IssuedBy: Actor.ParseLegacyFormat(executorId),
+                IssuedBy: executor,
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: expiresAt,
                 Reason: reason
@@ -746,38 +747,6 @@ public class ModerationActionService
             _logger.LogError(ex, "Failed to restrict user {UserId}", userId);
             return new ModerationResult { Success = false, ErrorMessage = ex.Message };
         }
-    }
-
-    /// <summary>
-    /// Map Telegram user ID to web app user ID (for audit trail)
-    /// </summary>
-    public async Task<string?> GetExecutorUserIdAsync(long? telegramUserId, CancellationToken cancellationToken = default)
-    {
-        if (telegramUserId == null) return null;
-        return await _telegramUserMappingRepository.GetUserIdByTelegramIdAsync(telegramUserId.Value, cancellationToken);
-    }
-
-    /// <summary>
-    /// Get executor identifier with fallback to Telegram username when no account mapping exists.
-    /// Returns: Web app user ID (GUID) if mapped, otherwise "telegram:@username" or "telegram:userid"
-    /// </summary>
-    public async Task<string> GetExecutorIdentifierAsync(long telegramUserId, string? telegramUsername, CancellationToken cancellationToken = default)
-    {
-        // Try to get mapped web app user ID first
-        var userId = await GetExecutorUserIdAsync(telegramUserId, cancellationToken);
-        if (!string.IsNullOrEmpty(userId))
-        {
-            return userId;
-        }
-
-        // Fallback to Telegram username
-        if (!string.IsNullOrEmpty(telegramUsername))
-        {
-            return $"telegram:@{telegramUsername.TrimStart('@')}";
-        }
-
-        // Last resort: Telegram user ID
-        return $"telegram:{telegramUserId}";
     }
 
     /// <summary>

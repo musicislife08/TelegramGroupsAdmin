@@ -54,17 +54,17 @@ public class UnbanCommand : IBotCommand
 
         try
         {
-            // Get executor identifier (web app user ID if mapped, otherwise Telegram username/ID)
-            var executorId = await _moderationService.GetExecutorIdentifierAsync(
+            // Get executor actor
+            var executor = Core.Models.Actor.FromTelegramUser(
                 message.From!.Id,
                 message.From.Username,
-                cancellationToken);
+                message.From.FirstName);
 
             // Execute unban action through ModerationActionService
             var result = await _moderationService.UnbanUserAsync(
                 botClient,
                 targetUser.Id,
-                executorId,
+                executor,
                 $"Manual unban command by {message.From?.Username ?? message.From?.Id.ToString() ?? "unknown"}",
                 restoreTrust: false,
                 cancellationToken);

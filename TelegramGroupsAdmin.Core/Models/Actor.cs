@@ -51,57 +51,15 @@ public record Actor
     // Factory Methods
     // ============================================================================
 
-    /// <summary>
-    /// Parse legacy executor ID string format and convert to Actor object
-    /// Supports multiple legacy formats: "system:identifier", "telegram:userid", GUIDs, etc.
-    /// </summary>
-    /// <param name="executorId">Legacy executor ID string</param>
-    /// <returns>Parsed Actor object</returns>
-    public static Actor ParseLegacyFormat(string? executorId)
-    {
-        if (string.IsNullOrEmpty(executorId))
-        {
-            return FromSystem("unknown");
-        }
-
-        // System identifiers (format: "system:identifier" or legacy patterns)
-        if (executorId.StartsWith("system:", StringComparison.OrdinalIgnoreCase))
-        {
-            var identifier = executorId.Substring(7); // Remove "system:" prefix
-            return FromSystem(identifier);
-        }
-
-        // Check if it's a GUID (web user ID)
-        if (Guid.TryParse(executorId, out _))
-        {
-            return FromWebUser(executorId);
-        }
-
-        // Telegram user identifiers (format: "telegram:@username" or "telegram:userid")
-        if (executorId.StartsWith("telegram:", StringComparison.OrdinalIgnoreCase))
-        {
-            var telegramPart = executorId.Substring(9); // Remove "telegram:" prefix
-            if (telegramPart.StartsWith("@"))
-            {
-                // Username format - store as system identifier for now
-                return FromSystem(executorId);
-            }
-            if (long.TryParse(telegramPart, out var telegramUserId))
-            {
-                // User ID format
-                return FromTelegramUser(telegramUserId);
-            }
-        }
-
-        // Legacy patterns from old system
-        if (executorId == "Auto-Detection" || executorId == "Web Admin")
-        {
-            return FromSystem(executorId.ToLowerInvariant().Replace(" ", "_"));
-        }
-
-        // Default: treat as system identifier
-        return FromSystem(executorId);
-    }
+    // Common system actors (eliminates magic strings)
+    public static Actor AutoDetection => FromSystem("auto_detection");
+    public static Actor BotProtection => FromSystem("bot_protection");
+    public static Actor FileScanner => FromSystem("file_scanner");
+    public static Actor AutoTrust => FromSystem("auto_trust");
+    public static Actor Impersonation => FromSystem("impersonation");
+    public static Actor AutoBan => FromSystem("auto_ban");
+    public static Actor SystemSeed => FromSystem("system_seed"); // Initial data seeding
+    public static Actor Unknown => FromSystem("unknown");
 
     /// <summary>
     /// Create actor from web user
@@ -142,6 +100,10 @@ public record Actor
             "auto_detection" => "Auto-Detection",
             "bot_protection" => "Bot Protection",
             "file_scanner" => "File Scanner",
+            "auto_trust" => "Auto-Trust",
+            "impersonation" => "Impersonation Detection",
+            "auto_ban" => "Auto-Ban",
+            "system_seed" => "System Seed",
             "initial_seed" => "Initial Seed",
             "web_admin" => "Web Admin (Legacy)",
             "unknown" => "Unknown",

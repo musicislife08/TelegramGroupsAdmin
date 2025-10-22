@@ -677,7 +677,7 @@ public partial class MessageProcessingService(
                     // IsSpam is computed from net_confidence (don't set it here)
                     Confidence = result.SpamResult.MaxConfidence,
                     Reason = $"{reasonPrefix}{result.SpamResult.PrimaryReason}",
-                    AddedBy = Actor.FromSystem("auto_detection"), // Phase 4.19: Actor system
+                    AddedBy = Actor.AutoDetection, // Phase 4.19: Actor system
                     UsedForTraining = SpamActionService.DetermineIfTrainingWorthy(result.SpamResult),
                     NetConfidence = result.SpamResult.NetConfidence,
                     CheckResultsJson = spamDetectionEngine.GetType()

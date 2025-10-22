@@ -202,6 +202,6 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
             return Actor.FromTelegramUser(dto.TelegramUserId.Value);
         }
 
-        return Actor.FromSystem("unknown");
+        return Actor.Unknown;
     }
 }

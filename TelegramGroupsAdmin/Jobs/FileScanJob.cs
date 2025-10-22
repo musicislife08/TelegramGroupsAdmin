@@ -143,7 +143,7 @@ public class FileScanJob(
                 CheckResultsJson = null, // File scanning is a single check, no aggregation
                 UsedForTraining = false, // File scans don't train spam detection
                 MessageText = $"File: {payload.FileName ?? "unknown"} ({payload.FileSize} bytes)",
-                AddedBy = Core.Models.Actor.FromSystem("file_scanner")
+                AddedBy = Core.Models.Actor.FileScanner
             };
 
             await _detectionResultsRepository.InsertAsync(detectionRecord, cancellationToken);
