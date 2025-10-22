@@ -468,8 +468,18 @@
     {
         if (_userDetail == null) return;
 
+        // Get current user ID for audit trail
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var executorId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (executorId == null)
+        {
+            Snackbar.Add("Authentication error: User ID not found", Severity.Error);
+            return;
+        }
+        var executor = Core.Models.Actor.FromWebUser(executorId);
+
         var action = _userDetail.IsTrusted ? "remove trust from" : "trust";
-        var success = await UserManagementService.ToggleTrustAsync(_userDetail.TelegramUserId, "web_admin");
+        var success = await UserManagementService.ToggleTrustAsync(_userDetail.TelegramUserId, executor);
 
         if (success)
         {

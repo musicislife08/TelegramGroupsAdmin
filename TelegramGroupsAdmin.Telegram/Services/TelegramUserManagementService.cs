@@ -95,7 +95,7 @@ public class TelegramUserManagementService
     /// Toggle user trust status (whitelist on/off)
     /// Creates audit trail via user_actions table.
     /// </summary>
-    public async Task<bool> ToggleTrustAsync(long telegramUserId, string modifiedBy, CancellationToken ct = default)
+    public async Task<bool> ToggleTrustAsync(long telegramUserId, Actor modifiedBy, CancellationToken ct = default)
     {
         // Get current user
         var user = await _userRepository.GetByTelegramIdAsync(telegramUserId, ct);
@@ -117,7 +117,7 @@ public class TelegramUserManagementService
                 UserId: telegramUserId,
                 ActionType: UserActionType.Trust,
                 MessageId: null, // No specific message associated
-                IssuedBy: Guid.TryParse(modifiedBy, out _) ? Actor.FromWebUser(modifiedBy) : Actor.FromSystem(modifiedBy),
+                IssuedBy: modifiedBy,
                 IssuedAt: DateTimeOffset.UtcNow,
                 ExpiresAt: null, // Trust doesn't expire
                 Reason: "User manually trusted"
@@ -168,7 +168,7 @@ public class TelegramUserManagementService
     /// Unban a user (expire all active bans and create unban action record)
     /// Phase 5: Banned users tab enhancements
     /// </summary>
-    public async Task<bool> UnbanAsync(long telegramUserId, string unbannedBy, string? reason = null, CancellationToken ct = default)
+    public async Task<bool> UnbanAsync(long telegramUserId, Actor unbannedBy, string? reason = null, CancellationToken ct = default)
     {
         // Verify user exists
         var user = await _userRepository.GetByTelegramIdAsync(telegramUserId, ct);
@@ -195,7 +195,7 @@ public class TelegramUserManagementService
             UserId: telegramUserId,
             ActionType: UserActionType.Unban,
             MessageId: null, // No specific message associated
-            IssuedBy: Guid.TryParse(unbannedBy, out _) ? Actor.FromWebUser(unbannedBy) : Actor.FromSystem(unbannedBy),
+            IssuedBy: unbannedBy,
             IssuedAt: DateTimeOffset.UtcNow,
             ExpiresAt: null, // Unban doesn't expire
             Reason: reason ?? "User manually unbanned from web interface"
