@@ -8,7 +8,7 @@
 
 ## Completed Work
 
-**2025-10-21**: ARCH-1 (Core library - 544 lines eliminated), ARCH-2 (Actor refactoring complete), PERF-APP-1, PERF-APP-3, DI-1 (4 repositories), Comprehensive audit logging coverage, BlazorAuthHelper DRY refactoring (19 instances)
+**2025-10-21**: ARCH-1 (Core library - 544 lines eliminated), ARCH-2 (Actor refactoring complete), PERF-APP-1, PERF-APP-3, DI-1 (4 repositories), Comprehensive audit logging coverage, BlazorAuthHelper DRY refactoring (19 instances), Empirical performance testing (PERF-CD-1 removed via PostgreSQL profiling)
 **2025-10-19**: 8 performance optimizations (Users N+1, config caching, parallel bans, composite index, virtualization, record conversion, leak fix, allocation optimization)
 
 ---
@@ -17,51 +17,9 @@
 
 **Deployment Context:** 10+ chats, 1000+ users, 100-1000 messages/day, Messages page primary moderation tool
 
-### Medium Priority (3 issues)
+### Medium Priority (2 issues)
 
-#### PERF-CD-1: Stop Words N+1 (Future-Proofing)
 
-**Project:** TelegramGroupsAdmin.ContentDetection
-**Files:** StopWordsRepository.cs (lines 117-158)
-**Severity:** Medium | **Impact:** Future-proofing for 10x growth
-
-**Description:**
-Loading stop words with actor information uses complex GroupJoin pattern that could result in N+1 queries. Currently only 20 stop words, so no performance issue, but this future-proofs for growth to 200+ words.
-
-**Reality Check:** At 20 stop words, loading takes ~40-60ms (perfectly acceptable). However, you don't know how many stop words could be added by you or other admins over time. This optimization prepares for 10x growth scenario.
-
-**Current Pattern:**
-Multiple JOINs for actor resolution executed per stop word in projection query.
-
-**Recommended Fix:**
-```csharp
-// Pre-load all actors in single query
-var actorIds = await context.StopWords
-    .SelectMany(s => new[] { s.AddedBy, s.UpdatedBy }.Where(id => id != 0))
-    .Distinct()
-    .ToListAsync(cancellationToken);
-
-// Batch load actors (assuming you add GetActorsByIdsAsync method)
-var actors = await GetActorsByIdsAsync(actorIds, cancellationToken);
-var actorDict = actors.ToDictionary(a => a.Id);
-
-// Single query for stop words, then client-side actor join
-var stopWords = await context.StopWords
-    .AsNoTracking()
-    .OrderByDescending(s => s.AddedAt)
-    .ToListAsync(cancellationToken);
-
-return stopWords.Select(s => new StopWordWithEmailDto
-{
-    // ... fields ...
-    AddedByActor = actorDict.GetValueOrDefault(s.AddedBy),
-    UpdatedByActor = s.UpdatedBy.HasValue ? actorDict.GetValueOrDefault(s.UpdatedBy.Value) : null
-}).ToList();
-```
-
-**Expected Gain:** None at current scale (20 words), but prevents 40ms → 500ms degradation if growing to 200+ words
-
----
 
 #### PERF-CD-3: Analytics Page - Batch Domain Filter Stats
 
@@ -121,12 +79,13 @@ Use pre-computed term frequencies with Dictionary lookups instead of repeated LI
 
 **Deployment Context:** 10+ chats, 100-1000 messages/day (10-50 spam checks/day on new users), 1000+ users, Messages page primary tool
 
-**Total Issues Remaining:** 3 medium priority (down from 52 initial findings, 38 false positives + 1 removed as unnecessary)
+**Total Issues Remaining:** 2 medium priority (down from 52 initial findings, 38 false positives + 2 removed as unnecessary)
 
 **Implementation Priority:** Implement opportunistically during related refactoring work
 
 **Removed Items:**
-- PERF-DATA-5 (JSON source generation): Inconsistent with reflection usage in backup/restore, negligible benefit with existing caching (PERF-CFG-1), premature optimization
+- **PERF-DATA-5** (JSON source generation): Inconsistent with reflection usage in backup/restore, negligible benefit with existing caching (PERF-CFG-1), premature optimization
+- **PERF-CD-1** (Stop words N+1): Empirical testing (2025-10-21) disproved original estimates by 100-300x. Actual: 0.3ms baseline → 1.5ms at 92x scale. PostgreSQL hash joins handle this perfectly. Original analysis confused LEFT JOINs with N+1 queries. Solution in search of a problem.
 
 ---
 
