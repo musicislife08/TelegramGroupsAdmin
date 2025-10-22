@@ -129,6 +129,20 @@ public class TelegramUserManagementService
         {
             // Expire all active trusts
             await _userActionsRepository.ExpireTrustsForUserAsync(telegramUserId);
+
+            // Create untrust action record (audit trail for who removed trust and when)
+            var untrustAction = new UserActionRecord(
+                Id: 0,
+                UserId: telegramUserId,
+                ActionType: UserActionType.Untrust,
+                MessageId: null,
+                IssuedBy: modifiedBy,
+                IssuedAt: DateTimeOffset.UtcNow,
+                ExpiresAt: null, // Untrust doesn't need expiration - it's a point-in-time action
+                Reason: "User manually untrusted"
+            );
+
+            await _userActionsRepository.InsertAsync(untrustAction);
         }
 
         _logger.LogInformation(

@@ -18,5 +18,8 @@ public enum UserActionType
     Trust = 3,
 
     /// <summary>Remove ban from user</summary>
-    Unban = 4
+    Unban = 4,
+
+    /// <summary>Remove trust from user</summary>
+    Untrust = 5
 }

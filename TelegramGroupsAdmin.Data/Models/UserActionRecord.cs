@@ -17,7 +17,9 @@ public enum UserActionType
     /// <summary>Mark user as trusted, bypass spam detection</summary>
     Trust = 3,
     /// <summary>Remove ban from user</summary>
-    Unban = 4
+    Unban = 4,
+    /// <summary>Remove trust from user</summary>
+    Untrust = 5
 }
 
 /// <summary>
