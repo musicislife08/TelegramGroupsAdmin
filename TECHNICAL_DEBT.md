@@ -17,7 +17,7 @@
 
 **Deployment Context:** 10+ chats, 1000+ users, 100-1000 messages/day, Messages page primary moderation tool
 
-### Medium Priority (4 issues)
+### Medium Priority (3 issues)
 
 #### PERF-CD-1: Stop Words N+1 (Future-Proofing)
 
@@ -99,32 +99,6 @@ return new UrlFilterStats
 
 ---
 
-#### PERF-DATA-5: JSON Source Generation for Config JSONB
-
-**Project:** TelegramGroupsAdmin.Data
-**Files:** ConfigRepository.cs, various JSONB columns
-**Severity:** Medium | **Impact:** 30% faster JSON operations
-
-**Description:**
-Configuration and JSONB columns use reflection-based JSON deserialization instead of source-generated serializers. With caching (PERF-CFG-1), this becomes less critical, but still valuable for initial loads.
-
-**Recommended Fix:**
-```csharp
-[JsonSourceGenerationOptions(WriteIndented = false)]
-[JsonSerializable(typeof(SpamDetectionConfig))]
-[JsonSerializable(typeof(WelcomeConfig))]
-[JsonSerializable(typeof(BotProtectionConfig))]
-// ... all config types
-internal partial class ConfigJsonContext : JsonSerializerContext { }
-
-// Usage in ConfigService:
-var config = JsonSerializer.Deserialize(json, ConfigJsonContext.Default.SpamDetectionConfig);
-```
-
-**Expected Gain:** 30% faster JSON operations, better AOT compatibility, complements config caching
-
----
-
 #### PERF-CD-4: TF-IDF Vector Calculation Optimization
 
 **Project:** TelegramGroupsAdmin.ContentDetection
@@ -147,9 +121,12 @@ Use pre-computed term frequencies with Dictionary lookups instead of repeated LI
 
 **Deployment Context:** 10+ chats, 100-1000 messages/day (10-50 spam checks/day on new users), 1000+ users, Messages page primary tool
 
-**Total Issues Remaining:** 4 medium priority (down from 52 initial findings, 38 false positives removed)
+**Total Issues Remaining:** 3 medium priority (down from 52 initial findings, 38 false positives + 1 removed as unnecessary)
 
 **Implementation Priority:** Implement opportunistically during related refactoring work
+
+**Removed Items:**
+- PERF-DATA-5 (JSON source generation): Inconsistent with reflection usage in backup/restore, negligible benefit with existing caching (PERF-CFG-1), premature optimization
 
 ---
 
