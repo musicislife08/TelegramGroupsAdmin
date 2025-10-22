@@ -10,7 +10,7 @@ using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Telegram.Helpers;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -813,9 +813,7 @@ public partial class MessageProcessingService(
     private static string ComputeContentHash(string messageText, string urls)
     {
         var normalized = $"{messageText.ToLowerInvariant().Trim()}{urls.ToLowerInvariant().Trim()}";
-        using var sha256 = System.Security.Cryptography.SHA256.Create();
-        var hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(normalized));
-        return Convert.ToHexString(hashBytes);
+        return HashUtilities.ComputeSHA256(normalized);
     }
 
     /// <summary>
@@ -829,7 +827,7 @@ public partial class MessageProcessingService(
             reason
         );
 
-        await TickerQHelper.ScheduleJobAsync(
+        await TickerQUtilities.ScheduleJobAsync(
             serviceProvider,
             logger,
             "DeleteMessage",
@@ -848,7 +846,7 @@ public partial class MessageProcessingService(
             userId
         );
 
-        await TickerQHelper.ScheduleJobAsync(
+        await TickerQUtilities.ScheduleJobAsync(
             serviceProvider,
             logger,
             "FetchUserPhoto",
@@ -889,7 +887,7 @@ public partial class MessageProcessingService(
             userId,
             chatId);
 
-        await TickerQHelper.ScheduleJobAsync(
+        await TickerQUtilities.ScheduleJobAsync(
             serviceProvider,
             logger,
             "FileScan",

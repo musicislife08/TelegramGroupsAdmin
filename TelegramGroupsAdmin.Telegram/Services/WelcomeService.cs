@@ -13,7 +13,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
-using TelegramGroupsAdmin.Telegram.Helpers;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -280,7 +280,7 @@ public class WelcomeService : IWelcomeService
                 welcomeMessage.MessageId
             );
 
-            var jobId = await TickerQHelper.ScheduleJobAsync(
+            var jobId = await TickerQUtilities.ScheduleJobAsync(
                 _serviceProvider,
                 _logger,
                 "WelcomeTimeout",
@@ -411,7 +411,7 @@ public class WelcomeService : IWelcomeService
                     "wrong_user_warning"
                 );
 
-                await TickerQHelper.ScheduleJobAsync(
+                await TickerQUtilities.ScheduleJobAsync(
                     _serviceProvider,
                     _logger,
                     "DeleteMessage",
@@ -676,7 +676,7 @@ public class WelcomeService : IWelcomeService
         // Step 2: Cancel timeout job if it exists
         if (existingResponse?.TimeoutJobId.HasValue == true)
         {
-            if (await TickerQHelper.CancelJobAsync(_serviceProvider, _logger, existingResponse.TimeoutJobId.Value))
+            if (await TickerQUtilities.CancelJobAsync(_serviceProvider, _logger, existingResponse.TimeoutJobId.Value))
             {
                 // Clear the job ID since it's been cancelled
                 await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(existingResponse.Id, null, ct), cancellationToken);
@@ -749,7 +749,7 @@ public class WelcomeService : IWelcomeService
         var existingResponse = await WithRepositoryAsync((repo, ct) => repo.GetByUserAndChatAsync(user.Id, chatId, ct), cancellationToken);
         if (existingResponse?.TimeoutJobId.HasValue == true)
         {
-            if (await TickerQHelper.CancelJobAsync(_serviceProvider, _logger, existingResponse.TimeoutJobId.Value))
+            if (await TickerQUtilities.CancelJobAsync(_serviceProvider, _logger, existingResponse.TimeoutJobId.Value))
             {
                 await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(existingResponse.Id, null, ct), cancellationToken);
             }
@@ -849,7 +849,7 @@ public class WelcomeService : IWelcomeService
         // Step 3: Cancel timeout job if it exists
         if (welcomeResponse.TimeoutJobId.HasValue)
         {
-            if (await TickerQHelper.CancelJobAsync(_serviceProvider, _logger, welcomeResponse.TimeoutJobId.Value))
+            if (await TickerQUtilities.CancelJobAsync(_serviceProvider, _logger, welcomeResponse.TimeoutJobId.Value))
             {
                 await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(welcomeResponse.Id, null, ct), cancellationToken);
             }
@@ -1044,7 +1044,7 @@ public class WelcomeService : IWelcomeService
             // Cancel timeout job if it exists
             if (response.TimeoutJobId.HasValue)
             {
-                if (await TickerQHelper.CancelJobAsync(_serviceProvider, _logger, response.TimeoutJobId.Value))
+                if (await TickerQUtilities.CancelJobAsync(_serviceProvider, _logger, response.TimeoutJobId.Value))
                 {
                     await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(response.Id, null, ct), cancellationToken);
                 }

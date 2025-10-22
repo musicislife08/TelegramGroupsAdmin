@@ -4,12 +4,13 @@ using TickerQ.Utilities;
 using TickerQ.Utilities.Interfaces.Managers;
 using TickerQ.Utilities.Models.Ticker;
 
-namespace TelegramGroupsAdmin.Telegram.Helpers;
+namespace TelegramGroupsAdmin.Core.BackgroundJobs;
 
 /// <summary>
 /// Helper methods for scheduling TickerQ background jobs
+/// Shared across all domain libraries to avoid coupling
 /// </summary>
-public static class TickerQHelper
+public static class TickerQUtilities
 {
     /// <summary>
     /// Schedule a TickerQ job with standardized error handling and logging

@@ -196,11 +196,12 @@ When adding new repositories or services, always create an interface first and r
 **Date Added:** 2025-10-21
 **Audit Completed:** 2025-10-21
 **Phase 1 Completed:** 2025-10-21
-**Status:** PHASE 1 COMPLETE ✅ | Phase 2 pending
-**Severity:** Architecture | **Impact:** Eliminated 138-148 lines duplicated code, Phase 2 will break coupling
+**Phase 2 Completed:** 2025-10-21
+**Status:** COMPLETE ✅
+**Severity:** Architecture | **Impact:** Eliminated 260-280 lines duplicated code, broke circular dependencies
 
-**Current Core Status:**
-TelegramGroupsAdmin.Core expanded with Utilities namespace. Phase 1 eliminated all HIGH priority duplications.
+**Final Core Status:**
+TelegramGroupsAdmin.Core fully established as shared utilities layer. All HIGH and MEDIUM priority items complete.
 
 **HIGH PRIORITY (Move Immediately)** ⚠️
 
@@ -220,39 +221,43 @@ TelegramGroupsAdmin.Core expanded with Utilities namespace. Phase 1 eliminated a
 
 **MEDIUM PRIORITY (Move During Related Work)**
 
-3. **TickerQHelper**
+3. ✅ **TickerQHelper** - COMPLETED 2025-10-21
    - **File**: TickerQHelper.cs
-   - **Library**: Telegram
-   - **Used by**: Main App
-   - **Issue**: Creates coupling - Main App depends on Telegram for utility
-   - **Move to**: Core.BackgroundJobs.TickerQUtilities
-   - **Impact**: Breaks circular dependency risk
+   - **Library**: Telegram → Core
+   - **Used by**: MessageProcessingService, ModerationActionService, WelcomeService, DmDeliveryService
+   - **Issue**: Created coupling - Multiple services depended on Telegram.Helpers
+   - **Moved to**: Core.BackgroundJobs.TickerQUtilities
+   - **Impact**: Eliminated 116 lines, broke circular dependency risk, updated 4 services
 
-4. **SHA256 Hashing (Duplication)**
+4. ✅ **SHA256 Hashing (Duplication)** - COMPLETED 2025-10-21
    - **Files**: FileScanJob.cs, MessageProcessingService.cs
    - **Library**: Telegram
-   - **Issue**: Duplicated hash computation logic
-   - **Move to**: Core.Utilities.HashUtilities.ComputeSHA256()
-   - **Impact**: Consistent hashing implementation
+   - **Issue**: Duplicated hash computation logic (file and content hashing)
+   - **Moved to**: Core.Utilities.HashUtilities (ComputeSHA256Async + ComputeSHA256)
+   - **Impact**: Eliminated ~10 lines duplication, consistent hashing implementation
 
-**Recommended Core Structure:**
+**Final Core Structure:**
 ```
 TelegramGroupsAdmin.Core/
   Models/
     Actor.cs (✅ exists)
   Utilities/
-    UrlUtilities.cs (NEW)
-    TimeSpanUtilities.cs (NEW)
-    HashUtilities.cs (NEW)
+    UrlUtilities.cs (✅ created Phase 1)
+    TimeSpanUtilities.cs (✅ created Phase 1)
+    HashUtilities.cs (✅ created Phase 2)
   BackgroundJobs/
-    TickerQUtilities.cs (MOVED)
+    TickerQUtilities.cs (✅ moved Phase 2)
 ```
 
-**Implementation Phases:**
-- Phase 1 (HIGH): 2-4 hours - UrlUtilities, TimeSpanUtilities
-- Phase 2 (MEDIUM): 1-2 hours - TickerQUtilities, HashUtilities
+**Implementation Complete:**
+- Phase 1 (HIGH): UrlUtilities, TimeSpanUtilities - ~138-148 lines eliminated
+- Phase 2 (MEDIUM): TickerQUtilities, HashUtilities - ~126 lines eliminated
+- **Total**: 260-280 lines of duplicated code eliminated
 
-**Priority:** High for Phase 1 (code duplication), Medium for Phase 2
+**Packages Added to Core:**
+- Microsoft.Extensions.DependencyInjection.Abstractions 9.0.10
+- Microsoft.Extensions.Logging.Abstractions 9.0.10
+- TickerQ 2.5.3
 
 ---
 

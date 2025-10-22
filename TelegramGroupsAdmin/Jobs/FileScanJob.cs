@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Security.Cryptography;
 using TickerQ.Utilities.Base;
 using TickerQ.Utilities.Models;
 using Telegram.Bot;
@@ -8,6 +7,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -94,8 +94,7 @@ public class FileScanJob(
             string fileHash;
             await using (var fileStream = File.OpenRead(tempFilePath))
             {
-                var hashBytes = await SHA256.HashDataAsync(fileStream, cancellationToken);
-                fileHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+                fileHash = await HashUtilities.ComputeSHA256Async(fileStream, cancellationToken);
             }
 
             _logger.LogDebug("File hash: {FileHash}", fileHash);

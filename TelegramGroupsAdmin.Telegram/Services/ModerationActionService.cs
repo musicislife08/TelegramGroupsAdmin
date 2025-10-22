@@ -12,7 +12,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
-using TelegramGroupsAdmin.Telegram.Helpers;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -597,7 +597,7 @@ public class ModerationActionService
             );
 
             var delaySeconds = (int)(expiresAt - DateTimeOffset.UtcNow).TotalSeconds;
-            var jobId = await TickerQHelper.ScheduleJobAsync(
+            var jobId = await TickerQUtilities.ScheduleJobAsync(
                 _serviceProvider,
                 _logger,
                 "TempbanExpiry",

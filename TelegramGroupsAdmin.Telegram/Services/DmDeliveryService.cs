@@ -9,7 +9,7 @@ using TickerQ.Utilities.Models.Ticker;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
-using TelegramGroupsAdmin.Telegram.Helpers;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -240,7 +240,7 @@ public class DmDeliveryService : IDmDeliveryService
                     "dm_fallback"
                 );
 
-                await TickerQHelper.ScheduleJobAsync(
+                await TickerQUtilities.ScheduleJobAsync(
                     _serviceProvider,
                     _logger,
                     "DeleteMessage",
