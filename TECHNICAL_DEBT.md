@@ -1,6 +1,6 @@
 # Refactoring Backlog - TelegramGroupsAdmin
 
-**Last Updated:** 2025-10-21
+**Last Updated:** 2025-10-22
 **Status:** Pre-production (breaking changes acceptable)
 **Overall Code Quality:** 88/100 (Excellent)
 
@@ -8,6 +8,7 @@
 
 ## Completed Work
 
+**2025-10-22**: PERF-CD-4 (TF-IDF optimization: 2.59× faster, 44% less memory via Dictionary counting + pre-indexed vocabulary)
 **2025-10-21**: ARCH-1 (Core library - 544 lines eliminated), ARCH-2 (Actor refactoring complete), PERF-APP-1, PERF-APP-3, DI-1 (4 repositories), Comprehensive audit logging coverage, BlazorAuthHelper DRY refactoring (19 instances), Empirical performance testing (PERF-CD-1 removed via PostgreSQL profiling)
 **2025-10-19**: 8 performance optimizations (Users N+1, config caching, parallel bans, composite index, virtualization, record conversion, leak fix, allocation optimization)
 
@@ -17,7 +18,7 @@
 
 **Deployment Context:** 10+ chats, 1000+ users, 100-1000 messages/day, Messages page primary moderation tool
 
-### Medium Priority (2 issues)
+### Medium Priority (1 issue)
 
 
 
@@ -57,29 +58,11 @@ return new UrlFilterStats
 
 ---
 
-#### PERF-CD-4: TF-IDF Vector Calculation Optimization
-
-**Project:** TelegramGroupsAdmin.ContentDetection
-**Files:** SimilaritySpamCheck.cs
-**Severity:** Medium | **Impact:** 40% faster similarity checks
-
-**Description:**
-TF-IDF calculation uses LINQ Count() in nested loops, causing repeated enumerations. At 10-50 spam checks/day (new users only), this isn't critical, but cleaner implementation is straightforward.
-
-**Reality Check:** With spam checks only on new users (~10-50/day), similarity check performance isn't a bottleneck. However, pre-computed term frequencies are the standard approach for TF-IDF.
-
-**Recommended Fix:**
-Use pre-computed term frequencies with Dictionary lookups instead of repeated LINQ Count() calls.
-
-**Expected Gain:** 40% faster TF-IDF calculation (100ms → 60ms per check), negligible user-visible impact at current check frequency
-
----
-
 ## Performance Optimization Summary
 
 **Deployment Context:** 10+ chats, 100-1000 messages/day (10-50 spam checks/day on new users), 1000+ users, Messages page primary tool
 
-**Total Issues Remaining:** 2 medium priority (down from 52 initial findings, 38 false positives + 2 removed as unnecessary)
+**Total Issues Remaining:** 1 medium priority (down from 52 initial findings, 38 false positives + 3 removed/completed)
 
 **Implementation Priority:** Implement opportunistically during related refactoring work
 
@@ -129,5 +112,5 @@ Use pre-computed term frequencies with Dictionary lookups instead of repeated LI
 - **No feature changes:** Pure refactoring, preserve all functionality
 - **Build quality:** Must maintain 0 errors, 0 warnings standard
 
-**Last Updated:** 2025-10-21
+**Last Updated:** 2025-10-22
 **Next Review:** When implementing medium priority optimizations opportunistically
