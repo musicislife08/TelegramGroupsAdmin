@@ -255,6 +255,84 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             replyToText: x.ReplyToText)).ToList();
     }
 
+    /// <summary>
+    /// PERF-APP-1: Get messages with detection history included via single JOIN query (51 queries → 1)
+    /// Uses method syntax to ensure .Include() works correctly (LINQ query syntax with projection can discard Include)
+    /// </summary>
+    public async Task<List<UiModels.MessageWithDetectionHistory>> GetMessagesWithDetectionHistoryAsync(long chatId, int limit = 10, DateTimeOffset? beforeTimestamp = null, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Step 1: Load messages with detection results (single query with LEFT JOIN)
+        var messagesQuery = context.Messages
+            .AsNoTracking()
+            .Include(m => m.DetectionResults)
+            .Where(m => m.ChatId == chatId);
+
+        if (beforeTimestamp.HasValue)
+        {
+            messagesQuery = messagesQuery.Where(m => m.Timestamp < beforeTimestamp.Value);
+        }
+
+        var messagesWithDetections = await messagesQuery
+            .OrderByDescending(m => m.Timestamp)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+
+        if (!messagesWithDetections.Any())
+            return new List<UiModels.MessageWithDetectionHistory>();
+
+        // Step 2: Load joined data (chat, user, reply info) in single query
+        var messageIds = messagesWithDetections.Select(m => m.MessageId).ToArray();
+
+        var joinedData = await (from m in context.Messages
+            where messageIds.Contains(m.MessageId)
+            join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
+            from chat in chatGroup.DefaultIfEmpty()
+            join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
+            from user in userGroup.DefaultIfEmpty()
+            join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
+            from parentMsg in parentGroup.DefaultIfEmpty()
+            join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
+            from parentUserInfo in parentUserGroup.DefaultIfEmpty()
+            select new
+            {
+                m.MessageId,
+                ChatName = chat != null ? chat.ChatName : null,
+                ChatIconPath = chat != null ? chat.ChatIconPath : null,
+                UserName = user != null ? user.Username : null,
+                FirstName = user != null ? user.FirstName : null,
+                UserPhotoPath = user != null ? user.UserPhotoPath : null,
+                ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                ReplyToText = parentMsg != null ? parentMsg.MessageText : null
+            })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var joinedDict = joinedData.ToDictionary(x => x.MessageId);
+
+        // Step 3: Combine data (preserve timestamp ordering from Step 1)
+        return messagesWithDetections.Select(msg =>
+        {
+            var joined = joinedDict[msg.MessageId];
+            return new UiModels.MessageWithDetectionHistory
+            {
+                Message = msg.ToModel(
+                    chatName: joined.ChatName,
+                    chatIconPath: joined.ChatIconPath,
+                    userName: joined.UserName,
+                    firstName: joined.FirstName,
+                    userPhotoPath: joined.UserPhotoPath,
+                    replyToUser: joined.ReplyToUser,
+                    replyToText: joined.ReplyToText),
+                DetectionResults = msg.DetectionResults
+                    .Select(dr => dr.ToModel())
+                    .OrderByDescending(dr => dr.DetectedAt)
+                    .ToList()
+            };
+        }).ToList();
+    }
+
     public async Task<List<UiModels.MessageRecord>> GetMessagesByDateRangeAsync(
         DateTimeOffset startTimestamp,
         DateTimeOffset endTimestamp,

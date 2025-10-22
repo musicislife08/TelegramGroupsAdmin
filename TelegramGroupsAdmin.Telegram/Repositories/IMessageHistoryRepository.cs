@@ -13,6 +13,12 @@ public interface IMessageHistoryRepository
     Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100, CancellationToken cancellationToken = default);
     Task<List<UiModels.MessageRecord>> GetMessagesBeforeAsync(DateTimeOffset? beforeTimestamp = null, int limit = 50, CancellationToken cancellationToken = default);
     Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10, DateTimeOffset? beforeTimestamp = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get messages with detection history included (PERF-APP-1: Single JOIN query instead of N+1)
+    /// </summary>
+    Task<List<UiModels.MessageWithDetectionHistory>> GetMessagesWithDetectionHistoryAsync(long chatId, int limit = 10, DateTimeOffset? beforeTimestamp = null, CancellationToken cancellationToken = default);
+
     Task<List<UiModels.MessageRecord>> GetMessagesByDateRangeAsync(DateTimeOffset startDate, DateTimeOffset endDate, int limit = 1000, CancellationToken cancellationToken = default);
     Task<UiModels.HistoryStats> GetStatsAsync(CancellationToken cancellationToken = default);
     Task<Dictionary<long, UiModels.SpamCheckRecord>> GetSpamChecksForMessagesAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default);

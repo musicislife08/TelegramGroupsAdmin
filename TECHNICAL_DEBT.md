@@ -22,59 +22,7 @@ The following performance issues were identified by comprehensive analysis acros
 
 Issues are organized by severity and realistic impact for this deployment scale.
 
-### High Priority (2 issues)
-
-#### PERF-APP-1: N+1 Detection History Loading on Messages Page
-
-**Project:** TelegramGroupsAdmin (Main App)
-**Files:** Messages.razor (lines 492-509)
-**Severity:** High | **Impact:** 95% query reduction, 2-3 second page load improvement
-
-**Description:**
-The Messages page (primary moderation tool) loads spam detection history in a `foreach` loop, executing one query per message. With 50 messages displayed, this executes 50 sequential queries.
-
-**Reality Check:** Messages page is your primary moderation interface, so this N+1 is hit constantly. With 1000+ users generating messages, this query pattern significantly slows down your workflow.
-
-**Current Code:**
-```csharp
-foreach (var messageId in messageIds)  // N+1 QUERY
-{
-    var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId);
-    if (history.Any())
-    {
-        _detectionHistory[messageId] = history;
-    }
-}
-```
-
-**Recommended Fix:**
-```csharp
-// Single batch query for all message IDs
-var allHistory = await DetectionResultsRepository.GetByMessageIdsAsync(messageIds);
-
-// Group by message ID (client-side, fast)
-_detectionHistory = allHistory
-    .GroupBy(h => h.MessageId)
-    .ToDictionary(g => g.Key, g => g.ToList());
-```
-
-**Repository Method to Add:**
-```csharp
-public async Task<List<DetectionResultRecord>> GetByMessageIdsAsync(
-    IEnumerable<int> messageIds,
-    CancellationToken cancellationToken = default)
-{
-    return await context.SpamCheckResults
-        .AsNoTracking()
-        .Where(r => messageIds.Contains(r.MessageId))
-        .OrderBy(r => r.CheckedAt)
-        .ToListAsync(cancellationToken);
-}
-```
-
-**Expected Gain:** 95% query reduction (50 queries → 1), page load 2-3 seconds → 100-200ms
-
----
+### High Priority (1 issue)
 
 #### PERF-APP-3: Excessive StateHasChanged() Calls in Messages.razor
 
@@ -85,7 +33,7 @@ public async Task<List<DetectionResultRecord>> GetByMessageIdsAsync(
 **Description:**
 The Messages page calls `StateHasChanged()` 12+ times during a single data load operation, causing excessive re-renders and SignalR traffic. With heavy web UI usage planned, this creates laggy user experience.
 
-**Reality Check:** You plan to use the web UI heavily for moderation. These repeated re-renders cause noticeable UI lag, especially when combined with the N+1 detection history loading.
+**Reality Check:** You plan to use the web UI heavily for moderation. These repeated re-renders cause noticeable UI lag during data loading operations.
 
 **Current Pattern:**
 ```csharp
@@ -245,21 +193,20 @@ Use pre-computed term frequencies with Dictionary lookups instead of repeated LI
 
 | Priority | Count | Realistic Impact for This Deployment |
 |----------|-------|--------------------------------------|
-| High | 2 | **Significant improvement** - Primary moderation page faster, snappier UI |
+| High | 1 | **Significant improvement** - Snappier UI with batched renders |
 | Medium | 4 | **Moderate improvement** - Future-proofs growth, optimizes analytics |
 
-**Total Issues:** 6 actionable (down from 52 initial findings)
-**Completed:** 8 optimizations (Users N+1, config caching, parallel bans, composite index, virtualization, record conversion, leak fix, allocation optimization)
+**Total Issues:** 5 actionable (down from 52 initial findings)
+**Completed:** 10 optimizations (Users N+1, Messages N+1 with composite model, config caching, parallel bans, composite index, virtualization, record conversion, leak fix, allocation optimization, detection history JOIN)
 **Removed:** 38 false positives (micro-optimizations, wrong usage assumptions, rare operations)
 
 **Estimated Performance Gains:**
-- **High issues:** 2-3 second Messages page → 100-200ms, snappier UI
+- **High issues:** Snappier UI with batched renders (60-180ms reduction)
 - **Medium issues:** Future-proofing and polish (10x stop word growth, analytics optimization)
 
 **Implementation Priority:**
-1. **PERF-APP-1** (High) - Messages page N+1 (primary tool, 50 queries → 1)
-2. **PERF-APP-3** (High) - StateHasChanged batching (snappier UI for heavy web usage)
-3. Medium - Implement opportunistically during related refactoring
+1. **PERF-APP-3** (High) - StateHasChanged batching (snappier UI for heavy web usage)
+2. Medium - Implement opportunistically during related refactoring
 
 **Testing Strategy:**
 - Use `dotnet run --migrate-only` to verify database migrations
