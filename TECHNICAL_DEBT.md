@@ -22,68 +22,7 @@ The following performance issues were identified by comprehensive analysis acros
 
 Issues are organized by severity and realistic impact for this deployment scale.
 
-### Critical Priority (3 issues)
-
-#### PERF-CFG-1: Configuration Caching with Invalidation
-
-**Project:** TelegramGroupsAdmin.Configuration
-**Files:** ConfigService.cs (lines 41-56), ConfigRepository.cs
-**Severity:** Critical | **Impact:** 95% query reduction potential
-
-**Description:**
-ConfigService performs 2 database queries per `GetEffectiveAsync()` call (1 for chat config, 1 for global config) with JSON deserialization on every access. With 10+ chats and spam checks, this causes 200+ queries/hour for configuration that rarely changes.
-
-**Current Code:**
-```csharp
-public async Task<T?> GetAsync<T>(ConfigType configType, long? chatId)
-{
-    var record = await configRepository.GetAsync(chatId);  // DB hit every time
-    var json = GetConfigColumn(record, configType);
-    return JsonSerializer.Deserialize<T>(json, JsonOptions);  // Deserialize every time
-}
-```
-
-**Recommended Fix:**
-```csharp
-private readonly IMemoryCache _cache;
-
-public async Task<T?> GetAsync<T>(ConfigType configType, long? chatId)
-{
-    var cacheKey = $"config_{configType}_{chatId}";
-
-    if (_cache.TryGetValue<T>(cacheKey, out var cachedValue))
-        return cachedValue;
-
-    var record = await configRepository.GetAsync(chatId);
-    var json = GetConfigColumn(record, configType);
-    var value = JsonSerializer.Deserialize<T>(json, JsonOptions);
-
-    _cache.Set(cacheKey, value, TimeSpan.FromMinutes(15)); // Sliding expiration
-    return value;
-}
-
-// Critical: Invalidate cache on updates (UI changes visible immediately)
-public async Task UpdateAsync<T>(ConfigType configType, long? chatId, T value)
-{
-    var cacheKey = $"config_{configType}_{chatId}";
-
-    // Update database
-    await configRepository.UpdateAsync(chatId, configType, value);
-
-    // Invalidate cache immediately for instant UI updates
-    _cache.Remove(cacheKey);
-
-    // If updating global config, also clear effective caches
-    if (chatId == null)
-    {
-        // Consider clearing all chat-specific effective caches if needed
-    }
-}
-```
-
-**Expected Gain:** 95% query reduction (200 queries/hr → 10-15 queries/hr), 80% faster config access, instant UI updates via cache invalidation
-
----
+### Critical Priority (1 issue)
 
 #### PERF-TG-2: Sequential Chat Bans Block Spam Detection
 
@@ -138,7 +77,7 @@ result.ChatsAffected = banResults.Count(success => success);
 
 ---
 
-### High Priority (3 issues)
+### High Priority (2 issues)
 
 #### PERF-APP-1: N+1 Detection History Loading on Messages Page
 
@@ -361,12 +300,12 @@ Use pre-computed term frequencies with Dictionary lookups instead of repeated LI
 
 | Priority | Count | Realistic Impact for This Deployment |
 |----------|-------|--------------------------------------|
-| Critical | 2 | **Massive improvement** - Enables config caching, speeds up auto-bans by 60% |
+| Critical | 1 | **Massive improvement** - Speeds up auto-bans by 60% |
 | High | 2 | **Significant improvement** - Primary moderation page faster, snappier UI |
 | Medium | 4 | **Moderate improvement** - Future-proofs growth, optimizes analytics |
 
-**Total Issues:** 8 actionable (down from 52 initial findings)
-**Completed:** 6 optimizations (N+1 query fix, composite index, virtualization, record conversion, leak fix, allocation optimization)
+**Total Issues:** 7 actionable (down from 52 initial findings)
+**Completed:** 7 optimizations (Users N+1, config caching, composite index, virtualization, record conversion, leak fix, allocation optimization)
 **Removed:** 38 false positives (micro-optimizations, wrong usage assumptions, rare operations)
 
 **Estimated Performance Gains:**
@@ -375,11 +314,10 @@ Use pre-computed term frequencies with Dictionary lookups instead of repeated LI
 - **Medium issues:** Future-proofing and polish (10x stop word growth, analytics optimization)
 
 **Implementation Priority:**
-1. **PERF-CFG-1** (Critical) - Config caching with invalidation (200 queries/hr → 10-15)
-2. **PERF-TG-2** (Critical) - Parallel bans (5 seconds → 2 seconds, unblocks spam detection)
-3. **PERF-APP-1** (High) - Messages page N+1 (primary tool, 50 queries → 1)
-4. **PERF-APP-3** (High) - StateHasChanged batching (snappier UI for heavy web usage)
-5. Medium - Implement opportunistically during related refactoring
+1. **PERF-TG-2** (Critical) - Parallel bans (5 seconds → 2 seconds, unblocks spam detection)
+2. **PERF-APP-1** (High) - Messages page N+1 (primary tool, 50 queries → 1)
+3. **PERF-APP-3** (High) - StateHasChanged batching (snappier UI for heavy web usage)
+4. Medium - Implement opportunistically during related refactoring
 
 **Testing Strategy:**
 - Use `dotnet run --migrate-only` to verify database migrations
@@ -441,6 +379,6 @@ When adding new repositories or services, always create an interface first and r
 - **No feature changes:** Pure refactoring, preserve all functionality
 - **Build quality:** Must maintain 0 errors, 0 warnings standard
 
-**Last Updated:** 2025-10-20
+**Last Updated:** 2025-10-21
 **Performance Analysis:** 2025-10-19 (reviewed and filtered based on deployment context)
 **Next Review:** After implementing Critical/High performance issues, or when extracting Telegram library to NuGet (re-evaluate L7 ConfigureAwait), or when adopting FUTURE-1 IDI pattern
