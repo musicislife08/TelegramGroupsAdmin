@@ -1,7 +1,9 @@
 # TelegramGroupsAdmin - AI Reference
 
 ## Stack
-.NET 10.0 RC2 (10.0.100-rc.2.25502.107), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 10.0 RC2, TickerQ 2.5.3, OpenAI API, VirusTotal, SendGrid
+.NET 9.0 (9.0.100), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 9.0, TickerQ 2.5.3, OpenAI API, VirusTotal, SendGrid
+
+**Note**: Migrated from .NET 10 RC2 → .NET 9 due to [framework bug](https://github.com/dotnet/aspnetcore/issues/XXXXX) where Blazor Server apps don't generate `wwwroot/_framework/blazor.web.js` during publish, causing 404s in Production mode. Will revisit .NET 10 after RTM release.
 
 ## Projects
 - **TelegramGroupsAdmin**: Main app, Blazor+API, TickerQ jobs (WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob, TempbanExpiryJob, FileScanJob)
@@ -69,6 +71,7 @@
 - DB growing: Check retention (720h default), cleanup running
 - Rate limits: Check logs for VirusTotalService/OpenAIVisionSpamDetectionService warnings
 - Testing: Always use `--migrate-only` flag, never run app in normal mode (only one instance allowed)
+- **Blazor 404 in Production**: .NET 10 RC2 bug - framework files not generated during publish. Use .NET 9 stable until .NET 10 RTM.
 
 ### TickerQ Background Jobs
 **Dashboard**: `/tickerq-dashboard` (development mode only, disabled in production)
