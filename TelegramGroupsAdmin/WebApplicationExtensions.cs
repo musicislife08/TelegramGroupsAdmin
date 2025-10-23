@@ -52,15 +52,30 @@ public static class WebApplicationExtensions
     /// </summary>
     public static WebApplication MapApiEndpoints(this WebApplication app)
     {
-        // Health check endpoint for Docker/Kubernetes readiness/liveness probes
-        app.MapGet("/health", () => Results.Ok(new
+        // Kubernetes/Docker health check endpoints
+        // Liveness probe: Returns 200 if app is alive and responsive (no dependency checks)
+        // Used by Kubernetes to determine if container should be restarted
+        // Database failures should NOT cause liveness to fail (restarting won't fix database issues)
+        app.MapHealthChecks("/healthz/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
         {
-            status = "healthy",
-            timestamp = DateTimeOffset.UtcNow,
-            version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown"
-        }))
-        .WithName("HealthCheck")
-        .WithTags("Health")
+            Predicate = _ => false // Exclude all checks - just confirms app is responsive
+        })
+        .AllowAnonymous();
+
+        // Readiness probe: Returns 200 if app is ready to handle requests (includes database check)
+        // Used by Kubernetes to determine if container should receive traffic
+        // If database is down, app becomes "not ready" but doesn't restart
+        app.MapHealthChecks("/healthz/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+        {
+            Predicate = healthCheck => healthCheck.Tags.Contains("ready")
+        })
+        .AllowAnonymous();
+
+        // Legacy /health endpoint for backward compatibility (same as readiness)
+        app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+        {
+            Predicate = healthCheck => healthCheck.Tags.Contains("ready")
+        })
         .AllowAnonymous();
 
         app.MapAuthEndpoints();

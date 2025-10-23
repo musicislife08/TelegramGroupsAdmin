@@ -19,7 +19,15 @@ public static class ServiceCollectionExtensions
         // Default tracking behavior - use .AsNoTracking() explicitly for read-only queries
         services.AddDbContext<AppDbContext>(
             options => options
-                .UseNpgsql(connectionString)
+                .UseNpgsql(connectionString, npgsqlOptions =>
+                {
+                    // Enable connection resiliency (automatic retry on transient failures)
+                    // Max 6 retries with up to 30 seconds delay between attempts
+                    npgsqlOptions.EnableRetryOnFailure(
+                        maxRetryCount: 6,
+                        maxRetryDelay: TimeSpan.FromSeconds(30),
+                        errorCodesToAdd: null);
+                })
                 .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)),
             contextLifetime: ServiceLifetime.Scoped,
             optionsLifetime: ServiceLifetime.Singleton);
@@ -27,7 +35,14 @@ public static class ServiceCollectionExtensions
         // Also register factory for scenarios that need explicit context creation (background services)
         services.AddPooledDbContextFactory<AppDbContext>(options =>
             options
-                .UseNpgsql(connectionString)
+                .UseNpgsql(connectionString, npgsqlOptions =>
+                {
+                    // Enable connection resiliency (automatic retry on transient failures)
+                    npgsqlOptions.EnableRetryOnFailure(
+                        maxRetryCount: 6,
+                        maxRetryDelay: TimeSpan.FromSeconds(30),
+                        errorCodesToAdd: null);
+                })
                 .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
         return services;

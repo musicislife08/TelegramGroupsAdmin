@@ -57,6 +57,15 @@ builder.Services.AddRepositories();
 // Content Detection library
 builder.Services.AddContentDetection();
 
+// Health checks for Kubernetes/Docker
+// Liveness: Just checks if the app is responsive (no database checks - app restart won't fix DB issues)
+// Readiness: Checks database connectivity (if DB is down, stop receiving traffic but don't restart)
+builder.Services.AddHealthChecks()
+    .AddNpgSql(
+        connectionString,
+        name: "postgresql",
+        tags: new[] { "ready", "db" });
+
 var app = builder.Build();
 
 // Explicitly initialize TickerQ functions BEFORE UseTickerQ() is called
