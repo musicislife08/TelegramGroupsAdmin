@@ -41,11 +41,9 @@ RUN dotnet publish "./TelegramGroupsAdmin.csproj" \
     /p:PublishSingleFile=false
 
 # -----------------------------------------------------------------------------
-# Stage 2: Runtime (Temporarily using full runtime for debugging)
-# TODO: Switch back to chiseled-extra after debugging
+# Stage 2: Runtime (Ubuntu Chiseled - minimal attack surface)
 # -----------------------------------------------------------------------------
-# FROM mcr.microsoft.com/dotnet/aspnet:9.0-noble-chiseled-extra AS final
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:9.0-noble-chiseled-extra AS final
 
 # Arguments for user/group ID customization
 ARG PUID=1654
@@ -81,8 +79,9 @@ VOLUME ["/data"]
 EXPOSE 8080
 
 # Health check using wget copied from SDK stage
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD ["/usr/bin/wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+# Use liveness probe (no dependency checks - database failures shouldn't cause container restart)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["/usr/bin/wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz/live"]
 
 # Set environment variables for production
 # TZ can be overridden at runtime: -e TZ=America/Phoenix
