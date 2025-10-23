@@ -67,8 +67,22 @@
 - Image spam failing: Check OPENAI__APIKEY, /data mounted
 - DB growing: Check retention (720h default), cleanup running
 - Rate limits: Check logs for VirusTotalService/OpenAIVisionSpamDetectionService warnings
-- TickerQ: `using TickerQ.Utilities.Base;` (TickerFunctionAttribute), `using TickerQ.Utilities.Models;` (TickerFunctionContext<T>)
 - Testing: Always use `--migrate-only` flag, never run app in normal mode (only one instance allowed)
+
+### TickerQ Background Jobs
+**Dashboard**: `/tickerq-dashboard` (development mode only, disabled in production)
+
+**0 Active Functions** (source generator not discovering jobs):
+1. Verify explicit analyzer reference in .csproj: `<Analyzer Include="$(NuGetPackageRoot)tickerq/2.5.3/analyzers/dotnet/cs/TickerQ.SourceGenerator.dll" />`
+2. Build with `/p:EmitCompilerGeneratedFiles=true` to check `obj/generated/TickerQ.SourceGenerator/*/TickerQInstanceFactory.g.cs` exists
+3. Confirm `TelegramGroupsAdmin.TickerQInstanceFactory.Initialize()` is called in Program.cs **BEFORE** `app.UseTickerQ()` (timing critical for .NET 10 RC2)
+
+**0 Active Threads** (workers not starting):
+1. Check `TickerQInstanceFactory.Initialize()` runs BEFORE `app.UseTickerQ()` in pipeline (Program.cs line ~59)
+2. Enable debug logging: `builder.Logging.SetMinimumLevel(LogLevel.Debug)` and search for "TickerQ" or "Hosting" messages
+3. Verify tables exist: `SELECT table_name FROM information_schema.tables WHERE table_schema = 'ticker';` (NOT public schema!)
+
+**Job Syntax**: `using TickerQ.Utilities.Base;` (TickerFunctionAttribute), `using TickerQ.Utilities.Models;` (TickerFunctionContext<T>)
 
 ## Development Roadmap
 

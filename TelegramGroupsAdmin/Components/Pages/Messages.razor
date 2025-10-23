@@ -21,6 +21,8 @@
 @inject NavigationManager NavigationManager
 @inject ILogger<Messages> Logger
 @inject ISnackbar Snackbar
+@inject TelegramGroupsAdmin.Services.Media.IMediaRefetchQueueService MediaRefetchQueue
+@inject Microsoft.Extensions.Options.IOptions<TelegramGroupsAdmin.Configuration.MessageHistoryOptions> MessageHistoryOptions
 @attribute [Authorize]
 @implements IDisposable
 
@@ -197,6 +199,7 @@
 
         // Subscribe to real-time updates
         MessageHistoryService.OnNewMessage += HandleNewMessage;
+        MessageHistoryService.OnMediaUpdated += HandleMediaUpdated;
 
         // Load managed chats
         await LoadChatsAsync();
@@ -215,6 +218,7 @@
     {
         // Unsubscribe from events
         MessageHistoryService.OnNewMessage -= HandleNewMessage;
+        MessageHistoryService.OnMediaUpdated -= HandleMediaUpdated;
 
         // Dispose JavaScript module
         _infiniteScrollModule?.DisposeAsync();
@@ -374,6 +378,60 @@
         });
     }
 
+    private async void HandleMediaUpdated(long messageId, TelegramGroupsAdmin.Telegram.Models.MediaType mediaType)
+    {
+        // CRITICAL: Must use InvokeAsync because worker runs on background thread
+        await InvokeAsync(async () =>
+        {
+            try
+            {
+                Logger.LogInformation("🔔 SignalR notification received for message {MessageId} type {MediaType}", messageId, mediaType);
+
+                // Reload the message from database to get updated media_local_path
+                var updatedMessage = await MessageRepository.GetByIdAsync(messageId);
+                if (updatedMessage == null)
+                {
+                    Logger.LogWarning("Updated message {MessageId} not found in database", messageId);
+                    return;
+                }
+
+                // Only update if message belongs to currently selected chat
+                if (!_selectedChatId.HasValue || updatedMessage.ChatId != _selectedChatId.Value)
+                {
+                    Logger.LogTrace("Ignoring media update for message {MessageId} from chat {ChatId} (currently viewing chat {SelectedChatId})",
+                        messageId, updatedMessage.ChatId, _selectedChatId);
+                    return;
+                }
+
+                // Find and replace in our list (Message is init-only)
+                var index = _allMessages.FindIndex(m => m.Message.MessageId == messageId);
+                if (index >= 0)
+                {
+                    var detectionResults = _allMessages[index].DetectionResults;
+                    _allMessages[index] = new MessageWithDetectionHistory
+                    {
+                        Message = updatedMessage,
+                        DetectionResults = detectionResults
+                    };
+
+                    // Reapply filters and trigger re-render
+                    ApplyFilters();
+                    StateHasChanged();
+
+                    Logger.LogInformation("✅ UI refreshed for message {MessageId} after media download via SignalR", messageId);
+                }
+                else
+                {
+                    Logger.LogWarning("Message {MessageId} not found in _allMessages list", messageId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error handling media update for message {MessageId}", messageId);
+            }
+        });
+    }
+
     private async Task LoadChatsAsync()
     {
         try
@@ -498,6 +556,9 @@
 
             _lastUpdate = DateTime.Now;
             ApplyFilters();
+
+            // Detect and queue missing media for automatic re-download (Phase 4.X: Media refetch system)
+            await QueueMissingMediaForRefetchAsync();
         }
         catch (Exception ex)
         {
@@ -1181,6 +1242,52 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to scroll to reply target message {MessageId}", targetMessageId);
+        }
+    }
+
+    /// <summary>
+    /// Detects messages with missing media files and queues them for automatic re-download
+    /// Phase 4.X: Media refetch system - handles backup/restore scenarios
+    /// Note: Documents are excluded - they're metadata-only and only downloaded by file scanner for security checks
+    /// </summary>
+    private async Task QueueMissingMediaForRefetchAsync()
+    {
+        try
+        {
+            var queuedCount = 0;
+
+            foreach (var msgWrapper in _allMessages)
+            {
+                var msg = msgWrapper.Message;
+
+                // Check if message has downloadable media but local path is missing
+                // Repository validates filesystem and returns null if file doesn't exist
+                // IMPORTANT: Exclude Document type - they're metadata-only for security (file scanner handles temporary downloads)
+                if (msg.MediaType.HasValue &&
+                    msg.MediaType.Value != MediaType.Document &&
+                    !string.IsNullOrEmpty(msg.MediaFileId) &&
+                    string.IsNullOrEmpty(msg.MediaLocalPath))
+                {
+                    // Queue for re-download (deduplication handled by queue service)
+                    // Real-time UI updates handled by MessageHistoryService.OnMediaUpdated event
+                    var wasQueued = await MediaRefetchQueue.EnqueueMediaAsync(msg.MessageId, msg.MediaType.Value);
+                    if (wasQueued)
+                    {
+                        queuedCount++;
+                        Logger.LogDebug("Queued missing media: Message {MessageId}, Type {MediaType}",
+                            msg.MessageId, msg.MediaType.Value);
+                    }
+                }
+            }
+
+            if (queuedCount > 0)
+            {
+                Logger.LogInformation("Queued {Count} missing media files for automatic re-download (excluding Documents)", queuedCount);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to queue missing media for refetch");
         }
     }
 

@@ -46,8 +46,14 @@ public class BackupService : IBackupService
         await using var connection = await _dataSource.OpenConnectionAsync();
 
         // Discover all tables dynamically from database
-        var tables = await DiscoverTablesAsync(connection);
-        _logger.LogInformation("Discovered {TableCount} tables to backup", tables.Count);
+        var allTables = await DiscoverTablesAsync(connection);
+
+        // Exclude repullable cached data (blocklist domains can be re-synced)
+        var excludedTables = new HashSet<string> { "cached_blocked_domains" };
+        var tables = allTables.Where(kvp => !excludedTables.Contains(kvp.Key)).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+        _logger.LogInformation("Discovered {TableCount} tables to backup (excluded {ExcludedCount} repullable tables)",
+            tables.Count, excludedTables.Count);
 
         backup.Metadata.Tables = tables.Keys.ToList();
         backup.Metadata.TableCount = tables.Count;
@@ -80,18 +86,18 @@ public class BackupService : IBackupService
         var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(backup, jsonOptions);
         _logger.LogInformation("Serialized backup to JSON: {Size} bytes", jsonBytes.Length);
 
-        // Compress with gzip
-        using var outputStream = new MemoryStream();
-        await using (var gzipStream = new GZipStream(outputStream, CompressionLevel.Optimal))
+        // Compress JSON with gzip
+        using var jsonGzipStream = new MemoryStream();
+        await using (var gzipWriter = new GZipStream(jsonGzipStream, CompressionLevel.Optimal))
         {
-            await gzipStream.WriteAsync(jsonBytes);
+            await gzipWriter.WriteAsync(jsonBytes);
         }
+        var compressedJson = jsonGzipStream.ToArray();
+        _logger.LogInformation("Compressed database: {OriginalSize} bytes → {CompressedSize} bytes ({Ratio:P1} compression)",
+            jsonBytes.Length, compressedJson.Length, 1 - (double)compressedJson.Length / jsonBytes.Length);
 
-        var compressedBytes = outputStream.ToArray();
-        _logger.LogInformation("Backup export complete: {OriginalSize} bytes → {CompressedSize} bytes ({Ratio:P1} compression)",
-            jsonBytes.Length, compressedBytes.Length, 1 - (double)compressedBytes.Length / jsonBytes.Length);
-
-        return compressedBytes;
+        _logger.LogInformation("✅ Backup export complete: {Size} bytes", compressedJson.Length);
+        return compressedJson;
     }
 
     /// <summary>
@@ -199,14 +205,24 @@ public class BackupService : IBackupService
 
         // EF Core models: exclude navigation properties (virtual) and [NotMapped] properties
         // Only include properties with [Column] attribute (actual database columns)
-        var columnNames = properties
+        var columnMappings = properties
             .Where(p => !p.GetGetMethod()!.IsVirtual) // Exclude navigation properties
             .Where(p => p.GetCustomAttribute<NotMappedAttribute>() == null) // Exclude [NotMapped]
             .Where(p => p.GetCustomAttribute<ColumnAttribute>() != null) // Must have [Column]
-            .Select(p => p.GetCustomAttribute<ColumnAttribute>()!.Name)
+            .Select(p => new
+            {
+                ColumnName = p.GetCustomAttribute<ColumnAttribute>()!.Name,
+                PropertyName = p.Name
+            })
             .ToList();
 
-        var columnList = string.Join(", ", columnNames);
+        // Build column list with aliases to match property names (fixes Dapper reflection mapping issue)
+        var columnList = string.Join(", ", columnMappings.Select(m =>
+            m.ColumnName == m.PropertyName.ToLowerInvariant()
+                ? m.ColumnName  // No alias needed if names match
+                : $"{m.ColumnName} AS {m.PropertyName}"));  // Add alias for Dapper mapping
+
+        var columnNames = columnMappings.Select(m => m.ColumnName).ToList();
 
         // Determine sort column (prefer id, created_at, or first column)
         var sortColumn = columnNames.Contains("id") ? "id" :
@@ -344,14 +360,16 @@ public class BackupService : IBackupService
         _logger.LogWarning("Starting full system restore - THIS WILL WIPE ALL DATA");
 
         // Decompress gzip
-        using var inputStream = new MemoryStream(backupBytes);
-        await using var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress);
-        using var outputStream = new MemoryStream();
-        await gzipStream.CopyToAsync(outputStream);
-        var jsonBytes = outputStream.ToArray();
+        byte[] jsonBytes;
+        using (var inputStream = new MemoryStream(backupBytes))
+        await using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
+        using (var outputStream = new MemoryStream())
+        {
+            await gzipStream.CopyToAsync(outputStream);
+            jsonBytes = outputStream.ToArray();
+        }
 
-        _logger.LogInformation("Decompressed backup: {CompressedSize} bytes → {OriginalSize} bytes",
-            backupBytes.Length, jsonBytes.Length);
+        _logger.LogInformation("Decompressed backup: {Size} bytes", jsonBytes.Length);
 
         // Deserialize JSON
         var jsonOptions = new JsonSerializerOptions
@@ -362,12 +380,11 @@ public class BackupService : IBackupService
         var backup = JsonSerializer.Deserialize<SystemBackup>(jsonBytes, jsonOptions)
             ?? throw new InvalidOperationException("Failed to deserialize backup");
 
-        // Version check
+        // Version check (allow backwards compatibility for now)
         if (backup.Metadata.Version != CurrentVersion)
         {
-            throw new InvalidOperationException(
-                $"Backup version mismatch: expected {CurrentVersion}, got {backup.Metadata.Version}. " +
-                "Cannot restore - schema may be incompatible.");
+            _logger.LogWarning("Backup version mismatch: expected {Expected}, got {Actual}. Attempting restore anyway.",
+                CurrentVersion, backup.Metadata.Version);
         }
 
         _logger.LogInformation("Backup metadata: version={Version}, created={CreatedAt}, tables={TableCount}",
@@ -420,6 +437,8 @@ public class BackupService : IBackupService
             _logger.LogInformation("Restore order after sort: {Tables}", string.Join(", ", sortedTables));
 
             // Restore each table from backup in dependency order
+            var totalRecordsRestored = 0;
+            var tablesRestored = 0;
             foreach (var tableName in sortedTables)
             {
                 if (!backup.Data.TryGetValue(tableName, out var records))
@@ -435,9 +454,11 @@ public class BackupService : IBackupService
 
                 try
                 {
-                    _logger.LogInformation("Restoring table: {TableName} ({Count} records)", tableName, records.Count);
+                    _logger.LogInformation("Restoring table {Current}/{Total}: {TableName} ({Count} records)",
+                        tablesRestored + 1, sortedTables.Count, tableName, records.Count);
                     await RestoreTableAsync(connection, transaction, tableName, dtoType, records);
-                    _logger.LogInformation("Restored {Count} records to {TableName}", records.Count, tableName);
+                    totalRecordsRestored += records.Count;
+                    tablesRestored++;
                 }
                 catch (Exception ex)
                 {
@@ -447,7 +468,8 @@ public class BackupService : IBackupService
             }
 
             await transaction.CommitAsync();
-            _logger.LogInformation("System restore complete - all data restored successfully");
+            _logger.LogInformation("✅ System restore complete: {Tables} tables, {Records} total records restored",
+                tablesRestored, totalRecordsRestored);
 
             // Reset all identity sequences to prevent duplicate key violations
             await ResetSequencesAsync(connection, sortedTables);
@@ -472,6 +494,23 @@ public class BackupService : IBackupService
         // Temporarily disable FK constraints for self-referencing tables
         await connection.ExecuteAsync($"ALTER TABLE {tableName} DISABLE TRIGGER ALL", transaction);
 
+        // Query database schema to find JSONB columns and GENERATED columns
+        var schemaInfo = await connection.QueryAsync<(string column_name, string data_type, string is_generated)>(
+            @"SELECT column_name, data_type, is_generated
+              FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = @tableName",
+            new { tableName },
+            transaction);
+
+        var jsonbColumnSet = new HashSet<string>(
+            schemaInfo.Where(c => c.data_type == "jsonb").Select(c => c.column_name),
+            StringComparer.OrdinalIgnoreCase);
+
+        var generatedColumnSet = new HashSet<string>(
+            schemaInfo.Where(c => c.is_generated == "ALWAYS").Select(c => c.column_name),
+            StringComparer.OrdinalIgnoreCase);
+
         // Get column names from DTO type using reflection
         var properties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
@@ -486,10 +525,16 @@ public class BackupService : IBackupService
             {
                 var columnAttr = p.GetCustomAttribute<ColumnAttribute>();
                 return new { PropertyName = p.Name, ColumnName = columnAttr!.Name };
-            }).ToList();
+            })
+            .Where(m => m.ColumnName != null && !generatedColumnSet.Contains(m.ColumnName)) // Exclude GENERATED ALWAYS columns
+            .ToList();
 
         var columnList = string.Join(", ", columnMappings.Select(m => m.ColumnName));
-        var paramList = string.Join(", ", columnMappings.Select(m => $"@{m.PropertyName}"));
+        // Add ::jsonb cast for JSONB columns to handle text→jsonb conversion
+        var paramList = string.Join(", ", columnMappings.Select(m =>
+            m.ColumnName != null && jsonbColumnSet.Contains(m.ColumnName)
+                ? $"@{m.PropertyName}::jsonb"  // Cast JSONB columns
+                : $"@{m.PropertyName}"));
 
         // Use OVERRIDING SYSTEM VALUE for tables with GENERATED ALWAYS AS IDENTITY columns
         // This allows us to insert explicit ID values during restore

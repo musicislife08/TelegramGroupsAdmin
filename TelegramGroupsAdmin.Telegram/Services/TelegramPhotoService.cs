@@ -8,6 +8,11 @@ using TelegramGroupsAdmin.Configuration;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
+/// Result of user photo fetch operation with metadata
+/// </summary>
+public record UserPhotoResult(string RelativePath, string FileUniqueId);
+
+/// <summary>
 /// Service for fetching and caching Telegram chat and user profile photos
 /// </summary>
 public class TelegramPhotoService
@@ -102,19 +107,28 @@ public class TelegramPhotoService
     /// </summary>
     public async Task<string?> GetUserPhotoAsync(ITelegramBotClient botClient, long userId, CancellationToken cancellationToken = default)
     {
+        var result = await GetUserPhotoWithMetadataAsync(botClient, userId, null, cancellationToken);
+        return result?.RelativePath;
+    }
+
+    /// <summary>
+    /// Get or fetch user profile photo with smart cache invalidation
+    /// Checks file_unique_id to detect photo changes
+    /// Returns photo metadata including file_unique_id for storage
+    /// </summary>
+    public async Task<UserPhotoResult?> GetUserPhotoWithMetadataAsync(
+        ITelegramBotClient botClient,
+        long userId,
+        string? knownPhotoId,
+        CancellationToken cancellationToken = default)
+    {
         try
         {
             var fileName = $"{userId}.jpg";
             var localPath = Path.Combine(_userPhotosPath, fileName);
             var relativePath = $"user_photos/{fileName}";
 
-            // Return cached if exists
-            if (File.Exists(localPath))
-            {
-                return relativePath;
-            }
-
-            // Fetch from Telegram
+            // Fetch current photo from Telegram
             var photos = await botClient.GetUserProfilePhotos(userId, limit: 1, cancellationToken: cancellationToken);
             if (photos.TotalCount == 0 || photos.Photos.Length == 0)
             {
@@ -125,7 +139,16 @@ public class TelegramPhotoService
             // Get the smallest size of the first photo
             var photo = photos.Photos[0];
             var smallestPhoto = photo.OrderBy(p => p.FileSize).First();
+            var currentPhotoId = smallestPhoto.FileUniqueId;
 
+            // Smart cache check: return cached if file exists and photo hasn't changed
+            if (File.Exists(localPath) && knownPhotoId == currentPhotoId)
+            {
+                _logger.LogDebug("User {UserId} photo unchanged (file_unique_id: {PhotoId})", userId, currentPhotoId);
+                return new UserPhotoResult(relativePath, currentPhotoId);
+            }
+
+            // Photo changed or first download - fetch from Telegram
             var file = await botClient.GetFile(smallestPhoto.FileId, cancellationToken);
             if (file.FilePath == null)
             {
@@ -145,8 +168,8 @@ public class TelegramPhotoService
                 // Resize to 64x64 icon
                 await ResizeImageAsync(tempPath, localPath, 64, cancellationToken);
 
-                _logger.LogInformation("Cached user photo for {UserId}", userId);
-                return relativePath;
+                _logger.LogInformation("Cached user photo for {UserId} (file_unique_id: {PhotoId})", userId, currentPhotoId);
+                return new UserPhotoResult(relativePath, currentPhotoId);
             }
             finally
             {

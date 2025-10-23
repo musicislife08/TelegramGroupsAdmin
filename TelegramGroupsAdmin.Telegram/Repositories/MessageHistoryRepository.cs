@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
@@ -10,11 +12,16 @@ public class MessageHistoryRepository : IMessageHistoryRepository
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<MessageHistoryRepository> _logger;
+    private readonly string _imageStoragePath;
 
-    public MessageHistoryRepository(IDbContextFactory<AppDbContext> contextFactory, ILogger<MessageHistoryRepository> logger)
+    public MessageHistoryRepository(
+        IDbContextFactory<AppDbContext> contextFactory,
+        ILogger<MessageHistoryRepository> logger,
+        IOptions<MessageHistoryOptions> messageHistoryOptions)
     {
         _contextFactory = contextFactory;
         _logger = logger;
+        _imageStoragePath = messageHistoryOptions.Value.ImageStoragePath;
     }
 
     public async Task InsertMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default)
@@ -54,7 +61,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             Timestamp: entity.Timestamp);
     }
 
-    public async Task<(int deletedCount, List<string> imagePaths)> CleanupExpiredAsync(CancellationToken cancellationToken = default)
+    public async Task<(int deletedCount, List<string> imagePaths, List<string> mediaPaths)> CleanupExpiredAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Retention: Keep messages from last 30 days OR messages with detection_results (training data)
@@ -79,17 +86,26 @@ public class MessageHistoryRepository : IMessageHistoryRepository
 
         if (expiredData.Count == 0)
         {
-            return (0, new List<string>());
+            return (0, new List<string>(), new List<string>());
         }
 
-        // Collect image paths
+        // Collect image paths (photo thumbnails)
         var imagePaths = new List<string>();
+        // Collect media paths (videos, animations, audio, voice, stickers, video notes)
+        var mediaPaths = new List<string>();
+
         foreach (var data in expiredData)
         {
+            // Photo thumbnails
             if (!string.IsNullOrEmpty(data.Message.PhotoLocalPath))
                 imagePaths.Add(data.Message.PhotoLocalPath);
             if (!string.IsNullOrEmpty(data.Message.PhotoThumbnailPath))
                 imagePaths.Add(data.Message.PhotoThumbnailPath);
+
+            // Media files (Animation, Video, Audio, Voice, Sticker, VideoNote)
+            // Note: Documents are excluded - they're metadata-only and never downloaded for display
+            if (!string.IsNullOrEmpty(data.Message.MediaLocalPath))
+                mediaPaths.Add(data.Message.MediaLocalPath);
         }
 
         // Delete edits and messages
@@ -106,9 +122,10 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         if (deleted > 0)
         {
             _logger.LogInformation(
-                "Cleaned up {Count} old messages ({ImageCount} images, {Edits} edits) - retention: 30 days",
+                "Cleaned up {Count} old messages ({ImageCount} images, {MediaCount} media files, {Edits} edits) - retention: 30 days",
                 deleted,
                 imagePaths.Count,
+                mediaPaths.Count,
                 deletedEdits);
 
             // Note: VACUUM is a PostgreSQL-specific command that can't be run in a transaction
@@ -116,7 +133,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             // If needed, VACUUM can be run separately via raw SQL outside a transaction
         }
 
-        return (deleted, imagePaths);
+        return (deleted, imagePaths, mediaPaths);
     }
 
     public async Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100, CancellationToken cancellationToken = default)
@@ -315,16 +332,21 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         return messagesWithDetections.Select(msg =>
         {
             var joined = joinedDict[msg.MessageId];
+            var messageModel = msg.ToModel(
+                chatName: joined.ChatName,
+                chatIconPath: joined.ChatIconPath,
+                userName: joined.UserName,
+                firstName: joined.FirstName,
+                userPhotoPath: joined.UserPhotoPath,
+                replyToUser: joined.ReplyToUser,
+                replyToText: joined.ReplyToText);
+
+            // Validate media path exists on filesystem (nulls if missing)
+            messageModel = ValidateMediaPath(messageModel);
+
             return new UiModels.MessageWithDetectionHistory
             {
-                Message = msg.ToModel(
-                    chatName: joined.ChatName,
-                    chatIconPath: joined.ChatIconPath,
-                    userName: joined.UserName,
-                    firstName: joined.FirstName,
-                    userPhotoPath: joined.UserPhotoPath,
-                    replyToUser: joined.ReplyToUser,
-                    replyToText: joined.ReplyToText),
+                Message = messageModel,
                 DetectionResults = msg.DetectionResults
                     .Select(dr => dr.ToModel())
                     .OrderByDescending(dr => dr.DetectedAt)
@@ -540,7 +562,10 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         .AsNoTracking()
         .FirstOrDefaultAsync(cancellationToken);
 
-        return result?.Message.ToModel(
+        if (result == null)
+            return null;
+
+        var messageModel = result.Message.ToModel(
             chatName: result.ChatName,
             chatIconPath: result.ChatIconPath,
             userName: result.UserName,
@@ -548,6 +573,26 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             userPhotoPath: result.UserPhotoPath,
             replyToUser: result.ReplyToUser,
             replyToText: result.ReplyToText);
+
+        // Validate media path exists on filesystem (nulls if missing)
+        return ValidateMediaPath(messageModel);
+    }
+
+    public Task<UiModels.MessageRecord?> GetByIdAsync(long messageId, CancellationToken cancellationToken = default)
+    {
+        return GetMessageAsync(messageId, cancellationToken);
+    }
+
+    public async Task UpdateMediaLocalPathAsync(long messageId, string localPath, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Messages.FindAsync(new object[] { messageId }, cancellationToken);
+
+        if (entity != null)
+        {
+            entity.MediaLocalPath = localPath;
+            await context.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public async Task UpdateMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default)
@@ -714,5 +759,26 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         return await context.Messages
             .AsNoTracking()
             .CountAsync(m => m.UserId == userId && m.ChatId == chatId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Validates that media file exists on filesystem, nulls MediaLocalPath if missing
+    /// This ensures UI shows placeholders for media that needs re-downloading
+    /// </summary>
+    private UiModels.MessageRecord ValidateMediaPath(UiModels.MessageRecord message)
+    {
+        // Skip if no media path set
+        if (string.IsNullOrEmpty(message.MediaLocalPath))
+            return message;
+
+        // Check if file actually exists on disk
+        var fullPath = Path.Combine(_imageStoragePath, message.MediaLocalPath);
+        if (File.Exists(fullPath))
+            return message; // File exists, return as-is
+
+        // File missing - null the path so UI shows placeholder and requests download
+        _logger.LogDebug("Media file missing for message {MessageId}: {Path}", message.MessageId, message.MediaLocalPath);
+
+        return message with { MediaLocalPath = null };
     }
 }

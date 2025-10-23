@@ -17,4 +17,9 @@ public interface IMessageHistoryService
     /// Event raised when a message is edited.
     /// </summary>
     event Action<MessageEditRecord>? OnMessageEdited;
+
+    /// <summary>
+    /// Event raised when media is downloaded and ready for display.
+    /// </summary>
+    event Action<long, TelegramGroupsAdmin.Telegram.Models.MediaType>? OnMediaUpdated;
 }

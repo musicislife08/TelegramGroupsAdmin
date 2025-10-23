@@ -64,10 +64,13 @@
                          @onclick="() => OnImageClick.InvokeAsync(Message)" />
                 }
 
-                @* Media Attachments (Phase 4.X: GIF, Video, Audio, Voice, Sticker, VideoNote, Document) *@
-                @if (Message.MediaType.HasValue && !string.IsNullOrEmpty(Message.MediaLocalPath))
+                @* Media Attachments (Phase 4.X: GIF, Video, Audio, Voice, Sticker, VideoNote) *@
+                @if (Message.MediaType.HasValue &&
+                     Message.MediaType.Value != TelegramGroupsAdmin.Telegram.Models.MediaType.Document)
                 {
-                    @switch (Message.MediaType.Value)
+                    @if (!string.IsNullOrEmpty(Message.MediaLocalPath))
+                    {
+                        @switch (Message.MediaType.Value)
                     {
                         case TelegramGroupsAdmin.Telegram.Models.MediaType.Animation:
                             <video src="@GetImagePath(Message.MediaLocalPath)"
@@ -125,6 +128,33 @@
                                    title="Video message">
                             </video>
                             break;
+                    }
+                    }
+                    else
+                    {
+                        @* Media file is being downloaded - show placeholder *@
+                        <div class="tg-media-placeholder">
+                            <div class="tg-media-placeholder-icon">
+                                @switch (Message.MediaType.Value)
+                                {
+                                    case TelegramGroupsAdmin.Telegram.Models.MediaType.Animation:
+                                    case TelegramGroupsAdmin.Telegram.Models.MediaType.Video:
+                                    case TelegramGroupsAdmin.Telegram.Models.MediaType.VideoNote:
+                                        <span>🎬</span>
+                                        break;
+                                    case TelegramGroupsAdmin.Telegram.Models.MediaType.Audio:
+                                    case TelegramGroupsAdmin.Telegram.Models.MediaType.Voice:
+                                        <span>🎵</span>
+                                        break;
+                                    case TelegramGroupsAdmin.Telegram.Models.MediaType.Sticker:
+                                        <span>🎭</span>
+                                        break;
+                                }
+                            </div>
+                            <div class="tg-media-placeholder-text">
+                                @GetMediaTypeName(Message.MediaType.Value) downloading...
+                            </div>
+                        </div>
                     }
                 }
                 else if (Message.MediaType == TelegramGroupsAdmin.Telegram.Models.MediaType.Document)
@@ -397,5 +427,24 @@
         }
 
         return $"{len:0.##} {sizes[order]}";
+    }
+
+    /// <summary>
+    /// Get friendly name for media type
+    /// Phase 4.X: Used for media placeholder display
+    /// </summary>
+    private string GetMediaTypeName(TelegramGroupsAdmin.Telegram.Models.MediaType mediaType)
+    {
+        return mediaType switch
+        {
+            TelegramGroupsAdmin.Telegram.Models.MediaType.Animation => "GIF",
+            TelegramGroupsAdmin.Telegram.Models.MediaType.Video => "Video",
+            TelegramGroupsAdmin.Telegram.Models.MediaType.Audio => "Audio",
+            TelegramGroupsAdmin.Telegram.Models.MediaType.Voice => "Voice message",
+            TelegramGroupsAdmin.Telegram.Models.MediaType.Sticker => "Sticker",
+            TelegramGroupsAdmin.Telegram.Models.MediaType.VideoNote => "Video message",
+            TelegramGroupsAdmin.Telegram.Models.MediaType.Document => "Document",
+            _ => "Media"
+        };
     }
 }

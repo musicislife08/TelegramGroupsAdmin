@@ -11,6 +11,7 @@ using Polly;
 using Polly.RateLimiting;
 using TickerQ.DependencyInjection;
 using TickerQ.EntityFrameworkCore.DependencyInjection;
+using TickerQ.Dashboard.DependencyInjection;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -144,8 +145,16 @@ public static class ServiceCollectionExtensions
         // Telegram media service (Phase 4.X: GIF, Video, Audio, Voice, Sticker, VideoNote, Document downloads)
         services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.TelegramMediaService>();
 
+        // Media refetch services (Phase 4.X: Re-download missing media after restore)
+        services.AddSingleton<TelegramGroupsAdmin.Services.Media.IMediaNotificationService, TelegramGroupsAdmin.Services.Media.MediaNotificationService>();
+        services.AddSingleton<TelegramGroupsAdmin.Services.Media.IMediaRefetchQueueService, TelegramGroupsAdmin.Services.Media.MediaRefetchQueueService>();
+        services.AddHostedService<TelegramGroupsAdmin.Services.Media.MediaRefetchWorkerService>();
+
         // Runtime logging configuration service (Phase 4.7)
         services.AddSingleton<IRuntimeLoggingService, RuntimeLoggingService>();
+
+        // Background jobs configuration service
+        services.AddScoped<IBackgroundJobConfigService, BackgroundJobConfigService>();
 
         return services;
     }
@@ -274,7 +283,9 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Adds TickerQ background job system with PostgreSQL backend and job registrations
     /// </summary>
-    public static IServiceCollection AddTickerQBackgroundJobs(this IServiceCollection services)
+    public static IServiceCollection AddTickerQBackgroundJobs(
+        this IServiceCollection services,
+        IHostEnvironment environment)
     {
         services.AddTickerQ(options =>
         {
@@ -293,9 +304,15 @@ public static class ServiceCollectionExtensions
                 efOptions.UseModelCustomizerForMigrations();
             });
 
-            // Optional: Add dashboard UI at /tickerq-dashboard
-            // options.AddDashboard(basePath: "/tickerq-dashboard");
-            // options.AddDashboardBasicAuth();
+            // Dashboard UI at /tickerq-dashboard (development only)
+            if (environment.IsDevelopment())
+            {
+                options.AddDashboard(dbopt =>
+                {
+                    dbopt.BasePath = "/tickerq-dashboard";
+                    dbopt.EnableBasicAuth = false;
+                });
+            }
         });
 
         // Register job classes (TickerQ discovers [TickerFunction] methods via source generators)
@@ -304,6 +321,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<Jobs.DeleteMessageJob>();
         services.AddScoped<Jobs.TempbanExpiryJob>();
         services.AddScoped<Jobs.BlocklistSyncJob>(); // Phase 4.13: URL Filtering
+        services.AddScoped<Jobs.RefreshUserPhotosJob>(); // Phase 4.X: Nightly user photo refresh
+        services.AddScoped<Jobs.ScheduledBackupJob>(); // Background Jobs Management: Automatic database backups
+        services.AddScoped<Jobs.DatabaseMaintenanceJob>(); // Background Jobs Management: PostgreSQL maintenance (STUB)
 
         return services;
     }

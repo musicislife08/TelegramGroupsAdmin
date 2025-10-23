@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Services.BackgroundServices;
@@ -30,13 +31,21 @@ public class CleanupBackgroundService : BackgroundService
             {
                 await Task.Delay(TimeSpan.FromMinutes(_options.CleanupIntervalMinutes), stoppingToken);
 
-                // Create a scope to resolve the repository
+                // Create a scope to resolve the repository and config service
                 await using var scope = _scopeFactory.CreateAsyncScope();
                 var repository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+                var configService = scope.ServiceProvider.GetRequiredService<IBackgroundJobConfigService>();
 
-                var (deleted, imagePaths) = await repository.CleanupExpiredAsync();
+                // Check if job is enabled
+                if (!await configService.IsJobEnabledAsync(BackgroundJobNames.MessageCleanup))
+                {
+                    _logger.LogDebug("Message cleanup job is disabled, skipping");
+                    continue;
+                }
 
-                // Delete image files from disk
+                var (deleted, imagePaths, mediaPaths) = await repository.CleanupExpiredAsync();
+
+                // Delete image files from disk (photo thumbnails)
                 var imageDeletedCount = 0;
                 var basePath = _options.ImageStoragePath;
                 foreach (var relativePath in imagePaths)
@@ -56,12 +65,32 @@ public class CleanupBackgroundService : BackgroundService
                     }
                 }
 
+                // Delete media files from disk (videos, animations, audio, voice, stickers, video notes)
+                var mediaDeletedCount = 0;
+                foreach (var relativePath in mediaPaths)
+                {
+                    try
+                    {
+                        var fullPath = Path.Combine(basePath, relativePath);
+                        if (File.Exists(fullPath))
+                        {
+                            File.Delete(fullPath);
+                            mediaDeletedCount++;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete media file: {Path}", relativePath);
+                    }
+                }
+
                 var stats = await repository.GetStatsAsync();
 
                 _logger.LogInformation(
-                    "Cleanup complete: {Deleted} expired messages removed, {ImagesDeleted} images deleted. Stats: {Messages} messages, {Users} users, {Photos} photos, oldest: {Oldest}",
+                    "Cleanup complete: {Deleted} expired messages removed, {ImagesDeleted} images deleted, {MediaDeleted} media files deleted. Stats: {Messages} messages, {Users} users, {Photos} photos, oldest: {Oldest}",
                     deleted,
                     imageDeletedCount,
+                    mediaDeletedCount,
                     stats.TotalMessages,
                     stats.UniqueUsers,
                     stats.PhotoCount,

@@ -11,6 +11,7 @@ public record TelegramUser(
     string? LastName,
     string? UserPhotoPath,
     string? PhotoHash,
+    string? PhotoFileUniqueId,
     bool IsTrusted,
     bool BotDmEnabled,
     DateTimeOffset FirstSeenAt,

@@ -57,6 +57,15 @@ public class TelegramUserDto
     public string? PhotoHash { get; set; }
 
     /// <summary>
+    /// Telegram's stable file_unique_id for profile photo (detects photo changes)
+    /// Used to invalidate cache when user changes their profile picture
+    /// Null if user has no profile photo
+    /// </summary>
+    [Column("photo_file_unique_id")]
+    [MaxLength(128)]
+    public string? PhotoFileUniqueId { get; set; }
+
+    /// <summary>
     /// Whether user is trusted/whitelisted (bypasses spam checks)
     /// Phase 5.5: Auto-trust feature (7 days + 50 clean messages + 0 warnings)
     /// </summary>

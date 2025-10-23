@@ -13,7 +13,47 @@ namespace TelegramGroupsAdmin.Core.BackgroundJobs;
 public static class TickerQUtilities
 {
     /// <summary>
-    /// Schedule a TickerQ job with standardized error handling and logging
+    /// Schedule a TickerQ job with standardized error handling and logging (non-generic overload)
+    /// </summary>
+    /// <param name="serviceProvider">Service provider for creating scopes</param>
+    /// <param name="logger">Logger instance for tracking job scheduling</param>
+    /// <param name="functionName">Name of the TickerQ function to execute</param>
+    /// <param name="payload">Job payload data (will be serialized as its runtime type)</param>
+    /// <param name="delaySeconds">Delay in seconds before job execution (0 for immediate)</param>
+    /// <param name="retries">Number of retries on failure (default: 0)</param>
+    /// <param name="retryIntervals">Retry intervals in seconds (default: null)</param>
+    /// <returns>Job ID if successful, null if failed</returns>
+    public static Task<Guid?> ScheduleJobAsync(
+        IServiceProvider serviceProvider,
+        ILogger logger,
+        string functionName,
+        object payload,
+        int delaySeconds,
+        int retries = 0,
+        int[]? retryIntervals = null)
+    {
+        // Use reflection to call the generic version with the runtime type
+        var payloadType = payload.GetType();
+
+        // Find the generic method
+        var methods = typeof(TickerQUtilities).GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+        var genericMethod = methods
+            .Where(m => m.Name == nameof(ScheduleJobAsync))
+            .Where(m => m.IsGenericMethod)
+            .Where(m => m.GetParameters().Length == 7)
+            .FirstOrDefault()
+            ?? throw new InvalidOperationException("Could not find generic ScheduleJobAsync method");
+
+        // Make it concrete with the runtime payload type
+        var concreteMethod = genericMethod.MakeGenericMethod(payloadType);
+
+        // Invoke it
+        var task = concreteMethod.Invoke(null, new object?[] { serviceProvider, logger, functionName, payload, delaySeconds, retries, retryIntervals });
+        return (Task<Guid?>)(task ?? Task.FromResult<Guid?>(null));
+    }
+
+    /// <summary>
+    /// Schedule a TickerQ job with standardized error handling and logging (generic version)
     /// </summary>
     /// <typeparam name="TPayload">The job payload type</typeparam>
     /// <param name="serviceProvider">Service provider for creating scopes</param>

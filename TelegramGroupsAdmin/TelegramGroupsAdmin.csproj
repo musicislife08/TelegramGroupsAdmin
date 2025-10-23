@@ -38,8 +38,14 @@
         <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
         <PackageReference Include="Telegram.Bot" Version="22.7.3-dev.4" />
         <PackageReference Include="TickerQ" Version="2.5.3" />
+        <PackageReference Include="TickerQ.Dashboard" Version="2.5.3" />
         <PackageReference Include="TickerQ.EntityFrameworkCore" Version="2.5.3" />
         <PackageReference Include="TickerQ.Utilities" Version="2.5.3" />
+    </ItemGroup>
+
+    <!-- Explicitly register TickerQ source generator for .NET 10 RC2 -->
+    <ItemGroup>
+        <Analyzer Include="$(NuGetPackageRoot)tickerq/2.5.3/analyzers/dotnet/cs/TickerQ.SourceGenerator.dll" />
     </ItemGroup>
 
     <ItemGroup>

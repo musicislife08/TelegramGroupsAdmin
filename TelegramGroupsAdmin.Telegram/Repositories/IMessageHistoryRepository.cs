@@ -9,7 +9,7 @@ public interface IMessageHistoryRepository
 {
     Task InsertMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default);
     Task<UiModels.PhotoMessageRecord?> GetUserRecentPhotoAsync(long userId, long chatId, CancellationToken cancellationToken = default);
-    Task<(int deletedCount, List<string> imagePaths)> CleanupExpiredAsync(CancellationToken cancellationToken = default);
+    Task<(int deletedCount, List<string> imagePaths, List<string> mediaPaths)> CleanupExpiredAsync(CancellationToken cancellationToken = default);
     Task<List<UiModels.MessageRecord>> GetRecentMessagesAsync(int limit = 100, CancellationToken cancellationToken = default);
     Task<List<UiModels.MessageRecord>> GetMessagesBeforeAsync(DateTimeOffset? beforeTimestamp = null, int limit = 50, CancellationToken cancellationToken = default);
     Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10, DateTimeOffset? beforeTimestamp = null, CancellationToken cancellationToken = default);
@@ -26,7 +26,9 @@ public interface IMessageHistoryRepository
     Task<List<UiModels.MessageEditRecord>> GetEditsForMessageAsync(long messageId, CancellationToken cancellationToken = default);
     Task InsertMessageEditAsync(UiModels.MessageEditRecord edit, CancellationToken cancellationToken = default);
     Task<UiModels.MessageRecord?> GetMessageAsync(long messageId, CancellationToken cancellationToken = default);
+    Task<UiModels.MessageRecord?> GetByIdAsync(long messageId, CancellationToken cancellationToken = default); // Alias for GetMessageAsync
     Task UpdateMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default);
+    Task UpdateMediaLocalPathAsync(long messageId, string localPath, CancellationToken cancellationToken = default);
     Task<List<string>> GetDistinctUserNamesAsync(CancellationToken cancellationToken = default);
     Task<List<string>> GetDistinctChatNamesAsync(CancellationToken cancellationToken = default);
     Task<UiModels.DetectionStats> GetDetectionStatsAsync(CancellationToken cancellationToken = default);

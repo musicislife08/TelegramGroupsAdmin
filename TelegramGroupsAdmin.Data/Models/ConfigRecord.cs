@@ -63,6 +63,14 @@ public class ConfigRecordDto
     public string? FileScanningConfig { get; set; }
 
     /// <summary>
+    /// Background jobs configuration (JSONB)
+    /// Stores schedule and settings for scheduled backups, cleanup, etc.
+    /// Only used for global config (chat_id = NULL)
+    /// </summary>
+    [Column("background_jobs_config", TypeName = "jsonb")]
+    public string? BackgroundJobsConfig { get; set; }
+
+    /// <summary>
     /// Cached permanent invite link for this chat (NULL for global config or public chats)
     /// Used for return-to-chat buttons in DM notifications (welcome, tempban, etc.)
     /// Automatically created/reused by ChatInviteLinkService

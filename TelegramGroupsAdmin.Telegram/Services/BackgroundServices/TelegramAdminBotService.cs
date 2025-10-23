@@ -43,6 +43,12 @@ public class TelegramAdminBotService(
         remove => messageProcessingService.OnMessageEdited -= value;
     }
 
+    public event Action<long, TelegramGroupsAdmin.Telegram.Models.MediaType>? OnMediaUpdated
+    {
+        add => messageProcessingService.OnMediaUpdated += value;
+        remove => messageProcessingService.OnMediaUpdated -= value;
+    }
+
     public event Action<ChatHealthStatus>? OnHealthUpdate
     {
         add => chatManagementService.OnHealthUpdate += value;

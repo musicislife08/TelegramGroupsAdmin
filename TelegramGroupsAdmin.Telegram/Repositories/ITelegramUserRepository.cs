@@ -8,9 +8,12 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 public interface ITelegramUserRepository
 {
     Task<UiModels.TelegramUser?> GetByTelegramIdAsync(long telegramUserId, CancellationToken ct = default);
+    Task<UiModels.TelegramUser?> GetByIdAsync(long telegramUserId, CancellationToken ct = default); // Alias for GetByTelegramIdAsync
     Task<string?> GetUserPhotoPathAsync(long telegramUserId, CancellationToken ct = default);
     Task UpsertAsync(UiModels.TelegramUser user, CancellationToken ct = default);
     Task UpdateUserPhotoPathAsync(long telegramUserId, string? photoPath, string? photoHash = null, CancellationToken ct = default);
+    Task UpdatePhotoFileUniqueIdAsync(long telegramUserId, string? fileUniqueId, string? photoPath, CancellationToken ct = default);
+    Task<List<UiModels.TelegramUser>> GetActiveUsersAsync(int days, CancellationToken ct = default);
     Task UpdateTrustStatusAsync(long telegramUserId, bool isTrusted, CancellationToken ct = default);
     Task SetBotDmEnabledAsync(long telegramUserId, bool enabled, CancellationToken ct = default);
     Task<List<long>> GetTrustedUserIdsAsync(CancellationToken ct = default);

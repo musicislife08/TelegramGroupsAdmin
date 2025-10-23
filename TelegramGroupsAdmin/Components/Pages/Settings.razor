@@ -21,6 +21,7 @@
                     <MudNavLink Href="/settings/system/security" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">Security</MudNavLink>
                     <MudNavLink Href="/settings/system/accounts" Icon="@Icons.Material.Filled.ManageAccounts" Match="NavLinkMatch.All">Admin Accounts</MudNavLink>
                     <MudNavLink Href="/settings/system/logging" Icon="@Icons.Material.Filled.Terminal" Match="NavLinkMatch.All">Logging</MudNavLink>
+                    <MudNavLink Href="/settings/system/background-jobs" Icon="@Icons.Material.Filled.Schedule" Match="NavLinkMatch.All">Background Jobs</MudNavLink>
                     <MudNavLink Href="/settings/system/backup" Icon="@Icons.Material.Filled.Backup" Match="NavLinkMatch.All">Backup & Restore</MudNavLink>
                 </MudNavGroup>
 
@@ -77,6 +78,9 @@
                             break;
                         case "logging":
                             <LoggingSettings />
+                            break;
+                        case "background-jobs":
+                            <BackgroundJobs />
                             break;
                         case "backup":
                             <BackupRestore />
@@ -215,6 +219,7 @@
             ("system", "security") => "Security Settings",
             ("system", "accounts") => "Admin Accounts",
             ("system", "logging") => "Logging Settings",
+            ("system", "background-jobs") => "Background Jobs",
             ("system", "backup") => "Backup & Restore",
 
             // Telegram

@@ -1,0 +1,502 @@
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Services.Media
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Core.BackgroundJobs
+@using TelegramGroupsAdmin.Telegram.Abstractions
+@using TelegramGroupsAdmin.Telegram.Abstractions.Jobs
+@using TickerQ.Utilities.Interfaces.Managers
+@using TickerQ.Utilities.Models.Ticker
+@using System.Text.Json
+@inject IBackgroundJobConfigService JobConfigService
+@inject IMediaRefetchQueueService QueueService
+@inject IServiceProvider ServiceProvider
+@inject ISnackbar Snackbar
+@inject ILogger<BackgroundJobs> Logger
+@implements IDisposable
+
+<MudStack Spacing="4">
+    <!-- Media Refetch Queue Status -->
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.CloudDownload" />
+            <MudText>
+                <strong>Media Refetch Queue:</strong> @_queueDepth @(_queueDepth == 1 ? "file" : "files") queued for download
+            </MudText>
+        </MudStack>
+    </MudAlert>
+
+    <!-- Background Jobs Table -->
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">
+            <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-2" />
+            Background Jobs
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mb-4" Color="Color.Secondary">
+            Configure and monitor scheduled background tasks
+        </MudText>
+
+        @if (_jobs == null)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else
+        {
+            <MudTable Items="@_jobs.Values.OrderBy(j => j.DisplayName)" Elevation="0" Dense="true">
+                <HeaderContent>
+                    <MudTh>Job</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Schedule</MudTh>
+                    <MudTh>Last Run</MudTh>
+                    <MudTh>Next Run</MudTh>
+                    <MudTh Style="text-align: right">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Job">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body2"><strong>@context.DisplayName</strong></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Description</MudText>
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.Enabled ? Color.Success : Color.Default)">
+                            @(context.Enabled ? "Enabled" : "Disabled")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Schedule">
+                        @if (context.ScheduleType == "cron")
+                        {
+                            <MudText Typo="Typo.caption">@FormatCronSchedule(context.CronExpression)</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption">Every @context.IntervalHours hours</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Last Run">
+                        @if (context.LastRunAt.HasValue)
+                        {
+                            <MudText Typo="Typo.caption">@context.LastRunAt.Value.ToLocalTime().ToString("MMM d, h:mm tt")</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Never</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Next Run">
+                        @if (context.NextRunAt.HasValue && context.Enabled)
+                        {
+                            <MudText Typo="Typo.caption">@context.NextRunAt.Value.ToLocalTime().ToString("MMM d, h:mm tt")</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">—</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Actions" Style="text-align: right">
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                            <MudSwitch T="bool"
+                                      Value="@context.Enabled"
+                                      ValueChanged="@(async (bool enabled) => await ToggleJobAsync(context.JobName, enabled))"
+                                      Color="Color.Success"
+                                      Size="Size.Small" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Settings"
+                                          Size="Size.Small"
+                                          OnClick="@(() => OpenConfigDialog(context))"
+                                          title="Configure" />
+                            <MudIconButton Icon="@Icons.Material.Filled.PlayArrow"
+                                          Size="Size.Small"
+                                          Color="Color.Primary"
+                                          Disabled="@(!context.Enabled || context.JobName == BackgroundJobNames.MessageCleanup)"
+                                          OnClick="@(() => RunNowAsync(context.JobName))"
+                                          title="@(context.JobName == BackgroundJobNames.MessageCleanup ? "Background Service (always running)" : "Run Now")" />
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            @if (_jobs.Values.Any(j => !string.IsNullOrEmpty(j.LastError)))
+            {
+                <MudAlert Severity="Severity.Warning" Class="mt-4" Dense="true">
+                    <MudText Typo="Typo.body2">One or more jobs have errors. Check the logging page for details.</MudText>
+                </MudAlert>
+            }
+        }
+    </MudPaper>
+</MudStack>
+
+<!-- Configuration Dialog -->
+<MudDialog @bind-Visible="_showConfigDialog" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Configure @_editingJob?.DisplayName</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_editingJob != null)
+        {
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@_editingJob.Description</MudText>
+
+                <!-- Schedule Type Selector -->
+                <MudRadioGroup @bind-Value="_editScheduleType">
+                    <MudRadio Value="@("interval")" Color="Color.Primary">
+                        <MudText Typo="Typo.body2">Simple (Every X hours)</MudText>
+                    </MudRadio>
+                    <MudRadio Value="@("cron")" Color="Color.Primary">
+                        <MudText Typo="Typo.body2">Advanced (Cron Expression)</MudText>
+                    </MudRadio>
+                </MudRadioGroup>
+
+                @if (_editScheduleType == "interval")
+                {
+                    <!-- Simple Interval Builder -->
+                    <MudNumericField @bind-Value="_editIntervalHours"
+                                   Label="Run Every (hours)"
+                                   Variant="Variant.Outlined"
+                                   Min="1"
+                                   Max="168"
+                                   HelperText="How often to run this job (1-168 hours / 1-7 days)" />
+
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        Job will run every <strong>@_editIntervalHours hours</strong>
+                        @if (_editIntervalHours >= 24)
+                        {
+                            <text> (<strong>@(_editIntervalHours / 24) days</strong>)</text>
+                        }
+                    </MudAlert>
+                }
+                else
+                {
+                    <!-- Cron Expression Builder -->
+                    <MudTextField @bind-Value="_editCronExpression"
+                                Label="Cron Expression"
+                                Variant="Variant.Outlined"
+                                HelperText="Standard cron format: minute hour day month weekday"
+                                Placeholder="0 2 * * *" />
+
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        <MudText Typo="Typo.body2"><strong>Common Examples:</strong></MudText>
+                        <MudText Typo="Typo.caption">• <code>0 2 * * *</code> - Daily at 2:00 AM</MudText>
+                        <MudText Typo="Typo.caption">• <code>0 3 * * 0</code> - Sundays at 3:00 AM</MudText>
+                        <MudText Typo="Typo.caption">• <code>0 */6 * * *</code> - Every 6 hours</MudText>
+                        <MudText Typo="Typo.caption">• <code>0 0 1 * *</code> - First day of month at midnight</MudText>
+                    </MudAlert>
+                }
+
+                <!-- Job-Specific Settings -->
+                @if (_editingJob.JobName == BackgroundJobNames.ScheduledBackup)
+                {
+                    <MudDivider />
+                    <MudText Typo="Typo.subtitle2">Backup Settings</MudText>
+
+                    <MudNumericField @bind-Value="_editRetentionDays"
+                                   Label="Retention (days)"
+                                   Variant="Variant.Outlined"
+                                   Min="1"
+                                   Max="365"
+                                   HelperText="How long to keep old backups (1-365 days)" />
+
+                    <MudTextField @bind-Value="_editBackupDirectory"
+                                Label="Backup Directory"
+                                Variant="Variant.Outlined"
+                                HelperText="Leave empty for default (./data/backups)"
+                                Placeholder="./data/backups" />
+                }
+                else if (_editingJob.JobName == BackgroundJobNames.DatabaseMaintenance)
+                {
+                    <MudDivider />
+                    <MudText Typo="Typo.subtitle2">Maintenance Settings</MudText>
+
+                    <MudCheckBox @bind-Value="_editRunVacuum" Color="Color.Primary" Dense="true">
+                        Run VACUUM (reclaim storage from deleted rows)
+                    </MudCheckBox>
+
+                    <MudCheckBox @bind-Value="_editRunAnalyze" Color="Color.Primary" Dense="true">
+                        Run ANALYZE (update query planner statistics)
+                    </MudCheckBox>
+
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        <strong>Note:</strong> This job is currently a stub. Full implementation requires direct PostgreSQL connection.
+                    </MudAlert>
+                }
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseConfigDialog">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveConfigAsync">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private Dictionary<string, BackgroundJobConfig>? _jobs;
+    private int _queueDepth = 0;
+    private Timer? _refreshTimer;
+
+    // Dialog state
+    private bool _showConfigDialog = false;
+    private BackgroundJobConfig? _editingJob;
+    private string _editScheduleType = "interval";
+    private int _editIntervalHours = 24;
+    private string? _editCronExpression;
+    private int _editRetentionDays = 7;
+    private string? _editBackupDirectory;
+    private bool _editRunVacuum = true;
+    private bool _editRunAnalyze = true;
+
+    private readonly DialogOptions _dialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Small,
+        FullWidth = true
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Ensure default job configs exist before loading
+        await JobConfigService.EnsureDefaultConfigsAsync();
+
+        await LoadJobsAsync();
+        UpdateQueueDepth();
+
+        // Refresh queue depth every 5 seconds
+        _refreshTimer = new Timer(_ =>
+        {
+            UpdateQueueDepth();
+            InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private async Task LoadJobsAsync()
+    {
+        _jobs = await JobConfigService.GetAllJobsAsync();
+    }
+
+    private void UpdateQueueDepth()
+    {
+        _queueDepth = QueueService.GetQueueDepth();
+    }
+
+    private async Task ToggleJobAsync(string jobName, bool enabled)
+    {
+        if (_jobs == null || !_jobs.TryGetValue(jobName, out var job))
+            return;
+
+        job.Enabled = enabled;
+        await JobConfigService.UpdateJobConfigAsync(jobName, job);
+
+        Snackbar.Add($"{job.DisplayName} {(enabled ? "enabled" : "disabled")}",
+            enabled ? Severity.Success : Severity.Info);
+    }
+
+    private async Task RunNowAsync(string jobName)
+    {
+        if (_jobs == null || !_jobs.TryGetValue(jobName, out var job))
+            return;
+
+        try
+        {
+            // Build payload based on job type
+            object? payload = jobName switch
+            {
+                BackgroundJobNames.ScheduledBackup => BuildBackupPayload(job),
+                BackgroundJobNames.DatabaseMaintenance => BuildMaintenancePayload(job),
+                BackgroundJobNames.UserPhotoRefresh => BuildUserPhotoRefreshPayload(job),
+                BackgroundJobNames.BlocklistSync => BuildBlocklistSyncPayload(job),
+                _ => new { } // Empty object for jobs without payloads
+            };
+
+            // Enqueue job via TickerQ utility
+            var jobId = await TickerQUtilities.ScheduleJobAsync(
+                ServiceProvider,
+                Logger,
+                jobName,
+                payload,
+                delaySeconds: 0); // Run immediately
+
+            if (jobId.HasValue)
+            {
+                Snackbar.Add($"{job.DisplayName} queued for execution", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Failed to queue {job.DisplayName}", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to queue job: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void OpenConfigDialog(BackgroundJobConfig job)
+    {
+        _editingJob = job;
+        _editScheduleType = job.ScheduleType;
+        _editIntervalHours = job.IntervalHours ?? 24;
+        _editCronExpression = job.CronExpression;
+
+        // Load job-specific settings
+        if (job.Settings != null)
+        {
+            if (job.JobName == BackgroundJobNames.ScheduledBackup)
+            {
+                if (job.Settings.TryGetValue(BackgroundJobSettings.RetentionDays, out var retention))
+                    _editRetentionDays = Convert.ToInt32(((JsonElement)retention).GetInt32());
+                if (job.Settings.TryGetValue(BackgroundJobSettings.BackupDirectory, out var dir))
+                    _editBackupDirectory = ((JsonElement)dir).GetString();
+            }
+            else if (job.JobName == BackgroundJobNames.DatabaseMaintenance)
+            {
+                if (job.Settings.TryGetValue(BackgroundJobSettings.RunVacuum, out var vacuum))
+                    _editRunVacuum = ((JsonElement)vacuum).GetBoolean();
+                if (job.Settings.TryGetValue(BackgroundJobSettings.RunAnalyze, out var analyze))
+                    _editRunAnalyze = ((JsonElement)analyze).GetBoolean();
+            }
+        }
+
+        _showConfigDialog = true;
+    }
+
+    private void CloseConfigDialog()
+    {
+        _showConfigDialog = false;
+        _editingJob = null;
+    }
+
+    private async Task SaveConfigAsync()
+    {
+        if (_editingJob == null || _jobs == null)
+            return;
+
+        try
+        {
+            // Update schedule
+            _editingJob.ScheduleType = _editScheduleType;
+            if (_editScheduleType == "interval")
+            {
+                _editingJob.IntervalHours = _editIntervalHours;
+                _editingJob.CronExpression = null;
+            }
+            else
+            {
+                _editingJob.CronExpression = _editCronExpression;
+                _editingJob.IntervalHours = null;
+            }
+
+            // Update job-specific settings
+            _editingJob.Settings ??= new Dictionary<string, object>();
+
+            if (_editingJob.JobName == BackgroundJobNames.ScheduledBackup)
+            {
+                _editingJob.Settings[BackgroundJobSettings.RetentionDays] = _editRetentionDays;
+                if (!string.IsNullOrWhiteSpace(_editBackupDirectory))
+                    _editingJob.Settings[BackgroundJobSettings.BackupDirectory] = _editBackupDirectory;
+            }
+            else if (_editingJob.JobName == BackgroundJobNames.DatabaseMaintenance)
+            {
+                _editingJob.Settings[BackgroundJobSettings.RunVacuum] = _editRunVacuum;
+                _editingJob.Settings[BackgroundJobSettings.RunAnalyze] = _editRunAnalyze;
+            }
+
+            await JobConfigService.UpdateJobConfigAsync(_editingJob.JobName, _editingJob);
+            await LoadJobsAsync(); // Refresh
+
+            Snackbar.Add($"{_editingJob.DisplayName} configuration saved", Severity.Success);
+            CloseConfigDialog();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save configuration: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private object BuildBackupPayload(BackgroundJobConfig job)
+    {
+        var retentionDays = 7;
+        string? backupDir = null;
+
+        if (job.Settings != null)
+        {
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RetentionDays, out var retention))
+                retentionDays = Convert.ToInt32(((JsonElement)retention).GetInt32());
+            if (job.Settings.TryGetValue(BackgroundJobSettings.BackupDirectory, out var dir))
+                backupDir = ((JsonElement)dir).GetString();
+        }
+
+        return new ScheduledBackupPayload
+        {
+            RetentionDays = retentionDays,
+            BackupDirectory = backupDir
+        };
+    }
+
+    private object BuildMaintenancePayload(BackgroundJobConfig job)
+    {
+        var runVacuum = true;
+        var runAnalyze = true;
+
+        if (job.Settings != null)
+        {
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RunVacuum, out var vacuum))
+                runVacuum = ((JsonElement)vacuum).GetBoolean();
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RunAnalyze, out var analyze))
+                runAnalyze = ((JsonElement)analyze).GetBoolean();
+        }
+
+        return new DatabaseMaintenancePayload
+        {
+            RunVacuum = runVacuum,
+            RunAnalyze = runAnalyze,
+            RunVacuumFull = false
+        };
+    }
+
+    private object BuildUserPhotoRefreshPayload(BackgroundJobConfig job)
+    {
+        var daysBack = 7;
+
+        if (job.Settings != null)
+        {
+            if (job.Settings.TryGetValue(BackgroundJobSettings.DaysBack, out var days))
+                daysBack = Convert.ToInt32(((JsonElement)days).GetInt32());
+        }
+
+        return new RefreshUserPhotosPayload
+        {
+            DaysBack = daysBack
+        };
+    }
+
+    private object BuildBlocklistSyncPayload(BackgroundJobConfig job)
+    {
+        return new BlocklistSyncJobPayload(
+            SubscriptionId: null, // Sync all
+            ChatId: 0, // Global
+            ForceRebuild: false
+        );
+    }
+
+    private static string FormatCronSchedule(string? cron)
+    {
+        if (string.IsNullOrEmpty(cron))
+            return "Not configured";
+
+        // Parse common cron patterns for user-friendly display
+        return cron switch
+        {
+            "0 2 * * *" => "Daily at 2:00 AM",
+            "0 3 * * *" => "Daily at 3:00 AM",
+            "0 4 * * *" => "Daily at 4:00 AM",
+            "0 0 * * *" => "Daily at midnight",
+            "0 3 * * 0" => "Sundays at 3:00 AM",
+            "0 4 * * 0" => "Sundays at 4:00 AM",
+            "0 */6 * * *" => "Every 6 hours",
+            "0 */12 * * *" => "Every 12 hours",
+            "0 0 1 * *" => "First of month at midnight",
+            _ => cron
+        };
+    }
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}

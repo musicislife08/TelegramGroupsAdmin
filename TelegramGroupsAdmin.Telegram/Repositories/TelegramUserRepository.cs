@@ -119,6 +119,41 @@ public class TelegramUserRepository : ITelegramUserRepository
         }
     }
 
+    public Task<UiModels.TelegramUser?> GetByIdAsync(long telegramUserId, CancellationToken ct = default)
+    {
+        return GetByTelegramIdAsync(telegramUserId, ct);
+    }
+
+    public async Task UpdatePhotoFileUniqueIdAsync(long telegramUserId, string? fileUniqueId, string? photoPath, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var entity = await context.TelegramUsers
+            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, ct);
+
+        if (entity != null)
+        {
+            entity.PhotoFileUniqueId = fileUniqueId;
+            if (photoPath != null)
+                entity.UserPhotoPath = photoPath;
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+
+            await context.SaveChangesAsync(ct);
+        }
+    }
+
+    public async Task<List<UiModels.TelegramUser>> GetActiveUsersAsync(int days, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var cutoffDate = DateTimeOffset.UtcNow.AddDays(-days);
+
+        var entities = await context.TelegramUsers
+            .Where(u => u.LastSeenAt >= cutoffDate)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        return entities.Select(e => e.ToModel()).ToList();
+    }
+
     /// <summary>
     /// Update trust status (Phase 5.5: Auto-trust feature)
     /// </summary>

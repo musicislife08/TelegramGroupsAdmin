@@ -12,7 +12,10 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.10" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.10" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
-    <PackageReference Include="TickerQ" Version="2.5.3" />
+    <PackageReference Include="TickerQ" Version="2.5.3">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>analyzers</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
 </Project>

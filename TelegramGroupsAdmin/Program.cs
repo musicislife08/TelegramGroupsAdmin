@@ -43,7 +43,7 @@ var connectionString = builder.Configuration.GetConnectionString("PostgreSQL")
 builder.Services.AddDataServices(connectionString);
 
 // Background job system (TickerQ with PostgreSQL backend)
-builder.Services.AddTickerQBackgroundJobs();
+builder.Services.AddTickerQBackgroundJobs(builder.Environment);
 
 // Telegram services and bot commands
 builder.Services.AddTelegramServices();
@@ -55,6 +55,10 @@ builder.Services.AddRepositories();
 builder.Services.AddContentDetection();
 
 var app = builder.Build();
+
+// Explicitly initialize TickerQ functions BEFORE UseTickerQ() is called
+// (for .NET 10 RC2 compatibility - ModuleInitializer doesn't auto-execute)
+TelegramGroupsAdmin.TickerQInstanceFactory.Initialize();
 
 // Run database migrations
 await app.RunDatabaseMigrationsAsync(connectionString);

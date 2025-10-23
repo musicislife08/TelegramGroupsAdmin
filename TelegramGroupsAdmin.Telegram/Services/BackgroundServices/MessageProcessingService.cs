@@ -41,6 +41,15 @@ public partial class MessageProcessingService(
     // Events for real-time UI updates
     public event Action<MessageRecord>? OnNewMessage;
     public event Action<MessageEditRecord>? OnMessageEdited;
+    public event Action<long, TelegramGroupsAdmin.Telegram.Models.MediaType>? OnMediaUpdated;
+
+    /// <summary>
+    /// Raises the OnMediaUpdated event (called by MediaRefetchWorkerService)
+    /// </summary>
+    public void RaiseMediaUpdated(long messageId, TelegramGroupsAdmin.Telegram.Models.MediaType mediaType)
+    {
+        OnMediaUpdated?.Invoke(messageId, mediaType);
+    }
 
     /// <summary>
     /// Handle new messages: save to database, execute commands, run spam detection
@@ -397,6 +406,7 @@ public partial class MessageProcessingService(
                 LastName: message.From.LastName,
                 UserPhotoPath: null, // Will be populated by FetchUserPhotoJob
                 PhotoHash: null,
+                PhotoFileUniqueId: null, // Will be populated by FetchUserPhotoJob
                 IsTrusted: false,
                 BotDmEnabled: false, // Will be set to true when user sends /start in private chat
                 FirstSeenAt: now,
