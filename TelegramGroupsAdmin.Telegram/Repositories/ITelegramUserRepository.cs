@@ -18,7 +18,7 @@ public interface ITelegramUserRepository
     Task SetBotDmEnabledAsync(long telegramUserId, bool enabled, CancellationToken ct = default);
     Task<List<long>> GetTrustedUserIdsAsync(CancellationToken ct = default);
     Task<List<UiModels.TelegramUserListItem>> GetAllWithStatsAsync(CancellationToken ct = default);
-    Task<List<UiModels.TelegramUserListItem>> GetFlaggedUsersAsync(CancellationToken ct = default);
+    Task<List<UiModels.TelegramUserListItem>> GetTaggedUsersAsync(CancellationToken ct = default);
     Task<List<UiModels.TelegramUserListItem>> GetBannedUsersAsync(CancellationToken ct = default);
     Task<List<UiModels.BannedUserListItem>> GetBannedUsersWithDetailsAsync(CancellationToken ct = default);
     Task<List<UiModels.TelegramUserListItem>> GetTrustedUsersAsync(CancellationToken ct = default);

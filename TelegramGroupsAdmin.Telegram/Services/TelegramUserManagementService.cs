@@ -35,11 +35,11 @@ public class TelegramUserManagementService
     }
 
     /// <summary>
-    /// Get users flagged for review (warnings, notes, tags)
+    /// Get users with tags or notes for tracking (includes warned users)
     /// </summary>
-    public Task<List<TelegramUserListItem>> GetFlaggedUsersAsync(CancellationToken ct = default)
+    public Task<List<TelegramUserListItem>> GetTaggedUsersAsync(CancellationToken ct = default)
     {
-        return _userRepository.GetFlaggedUsersAsync(ct);
+        return _userRepository.GetTaggedUsersAsync(ct);
     }
 
     /// <summary>

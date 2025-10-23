@@ -8,8 +8,8 @@ public enum TelegramUserStatus
     /// <summary>No issues - blue badge</summary>
     Clean = 0,
 
-    /// <summary>Needs review - yellow badge</summary>
-    Flagged = 1,
+    /// <summary>Has tags or notes for tracking - yellow badge</summary>
+    Tagged = 1,
 
     /// <summary>Has warnings - orange badge</summary>
     Warned = 2,

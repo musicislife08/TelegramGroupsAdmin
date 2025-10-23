@@ -20,7 +20,7 @@ public class TelegramUserListItem
     public int NoteCount { get; set; }
     public bool IsBanned { get; set; }
     public bool HasWarnings { get; set; }
-    public bool IsFlagged { get; set; }  // Has notes, tags, borderline spam, or reports
+    public bool IsTagged { get; set; }  // Has notes or tags for tracking
 
     // Display helpers
     public string DisplayName => !string.IsNullOrEmpty(Username) ? $"@{Username}" : FirstName ?? $"User {TelegramUserId}";
@@ -31,7 +31,7 @@ public class TelegramUserListItem
             if (IsTrusted) return TelegramUserStatus.Trusted;
             if (IsBanned) return TelegramUserStatus.Banned;
             if (HasWarnings) return TelegramUserStatus.Warned;
-            if (IsFlagged) return TelegramUserStatus.Flagged;
+            if (IsTagged) return TelegramUserStatus.Tagged;
             return TelegramUserStatus.Clean;
         }
     }

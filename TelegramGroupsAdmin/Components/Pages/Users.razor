@@ -116,8 +116,8 @@
             </MudTable>
         </MudTabPanel>
 
-        <MudTabPanel Text="Flagged" Icon="@Icons.Material.Filled.Flag" BadgeData="@FilteredFlaggedUsers.Count" BadgeColor="Color.Warning">
-            <MudTable Items="@FilteredFlaggedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true" Virtualize="true" FixedHeader="true" Height="600px">
+        <MudTabPanel Text="Tagged" Icon="@Icons.Material.Filled.LocalOffer" BadgeData="@FilteredTaggedUsers.Count" BadgeColor="Color.Warning">
+            <MudTable Items="@FilteredTaggedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true" Virtualize="true" FixedHeader="true" Height="600px">
                 <HeaderContent>
                     <MudTh>User</MudTh>
                     <MudTh>Status</MudTh>
@@ -303,7 +303,7 @@
 
 @code {
     private List<TelegramUserListItem> _allUsers = new();
-    private List<TelegramUserListItem> _flaggedUsers = new();
+    private List<TelegramUserListItem> _taggedUsers = new();
     private List<TelegramUserListItem> _trustedUsers = new();
     private List<TelegramUserListItem> _bannedUsers = new();
     private List<BannedUserListItem> _bannedUsersWithDetails = new();
@@ -315,7 +315,7 @@
 
     // Filtered lists (computed)
     private List<TelegramUserListItem> FilteredAllUsers => FilterUsers(_allUsers);
-    private List<TelegramUserListItem> FilteredFlaggedUsers => FilterUsers(_flaggedUsers);
+    private List<TelegramUserListItem> FilteredTaggedUsers => FilterUsers(_taggedUsers);
     private List<TelegramUserListItem> FilteredTrustedUsers => FilterUsers(_trustedUsers);
     private List<TelegramUserListItem> FilteredBannedUsers => FilterUsers(_bannedUsers);
     private List<BannedUserListItem> FilteredBannedUsersWithDetails => FilterBannedUsers(_bannedUsersWithDetails);
@@ -373,16 +373,16 @@
         {
             // Load all user lists in parallel
             var allUsersTask = UserManagementService.GetAllUsersAsync();
-            var flaggedTask = UserManagementService.GetFlaggedUsersAsync();
+            var taggedTask = UserManagementService.GetTaggedUsersAsync();
             var trustedTask = UserManagementService.GetTrustedUsersAsync();
             var bannedTask = UserManagementService.GetBannedUsersAsync();
             var bannedWithDetailsTask = UserManagementService.GetBannedUsersWithDetailsAsync();
 
-            await Task.WhenAll(allUsersTask, flaggedTask, trustedTask, bannedTask, bannedWithDetailsTask);
+            await Task.WhenAll(allUsersTask, taggedTask, trustedTask, bannedTask, bannedWithDetailsTask);
 
             // Exclude system user (telegram_user_id=0) from all lists
             _allUsers = (await allUsersTask).Where(u => u.TelegramUserId != 0).ToList();
-            _flaggedUsers = (await flaggedTask).Where(u => u.TelegramUserId != 0).ToList();
+            _taggedUsers = (await taggedTask).Where(u => u.TelegramUserId != 0).ToList();
             _trustedUsers = (await trustedTask).Where(u => u.TelegramUserId != 0).ToList();
             _bannedUsers = (await bannedTask).Where(u => u.TelegramUserId != 0).ToList();
             _bannedUsersWithDetails = (await bannedWithDetailsTask).Where(u => u.TelegramUserId != 0).ToList();
@@ -504,7 +504,7 @@
         TelegramUserStatus.Trusted => Color.Success,
         TelegramUserStatus.Banned => Color.Error,
         TelegramUserStatus.Warned => Color.Warning,
-        TelegramUserStatus.Flagged => Color.Warning,
+        TelegramUserStatus.Tagged => Color.Warning,
         TelegramUserStatus.Clean => Color.Info,
         _ => Color.Default
     };
@@ -514,7 +514,7 @@
         TelegramUserStatus.Trusted => "🟢",
         TelegramUserStatus.Banned => "🔴",
         TelegramUserStatus.Warned => "🟠",
-        TelegramUserStatus.Flagged => "🟡",
+        TelegramUserStatus.Tagged => "🟡",
         TelegramUserStatus.Clean => "🔵",
         _ => ""
     };

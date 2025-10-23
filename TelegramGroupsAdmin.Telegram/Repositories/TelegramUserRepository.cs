@@ -291,7 +291,7 @@ public class TelegramUserRepository : ITelegramUserRepository
                 NoteCount = 0,
                 IsBanned = false,
                 HasWarnings = false,
-                IsFlagged = false
+                IsTagged = false
             })
             .ToListAsync(ct);
 
@@ -303,22 +303,22 @@ public class TelegramUserRepository : ITelegramUserRepository
             user.NoteCount = noteCounts.GetValueOrDefault(user.TelegramUserId, 0);
             user.IsBanned = bannedUserIds.Contains(user.TelegramUserId);
             user.HasWarnings = usersWithWarnings.Contains(user.TelegramUserId);
-            user.IsFlagged = usersWithNotes.Contains(user.TelegramUserId) || usersWithTags.Contains(user.TelegramUserId);
+            user.IsTagged = usersWithNotes.Contains(user.TelegramUserId) || usersWithTags.Contains(user.TelegramUserId);
         }
 
         return users;
     }
 
     /// <summary>
-    /// Get users flagged for review (has notes, tags, borderline spam, or warnings)
+    /// Get users with tags or notes for tracking (includes warned users)
     /// </summary>
-    public async Task<List<UiModels.TelegramUserListItem>> GetFlaggedUsersAsync(CancellationToken ct = default)
+    public async Task<List<UiModels.TelegramUserListItem>> GetTaggedUsersAsync(CancellationToken ct = default)
     {
         var allUsers = await GetAllWithStatsAsync(ct);
 
-        // Filter to flagged users
+        // Filter to tagged users (includes warnings since those show in tagged status)
         return allUsers
-            .Where(u => u.IsFlagged || u.HasWarnings)
+            .Where(u => u.IsTagged || u.HasWarnings)
             .ToList();
     }
 
@@ -457,8 +457,8 @@ public class TelegramUserRepository : ITelegramUserRepository
                 .Distinct()
                 .CountAsync(ct),
 
-            // Flagged count (Phase 4.12: users with notes or tags)
-            FlaggedCount = await context.TelegramUsers
+            // Tagged count (users with notes or tags for tracking)
+            TaggedCount = await context.TelegramUsers
                 .Where(u => context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId)
                     || context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId))
                 .CountAsync(ct),

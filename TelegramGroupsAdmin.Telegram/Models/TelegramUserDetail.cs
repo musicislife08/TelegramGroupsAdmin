@@ -33,7 +33,7 @@ public class TelegramUserDetail
             if (IsTrusted) return TelegramUserStatus.Trusted;
             if (IsBanned) return TelegramUserStatus.Banned;
             if (HasWarnings) return TelegramUserStatus.Warned;
-            if (IsFlagged) return TelegramUserStatus.Flagged;
+            if (IsTagged) return TelegramUserStatus.Tagged;
             return TelegramUserStatus.Clean;
         }
     }
@@ -44,5 +44,5 @@ public class TelegramUserDetail
     public bool HasWarnings => Actions.Any(a => a.ActionType == UserActionType.Warn &&
         (a.ExpiresAt == null || a.ExpiresAt > DateTimeOffset.UtcNow));
 
-    public bool IsFlagged => Notes.Any() || Tags.Any(); // Phase 4.12: Has notes or tags
+    public bool IsTagged => Notes.Any() || Tags.Any(); // Has notes or tags for tracking
 }
