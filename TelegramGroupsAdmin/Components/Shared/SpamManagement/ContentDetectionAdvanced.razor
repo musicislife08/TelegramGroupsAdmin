@@ -1,7 +1,15 @@
 @using TelegramGroupsAdmin.ContentDetection.Configuration
 @using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Services.PromptBuilder
+@using TelegramGroupsAdmin.Services
 @inject ISpamDetectionConfigRepository ConfigRepository
+@inject IPromptVersionRepository PromptVersionRepository
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject BlazorAuthHelper AuthHelper
+@inject IPromptBuilderService PromptBuilderService
 
 <MudGrid>
     <MudItem xs="12" md="6">
@@ -178,9 +186,82 @@
 
                     <MudTextField @bind-Value="openAIConfig.SystemPrompt"
                                  Label="Custom System Prompt (Optional)"
-                                 Lines="3"
+                                 Lines="5"
+                                 AutoGrow="true"
+                                 Variant="Variant.Outlined"
                                  Disabled="@openAIReadOnly"
                                  HelperText="@(openAIReadOnly ? "Using global prompt" : "Topic-specific instructions for this group")" />
+
+                    @if (!_isGlobalView && !openAIReadOnly)
+                    {
+                        <MudDivider Class="my-2" />
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudText Typo="Typo.subtitle1" Color="Color.Primary">AI Prompt Builder</MudText>
+                            <MudSpacer />
+                            <MudButton Color="Color.Primary"
+                                      Variant="Variant.Filled"
+                                      Size="Size.Small"
+                                      StartIcon="@Icons.Material.Filled.AutoAwesome"
+                                      OnClick="OpenPromptBuilder">
+                                Generate with AI
+                            </MudButton>
+                        </MudStack>
+
+                        @if (_promptVersions.Any())
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                Version History (@_promptVersions.Count versions)
+                            </MudText>
+
+                            <MudList T="string" Dense="true">
+                                @foreach (var version in _promptVersions.Take(5))
+                                {
+                                    <MudListItem T="string">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudChip T="string"
+                                                    Size="Size.Small"
+                                                    Color="@(version.IsActive ? Color.Success : Color.Default)"
+                                                    Variant="@(version.IsActive ? Variant.Filled : Variant.Outlined)">
+                                                v@(version.Version)
+                                            </MudChip>
+                                            <MudText Typo="Typo.caption" Class="flex-grow-1">
+                                                @version.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")
+                                                @if (!string.IsNullOrEmpty(version.CreatedBy))
+                                                {
+                                                    <text> by @version.CreatedBy</text>
+                                                }
+                                            </MudText>
+                                            @if (!version.IsActive)
+                                            {
+                                                <MudIconButton Icon="@Icons.Material.Filled.RestorePage"
+                                                              Size="Size.Small"
+                                                              Color="Color.Primary"
+                                                              OnClick="@(() => RestoreVersion(version.Id))"
+                                                              title="Restore this version" />
+                                            }
+                                            <MudIconButton Icon="@Icons.Material.Filled.AutoFixHigh"
+                                                          Size="Size.Small"
+                                                          Color="Color.Secondary"
+                                                          OnClick="@(() => OpenImproveDialog(version))"
+                                                          title="Improve with AI" />
+                                            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                          Size="Size.Small"
+                                                          Color="Color.Default"
+                                                          OnClick="@(() => ViewVersion(version))"
+                                                          title="View prompt" />
+                                        </MudStack>
+                                    </MudListItem>
+                                }
+                            </MudList>
+
+                            @if (_promptVersions.Count > 5)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    Showing 5 of @_promptVersions.Count versions
+                                </MudText>
+                            }
+                        }
+                    }
                 }
             </MudStack>
         </MudPaper>
@@ -193,11 +274,16 @@
 
     private SpamDetectionConfig _config = new();
     private SpamDetectionConfig _globalConfig = new();
+    private List<PromptVersion> _promptVersions = new();
     private bool _isGlobalView => !ChatId.HasValue || ChatId.Value == 0;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadConfiguration();
+        if (!_isGlobalView)
+        {
+            await LoadPromptVersions();
+        }
     }
 
     private async Task LoadConfiguration()
@@ -239,5 +325,163 @@
         }
 
         return _config;
+    }
+
+    private async Task LoadPromptVersions()
+    {
+        if (!ChatId.HasValue || ChatId.Value == 0) return;
+
+        try
+        {
+            _promptVersions = await PromptVersionRepository.GetVersionHistoryByChatIdAsync(ChatId.Value);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading prompt versions: {ex.Message}", Severity.Warning);
+            _promptVersions = new List<PromptVersion>();
+        }
+    }
+
+    private async Task OpenPromptBuilder()
+    {
+        if (!ChatId.HasValue || ChatId.Value == 0) return;
+
+        var parameters = new DialogParameters<PromptBuilderDialog>
+        {
+            { x => x.ChatId, ChatId.Value }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<PromptBuilderDialog>("AI Prompt Builder", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled && result.Data is string generatedPrompt)
+        {
+            try
+            {
+                var userEmail = await AuthHelper.GetCurrentUserEmailAsync();
+
+                // Save as new version
+                var newVersion = await PromptVersionRepository.CreateVersionAsync(
+                    ChatId.Value,
+                    generatedPrompt,
+                    userEmail,
+                    null // Metadata is already stored by PromptBuilderService
+                );
+
+                // Update the config to use the new prompt
+                _config.OpenAI.SystemPrompt = generatedPrompt;
+
+                // Reload versions to show the new one
+                await LoadPromptVersions();
+
+                Snackbar.Add($"Prompt v{newVersion.Version} created and activated!", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error saving prompt: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task RestoreVersion(long versionId)
+    {
+        if (!ChatId.HasValue || ChatId.Value == 0) return;
+
+        try
+        {
+            var restoredVersion = await PromptVersionRepository.RestoreVersionAsync(versionId);
+
+            // Update the config to use the restored prompt
+            _config.OpenAI.SystemPrompt = restoredVersion.PromptText;
+
+            // Reload versions to update UI
+            await LoadPromptVersions();
+
+            Snackbar.Add($"Prompt v{restoredVersion.Version} restored and activated!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error restoring prompt: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ViewVersion(PromptVersion version)
+    {
+        var parameters = new DialogParameters
+        {
+            { "Title", $"Prompt Version {version.Version}" },
+            { "Content", version.PromptText },
+            { "ReadOnly", true }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true
+        };
+
+        await DialogService.ShowMessageBox(
+            $"Prompt Version {version.Version}",
+            version.PromptText,
+            "Close");
+    }
+
+    private async Task OpenImproveDialog(PromptVersion version)
+    {
+        if (!ChatId.HasValue || ChatId.Value == 0) return;
+
+        var parameters = new DialogParameters<PromptImprovementDialog>
+        {
+            { x => x.CurrentPrompt, version.PromptText }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<PromptImprovementDialog>(
+            $"Improve Prompt v{version.Version}",
+            parameters,
+            options);
+
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled && result.Data is string improvedPrompt)
+        {
+            try
+            {
+                var userEmail = await AuthHelper.GetCurrentUserEmailAsync();
+
+                // Save as new version
+                var newVersion = await PromptVersionRepository.CreateVersionAsync(
+                    ChatId.Value,
+                    improvedPrompt,
+                    userEmail,
+                    null // Metadata is already stored by PromptBuilderService
+                );
+
+                // Update the config to use the new improved prompt
+                _config.OpenAI.SystemPrompt = improvedPrompt;
+
+                // Reload versions to show the new one
+                await LoadPromptVersions();
+
+                Snackbar.Add($"Improved prompt saved as v{newVersion.Version} and activated!", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error saving improved prompt: {ex.Message}", Severity.Error);
+            }
+        }
     }
 }

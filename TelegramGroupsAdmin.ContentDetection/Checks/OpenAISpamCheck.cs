@@ -20,7 +20,7 @@ public class OpenAIContentCheck(
     IMemoryCache cache,
     IMessageHistoryService messageHistoryService) : IContentCheck
 {
-    private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
+    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
 
     public string CheckName => "OpenAI";
 
@@ -48,11 +48,6 @@ public class OpenAIContentCheck(
 
         try
         {
-            // Configure HTTP client for OpenAI API
-            _httpClient.Timeout = TimeSpan.FromSeconds(30);
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "TelegramGroupsAdmin/1.0");
-
             // Skip short messages unless specifically configured to check them
             if (!req.CheckShortMessages && req.Message.Length < req.MinMessageLength)
             {
@@ -109,12 +104,12 @@ public class OpenAIContentCheck(
             logger.LogDebug("OpenAI check for user {UserId}: Calling API with message length {MessageLength}",
                 req.UserId, req.Message.Length);
 
-            // Make API call
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
-            httpRequest.Headers.Add("Authorization", $"Bearer {req.ApiKey}");
+            // Make API call using named "OpenAI" HttpClient (configured in ServiceCollectionExtensions)
+            var httpClient = _httpClientFactory.CreateClient("OpenAI");
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "chat/completions");
             httpRequest.Content = new StringContent(requestJson, System.Text.Encoding.UTF8, "application/json");
 
-            using var response = await _httpClient.SendAsync(httpRequest, req.CancellationToken);
+            using var response = await httpClient.SendAsync(httpRequest, req.CancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {

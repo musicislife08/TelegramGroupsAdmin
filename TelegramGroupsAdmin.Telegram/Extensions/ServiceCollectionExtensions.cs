@@ -40,6 +40,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
+        services.AddScoped<IPromptVersionRepository, PromptVersionRepository>(); // Phase 4.X: AI-powered prompt builder
 
         // Telegram infrastructure
         services.AddSingleton<TelegramBotClientFactory>();

@@ -16,7 +16,7 @@ public class ImageSpamCheck(
     ILogger<ImageSpamCheck> logger,
     IHttpClientFactory httpClientFactory) : IContentCheck
 {
-    private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
+    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
 
     public string CheckName => "ImageSpam";
 
@@ -38,8 +38,6 @@ public class ImageSpamCheck(
 
         try
         {
-            _httpClient.Timeout = TimeSpan.FromSeconds(30);
-
             if (string.IsNullOrEmpty(req.ApiKey))
             {
                 logger.LogWarning("OpenAI API key not configured for image spam detection");
@@ -113,14 +111,13 @@ public class ImageSpamCheck(
                 temperature = 0.1
             };
 
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {req.ApiKey}");
-
             logger.LogDebug("ImageSpam check for user {UserId}: Calling OpenAI Vision API",
                 req.UserId);
 
-            var response = await _httpClient.PostAsJsonAsync(
-                "https://api.openai.com/v1/chat/completions",
+            // Use named "OpenAI" HttpClient (configured in ServiceCollectionExtensions)
+            var httpClient = _httpClientFactory.CreateClient("OpenAI");
+            var response = await httpClient.PostAsJsonAsync(
+                "chat/completions",
                 apiRequest,
                 req.CancellationToken);
 

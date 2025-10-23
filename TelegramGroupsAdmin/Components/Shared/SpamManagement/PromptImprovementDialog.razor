@@ -1,0 +1,109 @@
+@using TelegramGroupsAdmin.Services.PromptBuilder
+@inject IPromptBuilderService PromptBuilderService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (_isGenerating)
+            {
+                <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-4">
+                    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
+                    <MudText Typo="Typo.body1">Improving prompt with AI...</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        This may take 10-30 seconds
+                    </MudText>
+                </MudStack>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    Tell the AI what to improve about this prompt version.
+                </MudAlert>
+
+                <MudTextField @bind-Value="CurrentPrompt"
+                             Label="Current Prompt"
+                             Lines="8"
+                             Variant="Variant.Outlined"
+                             ReadOnly="true"
+                             HelperText="This is the prompt that will be improved" />
+
+                <MudTextField @bind-Value="_improvementFeedback"
+                             Label="What would you like to improve? *"
+                             Lines="4"
+                             Variant="Variant.Outlined"
+                             Placeholder="e.g., Make it more strict about promotional content, Add rules for crypto scams, Be more lenient with technical discussions"
+                             HelperText="Describe what's wrong or what could be better"
+                             Required="true"
+                             @ref="_feedbackField" />
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@_isGenerating">Cancel</MudButton>
+        @if (!_isGenerating)
+        {
+            <MudButton Color="Color.Secondary"
+                      Variant="Variant.Filled"
+                      OnClick="ImprovePrompt"
+                      Disabled="@(string.IsNullOrWhiteSpace(_improvementFeedback))">
+                Generate Improvement
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string CurrentPrompt { get; set; } = string.Empty;
+
+    private string? _improvementFeedback;
+    private bool _isGenerating;
+    private MudTextField<string>? _feedbackField;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _feedbackField != null)
+        {
+            await _feedbackField.FocusAsync();
+        }
+    }
+
+    private async Task ImprovePrompt()
+    {
+        if (string.IsNullOrWhiteSpace(CurrentPrompt) || string.IsNullOrWhiteSpace(_improvementFeedback))
+        {
+            Snackbar.Add("Cannot improve prompt: missing prompt or feedback", Severity.Warning);
+            return;
+        }
+
+        _isGenerating = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await PromptBuilderService.ImprovePromptAsync(CurrentPrompt, _improvementFeedback);
+
+            if (response.Success)
+            {
+                Snackbar.Add("Prompt improved successfully!", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(response.GeneratedPrompt));
+            }
+            else
+            {
+                Snackbar.Add($"Failed to improve prompt: {response.ErrorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error improving prompt: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isGenerating = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

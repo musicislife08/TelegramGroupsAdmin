@@ -130,6 +130,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuditService, AuditService>();
         services.AddScoped<BlazorAuthHelper>(); // Authentication context extraction helper for UI components
 
+        // Prompt builder service (Phase 4.X: AI-powered prompt generation)
+        services.AddScoped<TelegramGroupsAdmin.Services.PromptBuilder.IPromptBuilderService, TelegramGroupsAdmin.Services.PromptBuilder.PromptBuilderService>();
+
         // Backup service (replaces old UserDataExportService)
         services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupService, TelegramGroupsAdmin.Services.Backup.BackupService>();
 
@@ -228,8 +231,24 @@ public static class ServiceCollectionExtensions
                 resiliencePipelineBuilder.AddRateLimiter(limiterOptions);
             });
 
+        // Named HttpClient for OpenAI (shared by all OpenAI services)
+        services.AddHttpClient("OpenAI", client =>
+        {
+            client.BaseAddress = new Uri("https://api.openai.com/v1/");
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.Add("User-Agent", "TelegramGroupsAdmin/1.0");
+
+            var apiKey = configuration["OpenAI:ApiKey"];
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+            }
+        });
+
         services.AddHttpClient();
-        services.AddHttpClient<IVisionSpamDetectionService, OpenAIVisionSpamDetectionService>();
+
+        // Vision spam detection service (uses named "OpenAI" HttpClient)
+        services.AddScoped<IVisionSpamDetectionService, OpenAIVisionSpamDetectionService>();
 
         return services;
     }
@@ -246,6 +265,9 @@ public static class ServiceCollectionExtensions
         // Spam Detection repositories (from ContentDetection library)
         services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.IStopWordsRepository, TelegramGroupsAdmin.ContentDetection.Repositories.StopWordsRepository>();
         services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.ISpamDetectionConfigRepository, TelegramGroupsAdmin.ContentDetection.Repositories.SpamDetectionConfigRepository>();
+
+        // Analytics repository (Phase 5: Performance metrics)
+        services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 
         // Report Actions Service (uses repositories from Telegram library)
         services.AddScoped<IReportActionsService, ReportActionsService>();

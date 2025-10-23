@@ -11,7 +11,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 /// </summary>
 public class OpenAITranslationService : IOpenAITranslationService
 {
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<OpenAITranslationService> _logger;
     private readonly OpenAIOptions _options;
 
@@ -20,17 +20,9 @@ public class OpenAITranslationService : IOpenAITranslationService
         ILogger<OpenAITranslationService> logger,
         IOptions<OpenAIOptions> options)
     {
-        _httpClient = httpClientFactory.CreateClient();
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
         _options = options.Value;
-
-        // Configure OpenAI client
-        if (!string.IsNullOrEmpty(_options.ApiKey))
-        {
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_options.ApiKey}");
-        }
-
-        _httpClient.Timeout = TimeSpan.FromSeconds(15);
     }
 
     /// <summary>
@@ -69,7 +61,9 @@ IMPORTANT: Respond with ONLY the raw JSON object. Do NOT wrap it in markdown cod
                 temperature = 0.1
             };
 
-            var response = await _httpClient.PostAsJsonAsync("https://api.openai.com/v1/chat/completions", request, cancellationToken).ConfigureAwait(false);
+            // Use named "OpenAI" HttpClient (configured in ServiceCollectionExtensions)
+            var httpClient = _httpClientFactory.CreateClient("OpenAI");
+            var response = await httpClient.PostAsJsonAsync("chat/completions", request, cancellationToken).ConfigureAwait(false);
 
             if (!response.IsSuccessStatusCode)
             {

@@ -1,0 +1,231 @@
+@using TelegramGroupsAdmin.Services.PromptBuilder
+@inject IPromptBuilderService PromptBuilderService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (_isGenerating)
+            {
+                <MudStack AlignItems="AlignItems.Center" Spacing="2" Class="pa-4">
+                    <MudProgressCircular Color="Color.Primary" Size="Size.Large" Indeterminate="true" />
+                    <MudText Typo="Typo.body1">Generating custom prompt with AI...</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        This may take 10-30 seconds
+                    </MudText>
+                </MudStack>
+            }
+            else if (_generatedPrompt != null)
+            {
+                <MudAlert Severity="Severity.Success" Dense="true">
+                    Prompt generated successfully! Review and save to activate.
+                </MudAlert>
+
+                <MudTextField @bind-Value="_generatedPrompt"
+                             Label="Generated Prompt"
+                             Lines="12"
+                             Variant="Variant.Outlined"
+                             HelperText="You can edit the generated prompt before saving" />
+
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SavePrompt" Class="flex-grow-1">
+                        Save as New Version
+                    </MudButton>
+                    <MudButton Color="Color.Secondary" Variant="Variant.Outlined" OnClick="ShowImproveDialog" StartIcon="@Icons.Material.Filled.AutoFixHigh">
+                        Improve With AI
+                    </MudButton>
+                </MudStack>
+                <MudButton Color="Color.Default" Variant="Variant.Text" OnClick="StartOver" FullWidth="true">
+                    Start Over
+                </MudButton>
+            }
+            else
+            {
+                <MudText Typo="Typo.h6" Color="Color.Primary">AI-Powered Prompt Builder</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Let AI help you create a custom spam detection prompt tailored to your group's needs.
+                </MudText>
+
+                <MudTextField @bind-Value="_request.Topic"
+                             Label="Group Topic *"
+                             Variant="Variant.Outlined"
+                             Placeholder="e.g., Crypto Trading, Tech News, Gaming"
+                             HelperText="What is this group primarily about?"
+                             Required="true" />
+
+                <MudTextField @bind-Value="_request.GroupDescription"
+                             Label="Group Description *"
+                             Lines="2"
+                             Variant="Variant.Outlined"
+                             Placeholder="e.g., A community for crypto traders to share analysis and strategies"
+                             HelperText="Provide more details about the group's focus and culture"
+                             Required="true" />
+
+                <MudTextField @bind-Value="_request.CustomRules"
+                             Label="Custom Rules (Optional)"
+                             Lines="3"
+                             Variant="Variant.Outlined"
+                             Placeholder="e.g., Allow price discussions but block pump-and-dump schemes"
+                             HelperText="Specific rules for what's allowed vs. spam in this group" />
+
+                <MudTextField @bind-Value="_request.CommonSpamPatterns"
+                             Label="Common Spam Patterns (Optional)"
+                             Lines="3"
+                             Variant="Variant.Outlined"
+                             Placeholder="e.g., Users promoting Telegram signal channels"
+                             HelperText="What types of spam do you see most often?" />
+
+                <MudTextField @bind-Value="_request.LegitimateExamples"
+                             Label="Legitimate Content Examples (Optional)"
+                             Lines="3"
+                             Variant="Variant.Outlined"
+                             Placeholder="e.g., Technical analysis charts, market news links"
+                             HelperText="Examples of content that should NOT be flagged" />
+
+                <MudSelect @bind-Value="_request.Strictness"
+                          Label="Strictness Level"
+                          Variant="Variant.Outlined"
+                          HelperText="How aggressive should spam detection be?">
+                    <MudSelectItem Value="@StrictnessLevel.Conservative">
+                        Conservative (Prefer false negatives)
+                    </MudSelectItem>
+                    <MudSelectItem Value="@StrictnessLevel.Balanced">
+                        Balanced (Middle ground)
+                    </MudSelectItem>
+                    <MudSelectItem Value="@StrictnessLevel.Aggressive">
+                        Aggressive (Prefer false positives)
+                    </MudSelectItem>
+                </MudSelect>
+
+                <MudNumericField @bind-Value="_request.MessageHistoryCount"
+                                Label="Training Sample Count"
+                                Min="0" Max="50"
+                                Variant="Variant.Outlined"
+                                HelperText="Number of training samples to analyze for context (0 to skip)" />
+
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <MudText Typo="Typo.caption">
+                        The AI will analyze your group's characteristics and training data examples to generate
+                        custom spam detection rules tailored to your community's needs.
+                    </MudText>
+                </MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="@_isGenerating">Cancel</MudButton>
+        @if (_generatedPrompt == null && !_isGenerating)
+        {
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="GeneratePrompt" Disabled="@(!IsValid())">
+                Generate Prompt
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public long ChatId { get; set; }
+
+    private PromptBuilderRequest _request = new();
+    private string? _generatedPrompt;
+    private bool _isGenerating;
+
+    protected override void OnInitialized()
+    {
+        _request.ChatId = ChatId;
+        _request.Strictness = StrictnessLevel.Balanced;
+        _request.MessageHistoryCount = 20;
+    }
+
+    private bool IsValid()
+    {
+        return !string.IsNullOrWhiteSpace(_request.Topic) &&
+               !string.IsNullOrWhiteSpace(_request.GroupDescription);
+    }
+
+    private async Task GeneratePrompt()
+    {
+        _isGenerating = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await PromptBuilderService.GeneratePromptAsync(_request);
+
+            if (response.Success)
+            {
+                _generatedPrompt = response.GeneratedPrompt;
+                Snackbar.Add("Prompt generated successfully!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Failed to generate prompt: {response.ErrorMessage}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error generating prompt: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isGenerating = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SavePrompt()
+    {
+        if (string.IsNullOrWhiteSpace(_generatedPrompt))
+        {
+            Snackbar.Add("No prompt to save", Severity.Warning);
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(_generatedPrompt));
+    }
+
+    private void StartOver()
+    {
+        _generatedPrompt = null;
+        _request = new PromptBuilderRequest
+        {
+            ChatId = ChatId,
+            Strictness = StrictnessLevel.Balanced,
+            MessageHistoryCount = 20
+        };
+    }
+
+    private async Task ShowImproveDialog()
+    {
+        if (string.IsNullOrWhiteSpace(_generatedPrompt)) return;
+
+        var parameters = new DialogParameters<PromptImprovementDialog>
+        {
+            { x => x.CurrentPrompt, _generatedPrompt }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<PromptImprovementDialog>(
+            "Improve Prompt",
+            parameters,
+            options);
+
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled && result.Data is string improvedPrompt)
+        {
+            _generatedPrompt = improvedPrompt;
+            Snackbar.Add("Prompt improved! Review and save when ready.", Severity.Success);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -40,6 +40,7 @@
 - **Scroll Preservation**: Handles negative scrollTop (Chrome/Edge flex-reverse), captures state before DOM update, double requestAnimationFrame for layout completion, polarity-aware adjustment formula, 5px bottom threshold. TODO: Remove debug console.logs after production verification (app.js:318-440)
 - **DM Notifications**: IDmDeliveryService (Singleton, creates scopes), pending_notifications (30d expiry), auto-delivery on `/start`. Account linking (`/link`) separate from DM setup. Future: Notification preferences UI with deep link to enable bot DMs.
 - **Media Attachments**: TelegramMediaService downloads and saves media (Animation/Video/Audio/Voice/Sticker/VideoNote) to /data/media, stored in messages table. Documents metadata-only (no download for display, file scanner handles temp download). MediaType enum duplicated in Data/Telegram layers (architectural boundary). UI displays media with HTML5 elements (video/audio controls, autoplay for GIFs).
+- **AI Prompt Builder**: Meta-AI feature using OpenAI to generate/improve custom spam detection prompts. Two workflows: (1) Generate from scratch via form (group topic, rules, strictness, training samples), (2) Improve existing version with feedback. prompt_versions table tracks history with versioning, metadata (generation params), created_by. Shared PromptImprovementDialog reused by generation flow and version history. Auto-grow textarea shows full prompt. Settings → Content Detection → OpenAI Integration shows version history with View/Restore/Improve buttons.
 
 ## API Endpoints
 - GET /health
@@ -88,7 +89,7 @@
 
 ### Complete ✅
 **Phase 1-3**: Foundation (Blazor UI, auth+TOTP, user mgmt, audit), 9 spam algorithms (CAS, Bayes, TF-IDF, OpenAI, VirusTotal, Vision), cross-chat bans
-**Phase 4** (17 items): TickerQ jobs, unified configs (JSONB), Telegram library, welcome system, /tempban, logging UI, settings UI, anti-impersonation (pHash), warning system, URL filtering (540K domains, 6 blocklists), file scanning (ClamAV+VirusTotal 96-98%, 16K files/month), file scan UI, DM notifications, media attachments (7 types), bot auto-ban
+**Phase 4** (18 items): TickerQ jobs, unified configs (JSONB), Telegram library, welcome system, /tempban, logging UI, settings UI, anti-impersonation (pHash), warning system, URL filtering (540K domains, 6 blocklists), file scanning (ClamAV+VirusTotal 96-98%, 16K files/month), file scan UI, DM notifications, media attachments (7 types), bot auto-ban, **AI prompt builder** (meta-AI feature, version history, iterative improvement)
 
 ### Pending ⏳
 **4.9**: Bot hot-reload, **4.12**: Tag mgmt UI (Settings page - 90% complete), **4.15**: Report aggregation, **4.16**: Appeal system, **4.17.3**: Windows AMSI (deferred), **4.18**: Forum/topics support

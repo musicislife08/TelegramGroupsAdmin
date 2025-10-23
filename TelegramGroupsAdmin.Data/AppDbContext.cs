@@ -44,6 +44,7 @@ public class AppDbContext : DbContext
     // NOTE: TrainingSamples removed in Phase 2.2 - training data comes from detection_results.used_for_training
     public DbSet<SpamDetectionConfigRecordDto> SpamDetectionConfigs => Set<SpamDetectionConfigRecordDto>();
     public DbSet<SpamCheckConfigRecordDto> SpamCheckConfigs => Set<SpamCheckConfigRecordDto>();
+    public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
 
     // URL filtering tables (Phase 4.13)
     public DbSet<BlocklistSubscriptionDto> BlocklistSubscriptions => Set<BlocklistSubscriptionDto>();

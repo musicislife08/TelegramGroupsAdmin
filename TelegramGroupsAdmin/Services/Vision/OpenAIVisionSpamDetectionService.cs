@@ -8,16 +8,16 @@ namespace TelegramGroupsAdmin.Services.Vision;
 
 public class OpenAIVisionSpamDetectionService : IVisionSpamDetectionService
 {
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly OpenAIOptions _options;
     private readonly ILogger<OpenAIVisionSpamDetectionService> _logger;
 
     public OpenAIVisionSpamDetectionService(
-        HttpClient httpClient,
+        IHttpClientFactory httpClientFactory,
         IOptions<OpenAIOptions> options,
         ILogger<OpenAIVisionSpamDetectionService> logger)
     {
-        _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
         _options = options.Value;
         _logger = logger;
     }
@@ -63,11 +63,10 @@ public class OpenAIVisionSpamDetectionService : IVisionSpamDetectionService
                 temperature = 0.1
             };
 
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_options.ApiKey}");
-
-            var response = await _httpClient.PostAsJsonAsync(
-                "https://api.openai.com/v1/chat/completions",
+            // Use named "OpenAI" HttpClient (configured in ServiceCollectionExtensions)
+            var httpClient = _httpClientFactory.CreateClient("OpenAI");
+            var response = await httpClient.PostAsJsonAsync(
+                "chat/completions",
                 request,
                 ct);
 
