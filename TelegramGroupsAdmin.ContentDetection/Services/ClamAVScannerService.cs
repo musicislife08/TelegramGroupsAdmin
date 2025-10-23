@@ -70,30 +70,74 @@ public class ClamAVScannerService : IFileScannerService
                 };
             }
 
-            // Ping ClamAV to ensure it's available
-            var pingResult = await _clamClient.PingAsync(cancellationToken);
-            if (!pingResult)
-            {
-                _logger.LogError("ClamAV daemon is not responding to ping at {Host}:{Port}",
-                    _config.Tier1.ClamAV.Host, _config.Tier1.ClamAV.Port);
+            // Scan file bytes with retry logic for transient ClamAV failures
+            // nClam library doesn't auto-reconnect, so retry on network errors
+            _logger.LogDebug("Scanning file with ClamAV (size: {Size} bytes, name: {FileName})",
+                fileBytes.Length, fileName ?? "unknown");
 
+            ClamScanResult? scanResult = null;
+            var maxRetries = 3;
+            var retryDelay = TimeSpan.FromMilliseconds(500); // Start with 500ms
+
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
+                {
+                    // Ping ClamAV before scan attempt to detect connection issues early
+                    var pingResult = await _clamClient.PingAsync(cancellationToken);
+                    if (!pingResult)
+                    {
+                        if (attempt == maxRetries)
+                        {
+                            _logger.LogError("ClamAV daemon not responding to ping after {Attempts} attempts at {Host}:{Port}",
+                                maxRetries, _config.Tier1.ClamAV.Host, _config.Tier1.ClamAV.Port);
+
+                            return new FileScanResult
+                            {
+                                Scanner = ScannerName,
+                                IsClean = true,  // Fail-open
+                                ResultType = ScanResultType.Error,
+                                ErrorMessage = "ClamAV daemon not available after retries",
+                                ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
+                            };
+                        }
+
+                        _logger.LogWarning("ClamAV ping failed on attempt {Attempt}/{MaxAttempts}, retrying in {Delay}ms",
+                            attempt, maxRetries, retryDelay.TotalMilliseconds);
+                        await Task.Delay(retryDelay, cancellationToken);
+                        retryDelay = TimeSpan.FromMilliseconds(retryDelay.TotalMilliseconds * 2); // Exponential backoff
+                        continue;
+                    }
+
+                    // Perform the actual scan
+                    scanResult = await _clamClient.SendAndScanFileAsync(fileBytes, cancellationToken);
+                    break; // Success, exit retry loop
+                }
+                catch (Exception ex) when (attempt < maxRetries && IsTransientClamAVError(ex))
+                {
+                    _logger.LogWarning(ex,
+                        "Transient ClamAV error on attempt {Attempt}/{MaxAttempts}, retrying in {Delay}ms",
+                        attempt, maxRetries, retryDelay.TotalMilliseconds);
+                    await Task.Delay(retryDelay, cancellationToken);
+                    retryDelay = TimeSpan.FromMilliseconds(retryDelay.TotalMilliseconds * 2); // Exponential backoff
+
+                    if (attempt == maxRetries)
+                        throw; // Re-throw on final attempt to hit outer catch
+                }
+            }
+
+            // If we get here and scanResult is null, all retries failed (shouldn't happen due to throw above)
+            if (scanResult == null)
+            {
                 return new FileScanResult
                 {
                     Scanner = ScannerName,
                     IsClean = true,  // Fail-open
                     ResultType = ScanResultType.Error,
-                    ErrorMessage = "ClamAV daemon not available",
+                    ErrorMessage = "All scan attempts failed",
                     ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
                 };
             }
-
-            // Scan file bytes
-            _logger.LogDebug("Scanning file with ClamAV (size: {Size} bytes, name: {FileName})",
-                fileBytes.Length, fileName ?? "unknown");
-
-            var scanResult = await _clamClient.SendAndScanFileAsync(
-                fileBytes,
-                cancellationToken);
 
             stopwatch.Stop();
 
@@ -170,6 +214,18 @@ public class ClamAVScannerService : IFileScannerService
                 ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
             };
         }
+    }
+
+    /// <summary>
+    /// Determine if an exception is a transient ClamAV error that should be retried
+    /// </summary>
+    private static bool IsTransientClamAVError(Exception ex)
+    {
+        // Network errors that indicate temporary connectivity issues
+        return ex is System.Net.Sockets.SocketException
+            || ex is System.IO.IOException
+            || ex is TimeoutException
+            || (ex.InnerException != null && IsTransientClamAVError(ex.InnerException));
     }
 
     /// <summary>
