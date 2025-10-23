@@ -7,7 +7,7 @@
 # Stage 1: Build & Publish
 # Use full SDK image for building and publishing
 # -----------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
@@ -44,8 +44,8 @@ RUN dotnet publish "./TelegramGroupsAdmin.csproj" \
 # Stage 2: Runtime (Temporarily using full runtime for debugging)
 # TODO: Switch back to chiseled-extra after debugging
 # -----------------------------------------------------------------------------
-# FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra AS final
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+# FROM mcr.microsoft.com/dotnet/aspnet:9.0-noble-chiseled-extra AS final
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 
 # Arguments for user/group ID customization
 ARG PUID=1654

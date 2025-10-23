@@ -134,17 +134,17 @@ public class StopWordsRepository : IStopWordsRepository
                 })
                 .OrderBy(x => x.sw.Word)
                 .Select(x => new Models.StopWord(
-                    Id: x.sw.Id,
-                    Word: x.sw.Word,
-                    Enabled: x.sw.Enabled,
-                    AddedDate: x.sw.AddedDate,
+                    x.sw.Id,
+                    x.sw.Word,
+                    x.sw.Enabled,
+                    x.sw.AddedDate,
                     // Resolve actor display name (Phase 4.19: Actor system)
-                    AddedBy: x.sw.WebUserId != null
+                    x.sw.WebUserId != null
                         ? (x.ActorWebEmail ?? "User " + x.sw.WebUserId.Substring(0, 8) + "...")
                         : x.sw.TelegramUserId != null
                             ? (x.ActorTelegramUsername != null ? "@" + x.ActorTelegramUsername : x.ActorTelegramFirstName ?? "User " + x.sw.TelegramUserId.ToString())
                             : x.sw.SystemIdentifier ?? "System",
-                    Notes: x.sw.Notes
+                    x.sw.Notes
                 ))
                 .ToListAsync(cancellationToken).ConfigureAwait(false);
 

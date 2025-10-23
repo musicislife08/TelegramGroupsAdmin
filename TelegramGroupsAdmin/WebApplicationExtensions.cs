@@ -24,7 +24,9 @@ public static class WebApplicationExtensions
 
         app.UseHttpsRedirection();
 
-        // Serve static files from wwwroot (required for Blazor framework files in Production)
+        // Serve static files from wwwroot
+        // UseStaticFiles is needed for running in Production mode from source (e.g., Rider debugging)
+        // MapStaticAssets (below) provides optimized delivery when running from published output
         app.UseStaticFiles();
 
         // Configure static file serving for images

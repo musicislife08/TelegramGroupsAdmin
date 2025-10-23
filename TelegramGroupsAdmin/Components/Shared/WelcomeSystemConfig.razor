@@ -253,13 +253,14 @@
         await LoadConfig();
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
             // No special initialization needed for now
             // JS interop for cursor position will be called on-demand
         }
+        return Task.CompletedTask;
     }
 
     private async Task LoadConfig()
@@ -422,8 +423,9 @@
         };
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         // Cleanup if needed
+        return ValueTask.CompletedTask;
     }
 }
