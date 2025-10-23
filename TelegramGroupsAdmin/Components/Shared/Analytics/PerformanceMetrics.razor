@@ -1,0 +1,347 @@
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@inject IAnalyticsRepository AnalyticsRepository
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="4">
+    @* Date Range Selector *@
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h6">Performance Metrics</MudText>
+            <MudStack Row="true" Spacing="2">
+                <MudButtonGroup Variant="Variant.Outlined" Color="Color.Primary">
+                    <MudButton OnClick="() => LoadLast7Days()">Last 7 Days</MudButton>
+                    <MudButton OnClick="() => LoadLast30Days()">Last 30 Days</MudButton>
+                    <MudButton OnClick="() => LoadAllTime()">All Time</MudButton>
+                </MudButtonGroup>
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          StartIcon="@Icons.Material.Filled.Refresh"
+                          OnClick="LoadData"
+                          Disabled="@_loading">
+                    Refresh
+                </MudButton>
+            </MudStack>
+        </MudStack>
+
+        @if (_startDate.HasValue && _endDate.HasValue)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                Showing data from @_startDate.Value.ToString("MMM dd, yyyy") to @_endDate.Value.ToString("MMM dd, yyyy")
+            </MudText>
+        }
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+
+    @* Key Metrics Cards *@
+    @if (_falsePositiveStats != null && _responseTimeStats != null && _dailyTrends != null)
+    {
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudCard>
+                    <MudCardContent>
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Size="Size.Large" Color="@GetFalsePositiveColor()" />
+                            <MudText Typo="Typo.h3">@_falsePositiveStats.OverallPercentage.ToString("F2")%</MudText>
+                            <MudText Typo="Typo.body1" Align="Align.Center">False Positive Rate</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @_falsePositiveStats.TotalFalsePositives of @_falsePositiveStats.TotalDetections checks
+                            </MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudCard>
+                    <MudCardContent>
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Large" Color="@GetResponseTimeColor()" />
+                            <MudText Typo="Typo.h3">@FormatResponseTime(_responseTimeStats.AverageMs)</MudText>
+                            <MudText Typo="Typo.body1" Align="Align.Center">Avg Response Time</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                P95: @FormatResponseTime(_responseTimeStats.P95Ms)
+                            </MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudCard>
+                    <MudCardContent>
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Dataset" Size="Size.Large" Color="Color.Primary" />
+                            <MudText Typo="Typo.h3">@_dailyTrends.Sum(d => d.TotalCount)</MudText>
+                            <MudText Typo="Typo.body1" Align="Align.Center">Total Detections</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @_dailyTrends.Sum(d => d.SpamCount) spam detected
+                            </MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        @* Detection Method Comparison Table *@
+        @if (_methodStats?.Any() == true)
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" GutterBottom="true" Color="Color.Primary">Detection Method Comparison</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3" Color="Color.Secondary">
+                    Effectiveness of the 9 spam detection algorithms
+                </MudText>
+
+                <MudTable Items="@_methodStats" Dense="true" Hover="true" Striped="true">
+                    <HeaderContent>
+                        <MudTh>Method</MudTh>
+                        <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.TotalChecks">Total Checks</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.SpamDetected">Spam Detected</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.SpamPercentage">Spam %</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.AverageConfidence">Avg Confidence</MudTableSortLabel></MudTh>
+                        <MudTh>False Positive Rate</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Method">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default">@context.MethodName</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Total Checks">@context.TotalChecks</MudTd>
+                        <MudTd DataLabel="Spam Detected">@context.SpamDetected</MudTd>
+                        <MudTd DataLabel="Spam %">
+                            <MudChip T="string" Size="Size.Small" Color="@GetSpamRateColor(context.SpamPercentage)">
+                                @context.SpamPercentage.ToString("F1")%
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Avg Confidence">
+                            <MudChip T="string" Size="Size.Small" Color="@GetConfidenceColor(context.AverageConfidence)">
+                                @context.AverageConfidence.ToString("F0")
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="False Positive Rate">
+                            @if (context.FalsePositives > 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="@GetFalsePositiveColor(context.FalsePositiveRate)">
+                                    @context.FalsePositiveRate.ToString("F1")% (@context.FalsePositives)
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Success">No false positives</MudText>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+
+        @* Daily Trends Chart *@
+        @if (_dailyTrends?.Any() == true)
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" GutterBottom="true" Color="Color.Primary">Daily Detection Trends</MudText>
+                <MudChart ChartType="ChartType.Line"
+                         ChartSeries="@_chartSeries"
+                         XAxisLabels="@_chartLabels"
+                         Width="100%"
+                         Height="350px"
+                         ChartOptions="@_chartOptions" />
+            </MudPaper>
+        }
+
+        @* Response Time Chart *@
+        @if (_responseTimeStats?.DailyAverages?.Any() == true)
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" GutterBottom="true" Color="Color.Primary">Response Time Trends</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3" Color="Color.Secondary">
+                    Average time from spam detection to moderation action (ban/warn)
+                </MudText>
+                <MudChart ChartType="ChartType.Bar"
+                         ChartSeries="@_responseTimeChartSeries"
+                         XAxisLabels="@_responseTimeChartLabels"
+                         Width="100%"
+                         Height="300px" />
+            </MudPaper>
+        }
+    }
+    else if (!_loading && _dataLoaded)
+    {
+        <MudAlert Severity="Severity.Info">
+            No detection data available for the selected time range. Detection data will appear here once spam checks are performed.
+        </MudAlert>
+    }
+</MudStack>
+
+@code {
+    private bool _loading = true;
+    private bool _dataLoaded = false;
+    private DateTimeOffset? _startDate;
+    private DateTimeOffset? _endDate;
+
+    // Analytics data
+    private FalsePositiveStats? _falsePositiveStats;
+    private ResponseTimeStats? _responseTimeStats;
+    private List<DetectionMethodStats>? _methodStats;
+    private List<DailyDetectionTrend>? _dailyTrends;
+
+    // Chart data
+    private List<ChartSeries> _chartSeries = new();
+    private string[] _chartLabels = Array.Empty<string>();
+    private ChartOptions _chartOptions = new();
+
+    private List<ChartSeries> _responseTimeChartSeries = new();
+    private string[] _responseTimeChartLabels = Array.Empty<string>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLast30Days();
+    }
+
+    private async Task LoadLast7Days()
+    {
+        _endDate = DateTimeOffset.UtcNow;
+        _startDate = _endDate.Value.AddDays(-7);
+        await LoadData();
+    }
+
+    private async Task LoadLast30Days()
+    {
+        _endDate = DateTimeOffset.UtcNow;
+        _startDate = _endDate.Value.AddDays(-30);
+        await LoadData();
+    }
+
+    private async Task LoadAllTime()
+    {
+        _endDate = DateTimeOffset.UtcNow;
+        _startDate = DateTimeOffset.MinValue;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        if (!_startDate.HasValue || !_endDate.HasValue)
+            return;
+
+        _loading = true;
+        try
+        {
+            // Load all analytics data in parallel
+            var falsePositivesTask = AnalyticsRepository.GetFalsePositiveStatsAsync(_startDate.Value, _endDate.Value);
+            var responseTimeTask = AnalyticsRepository.GetResponseTimeStatsAsync(_startDate.Value, _endDate.Value);
+            var methodComparisonTask = AnalyticsRepository.GetDetectionMethodComparisonAsync(_startDate.Value, _endDate.Value);
+            var dailyTrendsTask = AnalyticsRepository.GetDailyDetectionTrendsAsync(_startDate.Value, _endDate.Value);
+
+            await Task.WhenAll(falsePositivesTask, responseTimeTask, methodComparisonTask, dailyTrendsTask);
+
+            _falsePositiveStats = await falsePositivesTask;
+            _responseTimeStats = await responseTimeTask;
+            _methodStats = await methodComparisonTask;
+            _dailyTrends = await dailyTrendsTask;
+
+            PrepareCharts();
+            _dataLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading analytics: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void PrepareCharts()
+    {
+        if (_dailyTrends == null || !_dailyTrends.Any())
+            return;
+
+        // Daily trends chart (spam vs ham)
+        _chartLabels = _dailyTrends.Select(d => d.Date.ToString("MMM dd")).ToArray();
+
+        _chartSeries = new List<ChartSeries>
+        {
+            new ChartSeries
+            {
+                Name = "Spam Detections",
+                Data = _dailyTrends.Select(d => (double)d.SpamCount).ToArray()
+            },
+            new ChartSeries
+            {
+                Name = "Ham Detections",
+                Data = _dailyTrends.Select(d => (double)d.HamCount).ToArray()
+            }
+        };
+
+        _chartOptions = new ChartOptions();
+
+        // Response time chart
+        if (_responseTimeStats?.DailyAverages?.Any() == true)
+        {
+            _responseTimeChartLabels = _responseTimeStats.DailyAverages.Select(d => d.Date.ToString("MMM dd")).ToArray();
+
+            _responseTimeChartSeries = new List<ChartSeries>
+            {
+                new ChartSeries
+                {
+                    Name = "Avg Response Time (seconds)",
+                    Data = _responseTimeStats.DailyAverages.Select(d => d.AverageMs / 1000.0).ToArray()
+                }
+            };
+        }
+    }
+
+    private string FormatResponseTime(double ms)
+    {
+        if (ms < 1000)
+            return $"{ms:F0} ms";
+        if (ms < 60000)
+            return $"{ms / 1000:F1} sec";
+        return $"{ms / 60000:F1} min";
+    }
+
+    private Color GetFalsePositiveColor()
+    {
+        if (_falsePositiveStats == null) return Color.Default;
+
+        if (_falsePositiveStats.OverallPercentage < 1.0) return Color.Success;
+        if (_falsePositiveStats.OverallPercentage < 5.0) return Color.Warning;
+        return Color.Error;
+    }
+
+    private Color GetFalsePositiveColor(double rate)
+    {
+        if (rate < 1.0) return Color.Success;
+        if (rate < 5.0) return Color.Warning;
+        return Color.Error;
+    }
+
+    private Color GetResponseTimeColor()
+    {
+        if (_responseTimeStats == null) return Color.Default;
+
+        var avgSeconds = _responseTimeStats.AverageMs / 1000.0;
+        if (avgSeconds < 60) return Color.Success;      // Under 1 minute
+        if (avgSeconds < 300) return Color.Warning;     // Under 5 minutes
+        return Color.Error;                              // Over 5 minutes
+    }
+
+    private Color GetSpamRateColor(double percentage)
+    {
+        if (percentage > 50) return Color.Error;
+        if (percentage > 20) return Color.Warning;
+        return Color.Info;
+    }
+
+    private Color GetConfidenceColor(double confidence)
+    {
+        if (confidence >= 80) return Color.Success;
+        if (confidence >= 60) return Color.Warning;
+        return Color.Error;
+    }
+}

@@ -1,8 +1,42 @@
-# Refactoring Backlog - TelegramGroupsAdmin
+# Development Backlog - TelegramGroupsAdmin
 
-**Last Updated:** 2025-10-22
+**Last Updated:** 2025-10-23
 **Status:** Pre-production (breaking changes acceptable)
 **Overall Code Quality:** 88/100 (Excellent)
+
+This document tracks technical debt, performance optimizations, refactoring work, and deferred features.
+
+---
+
+## Feature Backlog
+
+### FEATURE-4.9: Bot Configuration Hot-Reload
+
+**Status:** BACKLOG 📋
+**Severity:** Convenience | **Impact:** Developer experience, deployment flexibility
+
+**Current Behavior:**
+- Bot configuration changes require application restart
+- Telegram bot token, chat IDs, and other settings are read once at startup
+- Updates to environment variables or configuration files require full app restart
+
+**Proposed Enhancement:**
+- Implement `IOptionsMonitor<TelegramOptions>` or similar pattern for config hot-reload
+- Allow runtime updates to non-critical bot settings without restart
+- File watcher or admin UI trigger for configuration refresh
+
+**Use Cases:**
+- Adding new managed chats without downtime
+- Updating bot token during rotation
+- Adjusting rate limits or thresholds
+
+**Implementation Considerations:**
+- Some settings (like bot token) may require full reconnection
+- Need to handle partial config updates gracefully
+- Consider admin UI button "Reload Bot Configuration"
+- TelegramBotClientFactory may need IOptionsMonitor support
+
+**Priority:** Low (nice-to-have, not blocking MVP)
 
 ---
 

@@ -660,7 +660,7 @@ public static class ModelMappings
     public static UiModels.TagDefinition ToModel(this DataModels.TagDefinitionDto data) => new()
     {
         TagName = data.TagName,
-        Color = data.Color,
+        Color = (UiModels.TagColor)data.Color, // Cast enum from Data to UI layer
         UsageCount = data.UsageCount,
         CreatedAt = data.CreatedAt
     };
@@ -668,7 +668,7 @@ public static class ModelMappings
     public static DataModels.TagDefinitionDto ToDto(this UiModels.TagDefinition ui) => new()
     {
         TagName = ui.TagName,
-        Color = ui.Color,
+        Color = (DataModels.TagColor)ui.Color, // Cast enum from UI to Data layer
         UsageCount = ui.UsageCount,
         CreatedAt = ui.CreatedAt
     };
@@ -758,5 +758,33 @@ public static class ModelMappings
         CreatedAt = ui.CreatedAt,
         RetryCount = ui.RetryCount,
         ExpiresAt = ui.ExpiresAt
+    };
+
+    // ============================================================================
+    // Prompt Version Mappings (Phase 4.X: AI-powered prompt builder)
+    // ============================================================================
+
+    public static UiModels.PromptVersion ToModel(this DataModels.PromptVersionDto data) => new()
+    {
+        Id = data.Id,
+        ChatId = data.ChatId,
+        Version = data.Version,
+        PromptText = data.PromptText,
+        IsActive = data.IsActive,
+        CreatedAt = data.CreatedAt,
+        CreatedBy = data.CreatedBy,
+        GenerationMetadata = data.GenerationMetadata
+    };
+
+    public static DataModels.PromptVersionDto ToDto(this UiModels.PromptVersion ui) => new()
+    {
+        Id = ui.Id,
+        ChatId = ui.ChatId,
+        Version = ui.Version,
+        PromptText = ui.PromptText,
+        IsActive = ui.IsActive,
+        CreatedAt = ui.CreatedAt,
+        CreatedBy = ui.CreatedBy,
+        GenerationMetadata = ui.GenerationMetadata
     };
 }

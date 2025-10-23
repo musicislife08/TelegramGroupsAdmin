@@ -1,3 +1,5 @@
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Helpers
 @* Telegram-authentic message bubble design *@
 
 <div class="@GetBubbleClass()" @onclick:stopPropagation="true" data-message-id="@Message.MessageId">
@@ -28,6 +30,32 @@
                 <span class="tg-timestamp local-timestamp" data-utc="@Message.Timestamp.ToString("o")">
                     @FormatTimestamp(Message.Timestamp)
                 </span>
+
+                @* User Tags (Phase 4.12) *@
+                @if (UserTags != null && UserTags.Any())
+                {
+                    foreach (var tag in UserTags)
+                    {
+                        <MudChip T="string"
+                                 Size="Size.Small"
+                                 Color="@tag.TagColor.ToMudColor()"
+                                 Class="tg-user-tag"
+                                 title="@($"Added by {tag.AddedBy.DisplayName} on {tag.AddedAt:yyyy-MM-dd}")">
+                            @tag.TagName
+                        </MudChip>
+                    }
+                }
+
+                @* Notes Icon (Phase 4.12) *@
+                @if (UserNotes != null && UserNotes.Any())
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Notes"
+                                   Size="Size.Small"
+                                   Class="tg-notes-icon"
+                                   title="@($"{UserNotes.Count} note(s)")"
+                                   OnClick="ShowNotesDialog" />
+                }
+
                 @if (Message.DeletedAt.HasValue)
                 {
                     <span class="tg-badge tg-badge-deleted" title="Deleted @Message.DeletedAt.Value.ToString("yyyy-MM-dd HH:mm") UTC (@(Message.DeletionSource ?? "unknown"))">
@@ -322,8 +350,48 @@
     [Parameter]
     public EventCallback<long> OnReplyClick { get; set; }
 
+    /// <summary>
+    /// Phase 4.12: User tags for contextual display in message UI
+    /// </summary>
+    [Parameter]
+    public List<UserTag>? UserTags { get; set; }
+
+    /// <summary>
+    /// Phase 4.12: Admin notes for contextual display in message UI
+    /// </summary>
+    [Parameter]
+    public List<AdminNote>? UserNotes { get; set; }
+
+    [Inject]
+    private IDialogService DialogService { get; set; } = default!;
+
     private bool _actionInProgress = false;
     private bool _popoverOpen = false;
+
+    /// <summary>
+    /// Show admin notes dialog when notes icon is clicked
+    /// Phase 4.12: Display all notes for the message author
+    /// </summary>
+    private async Task ShowNotesDialog()
+    {
+        if (UserNotes == null || !UserNotes.Any())
+            return;
+
+        var parameters = new DialogParameters
+        {
+            { nameof(UserNotesDialog.Notes), UserNotes },
+            { nameof(UserNotesDialog.UserName), Message.UserName ?? Message.FirstName ?? $"User {Message.UserId}" }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        await DialogService.ShowAsync<UserNotesDialog>("User Notes", parameters, options);
+    }
 
     private string GetBubbleClass()
     {

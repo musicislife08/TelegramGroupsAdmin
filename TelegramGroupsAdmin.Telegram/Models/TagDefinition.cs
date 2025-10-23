@@ -1,5 +1,3 @@
-using TelegramGroupsAdmin.Data.Models;
-
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>

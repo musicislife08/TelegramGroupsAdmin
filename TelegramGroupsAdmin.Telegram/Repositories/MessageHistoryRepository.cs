@@ -301,6 +301,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
 
         // Step 2: Load joined data (chat, user, reply info) in single query
         var messageIds = messagesWithDetections.Select(m => m.MessageId).ToArray();
+        var userIds = messagesWithDetections.Select(m => m.UserId).Distinct().ToArray();
 
         var joinedData = await (from m in context.Messages
             where messageIds.Contains(m.MessageId)
@@ -315,6 +316,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             select new
             {
                 m.MessageId,
+                m.UserId,
                 ChatName = chat != null ? chat.ChatName : null,
                 ChatIconPath = chat != null ? chat.ChatIconPath : null,
                 UserName = user != null ? user.Username : null,
@@ -327,6 +329,56 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             .ToListAsync(cancellationToken);
 
         var joinedDict = joinedData.ToDictionary(x => x.MessageId);
+
+        // Step 3: Load user tags and notes separately (Phase 4.12: avoid cartesian product)
+        var userTags = await (from ut in context.UserTags
+            where userIds.Contains(ut.TelegramUserId) && ut.RemovedAt == null
+            join td in context.TagDefinitions on ut.TagName equals td.TagName into tagGroup
+            from tag in tagGroup.DefaultIfEmpty()
+            select new
+            {
+                ut.TelegramUserId,
+                ut.TagName,
+                TagColor = tag != null ? tag.Color : DataModels.TagColor.Primary, // Default to Primary if no definition
+                ut.AddedAt,
+                ut.RemovedAt,
+                // Actor arc pattern columns
+                ActorWebUserId = ut.ActorWebUserId,
+                ActorTelegramUserId = ut.ActorTelegramUserId,
+                ActorSystemIdentifier = ut.ActorSystemIdentifier,
+                RemovedByWebUserId = ut.RemovedByWebUserId,
+                RemovedByTelegramUserId = ut.RemovedByTelegramUserId,
+                RemovedBySystemIdentifier = ut.RemovedBySystemIdentifier
+            })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var userNotes = await (from an in context.AdminNotes
+            where userIds.Contains(an.TelegramUserId)
+            select new
+            {
+                an.TelegramUserId,
+                an.Id,
+                an.NoteText,
+                an.CreatedAt,
+                an.UpdatedAt,
+                an.IsPinned,
+                // Actor arc pattern columns
+                ActorWebUserId = an.ActorWebUserId,
+                ActorTelegramUserId = an.ActorTelegramUserId,
+                ActorSystemIdentifier = an.ActorSystemIdentifier
+            })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        // Group tags and notes by user
+        var tagsByUser = userTags
+            .GroupBy(t => t.TelegramUserId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var notesByUser = userNotes
+            .GroupBy(n => n.TelegramUserId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         // Step 3: Combine data (preserve timestamp ordering from Step 1)
         return messagesWithDetections.Select(msg =>
@@ -350,6 +402,33 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                 DetectionResults = msg.DetectionResults
                     .Select(dr => dr.ToModel())
                     .OrderByDescending(dr => dr.DetectedAt)
+                    .ToList(),
+                UserTags = tagsByUser.GetValueOrDefault(msg.UserId, [])
+                    .Select(t => new UiModels.UserTag
+                    {
+                        Id = 0, // Not needed for display
+                        TelegramUserId = t.TelegramUserId,
+                        TagName = t.TagName,
+                        TagColor = (UiModels.TagColor)t.TagColor, // Enum cast from Data to UI layer
+                        AddedBy = ModelMappings.ToActor(t.ActorWebUserId, t.ActorTelegramUserId, t.ActorSystemIdentifier),
+                        AddedAt = t.AddedAt,
+                        RemovedAt = t.RemovedAt,
+                        RemovedBy = t.RemovedAt.HasValue
+                            ? ModelMappings.ToActor(t.RemovedByWebUserId, t.RemovedByTelegramUserId, t.RemovedBySystemIdentifier)
+                            : null
+                    })
+                    .ToList(),
+                UserNotes = notesByUser.GetValueOrDefault(msg.UserId, [])
+                    .Select(n => new UiModels.AdminNote
+                    {
+                        Id = n.Id,
+                        TelegramUserId = n.TelegramUserId,
+                        NoteText = n.NoteText,
+                        CreatedBy = ModelMappings.ToActor(n.ActorWebUserId, n.ActorTelegramUserId, n.ActorSystemIdentifier),
+                        CreatedAt = n.CreatedAt,
+                        UpdatedAt = n.UpdatedAt,
+                        IsPinned = n.IsPinned
+                    })
                     .ToList()
             };
         }).ToList();

@@ -1,0 +1,71 @@
+@using TelegramGroupsAdmin.Telegram.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Admin notes for @UserName
+            </MudText>
+
+            @if (Notes != null && Notes.Any())
+            {
+                <MudStack Spacing="2">
+                    @foreach (var note in Notes.OrderByDescending(n => n.IsPinned).ThenByDescending(n => n.CreatedAt))
+                    {
+                        <MudPaper Elevation="1" Class="pa-3">
+                            <MudStack Spacing="1">
+                                @if (note.IsPinned)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.PushPin">
+                                        Pinned
+                                    </MudChip>
+                                }
+
+                                <MudText Typo="Typo.body1">
+                                    @note.NoteText
+                                </MudText>
+
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        By @note.CreatedBy.DisplayName
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @note.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                                    </MudText>
+                                    @if (note.UpdatedAt.HasValue)
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            (edited @note.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm"))
+                                        </MudText>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </MudStack>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info">
+                    No notes found for this user.
+                </MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public List<AdminNote> Notes { get; set; } = new();
+
+    [Parameter]
+    public string UserName { get; set; } = string.Empty;
+
+    private void Close() => MudDialog.Close();
+}

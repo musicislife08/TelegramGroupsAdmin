@@ -1,11 +1,6 @@
-@using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
-@using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Data
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@using TelegramGroupsAdmin.ContentDetection.Models
-@using DataModels = TelegramGroupsAdmin.Data.Models
-@using UiModels = TelegramGroupsAdmin.Models
 @inject IStopWordsRepository StopWordsRepository
 @inject IMessageHistoryRepository MessageHistoryRepository
 @inject IDbContextFactory<AppDbContext> DbContextFactory

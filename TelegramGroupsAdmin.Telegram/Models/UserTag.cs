@@ -12,6 +12,11 @@ public class UserTag
     public string TagName { get; set; } = string.Empty;  // Lowercase tag name
 
     /// <summary>
+    /// Display color for this tag (from TagDefinitions table)
+    /// </summary>
+    public TagColor TagColor { get; set; } = TagColor.Primary;
+
+    /// <summary>
     /// Who added this tag (Phase 4.19: Actor system)
     /// </summary>
     public required Actor AddedBy { get; set; }

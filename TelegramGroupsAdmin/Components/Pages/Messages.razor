@@ -80,6 +80,8 @@
                                                    EditCount="@GetEditCount(messageWrapper.Message.MessageId)"
                                                    ShowSpamActions="@(_userPermissionLevel >= 1)"
                                                    DetectionHistory="@messageWrapper.DetectionResults"
+                                                   UserTags="@messageWrapper.UserTags"
+                                                   UserNotes="@messageWrapper.UserNotes"
                                                    IsCurrentUser="@IsCurrentUserMessage(messageWrapper.Message.UserId)"
                                                    OnImageClick="HandleImageClick"
                                                    OnViewEdits="HandleViewEdits"

@@ -1055,6 +1055,50 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                     b.ToTable("pending_notifications");
                 });
 
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PromptVersionDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("GenerationMetadata")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("generation_metadata");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("PromptText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("prompt_text");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("prompt_versions");
+                });
+
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.RecoveryCodeRecordDto", b =>
                 {
                     b.Property<long>("Id")

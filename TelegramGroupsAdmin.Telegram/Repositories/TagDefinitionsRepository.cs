@@ -37,7 +37,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
         return definition?.ToModel();
     }
 
-    public async Task<TagDefinition> CreateAsync(string tagName, TagColor color, CancellationToken cancellationToken = default)
+    public async Task<TagDefinition> CreateAsync(string tagName, Models.TagColor color, CancellationToken cancellationToken = default)
     {
         var normalizedTag = tagName.Trim().ToLowerInvariant();
 
@@ -54,7 +54,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
         var definition = new TagDefinitionDto
         {
             TagName = normalizedTag,
-            Color = color,
+            Color = (Data.Models.TagColor)color, // Cast from UI to Data layer
             UsageCount = 0,
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -67,7 +67,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
         return definition.ToModel();
     }
 
-    public async Task<bool> UpdateColorAsync(string tagName, TagColor color, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateColorAsync(string tagName, Models.TagColor color, CancellationToken cancellationToken = default)
     {
         var normalizedTag = tagName.ToLowerInvariant();
 
@@ -80,7 +80,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
             return false;
         }
 
-        definition.Color = color;
+        definition.Color = (Data.Models.TagColor)color; // Cast from UI to Data layer
         await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Updated tag definition color: {TagName} to {Color}", normalizedTag, color);
@@ -129,7 +129,7 @@ public class TagDefinitionsRepository : ITagDefinitionsRepository
             definition = new TagDefinitionDto
             {
                 TagName = normalizedTag,
-                Color = TagColor.Primary,
+                Color = Data.Models.TagColor.Primary, // Use Data layer enum
                 UsageCount = 1,
                 CreatedAt = DateTimeOffset.UtcNow
             };

@@ -464,3 +464,27 @@
         background-color: rgba(255, 255, 255, 0.02);
     }
 }
+
+/* Phase 4.12: User tags and notes display in message header */
+/* Tag chips inline with timestamp */
+::deep .tg-user-tag {
+    margin-left: 4px;
+    height: 20px;
+    font-size: 11px;
+    padding: 0 6px;
+}
+
+/* Notes icon button */
+::deep .tg-notes-icon {
+    margin-left: 4px;
+    width: 24px;
+    height: 24px;
+    padding: 2px;
+    color: rgba(255, 255, 255, 0.7);
+    transition: color 0.2s ease;
+}
+
+::deep .tg-notes-icon:hover {
+    color: rgba(255, 255, 255, 1);
+    background-color: rgba(255, 255, 255, 0.1);
+}

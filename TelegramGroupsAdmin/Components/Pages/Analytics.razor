@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "Admin,Owner")]
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Components.Shared.SpamManagement
+@using TelegramGroupsAdmin.Components.Shared.Analytics
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -26,12 +27,7 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Performance" Icon="@Icons.Material.Filled.Speed">
-            <MudPaper Class="pa-4" Elevation="0">
-                <MudText Typo="Typo.h6" GutterBottom="true">Performance Metrics</MudText>
-                <MudText Typo="Typo.body2" Class="mb-4">
-                    Coming soon: Detection accuracy, false positive/negative analysis, per-chat performance
-                </MudText>
-            </MudPaper>
+            <PerformanceMetrics />
         </MudTabPanel>
     </MudTabs>
 </MudContainer>
