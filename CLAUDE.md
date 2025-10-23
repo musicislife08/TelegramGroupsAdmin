@@ -89,10 +89,11 @@
 
 ### Complete ✅
 **Phase 1-3**: Foundation (Blazor UI, auth+TOTP, user mgmt, audit), 9 spam algorithms (CAS, Bayes, TF-IDF, OpenAI, VirusTotal, Vision), cross-chat bans
-**Phase 4** (18 items): TickerQ jobs, unified configs (JSONB), Telegram library, welcome system, /tempban, logging UI, settings UI, anti-impersonation (pHash), warning system, URL filtering (540K domains, 6 blocklists), file scanning (ClamAV+VirusTotal 96-98%, 16K files/month), file scan UI, DM notifications, media attachments (7 types), bot auto-ban, **AI prompt builder** (meta-AI feature, version history, iterative improvement)
+**Phase 4** (18/18 items - COMPLETE): TickerQ jobs, unified configs (JSONB), Telegram library, welcome system, /tempban, logging UI, settings UI, anti-impersonation (pHash), warning system, URL filtering (540K domains, 6 blocklists), file scanning (ClamAV+VirusTotal 96-98%, 16K files/month), file scan UI, DM notifications, media attachments (7 types), bot auto-ban, **AI prompt builder** (meta-AI feature, version history, iterative improvement), **tag management** (7 colors, CRUD UI, usage tracking, admin notes)
+**Phase 5** (partial): Analytics enhancements (false positive tracking, response time metrics, detection method comparison, daily trends)
 
-### Pending ⏳
-**4.9**: Bot hot-reload, **4.12**: Tag mgmt UI (Settings page - 90% complete), **4.15**: Report aggregation, **4.16**: Appeal system, **4.17.3**: Windows AMSI (deferred), **4.18**: Forum/topics support
+### Backlog 📋
+**4.9**: Bot hot-reload (IOptionsMonitor pattern), **4.15**: Report aggregation, **4.16**: Appeal system, **4.17.3**: Windows AMSI (deferred), **4.18**: Forum/topics support
 
 ### Future 🔮
 **Phase 5**: Analytics (time-series, auto-trust, forwarded spam, multi-language DMs)
@@ -102,10 +103,50 @@
 **Phase 9**: Mobile web support
 
 ## Code Quality
-88/100 score. See TECHNICAL_DEBT.md for DI audit (partial) + 14 performance optimizations
+88/100 score. See BACKLOG.md for deferred features, DI audit (partial), and completed optimizations
 
-## Next Steps
-MVP Complete ✅ - Pending: 4.9, 4.15-4.18
+## Status
+**Phase 4 Complete** ✅ - All 18 core features shipped
+**Ready for MVP Deployment Testing** - See deployment testing checklist below
+
+## Pre-MVP Deployment Testing Checklist
+
+### Critical Path Testing
+1. **Database Setup** - Run all migrations on clean PostgreSQL 17 instance
+2. **First User Setup** - Owner creation, email verification, TOTP enrollment
+3. **Bot Connection** - Verify TelegramAdminBotService starts, polls, processes messages
+4. **Environment Variables** - All required vars set and validated
+5. **TickerQ Jobs** - All 5 background jobs discovered (0 Active Functions = source generator issue)
+6. **Spam Detection** - Test all 9 algorithms, OpenAI API connectivity, training data
+7. **File Scanning** - ClamAV connection (port 3310), VirusTotal API, FileScanJob execution
+8. **DM Notifications** - pending_notifications table, auto-delivery on /start
+9. **Media Download** - /data/media writable, all 7 types download correctly
+10. **Settings UI** - All configuration pages load, save, validation works
+
+### Feature Validation
+- AI Prompt Builder: Generate prompt, improve with feedback, version history
+- Tag Management: Create tags, assign to users, color display
+- File Scanner: Upload infected file, verify ClamAV+VirusTotal detection
+- Welcome System: New user joins, timeout job fires, welcome message sent
+- Anti-Impersonation: Duplicate photo detection, Levenshtein name matching
+- URL Filtering: Blocked domain detection (540K domains, 6 blocklists)
+
+### Performance Validation
+- Messages page: 50+ messages load without lag (infinite scroll)
+- Analytics queries: Response time under 100ms (optimized queries)
+- Spam detection: < 2s per message (9 algorithms + OpenAI)
+- File scanning: VirusTotal rate limit respected (4/min)
+
+### Security Validation
+- TOTP required for all users (except first Owner)
+- Email verification blocks login
+- Cookie authentication secure
+- Data Protection keys persistent (/data/keys)
+- SQL injection protection (parameterized queries)
+- XSS protection (Blazor auto-escaping)
+
+## Next Steps After MVP Testing
+Backlog items (4.9, 4.15-4.18) deferred to post-MVP
 
 ## CRITICAL RULES
 - Never run app in normal mode (only one instance allowed, user runs in Rider for debugging)
