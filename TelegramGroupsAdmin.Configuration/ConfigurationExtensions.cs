@@ -19,8 +19,20 @@ public static class ConfigurationExtensions
         services.Configure<OpenAIOptions>(configuration.GetSection("OpenAI"));
         services.Configure<TelegramOptions>(configuration.GetSection("Telegram"));
         services.Configure<SpamDetectionOptions>(configuration.GetSection("SpamDetection"));
-        services.Configure<MessageHistoryOptions>(configuration.GetSection("MessageHistory"));
         services.Configure<SendGridOptions>(configuration.GetSection("SendGrid"));
+
+        // MessageHistoryOptions: Set ImageStoragePath from App:DataPath if not explicitly configured
+        services.Configure<MessageHistoryOptions>(options =>
+        {
+            configuration.GetSection("MessageHistory").Bind(options);
+
+            // If ImageStoragePath is still the default "/data", use App:DataPath as base
+            var dataPath = configuration["App:DataPath"] ?? "/data";
+            if (options.ImageStoragePath == "/data")
+            {
+                options.ImageStoragePath = dataPath;
+            }
+        });
 
         // Unified configuration service (database-driven config with global/chat-specific merging)
         services.AddScoped<IConfigRepository, ConfigRepository>();

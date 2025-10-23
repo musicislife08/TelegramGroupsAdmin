@@ -24,15 +24,18 @@ builder.Services.AddBlazorServices();
 // Authentication and Authorization
 builder.Services.AddCookieAuthentication(builder.Environment);
 
-// Data Protection and Identity repositories
-var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"] ?? "/data/keys";
+// Configure application options from environment variables (must be early for DataPath)
+builder.Services.AddApplicationConfiguration(builder.Configuration);
+
+// Get base data path from configuration
+var dataPath = builder.Configuration["App:DataPath"] ?? "/data";
+
+// Data Protection and Identity repositories (uses {dataPath}/keys)
+var dataProtectionKeysPath = Path.Combine(dataPath, "keys");
 builder.Services.AddTgSpamWebDataServices(dataProtectionKeysPath);
 
 // Application services (auth, users, messages, etc.)
 builder.Services.AddApplicationServices();
-
-// Configure application options from environment variables
-builder.Services.AddApplicationConfiguration(builder.Configuration);
 
 // HTTP clients with rate limiting
 builder.Services.AddHttpClients(builder.Configuration);

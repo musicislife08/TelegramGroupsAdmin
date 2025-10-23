@@ -53,6 +53,23 @@ public class ClamAVScannerService : IFileScannerService
                 };
             }
 
+            // ClamAV has a hard 2GB limit (2147483647 bytes) - skip files larger than this
+            const long maxClamAVSize = 2147483647L; // 2 GiB - 1 byte
+            if (fileBytes.Length > maxClamAVSize)
+            {
+                _logger.LogWarning("File size ({Size} bytes) exceeds ClamAV's 2GB limit, skipping ClamAV scan (will use VirusTotal only)",
+                    fileBytes.Length);
+
+                return new FileScanResult
+                {
+                    Scanner = ScannerName,
+                    IsClean = true,  // Skip, rely on VirusTotal
+                    ResultType = ScanResultType.Skipped,
+                    ErrorMessage = $"File too large for ClamAV ({fileBytes.Length} bytes > 2GB limit)",
+                    ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
+                };
+            }
+
             // Ping ClamAV to ensure it's available
             var pingResult = await _clamClient.PingAsync(cancellationToken);
             if (!pingResult)

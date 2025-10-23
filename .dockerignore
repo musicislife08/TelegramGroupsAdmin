@@ -1,25 +1,116 @@
-﻿**/.dockerignore
-**/.env
+# =============================================================================
+# .dockerignore - Exclude unnecessary files from Docker build context
+# Improves build performance and reduces image size/security risks
+# =============================================================================
+
+# Git files
 **/.git
 **/.gitignore
-**/.project
-**/.settings
-**/.toolstarget
+**/.gitattributes
+**/*.orig
+
+# IDE and editor files
 **/.vs
 **/.vscode
 **/.idea
+**/.project
+**/.settings
+**/.toolstarget
 **/*.*proj.user
 **/*.dbmdl
 **/*.jfm
-**/azds.yaml
+**/.DS_Store
+**/*.user
+**/*.suo
+**/*.userosscache
+**/*.sln.docstates
+
+# Build outputs (will be rebuilt in container)
 **/bin
-**/charts
-**/docker-compose*
-**/Dockerfile*
-**/node_modules
-**/npm-debug.log
 **/obj
+**/out
+**/publish
+**/build
+
+# NuGet packages (will be restored in container)
+**/*.nupkg
+**/*.snupkg
+**/.nuget
+**/packages
+
+# Test results
+**/TestResults
+**/*.trx
+**/*.coverage
+**/*.coveragexml
+
+# Documentation (not needed in runtime image)
+**/*.md
+!README.md
+LICENSE
+CLAUDE.md
+BACKLOG.md
+WTELEGRAM_INTEGRATION.md
+BLAZOR_UI_IMPLEMENTATION.md
+
+# SECURITY: Environment files and secrets (NEVER include in image)
+**/.env
+**/.env.*
+**/*.pfx
+**/*.p12
+**/appsettings.*.json
+!**/appsettings.json
+**/launchSettings.json
 **/secrets.dev.yaml
 **/values.dev.yaml
-LICENSE
-README.md
+
+# SECURITY: Data directories (mounted as volumes at runtime)
+**/data/
+**/logs/
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.sqlite
+**/*.sqlite3
+identifier.sqlite
+
+# Docker files themselves
+**/Dockerfile*
+**/docker-compose*
+**/.dockerignore
+
+# CI/CD files
+**/.github
+**/.gitlab-ci.yml
+**/azure-pipelines.yml
+**/azds.yaml
+**/*.yml
+**/*.yaml
+**/charts
+
+# Temporary files
+**/*.tmp
+**/*.temp
+**/*.log
+**/*.cache
+**/tmp
+**/temp
+
+# Node modules (if any exist)
+**/node_modules
+**/npm-debug.log
+
+# OS-specific files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*~
+
+# Examples directory (not needed in image)
+examples/
+
+# Compose directory (contains Docker runtime data, not needed in build)
+compose/

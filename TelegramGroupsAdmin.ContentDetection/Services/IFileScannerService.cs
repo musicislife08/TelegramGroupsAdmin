@@ -86,5 +86,10 @@ public enum ScanResultType
     /// <summary>
     /// Scan encountered an error
     /// </summary>
-    Error = 3
+    Error = 3,
+
+    /// <summary>
+    /// Scan was skipped (e.g., file too large for scanner)
+    /// </summary>
+    Skipped = 4
 }

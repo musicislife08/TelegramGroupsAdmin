@@ -24,6 +24,9 @@ public static class WebApplicationExtensions
 
         app.UseHttpsRedirection();
 
+        // Serve static files from wwwroot (required for Blazor framework files in Production)
+        app.UseStaticFiles();
+
         // Configure static file serving for images
         ConfigureImageStaticFiles(app);
 
@@ -34,9 +37,10 @@ public static class WebApplicationExtensions
         app.UseAuthorization();
         app.UseAntiforgery();
 
-        app.MapStaticAssets();
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
+
+        app.MapStaticAssets();
 
         return app;
     }
@@ -46,6 +50,17 @@ public static class WebApplicationExtensions
     /// </summary>
     public static WebApplication MapApiEndpoints(this WebApplication app)
     {
+        // Health check endpoint for Docker/Kubernetes readiness/liveness probes
+        app.MapGet("/health", () => Results.Ok(new
+        {
+            status = "healthy",
+            timestamp = DateTimeOffset.UtcNow,
+            version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown"
+        }))
+        .WithName("HealthCheck")
+        .WithTags("Health")
+        .AllowAnonymous();
+
         app.MapAuthEndpoints();
         app.MapEmailVerificationEndpoints();
 
@@ -68,7 +83,7 @@ public static class WebApplicationExtensions
     }
 
     /// <summary>
-    /// Configures static file serving for uploaded images
+    /// Configures static file serving for all uploaded media (images, videos, audio, user photos, chat icons, etc.)
     /// </summary>
     private static void ConfigureImageStaticFiles(WebApplication app)
     {
@@ -79,19 +94,23 @@ public static class WebApplicationExtensions
             return;
         }
 
-        var imagesPath = Path.GetFullPath(messageHistoryOptions.ImageStoragePath);
-        Directory.CreateDirectory(imagesPath);
+        // Base data path (e.g., /data or ./bin/Debug/net10.0/data)
+        var basePath = Path.GetFullPath(messageHistoryOptions.ImageStoragePath);
+
+        // Serve media/ subdirectory (all user-uploaded content: images, videos, audio, user photos, chat icons, etc.)
+        var mediaPath = Path.Combine(basePath, "media");
+        Directory.CreateDirectory(mediaPath);
 
         app.UseStaticFiles(new StaticFileOptions
         {
-            FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(imagesPath),
-            RequestPath = "/images",
+            FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(mediaPath),
+            RequestPath = "/media",
             OnPrepareResponse = ctx =>
             {
                 ctx.Context.Response.Headers.Append("Cache-Control", "public,max-age=86400");
             }
         });
 
-        app.Logger.LogInformation("Configured static file serving for images at {ImagesPath}", imagesPath);
+        app.Logger.LogInformation("Configured static file serving for media at {MediaPath}", mediaPath);
     }
 }

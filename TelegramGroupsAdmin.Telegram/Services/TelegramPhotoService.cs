@@ -29,9 +29,10 @@ public class TelegramPhotoService
         _logger = logger;
         _options = options.Value;
 
-        // Create subdirectories for chat icons and user photos
-        _chatIconsPath = Path.Combine(_options.ImageStoragePath, "chat_icons");
-        _userPhotosPath = Path.Combine(_options.ImageStoragePath, "user_photos");
+        // Create subdirectories for chat icons and user photos under media/
+        var mediaPath = Path.Combine(_options.ImageStoragePath, "media");
+        _chatIconsPath = Path.Combine(mediaPath, "chat_icons");
+        _userPhotosPath = Path.Combine(mediaPath, "user_photos");
 
         Directory.CreateDirectory(_chatIconsPath);
         Directory.CreateDirectory(_userPhotosPath);
@@ -47,7 +48,7 @@ public class TelegramPhotoService
         {
             var fileName = $"{Math.Abs(chatId)}.jpg"; // Use absolute value for filename
             var localPath = Path.Combine(_chatIconsPath, fileName);
-            var relativePath = $"chat_icons/{fileName}";
+            var relativePath = $"media/chat_icons/{fileName}";
 
             // Return cached if exists
             if (File.Exists(localPath))
@@ -126,7 +127,7 @@ public class TelegramPhotoService
         {
             var fileName = $"{userId}.jpg";
             var localPath = Path.Combine(_userPhotosPath, fileName);
-            var relativePath = $"user_photos/{fileName}";
+            var relativePath = $"media/user_photos/{fileName}";
 
             // Fetch current photo from Telegram
             var photos = await botClient.GetUserProfilePhotos(userId, limit: 1, cancellationToken: cancellationToken);
