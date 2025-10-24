@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- Suppress EF Core version conflict warnings from TickerQ dependency -->
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
+  </PropertyGroup>
+</Project>

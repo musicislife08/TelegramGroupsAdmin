@@ -23,7 +23,7 @@
 
 **Background Services** (composition pattern):
 1. TelegramAdminBotService - Bot polling, update routing (5 types), command registration, health checks every 1 min
-2. MessageProcessingService - New messages, edits, media download (Animation/Video/Audio/Voice/Sticker/VideoNote), spam orchestration, URL extraction, user photo scheduling, file scan scheduling
+2. MessageProcessingService - New messages, edits, media download (Animation/Video/Audio/Voice/Sticker/VideoNote), spam orchestration, URL extraction, user photo scheduling, file scan scheduling, **translation before save** (Phase 4.20)
 3. ChatManagementService - MyChatMember, admin cache, health checks (permissions + invite link validation), chat names
 4. SpamActionService - Training QC, auto-ban (cross-chat), borderline reports
 5. CleanupBackgroundService - Message retention (keeps spam/ham samples)
@@ -43,6 +43,7 @@
 - **DM Notifications**: IDmDeliveryService (Singleton, creates scopes), pending_notifications (30d expiry), auto-delivery on `/start`. Account linking (`/link`) separate from DM setup. Future: Notification preferences UI with deep link to enable bot DMs.
 - **Media Attachments**: TelegramMediaService downloads and saves media (Animation/Video/Audio/Voice/Sticker/VideoNote) to /data/media, stored in messages table. Documents metadata-only (no download for display, file scanner handles temp download). MediaType enum duplicated in Data/Telegram layers (architectural boundary). UI displays media with HTML5 elements (video/audio controls, autoplay for GIFs).
 - **AI Prompt Builder**: Meta-AI feature using OpenAI to generate/improve custom spam detection prompts. Two workflows: (1) Generate from scratch via form (group topic, rules, strictness, training samples), (2) Improve existing version with feedback. prompt_versions table tracks history with versioning, metadata (generation params), created_by. Shared PromptImprovementDialog reused by generation flow and version history. Auto-grow textarea shows full prompt. Settings → Content Detection → OpenAI Integration shows version history with View/Restore/Improve buttons.
+- **Translation Storage** (Phase 4.20): message_translations table with exclusive arc pattern (message_id XOR edit_id), LEFT JOIN in main query. MessageProcessingService translates before save (≥10 chars, <80% Latin script) using OpenAITranslationService. UI: toggle button (🌐 badge), manual translate button in popover menu, EditHistoryDialog shows translations for edits. Translation reused by spam detection (OpenAI Vision, MultiLanguage). CASCADE delete, partial indexes for performance.
 
 ## API Endpoints
 - GET /health
@@ -92,7 +93,7 @@
 
 ### Complete ✅
 **Phase 1-3**: Foundation (Blazor UI, auth+TOTP, user mgmt, audit), 9 spam algorithms (CAS, Bayes, TF-IDF, OpenAI, VirusTotal, Vision), cross-chat bans
-**Phase 4** (18/18 items - COMPLETE): TickerQ jobs, unified configs (JSONB), Telegram library, welcome system, /tempban, logging UI, settings UI, anti-impersonation (pHash), warning system, URL filtering (540K domains, 6 blocklists), file scanning (ClamAV+VirusTotal 96-98%, 16K files/month), file scan UI, DM notifications, media attachments (7 types), bot auto-ban, **AI prompt builder** (meta-AI feature, version history, iterative improvement), **tag management** (7 colors, CRUD UI, usage tracking, admin notes)
+**Phase 4** (19/19 items - COMPLETE): TickerQ jobs, unified configs (JSONB), Telegram library, welcome system, /tempban, logging UI, settings UI, anti-impersonation (pHash), warning system, URL filtering (540K domains, 6 blocklists), file scanning (ClamAV+VirusTotal 96-98%, 16K files/month), file scan UI, DM notifications, media attachments (7 types), bot auto-ban, **AI prompt builder** (meta-AI feature, version history, iterative improvement), **tag management** (7 colors, CRUD UI, usage tracking, admin notes), **translation storage** (Phase 4.20: exclusive arc pattern, toggle UI, edit history, manual trigger)
 **Phase 5** (partial): Analytics enhancements (false positive tracking, response time metrics, detection method comparison, daily trends)
 
 ### Backlog 📋
@@ -109,7 +110,7 @@
 88/100 score. See BACKLOG.md for deferred features, DI audit (partial), and completed optimizations
 
 ## Status
-**Phase 4 Complete** ✅ - All 18 core features shipped
+**Phase 4 Complete** ✅ - All 19 core features shipped (including Phase 4.20 Translation Storage)
 **Ready for MVP Deployment Testing** - See deployment testing checklist below
 
 ## Pre-MVP Deployment Testing Checklist
@@ -133,6 +134,7 @@
 - Welcome System: New user joins, timeout job fires, welcome message sent
 - Anti-Impersonation: Duplicate photo detection, Levenshtein name matching
 - URL Filtering: Blocked domain detection (540K domains, 6 blocklists)
+- Translation Storage (Phase 4.20): Foreign language message auto-translates, toggle display, manual translation button, edit history shows translations
 
 ### Performance Validation
 - Messages page: 50+ messages load without lag (infinite scroll)

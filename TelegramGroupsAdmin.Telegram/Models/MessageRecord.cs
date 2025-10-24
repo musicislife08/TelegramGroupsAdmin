@@ -34,5 +34,7 @@ public record MessageRecord(
     string? MediaFileName,      // Original file name (for documents)
     string? MediaMimeType,      // MIME type (e.g., "video/mp4", "audio/ogg")
     string? MediaLocalPath,     // Local storage path (e.g., "/data/media/...")
-    int? MediaDuration          // Duration in seconds (for audio/video)
+    int? MediaDuration,         // Duration in seconds (for audio/video)
+    // Translation fields (Phase 4.20)
+    MessageTranslation? Translation // Translation of message text (if foreign language detected)
 );

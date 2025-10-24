@@ -45,10 +45,34 @@
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                                     <b>Edited:</b> <span class="local-timestamp" data-utc="@edit.EditDate.ToString("o")">@edit.EditDate.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                                 </MudText>
-                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Edit">
-                                    Edit #@_edits.IndexOf(edit)
-                                </MudChip>
+                                <MudStack Row="true" Spacing="1">
+                                    @* Phase 4.20: Translation badge *@
+                                    @if (_editTranslations.ContainsKey(edit.Id))
+                                    {
+                                        var translation = _editTranslations[edit.Id];
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Translate">
+                                            @translation.DetectedLanguage.ToUpper()→EN
+                                        </MudChip>
+                                    }
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Edit">
+                                        Edit #@_edits.IndexOf(edit)
+                                    </MudChip>
+                                </MudStack>
                             </MudStack>
+
+                            @* Phase 4.20: Translation display *@
+                            @if (_editTranslations.ContainsKey(edit.Id))
+                            {
+                                var translation = _editTranslations[edit.Id];
+                                <MudPaper Class="pa-2" Elevation="0" Style="background-color: rgba(33, 150, 243, 0.1); border-left: 3px solid #42a5f5;">
+                                    <MudText Typo="Typo.caption" Color="Color.Info" Style="font-weight: 600; margin-bottom: 4px;">
+                                        <MudIcon Icon="@Icons.Material.Filled.Translate" Size="Size.Small" /> English Translation:
+                                    </MudText>
+                                    <MudText Typo="Typo.body2" Style="font-style: italic;">
+                                        @translation.TranslatedText
+                                    </MudText>
+                                </MudPaper>
+                            }
 
                             @* Diff View *@
                             <MudPaper Class="pa-2 diff-container" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
@@ -98,6 +122,7 @@
     public MessageRecord Message { get; set; } = default!;
 
     private List<MessageEditRecord> _edits = new();
+    private Dictionary<long, MessageTranslation> _editTranslations = new(); // Phase 4.20: Translations for each edit
     private bool _loading = true;
 
     protected override async Task OnInitializedAsync()
@@ -105,6 +130,16 @@
         try
         {
             _edits = await MessageRepository.GetEditsForMessageAsync(Message.MessageId);
+
+            // Phase 4.20: Load translations for each edit
+            foreach (var edit in _edits)
+            {
+                var translation = await MessageRepository.GetTranslationForEditAsync(edit.Id);
+                if (translation != null)
+                {
+                    _editTranslations[edit.Id] = translation;
+                }
+            }
         }
         catch (Exception ex)
         {
