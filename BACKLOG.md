@@ -1,6 +1,6 @@
 # Development Backlog - TelegramGroupsAdmin
 
-**Last Updated:** 2025-10-23
+**Last Updated:** 2025-10-24
 **Status:** Pre-production (breaking changes acceptable)
 **Overall Code Quality:** 88/100 (Excellent)
 
@@ -85,8 +85,9 @@ SELECT SETVAL('table_name_id_seq', COALESCE((SELECT MAX(id) FROM table_name), 1)
 
 ## Completed Work
 
+**2025-10-24**: ARCH-2 reopened (audit log Actor migration incomplete - 5 tables remaining)
 **2025-10-22**: PERF-CD-3 (Domain stats: 2.24× faster, 55ms→25ms via GroupBy aggregation), PERF-CD-4 (TF-IDF: 2.59× faster, 44% less memory via Dictionary counting + pre-indexed vocabulary)
-**2025-10-21**: ARCH-1 (Core library - 544 lines eliminated), ARCH-2 (Actor refactoring complete), PERF-APP-1, PERF-APP-3, DI-1 (4 repositories), Comprehensive audit logging coverage, BlazorAuthHelper DRY refactoring (19 instances), Empirical performance testing (PERF-CD-1 removed via PostgreSQL profiling)
+**2025-10-21**: ARCH-1 (Core library - 544 lines eliminated), ARCH-2 (Actor refactoring partial - moderation tables only), PERF-APP-1, PERF-APP-3, DI-1 (4 repositories), Comprehensive audit logging coverage, BlazorAuthHelper DRY refactoring (19 instances), Empirical performance testing (PERF-CD-1 removed via PostgreSQL profiling)
 **2025-10-19**: 8 performance optimizations (Users N+1, config caching, parallel bans, composite index, virtualization, record conversion, leak fix, allocation optimization)
 
 ---
@@ -129,22 +130,283 @@ SELECT SETVAL('table_name_id_seq', COALESCE((SELECT MAX(id) FROM table_name), 1)
 
 ---
 
-### ~~ARCH-2: Eliminate Actor String Round-Tripping~~ ✅ COMPLETE
+### ARCH-2: Complete Actor Exclusive Arc Migration (REOPENED)
 
-**Status:** ✅ COMPLETE (2025-10-21)
-**Severity:** Architecture | **Impact:** Cleaner API, type safety, removed 50+ lines
+**Status:** 🔄 REOPENED (2025-10-24) - Partial completion, significant work remaining
+**Severity:** Architecture | **Impact:** Type safety, data consistency, audit trail accuracy
+**Complexity:** High - requires database migrations, data migration, repository updates, UI changes
 
-**Completed Work:**
-1. ✅ All ModerationActionService methods now accept `Actor` parameter instead of `string executorId`
-2. ✅ All repository methods (UserActionsRepository, AdminNotesRepository, UserTagsRepository) accept `Actor`
-3. ✅ TelegramUserManagementService.ToggleTrustAsync() and UnbanAsync() accept `Actor`
-4. ✅ No more string round-tripping - `Actor` objects created directly at call sites
-5. ✅ GetExecutorIdentifierAsync() helper method removed (never existed in final implementation)
-6. ✅ ParseLegacyFormat() removed (never needed - Actor system designed correctly from start)
+---
 
-**Files Updated:** ModerationActionService.cs (all methods), TelegramUserManagementService.cs, 6 repository files, SpamActionService.cs, ReportActionsService.cs, 5 UI components
+## Background
 
-**Result:** Clean, type-safe Actor attribution throughout the application
+The Actor exclusive arc pattern (Phase 4.19) provides type-safe attribution tracking with three mutually exclusive actor types:
+- **WebUser** - Authenticated web admin (UUID)
+- **TelegramUser** - Telegram user via bot commands (long ID)
+- **System** - Automated actions (identifier string like "auto_trust", "bot_protection")
+
+**Database Pattern:**
+```sql
+-- Exclusive arc: exactly ONE of these must be non-null
+web_user_id UUID,
+telegram_user_id BIGINT,
+system_identifier VARCHAR(50)
+```
+
+**Code Pattern:**
+```csharp
+Actor.FromWebUser(userId, email)
+Actor.FromTelegramUser(telegramId, username)
+Actor.AutoTrust  // Predefined system actor
+```
+
+---
+
+## Current Status
+
+### ✅ Phase 1 Complete (2025-10-21): Telegram Moderation Tables
+
+**Migrated Tables:**
+1. ✅ `user_actions` - Moderation actions (ban/warn/trust/etc)
+   - Columns: `web_user_id`, `telegram_user_id`, `system_identifier`
+   - Usage: All moderation commands, spam actions, auto-trust
+
+2. ✅ `stop_words` - Custom spam keywords
+   - Columns: `web_user_id`, `telegram_user_id`, `system_identifier`
+   - Usage: Add/remove stop words via UI or bot
+
+3. ✅ `user_tags` - User classification tags
+   - Columns: `actor_web_user_id`, `actor_telegram_user_id`, `actor_system_identifier`
+   - Plus separate removal actor columns for audit trail
+
+4. ✅ `admin_notes` - Per-user moderator notes
+   - Columns: `actor_web_user_id`, `actor_telegram_user_id`, `actor_system_identifier`
+   - **⚠️ Legacy field still exists:** `created_by` (string) - needs data migration + column drop
+
+5. ✅ `domain_filters` - Manual domain blacklist/whitelist
+   - Columns: `web_user_id`, `telegram_user_id`, `system_identifier`
+
+6. ✅ `blocklist_subscriptions` - External URL blocklists
+   - Columns: `web_user_id`, `telegram_user_id`, `system_identifier`
+
+**Migrated Code:**
+- ✅ ModerationActionService - All methods accept `Actor`
+- ✅ UserActionsRepository, AdminNotesRepository, UserTagsRepository
+- ✅ TelegramUserManagementService.ToggleTrustAsync(), UnbanAsync()
+- ✅ Domain/blocklist repositories and UI components
+
+---
+
+### ❌ Phase 2 Remaining: Web Admin Audit Tables
+
+**Tables NOT Yet Migrated:**
+
+1. ❌ **`audit_log`** - Web admin action audit trail (HIGH PRIORITY)
+   - **Current:** `actor_user_id VARCHAR` (string), `target_user_id VARCHAR` (string)
+   - **Issue:** Stores "system" string instead of null, breaking UI display (shows "Unknown (system)")
+   - **Impact:** 30+ call sites in services/endpoints
+   - **Files:** AuditLogRepository.cs, IAuditLogRepository.cs, UserAutoTrustService.cs:108, AuthService.cs, TotpService.cs, UserManagementService.cs, EmailVerificationEndpoints.cs, etc.
+
+2. ❌ **`invites`** - User invite tokens
+   - **Current:** `created_by VARCHAR` (UUID string), `used_by VARCHAR` (UUID string)
+   - **Issue:** Only tracks web users, no system/Telegram actors possible
+   - **Impact:** InviteService, invite management UI
+   - **Files:** InviteService.cs, InviteRepository.cs
+
+3. ❌ **`reports`** - User-submitted spam reports
+   - **Current:** Mixed approach - `reviewed_by VARCHAR` (string), `reported_by_user_id BIGINT` (Telegram only), `web_user_id VARCHAR` (web only)
+   - **Issue:** Can't track if system auto-reviewed a report, split actor logic
+   - **Impact:** Reports page, report review workflow
+   - **Files:** ReportDto.cs, ReportActionsService.cs, Reports.razor
+
+4. ❌ **`chat_prompts`** - Custom OpenAI prompts (DEPRECATED?)
+   - **Current:** `added_by VARCHAR` (string)
+   - **Note:** May be superseded by `prompt_versions` table
+   - **Files:** ChatPromptRecord.cs
+
+5. ❌ **`prompt_versions`** - AI prompt builder version history
+   - **Current:** `created_by VARCHAR` (UUID string)
+   - **Issue:** Only web users, can't track system-generated prompts
+   - **Impact:** Prompt builder UI, version history
+   - **Files:** PromptVersionDto.cs, prompt builder components
+
+---
+
+## Migration Plan
+
+### Step 1: Fix Immediate Bug (5 minutes)
+
+**File:** `UserAutoTrustService.cs:108`
+```csharp
+// Change:
+actorUserId: "system",  // ❌ Shows "Unknown (system)" in UI
+
+// To:
+actorUserId: null,      // ✅ Shows "SYSTEM" chip in Audit.razor:120-124
+```
+
+### Step 2: Migrate `audit_log` Table (HIGH PRIORITY)
+
+**Database Migration:**
+```sql
+ALTER TABLE audit_log
+  ADD COLUMN actor_web_user_id VARCHAR(450),
+  ADD COLUMN actor_telegram_user_id BIGINT,
+  ADD COLUMN actor_system_identifier VARCHAR(50),
+  ADD COLUMN target_web_user_id VARCHAR(450),
+  ADD COLUMN target_telegram_user_id BIGINT,
+  ADD COLUMN target_system_identifier VARCHAR(50);
+
+-- Data migration
+UPDATE audit_log
+SET actor_web_user_id = actor_user_id
+WHERE actor_user_id IS NOT NULL
+  AND actor_user_id != 'system'
+  AND actor_user_id ~ '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$';  -- UUID pattern
+
+UPDATE audit_log
+SET actor_system_identifier = 'unknown'
+WHERE actor_user_id = 'system';
+
+UPDATE audit_log
+SET target_web_user_id = target_user_id
+WHERE target_user_id IS NOT NULL
+  AND target_user_id ~ '^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$';
+
+-- Verify migration
+SELECT COUNT(*) FROM audit_log WHERE actor_user_id IS NOT NULL
+  AND actor_web_user_id IS NULL
+  AND actor_telegram_user_id IS NULL
+  AND actor_system_identifier IS NULL;
+
+-- Drop old columns (after verification)
+ALTER TABLE audit_log
+  DROP COLUMN actor_user_id,
+  DROP COLUMN target_user_id;
+```
+
+**Code Changes:**
+1. Update `AuditLogRecordDto` columns
+2. Update `IAuditLogRepository.LogEventAsync()` signature to accept `Actor actorBy, Actor? targetActor`
+3. Update `AuditLogRepository` implementation to use Actor exclusive arc columns
+4. Update all 30+ call sites (use IDE rename refactoring)
+5. Update `Audit.razor` to use Actor display helpers instead of `GetUserEmail()`
+
+**Estimated Effort:** 3-4 hours
+
+---
+
+### Step 3: Migrate `invites` Table
+
+**Changes:**
+- Add Actor columns for `created_by` and `used_by`
+- Data migration: UUIDs → `web_user_id`
+- Update InviteService, InviteRepository
+- Update invite UI components
+
+**Estimated Effort:** 1-2 hours
+
+---
+
+### Step 4: Migrate `reports` Table
+
+**Changes:**
+- Consolidate `reported_by_user_id`, `web_user_id` → Actor pattern
+- Add Actor columns for `reviewed_by`
+- Data migration for existing reports
+- Update ReportActionsService, Reports.razor
+
+**Estimated Effort:** 2-3 hours
+
+---
+
+### Step 5: Migrate `prompt_versions` Table
+
+**Changes:**
+- Add Actor columns for `created_by`
+- Data migration: UUIDs → `web_user_id`
+- Update prompt builder components
+
+**Estimated Effort:** 1 hour
+
+---
+
+### Step 6: Clean Up `admin_notes` Legacy Column
+
+**Changes:**
+- Drop `created_by VARCHAR` column (already has Actor columns)
+- Verify all data migrated to Actor columns
+- Remove any legacy code references
+
+**Estimated Effort:** 30 minutes
+
+---
+
+### Step 7: Fix Duplicate Enum Value Bug
+
+**File:** `AuditEventType.cs:75, 97`
+```csharp
+UserAutoWhitelisted = 26,    // Line 75
+...
+ConfigurationChanged = 26,   // Line 97 - DUPLICATE! Should be 28
+```
+
+**Fix:** Change `ConfigurationChanged` to next available number (28)
+
+**Estimated Effort:** 5 minutes
+
+---
+
+## Testing Plan
+
+1. **Unit Tests:** Repository methods with all Actor types
+2. **Integration Tests:** Audit log creation, filtering by actor type
+3. **UI Tests:**
+   - Audit.razor displays all actor types correctly
+   - Filter dropdowns include system actors
+   - User detail shows correct attribution
+4. **Migration Tests:**
+   - Test data migration on copy of production DB
+   - Verify no data loss
+   - Check foreign key integrity
+
+---
+
+## Benefits of Completion
+
+1. **Type Safety:** Eliminate string-based actor tracking, catch errors at compile time
+2. **Consistency:** Single Actor pattern across entire codebase
+3. **Audit Trail:** Accurate "who did what" tracking for system/Telegram/web actions
+4. **UI Clarity:** Proper display of system actors vs unknown users
+5. **Future-Proof:** Easy to add new actor types or attributes
+
+---
+
+## Blockers / Risks
+
+- **Breaking Changes:** Database schema changes require downtime
+- **Data Migration Complexity:** Need to handle edge cases (malformed UUIDs, Telegram IDs in string fields)
+- **Call Site Volume:** 30+ places use audit logging, requires careful refactoring
+- **Testing Burden:** Must verify audit trail accuracy across all features
+
+---
+
+## Definition of Done
+
+- [ ] All database tables storing "who" use Actor exclusive arc pattern
+- [ ] All repository methods accept `Actor` parameters
+- [ ] All UI components display Actor correctly (web user email, Telegram username, system name)
+- [ ] Data migrations tested and verified
+- [ ] Legacy string-based columns dropped
+- [ ] No "Unknown (system)" or similar display bugs
+- [ ] 0 errors, 0 warnings build standard maintained
+- [ ] Documentation updated (CLAUDE.md, this file)
+
+---
+
+**Total Estimated Effort:** 8-12 hours (across multiple sessions)
+**Priority:** Medium-High (audit trail accuracy important for production use)
+**Assigned:** To be completed on dev machine
 
 ---
 
@@ -155,5 +417,5 @@ SELECT SETVAL('table_name_id_seq', COALESCE((SELECT MAX(id) FROM table_name), 1)
 - **No feature changes:** Pure refactoring, preserve all functionality
 - **Build quality:** Must maintain 0 errors, 0 warnings standard
 
-**Last Updated:** 2025-10-22
-**Next Review:** When implementing medium priority optimizations opportunistically
+**Last Updated:** 2025-10-24
+**Next Review:** After ARCH-2 completion or when implementing medium priority optimizations opportunistically
