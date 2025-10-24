@@ -157,46 +157,8 @@
 
                     @if (_useCustomConfig)
                     {
-                        <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
-                            <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Settings">
-                                <ContentDetectionGeneral @ref="_generalComponent" ChatId="@ChatInfo.Chat.ChatId" />
-                            </MudTabPanel>
-                            <MudTabPanel Text="CAS" Icon="@Icons.Material.Filled.Security">
-                                <ContentDetectionCAS @ref="_casComponent" ChatId="@ChatInfo.Chat.ChatId" />
-                            </MudTabPanel>
-                            <MudTabPanel Text="Stop Words" Icon="@Icons.Material.Filled.Block">
-                                <ContentDetectionStopWords @ref="_stopWordsComponent" ChatId="@ChatInfo.Chat.ChatId" />
-                            </MudTabPanel>
-                            <MudTabPanel Text="Similarity" Icon="@Icons.Material.Filled.CompareArrows">
-                                <ContentDetectionSimilarity @ref="_similarityComponent" ChatId="@ChatInfo.Chat.ChatId" />
-                            </MudTabPanel>
-                            <MudTabPanel Text="Bayes" Icon="@Icons.Material.Filled.Psychology">
-                                <ContentDetectionBayes @ref="_bayesComponent" ChatId="@ChatInfo.Chat.ChatId" />
-                            </MudTabPanel>
-                            <MudTabPanel Text="Advanced" Icon="@Icons.Material.Filled.Tune">
-                                <ContentDetectionAdvanced @ref="_advancedComponent" ChatId="@ChatInfo.Chat.ChatId" />
-                            </MudTabPanel>
-                            <MudTabPanel Text="External" Icon="@Icons.Material.Filled.CloudQueue">
-                                <ContentDetectionExternal @ref="_externalComponent" ChatId="@ChatInfo.Chat.ChatId" />
-                            </MudTabPanel>
-                            <MudTabPanel Text="URL Filters" Icon="@Icons.Material.Filled.Link">
-                                <UrlFiltersConfig ChatId="@ChatInfo.Chat.ChatId" />
-                            </MudTabPanel>
-                        </MudTabs>
-
-                        <!-- Save Button -->
-                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                                  OnClick="SaveSpamConfigAsync" Disabled="@_savingSpamConfig" FullWidth="true" Class="mt-4">
-                            @if (_savingSpamConfig)
-                            {
-                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                <MudText Class="ms-2">Saving...</MudText>
-                            }
-                            else
-                            {
-                                <span>Save Configuration</span>
-                            }
-                        </MudButton>
+                        <!-- Reusable DetectionOverview component for per-chat configuration -->
+                        <DetectionOverview ChatId="@ChatInfo.Chat.ChatId" />
                     }
                     else
                     {
@@ -349,14 +311,6 @@
 
     // Spam Detection Config
     private bool _useCustomConfig;
-    private bool _savingSpamConfig;
-    private ContentDetectionGeneral? _generalComponent;
-    private ContentDetectionCAS? _casComponent;
-    private ContentDetectionStopWords? _stopWordsComponent;
-    private ContentDetectionSimilarity? _similarityComponent;
-    private ContentDetectionBayes? _bayesComponent;
-    private ContentDetectionAdvanced? _advancedComponent;
-    private ContentDetectionExternal? _externalComponent;
 
     // Welcome System Config
     private bool _savingWelcomeConfig;
@@ -417,105 +371,22 @@
         if (!_useCustomConfig && ChatInfo.HasCustomSpamConfig)
         {
             // User switched from custom to global - delete custom config
-            await SaveConfigAsync();
-        }
-    }
-
-
-
-    private async Task SaveConfigAsync()
-    {
-        try
-        {
-            if (!_useCustomConfig && ChatInfo.HasCustomSpamConfig)
+            try
             {
-                // Delete custom config (revert to global)
                 await SpamConfigRepository.DeleteChatConfigAsync(ChatInfo.Chat.ChatId);
                 ChatInfo.HasCustomSpamConfig = false;
-                Snackbar.Add("Reverted to global configuration", Severity.Success);
+                Snackbar.Add("Reverted to global spam detection configuration", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to revert to global config: {ex.Message}", Severity.Error);
             }
         }
-        catch (Exception ex)
+        else if (_useCustomConfig && !ChatInfo.HasCustomSpamConfig)
         {
-            Snackbar.Add($"Failed to save config: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-        }
-    }
-
-    private async Task SaveSpamConfigAsync()
-    {
-        _savingSpamConfig = true;
-        try
-        {
-            // Collect configs from all components
-            var mergedConfig = new SpamDetectionConfig();
-
-            if (_generalComponent != null)
-            {
-                var generalConfig = _generalComponent.GetConfig();
-                // Copy top-level properties from General tab
-                mergedConfig.FirstMessageOnly = generalConfig.FirstMessageOnly;
-                mergedConfig.FirstMessagesCount = generalConfig.FirstMessagesCount;
-                mergedConfig.MinMessageLength = generalConfig.MinMessageLength;
-                mergedConfig.AutoBanThreshold = generalConfig.AutoBanThreshold;
-                mergedConfig.ReviewQueueThreshold = generalConfig.ReviewQueueThreshold;
-                mergedConfig.MaxConfidenceVetoThreshold = generalConfig.MaxConfidenceVetoThreshold;
-                mergedConfig.TrainingMode = generalConfig.TrainingMode;
-            }
-
-            // Collect sub-configs from each component
-            if (_casComponent != null)
-            {
-                mergedConfig.Cas = _casComponent.GetConfig().Cas;
-            }
-
-            if (_stopWordsComponent != null)
-            {
-                mergedConfig.StopWords = _stopWordsComponent.GetConfig().StopWords;
-            }
-
-            if (_similarityComponent != null)
-            {
-                mergedConfig.Similarity = _similarityComponent.GetConfig().Similarity;
-            }
-
-            if (_bayesComponent != null)
-            {
-                mergedConfig.Bayes = _bayesComponent.GetConfig().Bayes;
-            }
-
-            if (_advancedComponent != null)
-            {
-                var advancedConfig = _advancedComponent.GetConfig();
-                mergedConfig.InvisibleChars = advancedConfig.InvisibleChars;
-                mergedConfig.Translation = advancedConfig.Translation;
-                mergedConfig.Spacing = advancedConfig.Spacing;
-                mergedConfig.OpenAI = advancedConfig.OpenAI;
-            }
-
-            if (_externalComponent != null)
-            {
-                var externalConfig = _externalComponent.GetConfig();
-                mergedConfig.UrlBlocklist = externalConfig.UrlBlocklist;
-                mergedConfig.ThreatIntel = externalConfig.ThreatIntel;
-                mergedConfig.SeoScraping = externalConfig.SeoScraping;
-                mergedConfig.ImageSpam = externalConfig.ImageSpam;
-            }
-
-            // Save the merged configuration
-            await SpamConfigRepository.UpdateChatConfigAsync(ChatInfo.Chat.ChatId, mergedConfig);
+            // User switched to custom - mark as having custom config
+            // DetectionOverview will handle creating it on first save
             ChatInfo.HasCustomSpamConfig = true;
-            Snackbar.Add("Chat spam detection configuration saved successfully", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to save spam detection config: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _savingSpamConfig = false;
         }
     }
 

@@ -1,0 +1,126 @@
+@using TelegramGroupsAdmin.ContentDetection.Configuration
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@inject ISpamDetectionConfigRepository ConfigRepository
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h6" Color="Color.Primary">Translation</MudText>
+
+        @if (!_isGlobalView)
+        {
+            <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
+                <MudSwitch T="bool" @bind-Value="_config.Translation.UseGlobal"
+                          Label="@(_config.Translation.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
+                          Color="@(_config.Translation.UseGlobal ? Color.Default : Color.Primary)" />
+            </MudPaper>
+        }
+
+        @{
+            var translationConfig = (_isGlobalView || !_config.Translation.UseGlobal) ? _config.Translation : _globalConfig.Translation;
+            var translationReadOnly = !_isGlobalView && _config.Translation.UseGlobal;
+        }
+
+        <MudSwitch T="bool" @bind-Value="translationConfig.Enabled"
+                  Label="Enable Foreign Language Translation"
+                  Color="Color.Primary"
+                  Disabled="@translationReadOnly" />
+
+        @if (translationConfig.Enabled)
+        {
+            <MudSwitch T="bool" @bind-Value="translationConfig.CheckTranslatedContent"
+                      Label="Check Translated Content"
+                      Color="Color.Primary"
+                      Disabled="@translationReadOnly" />
+
+            <MudSwitch T="bool" @bind-Value="translationConfig.WarnNonEnglish"
+                      Label="Warn users posting non-English messages"
+                      Color="Color.Primary"
+                      Disabled="@translationReadOnly" />
+
+            @if (translationConfig.WarnNonEnglish)
+            {
+                <MudTextField T="string" @bind-Value="translationConfig.WarningMessage"
+                             Label="Warning Message Template"
+                             Lines="3"
+                             Variant="Variant.Outlined"
+                             HelperText="Variables: {chat_name}, {language}, {warnings_remaining}"
+                             Disabled="@translationReadOnly" />
+            }
+
+            <MudNumericField @bind-Value="translationConfig.MinMessageLength"
+                            Label="Minimum Message Length"
+                            Min="10" Max="500"
+                            Disabled="@translationReadOnly"
+                            HelperText="@(translationReadOnly ? $"Using global value: {translationConfig.MinMessageLength}" : "Skip translation for shorter messages")" />
+
+            <MudSlider @bind-Value="translationConfig.LatinScriptThreshold"
+                      Min="0.1" Max="1.0" Step="0.05"
+                      Disabled="@translationReadOnly">
+                <MudText>Latin Script Threshold: @translationConfig.LatinScriptThreshold.ToString("F2")</MudText>
+            </MudSlider>
+
+            <MudNumericField @bind-Value="translationConfig.ConfidenceThreshold"
+                            Label="Confidence Threshold"
+                            Min="1" Max="100"
+                            Disabled="@translationReadOnly"
+                            HelperText="@(translationReadOnly ? $"Using global value: {translationConfig.ConfidenceThreshold}" : "Confidence level for translated spam")" />
+        }
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            Translates non-English messages to English before running spam checks
+        </MudText>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public long? ChatId { get; set; }
+
+    private SpamDetectionConfig _config = new();
+    private SpamDetectionConfig _globalConfig = new();
+    private bool _isGlobalView => !ChatId.HasValue || ChatId.Value == 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfiguration();
+    }
+
+    private async Task LoadConfiguration()
+    {
+        try
+        {
+            // Always load global config for comparison/fallback
+            _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
+
+            if (_isGlobalView)
+            {
+                // Editing global config directly
+                _config = _globalConfig;
+            }
+            else
+            {
+                // Load chat-specific config (which may have UseGlobal flags set)
+                var chatConfig = await ConfigRepository.GetByChatIdAsync(ChatId!.Value);
+                _config = chatConfig ?? new SpamDetectionConfig();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new SpamDetectionConfig();
+            _globalConfig = new SpamDetectionConfig();
+        }
+    }
+
+    public SpamDetectionConfig GetConfig()
+    {
+        // Ensure global configs always have UseGlobal=true
+        if (_isGlobalView)
+        {
+            _config.Translation.UseGlobal = true;
+        }
+
+        return _config;
+    }
+}

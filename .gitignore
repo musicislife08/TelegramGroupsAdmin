@@ -7,3 +7,4 @@ tg-spam/
 compose/*
 !compose/compose.yml
 *.DotSettings.user
+TelegramGroupsAdmin/Properties/launchSettings.json

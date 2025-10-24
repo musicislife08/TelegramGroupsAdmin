@@ -224,7 +224,7 @@
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenAdvancedSettings("spacing"))">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionSpacing>("Spacing Detection Configuration"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
@@ -252,7 +252,7 @@
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenAdvancedSettings("invisible"))">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionInvisibleChars>("Invisible Characters Configuration"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
@@ -280,7 +280,7 @@
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenAdvancedSettings("translation"))">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionTranslation>("Translation Configuration"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
@@ -311,7 +311,7 @@
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenAdvancedSettings("openai"))">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionOpenAI>("OpenAI Configuration"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
@@ -502,31 +502,6 @@
         finally
         {
             _isSaving = false;
-        }
-    }
-
-    private async Task OpenAdvancedSettings(string section)
-    {
-        var parameters = new DialogParameters<AdvancedSettingsDialog>
-        {
-            { x => x.ChatId, ChatId },
-            { x => x.InitialSection, section }
-        };
-
-        var options = new DialogOptions
-        {
-            MaxWidth = MaxWidth.Large,
-            FullWidth = true,
-            CloseOnEscapeKey = true
-        };
-
-        var dialog = await DialogService.ShowAsync<AdvancedSettingsDialog>("Advanced Settings", parameters, options);
-        var result = await dialog.Result;
-
-        if (result != null && !result.Canceled)
-        {
-            // Reload configuration after dialog closes
-            await LoadConfiguration();
         }
     }
 

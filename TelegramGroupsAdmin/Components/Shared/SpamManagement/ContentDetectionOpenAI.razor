@@ -1,0 +1,348 @@
+@using TelegramGroupsAdmin.ContentDetection.Configuration
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Services.PromptBuilder
+@using TelegramGroupsAdmin.Services
+@inject ISpamDetectionConfigRepository ConfigRepository
+@inject IPromptVersionRepository PromptVersionRepository
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject BlazorAuthHelper AuthHelper
+@inject IPromptBuilderService PromptBuilderService
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h6" Color="Color.Primary">OpenAI Integration</MudText>
+
+        @if (!_isGlobalView)
+        {
+            <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
+                <MudSwitch T="bool" @bind-Value="_config.OpenAI.UseGlobal"
+                          Label="@(_config.OpenAI.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
+                          Color="@(_config.OpenAI.UseGlobal ? Color.Default : Color.Primary)" />
+            </MudPaper>
+        }
+
+        @{
+            var openAIConfig = (_isGlobalView || !_config.OpenAI.UseGlobal) ? _config.OpenAI : _globalConfig.OpenAI;
+            var openAIReadOnly = !_isGlobalView && _config.OpenAI.UseGlobal;
+        }
+
+        <MudSwitch T="bool" @bind-Value="openAIConfig.Enabled"
+                  Label="Enable OpenAI Check"
+                  Color="Color.Primary"
+                  Disabled="@openAIReadOnly" />
+
+        @if (openAIConfig.Enabled)
+        {
+            <MudSwitch T="bool" @bind-Value="openAIConfig.VetoMode"
+                      Label="Veto Mode (Confirm Spam)"
+                      Color="Color.Primary"
+                      Disabled="@openAIReadOnly" />
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                If enabled, OpenAI confirms spam. If disabled, OpenAI finds spam.
+            </MudText>
+
+            @if (openAIConfig.VetoMode)
+            {
+                <MudNumericField @bind-Value="openAIConfig.VetoThreshold"
+                                Label="Veto Threshold"
+                                Min="50" Max="100"
+                                Disabled="@openAIReadOnly"
+                                HelperText="@(openAIReadOnly ? $"Using global value: {openAIConfig.VetoThreshold}" : "OpenAI veto runs only if spam confidence is below this (higher = more vetos)")" />
+            }
+
+            <MudSwitch T="bool" @bind-Value="openAIConfig.CheckShortMessages"
+                      Label="Check Short Messages"
+                      Color="Color.Primary"
+                      Disabled="@openAIReadOnly" />
+
+            <MudTextField @bind-Value="openAIConfig.SystemPrompt"
+                         Label="Custom System Prompt (Optional)"
+                         Lines="5"
+                         AutoGrow="true"
+                         Variant="Variant.Outlined"
+                         Disabled="@openAIReadOnly"
+                         HelperText="@(openAIReadOnly ? "Using global prompt" : "Topic-specific instructions for this group")" />
+
+            <MudNumericField @bind-Value="openAIConfig.ConfidenceThreshold"
+                            Label="Confidence Threshold"
+                            Min="1" Max="100"
+                            Disabled="@openAIReadOnly"
+                            HelperText="@(openAIReadOnly ? $"Using global value: {openAIConfig.ConfidenceThreshold}" : "Confidence level for OpenAI spam classification")" />
+
+            @* AI Prompt Builder - NOW AVAILABLE FOR BOTH GLOBAL AND PER-CHAT *@
+            @if (!openAIReadOnly)
+            {
+                <MudDivider Class="my-2" />
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.subtitle1" Color="Color.Primary">AI Prompt Builder</MudText>
+                    <MudSpacer />
+                    <MudButton Color="Color.Primary"
+                              Variant="Variant.Filled"
+                              Size="Size.Small"
+                              StartIcon="@Icons.Material.Filled.AutoAwesome"
+                              OnClick="OpenPromptBuilder">
+                        Generate with AI
+                    </MudButton>
+                </MudStack>
+
+                @if (_promptVersions.Any())
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Version History (@_promptVersions.Count versions)
+                    </MudText>
+
+                    <MudList T="string" Dense="true">
+                        @foreach (var version in _promptVersions.Take(5))
+                        {
+                            <MudListItem T="string">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudChip T="string"
+                                            Size="Size.Small"
+                                            Color="@(version.IsActive ? Color.Success : Color.Default)"
+                                            Variant="@(version.IsActive ? Variant.Filled : Variant.Outlined)">
+                                        v@(version.Version)
+                                    </MudChip>
+                                    <MudText Typo="Typo.caption" Class="flex-grow-1">
+                                        @version.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")
+                                        @if (!string.IsNullOrEmpty(version.CreatedBy))
+                                        {
+                                            <text> by @version.CreatedBy</text>
+                                        }
+                                    </MudText>
+                                    @if (!version.IsActive)
+                                    {
+                                        <MudIconButton Icon="@Icons.Material.Filled.RestorePage"
+                                                      Size="Size.Small"
+                                                      Color="Color.Primary"
+                                                      OnClick="@(() => RestoreVersion(version.Id))"
+                                                      title="Restore this version" />
+                                    }
+                                    <MudIconButton Icon="@Icons.Material.Filled.AutoFixHigh"
+                                                  Size="Size.Small"
+                                                  Color="Color.Secondary"
+                                                  OnClick="@(() => OpenImproveDialog(version))"
+                                                  title="Improve with AI" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                  Size="Size.Small"
+                                                  Color="Color.Default"
+                                                  OnClick="@(() => ViewVersion(version))"
+                                                  title="View prompt" />
+                                </MudStack>
+                            </MudListItem>
+                        }
+                    </MudList>
+
+                    @if (_promptVersions.Count > 5)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Showing 5 of @_promptVersions.Count versions
+                        </MudText>
+                    }
+                }
+            }
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public long? ChatId { get; set; }
+
+    private SpamDetectionConfig _config = new();
+    private SpamDetectionConfig _globalConfig = new();
+    private List<PromptVersion> _promptVersions = new();
+    private bool _isGlobalView => !ChatId.HasValue || ChatId.Value == 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfiguration();
+        await LoadPromptVersions();
+    }
+
+    private async Task LoadConfiguration()
+    {
+        try
+        {
+            // Always load global config for comparison/fallback
+            _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
+
+            if (_isGlobalView)
+            {
+                // Editing global config directly
+                _config = _globalConfig;
+            }
+            else
+            {
+                // Load chat-specific config (which may have UseGlobal flags set)
+                var chatConfig = await ConfigRepository.GetByChatIdAsync(ChatId!.Value);
+                _config = chatConfig ?? new SpamDetectionConfig();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new SpamDetectionConfig();
+            _globalConfig = new SpamDetectionConfig();
+        }
+    }
+
+    public SpamDetectionConfig GetConfig()
+    {
+        // Ensure global configs always have UseGlobal=true
+        if (_isGlobalView)
+        {
+            _config.OpenAI.UseGlobal = true;
+        }
+
+        return _config;
+    }
+
+    private async Task LoadPromptVersions()
+    {
+        // Load prompt versions for the current scope (global or chat-specific)
+        long targetChatId = _isGlobalView ? 0 : (ChatId ?? 0);
+
+        try
+        {
+            _promptVersions = await PromptVersionRepository.GetVersionHistoryByChatIdAsync(targetChatId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading prompt versions: {ex.Message}", Severity.Warning);
+            _promptVersions = new List<PromptVersion>();
+        }
+    }
+
+    private async Task OpenPromptBuilder()
+    {
+        long targetChatId = _isGlobalView ? 0 : (ChatId ?? 0);
+
+        var parameters = new DialogParameters<PromptBuilderDialog>
+        {
+            { x => x.ChatId, targetChatId }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<PromptBuilderDialog>("AI Prompt Builder", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled && result.Data is string generatedPrompt)
+        {
+            try
+            {
+                var userEmail = await AuthHelper.GetCurrentUserEmailAsync();
+
+                // Save as new version
+                var newVersion = await PromptVersionRepository.CreateVersionAsync(
+                    targetChatId,
+                    generatedPrompt,
+                    userEmail,
+                    null
+                );
+
+                // Update the config to use the new prompt
+                var configToUpdate = (_isGlobalView || !_config.OpenAI.UseGlobal) ? _config.OpenAI : _globalConfig.OpenAI;
+                configToUpdate.SystemPrompt = generatedPrompt;
+
+                // Reload versions to show the new one
+                await LoadPromptVersions();
+
+                Snackbar.Add($"Prompt v{newVersion.Version} created and activated!", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error saving prompt: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task RestoreVersion(long versionId)
+    {
+        try
+        {
+            var restoredVersion = await PromptVersionRepository.RestoreVersionAsync(versionId);
+
+            // Update the config to use the restored prompt
+            var configToUpdate = (_isGlobalView || !_config.OpenAI.UseGlobal) ? _config.OpenAI : _globalConfig.OpenAI;
+            configToUpdate.SystemPrompt = restoredVersion.PromptText;
+
+            // Reload versions to update UI
+            await LoadPromptVersions();
+
+            Snackbar.Add($"Prompt v{restoredVersion.Version} restored and activated!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error restoring prompt: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task ViewVersion(PromptVersion version)
+    {
+        await DialogService.ShowMessageBox(
+            $"Prompt Version {version.Version}",
+            version.PromptText,
+            "Close");
+    }
+
+    private async Task OpenImproveDialog(PromptVersion version)
+    {
+        var parameters = new DialogParameters<PromptImprovementDialog>
+        {
+            { x => x.CurrentPrompt, version.PromptText }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<PromptImprovementDialog>(
+            $"Improve Prompt v{version.Version}",
+            parameters,
+            options);
+
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled && result.Data is string improvedPrompt)
+        {
+            try
+            {
+                long targetChatId = _isGlobalView ? 0 : (ChatId ?? 0);
+                var userEmail = await AuthHelper.GetCurrentUserEmailAsync();
+
+                // Save as new version
+                var newVersion = await PromptVersionRepository.CreateVersionAsync(
+                    targetChatId,
+                    improvedPrompt,
+                    userEmail,
+                    null
+                );
+
+                // Update the config to use the new improved prompt
+                var configToUpdate = (_isGlobalView || !_config.OpenAI.UseGlobal) ? _config.OpenAI : _globalConfig.OpenAI;
+                configToUpdate.SystemPrompt = improvedPrompt;
+
+                // Reload versions to show the new one
+                await LoadPromptVersions();
+
+                Snackbar.Add($"Improved prompt saved as v{newVersion.Version} and activated!", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error saving improved prompt: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+}

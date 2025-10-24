@@ -580,7 +580,7 @@ public class BackupService : IBackupService
     private async Task ResetSequencesAsync(NpgsqlConnection connection, List<string> tables)
     {
         // Query for all identity columns and their sequences
-        // Only reset sequences for columns with default values using nextval() (true auto-increment columns)
+        // Includes both SERIAL (column_default LIKE 'nextval%') and IDENTITY columns (is_identity = 'YES')
         const string sequenceQuery = """
             SELECT
                 c.table_name,
@@ -588,9 +588,8 @@ public class BackupService : IBackupService
                 pg_get_serial_sequence(quote_ident(c.table_name), quote_ident(c.column_name)) as sequence_name
             FROM information_schema.columns c
             WHERE c.table_schema = 'public'
-                AND c.is_identity = 'YES'
                 AND c.table_name = ANY(@tables)
-                AND c.column_default LIKE 'nextval%'
+                AND (c.is_identity = 'YES' OR c.column_default LIKE 'nextval%')
             """;
 
         var identityColumns = await connection.QueryAsync<(string table_name, string column_name, string sequence_name)>(
@@ -603,25 +602,14 @@ public class BackupService : IBackupService
             if (string.IsNullOrEmpty(sequenceName))
                 continue;
 
-            // Check if the column contains negative values (e.g., Telegram chat IDs)
-            // Skip sequence reset for columns that intentionally store negative values
-            var hasNegative = await connection.ExecuteScalarAsync<bool>(
-                $"SELECT EXISTS(SELECT 1 FROM {tableName} WHERE {columnName} < 0)"
-            );
+            // Reset sequence to max(positive values) from the table
+            // Ignore negative values (manual inserts like negative message_ids)
+            // Sequences only generate positive integers, so we only care about max positive value
+            var resetSql = $"SELECT setval('{sequenceName}', COALESCE((SELECT MAX({columnName}) FROM {tableName} WHERE {columnName} > 0), 1))";
+            var newSeqValue = await connection.ExecuteScalarAsync<long>(resetSql);
 
-            if (hasNegative)
-            {
-                _logger.LogDebug("Skipping sequence reset for {TableName}.{ColumnName} (contains negative values)",
-                    tableName, columnName);
-                continue;
-            }
-
-            // Reset sequence to max(id) + 1 from the table
-            var resetSql = $"SELECT setval('{sequenceName}', COALESCE((SELECT MAX({columnName}) FROM {tableName}), 1))";
-            await connection.ExecuteScalarAsync(resetSql);
-
-            _logger.LogDebug("Reset sequence {SequenceName} for {TableName}.{ColumnName}",
-                sequenceName, tableName, columnName);
+            _logger.LogDebug("Reset sequence {SequenceName} for {TableName}.{ColumnName} to {NewValue}",
+                sequenceName, tableName, columnName, newSeqValue);
         }
 
         _logger.LogInformation("All identity sequences reset successfully");

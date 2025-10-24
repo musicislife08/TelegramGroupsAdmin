@@ -1,0 +1,114 @@
+@using TelegramGroupsAdmin.ContentDetection.Configuration
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@inject ISpamDetectionConfigRepository ConfigRepository
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h6" Color="Color.Primary">Spacing Detection</MudText>
+
+        @if (!_isGlobalView)
+        {
+            <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
+                <MudSwitch T="bool" @bind-Value="_config.Spacing.UseGlobal"
+                          Label="@(_config.Spacing.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
+                          Color="@(_config.Spacing.UseGlobal ? Color.Default : Color.Primary)" />
+            </MudPaper>
+        }
+
+        @{
+            var spacingConfig = (_isGlobalView || !_config.Spacing.UseGlobal) ? _config.Spacing : _globalConfig.Spacing;
+            var spacingReadOnly = !_isGlobalView && _config.Spacing.UseGlobal;
+        }
+
+        <MudSwitch T="bool" @bind-Value="spacingConfig.Enabled"
+                  Label="Enable Abnormal Spacing Check"
+                  Color="Color.Primary"
+                  Disabled="@spacingReadOnly" />
+
+        @if (spacingConfig.Enabled)
+        {
+            <MudNumericField @bind-Value="spacingConfig.MinWordsCount"
+                            Label="Minimum Words for Analysis"
+                            Min="3" Max="20"
+                            Disabled="@spacingReadOnly"
+                            HelperText="@(spacingReadOnly ? $"Using global value: {spacingConfig.MinWordsCount}" : "Minimum number of words required")" />
+
+            <MudNumericField @bind-Value="spacingConfig.ShortWordLength"
+                            Label="Short Word Length"
+                            Min="1" Max="5"
+                            Disabled="@spacingReadOnly"
+                            HelperText="@(spacingReadOnly ? $"Using global value: {spacingConfig.ShortWordLength}" : "Maximum length for 'short' words")" />
+
+            <MudSlider @bind-Value="spacingConfig.ShortWordRatioThreshold"
+                      Min="0.1" Max="1.0" Step="0.05"
+                      Disabled="@spacingReadOnly">
+                <MudText>Short Word Ratio: @spacingConfig.ShortWordRatioThreshold.ToString("F2")</MudText>
+            </MudSlider>
+
+            <MudSlider @bind-Value="spacingConfig.SpaceRatioThreshold"
+                      Min="0.1" Max="1.0" Step="0.05"
+                      Disabled="@spacingReadOnly">
+                <MudText>Space Ratio: @spacingConfig.SpaceRatioThreshold.ToString("F2")</MudText>
+            </MudSlider>
+
+            <MudNumericField @bind-Value="spacingConfig.ConfidenceThreshold"
+                            Label="Confidence Threshold"
+                            Min="1" Max="100"
+                            Disabled="@spacingReadOnly"
+                            HelperText="@(spacingReadOnly ? $"Using global value: {spacingConfig.ConfidenceThreshold}" : "Confidence level when abnormal spacing is detected")" />
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public long? ChatId { get; set; }
+
+    private SpamDetectionConfig _config = new();
+    private SpamDetectionConfig _globalConfig = new();
+    private bool _isGlobalView => !ChatId.HasValue || ChatId.Value == 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfiguration();
+    }
+
+    private async Task LoadConfiguration()
+    {
+        try
+        {
+            // Always load global config for comparison/fallback
+            _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
+
+            if (_isGlobalView)
+            {
+                // Editing global config directly
+                _config = _globalConfig;
+            }
+            else
+            {
+                // Load chat-specific config (which may have UseGlobal flags set)
+                var chatConfig = await ConfigRepository.GetByChatIdAsync(ChatId!.Value);
+                _config = chatConfig ?? new SpamDetectionConfig();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new SpamDetectionConfig();
+            _globalConfig = new SpamDetectionConfig();
+        }
+    }
+
+    public SpamDetectionConfig GetConfig()
+    {
+        // Ensure global configs always have UseGlobal=true
+        if (_isGlobalView)
+        {
+            _config.Spacing.UseGlobal = true;
+        }
+
+        return _config;
+    }
+}
