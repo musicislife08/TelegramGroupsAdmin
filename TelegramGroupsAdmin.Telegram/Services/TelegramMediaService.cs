@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 
@@ -54,8 +55,11 @@ public class TelegramMediaService(
             // Create unique filename: {mediaType}_{messageId}_{fileUniqueId}.{ext}
             var uniqueFileName = $"{mediaType.ToString().ToLowerInvariant()}_{messageId}_{file.FileUniqueId}{extension}";
 
-            // Ensure media directory exists
-            var mediaDir = Path.Combine(_mediaStoragePath, "media");
+            // Get subdirectory from centralized utility
+            var subDir = MediaPathUtilities.GetMediaSubdirectory((int)mediaType);
+
+            // Ensure media subdirectory exists (e.g., /data/media/video/)
+            var mediaDir = Path.Combine(_mediaStoragePath, "media", subDir);
             Directory.CreateDirectory(mediaDir);
 
             // Full local path for storage
@@ -74,8 +78,8 @@ public class TelegramMediaService(
                 uniqueFileName,
                 new FileInfo(localFilePath).Length);
 
-            // Return relative path for database (e.g., "media/animation_12345.mp4")
-            return $"media/{uniqueFileName}";
+            // Return just the filename - UI will construct full path from MediaType
+            return uniqueFileName;
         }
         catch (Exception ex)
         {

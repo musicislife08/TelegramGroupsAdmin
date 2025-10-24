@@ -101,7 +101,7 @@
                         @switch (Message.MediaType.Value)
                     {
                         case TelegramGroupsAdmin.Telegram.Models.MediaType.Animation:
-                            <video src="@GetImagePath(Message.MediaLocalPath)"
+                            <video src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
                                    class="tg-media tg-animation"
                                    autoplay loop muted playsinline
                                    title="GIF Animation">
@@ -109,7 +109,7 @@
                             break;
 
                         case TelegramGroupsAdmin.Telegram.Models.MediaType.Video:
-                            <video src="@GetImagePath(Message.MediaLocalPath)"
+                            <video src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
                                    class="tg-media tg-video"
                                    controls preload="metadata"
                                    title="@(Message.MediaFileName ?? "Video")">
@@ -119,7 +119,7 @@
                         case TelegramGroupsAdmin.Telegram.Models.MediaType.Audio:
                             <div class="tg-audio-container">
                                 <div class="tg-audio-icon">🎵</div>
-                                <audio src="@GetImagePath(Message.MediaLocalPath)"
+                                <audio src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
                                        class="tg-audio"
                                        controls preload="metadata"
                                        title="@(Message.MediaFileName ?? "Audio")">
@@ -130,7 +130,7 @@
                         case TelegramGroupsAdmin.Telegram.Models.MediaType.Voice:
                             <div class="tg-voice-container">
                                 <div class="tg-voice-icon">🎤</div>
-                                <audio src="@GetImagePath(Message.MediaLocalPath)"
+                                <audio src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
                                        class="tg-voice"
                                        controls preload="metadata"
                                        title="Voice message (@FormatDuration(Message.MediaDuration))">
@@ -143,14 +143,14 @@
                             break;
 
                         case TelegramGroupsAdmin.Telegram.Models.MediaType.Sticker:
-                            <img src="@GetImagePath(Message.MediaLocalPath)"
+                            <img src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
                                  alt="Sticker"
                                  class="tg-media tg-sticker"
                                  loading="lazy" />
                             break;
 
                         case TelegramGroupsAdmin.Telegram.Models.MediaType.VideoNote:
-                            <video src="@GetImagePath(Message.MediaLocalPath)"
+                            <video src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
                                    class="tg-media tg-videonote"
                                    controls preload="metadata"
                                    title="Video message">
@@ -451,7 +451,26 @@
             ? path.Replace('\\', '/')
             : Path.GetFileName(path);
 
+        // Media files are served from their respective folders, images from /images/
+        if (relativePath.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ||
+            relativePath.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) ||
+            relativePath.StartsWith("sticker/", StringComparison.OrdinalIgnoreCase) ||
+            relativePath.StartsWith("document/", StringComparison.OrdinalIgnoreCase) ||
+            relativePath.StartsWith("media/", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"/{relativePath}";
+        }
+
         return $"/images/{relativePath}";
+    }
+
+    private string GetMediaPath(string? filename, TelegramGroupsAdmin.Telegram.Models.MediaType mediaType)
+    {
+        if (string.IsNullOrEmpty(filename))
+            return string.Empty;
+
+        // Use centralized utility to construct media path
+        return TelegramGroupsAdmin.Core.Utilities.MediaPathUtilities.GetMediaWebPath(filename, (int)mediaType);
     }
 
     private bool IsManuallyMarkedAsHam()
