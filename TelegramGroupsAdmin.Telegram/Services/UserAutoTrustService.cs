@@ -105,7 +105,7 @@ public class UserAutoTrustService
             // Log to audit log (Telegram user as target)
             await _auditLogRepository.LogEventAsync(
                 Data.Models.AuditEventType.UserAutoWhitelisted,
-                actorUserId: "system",
+                actorUserId: null,  // System actor - shows "SYSTEM" chip in Audit UI
                 targetUserId: userId.ToString(), // Telegram user ID as target
                 value: $"Auto-trusted after {config.FirstMessagesCount} non-spam messages",
                 cancellationToken);
