@@ -9,18 +9,18 @@ using TelegramGroupsAdmin.Data;
 
 #nullable disable
 
-namespace TgSpam_PreFilterApi.Data.Migrations
+namespace TelegramGroupsAdmin.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251017233704_AddBotDmEnabledToTelegramUsers")]
-    partial class AddBotDmEnabledToTelegramUsers
+    [Migration("20251024031020_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.0-rc.1.25451.107")
+                .HasAnnotation("ProductVersion", "9.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -128,6 +128,147 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                     b.ToTable("audit_log");
                 });
 
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.BlocklistSubscriptionDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AddedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_date");
+
+                    b.Property<int>("BlockMode")
+                        .HasColumnType("integer")
+                        .HasColumnName("block_mode");
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<int?>("EntryCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("entry_count");
+
+                    b.Property<int>("Format")
+                        .HasColumnType("integer")
+                        .HasColumnName("format");
+
+                    b.Property<bool>("IsBuiltIn")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_built_in");
+
+                    b.Property<DateTimeOffset?>("LastFetched")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_fetched");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("RefreshIntervalHours")
+                        .HasColumnType("integer")
+                        .HasColumnName("refresh_interval_hours");
+
+                    b.Property<string>("SystemIdentifier")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("system_identifier");
+
+                    b.Property<long?>("TelegramUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("telegram_user_id");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("url");
+
+                    b.Property<string>("WebUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("web_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BlockMode")
+                        .HasFilter("block_mode > 0");
+
+                    b.HasIndex("ChatId");
+
+                    b.HasIndex("Enabled")
+                        .HasFilter("enabled = true");
+
+                    b.HasIndex("Url");
+
+                    b.ToTable("blocklist_subscriptions");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.CachedBlockedDomainDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("BlockMode")
+                        .HasColumnType("integer")
+                        .HasColumnName("block_mode");
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<string>("Domain")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("domain");
+
+                    b.Property<DateTimeOffset>("FirstSeen")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen");
+
+                    b.Property<DateTimeOffset>("LastVerified")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_verified");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<long?>("SourceSubscriptionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("source_subscription_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LastVerified");
+
+                    b.HasIndex("SourceSubscriptionId");
+
+                    b.HasIndex("Domain", "BlockMode", "ChatId")
+                        .IsUnique();
+
+                    b.ToTable("cached_blocked_domains");
+                });
+
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ChatAdminRecordDto", b =>
                 {
                     b.Property<long>("Id")
@@ -191,9 +332,8 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("added_date");
 
-                    b.Property<string>("ChatId")
-                        .IsRequired()
-                        .HasColumnType("text")
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
                         .HasColumnName("chat_id");
 
                     b.Property<string>("CustomPrompt")
@@ -223,6 +363,10 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("BackgroundJobsConfig")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("background_jobs_config");
+
                     b.Property<string>("BotProtectionConfig")
                         .HasColumnType("jsonb")
                         .HasColumnName("bot_protection_config");
@@ -236,6 +380,14 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("NOW()");
+
+                    b.Property<string>("FileScanningConfig")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("file_scanning_config");
+
+                    b.Property<string>("InviteLink")
+                        .HasColumnType("text")
+                        .HasColumnName("invite_link");
 
                     b.Property<string>("LogConfig")
                         .HasColumnType("jsonb")
@@ -353,6 +505,175 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_detection_results_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
                         });
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.DomainFilterDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AddedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_date");
+
+                    b.Property<int>("BlockMode")
+                        .HasColumnType("integer")
+                        .HasColumnName("block_mode");
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<string>("Domain")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("domain");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<int>("FilterType")
+                        .HasColumnType("integer")
+                        .HasColumnName("filter_type");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("SystemIdentifier")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("system_identifier");
+
+                    b.Property<long?>("TelegramUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("telegram_user_id");
+
+                    b.Property<string>("WebUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("web_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChatId");
+
+                    b.HasIndex("Domain");
+
+                    b.HasIndex("FilterType", "BlockMode")
+                        .HasFilter("enabled = true");
+
+                    b.ToTable("domain_filters");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.FileScanQuotaRecord", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer")
+                        .HasColumnName("count");
+
+                    b.Property<DateTimeOffset>("LastUpdated")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_updated");
+
+                    b.Property<int>("LimitValue")
+                        .HasColumnType("integer")
+                        .HasColumnName("limit_value");
+
+                    b.Property<string>("QuotaType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("quota_type");
+
+                    b.Property<DateTimeOffset>("QuotaWindowEnd")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("quota_window_end");
+
+                    b.Property<DateTimeOffset>("QuotaWindowStart")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("quota_window_start");
+
+                    b.Property<string>("Service")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("service");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Service", "QuotaType", "QuotaWindowEnd");
+
+                    b.HasIndex("Service", "QuotaType", "QuotaWindowStart")
+                        .IsUnique();
+
+                    b.ToTable("file_scan_quota");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.FileScanResultRecord", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("FileHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("file_hash");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metadata");
+
+                    b.Property<string>("Result")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("result");
+
+                    b.Property<int?>("ScanDurationMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("scan_duration_ms");
+
+                    b.Property<DateTimeOffset>("ScannedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scanned_at");
+
+                    b.Property<string>("Scanner")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("scanner");
+
+                    b.Property<string>("ThreatName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("threat_name");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FileHash");
+
+                    b.HasIndex("Scanner", "ScannedAt");
+
+                    b.ToTable("file_scan_results");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ImpersonationAlertRecordDto", b =>
@@ -605,6 +926,38 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("edit_date");
 
+                    b.Property<int?>("MediaDuration")
+                        .HasColumnType("integer")
+                        .HasColumnName("media_duration");
+
+                    b.Property<string>("MediaFileId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("media_file_id");
+
+                    b.Property<string>("MediaFileName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("media_file_name");
+
+                    b.Property<long?>("MediaFileSize")
+                        .HasColumnType("bigint")
+                        .HasColumnName("media_file_size");
+
+                    b.Property<string>("MediaLocalPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("media_local_path");
+
+                    b.Property<string>("MediaMimeType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("media_mime_type");
+
+                    b.Property<int?>("MediaType")
+                        .HasColumnType("integer")
+                        .HasColumnName("media_type");
+
                     b.Property<string>("MessageText")
                         .HasColumnType("text")
                         .HasColumnName("message_text");
@@ -653,7 +1006,100 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("Timestamp", "DeletedAt");
+
                     b.ToTable("messages");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PendingNotificationRecord", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("MessageText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("message_text");
+
+                    b.Property<string>("NotificationType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("notification_type");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("retry_count");
+
+                    b.Property<long>("TelegramUserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("telegram_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.HasIndex("TelegramUserId");
+
+                    b.HasIndex("NotificationType", "CreatedAt");
+
+                    b.ToTable("pending_notifications");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PromptVersionDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("GenerationMetadata")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("generation_metadata");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("PromptText")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("prompt_text");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("prompt_versions");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.RecoveryCodeRecordDto", b =>
@@ -759,9 +1205,12 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<string>("ChatId")
-                        .IsRequired()
-                        .HasColumnType("text")
+                    b.Property<bool>("AlwaysRun")
+                        .HasColumnType("boolean")
+                        .HasColumnName("always_run");
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
                         .HasColumnName("chat_id");
 
                     b.Property<string>("CheckName")
@@ -803,8 +1252,8 @@ namespace TgSpam_PreFilterApi.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<string>("ChatId")
-                        .HasColumnType("text")
+                    b.Property<long?>("ChatId")
+                        .HasColumnType("bigint")
                         .HasColumnName("chat_id");
 
                     b.Property<string>("ConfigJson")
@@ -978,6 +1427,11 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                     b.Property<DateTimeOffset>("LastSeenAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_seen_at");
+
+                    b.Property<string>("PhotoFileUniqueId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("photo_file_unique_id");
 
                     b.Property<string>("PhotoHash")
                         .HasMaxLength(64)
@@ -1373,10 +1827,8 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("responded_at");
 
-                    b.Property<string>("Response")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
+                    b.Property<int>("Response")
+                        .HasColumnType("integer")
                         .HasColumnName("response");
 
                     b.Property<Guid?>("TimeoutJobId")
@@ -1396,6 +1848,9 @@ namespace TgSpam_PreFilterApi.Data.Migrations
                         .HasColumnName("welcome_message_id");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TimeoutJobId")
+                        .HasFilter("timeout_job_id IS NOT NULL");
 
                     b.ToTable("welcome_responses");
                 });

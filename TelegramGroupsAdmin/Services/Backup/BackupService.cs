@@ -467,16 +467,20 @@ public class BackupService : IBackupService
                 }
             }
 
+            // Reset all identity sequences to prevent duplicate key violations (before commit, within transaction)
+            await ResetSequencesAsync(connection, sortedTables);
+
             await transaction.CommitAsync();
             _logger.LogInformation("✅ System restore complete: {Tables} tables, {Records} total records restored",
                 tablesRestored, totalRecordsRestored);
-
-            // Reset all identity sequences to prevent duplicate key violations
-            await ResetSequencesAsync(connection, sortedTables);
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync();
+            // Only rollback if transaction is not already completed
+            if (transaction.Connection != null)
+            {
+                await transaction.RollbackAsync();
+            }
             _logger.LogError(ex, "System restore failed - rolling back transaction");
             throw;
         }
@@ -576,6 +580,7 @@ public class BackupService : IBackupService
     private async Task ResetSequencesAsync(NpgsqlConnection connection, List<string> tables)
     {
         // Query for all identity columns and their sequences
+        // Only reset sequences for columns with default values using nextval() (true auto-increment columns)
         const string sequenceQuery = """
             SELECT
                 c.table_name,
@@ -585,6 +590,7 @@ public class BackupService : IBackupService
             WHERE c.table_schema = 'public'
                 AND c.is_identity = 'YES'
                 AND c.table_name = ANY(@tables)
+                AND c.column_default LIKE 'nextval%'
             """;
 
         var identityColumns = await connection.QueryAsync<(string table_name, string column_name, string sequence_name)>(
@@ -596,6 +602,19 @@ public class BackupService : IBackupService
         {
             if (string.IsNullOrEmpty(sequenceName))
                 continue;
+
+            // Check if the column contains negative values (e.g., Telegram chat IDs)
+            // Skip sequence reset for columns that intentionally store negative values
+            var hasNegative = await connection.ExecuteScalarAsync<bool>(
+                $"SELECT EXISTS(SELECT 1 FROM {tableName} WHERE {columnName} < 0)"
+            );
+
+            if (hasNegative)
+            {
+                _logger.LogDebug("Skipping sequence reset for {TableName}.{ColumnName} (contains negative values)",
+                    tableName, columnName);
+                continue;
+            }
 
             // Reset sequence to max(id) + 1 from the table
             var resetSql = $"SELECT setval('{sequenceName}', COALESCE((SELECT MAX({columnName}) FROM {tableName}), 1))";
