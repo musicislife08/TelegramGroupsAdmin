@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     // Core message tables
     public DbSet<MessageRecordDto> Messages => Set<MessageRecordDto>();
     public DbSet<MessageEditRecordDto> MessageEdits => Set<MessageEditRecordDto>();
+    public DbSet<MessageTranslationDto> MessageTranslations => Set<MessageTranslationDto>();
     public DbSet<DetectionResultRecordDto> DetectionResults => Set<DetectionResultRecordDto>();
 
     // User and auth tables
@@ -326,6 +327,25 @@ public class AppDbContext : DbContext
             .ToTable(t => t.HasCheckConstraint(
                 "CK_user_tags_exclusive_actor",
                 "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1"));
+
+        // MessageTranslations: Exactly one of (message_id, edit_id) must be non-null
+        modelBuilder.Entity<MessageTranslationDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_message_translations_exclusive_source",
+                "(message_id IS NOT NULL)::int + (edit_id IS NOT NULL)::int = 1"));
+
+        // MessageTranslations: CASCADE delete when message or edit is deleted
+        modelBuilder.Entity<MessageTranslationDto>()
+            .HasOne(mt => mt.Message)
+            .WithMany()
+            .HasForeignKey(mt => mt.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<MessageTranslationDto>()
+            .HasOne(mt => mt.MessageEdit)
+            .WithMany()
+            .HasForeignKey(mt => mt.EditId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
@@ -344,6 +364,16 @@ public class AppDbContext : DbContext
         // Composite index for cleanup job (PERF-DATA-2: 50x faster cleanup queries)
         modelBuilder.Entity<MessageRecordDto>()
             .HasIndex(m => new { m.Timestamp, m.DeletedAt });
+
+        // MessageTranslations indexes (partial indexes for exclusive arc pattern)
+        modelBuilder.Entity<MessageTranslationDto>()
+            .HasIndex(mt => mt.MessageId)
+            .HasFilter("message_id IS NOT NULL");
+        modelBuilder.Entity<MessageTranslationDto>()
+            .HasIndex(mt => mt.EditId)
+            .HasFilter("edit_id IS NOT NULL");
+        modelBuilder.Entity<MessageTranslationDto>()
+            .HasIndex(mt => mt.DetectedLanguage);
 
         // DetectionResults indexes
         modelBuilder.Entity<DetectionResultRecordDto>()

@@ -72,6 +72,18 @@
                         @(SpamCheck.IsSpam ? "spam" : "ham") @SpamCheck.Confidence%
                     </span>
                 }
+                @* Phase 4.20: Translation badge with toggle *@
+                @if (Message.Translation != null)
+                {
+                    <span class="tg-badge tg-badge-translation" title="Detected language: @Message.Translation.DetectedLanguage">
+                        🌐 @Message.Translation.DetectedLanguage.ToUpper()→EN
+                    </span>
+                    <MudIconButton Icon="@(_showTranslation ? Icons.Material.Filled.Translate : Icons.Material.Outlined.Translate)"
+                                   Size="Size.Small"
+                                   Class="tg-translate-toggle"
+                                   title="@(_showTranslation ? "Show original" : "Show translation")"
+                                   OnClick="ToggleTranslation" />
+                }
             </div>
 
             @* Content *@
@@ -200,10 +212,19 @@
                     </div>
                 }
 
-                @* Message Text *@
+                @* Message Text (Phase 4.20: Show translation or original based on toggle) *@
                 @if (!string.IsNullOrEmpty(Message.MessageText))
                 {
-                    <div class="tg-text">@Message.MessageText</div>
+                    @if (_showTranslation && Message.Translation != null)
+                    {
+                        <div class="tg-text tg-text-translated">
+                            @Message.Translation.TranslatedText
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="tg-text">@Message.MessageText</div>
+                    }
                 }
 
                 @* URLs *@
@@ -288,6 +309,17 @@
                                     <span>Temp Ban User</span>
                                 </div>
                             </MudMenuItem>
+
+                            @* Phase 4.20: Manual translation button (for messages that didn't auto-translate) *@
+                            @if (Message.Translation == null && !string.IsNullOrWhiteSpace(Message.MessageText))
+                            {
+                                <MudMenuItem OnClick="async () => { _popoverOpen = false; await OnTranslateMessage.InvokeAsync(Message); }" Disabled="@_actionInProgress">
+                                    <div class="tg-menu-item">
+                                        <MudIcon Icon="@Icons.Material.Filled.Translate" Size="Size.Small" />
+                                        <span>Translate Message</span>
+                                    </div>
+                                </MudMenuItem>
+                            }
                         </div>
                     </MudPopover>
                 </div>
@@ -351,6 +383,12 @@
     public EventCallback<long> OnReplyClick { get; set; }
 
     /// <summary>
+    /// Phase 4.20: Manual translation callback
+    /// </summary>
+    [Parameter]
+    public EventCallback<MessageRecord> OnTranslateMessage { get; set; }
+
+    /// <summary>
     /// Phase 4.12: User tags for contextual display in message UI
     /// </summary>
     [Parameter]
@@ -367,6 +405,7 @@
 
     private bool _actionInProgress = false;
     private bool _popoverOpen = false;
+    private bool _showTranslation = false; // Phase 4.20: Toggle between original and translated text
 
     /// <summary>
     /// Show admin notes dialog when notes icon is clicked
@@ -533,5 +572,14 @@
             TelegramGroupsAdmin.Telegram.Models.MediaType.Document => "Document",
             _ => "Media"
         };
+    }
+
+    /// <summary>
+    /// Toggle between original and translated text
+    /// Phase 4.20: User can switch between viewing original foreign language text or English translation
+    /// </summary>
+    private void ToggleTranslation()
+    {
+        _showTranslation = !_showTranslation;
     }
 }

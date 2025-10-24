@@ -187,7 +187,8 @@ public static class ModelMappings
         string? firstName,
         string? userPhotoPath,
         string? replyToUser,
-        string? replyToText) => new(
+        string? replyToText,
+        UiModels.MessageTranslation? translation = null) => new(
         MessageId: data.MessageId,
         UserId: data.UserId,
         UserName: userName,
@@ -217,7 +218,9 @@ public static class ModelMappings
         MediaFileName: data.MediaFileName,
         MediaMimeType: data.MediaMimeType,
         MediaLocalPath: data.MediaLocalPath,
-        MediaDuration: data.MediaDuration
+        MediaDuration: data.MediaDuration,
+        // Translation (Phase 4.20) - passed from repository query with LEFT JOIN
+        Translation: translation
     );
 
     public static DataModels.MessageRecordDto ToDto(this UiModels.MessageRecord ui) => new()
@@ -786,5 +789,27 @@ public static class ModelMappings
         CreatedAt = ui.CreatedAt,
         CreatedBy = ui.CreatedBy,
         GenerationMetadata = ui.GenerationMetadata
+    };
+
+    // MessageTranslation mappings (Phase 4.20)
+    public static UiModels.MessageTranslation ToModel(this DataModels.MessageTranslationDto data) => new(
+        Id: data.Id,
+        MessageId: data.MessageId,
+        EditId: data.EditId,
+        TranslatedText: data.TranslatedText,
+        DetectedLanguage: data.DetectedLanguage,
+        Confidence: data.Confidence,
+        TranslatedAt: data.TranslatedAt
+    );
+
+    public static DataModels.MessageTranslationDto ToDto(this UiModels.MessageTranslation ui) => new()
+    {
+        Id = ui.Id,
+        MessageId = ui.MessageId,
+        EditId = ui.EditId,
+        TranslatedText = ui.TranslatedText,
+        DetectedLanguage = ui.DetectedLanguage,
+        Confidence = ui.Confidence,
+        TranslatedAt = ui.TranslatedAt
     };
 }

@@ -196,8 +196,11 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                     from parentMsg in parentGroup.DefaultIfEmpty()
                     join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
                     from parentUserInfo in parentUserGroup.DefaultIfEmpty()
+                    join trans in context.MessageTranslations on m.MessageId equals trans.MessageId into transGroup
+                    from translation in transGroup.DefaultIfEmpty()
                     where m.ChatId != 0 // Exclude manual training samples (chat_id=0)
                        && (beforeTimestamp == null || m.Timestamp < beforeTimestamp)
+                       && (translation == null || translation.EditId == null) // Get translation for original message only (not edits)
                     orderby m.Timestamp descending
                     select new
                     {
@@ -208,7 +211,8 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                         FirstName = user != null ? user.FirstName : null,
                         UserPhotoPath = user != null ? user.UserPhotoPath : null,
                         ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
-                        ReplyToText = parentMsg != null ? parentMsg.MessageText : null
+                        ReplyToText = parentMsg != null ? parentMsg.MessageText : null,
+                        Translation = translation
                     };
 
         var results = await query
@@ -223,7 +227,8 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             firstName: x.FirstName,
             userPhotoPath: x.UserPhotoPath,
             replyToUser: x.ReplyToUser,
-            replyToText: x.ReplyToText)).ToList();
+            replyToText: x.ReplyToText,
+            translation: x.Translation?.ToModel())).ToList();
     }
 
     public async Task<List<UiModels.MessageRecord>> GetMessagesByChatIdAsync(long chatId, int limit = 10, DateTimeOffset? beforeTimestamp = null, CancellationToken cancellationToken = default)
@@ -862,5 +867,39 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         _logger.LogDebug("Media file missing for message {MessageId}: {Path}", message.MessageId, fullPath);
 
         return message with { MediaLocalPath = null };
+    }
+
+    // ============================================================================
+    // Translation Methods (Phase 4.20)
+    // ============================================================================
+
+    public async Task<UiModels.MessageTranslation?> GetTranslationForMessageAsync(long messageId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var translation = await context.MessageTranslations
+            .Where(t => t.MessageId == messageId)
+            .OrderByDescending(t => t.TranslatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return translation?.ToModel();
+    }
+
+    public async Task<UiModels.MessageTranslation?> GetTranslationForEditAsync(long editId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var translation = await context.MessageTranslations
+            .Where(t => t.EditId == editId)
+            .OrderByDescending(t => t.TranslatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return translation?.ToModel();
+    }
+
+    public async Task InsertTranslationAsync(UiModels.MessageTranslation translation, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var dto = translation.ToDto();
+        context.MessageTranslations.Add(dto);
+        await context.SaveChangesAsync(cancellationToken);
     }
 }

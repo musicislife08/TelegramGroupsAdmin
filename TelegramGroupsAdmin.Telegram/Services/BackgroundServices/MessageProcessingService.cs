@@ -358,6 +358,46 @@ public partial class MessageProcessingService(
             var chatIconCachedPath = Path.Combine(_historyOptions.ImageStoragePath, "chat_icons", chatIconFileName);
             var chatIconPath = File.Exists(chatIconCachedPath) ? $"chat_icons/{chatIconFileName}" : null;
 
+            // Phase 4.20: Translate message BEFORE saving (if enabled and non-English)
+            // This allows us to store translation AND reuse it in spam detection
+            MessageTranslation? translation = null;
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.ISpamDetectionConfigRepository>();
+                var spamConfig = await spamConfigRepo.GetGlobalConfigAsync(cancellationToken);
+
+                // Check if translation is enabled and message meets minimum length
+                if (spamConfig.Translation.Enabled &&
+                    text.Length >= spamConfig.Translation.MinMessageLength)
+                {
+                    // Check if text is likely non-Latin script (non-English)
+                    var latinRatio = CalculateLatinScriptRatio(text);
+                    if (latinRatio < spamConfig.Translation.LatinScriptThreshold)
+                    {
+                        var translationService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService>();
+                        var translationResult = await translationService.TranslateToEnglishAsync(text, cancellationToken);
+
+                        if (translationResult != null && translationResult.WasTranslated)
+                        {
+                            translation = new MessageTranslation(
+                                Id: 0, // Will be set by INSERT
+                                MessageId: message.MessageId,
+                                EditId: null,
+                                TranslatedText: translationResult.TranslatedText,
+                                DetectedLanguage: translationResult.DetectedLanguage,
+                                Confidence: null, // OpenAI doesn't return confidence for translation
+                                TranslatedAt: DateTimeOffset.UtcNow
+                            );
+
+                            logger.LogInformation(
+                                "Translated message {MessageId} from {Language} to English",
+                                message.MessageId,
+                                translationResult.DetectedLanguage);
+                        }
+                    }
+                }
+            }
+
             // User photo will be fetched asynchronously after message save (non-blocking)
             var messageRecord = new MessageRecord(
                 message.MessageId,
@@ -389,13 +429,25 @@ public partial class MessageProcessingService(
                 MediaFileName: mediaFileName,
                 MediaMimeType: mediaMimeType,
                 MediaLocalPath: mediaLocalPath,
-                MediaDuration: mediaDuration
+                MediaDuration: mediaDuration,
+                // Translation (Phase 4.20)
+                Translation: translation
             );
 
             // Save message to database using a scoped repository
             using var messageScope = _scopeFactory.CreateScope();
             var repository = messageScope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
             await repository.InsertMessageAsync(messageRecord, cancellationToken);
+
+            // Save translation to database if present
+            if (translation != null)
+            {
+                await repository.InsertTranslationAsync(translation, cancellationToken);
+                logger.LogDebug(
+                    "Saved translation for message {MessageId} ({Language})",
+                    message.MessageId,
+                    translation.DetectedLanguage);
+            }
 
             // Upsert user into telegram_users table (centralized user tracking)
             var telegramUserRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
@@ -574,6 +626,52 @@ public partial class MessageProcessingService(
             );
 
             await repository.InsertMessageEditAsync(editRecord, cancellationToken);
+
+            // Phase 4.20: Translate edited message if non-English (before spam detection)
+            // After InsertMessageEditAsync, editRecord.Id is populated by the database
+            // Need to re-fetch to get the generated ID
+            var editsForMessage = await repository.GetEditsForMessageAsync(editedMessage.MessageId, cancellationToken);
+            var savedEdit = editsForMessage.OrderByDescending(e => e.EditDate).FirstOrDefault();
+
+            if (savedEdit != null && !string.IsNullOrWhiteSpace(newText))
+            {
+                var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.ISpamDetectionConfigRepository>();
+                var spamConfig = await spamConfigRepo.GetGlobalConfigAsync(cancellationToken);
+
+                // Check if translation is enabled and message meets minimum length
+                if (spamConfig.Translation.Enabled &&
+                    newText.Length >= spamConfig.Translation.MinMessageLength)
+                {
+                    // Check if text is likely non-Latin script (non-English)
+                    var latinRatio = CalculateLatinScriptRatio(newText);
+                    if (latinRatio < spamConfig.Translation.LatinScriptThreshold)
+                    {
+                        var translationService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService>();
+                        var translationResult = await translationService.TranslateToEnglishAsync(newText, cancellationToken);
+
+                        if (translationResult != null && translationResult.WasTranslated)
+                        {
+                            var translation = new MessageTranslation(
+                                Id: 0, // Will be set by INSERT
+                                MessageId: null, // Exclusive arc: translation belongs to EDIT, not message
+                                EditId: savedEdit.Id,
+                                TranslatedText: translationResult.TranslatedText,
+                                DetectedLanguage: translationResult.DetectedLanguage,
+                                Confidence: null, // OpenAI doesn't return confidence for translation
+                                TranslatedAt: DateTimeOffset.UtcNow
+                            );
+
+                            await repository.InsertTranslationAsync(translation, cancellationToken);
+
+                            logger.LogInformation(
+                                "Translated edit #{EditId} for message {MessageId} from {Language} to English",
+                                savedEdit.Id,
+                                editedMessage.MessageId,
+                                translationResult.DetectedLanguage);
+                        }
+                    }
+                }
+            }
 
             // Update the message in the messages table with new text and edit date
             var updatedMessage = oldMessage with
@@ -1049,5 +1147,36 @@ public partial class MessageProcessingService(
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Calculate the ratio of Latin script characters to total characters (0.0 - 1.0)
+    /// Used to detect if text is likely English/Western European (skip expensive translation)
+    /// </summary>
+    private static double CalculateLatinScriptRatio(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return 0.0;
+
+        var totalChars = 0;
+        var latinChars = 0;
+
+        foreach (var c in text)
+        {
+            // Only count letter/digit characters (skip punctuation, whitespace, emoji)
+            if (char.IsLetterOrDigit(c))
+            {
+                totalChars++;
+
+                // Latin script: Basic Latin (0x0000-0x007F) + Latin-1 Supplement (0x0080-0x00FF) +
+                // Latin Extended-A (0x0100-0x017F) + Latin Extended-B (0x0180-0x024F)
+                if ((c >= 0x0000 && c <= 0x024F))
+                {
+                    latinChars++;
+                }
+            }
+        }
+
+        return totalChars > 0 ? (double)latinChars / totalChars : 0.0;
     }
 }

@@ -23,6 +23,7 @@
 @inject ISnackbar Snackbar
 @inject TelegramGroupsAdmin.Services.Media.IMediaRefetchQueueService MediaRefetchQueue
 @inject Microsoft.Extensions.Options.IOptions<TelegramGroupsAdmin.Configuration.MessageHistoryOptions> MessageHistoryOptions
+@inject TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService TranslationService
 @attribute [Authorize]
 @implements IDisposable
 
@@ -92,7 +93,8 @@
                                                    OnFilterByChat="HandleFilterByChat"
                                                    OnDeleteMessage="HandleDeleteMessage"
                                                    OnTempBan="HandleTempBan"
-                                                   OnReplyClick="HandleReplyClick" />
+                                                   OnReplyClick="HandleReplyClick"
+                                                   OnTranslateMessage="HandleTranslateMessage" />
                         </MudVirtualize>
 
                         @* Scroll Sentinel - triggers loading when scrolled near top (= bottom due to flex-reverse) *@
@@ -1290,6 +1292,79 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to queue missing media for refetch");
+        }
+    }
+
+    /// <summary>
+    /// Handle manual translation request for messages that didn't auto-translate
+    /// Phase 4.20: Allows users to translate short messages or messages that were below the length threshold
+    /// </summary>
+    private async Task HandleTranslateMessage(MessageRecord message)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(message.MessageText))
+            {
+                Snackbar.Add("Cannot translate: message has no text", Severity.Warning);
+                return;
+            }
+
+            // Call translation service
+            var translationResult = await TranslationService.TranslateToEnglishAsync(message.MessageText);
+
+            if (translationResult == null || !translationResult.WasTranslated)
+            {
+                Snackbar.Add("Message is already in English or translation failed", Severity.Info);
+                return;
+            }
+
+            // Save translation to database
+            var translation = new MessageTranslation(
+                Id: 0, // Will be set by INSERT
+                MessageId: message.MessageId,
+                EditId: null,
+                TranslatedText: translationResult.TranslatedText,
+                DetectedLanguage: translationResult.DetectedLanguage,
+                Confidence: null, // OpenAI doesn't return confidence for translation
+                TranslatedAt: DateTimeOffset.UtcNow
+            );
+
+            await MessageRepository.InsertTranslationAsync(translation);
+
+            // Update the message in memory to include the new translation
+            var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == message.MessageId);
+            if (messageWrapper != null)
+            {
+                // Create a new MessageRecord with the translation (immutable record pattern)
+                var updatedMessage = message with { Translation = translation };
+
+                // Replace the message in the wrapper (MessageWithDetectionHistory is a class, not a record)
+                var index = _allMessages.IndexOf(messageWrapper);
+                if (index >= 0)
+                {
+                    _allMessages[index] = new MessageWithDetectionHistory
+                    {
+                        Message = updatedMessage,
+                        DetectionResults = messageWrapper.DetectionResults,
+                        UserTags = messageWrapper.UserTags,
+                        UserNotes = messageWrapper.UserNotes
+                    };
+                    ApplyFilters(); // Reapply filters to update _filteredMessages
+                    StateHasChanged(); // Trigger re-render after all changes complete
+                }
+            }
+
+            Snackbar.Add($"Translated from {translationResult.DetectedLanguage} to English", Severity.Success);
+
+            Logger.LogInformation(
+                "Manually translated message {MessageId} from {Language}",
+                message.MessageId,
+                translationResult.DetectedLanguage);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to translate message {MessageId}", message.MessageId);
+            Snackbar.Add("Translation failed: " + ex.Message, Severity.Error);
         }
     }
 

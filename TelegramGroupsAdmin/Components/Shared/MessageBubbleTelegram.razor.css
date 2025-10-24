@@ -172,6 +172,37 @@
     text-transform: uppercase;
 }
 
+/* Phase 4.20: Translation badge */
+.tg-badge-translation {
+    background-color: rgba(33, 150, 243, 0.2);
+    color: #42a5f5;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 0.3px;
+}
+
+/* Phase 4.20: Translation toggle button */
+.tg-translate-toggle {
+    margin-left: 4px;
+    color: rgba(255, 255, 255, 0.7);
+    transition: color 0.2s ease;
+}
+
+.tg-translate-toggle:hover {
+    color: #42a5f5;
+    background-color: rgba(33, 150, 243, 0.1);
+}
+
+/* Phase 4.20: Translated text styling */
+.tg-text-translated {
+    font-style: italic;
+    opacity: 0.95;
+    border-left: 2px solid rgba(33, 150, 243, 0.3);
+    padding-left: 8px;
+    margin-left: -2px;
+}
+
 /* Content */
 .tg-content {
     margin: 0;
