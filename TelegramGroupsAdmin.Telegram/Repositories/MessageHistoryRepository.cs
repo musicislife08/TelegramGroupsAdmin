@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
@@ -846,17 +847,19 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     /// </summary>
     private UiModels.MessageRecord ValidateMediaPath(UiModels.MessageRecord message)
     {
-        // Skip if no media path set
-        if (string.IsNullOrEmpty(message.MediaLocalPath))
+        // Skip if no media path set or no media type
+        if (string.IsNullOrEmpty(message.MediaLocalPath) || !message.MediaType.HasValue)
             return message;
 
-        // Check if file actually exists on disk
-        var fullPath = Path.Combine(_imageStoragePath, message.MediaLocalPath);
+        // Construct full path using MediaPathUtilities (e.g., /data/media/video/animation_123_ABC.mp4)
+        var relativePath = MediaPathUtilities.GetMediaStoragePath(message.MediaLocalPath, (int)message.MediaType.Value);
+        var fullPath = Path.Combine(_imageStoragePath, relativePath);
+
         if (File.Exists(fullPath))
             return message; // File exists, return as-is
 
         // File missing - null the path so UI shows placeholder and requests download
-        _logger.LogDebug("Media file missing for message {MessageId}: {Path}", message.MessageId, message.MediaLocalPath);
+        _logger.LogDebug("Media file missing for message {MessageId}: {Path}", message.MessageId, fullPath);
 
         return message with { MediaLocalPath = null };
     }

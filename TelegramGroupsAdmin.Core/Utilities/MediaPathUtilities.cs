@@ -14,17 +14,17 @@ public static class MediaPathUtilities
     public static string GetMediaSubdirectory(int mediaType)
     {
         // MediaType enum values:
-        // Animation = 0, Video = 1, Audio = 2, Voice = 3, Sticker = 4, VideoNote = 5, Document = 6
+        // None = 0, Animation = 1, Video = 2, Audio = 3, Voice = 4, Sticker = 5, VideoNote = 6, Document = 7
         return mediaType switch
         {
-            0 => "video",    // Animation
-            1 => "video",    // Video
-            5 => "video",    // VideoNote
-            2 => "audio",    // Audio
-            3 => "audio",    // Voice
-            4 => "sticker",  // Sticker
-            6 => "document", // Document
-            _ => "other"
+            1 => "video",    // Animation
+            2 => "video",    // Video
+            6 => "video",    // VideoNote
+            3 => "audio",    // Audio
+            4 => "audio",    // Voice
+            5 => "sticker",  // Sticker
+            7 => "document", // Document
+            _ => "other"     // None or unknown
         };
     }
 
