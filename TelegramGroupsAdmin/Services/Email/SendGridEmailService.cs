@@ -21,6 +21,13 @@ public class SendGridEmailService : IEmailService
         _options = options.Value;
         _logger = logger;
         _client = new SendGridClient(_options.ApiKey);
+
+        // Debug log configuration at startup
+        _logger.LogInformation("SendGrid configured: Enabled={Enabled}, FromAddress={FromAddress}, FromName={FromName}, ApiKeySet={ApiKeySet}",
+            _options.Enabled,
+            _options.FromAddress,
+            _options.FromName,
+            !string.IsNullOrEmpty(_options.ApiKey));
     }
 
     public async Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, CancellationToken ct = default)

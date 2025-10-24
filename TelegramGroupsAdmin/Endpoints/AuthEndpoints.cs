@@ -56,27 +56,46 @@ public static class AuthEndpoints
         endpoints.MapPost("/api/auth/register", async (
             [FromBody] RegisterRequest request,
             [FromServices] IAuthService authService,
+            [FromServices] ILogger<Program> logger,
             HttpContext httpContext) =>
         {
-            var result = await authService.RegisterAsync(request.Email, request.Password, request.InviteToken);
-
-            if (!result.Success)
+            try
             {
-                return Results.Json(new { success = false, error = result.ErrorMessage });
+                var result = await authService.RegisterAsync(request.Email, request.Password, request.InviteToken);
+
+                if (!result.Success)
+                {
+                    return Results.Json(new { success = false, error = result.ErrorMessage });
+                }
+
+                // Auto-login after successful registration
+                var loginResult = await authService.LoginAsync(request.Email, request.Password);
+
+                if (loginResult.Success && !loginResult.RequiresTotp)
+                {
+                    // Sign in the user with cookie authentication
+                    await SignInUserAsync(httpContext, loginResult.UserId!, loginResult.Email!, loginResult.PermissionLevel!.Value);
+
+                    return Results.Json(new { success = true });
+                }
+
+                // Login failed - check if it's due to email verification
+                if (loginResult.ErrorMessage?.Contains("verify your email", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    logger.LogInformation("Registration succeeded for {Email}, email verification required", request.Email);
+                    return Results.Json(new { success = true, requiresEmailVerification = true, message = "Account created! Please check your email to verify your account before logging in." });
+                }
+
+                // Other login failure (TOTP setup, etc.)
+                var errorMsg = loginResult.ErrorMessage ?? "Login failed after registration";
+                logger.LogWarning("Registration succeeded but auto-login failed for {Email}: {Error}", request.Email, errorMsg);
+                return Results.Json(new { success = false, error = errorMsg });
             }
-
-            // Auto-login after successful registration
-            var loginResult = await authService.LoginAsync(request.Email, request.Password);
-
-            if (loginResult.Success && !loginResult.RequiresTotp)
+            catch (Exception ex)
             {
-                // Sign in the user with cookie authentication
-                await SignInUserAsync(httpContext, loginResult.UserId!, loginResult.Email!, loginResult.PermissionLevel!.Value);
-
-                return Results.Json(new { success = true });
+                logger.LogError(ex, "Unexpected error during registration for {Email}", request.Email);
+                return Results.Json(new { success = false, error = "An unexpected error occurred during registration" });
             }
-
-            return Results.Json(new { success = false, error = "Login failed after registration" });
         }).AllowAnonymous();
 
         endpoints.MapPost("/api/auth/logout", async (HttpContext httpContext) =>

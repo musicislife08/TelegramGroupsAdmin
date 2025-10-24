@@ -68,47 +68,51 @@ public class PromptVersionRepository : IPromptVersionRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Start transaction to ensure atomicity
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-
-        try
+        // Use execution strategy to handle retry logic with transaction
+        var strategy = context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            // Deactivate current active version (if any)
-            var currentActive = await context.PromptVersions
-                .FirstOrDefaultAsync(pv => pv.ChatId == chatId && pv.IsActive, cancellationToken);
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
 
-            if (currentActive != null)
+            try
             {
-                currentActive.IsActive = false;
+                // Deactivate current active version (if any)
+                var currentActive = await context.PromptVersions
+                    .FirstOrDefaultAsync(pv => pv.ChatId == chatId && pv.IsActive, cancellationToken);
+
+                if (currentActive != null)
+                {
+                    currentActive.IsActive = false;
+                }
+
+                // Get next version number
+                var maxVersion = await context.PromptVersions
+                    .Where(pv => pv.ChatId == chatId)
+                    .MaxAsync(pv => (int?)pv.Version, cancellationToken) ?? 0;
+
+                var newVersion = new Data.Models.PromptVersionDto
+                {
+                    ChatId = chatId,
+                    Version = maxVersion + 1,
+                    PromptText = promptText,
+                    IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    CreatedBy = createdBy,
+                    GenerationMetadata = generationMetadata
+                };
+
+                context.PromptVersions.Add(newVersion);
+                await context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+
+                return newVersion.ToModel();
             }
-
-            // Get next version number
-            var maxVersion = await context.PromptVersions
-                .Where(pv => pv.ChatId == chatId)
-                .MaxAsync(pv => (int?)pv.Version, cancellationToken) ?? 0;
-
-            var newVersion = new Data.Models.PromptVersionDto
+            catch
             {
-                ChatId = chatId,
-                Version = maxVersion + 1,
-                PromptText = promptText,
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow,
-                CreatedBy = createdBy,
-                GenerationMetadata = generationMetadata
-            };
-
-            context.PromptVersions.Add(newVersion);
-            await context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-
-            return newVersion.ToModel();
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+        });
     }
 
     public async Task<PromptVersion> RestoreVersionAsync(
@@ -117,41 +121,46 @@ public class PromptVersionRepository : IPromptVersionRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-
-        try
+        // Use execution strategy to handle retry logic with transaction
+        var strategy = context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            // Get the version to restore
-            var versionToRestore = await context.PromptVersions
-                .FirstOrDefaultAsync(pv => pv.Id == versionId, cancellationToken);
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
 
-            if (versionToRestore == null)
+            try
             {
-                throw new InvalidOperationException($"Prompt version {versionId} not found");
+                // Get the version to restore
+                var versionToRestore = await context.PromptVersions
+                    .FirstOrDefaultAsync(pv => pv.Id == versionId, cancellationToken);
+
+                if (versionToRestore == null)
+                {
+                    throw new InvalidOperationException($"Prompt version {versionId} not found");
+                }
+
+                // Deactivate current active version
+                var currentActive = await context.PromptVersions
+                    .FirstOrDefaultAsync(pv => pv.ChatId == versionToRestore.ChatId && pv.IsActive, cancellationToken);
+
+                if (currentActive != null)
+                {
+                    currentActive.IsActive = false;
+                }
+
+                // Activate the selected version
+                versionToRestore.IsActive = true;
+
+                await context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+
+                return versionToRestore.ToModel();
             }
-
-            // Deactivate current active version
-            var currentActive = await context.PromptVersions
-                .FirstOrDefaultAsync(pv => pv.ChatId == versionToRestore.ChatId && pv.IsActive, cancellationToken);
-
-            if (currentActive != null)
+            catch
             {
-                currentActive.IsActive = false;
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
             }
-
-            // Activate the selected version
-            versionToRestore.IsActive = true;
-
-            await context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-
-            return versionToRestore.ToModel();
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
+        });
     }
 
     public async Task<bool> DeleteVersionAsync(

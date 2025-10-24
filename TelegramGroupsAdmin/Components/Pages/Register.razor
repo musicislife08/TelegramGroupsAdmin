@@ -48,7 +48,7 @@
         @if (_registrationSuccess)
         {
             <MudAlert Severity="Severity.Success" Class="mb-4">
-                Account created successfully! You can now log in.
+                @(_successMessage ?? "Account created successfully! You can now log in.")
             </MudAlert>
         }
 
@@ -121,6 +121,7 @@
     private string _password = string.Empty; // Initialized as empty, never null
     private string _confirmPassword = string.Empty;
     private string? _errorMessage;
+    private string? _successMessage;
 
     [SupplyParameterFromQuery(Name = "invite")]
     private string? InviteQueryParam { get; set; }
@@ -167,31 +168,61 @@
             // Check if first run for UI display
             var isFirstRun = await AuthService.IsFirstRunAsync();
 
-            var response = await HttpClient.PostAsJsonAsync("/api/auth/register", new
+            var apiUrl = new Uri(Navigation.BaseUri).GetLeftPart(UriPartial.Authority) + "/api/auth/register";
+            var response = await HttpClient.PostAsJsonAsync(apiUrl, new
             {
                 Email = _email,
                 Password = _password, // Already initialized as empty string, never null
                 InviteToken = _inviteToken
             });
 
+            // Check if response has content and is JSON
+            if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength == 0)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _errorMessage = string.IsNullOrEmpty(errorBody)
+                    ? $"Server error: {response.StatusCode}"
+                    : "Registration failed. Please check the server logs for details.";
+                Logger.LogError("Registration failed with status {StatusCode}: {Body}", response.StatusCode, errorBody);
+                return;
+            }
+
             var result = await response.Content.ReadFromJsonAsync<JsonElement>();
 
-            if (!result.GetProperty("success").GetBoolean())
+            if (result.ValueKind == JsonValueKind.Undefined || !result.GetProperty("success").GetBoolean())
             {
-                _errorMessage = result.TryGetProperty("error", out var error)
+                _errorMessage = result.ValueKind != JsonValueKind.Undefined && result.TryGetProperty("error", out var error)
                     ? error.GetString()
                     : "Registration failed";
                 return;
             }
 
+            // Check if email verification is required
+            if (result.TryGetProperty("requiresEmailVerification", out var requiresVerification) && requiresVerification.GetBoolean())
+            {
+                _successMessage = result.TryGetProperty("message", out var msg)
+                    ? msg.GetString()
+                    : "Account created! Please check your email to verify your account.";
+                _registrationSuccess = true;
+                StateHasChanged();
+
+                // Wait longer to let user read the message
+                await Task.Delay(5000);
+
+                // Redirect to login page
+                Navigation.NavigateTo("/login", forceLoad: true);
+                return;
+            }
+
+            // Auto-login succeeded
             _registrationSuccess = true;
             StateHasChanged();
 
             // Wait a moment to show success message
             await Task.Delay(2000);
 
-            // Redirect to login page
-            Navigation.NavigateTo("/login", forceLoad: true);
+            // Redirect to home page (already logged in)
+            Navigation.NavigateTo("/", forceLoad: true);
         }
         catch (Exception ex)
         {

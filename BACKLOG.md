@@ -10,6 +10,49 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ## Feature Backlog
 
+### FEATURE-4.20: Auto-Fix Database Sequences on Backup Restore
+
+**Status:** BACKLOG 📋
+**Severity:** Bug Fix | **Impact:** Data integrity, user experience
+
+**Current Behavior:**
+- When restoring from backup, database sequences are not automatically synchronized with max IDs
+- Sequence values remain at their pre-restore state (e.g., sequence=2 but max ID=84)
+- Subsequent inserts fail with "duplicate key value violates unique constraint" errors
+- Requires manual SQL execution to reset all sequences after restore
+
+**Proposed Enhancement:**
+- Automatically detect and fix sequence mismatches during backup restore
+- Add post-restore hook to sync all sequences with max IDs
+- Display warning if sequences are out of sync before restore
+- Include sequence reset as part of restore transaction
+
+**Use Cases:**
+- Database restore from backup
+- Database migration from another instance
+- Recovery from corruption
+
+**Implementation Considerations:**
+- Query all sequences and their corresponding tables dynamically
+- Execute `SETVAL` for each sequence based on `MAX(id)` from table
+- Handle tables with no rows (use COALESCE for null safety)
+- Log which sequences were reset and their new values
+- Consider adding to BackupService.RestoreAsync() method
+
+**SQL Pattern:**
+```sql
+SELECT SETVAL('table_name_id_seq', COALESCE((SELECT MAX(id) FROM table_name), 1), true);
+```
+
+**Affected Tables:** 27+ sequences across all auto-incrementing ID columns
+
+**Priority:** Medium (affects restore operations, manual workaround exists)
+
+**Related Files:**
+- `/src/TelegramGroupsAdmin/Services/Backup/BackupService.cs` (line ~390-450)
+
+---
+
 ### FEATURE-4.9: Bot Configuration Hot-Reload
 
 **Status:** BACKLOG 📋

@@ -3,6 +3,7 @@
 @using TelegramGroupsAdmin.Components.Shared
 @inject IUserManagementService UserManagementService
 @inject IInviteService InviteService
+@inject IAuthService AuthService
 @inject BlazorAuthHelper AuthHelper
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -104,6 +105,14 @@
                                         OnClick="@(() => EditUserPermission(context))">
                                 Edit Permission
                             </MudMenuItem>
+                            @if (!context.EmailVerified)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Email"
+                                            IconColor="Color.Info"
+                                            OnClick="@(() => ResendVerificationEmail(context))">
+                                    Resend Verification Email
+                                </MudMenuItem>
+                            }
                             @if (context.TotpEnabled)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.LockReset"
@@ -396,6 +405,26 @@
             {
                 Snackbar.Add($"Error resetting 2FA: {ex.Message}", Severity.Error);
             }
+        }
+    }
+
+    private async Task ResendVerificationEmail(UserRecord user)
+    {
+        try
+        {
+            var success = await AuthService.ResendVerificationEmailAsync(user.Email);
+            if (success)
+            {
+                Snackbar.Add($"Verification email sent to {user.Email}", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Email already verified or user not found", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error sending verification email: {ex.Message}", Severity.Error);
         }
     }
 
