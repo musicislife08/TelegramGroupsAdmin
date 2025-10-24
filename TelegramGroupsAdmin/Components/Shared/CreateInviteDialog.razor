@@ -12,14 +12,14 @@
                       Variant="Variant.Outlined"
                       Class="mb-4"
                       HelperText="Access level for the new user">
-                <MudSelectItem Value="0">ReadOnly - View only access</MudSelectItem>
+                <MudSelectItem Value="0">Admin - Chat-scoped moderation</MudSelectItem>
                 @if (MaxPermissionLevel >= 1)
                 {
-                    <MudSelectItem Value="1">Admin - Can manage users</MudSelectItem>
+                    <MudSelectItem Value="1">GlobalAdmin - Global moderation</MudSelectItem>
                 }
                 @if (MaxPermissionLevel >= 2)
                 {
-                    <MudSelectItem Value="2">Owner - Full access</MudSelectItem>
+                    <MudSelectItem Value="2">Owner - Full system access</MudSelectItem>
                 }
             </MudSelect>
 
@@ -78,7 +78,7 @@
     public int MaxPermissionLevel { get; set; } = 2; // Default to Owner if not specified
 
     private int _validDays = 7;
-    private int _permissionLevel = 0; // Default to ReadOnly
+    private int _permissionLevel = 0; // Default to Admin (chat-scoped)
     private string? _inviteLink;
     private string? _expiresAt;
 

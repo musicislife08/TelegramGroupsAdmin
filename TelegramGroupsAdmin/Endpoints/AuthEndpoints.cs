@@ -175,10 +175,10 @@ public static class AuthEndpoints
 
     private static string GetRoleName(int permissionLevel) => permissionLevel switch
     {
-        0 => "ReadOnly",
-        1 => "Admin",
+        0 => "Admin",
+        1 => "GlobalAdmin",
         2 => "Owner",
-        _ => "ReadOnly"
+        _ => "Admin" // Default to lowest permission level
     };
 
     private static async Task SignInUserAsync(HttpContext httpContext, string userId, string email, int permissionLevel)

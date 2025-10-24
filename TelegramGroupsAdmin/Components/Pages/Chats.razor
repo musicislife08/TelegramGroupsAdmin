@@ -6,6 +6,7 @@
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject ISpamDetectionConfigRepository SpamConfigRepository
 @inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
+@inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @attribute [Authorize]
@@ -22,6 +23,16 @@
     @if (_loading)
     {
         <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_chats.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            <MudText Typo="Typo.h6">No chats available</MudText>
+            <MudText Typo="Typo.body2">
+                You don't have access to any chats yet. If you're an Admin user, you need to link your Telegram account
+                to see chats where you have admin permissions. Visit your Profile page to link your Telegram account.
+            </MudText>
+        </MudAlert>
     }
     else
     {
@@ -121,8 +132,20 @@
         _loading = true;
         try
         {
-            // Load all managed chats
-            var chats = await ManagedChatsRepository.GetAllChatsAsync();
+            // Get current user and their permission level
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                Snackbar.Add("Unable to identify current user", Severity.Error);
+                return;
+            }
+
+            // Load chats accessible to this user (filtered by permission level)
+            var chats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
+                userId,
+                (PermissionLevel)permissionLevel);
 
             // Check which chats have custom spam configs
             var allConfigs = await SpamConfigRepository.GetAllChatConfigsAsync();

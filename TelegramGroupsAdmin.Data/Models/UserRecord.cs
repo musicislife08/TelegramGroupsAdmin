@@ -10,13 +10,13 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// </summary>
 public enum PermissionLevel
 {
-    /// <summary>Can view data but cannot modify settings</summary>
-    ReadOnly = 0,
+    /// <summary>Chat-scoped moderation - Can view/moderate only chats they're Telegram admin in, read-only global settings, edit per-chat overrides</summary>
+    Admin = 0,
 
-    /// <summary>Can modify settings and take moderation actions</summary>
-    Admin = 1,
+    /// <summary>Global moderation - Can view/moderate all chats, edit content settings, read-only infrastructure settings, manage Admin/GlobalAdmin users</summary>
+    GlobalAdmin = 1,
 
-    /// <summary>Full system access including user management</summary>
+    /// <summary>Full system access - Complete control over all settings, infrastructure, and user management</summary>
     Owner = 2
 }
 

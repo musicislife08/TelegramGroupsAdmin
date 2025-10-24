@@ -24,7 +24,7 @@ public interface IBotCommand
     string Usage { get; }
 
     /// <summary>
-    /// Minimum permission level required (0=ReadOnly, 1=Admin, 2=Owner)
+    /// Minimum permission level required (0=Admin, 1=GlobalAdmin, 2=Owner)
     /// </summary>
     int MinPermissionLevel { get; }
 

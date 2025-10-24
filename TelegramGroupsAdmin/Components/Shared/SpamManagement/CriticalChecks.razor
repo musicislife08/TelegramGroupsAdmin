@@ -196,8 +196,8 @@
         var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
         var permissionLevel = permissionClaim != null && int.TryParse(permissionClaim.Value, out var level)
             ? (PermissionLevel)level
-            : PermissionLevel.ReadOnly;
-        _canEdit = permissionLevel >= PermissionLevel.Admin;
+            : PermissionLevel.Admin; // Default to lowest permission level
+        _canEdit = permissionLevel >= PermissionLevel.GlobalAdmin; // Only GlobalAdmin and Owner can edit
 
         await LoadConfiguration();
     }

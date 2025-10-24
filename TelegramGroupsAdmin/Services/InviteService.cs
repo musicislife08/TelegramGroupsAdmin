@@ -37,7 +37,7 @@ public class InviteService : IInviteService
             CreatedAt: createdAt,
             ExpiresAt: expiresAt,
             UsedBy: null,
-            PermissionLevel: 0, // Default to ReadOnly
+            PermissionLevel: 0, // Default to Admin
             Status: InviteStatus.Pending,
             ModifiedAt: null
         );
@@ -82,8 +82,8 @@ public class InviteService : IInviteService
 
         var permissionName = permissionLevel switch
         {
-            0 => "ReadOnly",
-            1 => "Admin",
+            0 => "Admin",
+            1 => "GlobalAdmin",
             2 => "Owner",
             _ => permissionLevel.ToString()
         };

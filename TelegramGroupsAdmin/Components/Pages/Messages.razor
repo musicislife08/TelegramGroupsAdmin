@@ -166,7 +166,7 @@
     private DateTime _lastUpdate = DateTime.Now;
 
     // User state
-    private int _userPermissionLevel = 0; // Default to ReadOnly
+    private int _userPermissionLevel = 0; // Default to Admin
     private HashSet<long> _userTelegramIds = new(); // Current user's linked Telegram IDs
 
     // Legacy filter state (not shown in UI for now, but kept for compatibility)
@@ -440,7 +440,21 @@
     {
         try
         {
-            _managedChats = await ChatsRepository.GetAllAsync();
+            // Get current user and their permission level
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                Logger.LogWarning("Unable to identify current user for chat filtering");
+                _managedChats = new List<ManagedChatRecord>();
+                return;
+            }
+
+            // Load chats accessible to this user (filtered by permission level)
+            _managedChats = await ChatsRepository.GetUserAccessibleChatsAsync(
+                userId,
+                (PermissionLevel)permissionLevel);
             ApplyChatFilter();
 
             // Calculate message counts for each chat

@@ -1,4 +1,5 @@
 namespace TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
 /// Invite record for UI display

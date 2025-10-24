@@ -93,7 +93,7 @@ public static class ModelMappings
         NormalizedEmail: data.NormalizedEmail,
         PasswordHash: data.PasswordHash,
         SecurityStamp: data.SecurityStamp,
-        PermissionLevel: (UiModels.PermissionLevel)data.PermissionLevel,
+        PermissionLevel: (PermissionLevel)data.PermissionLevel,
         InvitedBy: data.InvitedBy,
         IsActive: data.IsActive,
         TotpSecret: data.TotpSecret,
@@ -151,7 +151,7 @@ public static class ModelMappings
         CreatedAt: data.CreatedAt,
         ExpiresAt: data.ExpiresAt,
         UsedBy: data.UsedBy,
-        PermissionLevel: (UiModels.PermissionLevel)data.PermissionLevel,
+        PermissionLevel: (PermissionLevel)data.PermissionLevel,
         Status: (UiModels.InviteStatus)data.Status,
         ModifiedAt: data.ModifiedAt
     );
@@ -164,7 +164,7 @@ public static class ModelMappings
         ExpiresAt: data.Invite.ExpiresAt,
         UsedBy: data.Invite.UsedBy,
         UsedByEmail: null, // Not available in Data model - would need additional lookup
-        PermissionLevel: (UiModels.PermissionLevel)data.Invite.PermissionLevel,
+        PermissionLevel: (PermissionLevel)data.Invite.PermissionLevel,
         Status: (UiModels.InviteStatus)data.Invite.Status,
         ModifiedAt: data.Invite.ModifiedAt
     );

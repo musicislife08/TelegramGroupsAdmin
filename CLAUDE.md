@@ -58,7 +58,9 @@
 **Features**: URL fragment nav, nested sidebar navigation in Settings, component reuse
 
 ## Permissions
-**Levels**: 0=ReadOnly, 1=Admin, 2=Owner (hierarchy, cannot escalate above own)
+**Levels**: 0=Admin (chat-scoped), 1=GlobalAdmin (global moderation), 2=Owner (full access) - hierarchy, cannot escalate above own
+**Chat Access**: Admin sees only chats they're Telegram admin in (uses chat_admins table), GlobalAdmin/Owner see all chats
+**Enum Location**: Core.Models.PermissionLevel (canonical with Display attributes), Data.Models.PermissionLevel (DB-only, self-contained)
 **User Status**: 0=Pending, 1=Active, 2=Disabled, 3=Deleted
 **Invites**: 7-day expiry, first user auto-Owner, permission inheritance
 

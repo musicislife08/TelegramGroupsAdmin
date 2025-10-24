@@ -310,6 +310,115 @@ public class TelegramUserRepository : ITelegramUserRepository
     }
 
     /// <summary>
+    /// Get all users with computed stats filtered by chat IDs (for Admin users with chat-scoped access)
+    /// </summary>
+    public async Task<List<UiModels.TelegramUserListItem>> GetAllWithStatsAsync(List<long> chatIds, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        // Get users who have posted in the specified chats
+        var userIdsInChats = await context.Messages
+            .Where(m => chatIds.Contains(m.ChatId))
+            .Select(m => m.UserId)
+            .Distinct()
+            .ToHashSetAsync(ct);
+
+        // PERF-DATA-1: Pre-compute all stats in separate queries (filtered by chat IDs)
+        // Query 1: Chat counts per user (only count chats in accessible list)
+        var chatCounts = await context.Messages
+            .Where(m => chatIds.Contains(m.ChatId) && userIdsInChats.Contains(m.UserId))
+            .GroupBy(m => m.UserId)
+            .Select(g => new { UserId = g.Key, Count = g.Select(m => m.ChatId).Distinct().Count() })
+            .ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
+
+        // Query 2: Warning counts per user (all warnings, not filtered by chat)
+        var now = DateTimeOffset.UtcNow;
+        var warningCounts = await context.UserActions
+            .Where(ua => ua.ActionType == DataModels.UserActionType.Warn
+                && (ua.ExpiresAt == null || ua.ExpiresAt > now)
+                && userIdsInChats.Contains(ua.UserId))
+            .GroupBy(ua => ua.UserId)
+            .Select(g => new { UserId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
+
+        // Query 3: Note counts per user (all notes, not filtered by chat)
+        var noteCounts = await context.AdminNotes
+            .Where(n => userIdsInChats.Contains(n.TelegramUserId))
+            .GroupBy(n => n.TelegramUserId)
+            .Select(g => new { UserId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
+
+        // Query 4: Banned user IDs (all bans, not filtered by chat)
+        var bannedUserIds = await context.UserActions
+            .Where(ua => ua.ActionType == DataModels.UserActionType.Ban
+                && (ua.ExpiresAt == null || ua.ExpiresAt > now)
+                && userIdsInChats.Contains(ua.UserId))
+            .Select(ua => ua.UserId)
+            .Distinct()
+            .ToHashSetAsync(ct);
+
+        // Query 5: Users with warnings (for HasWarnings flag)
+        var usersWithWarnings = await context.UserActions
+            .Where(ua => ua.ActionType == DataModels.UserActionType.Warn
+                && (ua.ExpiresAt == null || ua.ExpiresAt > now)
+                && userIdsInChats.Contains(ua.UserId))
+            .Select(ua => ua.UserId)
+            .Distinct()
+            .ToHashSetAsync(ct);
+
+        // Query 6: Users with notes
+        var usersWithNotes = await context.AdminNotes
+            .Where(n => userIdsInChats.Contains(n.TelegramUserId))
+            .Select(n => n.TelegramUserId)
+            .Distinct()
+            .ToHashSetAsync(ct);
+
+        // Query 7: Users with tags
+        var usersWithTags = await context.UserTags
+            .Where(t => userIdsInChats.Contains(t.TelegramUserId))
+            .Select(t => t.TelegramUserId)
+            .Distinct()
+            .ToHashSetAsync(ct);
+
+        // Query 8: Get users who have posted in accessible chats
+        var users = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => userIdsInChats.Contains(u.TelegramUserId))
+            .Select(u => new UiModels.TelegramUserListItem
+            {
+                TelegramUserId = u.TelegramUserId,
+                Username = u.Username,
+                FirstName = u.FirstName,
+                LastName = u.LastName,
+                UserPhotoPath = u.UserPhotoPath,
+                IsTrusted = u.IsTrusted,
+                LastSeenAt = u.LastSeenAt,
+
+                // Populated after query using dictionary lookups
+                ChatCount = 0,
+                WarningCount = 0,
+                NoteCount = 0,
+                IsBanned = false,
+                HasWarnings = false,
+                IsTagged = false
+            })
+            .ToListAsync(ct);
+
+        // Populate stats using pre-computed dictionaries (in-memory, fast)
+        foreach (var user in users)
+        {
+            user.ChatCount = chatCounts.GetValueOrDefault(user.TelegramUserId, 0);
+            user.WarningCount = warningCounts.GetValueOrDefault(user.TelegramUserId, 0);
+            user.NoteCount = noteCounts.GetValueOrDefault(user.TelegramUserId, 0);
+            user.IsBanned = bannedUserIds.Contains(user.TelegramUserId);
+            user.HasWarnings = usersWithWarnings.Contains(user.TelegramUserId);
+            user.IsTagged = usersWithNotes.Contains(user.TelegramUserId) || usersWithTags.Contains(user.TelegramUserId);
+        }
+
+        return users;
+    }
+
+    /// <summary>
     /// Get users with tags or notes for tracking (includes warned users)
     /// </summary>
     public async Task<List<UiModels.TelegramUserListItem>> GetTaggedUsersAsync(CancellationToken ct = default)

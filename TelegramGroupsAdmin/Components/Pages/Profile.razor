@@ -503,8 +503,8 @@
 
     private static string GetPermissionName(int level) => level switch
     {
-        0 => "ReadOnly",
-        1 => "Admin",
+        0 => "Admin",
+        1 => "GlobalAdmin",
         2 => "Owner",
         _ => "Unknown"
     };

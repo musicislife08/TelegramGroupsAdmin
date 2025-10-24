@@ -35,6 +35,22 @@ public class TelegramUserManagementService
     }
 
     /// <summary>
+    /// Get Telegram users filtered by accessible chats
+    /// </summary>
+    /// <param name="chatIds">List of accessible chat IDs (empty = all users for GlobalAdmin/Owner)</param>
+    /// <param name="ct">Cancellation token</param>
+    public Task<List<TelegramUserListItem>> GetAllUsersAsync(List<long> chatIds, CancellationToken ct = default)
+    {
+        // Empty list means all chats (GlobalAdmin/Owner)
+        if (chatIds.Count == 0)
+        {
+            return _userRepository.GetAllWithStatsAsync(ct);
+        }
+
+        return _userRepository.GetAllWithStatsAsync(chatIds, ct);
+    }
+
+    /// <summary>
     /// Get users with tags or notes for tracking (includes warned users)
     /// </summary>
     public Task<List<TelegramUserListItem>> GetTaggedUsersAsync(CancellationToken ct = default)

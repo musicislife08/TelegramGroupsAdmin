@@ -187,7 +187,7 @@ public partial class CommandRouter
         {
             _logger.LogDebug("User {TelegramId} is linked to web app user with {PermissionLevel} permissions (global)",
                 telegramId, permissionLevel.Value);
-            return permissionLevel.Value; // 0=ReadOnly, 1=Admin, 2=Owner (global)
+            return permissionLevel.Value; // 0=Admin, 1=GlobalAdmin, 2=Owner (global)
         }
 
         // Check Telegram admin permissions (cached, per-chat only)
@@ -209,8 +209,8 @@ public partial class CommandRouter
 
     private static string GetPermissionName(int level) => level switch
     {
-        0 => "ReadOnly",
-        1 => "Admin",
+        0 => "Admin",
+        1 => "GlobalAdmin",
         2 => "Owner",
         _ => "Unknown"
     };

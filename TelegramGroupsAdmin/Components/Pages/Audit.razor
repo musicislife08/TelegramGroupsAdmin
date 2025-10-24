@@ -12,7 +12,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
-@attribute [Authorize(Roles = "Admin,Owner")]
+@attribute [Authorize(Roles = "GlobalAdmin,Owner")]
 @implements IDisposable
 
 <PageTitle>Audit Log - TelegramGroupsAdmin</PageTitle>

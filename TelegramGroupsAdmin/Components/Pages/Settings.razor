@@ -5,7 +5,9 @@
 @using TelegramGroupsAdmin.Components.Shared.SpamManagement
 @using TelegramGroupsAdmin.Components.Shared
 @using TelegramGroupsAdmin.Components.Shared.Settings
+@using TelegramGroupsAdmin.Services
 @inject NavigationManager Navigation
+@inject BlazorAuthHelper AuthHelper
 @implements IDisposable
 
 <PageTitle>Settings</PageTitle>
@@ -19,7 +21,10 @@
                 <MudNavGroup Title="System" Icon="@Icons.Material.Filled.Computer" Expanded="@_systemExpanded" ExpandedChanged="@((bool expanded) => _systemExpanded = expanded)">
                     <MudNavLink Href="/settings/system/general" Icon="@Icons.Material.Filled.Tune" Match="NavLinkMatch.All">General Settings</MudNavLink>
                     <MudNavLink Href="/settings/system/security" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">Security</MudNavLink>
-                    <MudNavLink Href="/settings/system/accounts" Icon="@Icons.Material.Filled.ManageAccounts" Match="NavLinkMatch.All">Admin Accounts</MudNavLink>
+                    @if (_canManageAdminAccounts)
+                    {
+                        <MudNavLink Href="/settings/system/accounts" Icon="@Icons.Material.Filled.ManageAccounts" Match="NavLinkMatch.All">Admin Accounts</MudNavLink>
+                    }
                     <MudNavLink Href="/settings/system/logging" Icon="@Icons.Material.Filled.Terminal" Match="NavLinkMatch.All">Logging</MudNavLink>
                     <MudNavLink Href="/settings/system/background-jobs" Icon="@Icons.Material.Filled.Schedule" Match="NavLinkMatch.All">Background Jobs</MudNavLink>
                     <MudNavLink Href="/settings/system/backup" Icon="@Icons.Material.Filled.Backup" Match="NavLinkMatch.All">Backup & Restore</MudNavLink>
@@ -188,8 +193,18 @@
     private string _currentSubSection = "";
     private string _pageTitle = "";
 
-    protected override void OnInitialized()
+    // Permission flags
+    private bool _canManageAdminAccounts = false;
+    private bool _canEditInfrastructure = false;
+    private bool _canEditContent = false;
+
+    protected override async Task OnInitializedAsync()
     {
+        // Load permission flags
+        _canManageAdminAccounts = await AuthHelper.CanManageAdminAccountsAsync();
+        _canEditInfrastructure = await AuthHelper.CanEditInfrastructureAsync();
+        _canEditContent = await AuthHelper.CanEditContentSettingsAsync();
+
         UpdateCurrentSection();
         Navigation.LocationChanged += OnLocationChanged;
     }

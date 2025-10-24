@@ -17,10 +17,10 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
 
     public async Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken ct = default)
     {
-        // Validate permission level (0=ReadOnly, 1=Admin, 2=Owner)
+        // Validate permission level (0=Admin, 1=GlobalAdmin, 2=Owner)
         if (permissionLevel < 0 || permissionLevel > 2)
         {
-            throw new ArgumentException("Permission level must be 0 (ReadOnly), 1 (Admin), or 2 (Owner)", nameof(permissionLevel));
+            throw new ArgumentException("Permission level must be 0 (Admin), 1 (GlobalAdmin), or 2 (Owner)", nameof(permissionLevel));
         }
 
         // Get old permission level for audit log
@@ -32,8 +32,8 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
         // Audit log
         var permissionName = permissionLevel switch
         {
-            0 => "ReadOnly",
-            1 => "Admin",
+            0 => "Admin",
+            1 => "GlobalAdmin",
             2 => "Owner",
             _ => permissionLevel.ToString()
         };

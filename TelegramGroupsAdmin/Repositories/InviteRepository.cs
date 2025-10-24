@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using DataModels = TelegramGroupsAdmin.Data.Models;
@@ -63,8 +64,8 @@ public class InviteRepository
 
         var permissionName = permissionLevel switch
         {
-            0 => "ReadOnly",
-            1 => "Admin",
+            0 => "Admin",
+            1 => "GlobalAdmin",
             2 => "Owner",
             _ => permissionLevel.ToString()
         };
@@ -175,7 +176,7 @@ public class InviteRepository
             ExpiresAt: r.Invite.ExpiresAt,
             UsedBy: r.Invite.UsedBy,
             UsedByEmail: r.UsedByEmail,
-            PermissionLevel: (UiModels.PermissionLevel)r.Invite.PermissionLevel,
+            PermissionLevel: (PermissionLevel)r.Invite.PermissionLevel,
             Status: (UiModels.InviteStatus)r.Invite.Status,
             ModifiedAt: r.Invite.ModifiedAt
         )).ToList();

@@ -104,7 +104,13 @@ public static class ServiceCollectionExtensions
                 options.AccessDeniedPath = "/access-denied";
             });
 
-        services.AddAuthorizationBuilder();
+        // Add authorization policies
+        services.AddAuthorizationBuilder()
+            .AddPolicy("GlobalAdminOrOwner", policy =>
+                policy.RequireRole("GlobalAdmin", "Owner"))
+            .AddPolicy("OwnerOnly", policy =>
+                policy.RequireRole("Owner"));
+
         services.AddCascadingAuthenticationState();
         services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
 

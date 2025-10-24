@@ -203,7 +203,7 @@ public class TelegramAdminBotService(
         {
             // Register commands with different scopes based on permission levels
 
-            // Default scope - commands for all users (ReadOnly level 0)
+            // Default scope - commands for all users (Admin level 0)
             var defaultCommands = commandRouter.GetAvailableCommands(permissionLevel: 0)
                 .Select(cmd => new BotCommand
                 {

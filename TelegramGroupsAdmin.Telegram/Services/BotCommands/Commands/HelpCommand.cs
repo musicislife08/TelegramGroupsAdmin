@@ -60,7 +60,7 @@ public class HelpCommand : IBotCommand
         var readOnlyCommands = availableCommands.Where(c => c.MinPermissionLevel == 0).ToList();
         var adminCommands = availableCommands.Where(c => c.MinPermissionLevel >= 1).ToList();
 
-        // Show ReadOnly commands (including self)
+        // Show Admin commands (including self)
         sb.AppendLine($"{GetCommandEmoji("help")} `/help` - {Description}");
 
         foreach (var cmd in readOnlyCommands)
@@ -102,8 +102,8 @@ public class HelpCommand : IBotCommand
 
     private static string GetPermissionName(int level) => level switch
     {
-        0 => "ReadOnly",
-        1 => "Admin",
+        0 => "Admin",
+        1 => "GlobalAdmin",
         2 => "Owner",
         _ => "Unknown"
     };

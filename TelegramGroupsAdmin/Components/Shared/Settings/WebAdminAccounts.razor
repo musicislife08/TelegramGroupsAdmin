@@ -234,12 +234,20 @@
         var parameters = new DialogParameters<PermissionDialog>();
         parameters.Add(p => p.CurrentPermissionLevel, user.PermissionLevelInt);
         parameters.Add(p => p.UserEmail, user.Email);
+        parameters.Add(p => p.MaxPermissionLevel, _currentUserPermissionLevel); // Pass current user's permission level to limit assignable roles
 
         var dialog = await DialogService.ShowAsync<PermissionDialog>("Edit Permission Level", parameters);
         var result = await dialog.Result;
 
         if (result is not null && !result.Canceled && result.Data is int newLevel)
         {
+            // Validate that user isn't trying to escalate beyond their own permission level
+            if (newLevel > _currentUserPermissionLevel)
+            {
+                Snackbar.Add("You cannot assign a permission level higher than your own", Severity.Error);
+                return;
+            }
+
             try
             {
                 await UserManagementService.UpdatePermissionLevelAsync(user.Id, newLevel, _currentUserId!);
@@ -337,8 +345,8 @@
 
     private static string GetPermissionName(int level) => level switch
     {
-        0 => "ReadOnly",
-        1 => "Admin",
+        0 => "Admin",
+        1 => "GlobalAdmin",
         2 => "Owner",
         _ => "Unknown"
     };

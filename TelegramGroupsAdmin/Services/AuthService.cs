@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using TelegramGroupsAdmin.Core.Models;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Models;

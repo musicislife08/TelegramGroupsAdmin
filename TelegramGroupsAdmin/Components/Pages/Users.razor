@@ -1,10 +1,12 @@
 @page "/users"
-@attribute [Authorize(Roles = "Admin,Owner")]
+@attribute [Authorize(Roles = "GlobalAdmin,Owner")]
 @using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Components.Shared
 @inject TelegramUserManagementService UserManagementService
+@inject TelegramGroupsAdmin.Services.BlazorAuthHelper AuthHelper
+@inject TelegramGroupsAdmin.Telegram.Repositories.IManagedChatsRepository ManagedChatsRepository
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject AuthenticationStateProvider AuthStateProvider
@@ -379,8 +381,24 @@
 
         try
         {
-            // Load all user lists in parallel
-            var allUsersTask = UserManagementService.GetAllUsersAsync();
+            // Get current user's accessible chats
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                Snackbar.Add("Unable to identify current user", Severity.Error);
+                return;
+            }
+
+            // Get accessible chat IDs for filtering
+            var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
+                userId,
+                (PermissionLevel)permissionLevel);
+            var chatIds = accessibleChats.Select(c => c.ChatId).ToList();
+
+            // Load all user lists in parallel (filtered by accessible chats for Admin users)
+            var allUsersTask = UserManagementService.GetAllUsersAsync(chatIds);
             var taggedTask = UserManagementService.GetTaggedUsersAsync();
             var trustedTask = UserManagementService.GetTrustedUsersAsync();
             var bannedTask = UserManagementService.GetBannedUsersAsync();

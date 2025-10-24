@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -61,4 +62,18 @@ public interface IManagedChatsRepository
     /// Used when Group is migrated to Supergroup (old chat ID becomes invalid)
     /// </summary>
     Task DeleteAsync(long chatId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get chats accessible to a specific user based on their permission level
+    /// - Admin (0): Only active chats where user's linked Telegram account is admin (via chat_admins table)
+    /// - GlobalAdmin (1) / Owner (2): All active chats
+    /// </summary>
+    /// <param name="userId">Web app user ID</param>
+    /// <param name="permissionLevel">User's permission level</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of accessible chats, empty if Admin user has no linked Telegram account</returns>
+    Task<List<ManagedChatRecord>> GetUserAccessibleChatsAsync(
+        string userId,
+        PermissionLevel permissionLevel,
+        CancellationToken cancellationToken = default);
 }

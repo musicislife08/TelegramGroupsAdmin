@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Email;
@@ -113,7 +114,7 @@ public class NotificationService : INotificationService
         {
             // Get all users with Owner permission level (PermissionLevel = 2)
             var allUsers = await _userRepo.GetAllAsync(ct);
-            var ownerUsers = allUsers.Where(u => u.PermissionLevel == Telegram.Models.PermissionLevel.Owner).ToList();
+            var ownerUsers = allUsers.Where(u => u.PermissionLevel == CoreModels.PermissionLevel.Owner).ToList();
 
             if (!ownerUsers.Any())
             {
