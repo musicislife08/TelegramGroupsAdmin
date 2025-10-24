@@ -3,6 +3,7 @@
 @inject ISpamDetectionConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject IDialogService DialogService
 
 <MudStack Spacing="4">
     <!-- Action Buttons -->
@@ -223,7 +224,7 @@
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/advanced#spacing"))'>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenAdvancedSettings("spacing"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
@@ -251,7 +252,7 @@
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/advanced#invisible"))'>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenAdvancedSettings("invisible"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
@@ -279,7 +280,7 @@
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/advanced#translation"))'>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenAdvancedSettings("translation"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
@@ -310,7 +311,7 @@
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/advanced#openai"))'>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenAdvancedSettings("openai"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
@@ -501,6 +502,31 @@
         finally
         {
             _isSaving = false;
+        }
+    }
+
+    private async Task OpenAdvancedSettings(string section)
+    {
+        var parameters = new DialogParameters<AdvancedSettingsDialog>
+        {
+            { x => x.ChatId, ChatId },
+            { x => x.InitialSection, section }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<AdvancedSettingsDialog>("Advanced Settings", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            // Reload configuration after dialog closes
+            await LoadConfiguration();
         }
     }
 }
