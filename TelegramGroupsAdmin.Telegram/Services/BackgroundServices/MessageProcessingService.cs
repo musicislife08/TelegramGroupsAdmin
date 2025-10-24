@@ -812,6 +812,13 @@ public partial class MessageProcessingService(
                     await autoTrustService.CheckAndApplyAutoTrustAsync(message.From.Id, message.Chat.Id, cancellationToken);
                 }
 
+                // Phase 4.21: Language warning for non-English non-spam messages from untrusted users
+                // Note: Language detection happens earlier in ProcessNewMessageAsync, check translation there
+                if (!result.SpamResult.IsSpam && message.From?.Id != null)
+                {
+                    await HandleLanguageWarningAsync(botClient, message, scope, cancellationToken);
+                }
+
                 // Phase 2.7: Handle spam actions based on net confidence
                 await spamActionService.HandleSpamDetectionActionsAsync(
                     message,
@@ -1179,5 +1186,99 @@ public partial class MessageProcessingService(
         }
 
         return totalChars > 0 ? (double)latinChars / totalChars : 0.0;
+    }
+
+    /// <summary>
+    /// Phase 4.21: Handle language warning for non-English non-spam messages from untrusted users
+    /// </summary>
+    private async Task HandleLanguageWarningAsync(
+        ITelegramBotClient botClient,
+        Message message,
+        IServiceScope scope,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Get message translation to check if it was non-English
+            var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+            var translation = await messageRepo.GetTranslationForMessageAsync(message.MessageId, cancellationToken);
+
+            // Skip if no translation (message was in English)
+            if (translation == null)
+                return;
+
+            // Get configuration
+            var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.ISpamDetectionConfigRepository>();
+            var spamConfig = await spamConfigRepo.GetGlobalConfigAsync(cancellationToken);
+
+            // Check if language warnings are enabled
+            if (!spamConfig.Translation.WarnNonEnglish)
+                return;
+
+            // Check if user is trusted or admin (skip warning for them)
+            var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+            var user = await userRepo.GetByIdAsync(message.From!.Id, cancellationToken);
+
+            if (user?.IsTrusted == true)
+                return;
+
+            // Check if user is admin in this chat
+            var chatMember = await botClient.GetChatMember(message.Chat.Id, message.From.Id, cancellationToken);
+            if (chatMember.Status == ChatMemberStatus.Administrator || chatMember.Status == ChatMemberStatus.Creator)
+                return;
+
+            // Get warning system config for auto-ban threshold
+            var configService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Configuration.Services.IConfigService>();
+            var warningConfig = await configService.GetEffectiveAsync<WarningSystemConfig>(ConfigType.Moderation, message.Chat.Id)
+                               ?? WarningSystemConfig.Default;
+
+            // Get current warning count
+            var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+            var currentWarnings = await userActionsRepo.GetWarnCountAsync(message.From.Id, message.Chat.Id, cancellationToken);
+
+            // Calculate warnings remaining
+            var warningsRemaining = warningConfig.AutoBanThreshold - currentWarnings;
+            if (warningsRemaining <= 0)
+                warningsRemaining = 1; // Edge case: user already at threshold but not banned yet
+
+            // Build warning message with variable substitution (in English)
+            var chatName = message.Chat.Title ?? "this chat";
+            var warningMessage = spamConfig.Translation.WarningMessage
+                .Replace("{chat_name}", chatName)
+                .Replace("{language}", translation.DetectedLanguage)
+                .Replace("{warnings_remaining}", warningsRemaining.ToString());
+
+            // Issue warning using moderation system
+            var moderationService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
+            await moderationService.WarnUserAsync(
+                userId: message.From.Id,
+                messageId: message.MessageId,
+                executor: Actor.LanguageWarning,
+                reason: $"Non-English message ({translation.DetectedLanguage})",
+                chatId: message.Chat.Id,
+                cancellationToken: cancellationToken);
+
+            // Send warning to user via DM with chat fallback
+            var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
+            await messagingService.SendToUserAsync(
+                botClient: botClient,
+                userId: message.From.Id,
+                chatId: message.Chat.Id,
+                messageText: warningMessage,
+                replyToMessageId: message.MessageId,
+                cancellationToken: cancellationToken);
+
+            logger.LogInformation(
+                "Language warning issued to user {UserId} for {Language} message in chat {ChatId} ({Warnings}/{Threshold})",
+                message.From.Id,
+                translation.DetectedLanguage,
+                message.Chat.Id,
+                currentWarnings + 1,
+                warningConfig.AutoBanThreshold);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to handle language warning for message {MessageId}", message.MessageId);
+        }
     }
 }

@@ -58,6 +58,7 @@ public record Actor
     public static Actor AutoTrust => FromSystem("auto_trust");
     public static Actor Impersonation => FromSystem("impersonation");
     public static Actor AutoBan => FromSystem("auto_ban");
+    public static Actor LanguageWarning => FromSystem("language_warning"); // Phase 4.21
     public static Actor SystemSeed => FromSystem("system_seed"); // Initial data seeding
     public static Actor Unknown => FromSystem("unknown");
 
@@ -103,6 +104,7 @@ public record Actor
             "auto_trust" => "Auto-Trust",
             "impersonation" => "Impersonation Detection",
             "auto_ban" => "Auto-Ban",
+            "language_warning" => "Language Warning", // Phase 4.21
             "system_seed" => "System Seed",
             "initial_seed" => "Initial Seed",
             "web_admin" => "Web Admin (Legacy)",

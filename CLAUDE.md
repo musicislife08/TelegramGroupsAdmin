@@ -23,7 +23,7 @@
 
 **Background Services** (composition pattern):
 1. TelegramAdminBotService - Bot polling, update routing (5 types), command registration, health checks every 1 min
-2. MessageProcessingService - New messages, edits, media download (Animation/Video/Audio/Voice/Sticker/VideoNote), spam orchestration, URL extraction, user photo scheduling, file scan scheduling, **translation before save** (Phase 4.20)
+2. MessageProcessingService - New messages, edits, media download (Animation/Video/Audio/Voice/Sticker/VideoNote), spam orchestration, URL extraction, user photo scheduling, file scan scheduling, **translation before save** (Phase 4.20), **language warnings** (Phase 4.21)
 3. ChatManagementService - MyChatMember, admin cache, health checks (permissions + invite link validation), chat names
 4. SpamActionService - Training QC, auto-ban (cross-chat), borderline reports
 5. CleanupBackgroundService - Message retention (keeps spam/ham samples)
@@ -93,14 +93,14 @@
 
 ### Complete ✅
 **Phase 1-3**: Foundation (Blazor UI, auth+TOTP, user mgmt, audit), 9 spam algorithms (CAS, Bayes, TF-IDF, OpenAI, VirusTotal, Vision), cross-chat bans
-**Phase 4** (19/19 items - COMPLETE): TickerQ jobs, unified configs (JSONB), Telegram library, welcome system, /tempban, logging UI, settings UI, anti-impersonation (pHash), warning system, URL filtering (540K domains, 6 blocklists), file scanning (ClamAV+VirusTotal 96-98%, 16K files/month), file scan UI, DM notifications, media attachments (7 types), bot auto-ban, **AI prompt builder** (meta-AI feature, version history, iterative improvement), **tag management** (7 colors, CRUD UI, usage tracking, admin notes), **translation storage** (Phase 4.20: exclusive arc pattern, toggle UI, edit history, manual trigger)
+**Phase 4** (20/20 items - COMPLETE): TickerQ jobs, unified configs (JSONB), Telegram library, welcome system, /tempban, logging UI, settings UI, anti-impersonation (pHash), warning system, URL filtering (540K domains, 6 blocklists), file scanning (ClamAV+VirusTotal 96-98%, 16K files/month), file scan UI, DM notifications, media attachments (7 types), bot auto-ban, **AI prompt builder** (meta-AI feature, version history, iterative improvement), **tag management** (7 colors, CRUD UI, usage tracking, admin notes), **translation storage** (Phase 4.20: exclusive arc pattern, toggle UI, edit history, manual trigger), **language warnings** (Phase 4.21: auto-warn untrusted users posting non-spam non-English messages, configurable per-chat, DM delivery, warning system integration)
 **Phase 5** (partial): Analytics enhancements (false positive tracking, response time metrics, detection method comparison, daily trends)
 
 ### Backlog 📋
 **4.9**: Bot hot-reload (IOptionsMonitor pattern), **4.15**: Report aggregation, **4.16**: Appeal system, **4.17.3**: Windows AMSI (deferred), **4.18**: Forum/topics support
 
 ### Future 🔮
-**Phase 5**: Analytics (time-series, auto-trust, forwarded spam, multi-language DMs)
+**Phase 5**: Analytics (time-series, auto-trust, forwarded spam)
 **Phase 6**: ML insights (pattern detection, OpenAI recommendations), raid detection, bio spam, scheduled messages
 **Phase 7**: ML-based spam (10th algorithm)
 **Phase 8**: WTelegram integration (see WTELEGRAM_INTEGRATION.md)
@@ -110,7 +110,7 @@
 88/100 score. See BACKLOG.md for deferred features, DI audit (partial), and completed optimizations
 
 ## Status
-**Phase 4 Complete** ✅ - All 19 core features shipped (including Phase 4.20 Translation Storage)
+**Phase 4 Complete** ✅ - All 20 core features shipped (including Phase 4.20 Translation Storage, Phase 4.21 Language Warnings)
 **Ready for MVP Deployment Testing** - See deployment testing checklist below
 
 ## Pre-MVP Deployment Testing Checklist
@@ -135,6 +135,7 @@
 - Anti-Impersonation: Duplicate photo detection, Levenshtein name matching
 - URL Filtering: Blocked domain detection (540K domains, 6 blocklists)
 - Translation Storage (Phase 4.20): Foreign language message auto-translates, toggle display, manual translation button, edit history shows translations
+- Language Warnings (Phase 4.21): Non-English non-spam messages from untrusted users trigger warnings, configurable message template with variables, DM delivery with chat fallback, warning system integration with auto-ban threshold
 
 ### Performance Validation
 - Messages page: 50+ messages load without lag (infinite scroll)

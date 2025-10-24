@@ -73,6 +73,21 @@
                               Label="Check Translated Content"
                               Color="Color.Primary"
                               Disabled="@translationReadOnly" />
+
+                    <MudSwitch T="bool" @bind-Value="translationConfig.WarnNonEnglish"
+                              Label="Warn users posting non-English messages"
+                              Color="Color.Primary"
+                              Disabled="@translationReadOnly" />
+
+                    @if (translationConfig.WarnNonEnglish)
+                    {
+                        <MudTextField T="string" @bind-Value="translationConfig.WarningMessage"
+                                     Label="Warning Message Template"
+                                     Lines="3"
+                                     Variant="Variant.Outlined"
+                                     HelperText="Variables: {chat_name}, {language}, {warnings_remaining}"
+                                     Disabled="@translationReadOnly" />
+                    }
                 }
 
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">

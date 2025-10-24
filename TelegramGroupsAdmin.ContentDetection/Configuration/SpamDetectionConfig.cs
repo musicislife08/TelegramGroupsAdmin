@@ -272,6 +272,18 @@ public class TranslationConfig
     /// Confidence threshold for spam classification (0-100)
     /// </summary>
     public int ConfidenceThreshold { get; set; } = 80;
+
+    /// <summary>
+    /// Enable language warnings for non-English messages (Phase 4.21)
+    /// When enabled, untrusted users posting non-spam messages in non-English will receive a warning
+    /// </summary>
+    public bool WarnNonEnglish { get; set; } = false;
+
+    /// <summary>
+    /// Warning message template sent to users (translated to their language) (Phase 4.21)
+    /// Variables: {chat_name}, {language}, {warnings_remaining}
+    /// </summary>
+    public string WarningMessage { get; set; } = "This is an English-only chat. Please use English in {chat_name}. You have {warnings_remaining} warnings remaining before removal.";
 }
 
 /// <summary>
