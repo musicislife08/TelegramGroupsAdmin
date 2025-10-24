@@ -7,6 +7,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 
@@ -16,9 +17,11 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 /// <summary>
 /// Handles spam detection actions: auto-ban and borderline report creation
+/// Phase 5.1: Sends notifications to admins for spam events
 /// </summary>
 public class SpamActionService(
     IServiceProvider serviceProvider,
+    INotificationService notificationService,
     ILogger<SpamActionService> logger)
 {
     // Confidence thresholds for spam detection decisions
@@ -134,6 +137,17 @@ public class SpamActionService(
                     $"MALWARE DETECTED: {malwareResult.Details}",
                     cancellationToken);
 
+                // Notify chat admins about malware detection (Phase 5.1)
+                _ = notificationService.SendChatNotificationAsync(
+                    chatId: message.Chat.Id,
+                    eventType: NotificationEventType.MalwareDetected,
+                    subject: "Malware Detected and Removed",
+                    message: $"Malware was detected in chat '{message.Chat.Title ?? message.Chat.Id.ToString()}' and the message was deleted.\n\n" +
+                             $"User: {message.From?.Username ?? message.From?.FirstName ?? message.From?.Id.ToString()}\n" +
+                             $"Detection: {malwareResult.Details}\n\n" +
+                             $"The user was NOT auto-banned (malware upload may be accidental). Please review the report in the admin panel.",
+                    ct: cancellationToken);
+
                 logger.LogInformation(
                     "Deleted malware message {MessageId} and created admin alert (no auto-ban)",
                     message.MessageId);
@@ -176,6 +190,18 @@ public class SpamActionService(
                     spamResult.NetConfidence,
                     openAIResult.Confidence);
 
+                // Notify chat admins about spam detection (Phase 5.1)
+                _ = notificationService.SendChatNotificationAsync(
+                    chatId: message.Chat.Id,
+                    eventType: NotificationEventType.SpamDetected,
+                    subject: "Spam Detected - Auto-Ban Triggered",
+                    message: $"High-confidence spam detected in chat '{message.Chat.Title ?? message.Chat.Id.ToString()}'.\n\n" +
+                             $"User: {message.From?.Username ?? message.From?.FirstName ?? message.From?.Id.ToString()}\n" +
+                             $"Confidence: {spamResult.NetConfidence}% (OpenAI: {openAIResult.Confidence}%)\n" +
+                             $"Action: User auto-banned across all managed chats and message deleted.\n\n" +
+                             $"Reason: {spamResult.CheckResults.FirstOrDefault()?.Details ?? "Multiple spam indicators detected"}",
+                    ct: cancellationToken);
+
                 await ExecuteAutoBanAsync(
                     scope.ServiceProvider,
                     message,
@@ -191,6 +217,17 @@ public class SpamActionService(
                     deletedBy: Actor.AutoDetection,
                     reason: $"Auto-ban triggered (net confidence: {spamResult.NetConfidence}%, OpenAI confirmed)",
                     cancellationToken: cancellationToken);
+
+                // Notify chat admins about message deletion (Phase 5.1)
+                _ = notificationService.SendChatNotificationAsync(
+                    chatId: message.Chat.Id,
+                    eventType: NotificationEventType.SpamAutoDeleted,
+                    subject: "Spam Message Auto-Deleted",
+                    message: $"Spam message automatically deleted from chat '{message.Chat.Title ?? message.Chat.Id.ToString()}'.\n\n" +
+                             $"User: {message.From?.Username ?? message.From?.FirstName ?? message.From?.Id.ToString()}\n" +
+                             $"Message ID: {message.MessageId}\n" +
+                             $"User has been banned across all managed chats.",
+                    ct: cancellationToken);
 
                 logger.LogInformation(
                     "Deleted spam message {MessageId} from chat {ChatId} (auto-ban)",
@@ -345,6 +382,17 @@ public class SpamActionService(
                 successCount,
                 activeChats.Count,
                 failCount);
+
+            // Notify chat admins about the ban (Phase 5.1)
+            _ = notificationService.SendChatNotificationAsync(
+                chatId: message.Chat.Id,
+                eventType: NotificationEventType.UserBanned,
+                subject: "User Auto-Banned",
+                message: $"User automatically banned from chat '{message.Chat.Title ?? message.Chat.Id.ToString()}' and {activeChats.Count - 1} other managed chats.\n\n" +
+                         $"User: {message.From.Username ?? message.From.FirstName ?? message.From.Id.ToString()}\n" +
+                         $"Ban Status: {successCount}/{activeChats.Count} chats\n" +
+                         $"Reason: {banAction.Reason}",
+                ct: cancellationToken);
         }
         catch (Exception ex)
         {

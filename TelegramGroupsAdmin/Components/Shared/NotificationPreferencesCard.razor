@@ -1,0 +1,198 @@
+@using TelegramGroupsAdmin.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Data.Models
+@inject INotificationPreferencesRepository PreferencesRepo
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudText Typo="Typo.h6" Class="mb-3">
+        <MudIcon Icon="@Icons.Material.Filled.Notifications" Class="mr-2" />
+        Notification Preferences
+    </MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_preferences != null)
+    {
+        <MudStack Spacing="3">
+            <!-- Notification Channels -->
+            <MudText Typo="Typo.subtitle2" Class="mb-2">
+                <strong>Notification Channels</strong>
+            </MudText>
+
+            <MudSwitch @bind-Value="_preferences.TelegramDmEnabled"
+                      Label="Telegram Direct Messages"
+                      Color="Color.Primary"
+                      ThumbIcon="@Icons.Custom.Brands.Telegram" />
+
+            <MudSwitch @bind-Value="_preferences.EmailEnabled"
+                      Label="Email Notifications"
+                      Color="Color.Primary"
+                      ThumbIcon="@Icons.Material.Filled.Email" />
+
+            @if (_preferences.EmailEnabled)
+            {
+                <MudTextField @bind-Value="@_emailAddress"
+                             Label="Email Address (leave blank for account email)"
+                             Variant="Variant.Outlined"
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Email"
+                             HelperText="Override your account email for notifications" />
+
+                <MudNumericField @bind-Value="@_digestMinutes"
+                                Label="Email Digest Interval (minutes)"
+                                Variant="Variant.Outlined"
+                                Min="0"
+                                HelperText="0 = send immediately, > 0 = batch notifications" />
+            }
+
+            <MudDivider Class="my-3" />
+
+            <!-- Event Filters -->
+            <MudText Typo="Typo.subtitle2" Class="mb-2">
+                <strong>Which events should trigger notifications?</strong>
+            </MudText>
+
+            <MudStack Spacing="1">
+                <MudCheckBox @bind-Value="_eventFilters.SpamDetected"
+                            Label="Spam Detected"
+                            Color="Color.Warning"
+                            Dense="true" />
+
+                <MudCheckBox @bind-Value="_eventFilters.SpamAutoDeleted"
+                            Label="Spam Auto-Deleted"
+                            Color="Color.Warning"
+                            Dense="true" />
+
+                <MudCheckBox @bind-Value="_eventFilters.UserBanned"
+                            Label="User Banned"
+                            Color="Color.Error"
+                            Dense="true" />
+
+                <MudCheckBox @bind-Value="_eventFilters.MessageReported"
+                            Label="Message Reported"
+                            Color="Color.Info"
+                            Dense="true" />
+
+                <MudCheckBox @bind-Value="_eventFilters.ChatHealthWarning"
+                            Label="Chat Health Warning (Owners only)"
+                            Color="Color.Warning"
+                            Dense="true" />
+
+                <MudCheckBox @bind-Value="_eventFilters.BackupFailed"
+                            Label="Backup Failed (Owners only)"
+                            Color="Color.Error"
+                            Dense="true" />
+
+                <MudCheckBox @bind-Value="_eventFilters.MalwareDetected"
+                            Label="Malware Detected"
+                            Color="Color.Error"
+                            Dense="true" />
+            </MudStack>
+
+            <!-- Save Button -->
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      FullWidth="true"
+                      OnClick="SavePreferences"
+                      Disabled="@_saving">
+                @if (_saving)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Saving...</span>
+                }
+                else
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.Save" Class="mr-2" />
+                    <span>Save Preferences</span>
+                }
+            </MudButton>
+
+            <!-- Info Alert -->
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                <strong>Note:</strong> Chat-specific events (spam, bans, reports) notify admins of those specific chats.
+                System events (backup failures, health warnings) notify Owners only.
+            </MudAlert>
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    [Parameter]
+    public string UserId { get; set; } = string.Empty;
+
+    private NotificationPreferences? _preferences;
+    private NotificationEventFilters _eventFilters = new();
+    private string? _emailAddress;
+    private int _digestMinutes;
+    private bool _loading = true;
+    private bool _saving = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPreferences();
+    }
+
+    private async Task LoadPreferences()
+    {
+        try
+        {
+            _loading = true;
+            _preferences = await PreferencesRepo.GetOrCreatePreferencesAsync(UserId);
+
+            // Load event filters
+            _eventFilters = _preferences.EventFilters;
+
+            // Load channel configs
+            _emailAddress = _preferences.ChannelConfigs.Email?.Address;
+            _digestMinutes = _preferences.ChannelConfigs.Email?.DigestMinutes ?? 0;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load notification preferences: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SavePreferences()
+    {
+        if (_preferences == null) return;
+
+        try
+        {
+            _saving = true;
+
+            // Update channel configs
+            if (_preferences.ChannelConfigs.Email == null)
+            {
+                _preferences.ChannelConfigs.Email = new EmailChannelConfig();
+            }
+
+            _preferences.ChannelConfigs.Email.Address = _emailAddress;
+            _preferences.ChannelConfigs.Email.DigestMinutes = _digestMinutes;
+
+            // Update event filters and timestamp
+            _preferences.EventFilters = _eventFilters;
+            _preferences.UpdatedAt = DateTimeOffset.UtcNow;
+
+            var updatedPreferences = _preferences;
+
+            await PreferencesRepo.UpdatePreferencesAsync(updatedPreferences);
+
+            Snackbar.Add("Notification preferences saved successfully!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save preferences: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

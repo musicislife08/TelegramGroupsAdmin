@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TelegramGroupsAdmin.Data;
@@ -11,9 +12,11 @@ using TelegramGroupsAdmin.Data;
 namespace TelegramGroupsAdmin.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251024202415_AddNotificationPreferences")]
+    partial class AddNotificationPreferences
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1058,57 +1061,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_message_translations_exclusive_source", "(message_id IS NOT NULL)::int + (edit_id IS NOT NULL)::int = 1");
                         });
-                });
-
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.NotificationPreferencesDto", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("ChannelConfigs")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("channel_configs");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<bool>("EmailEnabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("email_enabled");
-
-                    b.Property<string>("EventFilters")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("event_filters");
-
-                    b.Property<string>("ProtectedSecrets")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("protected_secrets");
-
-                    b.Property<bool>("TelegramDmEnabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("telegram_dm_enabled");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("notification_preferences");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PendingNotificationRecord", b =>

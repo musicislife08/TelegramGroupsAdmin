@@ -18,6 +18,7 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Vision;
+using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin;
 
@@ -36,6 +37,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITotpProtectionService, TotpProtectionService>();
         services.AddScoped<Repositories.InviteRepository>();
         services.AddScoped<Repositories.VerificationTokenRepository>();
+        services.AddScoped<Repositories.INotificationPreferencesRepository, Repositories.NotificationPreferencesRepository>(); // Phase 5.1
 
         // Note: UserRepository, AuditLogRepository, IMessageHistoryRepository are registered in TelegramGroupsAdmin.Telegram.Extensions.AddTelegramServices()
 
@@ -138,6 +140,9 @@ public static class ServiceCollectionExtensions
 
         // Email service (SendGrid)
         services.AddScoped<TelegramGroupsAdmin.Services.Email.IEmailService, TelegramGroupsAdmin.Services.Email.SendGridEmailService>();
+
+        // Notification service (Phase 5.1: User notification preferences with Telegram DM + Email channels)
+        services.AddScoped<INotificationService, NotificationService>();
 
         // Message history adapter for spam detection library
         services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();

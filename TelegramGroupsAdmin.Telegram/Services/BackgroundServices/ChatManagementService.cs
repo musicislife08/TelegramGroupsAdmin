@@ -6,14 +6,19 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Models;
+using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 /// <summary>
 /// Handles chat management, admin caching, and health checking
+/// Phase 5.1: Sends ChatHealthWarning notifications to Owners
 /// </summary>
 public class ChatManagementService(
     IServiceProvider serviceProvider,
+    INotificationService notificationService,
     ILogger<ChatManagementService> logger)
 {
     private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();
@@ -529,6 +534,21 @@ public class ChatManagementService(
                 if (health.Warnings.Count > 0)
                     health.Status = "Warning";
             }
+
+            // Send notification if health warnings detected (Phase 5.1)
+            if (health.Status == "Warning" || health.Status == "Error")
+            {
+                var warningsText = string.Join("\n- ", health.Warnings);
+                _ = notificationService.SendSystemNotificationAsync(
+                    eventType: NotificationEventType.ChatHealthWarning,
+                    subject: $"Chat Health Warning: {chatName ?? chatId.ToString()}",
+                    message: $"Health check detected issues with chat '{chatName ?? chatId.ToString()}'.\n\n" +
+                             $"Status: {health.Status}\n" +
+                             $"Bot Admin: {health.IsAdmin}\n" +
+                             $"Warnings:\n- {warningsText}\n\n" +
+                             $"Please review the chat settings and bot permissions.",
+                    ct: cancellationToken);
+            }
         }
         catch (Exception ex)
         {
@@ -536,6 +556,15 @@ public class ChatManagementService(
             health.IsReachable = false;
             health.Status = "Error";
             health.Warnings.Add($"Cannot reach chat: {ex.Message}");
+
+            // Notify about critical health failure (Phase 5.1)
+            _ = notificationService.SendSystemNotificationAsync(
+                eventType: NotificationEventType.ChatHealthWarning,
+                subject: $"Chat Health Check Failed: {chatName ?? chatId.ToString()}",
+                message: $"Critical: Health check failed for chat '{chatName ?? chatId.ToString()}'.\n\n" +
+                         $"Error: {ex.Message}\n\n" +
+                         $"The bot may have been removed from the chat or lost permissions.",
+                ct: cancellationToken);
         }
 
         return (health, chatName);

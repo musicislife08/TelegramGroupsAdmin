@@ -5,6 +5,7 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 
@@ -14,12 +15,14 @@ namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 /// <summary>
 /// /report - Report message for admin review
 /// Notifies all chat admins via DM if available, falls back to chat mention
+/// Phase 5.1: Sends notification through notification preferences system
 /// </summary>
 public class ReportCommand : IBotCommand
 {
     private readonly ILogger<ReportCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IUserMessagingService _messagingService;
+    private readonly INotificationService _notificationService;
 
     public string Name => "report";
     public string Description => "Report message for admin review";
@@ -32,11 +35,13 @@ public class ReportCommand : IBotCommand
     public ReportCommand(
         ILogger<ReportCommand> logger,
         IServiceProvider serviceProvider,
-        IUserMessagingService messagingService)
+        IUserMessagingService messagingService,
+        INotificationService notificationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _messagingService = messagingService;
+        _notificationService = notificationService;
     }
 
     public async Task<CommandResult> ExecuteAsync(
@@ -92,18 +97,31 @@ public class ReportCommand : IBotCommand
             reportedUser.Id,
             reportedUser.Username);
 
-        // Notify all admins of the new report
+        // Send notification to chat admins (Phase 5.1)
+        var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
+        var messagePreview = reportedMessage.Text?.Length > 100
+            ? reportedMessage.Text.Substring(0, 100) + "..."
+            : reportedMessage.Text ?? "[Media message]";
+
+        _ = _notificationService.SendChatNotificationAsync(
+            chatId: message.Chat.Id,
+            eventType: NotificationEventType.MessageReported,
+            subject: $"Message Reported in {chatName}",
+            message: $"A user has reported a message for admin review.\n\n" +
+                     $"Report ID: #{reportId}\n" +
+                     $"Reported by: @{reporter.Username ?? reporter.FirstName ?? reporter.Id.ToString()}\n" +
+                     $"Reported user: @{reportedUser.Username ?? reportedUser.FirstName ?? reportedUser.Id.ToString()}\n" +
+                     $"Message preview: {messagePreview}\n\n" +
+                     $"Please review this report in the Reports tab of the admin panel.",
+            ct: cancellationToken);
+
+        // Notify all admins of the new report via direct message (immediate alert)
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
         var admins = await chatAdminsRepository.GetChatAdminsAsync(message.Chat.Id, cancellationToken);
         var adminUserIds = admins.Select(a => a.TelegramId).ToList();
 
         if (adminUserIds.Any())
         {
-            var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
-            var messagePreview = reportedMessage.Text?.Length > 100
-                ? reportedMessage.Text.Substring(0, 100) + "..."
-                : reportedMessage.Text ?? "[Media message]";
-
             var reportNotification = $"🚨 **New Report #{reportId}**\n\n" +
                                     $"**Chat:** {chatName}\n" +
                                     $"**Reported by:** @{reporter.Username ?? reporter.FirstName ?? reporter.Id.ToString()}\n" +

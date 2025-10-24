@@ -9,6 +9,9 @@ using Dapper;
 using Npgsql;
 using TelegramGroupsAdmin.Data.Attributes;
 using TelegramGroupsAdmin.Data.Services;
+using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Models;
+using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Services.Backup;
 
@@ -17,16 +20,19 @@ public class BackupService : IBackupService
     private readonly NpgsqlDataSource _dataSource;
     private readonly ILogger<BackupService> _logger;
     private readonly ITotpProtectionService _totpProtection;
+    private readonly INotificationService _notificationService;
     private const string CurrentVersion = "2.0";
 
     public BackupService(
         NpgsqlDataSource dataSource,
         ILogger<BackupService> logger,
-        ITotpProtectionService totpProtection)
+        ITotpProtectionService totpProtection,
+        INotificationService notificationService)
     {
         _dataSource = dataSource;
         _logger = logger;
         _totpProtection = totpProtection;
+        _notificationService = notificationService;
     }
 
     public async Task<byte[]> ExportAsync()
@@ -71,6 +77,16 @@ public class BackupService : IBackupService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to export table {TableName}", tableName);
+
+                // Notify Owners about backup failure (Phase 5.1)
+                _ = _notificationService.SendSystemNotificationAsync(
+                    eventType: NotificationEventType.BackupFailed,
+                    subject: "Database Backup Failed",
+                    message: $"Critical: Database backup failed while exporting table '{tableName}'.\n\n" +
+                             $"Error: {ex.Message}\n\n" +
+                             $"Please investigate the database connection and ensure all tables are accessible.",
+                    ct: CancellationToken.None);
+
                 throw;
             }
         }

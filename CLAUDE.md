@@ -94,7 +94,7 @@
 ### Complete ✅
 **Phase 1-3**: Foundation (Blazor UI, auth+TOTP, user mgmt, audit), 9 spam algorithms (CAS, Bayes, TF-IDF, OpenAI, VirusTotal, Vision), cross-chat bans
 **Phase 4** (20/20 items - COMPLETE): TickerQ jobs, unified configs (JSONB), Telegram library, welcome system, /tempban, logging UI, settings UI, anti-impersonation (pHash), warning system, URL filtering (540K domains, 6 blocklists), file scanning (ClamAV+VirusTotal 96-98%, 16K files/month), file scan UI, DM notifications, media attachments (7 types), bot auto-ban, **AI prompt builder** (meta-AI feature, version history, iterative improvement), **tag management** (7 colors, CRUD UI, usage tracking, admin notes), **translation storage** (Phase 4.20: exclusive arc pattern, toggle UI, edit history, manual trigger), **language warnings** (Phase 4.21: auto-warn untrusted users posting non-spam non-English messages, configurable per-chat, DM delivery, warning system integration)
-**Phase 5** (partial): Analytics enhancements (false positive tracking, response time metrics, detection method comparison, daily trends)
+**Phase 5** (partial): Analytics enhancements (false positive tracking, response time metrics, detection method comparison, daily trends), **notification preferences** (Phase 5.1: per-user notification preferences with JSONB event filters and channel configs, Telegram DM + Email delivery, hybrid routing - chat admins for chat events, Owners for system events, /profile/notifications UI)
 
 ### Backlog 📋
 **4.9**: Bot hot-reload (IOptionsMonitor pattern), **4.15**: Report aggregation, **4.16**: Appeal system, **4.17.3**: Windows AMSI (deferred), **4.18**: Forum/topics support

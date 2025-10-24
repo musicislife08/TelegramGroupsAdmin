@@ -26,6 +26,7 @@ public class AppDbContext : DbContext
     public DbSet<RecoveryCodeRecordDto> RecoveryCodes => Set<RecoveryCodeRecordDto>();
     public DbSet<VerificationTokenDto> VerificationTokens => Set<VerificationTokenDto>();
     public DbSet<AuditLogRecordDto> AuditLogs => Set<AuditLogRecordDto>();
+    public DbSet<NotificationPreferencesDto> NotificationPreferences => Set<NotificationPreferencesDto>();
 
     // Telegram integration tables
     public DbSet<TelegramUserDto> TelegramUsers => Set<TelegramUserDto>();
