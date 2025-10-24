@@ -17,6 +17,7 @@ public class UserAutoTrustService
     private readonly IUserActionsRepository _userActionsRepository;
     private readonly ISpamDetectionConfigRepository _spamDetectionConfigRepository;
     private readonly IAuditLogRepository _auditLogRepository;
+    private readonly ITelegramUserRepository _userRepository;
     private readonly ILogger<UserAutoTrustService> _logger;
 
     public UserAutoTrustService(
@@ -24,12 +25,14 @@ public class UserAutoTrustService
         IUserActionsRepository userActionsRepository,
         ISpamDetectionConfigRepository spamDetectionConfigRepository,
         IAuditLogRepository auditLogRepository,
+        ITelegramUserRepository userRepository,
         ILogger<UserAutoTrustService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;
         _userActionsRepository = userActionsRepository;
         _spamDetectionConfigRepository = spamDetectionConfigRepository;
         _auditLogRepository = auditLogRepository;
+        _userRepository = userRepository;
         _logger = logger;
     }
 
@@ -89,6 +92,9 @@ public class UserAutoTrustService
 
             // AddOrUpdate pattern - safe even if already trusted
             var actionId = await _userActionsRepository.InsertAsync(trustAction, cancellationToken);
+
+            // Update telegram_users.is_trusted flag for UI display (same as manual trust)
+            await _userRepository.UpdateTrustStatusAsync(userId, isTrusted: true, cancellationToken);
 
             _logger.LogInformation(
                 "Auto-trusted user {UserId} after {Count} non-spam messages (action ID: {ActionId})",

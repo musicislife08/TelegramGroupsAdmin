@@ -21,7 +21,6 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public class SpamActionService(
     IServiceProvider serviceProvider,
-    INotificationService notificationService,
     ILogger<SpamActionService> logger)
 {
     // Confidence thresholds for spam detection decisions
@@ -138,15 +137,13 @@ public class SpamActionService(
                     cancellationToken);
 
                 // Notify chat admins about malware detection (Phase 5.1)
-                _ = notificationService.SendChatNotificationAsync(
-                    chatId: message.Chat.Id,
-                    eventType: NotificationEventType.MalwareDetected,
-                    subject: "Malware Detected and Removed",
-                    message: $"Malware was detected in chat '{message.Chat.Title ?? message.Chat.Id.ToString()}' and the message was deleted.\n\n" +
-                             $"User: {message.From?.Username ?? message.From?.FirstName ?? message.From?.Id.ToString()}\n" +
-                             $"Detection: {malwareResult.Details}\n\n" +
-                             $"The user was NOT auto-banned (malware upload may be accidental). Please review the report in the admin panel.",
-                    ct: cancellationToken);
+                SendNotificationAsync(message.Chat.Id, NotificationEventType.MalwareDetected,
+                    "Malware Detected and Removed",
+                    $"Malware was detected in chat '{message.Chat.Title ?? message.Chat.Id.ToString()}' and the message was deleted.\n\n" +
+                    $"User: {message.From?.Username ?? message.From?.FirstName ?? message.From?.Id.ToString()}\n" +
+                    $"Detection: {malwareResult.Details}\n\n" +
+                    $"The user was NOT auto-banned (malware upload may be accidental). Please review the report in the admin panel.",
+                    cancellationToken);
 
                 logger.LogInformation(
                     "Deleted malware message {MessageId} and created admin alert (no auto-ban)",
@@ -191,16 +188,14 @@ public class SpamActionService(
                     openAIResult.Confidence);
 
                 // Notify chat admins about spam detection (Phase 5.1)
-                _ = notificationService.SendChatNotificationAsync(
-                    chatId: message.Chat.Id,
-                    eventType: NotificationEventType.SpamDetected,
-                    subject: "Spam Detected - Auto-Ban Triggered",
-                    message: $"High-confidence spam detected in chat '{message.Chat.Title ?? message.Chat.Id.ToString()}'.\n\n" +
-                             $"User: {message.From?.Username ?? message.From?.FirstName ?? message.From?.Id.ToString()}\n" +
-                             $"Confidence: {spamResult.NetConfidence}% (OpenAI: {openAIResult.Confidence}%)\n" +
-                             $"Action: User auto-banned across all managed chats and message deleted.\n\n" +
-                             $"Reason: {spamResult.CheckResults.FirstOrDefault()?.Details ?? "Multiple spam indicators detected"}",
-                    ct: cancellationToken);
+                SendNotificationAsync(message.Chat.Id, NotificationEventType.SpamDetected,
+                    "Spam Detected - Auto-Ban Triggered",
+                    $"High-confidence spam detected in chat '{message.Chat.Title ?? message.Chat.Id.ToString()}'.\n\n" +
+                    $"User: {message.From?.Username ?? message.From?.FirstName ?? message.From?.Id.ToString()}\n" +
+                    $"Confidence: {spamResult.NetConfidence}% (OpenAI: {openAIResult.Confidence}%)\n" +
+                    $"Action: User auto-banned across all managed chats and message deleted.\n\n" +
+                    $"Reason: {spamResult.CheckResults.FirstOrDefault()?.Details ?? "Multiple spam indicators detected"}",
+                    cancellationToken);
 
                 await ExecuteAutoBanAsync(
                     scope.ServiceProvider,
@@ -219,15 +214,13 @@ public class SpamActionService(
                     cancellationToken: cancellationToken);
 
                 // Notify chat admins about message deletion (Phase 5.1)
-                _ = notificationService.SendChatNotificationAsync(
-                    chatId: message.Chat.Id,
-                    eventType: NotificationEventType.SpamAutoDeleted,
-                    subject: "Spam Message Auto-Deleted",
-                    message: $"Spam message automatically deleted from chat '{message.Chat.Title ?? message.Chat.Id.ToString()}'.\n\n" +
-                             $"User: {message.From?.Username ?? message.From?.FirstName ?? message.From?.Id.ToString()}\n" +
-                             $"Message ID: {message.MessageId}\n" +
-                             $"User has been banned across all managed chats.",
-                    ct: cancellationToken);
+                SendNotificationAsync(message.Chat.Id, NotificationEventType.SpamAutoDeleted,
+                    "Spam Message Auto-Deleted",
+                    $"Spam message automatically deleted from chat '{message.Chat.Title ?? message.Chat.Id.ToString()}'.\n\n" +
+                    $"User: {message.From?.Username ?? message.From?.FirstName ?? message.From?.Id.ToString()}\n" +
+                    $"Message ID: {message.MessageId}\n" +
+                    $"User has been banned across all managed chats.",
+                    cancellationToken);
 
                 logger.LogInformation(
                     "Deleted spam message {MessageId} from chat {ChatId} (auto-ban)",
@@ -384,15 +377,13 @@ public class SpamActionService(
                 failCount);
 
             // Notify chat admins about the ban (Phase 5.1)
-            _ = notificationService.SendChatNotificationAsync(
-                chatId: message.Chat.Id,
-                eventType: NotificationEventType.UserBanned,
-                subject: "User Auto-Banned",
-                message: $"User automatically banned from chat '{message.Chat.Title ?? message.Chat.Id.ToString()}' and {activeChats.Count - 1} other managed chats.\n\n" +
-                         $"User: {message.From.Username ?? message.From.FirstName ?? message.From.Id.ToString()}\n" +
-                         $"Ban Status: {successCount}/{activeChats.Count} chats\n" +
-                         $"Reason: {banAction.Reason}",
-                ct: cancellationToken);
+            SendNotificationAsync(message.Chat.Id, NotificationEventType.UserBanned,
+                "User Auto-Banned",
+                $"User automatically banned from chat '{message.Chat.Title ?? message.Chat.Id.ToString()}' and {activeChats.Count - 1} other managed chats.\n\n" +
+                $"User: {message.From.Username ?? message.From.FirstName ?? message.From.Id.ToString()}\n" +
+                $"Ban Status: {successCount}/{activeChats.Count} chats\n" +
+                $"Reason: {banAction.Reason}",
+                cancellationToken);
         }
         catch (Exception ex)
         {
@@ -499,5 +490,27 @@ public class SpamActionService(
                 message.From.Id,
                 message.Chat.Id);
         }
+    }
+
+    /// <summary>
+    /// Helper method to send notifications with proper scope management (Phase 5.1)
+    /// Creates scope to resolve scoped INotificationService from singleton background service
+    /// Fire-and-forget pattern - does not await the notification task
+    /// </summary>
+    private void SendNotificationAsync(long chatId, NotificationEventType eventType, string subject, string message, CancellationToken ct)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = serviceProvider.CreateScope();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                await notificationService.SendChatNotificationAsync(chatId, eventType, subject, message, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to send notification for event {EventType} in chat {ChatId}", eventType, chatId);
+            }
+        }, ct);
     }
 }

@@ -18,7 +18,6 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public class ChatManagementService(
     IServiceProvider serviceProvider,
-    INotificationService notificationService,
     ILogger<ChatManagementService> logger)
 {
     private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();
@@ -539,6 +538,11 @@ public class ChatManagementService(
             if (health.Status == "Warning" || health.Status == "Error")
             {
                 var warningsText = string.Join("\n- ", health.Warnings);
+
+                // Create scope to resolve scoped INotificationService from singleton
+                using var scope = serviceProvider.CreateScope();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+
                 _ = notificationService.SendSystemNotificationAsync(
                     eventType: NotificationEventType.ChatHealthWarning,
                     subject: $"Chat Health Warning: {chatName ?? chatId.ToString()}",
@@ -558,6 +562,10 @@ public class ChatManagementService(
             health.Warnings.Add($"Cannot reach chat: {ex.Message}");
 
             // Notify about critical health failure (Phase 5.1)
+            // Create scope to resolve scoped INotificationService from singleton
+            using var scope = serviceProvider.CreateScope();
+            var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+
             _ = notificationService.SendSystemNotificationAsync(
                 eventType: NotificationEventType.ChatHealthWarning,
                 subject: $"Chat Health Check Failed: {chatName ?? chatId.ToString()}",
