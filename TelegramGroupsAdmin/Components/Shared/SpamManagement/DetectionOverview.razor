@@ -108,7 +108,7 @@
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/stopwords-config"))'>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionStopWords>("Stop Words Configuration"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
@@ -138,7 +138,7 @@
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/cas"))'>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionCAS>("CAS Configuration"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
@@ -166,7 +166,7 @@
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/similarity"))'>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionSimilarity>("Similarity Detection Configuration"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
@@ -194,7 +194,7 @@
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
-                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick='@(() => Navigation.NavigateTo("/settings/content-detection/bayes"))'>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => OpenConfigDialog<ContentDetectionBayes>("Bayes Classifier Configuration"))">
                     Configure
                 </MudButton>
             </CardHeaderActions>
@@ -521,6 +521,31 @@
         };
 
         var dialog = await DialogService.ShowAsync<AdvancedSettingsDialog>("Advanced Settings", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            // Reload configuration after dialog closes
+            await LoadConfiguration();
+        }
+    }
+
+    private async Task OpenConfigDialog<T>(string title) where T : ComponentBase
+    {
+        var parameters = new DialogParameters<ConfigDialogWrapper>
+        {
+            { x => x.ChatId, ChatId },
+            { x => x.ComponentType, typeof(T) }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfigDialogWrapper>(title, parameters, options);
         var result = await dialog.Result;
 
         if (result != null && !result.Canceled)

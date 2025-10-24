@@ -1,0 +1,104 @@
+@using TelegramGroupsAdmin.ContentDetection.Configuration
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@using Microsoft.AspNetCore.Components
+@inject ISpamDetectionConfigRepository ConfigRepository
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <DynamicComponent Type="@ComponentType" Parameters="@_parameters" @ref="_dynamicComponentRef" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAndClose" Disabled="@_isSaving">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                <span class="ml-2">Saving...</span>
+            }
+            else
+            {
+                <text>Save</text>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public long? ChatId { get; set; }
+
+    [Parameter]
+    public Type ComponentType { get; set; } = default!;
+
+    private DynamicComponent? _dynamicComponentRef;
+    private Dictionary<string, object> _parameters = new();
+    private bool _isSaving = false;
+
+    protected override void OnInitialized()
+    {
+        // Set up parameters to pass to the child component
+        _parameters = new Dictionary<string, object>
+        {
+            { "ChatId", (object?)ChatId ?? (object)0L }
+        };
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task SaveAndClose()
+    {
+        if (_isSaving || _dynamicComponentRef == null) return;
+
+        try
+        {
+            _isSaving = true;
+
+            // Use reflection to get the GetConfig() method from the dynamic component instance
+            var componentInstance = _dynamicComponentRef.Instance;
+            var getConfigMethod = componentInstance?.GetType().GetMethod("GetConfig");
+
+            if (getConfigMethod == null)
+            {
+                Snackbar.Add("Component does not have a GetConfig() method", Severity.Error);
+                return;
+            }
+
+            var config = getConfigMethod.Invoke(componentInstance, null) as SpamDetectionConfig;
+
+            if (config == null)
+            {
+                Snackbar.Add("Failed to retrieve configuration from component", Severity.Error);
+                return;
+            }
+
+            // Save to appropriate scope
+            if (ChatId.HasValue && ChatId.Value != 0)
+            {
+                await ConfigRepository.UpdateChatConfigAsync(ChatId.Value, config);
+                Snackbar.Add("Chat configuration saved successfully", Severity.Success);
+            }
+            else
+            {
+                await ConfigRepository.UpdateGlobalConfigAsync(config);
+                Snackbar.Add("Global configuration saved successfully", Severity.Success);
+            }
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}
