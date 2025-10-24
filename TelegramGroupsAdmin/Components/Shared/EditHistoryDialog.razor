@@ -43,7 +43,7 @@
                         <MudStack Spacing="2">
                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    <b>Edited:</b> @FormatTimestamp(edit.EditDate)
+                                    <b>Edited:</b> <span class="local-timestamp" data-utc="@edit.EditDate.ToString("o")">@edit.EditDate.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                                 </MudText>
                                 <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Edit">
                                     Edit #@_edits.IndexOf(edit)
@@ -153,11 +153,5 @@
         if (parts.Length >= 2)
             return $"{parts[0][0]}{parts[1][0]}".ToUpper();
         return name.Length >= 2 ? name.Substring(0, 2).ToUpper() : name.ToUpper();
-    }
-
-    private string FormatTimestamp(DateTimeOffset timestamp)
-    {
-        var dt = timestamp.ToLocalTime();
-        return dt.ToString("MMM dd, yyyy HH:mm:ss");
     }
 }

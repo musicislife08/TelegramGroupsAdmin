@@ -27,15 +27,15 @@
 
                                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        By @note.CreatedBy.DisplayName
+                                        By @note.CreatedBy.GetDisplayText()
                                     </MudText>
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        @note.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                                        <span class="local-timestamp" data-utc="@note.CreatedAt.ToString("o")">@note.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                                     </MudText>
                                     @if (note.UpdatedAt.HasValue)
                                     {
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                            (edited @note.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm"))
+                                            (edited <span class="local-timestamp" data-utc="@note.UpdatedAt.Value.ToString("o")">@note.UpdatedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>)
                                         </MudText>
                                     }
                                 </MudStack>

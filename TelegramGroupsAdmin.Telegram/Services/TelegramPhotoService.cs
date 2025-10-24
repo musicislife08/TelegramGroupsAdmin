@@ -48,7 +48,7 @@ public class TelegramPhotoService
         {
             var fileName = $"{Math.Abs(chatId)}.jpg"; // Use absolute value for filename
             var localPath = Path.Combine(_chatIconsPath, fileName);
-            var relativePath = $"media/chat_icons/{fileName}";
+            var relativePath = $"chat_icons/{fileName}"; // Web path (served as /media/chat_icons/)
 
             // Return cached if exists
             if (File.Exists(localPath))
@@ -127,7 +127,7 @@ public class TelegramPhotoService
         {
             var fileName = $"{userId}.jpg";
             var localPath = Path.Combine(_userPhotosPath, fileName);
-            var relativePath = $"media/user_photos/{fileName}";
+            var relativePath = $"user_photos/{fileName}";
 
             // Fetch current photo from Telegram
             var photos = await botClient.GetUserProfilePhotos(userId, limit: 1, cancellationToken: cancellationToken);

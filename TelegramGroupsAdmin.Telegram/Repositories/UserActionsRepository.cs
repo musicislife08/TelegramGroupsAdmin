@@ -209,6 +209,55 @@ public class UserActionsRepository : IUserActionsRepository
         return entities.Select(e => e.ToModel()).ToList();
     }
 
+    public async Task<(List<UserActionRecord> Actions, int TotalCount)> GetPagedActionsAsync(
+        int skip,
+        int take,
+        UserActionType? actionTypeFilter = null,
+        long? userIdFilter = null,
+        string? issuedByFilter = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Build query with filters
+        var query = context.UserActions.AsNoTracking();
+
+        if (actionTypeFilter.HasValue)
+        {
+            var dataActionType = (DataModels.UserActionType)(int)actionTypeFilter.Value;
+            query = query.Where(ua => ua.ActionType == dataActionType);
+        }
+
+        if (userIdFilter.HasValue)
+        {
+            query = query.Where(ua => ua.UserId == userIdFilter.Value);
+        }
+
+        if (!string.IsNullOrEmpty(issuedByFilter))
+        {
+            // Filter by issued_by using exclusive arc columns
+            // IssuedBy is stored as three columns: WebUserId, TelegramUserId, SystemIdentifier
+            // We'll filter by SystemIdentifier (case-insensitive contains)
+            // For WebUserId/TelegramUserId filtering, user would need to use exact IDs
+            query = query.Where(ua =>
+                (ua.SystemIdentifier != null && EF.Functions.ILike(ua.SystemIdentifier, $"%{issuedByFilter}%")));
+        }
+
+        // Get total count for pagination
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        // Get page of results
+        var entities = await query
+            .OrderByDescending(ua => ua.IssuedAt)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+        var actions = entities.Select(e => e.ToModel()).ToList();
+
+        return (actions, totalCount);
+    }
+
     public async Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

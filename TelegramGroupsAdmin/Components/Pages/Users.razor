@@ -67,7 +67,7 @@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             @if (!string.IsNullOrEmpty(context.UserPhotoPath))
                             {
-                                <img src="@($"/images/{context.UserPhotoPath}")" alt="@context.DisplayName" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
+                                <img src="@($"/media/{context.UserPhotoPath}")" alt="@context.DisplayName" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
                             }
                             else
                             {
@@ -97,7 +97,9 @@
                             <MudText Typo="Typo.caption" Color="Color.Secondary">None</MudText>
                         }
                     </MudTd>
-                    <MudTd DataLabel="Last Seen">@FormatTimestamp(context.LastSeenAt)</MudTd>
+                    <MudTd DataLabel="Last Seen">
+                        <span class="local-timestamp" data-utc="@context.LastSeenAt.ToString("o")">@context.LastSeenAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                    </MudTd>
                     <MudTd DataLabel="Actions">
                         <MudTooltip Text="View Details">
                             <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" OnClick="@(() => ViewUserDetail(context.TelegramUserId))" />
@@ -130,7 +132,7 @@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             @if (!string.IsNullOrEmpty(context.UserPhotoPath))
                             {
-                                <img src="@($"/images/{context.UserPhotoPath}")" alt="@context.DisplayName" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
+                                <img src="@($"/media/{context.UserPhotoPath}")" alt="@context.DisplayName" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
                             }
                             else
                             {
@@ -152,7 +154,9 @@
                     <MudTd DataLabel="Warnings">
                         <MudChip T="string" Size="Size.Small" Color="Color.Warning">@context.WarningCount</MudChip>
                     </MudTd>
-                    <MudTd DataLabel="Last Seen">@FormatTimestamp(context.LastSeenAt)</MudTd>
+                    <MudTd DataLabel="Last Seen">
+                        <span class="local-timestamp" data-utc="@context.LastSeenAt.ToString("o")">@context.LastSeenAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                    </MudTd>
                     <MudTd DataLabel="Actions">
                         <MudTooltip Text="View Details">
                             <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" OnClick="@(() => ViewUserDetail(context.TelegramUserId))" />
@@ -175,7 +179,7 @@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             @if (!string.IsNullOrEmpty(context.UserPhotoPath))
                             {
-                                <img src="@($"/images/{context.UserPhotoPath}")" alt="@context.DisplayName" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
+                                <img src="@($"/media/{context.UserPhotoPath}")" alt="@context.DisplayName" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
                             }
                             else
                             {
@@ -190,7 +194,9 @@
                         </MudStack>
                     </MudTd>
                     <MudTd DataLabel="Chats">@context.ChatCount</MudTd>
-                    <MudTd DataLabel="Last Seen">@FormatTimestamp(context.LastSeenAt)</MudTd>
+                    <MudTd DataLabel="Last Seen">
+                        <span class="local-timestamp" data-utc="@context.LastSeenAt.ToString("o")">@context.LastSeenAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                    </MudTd>
                     <MudTd DataLabel="Actions">
                         <MudTooltip Text="View Details">
                             <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" OnClick="@(() => ViewUserDetail(context.TelegramUserId))" />
@@ -219,7 +225,7 @@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             @if (!string.IsNullOrEmpty(context.UserPhotoPath))
                             {
-                                <img src="@($"/images/{context.UserPhotoPath}")" alt="@context.DisplayName" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
+                                <img src="@($"/media/{context.UserPhotoPath}")" alt="@context.DisplayName" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
                             }
                             else
                             {
@@ -234,7 +240,9 @@
                         </MudStack>
                     </MudTd>
                     <MudTd DataLabel="Ban Date">
-                        <MudText Typo="Typo.body2">@FormatTimestamp(context.BanDate)</MudText>
+                        <MudText Typo="Typo.body2">
+                            <span class="local-timestamp" data-utc="@context.BanDate.ToString("o")">@context.BanDate.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                        </MudText>
                     </MudTd>
                     <MudTd DataLabel="Banned By">
                         <MudText Typo="Typo.body2">@context.BannedBy</MudText>
@@ -518,18 +526,4 @@
         TelegramUserStatus.Clean => "🔵",
         _ => ""
     };
-
-    private static string FormatTimestamp(DateTimeOffset timestamp)
-    {
-        var dt = timestamp.ToLocalTime();
-        var now = DateTimeOffset.Now;
-
-        if (dt.Date == now.Date)
-            return dt.ToString("h:mm tt");
-        if (dt.Date == now.AddDays(-1).Date)
-            return $"Yesterday {dt:h:mm tt}";
-        if (dt.Year == now.Year)
-            return dt.ToString("MMM dd h:mm tt");
-        return dt.ToString("MMM dd yyyy");
-    }
 }

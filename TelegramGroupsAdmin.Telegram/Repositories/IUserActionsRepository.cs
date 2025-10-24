@@ -80,6 +80,17 @@ public interface IUserActionsRepository
     Task<List<UserActionRecord>> GetRecentAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Get paginated actions with filtering
+    /// </summary>
+    Task<(List<UserActionRecord> Actions, int TotalCount)> GetPagedActionsAsync(
+        int skip,
+        int take,
+        UserActionType? actionTypeFilter = null,
+        long? userIdFilter = null,
+        string? issuedByFilter = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Delete actions older than specified timestamp
     /// </summary>
     Task<int> DeleteOlderThanAsync(DateTimeOffset timestamp, CancellationToken cancellationToken = default);

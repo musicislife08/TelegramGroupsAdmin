@@ -28,7 +28,7 @@
                     @(Message.UserName ?? Message.FirstName ?? $"User {Message.UserId}")
                 </span>
                 <span class="tg-timestamp local-timestamp" data-utc="@Message.Timestamp.ToString("o")">
-                    @FormatTimestamp(Message.Timestamp)
+                    @Message.Timestamp.ToLocalTime().ToString("MMM d, yyyy h:mm tt")
                 </span>
 
                 @* User Tags (Phase 4.12) *@
@@ -58,8 +58,8 @@
 
                 @if (Message.DeletedAt.HasValue)
                 {
-                    <span class="tg-badge tg-badge-deleted" title="Deleted @Message.DeletedAt.Value.ToString("yyyy-MM-dd HH:mm") UTC (@(Message.DeletionSource ?? "unknown"))">
-                        🗑️ DELETED
+                    <span class="tg-badge tg-badge-deleted" title="@($"Deleted: {Message.DeletionSource ?? "unknown"}")">
+                        🗑️ DELETED <span class="local-timestamp" data-utc="@Message.DeletedAt.Value.ToString("o")">@Message.DeletedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                     </span>
                 }
                 @if (Message.EditDate.HasValue)
@@ -413,20 +413,6 @@
         return baseClass;
     }
 
-    private string FormatTimestamp(DateTimeOffset timestamp)
-    {
-        var dt = timestamp.ToLocalTime();
-        var now = DateTimeOffset.Now;
-
-        if (dt.Date == now.Date)
-            return dt.ToString("h:mm tt"); // 12-hour format with AM/PM
-        if (dt.Date == now.AddDays(-1).Date)
-            return $"Yesterday {dt:h:mm tt}";
-        if (dt.Year == now.Year)
-            return dt.ToString("MMM dd h:mm tt");
-        return dt.ToString("MMM dd yyyy h:mm tt");
-    }
-
     private string[] GetUrls()
     {
         if (string.IsNullOrEmpty(Message.Urls))
@@ -451,17 +437,8 @@
             ? path.Replace('\\', '/')
             : Path.GetFileName(path);
 
-        // Media files are served from their respective folders, images from /images/
-        if (relativePath.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ||
-            relativePath.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) ||
-            relativePath.StartsWith("sticker/", StringComparison.OrdinalIgnoreCase) ||
-            relativePath.StartsWith("document/", StringComparison.OrdinalIgnoreCase) ||
-            relativePath.StartsWith("media/", StringComparison.OrdinalIgnoreCase))
-        {
-            return $"/{relativePath}";
-        }
-
-        return $"/images/{relativePath}";
+        // All media files (images, videos, audio, etc.) are served from /media/
+        return $"/media/{relativePath}";
     }
 
     private string GetMediaPath(string? filename, TelegramGroupsAdmin.Telegram.Models.MediaType mediaType)

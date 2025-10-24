@@ -23,9 +23,23 @@ public class AdminNotesRepository : IAdminNotesRepository
             .Where(n => n.TelegramUserId == telegramUserId)
             .OrderByDescending(n => n.IsPinned)
             .ThenByDescending(n => n.CreatedAt)
+            .Select(n => new
+            {
+                Note = n,
+                WebUserEmail = n.ActorWebUserId != null
+                    ? _context.Users.Where(u => u.Id == n.ActorWebUserId).Select(u => u.Email).FirstOrDefault()
+                    : null,
+                TelegramUser = n.ActorTelegramUserId != null
+                    ? _context.TelegramUsers.Where(t => t.TelegramUserId == n.ActorTelegramUserId).FirstOrDefault()
+                    : null
+            })
             .ToListAsync(cancellationToken);
 
-        return notes.Select(n => n.ToModel()).ToList();
+        return notes.Select(n => n.Note.ToModel(
+            webUserEmail: n.WebUserEmail,
+            telegramUsername: n.TelegramUser?.Username,
+            telegramFirstName: n.TelegramUser?.FirstName
+        )).ToList();
     }
 
     public async Task<AdminNote?> GetNoteByIdAsync(long noteId, CancellationToken cancellationToken = default)
@@ -82,9 +96,23 @@ public class AdminNotesRepository : IAdminNotesRepository
         var notes = await _context.AdminNotes
             .Where(n => n.TelegramUserId == telegramUserId && n.IsPinned)
             .OrderByDescending(n => n.CreatedAt)
+            .Select(n => new
+            {
+                Note = n,
+                WebUserEmail = n.ActorWebUserId != null
+                    ? _context.Users.Where(u => u.Id == n.ActorWebUserId).Select(u => u.Email).FirstOrDefault()
+                    : null,
+                TelegramUser = n.ActorTelegramUserId != null
+                    ? _context.TelegramUsers.Where(t => t.TelegramUserId == n.ActorTelegramUserId).FirstOrDefault()
+                    : null
+            })
             .ToListAsync(cancellationToken);
 
-        return notes.Select(n => n.ToModel()).ToList();
+        return notes.Select(n => n.Note.ToModel(
+            webUserEmail: n.WebUserEmail,
+            telegramUsername: n.TelegramUser?.Username,
+            telegramFirstName: n.TelegramUser?.FirstName
+        )).ToList();
     }
 
     public async Task<bool> TogglePinAsync(long noteId, Actor toggledBy, CancellationToken cancellationToken = default)

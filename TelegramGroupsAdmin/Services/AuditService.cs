@@ -42,4 +42,21 @@ public class AuditService : IAuditService
     {
         return _repository.GetEventsByTypeAsync((DataModels.AuditEventType)eventType, limit, ct);
     }
+
+    public Task<(List<AuditLogRecord> Events, int TotalCount)> GetPagedEventsAsync(
+        int skip,
+        int take,
+        AuditEventType? eventTypeFilter = null,
+        string? actorUserIdFilter = null,
+        string? targetUserIdFilter = null,
+        CancellationToken ct = default)
+    {
+        return _repository.GetPagedEventsAsync(
+            skip,
+            take,
+            eventTypeFilter.HasValue ? (DataModels.AuditEventType)eventTypeFilter.Value : null,
+            actorUserIdFilter,
+            targetUserIdFilter,
+            ct);
+    }
 }

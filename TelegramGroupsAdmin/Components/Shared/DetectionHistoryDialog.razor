@@ -13,7 +13,7 @@
                     <MudTimelineItem Color="@(result.IsSpam ? Color.Error : Color.Success)" Size="Size.Small">
                         <ItemOpposite>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @FormatTimestamp(result.DetectedAt)
+                                <span class="local-timestamp" data-utc="@result.DetectedAt.ToString("o")">@result.DetectedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                             </MudText>
                         </ItemOpposite>
                         <ItemContent>
@@ -137,12 +137,6 @@
     public List<DetectionResultRecord>? DetectionResults { get; set; }
 
     private void Close() => MudDialog.Close();
-
-    private string FormatTimestamp(DateTimeOffset timestamp)
-    {
-        var dt = timestamp.ToLocalTime();
-        return dt.ToString("yyyy-MM-dd HH:mm:ss");
-    }
 
     private List<CheckResult>? ParseCheckResults(string json)
     {

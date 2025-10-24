@@ -37,7 +37,7 @@
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
                         @if (!string.IsNullOrEmpty(_userDetail.UserPhotoPath))
                         {
-                            <img src="@($"/images/{_userDetail.UserPhotoPath}")"
+                            <img src="@($"/media/{_userDetail.UserPhotoPath}")"
                                  alt="@_userDetail.DisplayName"
                                  style="width: 64px; height: 64px; border-radius: 50%; object-fit: cover;" />
                         }
@@ -100,11 +100,11 @@
                     <MudStack Spacing="2">
                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                             <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Small" Color="Color.Success" />
-                            <MudText Typo="Typo.body2">First seen: @FormatTimestamp(_userDetail.FirstSeenAt)</MudText>
+                            <MudText Typo="Typo.body2">First seen: <span class="local-timestamp" data-utc="@_userDetail.FirstSeenAt.ToString("o")">@_userDetail.FirstSeenAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span></MudText>
                         </MudStack>
                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                             <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Color="Color.Info" />
-                            <MudText Typo="Typo.body2">Last seen: @FormatTimestamp(_userDetail.LastSeenAt)</MudText>
+                            <MudText Typo="Typo.body2">Last seen: <span class="local-timestamp" data-utc="@_userDetail.LastSeenAt.ToString("o")">@_userDetail.LastSeenAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span></MudText>
                         </MudStack>
                         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                             <MudIcon Icon="@(_userDetail.BotDmEnabled ? Icons.Material.Filled.MarkEmailRead : Icons.Material.Filled.MarkEmailUnread)"
@@ -203,7 +203,7 @@
                                                 }
                                             </MudStack>
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @membership.MessageCount messages • Last: @FormatTimestamp(membership.LastActivityAt)
+                                                @membership.MessageCount messages • Last: <span class="local-timestamp" data-utc="@membership.LastActivityAt.ToString("o")">@membership.LastActivityAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                                             </MudText>
                                         </div>
                                     </MudStack>
@@ -251,7 +251,7 @@
                                                      Icon="@GetActionIcon(action.ActionType)">
                                         <ItemOpposite>
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @FormatTimeOnly(action.IssuedAt)
+                                                <span class="local-timestamp" data-utc="@action.IssuedAt.ToString("o")">@action.IssuedAt.ToLocalTime().ToString("h:mm tt")</span>
                                             </MudText>
                                         </ItemOpposite>
                                         <ItemContent>
@@ -326,10 +326,10 @@
                                             </MudStack>
                                         </MudStack>
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                            By @note.CreatedBy • @FormatTimestamp(note.CreatedAt)
+                                            By @note.CreatedBy • <span class="local-timestamp" data-utc="@note.CreatedAt.ToString("o")">@note.CreatedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                                             @if (note.UpdatedAt.HasValue)
                                             {
-                                                <text> (edited @FormatTimestamp(note.UpdatedAt.Value))</text>
+                                                <text> (edited <span class="local-timestamp" data-utc="@note.UpdatedAt.Value.ToString("o")">@note.UpdatedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>)</text>
                                             }
                                         </MudText>
                                     </MudStack>
@@ -396,7 +396,7 @@
                                         <div style="flex: 1;">
                                             <MudText Typo="Typo.body2">Confidence: @detection.Confidence%</MudText>
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @detection.DetectionMethod • @FormatTimestamp(detection.DetectedAt)
+                                                @detection.DetectionMethod • <span class="local-timestamp" data-utc="@detection.DetectedAt.ToString("o")">@detection.DetectedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                                             </MudText>
                                         </div>
                                     </MudStack>
@@ -683,20 +683,6 @@
         _ => Color.Default
     };
 
-    private static string FormatTimestamp(DateTimeOffset timestamp)
-    {
-        var dt = timestamp.ToLocalTime();
-        var now = DateTimeOffset.Now;
-
-        if (dt.Date == now.Date)
-            return dt.ToString("h:mm tt");
-        if (dt.Date == now.AddDays(-1).Date)
-            return $"Yesterday {dt:h:mm tt}";
-        if (dt.Year == now.Year)
-            return dt.ToString("MMM dd h:mm tt");
-        return dt.ToString("MMM dd yyyy");
-    }
-
     /// <summary>
     /// Format actor for display in timeline (Phase 4.19: Actor system)
     /// </summary>
@@ -794,11 +780,6 @@
         if (actionDate.Year == now.Year)
             return actionDate.ToString("MMMM dd"); // Month Day (January 15)
         return actionDate.ToString("MMMM dd, yyyy"); // Month Day, Year (January 15, 2024)
-    }
-
-    private static string FormatTimeOnly(DateTimeOffset timestamp)
-    {
-        return timestamp.ToLocalTime().ToString("h:mm tt");
     }
 
     private static string FormatActionType(UserActionType actionType)

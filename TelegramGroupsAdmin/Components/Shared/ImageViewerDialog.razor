@@ -14,7 +14,7 @@
                             @(Message.UserName ?? $"User {Message.UserId}")
                         </MudText>
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            @FormatTimestamp(Message.Timestamp)
+                            <span class="local-timestamp" data-utc="@Message.Timestamp.ToString("o")">@Message.Timestamp.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                         </MudText>
                     </MudStack>
                 </MudStack>
@@ -89,12 +89,6 @@
         return name.Length >= 2 ? name.Substring(0, 2).ToUpper() : name.ToUpper();
     }
 
-    private string FormatTimestamp(DateTimeOffset timestamp)
-    {
-        var dt = timestamp.ToLocalTime();
-        return dt.ToString("MMM dd, yyyy HH:mm:ss");
-    }
-
     private string GetImagePath(string? path)
     {
         if (string.IsNullOrEmpty(path))
@@ -107,7 +101,7 @@
             ? path.Replace('\\', '/')  // Normalize path separators
             : Path.GetFileName(path);   // Legacy: just filename
 
-        return $"/images/{relativePath}";
+        return $"/media/{relativePath}";
     }
 
     private string FormatFileSize(long bytes)

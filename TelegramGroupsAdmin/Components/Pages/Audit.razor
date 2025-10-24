@@ -24,11 +24,11 @@
         <MudTabPanel Text="Web Admin Log" Icon="@Icons.Material.Filled.Security">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
                 <MudChip T="string" Icon="@Icons.Material.Filled.Security" Color="Color.Primary">
-                    @_events.Count events
+                    Web Admin Audit Log
                 </MudChip>
                 <MudIconButton Icon="@Icons.Material.Filled.Refresh"
                               Color="Color.Primary"
-                              OnClick="LoadWebAdminDataAsync"
+                              OnClick="@(async () => await _webAdminTable.ReloadServerData())"
                               title="Refresh Web Admin Log"
                               Size="Size.Medium" />
             </MudStack>
@@ -89,7 +89,9 @@
 
     <!-- Audit Log Table -->
     <MudPaper Class="pa-4" Elevation="2">
-        <MudTable Items="@_filteredEvents"
+        <MudTable T="AuditLogRecord"
+                 @ref="_webAdminTable"
+                 ServerData="@LoadWebAdminServerDataAsync"
                  Hover="true"
                  Breakpoint="Breakpoint.Sm"
                  Loading="@_loading"
@@ -155,6 +157,9 @@
                     }
                 </MudTd>
             </RowTemplate>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+            </PagerContent>
         </MudTable>
     </MudPaper>
         </MudTabPanel>
@@ -162,11 +167,11 @@
         <MudTabPanel Text="Telegram Moderation Log" Icon="@Icons.Material.Filled.SmartToy">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
                 <MudChip T="string" Icon="@Icons.Material.Filled.Shield" Color="Color.Primary">
-                    @_userActions.Count actions
+                    Telegram Moderation Log
                 </MudChip>
                 <MudIconButton Icon="@Icons.Material.Filled.Refresh"
                               Color="Color.Primary"
-                              OnClick="LoadModerationDataAsync"
+                              OnClick="@(async () => await _moderationTable.ReloadServerData())"
                               title="Refresh Moderation Log"
                               Size="Size.Medium" />
             </MudStack>
@@ -214,7 +219,9 @@
 
     <!-- Moderation Log Table -->
     <MudPaper Class="pa-4" Elevation="2">
-        <MudTable Items="@_filteredUserActions"
+        <MudTable T="TelegramGroupsAdmin.Telegram.Models.UserActionRecord"
+                 @ref="_moderationTable"
+                 ServerData="@LoadModerationServerDataAsync"
                  Hover="true"
                  Breakpoint="Breakpoint.Sm"
                  Loading="@_loadingModerationActions"
@@ -246,7 +253,7 @@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             @if (!string.IsNullOrEmpty(telegramUser.UserPhotoPath))
                             {
-                                <img src="@($"/images/{telegramUser.UserPhotoPath}")" alt="@GetTelegramUserDisplayName(telegramUser)" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
+                                <img src="@($"/media/{telegramUser.UserPhotoPath}")" alt="@GetTelegramUserDisplayName(telegramUser)" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
                             }
                             else
                             {
@@ -334,6 +341,9 @@
                     }
                 </MudTd>
             </RowTemplate>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+            </PagerContent>
         </MudTable>
     </MudPaper>
         </MudTabPanel>
@@ -345,10 +355,9 @@
     private int _activeTabIndex = 0;
 
     // Web Admin Log
-    private List<AuditLogRecord> _events = new();
-    private List<AuditLogRecord> _filteredEvents = new();
+    private MudTable<AuditLogRecord> _webAdminTable = null!;
     private List<UserRecord> _users = new();
-    private bool _loading = true;
+    private bool _loading = false;
 
     // Web Admin Filters
     private AuditEventType? _filterEventType;
@@ -356,9 +365,8 @@
     private string? _filterTargetUserId;
 
     // Telegram Moderation Log
-    private List<TelegramGroupsAdmin.Telegram.Models.UserActionRecord> _userActions = new();
-    private List<TelegramGroupsAdmin.Telegram.Models.UserActionRecord> _filteredUserActions = new();
-    private bool _loadingModerationActions = true;
+    private MudTable<TelegramGroupsAdmin.Telegram.Models.UserActionRecord> _moderationTable = null!;
+    private bool _loadingModerationActions = false;
 
     // Moderation Filters
     private UserActionType? _filterActionType;
@@ -384,15 +392,18 @@
 
         Navigation.LocationChanged += OnLocationChanged;
 
-        // Load data for initial tab
-        if (_activeTabIndex == 0)
+        // Load users for filter dropdowns
+        try
         {
-            await LoadWebAdminDataAsync();
+            _users = await UserRepository.GetAllIncludingDeletedAsync();
+            _userEmailCache = _users.ToDictionary(u => u.Id, u => u.Email);
         }
-        else
+        catch (Exception ex)
         {
-            await LoadModerationDataAsync();
+            Snackbar.Add($"Error loading users: {ex.Message}", Severity.Error);
         }
+
+        // Tables will load data automatically via ServerData
     }
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
@@ -412,7 +423,7 @@
         }
     }
 
-    private async Task OnTabChanged(int index)
+    private void OnTabChanged(int index)
     {
         _activeTabIndex = index;
 
@@ -425,39 +436,29 @@
         };
 
         Navigation.NavigateTo($"/audit#{fragment}", false);
-
-        // Load data if not already loaded
-        if (index == 0 && _events.Count == 0)
-        {
-            await LoadWebAdminDataAsync();
-        }
-        else if (index == 1 && _userActions.Count == 0)
-        {
-            await LoadModerationDataAsync();
-        }
     }
 
-    private async Task LoadWebAdminDataAsync()
+    private async Task<TableData<AuditLogRecord>> LoadWebAdminServerDataAsync(TableState state, CancellationToken cancellationToken)
     {
         _loading = true;
         StateHasChanged();
 
         try
         {
-            // Load both audit events and users for filtering/display
-            // Use GetAllIncludingDeletedAsync to show emails for deleted users in audit log
-            _events = await AuditService.GetRecentEventsAsync(limit: 500);
-            _users = await UserRepository.GetAllIncludingDeletedAsync();
+            var (events, totalCount) = await AuditService.GetPagedEventsAsync(
+                skip: state.Page * state.PageSize,
+                take: state.PageSize,
+                eventTypeFilter: _filterEventType,
+                actorUserIdFilter: _filterActorUserId,
+                targetUserIdFilter: _filterTargetUserId,
+                ct: cancellationToken);
 
-            // Build email cache for fast lookups
-            _userEmailCache = _users.ToDictionary(u => u.Id, u => u.Email);
-
-            // Apply initial filters (no filters = show all)
-            ApplyFilters();
+            return new TableData<AuditLogRecord> { Items = events, TotalItems = totalCount };
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading audit log: {ex.Message}", Severity.Error);
+            return new TableData<AuditLogRecord> { Items = new List<AuditLogRecord>(), TotalItems = 0 };
         }
         finally
         {
@@ -466,44 +467,48 @@
         }
     }
 
-    private async Task LoadModerationDataAsync()
+    private async Task<TableData<TelegramGroupsAdmin.Telegram.Models.UserActionRecord>> LoadModerationServerDataAsync(TableState state, CancellationToken cancellationToken)
     {
         _loadingModerationActions = true;
         StateHasChanged();
 
         try
         {
-            // Load moderation actions and web admin users (if needed)
-            _userActions = await UserActionsRepository.GetRecentAsync(limit: 500);
-
-            // Build web admin user email cache (if not already loaded)
-            if (_users.Count == 0)
+            // Parse filter for user ID
+            long? userIdFilter = null;
+            if (!string.IsNullOrEmpty(_filterTelegramUserId) && long.TryParse(_filterTelegramUserId, out var parsedUserId))
             {
-                _users = await UserRepository.GetAllIncludingDeletedAsync();
-                _userEmailCache = _users.ToDictionary(u => u.Id, u => u.Email);
+                userIdFilter = parsedUserId;
             }
 
-            // Build Telegram users cache for display names
-            _telegramUsersCache = new Dictionary<long, TelegramGroupsAdmin.Telegram.Models.TelegramUser>();
+            var (actions, totalCount) = await UserActionsRepository.GetPagedActionsAsync(
+                skip: state.Page * state.PageSize,
+                take: state.PageSize,
+                actionTypeFilter: _filterActionType,
+                userIdFilter: userIdFilter,
+                issuedByFilter: _filterIssuedBy,
+                cancellationToken: cancellationToken);
 
-            // We need to fetch full TelegramUser objects, not just list items
-            // Get unique telegram user IDs from user actions
-            var uniqueUserIds = _userActions.Select(a => a.UserId).Distinct().ToList();
+            // Build Telegram users cache for this page
+            var uniqueUserIds = actions.Select(a => a.UserId).Distinct().ToList();
             foreach (var userId in uniqueUserIds)
             {
-                var user = await TelegramUserRepository.GetByTelegramIdAsync(userId);
-                if (user != null)
+                if (!_telegramUsersCache.ContainsKey(userId))
                 {
-                    _telegramUsersCache[userId] = user;
+                    var user = await TelegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
+                    if (user != null)
+                    {
+                        _telegramUsersCache[userId] = user;
+                    }
                 }
             }
 
-            // Apply initial filters (no filters = show all)
-            ApplyModerationFilters();
+            return new TableData<TelegramGroupsAdmin.Telegram.Models.UserActionRecord> { Items = actions, TotalItems = totalCount };
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading moderation log: {ex.Message}", Severity.Error);
+            return new TableData<TelegramGroupsAdmin.Telegram.Models.UserActionRecord> { Items = new List<TelegramGroupsAdmin.Telegram.Models.UserActionRecord>(), TotalItems = 0 };
         }
         finally
         {
@@ -517,53 +522,22 @@
         Navigation.LocationChanged -= OnLocationChanged;
     }
 
-    private void OnEventTypeFilterChanged(AuditEventType? value)
+    private async Task OnEventTypeFilterChanged(AuditEventType? value)
     {
         _filterEventType = value;
-        ApplyFilters();
+        await _webAdminTable.ReloadServerData();
     }
 
-    private void OnActorFilterChanged(string? value)
+    private async Task OnActorFilterChanged(string? value)
     {
         _filterActorUserId = value;
-        ApplyFilters();
+        await _webAdminTable.ReloadServerData();
     }
 
-    private void OnTargetFilterChanged(string? value)
+    private async Task OnTargetFilterChanged(string? value)
     {
         _filterTargetUserId = value;
-        ApplyFilters();
-    }
-
-    private void ApplyFilters()
-    {
-        var filtered = _events.AsEnumerable();
-
-        if (_filterEventType.HasValue)
-        {
-            filtered = filtered.Where(e => e.EventType == _filterEventType.Value);
-        }
-
-        if (!string.IsNullOrEmpty(_filterActorUserId))
-        {
-            if (_filterActorUserId == "SYSTEM")
-            {
-                filtered = filtered.Where(e => e.ActorUserId == null);
-            }
-            else
-            {
-                filtered = filtered.Where(e => e.ActorUserId == _filterActorUserId);
-            }
-        }
-
-        if (!string.IsNullOrEmpty(_filterTargetUserId))
-        {
-            filtered = filtered.Where(e => e.TargetUserId == _filterTargetUserId);
-        }
-
-        _filteredEvents = filtered.ToList();
-
-        StateHasChanged();
+        await _webAdminTable.ReloadServerData();
     }
 
     private string GetUserEmail(string userId)
@@ -647,48 +621,22 @@
     }
 
     // Moderation Log Filter Methods
-    private void OnActionTypeFilterChanged(UserActionType? value)
+    private async Task OnActionTypeFilterChanged(UserActionType? value)
     {
         _filterActionType = value;
-        ApplyModerationFilters();
+        await _moderationTable.ReloadServerData();
     }
 
-    private void OnTelegramUserIdFilterChanged(string? value)
+    private async Task OnTelegramUserIdFilterChanged(string? value)
     {
         _filterTelegramUserId = value;
-        ApplyModerationFilters();
+        await _moderationTable.ReloadServerData();
     }
 
-    private void OnIssuedByFilterChanged(string? value)
+    private async Task OnIssuedByFilterChanged(string? value)
     {
         _filterIssuedBy = value;
-        ApplyModerationFilters();
-    }
-
-    private void ApplyModerationFilters()
-    {
-        var filtered = _userActions.AsEnumerable();
-
-        if (_filterActionType.HasValue)
-        {
-            filtered = filtered.Where(a => a.ActionType == _filterActionType.Value);
-        }
-
-        if (!string.IsNullOrEmpty(_filterTelegramUserId))
-        {
-            if (long.TryParse(_filterTelegramUserId, out var userId))
-            {
-                filtered = filtered.Where(a => a.UserId == userId);
-            }
-        }
-
-        if (!string.IsNullOrEmpty(_filterIssuedBy))
-        {
-            filtered = filtered.Where(a => a.IssuedBy.DisplayName != null && a.IssuedBy.DisplayName.Contains(_filterIssuedBy, StringComparison.OrdinalIgnoreCase));
-        }
-
-        _filteredUserActions = filtered.ToList();
-        StateHasChanged();
+        await _moderationTable.ReloadServerData();
     }
 
     // Action Type Helper Methods

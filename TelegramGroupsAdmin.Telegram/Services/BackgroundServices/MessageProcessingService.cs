@@ -355,7 +355,7 @@ public partial class MessageProcessingService(
 
             // Check if chat icon is cached on disk
             var chatIconFileName = $"{Math.Abs(message.Chat.Id)}.jpg";
-            var chatIconCachedPath = Path.Combine(_historyOptions.ImageStoragePath, "chat_icons", chatIconFileName);
+            var chatIconCachedPath = Path.Combine(_historyOptions.ImageStoragePath, "media", "chat_icons", chatIconFileName);
             var chatIconPath = File.Exists(chatIconCachedPath) ? $"chat_icons/{chatIconFileName}" : null;
 
             // User photo will be fetched asynchronously after message save (non-blocking)
@@ -741,10 +741,11 @@ public partial class MessageProcessingService(
     {
         try
         {
-            // Create directory structure: {ImageStoragePath}/full/{chat_id}/ and thumbs/{chat_id}/
+            // Create directory structure: {ImageStoragePath}/media/full/{chat_id}/ and media/thumbs/{chat_id}/
             var basePath = _historyOptions.ImageStoragePath;
-            var fullDir = Path.Combine(basePath, "full", chatId.ToString());
-            var thumbDir = Path.Combine(basePath, "thumbs", chatId.ToString());
+            var mediaPath = Path.Combine(basePath, "media");
+            var fullDir = Path.Combine(mediaPath, "full", chatId.ToString());
+            var thumbDir = Path.Combine(mediaPath, "thumbs", chatId.ToString());
 
             Directory.CreateDirectory(fullDir);
             Directory.CreateDirectory(thumbDir);

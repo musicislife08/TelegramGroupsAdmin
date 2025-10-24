@@ -16,7 +16,7 @@
                     @Alert.RiskLevel.ToString()
                 </MudChip>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @FormatTimestamp(Alert.DetectedAt)
+                    <span class="local-timestamp" data-utc="@Alert.DetectedAt.ToString("o")">@Alert.DetectedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                 </MudText>
             </MudStack>
         </CardHeaderContent>
@@ -122,7 +122,7 @@
             @if (Alert.ReviewedAt.HasValue)
             {
                 <MudAlert Severity="Severity.Info" Dense="true">
-                    <b>Reviewed:</b> @Alert.Verdict by @(Alert.ReviewedByUserId ?? "Unknown") on @FormatTimestamp(Alert.ReviewedAt.Value)
+                    <b>Reviewed:</b> @Alert.Verdict by @(Alert.ReviewedByUserId ?? "Unknown") on <span class="local-timestamp" data-utc="@Alert.ReviewedAt.Value.ToString("o")">@Alert.ReviewedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                 </MudAlert>
             }
         </MudStack>
@@ -221,19 +221,6 @@
         // For now, assume photos are accessible via /api/photos/{filename}
         var fileName = Path.GetFileName(photoPath);
         return $"/api/photos/{fileName}";
-    }
-
-    private string FormatTimestamp(DateTimeOffset timestamp)
-    {
-        var now = DateTimeOffset.UtcNow;
-        var diff = now - timestamp;
-
-        if (diff.TotalMinutes < 1) return "Just now";
-        if (diff.TotalHours < 1) return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalDays < 1) return $"{(int)diff.TotalHours}h ago";
-        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
-
-        return timestamp.LocalDateTime.ToString("MMM dd, yyyy");
     }
 
     private async Task OnConfirmBan()

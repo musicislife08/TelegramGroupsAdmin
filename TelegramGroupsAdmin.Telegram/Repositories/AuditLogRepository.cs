@@ -96,4 +96,54 @@ public class AuditLogRepository : IAuditLogRepository
 
         return entities.Select(e => e.ToModel()).ToList();
     }
+
+    public async Task<(List<UiModels.AuditLogRecord> Events, int TotalCount)> GetPagedEventsAsync(
+        int skip,
+        int take,
+        DataModels.AuditEventType? eventTypeFilter = null,
+        string? actorUserIdFilter = null,
+        string? targetUserIdFilter = null,
+        CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        // Build query with filters
+        var query = context.AuditLogs.AsNoTracking();
+
+        if (eventTypeFilter.HasValue)
+        {
+            query = query.Where(al => al.EventType == eventTypeFilter.Value);
+        }
+
+        if (!string.IsNullOrEmpty(actorUserIdFilter))
+        {
+            if (actorUserIdFilter == "SYSTEM")
+            {
+                query = query.Where(al => al.ActorUserId == null);
+            }
+            else
+            {
+                query = query.Where(al => al.ActorUserId == actorUserIdFilter);
+            }
+        }
+
+        if (!string.IsNullOrEmpty(targetUserIdFilter))
+        {
+            query = query.Where(al => al.TargetUserId == targetUserIdFilter);
+        }
+
+        // Get total count for pagination
+        var totalCount = await query.CountAsync(ct);
+
+        // Get page of results
+        var entities = await query
+            .OrderByDescending(al => al.Timestamp)
+            .Skip(skip)
+            .Take(take)
+            .ToListAsync(ct);
+
+        var events = entities.Select(e => e.ToModel()).ToList();
+
+        return (events, totalCount);
+    }
 }

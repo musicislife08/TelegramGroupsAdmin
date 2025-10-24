@@ -13,7 +13,7 @@
                     @Report.Status.ToString()
                 </MudChip>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @FormatTimestamp(Report.ReportedAt)
+                    <span class="local-timestamp" data-utc="@Report.ReportedAt.ToString("o")">@Report.ReportedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                 </MudText>
             </MudStack>
         </CardHeaderContent>
@@ -43,7 +43,7 @@
                 @if (_message.DeletedAt.HasValue)
                 {
                     <MudChip T="string" Size="Size.Small" Color="Color.Error">
-                        Deleted @FormatTimestamp(_message.DeletedAt.Value)
+                        Deleted <span class="local-timestamp" data-utc="@_message.DeletedAt.Value.ToString("o")">@_message.DeletedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                     </MudChip>
                 }
 
@@ -150,19 +150,6 @@
             DataModels.ReportStatus.Dismissed => Color.Default,
             _ => Color.Default
         };
-    }
-
-    private string FormatTimestamp(DateTimeOffset timestamp)
-    {
-        var now = DateTimeOffset.UtcNow;
-        var diff = now - timestamp;
-
-        if (diff.TotalMinutes < 1) return "Just now";
-        if (diff.TotalHours < 1) return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalDays < 1) return $"{(int)diff.TotalHours}h ago";
-        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
-
-        return timestamp.LocalDateTime.ToString("MMM dd, yyyy");
     }
 
     private string GetMessagesLink()

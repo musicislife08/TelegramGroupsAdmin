@@ -37,4 +37,15 @@ public interface IAuditLogRepository
     /// Get audit events by event type
     /// </summary>
     Task<List<UiModels.AuditLogRecord>> GetEventsByTypeAsync(AuditEventType eventType, int limit = 100, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get paginated audit events with filtering
+    /// </summary>
+    Task<(List<UiModels.AuditLogRecord> Events, int TotalCount)> GetPagedEventsAsync(
+        int skip,
+        int take,
+        AuditEventType? eventTypeFilter = null,
+        string? actorUserIdFilter = null,
+        string? targetUserIdFilter = null,
+        CancellationToken ct = default);
 }
