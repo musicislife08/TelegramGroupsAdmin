@@ -82,6 +82,20 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
             ? new BackgroundJobsConfig()
             : JsonSerializer.Deserialize<BackgroundJobsConfig>(configRecord.BackgroundJobsConfig, _jsonOptions) ?? new BackgroundJobsConfig();
 
+        // Check if schedule changed (interval or cron) - if so, clear NextRunAt to reschedule immediately
+        if (jobsConfig.Jobs.TryGetValue(jobName, out var existingJob))
+        {
+            var scheduleChanged = existingJob.ScheduleType != config.ScheduleType ||
+                                  existingJob.IntervalDuration != config.IntervalDuration ||
+                                  existingJob.CronExpression != config.CronExpression;
+
+            if (scheduleChanged)
+            {
+                config.NextRunAt = null; // Clear scheduled time - will be recalculated on next scheduler run
+                _logger.LogInformation("Schedule changed for {JobName}, clearing NextRunAt for immediate reschedule", jobName);
+            }
+        }
+
         // Update the specific job
         jobsConfig.Jobs[jobName] = config;
 
