@@ -331,6 +331,32 @@ git push --force --tags origin
 
 ---
 
+### FEATURE-4.23: Cross-Chat Ban Message Cleanup
+
+**Status:** BACKLOG 📋
+**Severity:** Feature | **Impact:** Complete spam removal, user experience
+
+**Current Behavior:**
+- Cross-chat ban system bans user from all managed chats
+- Existing messages from banned user remain in all chats
+- Spam messages stay visible after ban
+
+**Enhancement:**
+- When high-confidence spam triggers cross-chat ban, delete ALL existing messages from that user across all chats
+- Use message history table to find all messages by telegram_user_id
+- Delete messages via Telegram Bot API (if within 48hr window) or mark as deleted in DB
+- Audit log all deletions
+
+**Implementation Notes:**
+- Only trigger on high-confidence spam (>90% confidence or OpenAI veto)
+- Query messages table: `WHERE telegram_user_id = ? AND deleted_at IS NULL`
+- Batch delete via TickerQ job (avoid blocking moderation action)
+- Handle Telegram API 48-hour deletion window (older messages can't be deleted via API)
+
+**Priority:** MEDIUM - Nice to have before launch
+
+---
+
 ### QUALITY-1: Nullable Reference Type Hardening
 
 **Status:** BACKLOG 📋
