@@ -1,4 +1,5 @@
 @using Microsoft.AspNetCore.Components
+@using TelegramGroupsAdmin.Core.Models
 @inject NavigationManager Navigation
 
 <MudDialog>
@@ -12,14 +13,14 @@
                       Variant="Variant.Outlined"
                       Class="mb-4"
                       HelperText="Access level for the new user">
-                <MudSelectItem Value="0">Admin - Chat-scoped moderation</MudSelectItem>
-                @if (MaxPermissionLevel >= 1)
+                <MudSelectItem Value="PermissionLevel.Admin">Admin - Chat-scoped moderation</MudSelectItem>
+                @if (MaxPermissionLevel >= PermissionLevel.GlobalAdmin)
                 {
-                    <MudSelectItem Value="1">GlobalAdmin - Global moderation</MudSelectItem>
+                    <MudSelectItem Value="PermissionLevel.GlobalAdmin">GlobalAdmin - Global moderation</MudSelectItem>
                 }
-                @if (MaxPermissionLevel >= 2)
+                @if (MaxPermissionLevel >= PermissionLevel.Owner)
                 {
-                    <MudSelectItem Value="2">Owner - Full system access</MudSelectItem>
+                    <MudSelectItem Value="PermissionLevel.Owner">Owner - Full system access</MudSelectItem>
                 }
             </MudSelect>
 
@@ -75,10 +76,10 @@
     public DateTimeOffset? ExpiresAt { get; set; }
 
     [Parameter]
-    public int MaxPermissionLevel { get; set; } = 2; // Default to Owner if not specified
+    public PermissionLevel MaxPermissionLevel { get; set; } = PermissionLevel.Owner; // Default to Owner if not specified
 
     private int _validDays = 7;
-    private int _permissionLevel = 0; // Default to Admin (chat-scoped)
+    private PermissionLevel _permissionLevel = PermissionLevel.Admin; // Default to Admin (chat-scoped)
     private string? _inviteLink;
     private string? _expiresAt;
 
@@ -93,10 +94,10 @@
             }
         }
 
-        // Ensure permission level defaults to 0 and doesn't exceed max
+        // Ensure permission level defaults to Admin and doesn't exceed max
         if (_permissionLevel > MaxPermissionLevel)
         {
-            _permissionLevel = 0;
+            _permissionLevel = PermissionLevel.Admin;
         }
     }
 
@@ -108,9 +109,9 @@
     private void Submit()
     {
         // Validate permission level doesn't exceed max (defense in depth)
-        var safePermissionLevel = Math.Min(_permissionLevel, MaxPermissionLevel);
+        var safePermissionLevel = _permissionLevel > MaxPermissionLevel ? PermissionLevel.Admin : _permissionLevel;
 
-        // Return both validDays and permissionLevel
+        // Return both validDays and permissionLevel (as enum)
         MudDialog?.Close(DialogResult.Ok(new { ValidDays = _validDays, PermissionLevel = safePermissionLevel }));
     }
 

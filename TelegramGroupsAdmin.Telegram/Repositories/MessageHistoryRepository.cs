@@ -933,4 +933,120 @@ public class MessageHistoryRepository : IMessageHistoryRepository
 
         await context.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<UiModels.MessageTrendsData> GetMessageTrendsAsync(
+        List<long> chatIds,
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Base query filtered by date and chats
+        var baseQuery = context.Messages
+            .Where(m => m.Timestamp >= startDate && m.Timestamp <= endDate)
+            .Where(m => chatIds.Count == 0 || chatIds.Contains(m.ChatId));
+
+        // Total messages
+        var totalMessages = await baseQuery.CountAsync(cancellationToken);
+
+        // Unique users
+        var uniqueUsers = await baseQuery
+            .Select(m => m.UserId)
+            .Distinct()
+            .CountAsync(cancellationToken);
+
+        // Daily average
+        var daysDiff = (endDate - startDate).TotalDays;
+        var dailyAverage = daysDiff > 0 ? totalMessages / daysDiff : 0;
+
+        // Spam percentage (messages with spam detection results)
+        var spamCount = await (
+            from m in baseQuery
+            join dr in context.DetectionResults on m.MessageId equals dr.MessageId
+            where dr.IsSpam
+            select m.MessageId
+        ).Distinct().CountAsync(cancellationToken);
+
+        var spamPercentage = totalMessages > 0 ? (spamCount / (double)totalMessages * 100.0) : 0;
+
+        // Daily volume
+        var dailyVolume = await baseQuery
+            .GroupBy(m => new { Date = DateOnly.FromDateTime(m.Timestamp.Date) })
+            .Select(g => new UiModels.DailyVolumeData
+            {
+                Date = g.Key.Date,
+                Count = g.Count()
+            })
+            .OrderBy(d => d.Date)
+            .ToListAsync(cancellationToken);
+
+        // Daily spam vs ham
+        var dailySpam = await (
+            from m in baseQuery
+            join dr in context.DetectionResults on m.MessageId equals dr.MessageId
+            where dr.IsSpam
+            group m by new { Date = DateOnly.FromDateTime(m.Timestamp.Date) } into g
+            select new UiModels.DailyVolumeData
+            {
+                Date = g.Key.Date,
+                Count = g.Select(x => x.MessageId).Distinct().Count()
+            })
+            .OrderBy(d => d.Date)
+            .ToListAsync(cancellationToken);
+
+        var dailyHam = await (
+            from m in baseQuery
+            where !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.IsSpam)
+            group m by new { Date = DateOnly.FromDateTime(m.Timestamp.Date) } into g
+            select new UiModels.DailyVolumeData
+            {
+                Date = g.Key.Date,
+                Count = g.Count()
+            })
+            .OrderBy(d => d.Date)
+            .ToListAsync(cancellationToken);
+
+        // Per-chat breakdown (only if no specific chats selected)
+        var perChatVolume = await (
+            from m in baseQuery
+            join c in context.ManagedChats on m.ChatId equals c.ChatId
+            group m by new { c.ChatId, c.ChatName } into g
+            select new UiModels.ChatVolumeData
+            {
+                ChatName = g.Key.ChatName ?? g.Key.ChatId.ToString(),
+                Count = g.Count()
+            })
+            .OrderByDescending(c => c.Count)
+            .ToListAsync(cancellationToken);
+
+        return new UiModels.MessageTrendsData
+        {
+            TotalMessages = totalMessages,
+            DailyAverage = dailyAverage,
+            UniqueUsers = uniqueUsers,
+            SpamPercentage = spamPercentage,
+            DailyVolume = dailyVolume,
+            DailySpam = dailySpam,
+            DailyHam = dailyHam,
+            PerChatVolume = perChatVolume
+        };
+    }
+
+    public async Task<List<UiModels.UserMessageInfo>> GetUserMessagesAsync(
+        long telegramUserId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        return await context.Messages
+            .Where(m => m.UserId == telegramUserId)
+            .Where(m => m.DeletedAt == null) // Only non-deleted messages
+            .Select(m => new UiModels.UserMessageInfo
+            {
+                MessageId = m.MessageId,
+                ChatId = m.ChatId
+            })
+            .ToListAsync(cancellationToken);
+    }
 }

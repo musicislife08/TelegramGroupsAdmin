@@ -1,0 +1,292 @@
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@using ApexCharts
+@inject IMessageHistoryRepository MessageHistoryRepository
+@inject ISnackbar Snackbar
+
+<MudStack Spacing="4">
+    @* Date Range Selector *@
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h6">Message Trends</MudText>
+            <MudStack Row="true" Spacing="2">
+                <MudButtonGroup Variant="MudBlazor.Variant.Outlined" Color="MudBlazor.Color.Primary">
+                    <MudButton OnClick="() => LoadLast7Days()">Last 7 Days</MudButton>
+                    <MudButton OnClick="() => LoadLast30Days()">Last 30 Days</MudButton>
+                    <MudButton OnClick="() => LoadAllTime()">All Time</MudButton>
+                </MudButtonGroup>
+                <MudButton Variant="MudBlazor.Variant.Filled"
+                          Color="MudBlazor.Color.Primary"
+                          StartIcon="@Icons.Material.Filled.Refresh"
+                          OnClick="LoadData"
+                          Disabled="@_loading">
+                    Refresh
+                </MudButton>
+            </MudStack>
+        </MudStack>
+
+        @if (_startDate.HasValue && _endDate.HasValue)
+        {
+            <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary" Class="mt-2">
+                Showing data from @_startDate.Value.ToString("MMM dd, yyyy") to @_endDate.Value.ToString("MMM dd, yyyy")
+            </MudText>
+        }
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="MudBlazor.Color.Primary" Indeterminate="true" />
+    }
+
+    @* Key Metrics Cards *@
+    @if (_dataLoaded && _trendsData != null)
+    {
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudCard>
+                    <MudCardContent>
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Message" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Primary" />
+                            <MudText Typo="Typo.h3">@_trendsData.TotalMessages</MudText>
+                            <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Total Messages</MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudCard>
+                    <MudCardContent>
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Success" />
+                            <MudText Typo="Typo.h3">@_trendsData.DailyAverage.ToString("F0")</MudText>
+                            <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Daily Average</MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudCard>
+                    <MudCardContent>
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.People" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Info" />
+                            <MudText Typo="Typo.h3">@_trendsData.UniqueUsers</MudText>
+                            <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Active Users</MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudCard>
+                    <MudCardContent>
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Shield" Size="MudBlazor.Size.Large" Color="@(_trendsData.SpamPercentage > 5 ? MudBlazor.Color.Error : MudBlazor.Color.Success)" />
+                            <MudText Typo="Typo.h3">@_trendsData.SpamPercentage.ToString("F1")%</MudText>
+                            <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Spam Rate</MudText>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        @* Daily Volume Chart *@
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-4">Daily Message Volume</MudText>
+            @if (_dailyVolumeChart != null)
+            {
+                <ApexChart TItem="DailyVolumeData"
+                          Title=""
+                          Options="_dailyVolumeChart"
+                          Height="250">
+                    <ApexPointSeries TItem="DailyVolumeData"
+                                    Items="_trendsData.DailyVolume"
+                                    Name="Messages"
+                                    SeriesType="SeriesType.Line"
+                                    XValue="@(e => e.Date.ToString("MMM dd"))"
+                                    YAggregate="@(e => e.Sum(x => x.Count))"
+                                    OrderBy="e => e.X" />
+                </ApexChart>
+            }
+        </MudPaper>
+
+        @* Spam vs Ham Trend *@
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-4">Spam vs Clean Messages</MudText>
+            @if (_spamHamChart != null)
+            {
+                <ApexChart TItem="DailyVolumeData"
+                          Title=""
+                          Options="_spamHamChart"
+                          Height="250">
+                    <ApexPointSeries TItem="DailyVolumeData"
+                                    Items="_trendsData.DailySpam"
+                                    Name="Spam"
+                                    SeriesType="SeriesType.Area"
+                                    XValue="@(e => e.Date.ToString("MMM dd"))"
+                                    YAggregate="@(e => e.Sum(x => x.Count))"
+                                    OrderBy="e => e.X" />
+                    <ApexPointSeries TItem="DailyVolumeData"
+                                    Items="_trendsData.DailyHam"
+                                    Name="Clean"
+                                    SeriesType="SeriesType.Area"
+                                    XValue="@(e => e.Date.ToString("MMM dd"))"
+                                    YAggregate="@(e => e.Sum(x => x.Count))"
+                                    OrderBy="e => e.X" />
+                </ApexChart>
+            }
+        </MudPaper>
+
+        @* Per-Chat Breakdown (only if multiple chats) *@
+        @if (_trendsData.PerChatVolume.Count > 1)
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-4">Messages by Chat</MudText>
+                @if (_perChatChart != null)
+                {
+                    <ApexChart TItem="ChatVolumeData"
+                              Title=""
+                              Options="_perChatChart"
+                              Height="200">
+                        <ApexPointSeries TItem="ChatVolumeData"
+                                        Items="_trendsData.PerChatVolume"
+                                        Name="Messages"
+                                        SeriesType="SeriesType.Bar"
+                                        XValue="@(e => e.ChatName)"
+                                        YAggregate="@(e => e.Sum(x => x.Count))"
+                                        OrderByDescending="e => e.Y" />
+                    </ApexChart>
+                }
+            </MudPaper>
+        }
+    }
+    else if (!_loading && !_dataLoaded)
+    {
+        <MudAlert Severity="Severity.Info">
+            No message data available for the selected time range.
+        </MudAlert>
+    }
+</MudStack>
+
+@code {
+    [Parameter] public List<long> SelectedChatIds { get; set; } = new();
+
+    private bool _loading = true;
+    private bool _dataLoaded = false;
+    private DateTimeOffset? _startDate;
+    private DateTimeOffset? _endDate;
+
+    private MessageTrendsData? _trendsData;
+    private ApexChartOptions<DailyVolumeData>? _dailyVolumeChart;
+    private ApexChartOptions<DailyVolumeData>? _spamHamChart;
+    private ApexChartOptions<ChatVolumeData>? _perChatChart;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLast30Days();
+    }
+
+    private async Task LoadLast7Days()
+    {
+        _endDate = DateTimeOffset.UtcNow;
+        _startDate = _endDate.Value.AddDays(-7);
+        await LoadData();
+    }
+
+    private async Task LoadLast30Days()
+    {
+        _endDate = DateTimeOffset.UtcNow;
+        _startDate = _endDate.Value.AddDays(-30);
+        await LoadData();
+    }
+
+    private async Task LoadAllTime()
+    {
+        _endDate = DateTimeOffset.UtcNow;
+        _startDate = DateTimeOffset.MinValue;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        if (!_startDate.HasValue || !_endDate.HasValue)
+            return;
+
+        _loading = true;
+        try
+        {
+            _trendsData = await MessageHistoryRepository.GetMessageTrendsAsync(
+                SelectedChatIds,
+                _startDate.Value,
+                _endDate.Value,
+                CancellationToken.None);
+
+            PrepareCharts();
+            _dataLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load trends data: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void PrepareCharts()
+    {
+        if (_trendsData == null) return;
+
+        // Daily volume chart
+        _dailyVolumeChart = new ApexChartOptions<DailyVolumeData>
+        {
+            Chart = new Chart
+            {
+                Toolbar = new Toolbar { Show = false },
+                Zoom = new Zoom { Enabled = false }
+            },
+            Stroke = new Stroke { Curve = Curve.Smooth, Width = 3 },
+            Colors = new List<string> { "#2196F3" },
+            Xaxis = new XAxis { Type = XAxisType.Category },
+            Yaxis = new List<YAxis> { new YAxis { Title = new AxisTitle { Text = "Messages" } } }
+        };
+
+        // Spam vs ham chart
+        _spamHamChart = new ApexChartOptions<DailyVolumeData>
+        {
+            Chart = new Chart
+            {
+                Toolbar = new Toolbar { Show = false },
+                Zoom = new Zoom { Enabled = false },
+                Stacked = false
+            },
+            Stroke = new Stroke { Curve = Curve.Smooth, Width = 2 },
+            Colors = new List<string> { "#F44336", "#4CAF50" },
+            Xaxis = new XAxis { Type = XAxisType.Category },
+            Yaxis = new List<YAxis> { new YAxis { Title = new AxisTitle { Text = "Messages" } } },
+            Fill = new Fill { Type = new List<FillType> { FillType.Gradient } }
+        };
+
+        // Per-chat chart
+        _perChatChart = new ApexChartOptions<ChatVolumeData>
+        {
+            Chart = new Chart
+            {
+                Toolbar = new Toolbar { Show = false }
+            },
+            Colors = new List<string> { "#2196F3" },
+            PlotOptions = new PlotOptions
+            {
+                Bar = new PlotOptionsBar
+                {
+                    Horizontal = true
+                }
+            },
+            Xaxis = new XAxis { Title = new AxisTitle { Text = "Messages" } },
+            Yaxis = new List<YAxis> { new YAxis { Title = new AxisTitle { Text = "Chat" } } }
+        };
+    }
+
+}

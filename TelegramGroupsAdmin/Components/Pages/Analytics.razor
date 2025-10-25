@@ -3,7 +3,13 @@
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Components.Shared.SpamManagement
 @using TelegramGroupsAdmin.Components.Shared.Analytics
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Services
 @inject NavigationManager Navigation
+@inject IManagedChatsRepository ChatsRepository
+@inject BlazorAuthHelper AuthHelper
 @implements IDisposable
 
 <PageTitle>Analytics</PageTitle>
@@ -12,31 +18,61 @@
     <MudText Typo="Typo.h4" GutterBottom="true">Analytics</MudText>
     <MudText Typo="Typo.body1" Class="mb-4">Deep-dive statistics and trends across all managed chats</MudText>
 
+    @* Chat Filter Header *@
+    @if (_accessibleChats.Any())
+    {
+        <MudPaper Class="pa-4 mb-4" Elevation="1">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Filter by Chat:</MudText>
+            <MudChipSet SelectedChips="_selectedChatChips"
+                        SelectedChipsChanged="OnChipSelectionChanged"
+                        MultiSelection="true"
+                        Filter="true"
+                        T="long">
+                <MudChip T="long" Text="All" Color="Color.Primary" Default="true" Value="@(-1L)">All Chats</MudChip>
+                @foreach (var chat in _accessibleChats)
+                {
+                    <MudChip T="long" Text="@chat.ChatName" Color="Color.Default" Value="@chat.ChatId">@chat.ChatName</MudChip>
+                }
+            </MudChipSet>
+        </MudPaper>
+    }
+
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnTabChanged">
         <MudTabPanel Text="Spam Analytics" Icon="@Icons.Material.Filled.Shield">
-            <SpamAnalytics />
+            <SpamAnalytics SelectedChatIds="@GetSelectedChatIds()" />
         </MudTabPanel>
 
         <MudTabPanel Text="Message Trends" Icon="@Icons.Material.Filled.TrendingUp">
-            <MudPaper Class="pa-4" Elevation="0">
-                <MudText Typo="Typo.h6" GutterBottom="true">Message Volume Trends</MudText>
-                <MudText Typo="Typo.body2" Class="mb-4">
-                    Coming soon: Message volume trends over time, activity patterns, user engagement metrics
-                </MudText>
-            </MudPaper>
+            <MessageTrends SelectedChatIds="@GetSelectedChatIds()" />
         </MudTabPanel>
 
         <MudTabPanel Text="Performance" Icon="@Icons.Material.Filled.Speed">
-            <PerformanceMetrics />
+            <PerformanceMetrics SelectedChatIds="@GetSelectedChatIds()" />
         </MudTabPanel>
     </MudTabs>
 </MudContainer>
 
 @code {
     private int _activeTabIndex = 0;
+    private List<ManagedChatRecord> _accessibleChats = new();
+    private MudChip<long>[] _selectedChatChips = Array.Empty<MudChip<long>>();
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        // Get user permission level and ID
+        var userId = await AuthHelper.GetCurrentUserIdAsync();
+        var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
+
+        // Load accessible chats based on permissions
+        if (!string.IsNullOrEmpty(userId))
+        {
+            _accessibleChats = await ChatsRepository.GetUserAccessibleChatsAsync(
+                userId,
+                permissionLevel,
+                CancellationToken.None);
+        }
+
+        // Parse URL fragment for tab selection
         var fragment = new Uri(Navigation.Uri).Fragment.TrimStart('#');
         _activeTabIndex = fragment switch
         {
@@ -47,6 +83,21 @@
         };
 
         Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private List<long> GetSelectedChatIds()
+    {
+        // If "All" chip is selected (Value = -1), return empty list (all accessible chats)
+        if (_selectedChatChips.Any(c => c.Value is long val && val == -1L))
+        {
+            return new List<long>();
+        }
+
+        // Otherwise return selected chat IDs
+        return _selectedChatChips
+            .Where(c => c.Value is long)
+            .Select(c => (long)c.Value!)
+            .ToList();
     }
 
     private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
@@ -80,6 +131,13 @@
         };
 
         Navigation.NavigateTo($"/analytics#{fragment}", false);
+    }
+
+    private void OnChipSelectionChanged(MudChip<long>[] selectedChips)
+    {
+        _selectedChatChips = selectedChips;
+        // Trigger re-render so child components receive updated chat IDs
+        StateHasChanged();
     }
 
     public void Dispose()

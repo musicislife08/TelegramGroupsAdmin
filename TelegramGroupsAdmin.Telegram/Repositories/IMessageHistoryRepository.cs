@@ -40,4 +40,16 @@ public interface IMessageHistoryRepository
     Task<UiModels.MessageTranslation?> GetTranslationForMessageAsync(long messageId, CancellationToken cancellationToken = default);
     Task<UiModels.MessageTranslation?> GetTranslationForEditAsync(long editId, CancellationToken cancellationToken = default);
     Task InsertTranslationAsync(UiModels.MessageTranslation translation, CancellationToken cancellationToken = default);
+
+    // Analytics methods (UX-2)
+    Task<UiModels.MessageTrendsData> GetMessageTrendsAsync(
+        List<long> chatIds, // Empty = all accessible chats (filtered by caller)
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        CancellationToken cancellationToken = default);
+
+    // Cross-chat ban cleanup (FEATURE-4.23)
+    Task<List<UiModels.UserMessageInfo>> GetUserMessagesAsync(
+        long telegramUserId,
+        CancellationToken cancellationToken = default);
 }

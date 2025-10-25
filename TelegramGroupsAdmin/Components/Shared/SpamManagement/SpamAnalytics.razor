@@ -200,6 +200,8 @@
 </MudContainer>
 
 @code {
+    [Parameter] public List<long> SelectedChatIds { get; set; } = new();
+
     private bool _loading = true;
 
     // Overview statistics

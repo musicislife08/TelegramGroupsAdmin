@@ -73,49 +73,49 @@ public class BlazorAuthHelper
 
     /// <summary>
     /// Get the current authenticated user's permission level from claims.
-    /// Returns 0 if not authenticated or PermissionLevel claim is missing/invalid.
+    /// Returns PermissionLevel.Admin (0) if not authenticated or PermissionLevel claim is missing/invalid.
     /// </summary>
-    public async Task<int> GetCurrentPermissionLevelAsync()
+    public async Task<PermissionLevel> GetCurrentPermissionLevelAsync()
     {
         var authState = await _authStateProvider.GetAuthenticationStateAsync();
         var permissionClaim = authState.User.FindFirst(CustomClaimTypes.PermissionLevel);
 
         if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
         {
-            return level;
+            return (PermissionLevel)level;
         }
 
-        return 0;
+        return PermissionLevel.Admin; // Default to lowest permission level
     }
 
     /// <summary>
     /// Check if current user can edit infrastructure settings (backups, API keys, logging, bot config).
-    /// Only Owner (2) can edit infrastructure.
+    /// Only Owner can edit infrastructure.
     /// </summary>
     public async Task<bool> CanEditInfrastructureAsync()
     {
         var permissionLevel = await GetCurrentPermissionLevelAsync();
-        return permissionLevel >= 2; // Owner only
+        return permissionLevel >= PermissionLevel.Owner;
     }
 
     /// <summary>
     /// Check if current user can edit content settings (spam detection, URL filters, training data).
-    /// GlobalAdmin (1) and Owner (2) can edit content.
+    /// GlobalAdmin and Owner can edit content.
     /// </summary>
     public async Task<bool> CanEditContentSettingsAsync()
     {
         var permissionLevel = await GetCurrentPermissionLevelAsync();
-        return permissionLevel >= 1; // GlobalAdmin or Owner
+        return permissionLevel >= PermissionLevel.GlobalAdmin;
     }
 
     /// <summary>
     /// Check if current user can manage admin accounts.
-    /// Only Owner (2) can manage admin accounts.
+    /// Only Owner can manage admin accounts.
     /// </summary>
     public async Task<bool> CanManageAdminAccountsAsync()
     {
         var permissionLevel = await GetCurrentPermissionLevelAsync();
-        return permissionLevel >= 2; // Owner only
+        return permissionLevel >= PermissionLevel.Owner;
     }
 
     /// <summary>
@@ -124,7 +124,7 @@ public class BlazorAuthHelper
     public async Task<bool> IsOwnerAsync()
     {
         var permissionLevel = await GetCurrentPermissionLevelAsync();
-        return permissionLevel >= 2;
+        return permissionLevel >= PermissionLevel.Owner;
     }
 
     /// <summary>
@@ -133,6 +133,6 @@ public class BlazorAuthHelper
     public async Task<bool> IsGlobalAdminOrHigherAsync()
     {
         var permissionLevel = await GetCurrentPermissionLevelAsync();
-        return permissionLevel >= 1;
+        return permissionLevel >= PermissionLevel.GlobalAdmin;
     }
 }

@@ -13,6 +13,34 @@
         body, .mud-typography {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
+
+        /* ApexCharts dark theme fixes for axis labels and text */
+        .apexcharts-text,
+        .apexcharts-xaxis-label,
+        .apexcharts-yaxis-label,
+        .apexcharts-yaxis-title-text,
+        .apexcharts-xaxis-title-text {
+            fill: rgba(255, 255, 255, 0.87) !important;
+        }
+
+        .apexcharts-gridline {
+            stroke: rgba(255, 255, 255, 0.12) !important;
+        }
+
+        .apexcharts-legend-text {
+            color: rgba(255, 255, 255, 0.87) !important;
+        }
+
+        .apexcharts-tooltip {
+            background: #424242 !important;
+            color: rgba(255, 255, 255, 0.87) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        }
+
+        .apexcharts-tooltip-title {
+            background: #303030 !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+        }
     </style>
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="TelegramGroupsAdmin.styles.css" />

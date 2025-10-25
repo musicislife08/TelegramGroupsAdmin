@@ -9,9 +9,10 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using DataModels = TelegramGroupsAdmin.Data.Models;
-
-
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TickerQ.Utilities;
+using TelegramGroupsAdmin.Telegram.Abstractions;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -27,6 +28,11 @@ public class SpamActionService(
     private const int AutoBanNetConfidenceThreshold = 50;
     private const int BorderlineNetConfidenceThreshold = 0;
     private const int OpenAIConfidentThreshold = 85;
+
+    // FEATURE-4.23: Track recent cleanup job schedules to prevent duplicate jobs for same user
+    // Key: TelegramUserId, Value: Timestamp when cleanup job was last scheduled
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, DateTimeOffset> _recentCleanupJobs = new();
+    private static readonly TimeSpan CleanupJobDeduplicationWindow = TimeSpan.FromSeconds(30);
     /// <summary>
     /// Determine if detection result should be used for training
     /// High-quality samples only: Confident OpenAI results (85%+) or manual admin decisions
@@ -375,6 +381,71 @@ public class SpamActionService(
                 successCount,
                 activeChats.Count,
                 failCount);
+
+            // FEATURE-4.23: Schedule cross-chat message cleanup job
+            // Note: BanChatMember with revokeMessages=true only deletes messages in the chat where the ban occurred
+            // This job deletes all messages from the banned user across ALL managed chats
+            // Race condition mitigation: Spambots often post same message in multiple chats rapidly
+            // Use deduplication to ensure only one cleanup job runs per user within 30-second window
+            try
+            {
+                var now = DateTimeOffset.UtcNow;
+                var userId = message.From.Id;
+
+                // Check if we already scheduled a cleanup job for this user recently
+                if (_recentCleanupJobs.TryGetValue(userId, out var lastScheduled))
+                {
+                    var timeSinceLastSchedule = now - lastScheduled;
+                    if (timeSinceLastSchedule < CleanupJobDeduplicationWindow)
+                    {
+                        logger.LogDebug(
+                            "Skipping duplicate cleanup job for user {UserId} (already scheduled {Seconds}s ago)",
+                            userId,
+                            timeSinceLastSchedule.TotalSeconds);
+                        // Don't schedule another job - the existing one will handle all messages
+                        goto skipCleanupJob;
+                    }
+                }
+
+                var deleteMessagesPayload = new DeleteUserMessagesPayload
+                {
+                    TelegramUserId = userId
+                };
+
+                await TickerQUtilities.ScheduleJobAsync(
+                    serviceProvider,
+                    logger,
+                    "DeleteUserMessages",
+                    deleteMessagesPayload,
+                    delaySeconds: 15, // 15-second delay allows spambot to post across all chats before cleanup
+                    retries: 0); // Best-effort, don't retry (48-hour window limitation)
+
+                // Track this scheduling to prevent duplicates
+                _recentCleanupJobs[userId] = now;
+
+                // Cleanup old entries to prevent memory leak (remove entries older than window)
+                var expiredEntries = _recentCleanupJobs
+                    .Where(kvp => now - kvp.Value > CleanupJobDeduplicationWindow)
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+
+                foreach (var expiredUserId in expiredEntries)
+                {
+                    _recentCleanupJobs.TryRemove(expiredUserId, out _);
+                }
+
+                logger.LogInformation(
+                    "Scheduled cross-chat message cleanup job for user {UserId} (will execute in 15s)",
+                    userId);
+
+                skipCleanupJob: ; // Label for early exit from deduplication check
+            }
+            catch (Exception jobEx)
+            {
+                logger.LogWarning(jobEx,
+                    "Failed to schedule message cleanup job for user {UserId} (ban still successful)",
+                    message.From.Id);
+            }
 
             // Notify chat admins about the ban (Phase 5.1)
             SendNotificationAsync(message.Chat.Id, NotificationEventType.UserBanned,

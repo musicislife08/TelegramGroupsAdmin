@@ -13,7 +13,7 @@
 <div>
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
         <MudText Typo="Typo.h4">User Management</MudText>
-        @if (_currentUserPermissionLevel >= 1)
+        @if (_currentUserPermissionLevel >= PermissionLevel.GlobalAdmin)
         {
             <MudStack Row="true" Spacing="2">
                 <MudButton Variant="Variant.Outlined"
@@ -75,8 +75,8 @@
                     </MudStack>
                 </MudTd>
                 <MudTd DataLabel="Permission Level">
-                    <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor(context.PermissionLevelInt)">
-                        @GetPermissionName(context.PermissionLevelInt)
+                    <MudChip T="string" Size="Size.Small" Color="@GetPermissionColor((PermissionLevel)context.PermissionLevelInt)">
+                        @GetPermissionName((PermissionLevel)context.PermissionLevelInt)
                     </MudChip>
                 </MudTd>
                 <MudTd DataLabel="Status">
@@ -97,7 +97,7 @@
                 <MudTd DataLabel="Created">@FormatDate(context.CreatedAt)</MudTd>
                 <MudTd DataLabel="Last Login">@FormatDate(context.LastLoginAt)</MudTd>
                 <MudTd DataLabel="Actions">
-                    @if (_currentUserPermissionLevel >= 2 && context.Id != _currentUserId)
+                    @if (_currentUserPermissionLevel >= PermissionLevel.Owner && context.Id != _currentUserId)
                     {
                         <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomRight">
                             <MudMenuItem Icon="@Icons.Material.Filled.Edit"
@@ -176,7 +176,7 @@
     private bool _loading = true;
     private IEnumerable<UserStatus> _selectedStatuses = new[] { UserStatus.Active, UserStatus.Pending, UserStatus.Disabled };
     private string? _currentUserId;
-    private int _currentUserPermissionLevel = 0;
+    private PermissionLevel _currentUserPermissionLevel = PermissionLevel.Admin;
 
     protected override async Task OnInitializedAsync()
     {
@@ -232,14 +232,14 @@
     private async Task EditUserPermission(UserRecord user)
     {
         var parameters = new DialogParameters<PermissionDialog>();
-        parameters.Add(p => p.CurrentPermissionLevel, user.PermissionLevelInt);
+        parameters.Add(p => p.CurrentPermissionLevel, (PermissionLevel)user.PermissionLevelInt);
         parameters.Add(p => p.UserEmail, user.Email);
-        parameters.Add(p => p.MaxPermissionLevel, _currentUserPermissionLevel); // Pass current user's permission level to limit assignable roles
+        parameters.Add(p => p.MaxPermissionLevel, _currentUserPermissionLevel);
 
         var dialog = await DialogService.ShowAsync<PermissionDialog>("Edit Permission Level", parameters);
         var result = await dialog.Result;
 
-        if (result is not null && !result.Canceled && result.Data is int newLevel)
+        if (result is not null && !result.Canceled && result.Data is PermissionLevel newLevel)
         {
             // Validate that user isn't trying to escalate beyond their own permission level
             if (newLevel > _currentUserPermissionLevel)
@@ -250,7 +250,7 @@
 
             try
             {
-                await UserManagementService.UpdatePermissionLevelAsync(user.Id, newLevel, _currentUserId!);
+                await UserManagementService.UpdatePermissionLevelAsync(user.Id, (int)newLevel, _currentUserId!);
                 Snackbar.Add($"Updated {user.Email} to {GetPermissionName(newLevel)}", Severity.Success);
                 await LoadUsersAsync();
             }
@@ -322,7 +322,8 @@
                 var permissionLevelProperty = dataType.GetProperty("PermissionLevel");
 
                 var validDays = validDaysProperty?.GetValue(data) as int? ?? 7;
-                var permissionLevel = permissionLevelProperty?.GetValue(data) as int? ?? 0;
+                var permissionLevelEnum = permissionLevelProperty?.GetValue(data) as PermissionLevel? ?? PermissionLevel.Admin;
+                var permissionLevel = (int)permissionLevelEnum; // Cast enum to int for service layer
 
                 var token = await InviteService.CreateInviteWithPermissionAsync(_currentUserId, permissionLevel, validDays);
                 var inviteLink = $"{Navigation.BaseUri}register?invite={token}";
@@ -343,19 +344,19 @@
         }
     }
 
-    private static string GetPermissionName(int level) => level switch
+    private static string GetPermissionName(PermissionLevel level) => level switch
     {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
+        PermissionLevel.Admin => "Admin",
+        PermissionLevel.GlobalAdmin => "GlobalAdmin",
+        PermissionLevel.Owner => "Owner",
         _ => "Unknown"
     };
 
-    private static Color GetPermissionColor(int level) => level switch
+    private static Color GetPermissionColor(PermissionLevel level) => level switch
     {
-        0 => Color.Default,
-        1 => Color.Primary,
-        2 => Color.Secondary,
+        PermissionLevel.Admin => Color.Default,
+        PermissionLevel.GlobalAdmin => Color.Primary,
+        PermissionLevel.Owner => Color.Secondary,
         _ => Color.Error
     };
 

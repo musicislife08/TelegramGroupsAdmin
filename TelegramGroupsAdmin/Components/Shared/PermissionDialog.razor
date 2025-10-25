@@ -1,25 +1,26 @@
 @using Microsoft.AspNetCore.Components
+@using TelegramGroupsAdmin.Core.Models
 
 <MudDialog>
     <DialogContent>
         <MudText Class="mb-4">Change permission level for @UserEmail</MudText>
 
         <MudRadioGroup @bind-Value="_selectedLevel">
-            <MudRadio Value="0" Color="Color.Default">
+            <MudRadio Value="PermissionLevel.Admin" Color="Color.Default">
                 <MudStack Spacing="0">
                     <MudText Typo="Typo.body1">Admin</MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Chat-scoped moderation - Can view/moderate only chats they're Telegram admin in</MudText>
                 </MudStack>
             </MudRadio>
-            <MudRadio Value="1" Color="Color.Primary" Class="mt-2">
+            <MudRadio Value="PermissionLevel.GlobalAdmin" Color="Color.Primary" Class="mt-2">
                 <MudStack Spacing="0">
                     <MudText Typo="Typo.body1">GlobalAdmin</MudText>
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Global moderation - Can view/moderate all chats, edit content settings</MudText>
                 </MudStack>
             </MudRadio>
-            @if (MaxPermissionLevel >= 2)
+            @if (MaxPermissionLevel >= PermissionLevel.Owner)
             {
-                <MudRadio Value="2" Color="Color.Secondary" Class="mt-2">
+                <MudRadio Value="PermissionLevel.Owner" Color="Color.Secondary" Class="mt-2">
                     <MudStack Spacing="0">
                         <MudText Typo="Typo.body1">Owner</MudText>
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Full system access - Complete control over all settings, infrastructure, and user management</MudText>
@@ -28,7 +29,7 @@
             }
         </MudRadioGroup>
 
-        @if (MaxPermissionLevel < 2)
+        @if (MaxPermissionLevel < PermissionLevel.Owner)
         {
             <MudAlert Severity="Severity.Info" Class="mt-4" Dense="true">
                 You can only assign Admin or GlobalAdmin permissions.
@@ -46,19 +47,19 @@
     IMudDialogInstance? MudDialog { get; set; }
 
     [Parameter]
-    public int CurrentPermissionLevel { get; set; }
+    public PermissionLevel CurrentPermissionLevel { get; set; }
 
     [Parameter]
     public string UserEmail { get; set; } = string.Empty;
 
     /// <summary>
     /// Maximum permission level the current user can assign.
-    /// GlobalAdmin (1) can only assign Admin/GlobalAdmin, Owner (2) can assign any level.
+    /// GlobalAdmin can only assign Admin/GlobalAdmin, Owner can assign any level.
     /// </summary>
     [Parameter]
-    public int MaxPermissionLevel { get; set; } = 2; // Default to Owner for backward compatibility
+    public PermissionLevel MaxPermissionLevel { get; set; } = PermissionLevel.Owner; // Default to Owner for backward compatibility
 
-    private int _selectedLevel;
+    private PermissionLevel _selectedLevel;
 
     protected override void OnInitialized()
     {
