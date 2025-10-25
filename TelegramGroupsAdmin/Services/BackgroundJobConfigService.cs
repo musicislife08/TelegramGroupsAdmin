@@ -14,7 +14,12 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<BackgroundJobConfigService> _logger;
-    private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never,
+        WriteIndented = false
+    };
 
     public BackgroundJobConfigService(
         IDbContextFactory<AppDbContext> contextFactory,
@@ -144,11 +149,40 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 
         foreach (var (jobName, defaultConfig) in defaults)
         {
-            // Only create if doesn't exist
             if (!existing.ContainsKey(jobName))
             {
+                // Create new config if doesn't exist
                 await UpdateJobConfigAsync(jobName, defaultConfig, cancellationToken);
                 _logger.LogInformation("Created default config for {JobName}", jobName);
+            }
+            else
+            {
+                // Validate and repair existing config
+                var existingConfig = existing[jobName];
+                var needsRepair = false;
+
+                // Check for invalid schedule configuration
+                if (existingConfig.ScheduleType == "interval" && string.IsNullOrEmpty(existingConfig.IntervalDuration))
+                {
+                    _logger.LogWarning("Repairing invalid IntervalDuration for {JobName} (was null, setting to {Default})",
+                        jobName, defaultConfig.IntervalDuration);
+                    existingConfig.IntervalDuration = defaultConfig.IntervalDuration;
+                    needsRepair = true;
+                }
+                else if (existingConfig.ScheduleType == "cron" && string.IsNullOrEmpty(existingConfig.CronExpression))
+                {
+                    _logger.LogWarning("Repairing invalid CronExpression for {JobName} (was null, setting to {Default})",
+                        jobName, defaultConfig.CronExpression);
+                    existingConfig.CronExpression = defaultConfig.CronExpression;
+                    needsRepair = true;
+                }
+
+                // Save repaired config
+                if (needsRepair)
+                {
+                    await UpdateJobConfigAsync(jobName, existingConfig, cancellationToken);
+                    _logger.LogInformation("Repaired config for {JobName}", jobName);
+                }
             }
         }
     }
