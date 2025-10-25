@@ -170,6 +170,9 @@ public static class ServiceCollectionExtensions
         // Background jobs configuration service
         services.AddScoped<IBackgroundJobConfigService, BackgroundJobConfigService>();
 
+        // Recurring job scheduler (Phase 4.X: Generic TickerQ job scheduler with interval/cron support)
+        services.AddHostedService<Services.BackgroundServices.RecurringJobSchedulerService>();
+
         return services;
     }
 
@@ -357,6 +360,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<Jobs.RefreshUserPhotosJob>(); // Phase 4.X: Nightly user photo refresh
         services.AddScoped<Jobs.ScheduledBackupJob>(); // Background Jobs Management: Automatic database backups
         services.AddScoped<Jobs.DatabaseMaintenanceJob>(); // Background Jobs Management: PostgreSQL maintenance (STUB)
+        services.AddScoped<Jobs.ChatHealthCheckJob>(); // Phase 4.X: Chat health monitoring (replaces PeriodicTimer)
 
         return services;
     }

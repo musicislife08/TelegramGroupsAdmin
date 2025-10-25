@@ -163,7 +163,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 Description = "Delete old messages and their media files based on retention policy",
                 Enabled = true, // Already exists, just adding config
                 ScheduleType = "interval",
-                IntervalHours = 24, // Every 24 hours
+                IntervalDuration = "24h", // Every 24 hours
                 Settings = new Dictionary<string, object>
                 {
                     [BackgroundJobSettings.RetentionHours] = 720 // 30 days default
@@ -189,7 +189,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 Description = "Sync URL blocklists from upstream sources",
                 Enabled = true,
                 ScheduleType = "interval",
-                IntervalHours = 168, // Weekly (7 days)
+                IntervalDuration = "7d", // Weekly (7 days)
                 Settings = new Dictionary<string, object>()
             },
             [BackgroundJobNames.DatabaseMaintenance] = new BackgroundJobConfig
@@ -205,6 +205,16 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                     [BackgroundJobSettings.RunVacuum] = true,
                     [BackgroundJobSettings.RunAnalyze] = true
                 }
+            },
+            [BackgroundJobNames.ChatHealthCheck] = new BackgroundJobConfig
+            {
+                JobName = BackgroundJobNames.ChatHealthCheck,
+                DisplayName = "Chat Health Monitoring",
+                Description = "Monitor chat health, bot permissions, and admin lists",
+                Enabled = true,
+                ScheduleType = "interval",
+                IntervalDuration = "30m", // Every 30 minutes
+                Settings = new Dictionary<string, object>()
             }
         };
     }

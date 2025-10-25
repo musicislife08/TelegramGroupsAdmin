@@ -38,10 +38,11 @@ public class BackgroundJobConfig
     public string? CronExpression { get; set; }
 
     /// <summary>
-    /// Interval in hours (if ScheduleType = "interval")
-    /// Example: 24 for every 24 hours
+    /// Interval as friendly duration string (if ScheduleType = "interval")
+    /// Examples: "30m", "1h", "24h", "7d"
+    /// Parsed via TimeSpanUtilities.TryParseDuration()
     /// </summary>
-    public int? IntervalHours { get; set; }
+    public string? IntervalDuration { get; set; }
 
     /// <summary>
     /// Last time this job executed successfully (UTC)

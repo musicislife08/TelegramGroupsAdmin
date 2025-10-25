@@ -382,31 +382,6 @@ public class ChatManagementService(
                 chatId,
                 string.Join(", ", adminNames));
 
-            // Fetch and cache chat icon (always fetch to keep icon up-to-date)
-            try
-            {
-                var photoService = scope.ServiceProvider.GetRequiredService<TelegramPhotoService>();
-                var iconPath = await photoService.GetChatIconAsync(botClient, chatId);
-
-                if (iconPath != null)
-                {
-                    // Save icon path to database
-                    var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-                    var existingChat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
-
-                    if (existingChat != null)
-                    {
-                        var updatedChat = existingChat with { ChatIconPath = iconPath };
-                        await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
-                        logger.LogInformation("✅ Cached chat icon for {ChatId}: {IconPath}", chatId, iconPath);
-                    }
-                }
-            }
-            catch (Exception photoEx)
-            {
-                logger.LogWarning(photoEx, "Failed to fetch chat icon for {ChatId} (non-fatal, continuing)", chatId);
-                // Non-fatal - continue even if icon fetch fails
-            }
         }
         catch (Exception ex)
         {
@@ -605,6 +580,76 @@ public class ChatManagementService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to refresh health for all chats");
+        }
+    }
+
+    /// <summary>
+    /// Refresh a single chat (for manual UI refresh button)
+    /// Includes admin list, health check, and optionally chat icon
+    /// </summary>
+    public async Task RefreshSingleChatAsync(
+        ITelegramBotClient botClient,
+        long chatId,
+        bool includeIcon = true,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            logger.LogInformation("Refreshing single chat {ChatId}", chatId);
+
+            // Refresh admin list and health
+            await RefreshChatAdminsAsync(botClient, chatId, cancellationToken);
+            await RefreshHealthForChatAsync(botClient, chatId, cancellationToken);
+
+            // Optionally fetch fresh chat icon
+            if (includeIcon)
+            {
+                await FetchChatIconAsync(botClient, chatId, cancellationToken);
+            }
+
+            logger.LogInformation("✅ Single chat refresh completed for {ChatId}", chatId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to refresh single chat {ChatId}", chatId);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Fetch and cache chat icon (profile photo)
+    /// Only called on bot join or manual refresh
+    /// Extracted from periodic health check to reduce API calls
+    /// </summary>
+    private async Task FetchChatIconAsync(
+        ITelegramBotClient botClient,
+        long chatId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var photoService = scope.ServiceProvider.GetRequiredService<TelegramPhotoService>();
+            var iconPath = await photoService.GetChatIconAsync(botClient, chatId);
+
+            if (iconPath != null)
+            {
+                // Save icon path to database
+                var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+                var existingChat = await managedChatsRepository.GetByChatIdAsync(chatId, cancellationToken);
+
+                if (existingChat != null)
+                {
+                    var updatedChat = existingChat with { ChatIconPath = iconPath };
+                    await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
+                    logger.LogInformation("✅ Cached chat icon for {ChatId}: {IconPath}", chatId, iconPath);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to fetch chat icon for {ChatId} (non-fatal)", chatId);
+            // Non-fatal - don't throw
         }
     }
 

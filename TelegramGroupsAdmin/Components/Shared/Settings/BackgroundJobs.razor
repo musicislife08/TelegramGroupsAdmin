@@ -2,6 +2,7 @@
 @using TelegramGroupsAdmin.Services.Media
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.BackgroundJobs
+@using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Abstractions
 @using TelegramGroupsAdmin.Telegram.Abstractions.Jobs
 @using TickerQ.Utilities.Interfaces.Managers
@@ -69,7 +70,7 @@
                         }
                         else
                         {
-                            <MudText Typo="Typo.caption">Every @context.IntervalHours hours</MudText>
+                            <MudText Typo="Typo.caption">Every @(FormatIntervalDuration(context.IntervalDuration))</MudText>
                         }
                     </MudTd>
                     <MudTd DataLabel="Last Run">
@@ -148,18 +149,20 @@
                 @if (_editScheduleType == "interval")
                 {
                     <!-- Simple Interval Builder -->
-                    <MudNumericField @bind-Value="_editIntervalHours"
-                                   Label="Run Every (hours)"
+                    <MudTextField @bind-Value="_editIntervalDuration"
+                                   Label="Run Every"
                                    Variant="Variant.Outlined"
-                                   Min="1"
-                                   Max="168"
-                                   HelperText="How often to run this job (1-168 hours / 1-7 days)" />
+                                   HelperText="Examples: 30m, 1h, 6h, 24h, 7d, 1w"
+                                   Placeholder="1h" />
 
                     <MudAlert Severity="Severity.Info" Dense="true">
-                        Job will run every <strong>@_editIntervalHours hours</strong>
-                        @if (_editIntervalHours >= 24)
+                        @if (TimeSpanUtilities.TryParseDuration(_editIntervalDuration ?? "1h", out var duration))
                         {
-                            <text> (<strong>@(_editIntervalHours / 24) days</strong>)</text>
+                            <text>Job will run every <strong>@TimeSpanUtilities.FormatDuration(duration)</strong></text>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Warning">Invalid duration format. Use examples like: 30m, 1h, 24h, 7d, 1w</MudText>
                         }
                     </MudAlert>
                 }
@@ -235,7 +238,7 @@
     private bool _showConfigDialog = false;
     private BackgroundJobConfig? _editingJob;
     private string _editScheduleType = "interval";
-    private int _editIntervalHours = 24;
+    private string? _editIntervalDuration = "1h";
     private string? _editCronExpression;
     private int _editRetentionDays = 7;
     private string? _editBackupDirectory;
@@ -330,7 +333,7 @@
     {
         _editingJob = job;
         _editScheduleType = job.ScheduleType;
-        _editIntervalHours = job.IntervalHours ?? 24;
+        _editIntervalDuration = job.IntervalDuration ?? "1h";
         _editCronExpression = job.CronExpression;
 
         // Load job-specific settings
@@ -368,17 +371,28 @@
 
         try
         {
+            // Validate interval duration if using interval schedule
+            if (_editScheduleType == "interval")
+            {
+                if (string.IsNullOrWhiteSpace(_editIntervalDuration) ||
+                    !TimeSpanUtilities.TryParseDuration(_editIntervalDuration, out _))
+                {
+                    Snackbar.Add("Invalid duration format. Use examples like: 30m, 1h, 24h, 7d", Severity.Warning);
+                    return;
+                }
+            }
+
             // Update schedule
             _editingJob.ScheduleType = _editScheduleType;
             if (_editScheduleType == "interval")
             {
-                _editingJob.IntervalHours = _editIntervalHours;
+                _editingJob.IntervalDuration = _editIntervalDuration;
                 _editingJob.CronExpression = null;
             }
             else
             {
                 _editingJob.CronExpression = _editCronExpression;
-                _editingJob.IntervalHours = null;
+                _editingJob.IntervalDuration = null;
             }
 
             // Update job-specific settings
@@ -493,6 +507,17 @@
             "0 0 1 * *" => "First of month at midnight",
             _ => cron
         };
+    }
+
+    private static string FormatIntervalDuration(string? duration)
+    {
+        if (string.IsNullOrEmpty(duration))
+            return "Not configured";
+
+        if (TimeSpanUtilities.TryParseDuration(duration, out var timespan))
+            return TimeSpanUtilities.FormatDuration(timespan);
+
+        return duration; // Return raw if can't parse
     }
 
     public void Dispose()

@@ -2,13 +2,17 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Components.Shared.ChatManagement
 @using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.Core.BackgroundJobs
+@using TelegramGroupsAdmin.Telegram.Abstractions
 @inject TelegramAdminBotService BotService
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject ISpamDetectionConfigRepository SpamConfigRepository
 @inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
+@inject IServiceProvider ServiceProvider
 @inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject ILogger<Chats> Logger
 @attribute [Authorize]
 @implements IDisposable
 
@@ -101,10 +105,17 @@
                     }
                 </MudTd>
                 <MudTd DataLabel="Actions">
-                    <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
-                              OnClick="@(() => OpenChatConfig(context))">
-                        Configure
-                    </MudButton>
+                    <MudStack Row="true" Spacing="1">
+                        <MudIconButton Icon="@Icons.Material.Filled.Refresh"
+                                      Size="Size.Small"
+                                      Color="Color.Info"
+                                      OnClick="@(() => RefreshChatHealthAsync(context.Chat.ChatId))"
+                                      title="Refresh health status" />
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
+                                  OnClick="@(() => OpenChatConfig(context))">
+                            Configure
+                        </MudButton>
+                    </MudStack>
                 </MudTd>
             </RowTemplate>
             <PagerContent>
@@ -241,6 +252,35 @@
             "Error" => Color.Error,
             _ => Color.Default
         };
+    }
+
+    private async Task RefreshChatHealthAsync(long chatId)
+    {
+        try
+        {
+            // Schedule a ChatHealthCheckJob for this specific chat
+            var payload = new ChatHealthCheckPayload { ChatId = chatId };
+
+            var jobId = await TickerQUtilities.ScheduleJobAsync(
+                ServiceProvider,
+                Logger,
+                BackgroundJobNames.ChatHealthCheck,
+                payload,
+                delaySeconds: 0); // Run immediately
+
+            if (jobId.HasValue)
+            {
+                Snackbar.Add("Chat health refresh queued", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to queue health refresh", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to refresh chat health: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task OpenChatConfig(ManagedChatInfo chatInfo)

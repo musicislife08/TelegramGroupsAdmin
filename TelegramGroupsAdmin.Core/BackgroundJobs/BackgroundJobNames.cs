@@ -35,6 +35,13 @@ public static class BackgroundJobNames
     /// TickerFunction: "database_maintenance"
     /// </summary>
     public const string DatabaseMaintenance = "database_maintenance";
+
+    /// <summary>
+    /// Chat health check (monitors bot permissions and admin lists)
+    /// TickerFunction: "chat_health_check"
+    /// Replaces PeriodicTimer in TelegramAdminBotService
+    /// </summary>
+    public const string ChatHealthCheck = "chat_health_check";
 }
 
 /// <summary>

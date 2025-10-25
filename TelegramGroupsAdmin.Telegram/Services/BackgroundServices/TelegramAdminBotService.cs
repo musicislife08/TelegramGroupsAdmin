@@ -87,26 +87,8 @@ public class TelegramAdminBotService(
         // Perform initial health check for all chats
         await chatManagementService.RefreshAllHealthAsync(botClient);
 
-        // Start periodic health check timer (runs every 1 minute)
-        _ = Task.Run(async () =>
-        {
-            var healthTimer = new PeriodicTimer(TimeSpan.FromMinutes(1));
-            try
-            {
-                while (await healthTimer.WaitForNextTickAsync(stoppingToken))
-                {
-                    await chatManagementService.RefreshAllHealthAsync(botClient);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                logger.LogInformation("Health check timer cancelled");
-            }
-            finally
-            {
-                healthTimer.Dispose();
-            }
-        }, stoppingToken);
+        // Periodic health checks now handled by ChatHealthCheckJob via TickerQ recurring job scheduler
+        // (see RecurringJobSchedulerService and BackgroundJobConfigService default config)
 
         logger.LogInformation("Telegram admin bot started listening for messages in all chats");
 
