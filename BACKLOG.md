@@ -72,16 +72,276 @@ git push --force --tags origin
 
 ---
 
+### DOCS-1: README.md (Pre-Open Source)
+
+**Status:** BACKLOG 📋 **HIGH - Blocking for open source**
+**Severity:** Documentation | **Impact:** First impression, adoption rate
+
+**Current State:**
+- No README.md at repository root
+- GitHub landing page empty
+
+**What's Needed:**
+- Project description and value proposition
+- Screenshots of key features (Messages, Analytics, Settings)
+- Quick start (5 commands from zero to running)
+- Comparison to alternatives
+- Community links
+
+**Priority:** HIGH - Blocking for GitHub migration
+
+---
+
+### DOCS-2: Setup Guide (Pre-Open Source)
+
+**Status:** BACKLOG 📋 **HIGH - Blocking for open source**
+**Severity:** Documentation | **Impact:** User onboarding success
+
+**What's Needed:**
+- Docker Compose walkthrough (simple copy/paste)
+- .env.example explanation (where to get each API key)
+- First user setup process
+- Health check verification
+- Common deployment targets
+
+**Priority:** HIGH - Blocking for GitHub migration
+
+---
+
+### DOCS-3: Configuration Guide
+
+**Status:** BACKLOG 📋
+**Severity:** Documentation | **Impact:** Optimal spam detection tuning
+
+**What's Needed:**
+- Explain all 9 algorithms in plain English
+- When to enable/disable each one
+- Example configurations (Strict / Moderate / Permissive)
+- Threshold tuning guidance
+- File scanning configuration
+- Auto-trust settings
+
+**Priority:** MEDIUM - Nice to have before launch
+
+---
+
+### DOCS-4: LICENSE File (Pre-Open Source)
+
+**Status:** BACKLOG 📋 **HIGH - Blocking for open source**
+**Severity:** Legal | **Impact:** Usage clarity, contribution safety
+
+**Decision Needed:**
+- MIT (permissive, max adoption)
+- AGPL (copyleft, prevents commercial abuse)
+
+**Priority:** HIGH - Blocking for GitHub migration
+
+---
+
+### DOCS-5: Contextual Help System
+
+**Status:** BACKLOG 📋
+**Severity:** UX | **Impact:** Reduces support burden, builds user confidence
+
+**What's Needed:**
+- Help icons (?) next to complex settings
+- Tooltips explaining each option
+- "Learn more" expandable sections
+- Examples embedded in UI
+
+**Priority:** MEDIUM - Nice to have before launch
+
+---
+
+### DOCS-6: First-Time Setup Guidance
+
+**Status:** BACKLOG 📋
+**Severity:** UX | **Impact:** Reduces misconfiguration
+
+**What's Needed:**
+- Welcome modal on first login
+- Suggested default configurations
+- Optional guided wizard
+- "Getting Started" dashboard widget
+
+**Priority:** LOW - Post-launch enhancement
+
+---
+
+### UX-1: Detection Explanation Enhancement
+
+**Status:** BACKLOG 📋
+**Severity:** UX | **Impact:** Trust and transparency
+
+**Current State:**
+- Shows confidence scores and detection methods
+- Missing: WHY the decision was made
+
+**Enhancement:**
+- Show contributing factors for each detection
+- Explain threshold logic
+- Example: "Banned because: CAS (90%), Stop Words: 2 matches (85%), TF-IDF (73%)"
+- Example: "Allowed because: User is Trusted, Bayesian Filter (88% ham)"
+
+**Priority:** MEDIUM - Nice to have before launch
+
+---
+
+### UX-2: Message Trends Analytics
+
+**Status:** BACKLOG 📋
+**Severity:** Feature | **Impact:** Complete analytics offering
+
+**Current State:**
+- Analytics → Message Trends tab says "Coming soon"
+
+**Implementation:**
+- Daily message volume charts
+- Messages per chat breakdown
+- Active users per day
+- Peak hours heatmap
+- Growth trends (week-over-week)
+- Spam vs ham ratio over time
+- Use existing messages/detection_results tables
+
+**Priority:** MEDIUM - Nice to have before launch
+
+---
+
+### ANALYTICS-1: Algorithm Reliability Dashboard
+
+**Status:** BACKLOG 📋
+**Severity:** Feature | **Impact:** Algorithm tuning confidence
+
+**What It Shows:**
+- Performance metrics per algorithm (checks, spam flagged, false positives)
+- False positive rate by algorithm
+- Average confidence per algorithm
+- Trends over time
+- Recommendations (e.g., "Stop Words has 11.5% false positive rate - review list")
+
+**Data Source:** Existing detection_results + manual corrections
+
+**Priority:** MEDIUM - Nice to have before launch
+
+---
+
+### ANALYTICS-2: Algorithm Recommendations
+
+**Status:** BACKLOG 📋
+**Severity:** Feature | **Impact:** Automated optimization
+
+**Auto-Suggest Configuration Changes:**
+- "CAS detected 0 spam in 30 days - consider disabling"
+- "OpenAI Vision has 98% accuracy - consider increasing weight"
+- "Stop Words false positive rate increased - review corrections"
+
+**Priority:** LOW - Post-launch enhancement
+
+---
+
+### ANALYTICS-3: Export Features
+
+**Status:** BACKLOG 📋
+**Severity:** Feature | **Impact:** External analysis, compliance
+
+**Export to CSV/Excel:**
+- Analytics data (detection stats, trends)
+- User lists (with tags, trust status)
+- Audit logs (compliance)
+- Message history (backup/migration)
+
+**Priority:** LOW - Post-launch enhancement
+
+---
+
+### ML-1: Algorithm Weight Optimization
+
+**Status:** BACKLOG 📋
+**Severity:** Enhancement | **Impact:** Fewer false positives
+
+**Current:** Confidence aggregation uses fixed weights
+**Enhancement:** Learn optimal weights from manual corrections
+- Train on correction history
+- Auto-tune weekly
+- Example: "OpenAI Vision weight increased 1.0 → 1.3 based on corrections"
+
+**Priority:** LOW - Post-launch experimentation
+
+---
+
+### ML-2: Community-Specific Pattern Mining
+
+**Status:** BACKLOG 📋
+**Severity:** Enhancement | **Impact:** Personalized spam detection
+
+**What It Does:**
+- Analyze banned messages, suggest new stop words
+- Extract patterns via TF-IDF
+- One-click add to config
+- Example: "These phrases appeared in 80% of your spam: [list]"
+
+**Priority:** LOW - Post-launch experimentation
+
+---
+
+### ML-3: Anomaly Detection for Raids
+
+**Status:** BACKLOG 📋
+**Severity:** Feature | **Impact:** Early warning for coordinated attacks
+
+**Detect Unusual Patterns:**
+- Burst of new joins (15 users in 5 minutes)
+- Similar messages from multiple users
+- Coordinated posting patterns
+- Alert: "⚠️ Unusual activity detected"
+
+**Priority:** LOW - Post-launch experimentation
+
+---
+
+### DEPLOY-1: Docker Compose Simplicity Validation
+
+**Status:** BACKLOG 📋 **HIGH - Blocking for open source**
+**Severity:** Deployment | **Impact:** Deployment friction
+
+**Audit Checklist:**
+- .env.example has all required variables
+- Clear CHANGEME markers for secrets
+- No complex args/profiles for basic setup
+- Works standalone (no required custom networks/volumes)
+- Power users can extend without breaking defaults
+
+**Priority:** HIGH - Blocking for GitHub migration
+
+---
+
+### DEPLOY-2: Troubleshooting Documentation
+
+**Status:** BACKLOG 📋
+**Severity:** Documentation | **Impact:** Support burden reduction
+
+**Add to README:**
+- Common issues (ClamAV not starting, bot offline, database connection)
+- Health check commands (curl, docker logs)
+- Log debugging tips
+- Permission errors
+
+**Priority:** MEDIUM - Nice to have before launch
+
+---
+
 ### QUALITY-1: Nullable Reference Type Hardening
 
 **Status:** BACKLOG 📋
 **Severity:** Code Quality | **Impact:** Bug prevention, developer experience
 
 **Current State:**
-- Nullable reference types enabled in projects (`<Nullable>enable</Nullable>`)
-- Not strictly enforced (warnings exist but not treated as errors)
-- Unknown number of potential null dereference warnings
-- No systematic approach to null handling
+- Nullable reference types enabled in ALL 7 projects (`<Nullable>enable</Nullable>`)
+- TreatWarningsAsErrors enabled in 3/7 projects (ContentDetection, Core, Data)
+- TreatWarningsAsErrors MISSING in 4/7 projects (main app, Configuration, Telegram, Telegram.Abstractions)
+- Unknown number of potential null dereference warnings in projects without strict enforcement
+- Build currently succeeds with 0 errors, 0 warnings (likely due to null-forgiving operators or selective suppression)
 
 **Motivation:**
 - Reduce potential NullReferenceException bugs
@@ -90,16 +350,19 @@ git push --force --tags origin
 - Leverage C# compiler for null safety without massive Option<T> rewrite
 
 **Proposed Solution:**
-**Phase 1: Baseline Audit** (~30 min)
-- Count total nullability warnings (CS8600-CS8999)
-- Categorize by severity (critical hot paths vs conservative warnings)
-- Document current state
+**Phase 1: Enable TreatWarningsAsErrors in Remaining Projects** (~15 min)
+- Add `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` to 4 remaining projects:
+  - TelegramGroupsAdmin/TelegramGroupsAdmin.csproj (main app)
+  - TelegramGroupsAdmin.Configuration/TelegramGroupsAdmin.Configuration.csproj
+  - TelegramGroupsAdmin.Telegram/TelegramGroupsAdmin.Telegram.csproj
+  - TelegramGroupsAdmin.Telegram.Abstractions/TelegramGroupsAdmin.Telegram.Abstractions.csproj
+- Build and count nullability errors that surface
 
-**Phase 2: Enable Warnings as Errors** (~1-2 hours)
-- Add `<WarningsAsErrors>CS8600,CS8602,CS8603,CS8625</WarningsAsErrors>` to .csproj
-- Fix critical warnings (actual null dereference risk)
-- Use null-forgiving operator (`!`) sparingly for false positives
-- Focus on hot paths first (spam detection, message processing)
+**Phase 2: Fix Nullable Warnings** (~1-2 hours)
+- Fix all nullable warnings revealed by Phase 1
+- Focus on critical warnings first (CS8600, CS8602, CS8603 - actual null dereference risk)
+- Use null-forgiving operator (`!`) sparingly for legitimate false positives
+- Prioritize hot paths (spam detection, message processing, bot services)
 
 **Phase 3: Ongoing Enforcement** (future)
 - Enforce for all new code
@@ -115,14 +378,15 @@ git push --force --tags origin
 - **DON'T**: Make every field nullable "to be safe"
 
 **Success Criteria:**
-- Zero critical nullable warnings (CS8600, CS8602, CS8603)
-- Warnings-as-errors for nullable violations
+- TreatWarningsAsErrors enabled in ALL 7 projects
+- Zero nullable warnings in entire solution
+- Build succeeds with 0 errors, 0 warnings
 - No new nullable warnings in future PRs
 - No production NullReferenceExceptions from new code
 
 **Priority:** MEDIUM - Quality improvement, not blocking
 
-**Effort:** 2-3 hours (phased approach)
+**Effort:** 1.5-2 hours total (15 min to enable, 1-2 hours to fix warnings)
 
 **When to Do:**
 - NOT before security sanitization (security is blocking)
