@@ -70,11 +70,19 @@ namespace TelegramGroupsAdmin.Data.Migrations
             // Data Migration: Populate new Actor exclusive arc columns from legacy fields
             // ============================================================================
 
-            // Migrate actor_user_id → actor_web_user_id (non-null values are web user IDs)
+            // Migrate actor_user_id = 'system' string → actor_system_identifier='unknown' (legacy system events)
+            migrationBuilder.Sql(@"
+                UPDATE audit_log
+                SET actor_system_identifier = 'unknown'
+                WHERE actor_user_id = 'system';
+            ");
+
+            // Migrate actor_user_id → actor_web_user_id (non-null values are web user IDs, excluding 'system')
             migrationBuilder.Sql(@"
                 UPDATE audit_log
                 SET actor_web_user_id = actor_user_id
-                WHERE actor_user_id IS NOT NULL;
+                WHERE actor_user_id IS NOT NULL
+                  AND actor_user_id != 'system';
             ");
 
             // Migrate NULL actor_user_id → actor_system_identifier='SYSTEM' (system events)

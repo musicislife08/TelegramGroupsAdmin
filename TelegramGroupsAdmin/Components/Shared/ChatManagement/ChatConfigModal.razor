@@ -232,7 +232,7 @@
                 {
                     <MudStack Spacing="2">
                         <MudText Typo="Typo.body1">
-                            This chat has <strong>@_admins.Count admin(s)</strong> cached. Last refresh: <span class="local-timestamp" data-utc="@(ChatInfo.Chat.LastSeenAt ?? DateTimeOffset.MinValue).ToString("o")">@(ChatInfo.Chat.LastSeenAt ?? DateTimeOffset.MinValue).ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                            This chat has <strong>@_admins.Count admin(s)</strong> cached. Last refresh: <span class="local-timestamp" data-utc="@((ChatInfo.Chat.LastSeenAt ?? DateTimeOffset.MinValue).ToString("o"))">@(ChatInfo.Chat.LastSeenAt ?? DateTimeOffset.MinValue).ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
                         </MudText>
 
                         <MudTable Items="@_admins" Dense="true" Hover="true">

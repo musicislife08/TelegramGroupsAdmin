@@ -75,6 +75,14 @@ TelegramGroupsAdmin.TickerQInstanceFactory.Initialize();
 // Run database migrations
 await app.RunDatabaseMigrationsAsync(connectionString);
 
+// Ensure default background job configurations exist
+using (var scope = app.Services.CreateScope())
+{
+    var jobConfigService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Services.IBackgroundJobConfigService>();
+    await jobConfigService.EnsureDefaultConfigsAsync();
+    app.Logger.LogInformation("Ensured default background job configurations exist");
+}
+
 // Check for --migrate-only flag to run migrations and exit
 if (args.Contains("--migrate-only") || args.Contains("--migrate"))
 {
