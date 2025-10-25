@@ -71,7 +71,7 @@ public record Actor
         {
             Type = ActorType.WebUser,
             WebUserId = userId,
-            DisplayName = email ?? $"User {userId[..8]}"
+            DisplayName = email ?? $"User {userId[..Math.Min(8, userId.Length)]}"
         };
     }
 
