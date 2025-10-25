@@ -541,8 +541,8 @@
             {
                 await AuditService.LogEventAsync(
                     AuditEventType.ConfigurationChanged,
-                    userId,
-                    null,
+                    Actor.FromWebUser(userId),
+                    Actor.FromWebUser(userId),
                     $"file_scanning:vt_enabled={_config.Tier2.VirusTotal.Enabled}:daily={_config.Tier2.VirusTotal.DailyLimit}:permin={_config.Tier2.VirusTotal.PerMinuteLimit}");
             }
 

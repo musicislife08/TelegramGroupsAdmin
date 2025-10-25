@@ -117,27 +117,49 @@
                     </MudChip>
                 </MudTd>
                 <MudTd DataLabel="Actor">
-                    @if (context.ActorUserId == null)
+                    @if (context.ActorWebUserId != null)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Color="Color.Primary" />
+                            <MudText Typo="Typo.body2">@GetUserEmail(context.ActorWebUserId)</MudText>
+                        </MudStack>
+                    }
+                    else if (context.ActorSystemIdentifier != null)
                     {
                         <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Computer" Color="Color.Default">
-                            SYSTEM
+                            @context.ActorSystemIdentifier.ToUpperInvariant()
+                        </MudChip>
+                    }
+                    else if (context.ActorTelegramUserId.HasValue)
+                    {
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SmartToy" Color="Color.Info">
+                            Telegram @context.ActorTelegramUserId
                         </MudChip>
                     }
                     else
                     {
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
-                            <MudText Typo="Typo.body2">@GetUserEmail(context.ActorUserId)</MudText>
-                        </MudStack>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Unknown</MudText>
                     }
                 </MudTd>
                 <MudTd DataLabel="Target">
-                    @if (!string.IsNullOrEmpty(context.TargetUserId))
+                    @if (context.TargetWebUserId != null)
                     {
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudIcon Icon="@Icons.Material.Filled.PersonOutline" Size="Size.Small" />
-                            <MudText Typo="Typo.body2">@GetUserEmail(context.TargetUserId)</MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.PersonOutline" Size="Size.Small" Color="Color.Primary" />
+                            <MudText Typo="Typo.body2">@GetUserEmail(context.TargetWebUserId)</MudText>
                         </MudStack>
+                    }
+                    else if (context.TargetSystemIdentifier != null)
+                    {
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Computer" Color="Color.Default">
+                            @context.TargetSystemIdentifier.ToUpperInvariant()
+                        </MudChip>
+                    }
+                    else if (context.TargetTelegramUserId.HasValue)
+                    {
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SmartToy" Color="Color.Info">
+                            Telegram @context.TargetTelegramUserId
+                        </MudChip>
                     }
                     else
                     {

@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using DataModels = TelegramGroupsAdmin.Data.Models;
@@ -15,12 +16,12 @@ public class AuditService : IAuditService
 
     public Task LogEventAsync(
         AuditEventType eventType,
-        string? actorUserId,
-        string? targetUserId = null,
+        Actor actor,
+        Actor? target = null,
         string? value = null,
         CancellationToken ct = default)
     {
-        return _repository.LogEventAsync((DataModels.AuditEventType)eventType, actorUserId, targetUserId, value, ct);
+        return _repository.LogEventAsync((DataModels.AuditEventType)eventType, actor, target, value, ct);
     }
 
     public Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = 100, CancellationToken ct = default)

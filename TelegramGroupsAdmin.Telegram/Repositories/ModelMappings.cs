@@ -174,8 +174,17 @@ public static class ModelMappings
         Id: data.Id,
         EventType: (UiModels.AuditEventType)data.EventType,
         Timestamp: data.Timestamp,
-        ActorUserId: data.ActorUserId,
-        TargetUserId: data.TargetUserId,
+
+        // Actor exclusive arc (ARCH-2)
+        ActorWebUserId: data.ActorWebUserId,
+        ActorTelegramUserId: data.ActorTelegramUserId,
+        ActorSystemIdentifier: data.ActorSystemIdentifier,
+
+        // Target exclusive arc (ARCH-2)
+        TargetWebUserId: data.TargetWebUserId,
+        TargetTelegramUserId: data.TargetTelegramUserId,
+        TargetSystemIdentifier: data.TargetSystemIdentifier,
+
         Value: data.Value
     );
 

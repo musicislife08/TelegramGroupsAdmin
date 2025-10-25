@@ -89,8 +89,8 @@ public class ReportActionsService : IReportActionsService
         // Create audit log entry
         await _auditService.LogEventAsync(
             AuditEventType.ReportReviewed,
-            reviewerId,
-            message.UserId.ToString(),
+            Actor.FromWebUser(reviewerId),
+            Actor.FromTelegramUser(message.UserId),
             $"spam:report#{reportId}:chats{result.ChatsAffected}");
 
         // Reply to original /report command
@@ -162,8 +162,8 @@ public class ReportActionsService : IReportActionsService
         // Create audit log entry
         await _auditService.LogEventAsync(
             AuditEventType.ReportReviewed,
-            reviewerId,
-            message.UserId.ToString(),
+            Actor.FromWebUser(reviewerId),
+            Actor.FromTelegramUser(message.UserId),
             $"ban:report#{reportId}:chats{result.ChatsAffected}");
 
         // Reply to original /report command
@@ -213,8 +213,8 @@ public class ReportActionsService : IReportActionsService
         // Create audit log entry
         await _auditService.LogEventAsync(
             AuditEventType.ReportReviewed,
-            reviewerId,
-            message.UserId.ToString(),
+            Actor.FromWebUser(reviewerId),
+            Actor.FromTelegramUser(message.UserId),
             $"warn:report#{reportId}:warnings{result.WarningCount}");
 
         // Reply to original /report command
@@ -242,7 +242,7 @@ public class ReportActionsService : IReportActionsService
         // Create audit log entry
         await _auditService.LogEventAsync(
             AuditEventType.ReportReviewed,
-            reviewerId,
+            Actor.FromWebUser(reviewerId),
             null,
             $"dismiss:report#{reportId}:{reason ?? "no_action"}");
 

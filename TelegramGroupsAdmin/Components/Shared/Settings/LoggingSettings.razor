@@ -242,8 +242,8 @@
             {
                 await AuditService.LogEventAsync(
                     AuditEventType.ConfigurationChanged,
-                    userId,
-                    null,
+                    Actor.FromWebUser(userId),
+                    Actor.FromWebUser(userId),
                     $"logging:default={_config.DefaultLevel}:overrides={_config.Overrides.Count}");
             }
 

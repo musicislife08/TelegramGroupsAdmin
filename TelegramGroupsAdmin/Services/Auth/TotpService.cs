@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using OtpNet;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Data.Services;
@@ -101,8 +102,8 @@ public class TotpService(
         // Audit log
         await auditLog.LogEventAsync(
             AuditEventType.UserTotpEnabled,
-            actorUserId: userId,
-            targetUserId: userId,
+            actor: Actor.FromWebUser(userId),
+            target: Actor.FromWebUser(userId),
             value: "TOTP 2FA enabled",
             ct: ct);
 
@@ -153,8 +154,8 @@ public class TotpService(
         // Audit log
         await auditLog.LogEventAsync(
             AuditEventType.UserTotpReset,
-            actorUserId: userId,
-            targetUserId: userId,
+            actor: Actor.FromWebUser(userId),
+            target: Actor.FromWebUser(userId),
             value: "TOTP 2FA disabled by user",
             ct: ct);
 

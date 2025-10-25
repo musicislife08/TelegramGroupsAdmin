@@ -1,13 +1,17 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Services;
 
 public interface IAuditService
 {
+    /// <summary>
+    /// Log an audit event with Actor exclusive arc pattern (ARCH-2 migration)
+    /// </summary>
     Task LogEventAsync(
         AuditEventType eventType,
-        string? actorUserId,
-        string? targetUserId = null,
+        Actor actor,
+        Actor? target = null,
         string? value = null,
         CancellationToken ct = default);
 

@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -40,8 +41,8 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
 
         await auditLog.LogEventAsync(
             AuditEventType.UserPermissionChanged,
-            actorUserId: modifiedBy,
-            targetUserId: userId,
+            actor: Actor.FromWebUser(modifiedBy),
+            target: Actor.FromWebUser(userId),
             value: $"Changed to {permissionName}",
             ct: ct);
     }
@@ -53,8 +54,8 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
         // Audit log
         await auditLog.LogEventAsync(
             AuditEventType.UserStatusChanged,
-            actorUserId: modifiedBy,
-            targetUserId: userId,
+            actor: Actor.FromWebUser(modifiedBy),
+            target: Actor.FromWebUser(userId),
             value: $"Status changed to {newStatus}",
             ct: ct);
     }
@@ -78,8 +79,8 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
         // Audit log
         await auditLog.LogEventAsync(
             AuditEventType.UserTotpReset,
-            actorUserId: modifiedBy,
-            targetUserId: userId,
+            actor: Actor.FromWebUser(modifiedBy),
+            target: Actor.FromWebUser(userId),
             value: "2FA reset by admin",
             ct: ct);
     }

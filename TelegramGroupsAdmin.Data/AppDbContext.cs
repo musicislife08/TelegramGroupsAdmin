@@ -293,6 +293,32 @@ public class AppDbContext : DbContext
             .HasForeignKey(ut => ut.ActorTelegramUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // AuditLog actor FKs (ARCH-2 migration)
+        modelBuilder.Entity<AuditLogRecordDto>()
+            .HasOne<UserRecordDto>()
+            .WithMany()
+            .HasForeignKey(al => al.ActorWebUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<AuditLogRecordDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany()
+            .HasForeignKey(al => al.ActorTelegramUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // AuditLog target FKs (ARCH-2 migration)
+        modelBuilder.Entity<AuditLogRecordDto>()
+            .HasOne<UserRecordDto>()
+            .WithMany()
+            .HasForeignKey(al => al.TargetWebUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<AuditLogRecordDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany()
+            .HasForeignKey(al => al.TargetTelegramUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         // ============================================================================
         // Actor System CHECK Constraints (Phase 4.19)
         // Enforce exclusive arc: exactly one actor column must be non-null
@@ -328,6 +354,20 @@ public class AppDbContext : DbContext
             .ToTable(t => t.HasCheckConstraint(
                 "CK_user_tags_exclusive_actor",
                 "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1"));
+
+        // AuditLog: Exactly one actor must be non-null (ARCH-2 migration)
+        modelBuilder.Entity<AuditLogRecordDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_audit_log_exclusive_actor",
+                "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1"));
+
+        // AuditLog: Exactly one target must be non-null when target exists (ARCH-2 migration)
+        // Note: All three can be NULL if event has no target (e.g., SystemConfigChanged)
+        modelBuilder.Entity<AuditLogRecordDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_audit_log_exclusive_target",
+                "(target_web_user_id IS NULL AND target_telegram_user_id IS NULL AND target_system_identifier IS NULL) OR " +
+                "((target_web_user_id IS NOT NULL)::int + (target_telegram_user_id IS NOT NULL)::int + (target_system_identifier IS NOT NULL)::int = 1)"));
 
         // MessageTranslations: Exactly one of (message_id, edit_id) must be non-null
         modelBuilder.Entity<MessageTranslationDto>()

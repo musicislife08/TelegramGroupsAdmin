@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -9,12 +10,17 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 public interface IAuditLogRepository
 {
     /// <summary>
-    /// Log an audit event
+    /// Log an audit event with Actor exclusive arc pattern (ARCH-2 migration)
     /// </summary>
+    /// <param name="eventType">Type of audit event</param>
+    /// <param name="actor">Who performed the action (web user, telegram user, or system)</param>
+    /// <param name="target">Who/what was affected (web user, telegram user, system, or null)</param>
+    /// <param name="value">Additional context/data for the event</param>
+    /// <param name="ct">Cancellation token</param>
     Task LogEventAsync(
         AuditEventType eventType,
-        string? actorUserId,
-        string? targetUserId = null,
+        Actor actor,
+        Actor? target = null,
         string? value = null,
         CancellationToken ct = default);
 

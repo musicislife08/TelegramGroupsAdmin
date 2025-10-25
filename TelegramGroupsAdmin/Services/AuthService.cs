@@ -34,8 +34,8 @@ public class AuthService(
             // Audit log - failed login (no user ID available)
             await auditLog.LogEventAsync(
                 AuditEventType.UserLoginFailed,
-                actorUserId: null,
-                targetUserId: null,
+                actor: Actor.FromSystem("login_failed"),
+                target: null,
                 value: $"Non-existent email: {email}",
                 ct: ct);
 
@@ -50,8 +50,8 @@ public class AuthService(
             // Audit log - failed login (disabled account)
             await auditLog.LogEventAsync(
                 AuditEventType.UserLoginFailed,
-                actorUserId: user.Id,
-                targetUserId: user.Id,
+                actor: Actor.FromWebUser(user.Id),
+                target: Actor.FromWebUser(user.Id),
                 value: "Account disabled",
                 ct: ct);
 
@@ -65,8 +65,8 @@ public class AuthService(
             // Audit log - failed login (deleted account)
             await auditLog.LogEventAsync(
                 AuditEventType.UserLoginFailed,
-                actorUserId: user.Id,
-                targetUserId: user.Id,
+                actor: Actor.FromWebUser(user.Id),
+                target: Actor.FromWebUser(user.Id),
                 value: "Account deleted",
                 ct: ct);
 
@@ -81,8 +81,8 @@ public class AuthService(
             // Audit log - failed login (inactive account)
             await auditLog.LogEventAsync(
                 AuditEventType.UserLoginFailed,
-                actorUserId: user.Id,
-                targetUserId: user.Id,
+                actor: Actor.FromWebUser(user.Id),
+                target: Actor.FromWebUser(user.Id),
                 value: "Account inactive (legacy flag)",
                 ct: ct);
 
@@ -96,8 +96,8 @@ public class AuthService(
             // Audit log - failed login (wrong password)
             await auditLog.LogEventAsync(
                 AuditEventType.UserLoginFailed,
-                actorUserId: user.Id,
-                targetUserId: user.Id,
+                actor: Actor.FromWebUser(user.Id),
+                target: Actor.FromWebUser(user.Id),
                 value: "Invalid password",
                 ct: ct);
 
@@ -112,8 +112,8 @@ public class AuthService(
             // Audit log - failed login (email not verified)
             await auditLog.LogEventAsync(
                 AuditEventType.UserLoginFailed,
-                actorUserId: user.Id,
-                targetUserId: user.Id,
+                actor: Actor.FromWebUser(user.Id),
+                target: Actor.FromWebUser(user.Id),
                 value: "Email not verified",
                 ct: ct);
 
@@ -126,8 +126,8 @@ public class AuthService(
         // Audit log - successful login
         await auditLog.LogEventAsync(
             AuditEventType.UserLogin,
-            actorUserId: user.Id,
-            targetUserId: user.Id,
+            actor: Actor.FromWebUser(user.Id),
+            target: Actor.FromWebUser(user.Id),
             value: user.TotpEnabled ? "Login (requires TOTP)" : "Login successful",
             ct: ct);
 
@@ -296,8 +296,8 @@ public class AuthService(
         // Audit log
         await auditLog.LogEventAsync(
             AuditEventType.UserLogout,
-            actorUserId: userId,
-            targetUserId: userId,
+            actor: Actor.FromWebUser(userId),
+            target: Actor.FromWebUser(userId),
             value: "User logged out",
             ct: ct);
     }
@@ -337,8 +337,8 @@ public class AuthService(
         // Audit log
         await auditLog.LogEventAsync(
             AuditEventType.UserPasswordChanged,
-            actorUserId: userId,
-            targetUserId: userId,
+            actor: Actor.FromWebUser(userId),
+            target: Actor.FromWebUser(userId),
             value: "Password changed",
             ct: ct);
 
@@ -384,8 +384,8 @@ public class AuthService(
             // Audit log - user reactivation via invite
             await auditLog.LogEventAsync(
                 AuditEventType.UserRegistered,
-                actorUserId: existing.Id,
-                targetUserId: existing.Id,
+                actor: Actor.FromWebUser(existing.Id),
+                target: Actor.FromWebUser(existing.Id),
                 value: $"Reactivated via invite from {invitedBy}",
                 ct: ct);
 
@@ -397,8 +397,8 @@ public class AuthService(
             // Audit log - user reactivation (first run)
             await auditLog.LogEventAsync(
                 AuditEventType.UserRegistered,
-                actorUserId: existing.Id,
-                targetUserId: existing.Id,
+                actor: Actor.FromWebUser(existing.Id),
+                target: Actor.FromWebUser(existing.Id),
                 value: "Reactivated (first run)",
                 ct: ct);
         }
@@ -455,8 +455,8 @@ public class AuthService(
             // Audit log - user registration via invite
             await auditLog.LogEventAsync(
                 AuditEventType.UserRegistered,
-                actorUserId: userId,
-                targetUserId: userId,
+                actor: Actor.FromWebUser(userId),
+                target: Actor.FromWebUser(userId),
                 value: $"Registered via invite from {invitedBy}",
                 ct: ct);
 
@@ -470,8 +470,8 @@ public class AuthService(
             // Audit log - owner account creation (first run)
             await auditLog.LogEventAsync(
                 AuditEventType.UserRegistered,
-                actorUserId: userId,
-                targetUserId: userId,
+                actor: Actor.FromWebUser(userId),
+                target: Actor.FromWebUser(userId),
                 value: "First user (Owner)",
                 ct: ct);
         }
@@ -513,8 +513,8 @@ public class AuthService(
             // Audit log - email verification sent
             await auditLog.LogEventAsync(
                 AuditEventType.UserEmailVerificationSent,
-                actorUserId: null,
-                targetUserId: userId,
+                actor: Actor.FromSystem("email_verification"),
+                target: Actor.FromWebUser(userId),
                 value: email,
                 ct: ct);
         }
@@ -574,8 +574,8 @@ public class AuthService(
             // Audit log
             await auditLog.LogEventAsync(
                 AuditEventType.UserEmailVerificationSent,
-                actorUserId: null, // System event
-                targetUserId: user.Id,
+                actor: Actor.FromSystem("email_verification"), // System event
+                target: Actor.FromWebUser(user.Id),
                 value: $"Resent to {email}",
                 ct: ct);
 
@@ -632,8 +632,8 @@ public class AuthService(
             // Audit log
             await auditLog.LogEventAsync(
                 AuditEventType.UserPasswordResetRequested,
-                actorUserId: null, // System event
-                targetUserId: user.Id,
+                actor: Actor.FromSystem("password_reset"), // System event
+                target: Actor.FromWebUser(user.Id),
                 value: email,
                 ct: ct);
 
@@ -684,8 +684,8 @@ public class AuthService(
         // Audit log
         await auditLog.LogEventAsync(
             AuditEventType.UserPasswordChanged,
-            actorUserId: user.Id,
-            targetUserId: user.Id,
+            actor: Actor.FromWebUser(user.Id),
+            target: Actor.FromWebUser(user.Id),
             value: "Password reset via email",
             ct: ct);
 

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
@@ -19,8 +20,8 @@ public class AuditLogRepository : IAuditLogRepository
 
     public async Task LogEventAsync(
         DataModels.AuditEventType eventType,
-        string? actorUserId,
-        string? targetUserId = null,
+        Actor actor,
+        Actor? target = null,
         string? value = null,
         CancellationToken ct = default)
     {
@@ -30,16 +31,29 @@ public class AuditLogRepository : IAuditLogRepository
         {
             EventType = eventType,
             Timestamp = DateTimeOffset.UtcNow,
-            ActorUserId = actorUserId,
-            TargetUserId = targetUserId,
+
+            // Actor exclusive arc (ARCH-2)
+            ActorWebUserId = actor.WebUserId,
+            ActorTelegramUserId = actor.TelegramUserId,
+            ActorSystemIdentifier = actor.SystemIdentifier,
+
+            // Target exclusive arc (ARCH-2)
+            TargetWebUserId = target?.WebUserId,
+            TargetTelegramUserId = target?.TelegramUserId,
+            TargetSystemIdentifier = target?.SystemIdentifier,
+
             Value = value
         };
 
         context.AuditLogs.Add(entity);
         await context.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Audit log: {EventType} by {ActorUserId} on {TargetUserId}",
-            eventType, actorUserId ?? "SYSTEM", targetUserId ?? "N/A");
+        // Format actor for logging
+        var actorDisplay = actor.SystemIdentifier ?? actor.WebUserId ?? actor.TelegramUserId?.ToString() ?? "UNKNOWN";
+        var targetDisplay = target?.SystemIdentifier ?? target?.WebUserId ?? target?.TelegramUserId?.ToString() ?? "N/A";
+
+        _logger.LogInformation("Audit log: {EventType} by {Actor} on {Target}",
+            eventType, actorDisplay, targetDisplay);
     }
 
     public async Task<List<UiModels.AuditLogRecord>> GetRecentEventsAsync(int limit = 100, CancellationToken ct = default)
