@@ -305,7 +305,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         if (!messagesWithDetections.Any())
             return new List<UiModels.MessageWithDetectionHistory>();
 
-        // Step 2: Load joined data (chat, user, reply info) in single query
+        // Step 2: Load joined data (chat, user, reply info, translations) in single query
         var messageIds = messagesWithDetections.Select(m => m.MessageId).ToArray();
         var userIds = messagesWithDetections.Select(m => m.UserId).Distinct().ToArray();
 
@@ -319,6 +319,8 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             from parentMsg in parentGroup.DefaultIfEmpty()
             join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
             from parentUserInfo in parentUserGroup.DefaultIfEmpty()
+            join translation in context.MessageTranslations on m.MessageId equals translation.MessageId into translationGroup
+            from trans in translationGroup.DefaultIfEmpty()
             select new
             {
                 m.MessageId,
@@ -329,7 +331,8 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                 FirstName = user != null ? user.FirstName : null,
                 UserPhotoPath = user != null ? user.UserPhotoPath : null,
                 ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
-                ReplyToText = parentMsg != null ? parentMsg.MessageText : null
+                ReplyToText = parentMsg != null ? parentMsg.MessageText : null,
+                Translation = trans
             })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -397,7 +400,8 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                 firstName: joined.FirstName,
                 userPhotoPath: joined.UserPhotoPath,
                 replyToUser: joined.ReplyToUser,
-                replyToText: joined.ReplyToText);
+                replyToText: joined.ReplyToText,
+                translation: joined.Translation?.ToModel());
 
             // Validate media path exists on filesystem (nulls if missing)
             messageModel = ValidateMediaPath(messageModel);
@@ -898,8 +902,35 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     public async Task InsertTranslationAsync(UiModels.MessageTranslation translation, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var dto = translation.ToDto();
-        context.MessageTranslations.Add(dto);
+
+        // Check if translation already exists (unique constraint on message_id or edit_id)
+        DataModels.MessageTranslationDto? existing = null;
+        if (translation.MessageId.HasValue)
+        {
+            existing = await context.MessageTranslations
+                .FirstOrDefaultAsync(mt => mt.MessageId == translation.MessageId, cancellationToken);
+        }
+        else if (translation.EditId.HasValue)
+        {
+            existing = await context.MessageTranslations
+                .FirstOrDefaultAsync(mt => mt.EditId == translation.EditId, cancellationToken);
+        }
+
+        if (existing != null)
+        {
+            // Update existing translation
+            existing.TranslatedText = translation.TranslatedText;
+            existing.DetectedLanguage = translation.DetectedLanguage;
+            existing.Confidence = translation.Confidence;
+            existing.TranslatedAt = translation.TranslatedAt;
+        }
+        else
+        {
+            // Insert new translation
+            var dto = translation.ToDto();
+            context.MessageTranslations.Add(dto);
+        }
+
         await context.SaveChangesAsync(cancellationToken);
     }
 }

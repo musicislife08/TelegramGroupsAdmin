@@ -406,12 +406,14 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<MessageRecordDto>()
             .HasIndex(m => new { m.Timestamp, m.DeletedAt });
 
-        // MessageTranslations indexes (partial indexes for exclusive arc pattern)
+        // MessageTranslations indexes (partial UNIQUE indexes for exclusive arc pattern)
         modelBuilder.Entity<MessageTranslationDto>()
             .HasIndex(mt => mt.MessageId)
+            .IsUnique()
             .HasFilter("message_id IS NOT NULL");
         modelBuilder.Entity<MessageTranslationDto>()
             .HasIndex(mt => mt.EditId)
+            .IsUnique()
             .HasFilter("edit_id IS NOT NULL");
         modelBuilder.Entity<MessageTranslationDto>()
             .HasIndex(mt => mt.DetectedLanguage);
