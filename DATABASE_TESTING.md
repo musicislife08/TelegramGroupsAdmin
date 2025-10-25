@@ -643,11 +643,6 @@ AuditLogBuilder.WithSystemActor().WithAction("Created").Build()
 - Test migrations against realistic data volume
 - Validate performance at production scale
 
-### CI/CD Integration
-- GitHub Actions workflow to run tests on PR
-- Block merge if migration tests fail
-- Automated reporting of test results
-
 ### Migration Rollback Automation
 - Detect failed migration
 - Automatically run Down() migration
