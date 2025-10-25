@@ -10,6 +10,128 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ## Feature Backlog
 
+### SECURITY-1: Git History Sanitization (Pre-Open Source)
+
+**Status:** BACKLOG 📋 **CRITICAL - Blocking for open source**
+**Severity:** Security | **Impact:** Repository security, credential protection
+
+**Current State:**
+- launchSettings.json appears in 10+ commits in git history
+- File contains potential secrets (connection strings, API keys, environment-specific configs)
+- NOW in .gitignore (good) but historical commits still contain it (bad)
+- Git history is permanent - once pushed to public GitHub, secrets are exposed forever
+
+**Security Risk:**
+- API keys, database credentials, tokens in git history
+- GitHub scanning bots will find exposed secrets within minutes of public push
+- Cannot be undone easily once public (requires force push to all forks)
+- Credential leaks = immediate security breach requiring key rotation
+
+**Proposed Solution:**
+1. **Use BFG Repo-Cleaner** (recommended) to purge launchSettings.json from all history
+2. **Secret scanning audit** - grep for hardcoded credentials, API keys, tokens
+3. **Force push** to Gitea (requires coordination with production machine)
+4. **Re-clone** on both dev and production machines
+5. **Add pre-commit hooks** to prevent future secret commits (detect-secrets or git-secrets)
+
+**Implementation Steps:**
+```bash
+# Backup repo first
+cp -r TelegramGroupsAdmin TelegramGroupsAdmin-backup
+
+# Remove launchSettings.json from all history
+bfg --delete-files launchSettings.json TelegramGroupsAdmin
+
+# Clean up
+cd TelegramGroupsAdmin
+git reflog expire --expire=now --all
+git gc --prune=now --aggressive
+
+# Force push
+git push --force --all origin
+git push --force --tags origin
+```
+
+**Verification:**
+- `git log --all --full-history -- "*launchSettings.json"` returns no results
+- `git log -p | grep -i "password\|apikey"` finds no hardcoded secrets
+- Fresh clone has clean history
+
+**Files to Audit:**
+- TelegramGroupsAdmin/Properties/launchSettings.json (confirmed in 10+ commits)
+- Any other launchSettings.json in sub-projects
+- Hardcoded secrets in code (connection strings, API keys)
+
+**Priority:** HIGH - Must complete before GitHub migration
+
+**Effort:** 1-2 hours
+
+**Related Work:**
+- Document secret management in README (environment variables only)
+- Add pre-commit hooks to block future secret commits
+
+---
+
+### QUALITY-1: Nullable Reference Type Hardening
+
+**Status:** BACKLOG 📋
+**Severity:** Code Quality | **Impact:** Bug prevention, developer experience
+
+**Current State:**
+- Nullable reference types enabled in projects (`<Nullable>enable</Nullable>`)
+- Not strictly enforced (warnings exist but not treated as errors)
+- Unknown number of potential null dereference warnings
+- No systematic approach to null handling
+
+**Motivation:**
+- Reduce potential NullReferenceException bugs
+- Make intent explicit (nullable vs non-nullable)
+- Show best practices for open source community
+- Leverage C# compiler for null safety without massive Option<T> rewrite
+
+**Proposed Solution:**
+**Phase 1: Baseline Audit** (~30 min)
+- Count total nullability warnings (CS8600-CS8999)
+- Categorize by severity (critical hot paths vs conservative warnings)
+- Document current state
+
+**Phase 2: Enable Warnings as Errors** (~1-2 hours)
+- Add `<WarningsAsErrors>CS8600,CS8602,CS8603,CS8625</WarningsAsErrors>` to .csproj
+- Fix critical warnings (actual null dereference risk)
+- Use null-forgiving operator (`!`) sparingly for false positives
+- Focus on hot paths first (spam detection, message processing)
+
+**Phase 3: Ongoing Enforcement** (future)
+- Enforce for all new code
+- Gradual cleanup of remaining warnings
+- Code review checklist for null handling
+
+**Practical Guidelines:**
+- **DO**: Use `string?` for optional parameters
+- **DO**: Check null before dereferencing: `if (user?.Email != null)`
+- **DO**: Return empty collections instead of null: `Array.Empty<T>()`
+- **DON'T**: Use `!` everywhere to silence warnings
+- **DON'T**: Rewrite working code just to eliminate null
+- **DON'T**: Make every field nullable "to be safe"
+
+**Success Criteria:**
+- Zero critical nullable warnings (CS8600, CS8602, CS8603)
+- Warnings-as-errors for nullable violations
+- No new nullable warnings in future PRs
+- No production NullReferenceExceptions from new code
+
+**Priority:** MEDIUM - Quality improvement, not blocking
+
+**Effort:** 2-3 hours (phased approach)
+
+**When to Do:**
+- NOT before security sanitization (security is blocking)
+- NOT before migration testing (higher priority)
+- MAYBE after migration testing Phase 2
+- DEFINITELY before open sourcing (shows code quality)
+
+---
+
 ### FEATURE-4.20: Auto-Fix Database Sequences on Backup Restore
 
 **Status:** BACKLOG 📋
