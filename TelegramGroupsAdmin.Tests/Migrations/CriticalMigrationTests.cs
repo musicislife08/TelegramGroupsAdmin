@@ -223,4 +223,163 @@ public class CriticalMigrationTests
         Assert.That(indexExists, Is.True,
             "Unique partial index on message_id should exist");
     }
+
+    /// <summary>
+    /// Test 3: SpamCheckSkipReason Backfill Logic
+    ///
+    /// Context: AddSpamCheckSkipReasonToMessages migration (2025-10-25) intelligently backfills
+    /// existing data based on chat_admins and telegram_users tables to classify why spam checks were skipped.
+    ///
+    /// This test validates the backfill logic correctly classifies messages by user type with
+    /// proper priority handling (admin > trusted > default).
+    /// </summary>
+    [Test]
+    public async Task SpamCheckSkipReasonBackfill_ShouldClassifyMessagesByUserType()
+    {
+        // Arrange - Apply migrations up to (but not including) AddSpamCheckSkipReasonToMessages
+        using var helper = new MigrationTestHelper();
+        await helper.CreateDatabaseAndMigrateToAsync("20251025031236_AddUniqueConstraintToMessageTranslations");
+
+        // Create a managed chat (required for FK constraint in chat_admins)
+        await using (var context = helper.GetDbContext())
+        {
+            context.ManagedChats.Add(new ManagedChatRecordDto
+            {
+                ChatId = 100,
+                ChatName = "Test Chat",
+                IsActive = true,
+                AddedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // Create telegram users with different statuses
+        await using (var context = helper.GetDbContext())
+        {
+            context.TelegramUsers.AddRange(
+                new TelegramUserDto { TelegramUserId = 1001, FirstName = "Admin", IsTrusted = false, FirstSeenAt = DateTimeOffset.UtcNow },
+                new TelegramUserDto { TelegramUserId = 2001, FirstName = "Trusted", IsTrusted = true, FirstSeenAt = DateTimeOffset.UtcNow },
+                new TelegramUserDto { TelegramUserId = 3001, FirstName = "Regular", IsTrusted = false, FirstSeenAt = DateTimeOffset.UtcNow },
+                new TelegramUserDto { TelegramUserId = 4001, FirstName = "Both", IsTrusted = true, FirstSeenAt = DateTimeOffset.UtcNow },
+                new TelegramUserDto { TelegramUserId = 5001, FirstName = "Checked", IsTrusted = false, FirstSeenAt = DateTimeOffset.UtcNow }
+            );
+            await context.SaveChangesAsync();
+        }
+
+        // Create chat_admins (user 1001 and 4001 are admins in chat 100)
+        await using (var context = helper.GetDbContext())
+        {
+            context.ChatAdmins.AddRange(
+                new ChatAdminRecordDto
+                {
+                    ChatId = 100,
+                    TelegramId = 1001,
+                    IsActive = true,
+                    PromotedAt = DateTimeOffset.UtcNow,
+                    LastVerifiedAt = DateTimeOffset.UtcNow
+                },
+                new ChatAdminRecordDto
+                {
+                    ChatId = 100,
+                    TelegramId = 4001,
+                    IsActive = true,
+                    PromotedAt = DateTimeOffset.UtcNow,
+                    LastVerifiedAt = DateTimeOffset.UtcNow
+                }
+            );
+            await context.SaveChangesAsync();
+        }
+
+        // Create messages (using raw SQL since spam_check_skip_reason column doesn't exist yet)
+        await helper.ExecuteSqlAsync(@"
+            -- Message 1: Admin user (should become UserAdmin=2)
+            INSERT INTO messages (message_id, user_id, chat_id, timestamp)
+            VALUES (1, 1001, 100, NOW());
+
+            -- Message 2: Trusted user (should become UserTrusted=1)
+            INSERT INTO messages (message_id, user_id, chat_id, timestamp)
+            VALUES (2, 2001, 100, NOW());
+
+            -- Message 3: Regular user (should stay NotSkipped=0, old data)
+            INSERT INTO messages (message_id, user_id, chat_id, timestamp)
+            VALUES (3, 3001, 100, NOW());
+
+            -- Message 4: Both admin and trusted (should become UserAdmin=2, admin priority)
+            INSERT INTO messages (message_id, user_id, chat_id, timestamp)
+            VALUES (4, 4001, 100, NOW());
+
+            -- Message 5: Has detection results (should stay NotSkipped=0, was checked)
+            INSERT INTO messages (message_id, user_id, chat_id, timestamp)
+            VALUES (5, 5001, 100, NOW());
+        ");
+
+        // Add detection result for message 5 using DbContext
+        await using (var context = helper.GetDbContext())
+        {
+            context.DetectionResults.Add(new DetectionResultRecordDto
+            {
+                MessageId = 5,
+                Confidence = 95,
+                NetConfidence = 95,
+                DetectionSource = "test",
+                DetectionMethod = "manual",
+                DetectedAt = DateTimeOffset.UtcNow,
+                SystemIdentifier = "test-system",
+                UsedForTraining = true
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // Verify legacy data exists
+        var countBefore = await helper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM messages");
+        Assert.That(countBefore, Is.EqualTo(5), "Should have 5 messages before migration");
+
+        // Act - Apply the AddSpamCheckSkipReasonToMessages migration
+        await helper.ApplyNextMigrationAsync("20251026043301_AddSpamCheckSkipReasonToMessages");
+
+        // Assert - Verify backfill logic correctly classified each message
+
+        // Message 1: Admin only → spam_check_skip_reason = 2 (UserAdmin)
+        var msg1Reason = await helper.ExecuteScalarAsync<int>(
+            "SELECT spam_check_skip_reason FROM messages WHERE message_id = 1");
+        Assert.That(msg1Reason, Is.EqualTo(2),
+            "Message from admin-only user should be classified as UserAdmin (2)");
+
+        // Message 2: Trusted only → spam_check_skip_reason = 1 (UserTrusted)
+        var msg2Reason = await helper.ExecuteScalarAsync<int>(
+            "SELECT spam_check_skip_reason FROM messages WHERE message_id = 2");
+        Assert.That(msg2Reason, Is.EqualTo(1),
+            "Message from trusted-only user should be classified as UserTrusted (1)");
+
+        // Message 3: Regular user → spam_check_skip_reason = 0 (NotSkipped - old data)
+        var msg3Reason = await helper.ExecuteScalarAsync<int>(
+            "SELECT spam_check_skip_reason FROM messages WHERE message_id = 3");
+        Assert.That(msg3Reason, Is.EqualTo(0),
+            "Message from regular user should remain NotSkipped (0) - old data assumption");
+
+        // Message 4: Both admin and trusted → spam_check_skip_reason = 2 (UserAdmin - admin priority)
+        var msg4Reason = await helper.ExecuteScalarAsync<int>(
+            "SELECT spam_check_skip_reason FROM messages WHERE message_id = 4");
+        Assert.That(msg4Reason, Is.EqualTo(2),
+            "Message from user who is both admin and trusted should be UserAdmin (2) - admin takes priority");
+
+        // Message 5: Has detection_results → spam_check_skip_reason = 0 (NotSkipped - was actually checked)
+        var msg5Reason = await helper.ExecuteScalarAsync<int>(
+            "SELECT spam_check_skip_reason FROM messages WHERE message_id = 5");
+        Assert.That(msg5Reason, Is.EqualTo(0),
+            "Message with detection_results should be NotSkipped (0) - was actually checked");
+
+        // Verify the column exists with correct default
+        var columnExists = await helper.ExecuteScalarAsync<bool>(@"
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'messages'
+                AND column_name = 'spam_check_skip_reason'
+                AND column_default = '0'
+            )
+        ");
+        Assert.That(columnExists, Is.True,
+            "spam_check_skip_reason column should exist with default value 0");
+    }
 }
