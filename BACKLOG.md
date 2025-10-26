@@ -1,8 +1,8 @@
 # Development Backlog - TelegramGroupsAdmin
 
-**Last Updated:** 2025-10-24
+**Last Updated:** 2025-10-26
 **Status:** Pre-production (breaking changes acceptable)
-**Overall Code Quality:** 88/100 (Excellent)
+**Overall Code Quality:** 89/100 (Excellent - homelab-optimized)
 
 This document tracks technical debt, performance optimizations, refactoring work, and deferred features.
 
@@ -60,6 +60,8 @@ git push --force --tags origin
 **Files to Audit:**
 - TelegramGroupsAdmin/Properties/launchSettings.json (confirmed in 10+ commits)
 - Any other launchSettings.json in sub-projects
+- compose/compose.yml (contains Telegram bot token, OpenAI, VirusTotal, SendGrid API keys)
+- TelegramGroupsAdmin/http-client.private.env.json (contains API keys for HTTP testing)
 - Hardcoded secrets in code (connection strings, API keys)
 
 **Priority:** HIGH - Must complete before GitHub migration
@@ -69,6 +71,93 @@ git push --force --tags origin
 **Related Work:**
 - Document secret management in README (environment variables only)
 - Add pre-commit hooks to block future secret commits
+
+---
+
+### SECURITY-2: Open Redirect Vulnerability
+
+**Status:** BACKLOG 📋 **HIGH - Security Issue**
+**Severity:** Security | **Impact:** Phishing attacks, credential theft
+**Discovered:** 2025-10-26 via security agent code review
+
+**Current State:**
+- `Setup2FA.razor` (line 227) and `LoginVerify.razor` (line 164) accept `returnUrl` query parameter without validation
+- Redirects to user-controlled URLs after authentication
+- Allows phishing attacks via malicious redirect URLs
+
+**Attack Scenario:**
+```
+https://your-site.com/login/setup-2fa?returnUrl=https://evil.com/steal-creds
+→ User completes 2FA → Redirected to attacker's site → Credentials stolen
+```
+
+**Proposed Solution:**
+Create `UrlHelpers.IsLocalUrl()` validation method:
+```csharp
+public static class UrlHelpers
+{
+    public static bool IsLocalUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return false;
+
+        // Reject absolute URLs
+        if (url.StartsWith("http://") || url.StartsWith("https://") || url.StartsWith("//"))
+            return false;
+
+        // Only allow relative URLs starting with /
+        return url.StartsWith("/") && !url.StartsWith("//");
+    }
+}
+```
+
+Apply to all redirect flows:
+- Setup2FA.razor:227
+- LoginVerify.razor:164
+- Any other pages using `returnUrl` parameter
+
+**Priority:** HIGH - Security vulnerability in authentication flow
+
+**Effort:** 30 minutes
+
+---
+
+### SECURITY-3: CSRF Protection on API Endpoints
+
+**Status:** BACKLOG 📋
+**Severity:** Security | **Impact:** Defense-in-depth for state-changing operations
+**Discovered:** 2025-10-26 via security agent code review
+
+**Current State:**
+- `app.UseAntiforgery()` enabled in pipeline (WebApplicationExtensions.cs:40)
+- API endpoints don't validate antiforgery tokens
+- Cookie auth with `SameSite=Lax` provides partial protection
+
+**Risk Assessment:**
+- **LOW risk** for homelab deployment (Blazor Server uses SignalR/WebSocket)
+- **MEDIUM risk** if API endpoints called from JavaScript/AJAX
+- SameSite=Lax prevents most CSRF attacks but lacks defense-in-depth
+
+**Proposed Solution:**
+Add antiforgery validation to state-changing endpoints:
+```csharp
+endpoints.MapPost("/api/auth/logout", async (HttpContext context, ...) =>
+{
+    var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
+    await antiforgery.ValidateRequestAsync(context);
+    // ... rest of handler
+}).RequireAuthorization();
+```
+
+**Affected Endpoints:**
+- POST /api/auth/logout
+- POST /api/auth/register
+- POST /resend-verification
+- POST /forgot-password
+- POST /reset-password
+
+**Priority:** MEDIUM - Defense-in-depth, not critical for homelab
+
+**Effort:** 1 hour
 
 ---
 
@@ -725,5 +814,299 @@ Test 6 (CascadeBehaviorTests.UserDeletionCascade_FailsDueToCheckConstraintConfli
 - After migration testing (higher priority)
 - **BEFORE open sourcing** - Shows professional code organization
 - Can be done incrementally: worst offenders first, then work down the list
+
+---
+
+### CODE-5: Fire-and-Forget Error Handling
+
+**Status:** BACKLOG 📋
+**Severity:** Code Quality | **Impact:** Silent failures, debugging difficulty
+**Discovered:** 2025-10-26 via performance agent code review
+
+**Current State:**
+- 4 locations use `_ = Task.Run(...)` fire-and-forget pattern
+- Exceptions swallowed without logging
+- No timeout or cancellation support
+
+**Affected Locations:**
+1. `MessageProcessingService.cs:591` - Spam detection fire-and-forget
+2. `MessageProcessingService.cs:730` - Edit spam detection fire-and-forget
+3. `SpamActionService.cs:573` - Notification delivery fire-and-forget
+4. `IntermediateAuthService.cs:38` - Token cleanup fire-and-forget
+
+**Note:** OpenAI timeout is NOT an issue - HttpClient already configured with 30s timeout (ServiceCollectionExtensions.cs:252) and fail-open handling (OpenAISpamCheck.cs:171-176)
+
+**Proposed Solution:**
+Wrap all fire-and-forget tasks in try-catch with logging:
+```csharp
+_ = Task.Run(async () =>
+{
+    try
+    {
+        await RunSpamDetectionAsync(botClient, message, text, editVersion: 0, cancellationToken);
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Spam detection failed for message {MessageId}", message.MessageId);
+    }
+}, cancellationToken);
+```
+
+**Priority:** MEDIUM - Good practice for debugging, not breaking
+
+**Effort:** 1 hour (15 min per location)
+
+---
+
+### CODE-6: Extract Magic Numbers to Configuration
+
+**Status:** BACKLOG 📋
+**Severity:** Code Quality | **Impact:** Configuration flexibility
+**Discovered:** 2025-10-26 via refactor agent code review
+
+**Current State:**
+- Hardcoded retention periods, timeouts, thresholds throughout codebase
+- Examples:
+  - `MessageHistoryRepository.cs:68` - 30-day retention hardcoded
+  - Various timeout values (5s, 30s, 60s) scattered in code
+
+**Proposed Solution:**
+Extract to configuration classes:
+```csharp
+public class MessageHistoryOptions
+{
+    public int RetentionDays { get; set; } = 30;
+    public int CleanupBatchSize { get; set; } = 1000;
+}
+```
+
+**Affected Areas:**
+- Message retention periods
+- Background job polling intervals
+- API timeout values
+- Rate limit thresholds
+
+**Priority:** LOW - Nice to have, not blocking
+
+**Effort:** 1-2 hours
+
+---
+
+### CODE-7: Modernize to C# 12 Collection Expressions
+
+**Status:** BACKLOG 📋
+**Severity:** Code Quality | **Impact:** Code modernization
+**Discovered:** 2025-10-26 via refactor agent code review
+
+**Current State:**
+- Uses `new List<string>()` throughout codebase
+- C# 12 collection expressions available but not used
+
+**Proposed Solution:**
+Replace with modern syntax:
+```csharp
+// Before:
+var items = new List<string>();
+
+// After:
+List<string> items = [];
+```
+
+**Benefits:**
+- More concise
+- Compiler can optimize allocation
+- Consistent with .NET 9 idioms
+
+**Priority:** LOW - Cosmetic improvement
+
+**Effort:** 2 hours (automated refactoring with IDE)
+
+---
+
+### CODE-8: Remove Inconsistent ConfigureAwait Usage
+
+**Status:** BACKLOG 📋
+**Severity:** Code Quality | **Impact:** Code consistency
+**Discovered:** 2025-10-26 via refactor agent code review
+
+**Current State:**
+- Only 7 uses of `.ConfigureAwait(false)` across entire codebase
+- Inconsistent application suggests uncertainty about the pattern
+- ASP.NET Core doesn't require ConfigureAwait(false) (no SynchronizationContext)
+
+**Affected Files:**
+- ContentCheckCoordinator.cs (4 occurrences)
+- SpamActionService.cs (2 occurrences)
+- MessageProcessingService.cs (1 occurrence)
+
+**Proposed Solution:**
+Remove all `.ConfigureAwait(false)` calls - unnecessary in ASP.NET Core
+
+**Microsoft Guidance:** ASP.NET Core apps don't need ConfigureAwait(false) because there's no SynchronizationContext to capture
+
+**Priority:** LOW - Code consistency improvement
+
+**Effort:** 15 minutes
+
+---
+
+### CODE-9: Remove Reflection in Production Code
+
+**Status:** BACKLOG 📋
+**Severity:** Code Quality | **Impact:** Type safety, performance
+**Discovered:** 2025-10-26 via refactor agent code review
+
+**Current State:**
+- `MessageProcessingService.cs:824-826` uses reflection to call `SerializeCheckResults`
+- No compile-time safety
+- Performance overhead (minimal but unnecessary)
+- Fragile - breaks silently if method renamed
+
+**Proposed Solution:**
+Make method accessible through interface or use direct serialization:
+```csharp
+// Option 1: Add to interface
+CheckResultsJson = spamDetectionEngine.SerializeCheckResults(result.SpamResult.CheckResults)
+
+// Option 2: Direct serialization
+CheckResultsJson = JsonSerializer.Serialize(result.SpamResult.CheckResults)
+```
+
+**Priority:** LOW - Nice to have, not breaking
+
+**Effort:** 30 minutes
+
+---
+
+### QUALITY-2: Implement HybridCache
+
+**Status:** BACKLOG 📋
+**Severity:** Code Quality | **Impact:** Performance optimization
+**Discovered:** 2025-10-26 via code review (AI agent recommended but never implemented)
+
+**Current State:**
+- HybridCache package added to project (Microsoft.Extensions.Caching.Hybrid v9.0.0)
+- Package never wired up or used
+- Zero caching strategy despite frequent config/admin lookups
+
+**Proposed Implementation:**
+Cache frequently-accessed data:
+```csharp
+// Config lookups (5min TTL)
+var config = await _cache.GetOrCreateAsync($"config:{chatId}", async entry =>
+{
+    entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+    return await _configRepo.GetConfigAsync(chatId);
+});
+
+// Admin status (30s TTL)
+var isAdmin = await _cache.GetOrCreateAsync($"admin:{chatId}:{userId}", async entry =>
+{
+    entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(30);
+    return await _chatAdminsRepo.IsAdminAsync(chatId, userId);
+});
+```
+
+**Target Areas:**
+- Spam detection config per chat
+- Chat admin status lookups
+- Blocklist domain lookups
+- Tag/note data for message page
+
+**Priority:** MEDIUM - Performance improvement for homelab
+
+**Effort:** 2-4 hours
+
+---
+
+### PERF-2: Add Performance Telemetry
+
+**Status:** BACKLOG 📋
+**Severity:** Performance | **Impact:** Validate production metrics
+**Discovered:** 2025-10-26 via performance agent code review
+
+**Current State:**
+- Performance claims based on observation, not telemetry
+- No OpenTelemetry, no custom metrics
+- Cannot validate 255ms average spam detection claim
+
+**Proposed Solution:**
+Add OpenTelemetry with custom metrics:
+```csharp
+using var activity = ActivitySource.StartActivity("SpamDetection");
+activity?.SetTag("chat.id", chatId);
+activity?.SetTag("user.id", userId);
+// ... existing code ...
+activity?.SetTag("detection.duration_ms", stopwatch.ElapsedMilliseconds);
+activity?.SetTag("detection.result", result.Action.ToString());
+```
+
+**Metrics to Track:**
+- Spam detection duration (avg, P95, P99)
+- Analytics query response time
+- Message page load time
+- Background job execution time
+
+**Benefits:**
+- Validate performance claims with data
+- Identify regressions
+- Optimize based on metrics
+
+**Priority:** MEDIUM - Useful for homelab monitoring
+
+**Effort:** 4-6 hours
+
+---
+
+### REFACTOR-1: Method Extraction for Unit Testing
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Testability, maintainability
+**Discovered:** 2025-10-26 via refactor agent code review
+**User Priority:** HIGH (preparing for unit test migration)
+
+**Current State:**
+- `MessageProcessingService.HandleNewMessageAsync` - 550+ lines
+- Single responsibility violated (handles 15+ concerns)
+- Difficult to unit test individual behaviors
+- High cognitive complexity
+
+**Target:**
+Reduce to ~300-350 lines by extracting 3-5 focused handlers:
+- MediaDownloadHandler - Photo/video/media download logic
+- FileScanningHandler - ClamAV/VirusTotal coordination
+- Keep inline: Translation, impersonation, spam detection (core orchestration)
+
+**Example Refactoring:**
+```csharp
+public async Task HandleNewMessageAsync(...)
+{
+    if (ShouldSkipMessage(message)) return;
+
+    var messageContext = await BuildMessageContextAsync(...);
+    await ExecuteCommandsIfPresentAsync(...);
+    await HandleAdminMentionsAsync(...);
+
+    // Extract to MediaDownloadHandler
+    await _mediaDownloadHandler.DownloadMediaAttachmentsAsync(message, messageContext);
+
+    // Extract to FileScanningHandler
+    await _fileScanningHandler.ScheduleFileScansAsync(message, messageContext);
+
+    await TranslateMessageIfNeededAsync(...);
+    await SaveMessageToHistoryAsync(...);
+    await RunContentDetectionAsync(...);
+}
+```
+
+**Benefits:**
+- Unit testable components
+- Easier to understand and modify
+- Reduced cognitive load
+- Prep for comprehensive unit test suite
+
+**Priority:** HIGH - User confirmed, preparing for unit tests
+
+**Effort:** 4-6 hours (extract 3-5 handlers, update DI, add tests)
 
 ---
