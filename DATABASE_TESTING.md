@@ -141,7 +141,7 @@ Tests are designed to run locally, not as CI/CD gates:
 
 ## Phase Breakdown
 
-### Phase 1: Infrastructure Setup (~30 minutes)
+### Phase 1: Infrastructure Setup
 
 **Objective**: Build the foundation for all future tests
 
@@ -172,9 +172,9 @@ dotnet test
 
 ---
 
-### Phase 2: Critical Migration Tests (~2 hours)
+### Phase 2: Critical Migration Tests
 
-**Objective**: Catch the 3 production failures that have already happened
+**Objective**: Catch the production failures that have already happened, plus validate recent migration logic
 
 #### Test 1: System Actor Migration Routing
 
@@ -231,7 +231,58 @@ message_translations:
 
 ---
 
-#### Test 3: Orphaned Foreign Key Protection
+#### Test 3: SpamCheckSkipReason Backfill Logic
+
+**Context**: AddSpamCheckSkipReasonToMessages migration (2025-10-25) intelligently backfills existing data based on chat_admins and telegram_users tables to classify why spam checks were skipped.
+
+**Test Scenario**:
+- Seed database with production-like message data representing different user types
+- Apply AddSpamCheckSkipReasonToMessages migration
+- Verify intelligent backfill SQL correctly classified all messages based on admin/trust status
+- Verify priority handling (admin status takes precedence over trusted status)
+
+**Data Setup**:
+```
+users:
+  id="admin-user-1", email="admin@test.com"
+  id="trusted-user-1", email="trusted@test.com"
+  id="regular-user-1", email="regular@test.com"
+  id="both-user-1", email="both@test.com"
+
+telegram_users:
+  telegram_user_id=1001 (admin-user-1)
+  telegram_user_id=2001, is_trusted=true (trusted-user-1)
+  telegram_user_id=3001 (regular-user-1)
+  telegram_user_id=4001, is_trusted=true (both-user-1)
+
+chat_admins:
+  chat_id=100, telegram_id=1001, is_active=true (admin-user-1)
+  chat_id=100, telegram_id=4001, is_active=true (both-user-1)
+
+messages:
+  message_id=1, user_id=1001, chat_id=100 (no detection_results)
+  message_id=2, user_id=2001, chat_id=100 (no detection_results)
+  message_id=3, user_id=3001, chat_id=100 (no detection_results)
+  message_id=4, user_id=4001, chat_id=100 (no detection_results)
+  message_id=5, user_id=5001, chat_id=100
+
+detection_results:
+  message_id=5, spam_detected=false (spam was actually checked)
+```
+
+**Expected Results**:
+- Migration succeeds without errors
+- Message 1 (admin only): `spam_check_skip_reason = 2` (UserAdmin)
+- Message 2 (trusted only): `spam_check_skip_reason = 1` (UserTrusted)
+- Message 3 (regular user): `spam_check_skip_reason = 0` (NotSkipped - old data assumption)
+- Message 4 (both admin and trusted): `spam_check_skip_reason = 2` (UserAdmin - admin priority)
+- Message 5 (has detection_result): `spam_check_skip_reason = 0` (NotSkipped - was actually checked)
+
+**Why This Matters**: Validates complex data-dependent backfill logic. Similar intelligent migrations in the future can follow this pattern, and this test ensures the priority handling (admin > trusted > default) works correctly.
+
+---
+
+#### Test 4: Orphaned Foreign Key Protection
 
 **Context**: Migrations adding FK constraints failed because existing data had orphaned references (deleted parents).
 
@@ -258,7 +309,7 @@ message_translations:
 
 ---
 
-#### Test 4: NULL Exclusive Arc Validation
+#### Test 5: NULL Exclusive Arc Validation
 
 **Context**: Exclusive arc CHECK constraints should allow one NULL value (either message_id OR edit_id can be NULL, but not both).
 
@@ -289,15 +340,16 @@ message_edits:
 ---
 
 **Success Criteria for Phase 2**:
-- [x] All 4 critical tests pass
+- [x] All 5 critical tests pass
 - [x] System actor migration routing validated
 - [x] Duplicate translation prevention enforced
+- [x] SpamCheckSkipReason backfill logic validated
 - [x] Orphaned FK protection working
 - [x] Exclusive arc CHECK constraint validated
 
 ---
 
-### Phase 3: Cascade Behavior Tests (~1 hour)
+### Phase 3: Cascade Behavior Tests
 
 **Objective**: Validate FK cascade rules work as expected, no surprise deletions or orphans
 
@@ -353,7 +405,7 @@ message_edits:
 
 ---
 
-### Phase 4: Data Integrity Tests (~1 hour)
+### Phase 4: Data Integrity Tests
 
 **Objective**: Verify all constraints are enforced at database level, not just application level
 
@@ -416,7 +468,7 @@ message_edits:
 
 ---
 
-### Phase 5: Migration Workflow Tests (~30 minutes)
+### Phase 5: Migration Workflow Tests
 
 **Objective**: Validate schema evolution and rollback safety
 
@@ -480,7 +532,13 @@ message_edits:
 - **Data**: message_translation with non-existent message_id
 - **Expected**: FK creation fails or orphan cleanup runs first
 
-#### 4. NULL Exclusive Arc Handling
+#### 4. SpamCheckSkipReason Backfill Logic
+- **Context**: AddSpamCheckSkipReasonToMessages (2025-10-25) backfills based on admin/trust status
+- **Test**: Verify intelligent backfill routes messages correctly with priority handling
+- **Data**: Mix of admin, trusted, regular users with/without detection_results
+- **Expected**: Admin=2, Trusted=1, Default=0, admin priority over trusted
+
+#### 5. NULL Exclusive Arc Handling
 - **Context**: Exclusive arc CHECK constraint edge cases
 - **Test**: Verify one NULL allowed, not both NULL
 - **Data**: audit_log with NULL actor values
@@ -490,25 +548,25 @@ message_edits:
 
 ### High-Priority Scenarios (common patterns)
 
-#### 5. User Deletion Cascade
+#### 6. User Deletion Cascade
 - **Context**: Deleting users should clean up audit logs
 - **Test**: Delete user → verify audit_log cascade
 - **Data**: User with audit_log entries
 - **Expected**: Audit logs with actor_web_user_id updated/deleted
 
-#### 6. Message Deletion Cascade
+#### 7. Message Deletion Cascade
 - **Context**: Deleting messages should remove translations
 - **Test**: Delete message → verify message_translations cascade
 - **Data**: Message with translation
 - **Expected**: Translation deleted automatically
 
-#### 7. BackgroundJobConfig Seed Data
+#### 8. BackgroundJobConfig Seed Data
 - **Context**: Default job configs must initialize correctly
 - **Test**: Fresh DB → verify all default jobs created
 - **Data**: Empty background_job_config table
 - **Expected**: 6 default jobs (ChatHealthCheck, ScheduledBackup, DatabaseMaintenance, UserPhotoRefresh, BlocklistSync, MessageCleanup)
 
-#### 8. Chat Cleanup on Deletion
+#### 9. Chat Cleanup on Deletion
 - **Context**: Removing chat should clean up related data
 - **Test**: Delete chat → verify managed_chats cleanup
 - **Data**: Chat with managed_chats entries
@@ -518,13 +576,13 @@ message_edits:
 
 ### Medium-Priority Scenarios (workflow protection)
 
-#### 9. Migration Ordering
+#### 10. Migration Ordering
 - **Context**: Migrations must apply in timestamp order
 - **Test**: Fresh DB → all migrations apply sequentially
 - **Data**: Empty database
 - **Expected**: All migrations succeed, no dependency errors
 
-#### 10. Rollback Safety
+#### 11. Rollback Safety
 - **Context**: Down() migrations must undo Up() changes
 - **Test**: Apply migration → rollback → verify schema reverted
 - **Data**: Any migration
@@ -660,48 +718,42 @@ AuditLogBuilder.WithSystemActor().WithAction("Created").Build()
 
 ### Checklist
 
-**Phase 1: Infrastructure Setup** (~30 min)
+**Phase 1: Infrastructure Setup**
 - [ ] Create TelegramGroupsAdmin.Tests project
 - [ ] Install NuGet packages (NUnit, Testcontainers.PostgreSQL)
 - [ ] Create PostgresFixture.cs (shared container)
 - [ ] Create MigrationTestHelper.cs (seed data utilities)
 - [ ] Verify: Tests run in <10 seconds
 
-**Phase 2: Critical Migration Tests** (~2 hours)
+**Phase 2: Critical Migration Tests**
 - [ ] Test 1: System Actor Migration Routing
 - [ ] Test 2: Duplicate Translation Prevention
-- [ ] Test 3: Orphaned Foreign Key Protection
-- [ ] Test 4: NULL Exclusive Arc Validation
+- [ ] Test 3: SpamCheckSkipReason Backfill Logic
+- [ ] Test 4: Orphaned Foreign Key Protection
+- [ ] Test 5: NULL Exclusive Arc Validation
 
-**Phase 3: Cascade Behavior Tests** (~1 hour)
-- [ ] Test 5: User Deletion Cascade (audit_log)
-- [ ] Test 6: Message Deletion Cascade (message_translations)
-- [ ] Test 7: Chat Cleanup on Deletion (managed_chats)
+**Phase 3: Cascade Behavior Tests**
+- [ ] Test 6: User Deletion Cascade (audit_log)
+- [ ] Test 7: Message Deletion Cascade (message_translations)
+- [ ] Test 8: Chat Cleanup on Deletion (managed_chats)
 
-**Phase 4: Data Integrity Tests** (~1 hour)
-- [ ] Test 8: UNIQUE Constraints Enforced
-- [ ] Test 9: CHECK Constraints Enforced
-- [ ] Test 10: NOT NULL Constraints Enforced
-- [ ] Test 11: FK Constraints Enforced
+**Phase 4: Data Integrity Tests**
+- [ ] Test 9: UNIQUE Constraints Enforced
+- [ ] Test 10: CHECK Constraints Enforced
+- [ ] Test 11: NOT NULL Constraints Enforced
+- [ ] Test 12: FK Constraints Enforced
 
-**Phase 5: Migration Workflow Tests** (~30 min)
-- [ ] Test 12: Migration Ordering (fresh DB)
-- [ ] Test 13: Rollback Safety (Down migrations)
+**Phase 5: Migration Workflow Tests**
+- [ ] Test 13: Migration Ordering (fresh DB)
+- [ ] Test 14: Rollback Safety (Down migrations)
 
 ---
 
-### Total Effort Estimate
+### Implementation Approach
 
-**Total Tests**: 13 tests across 5 phases
-**Total Time**: ~5 hours of focused work
-**Breakdown**:
-- Infrastructure: 30 min
-- Critical tests: 2 hours (highest ROI)
-- Cascade tests: 1 hour
-- Integrity tests: 1 hour
-- Workflow tests: 30 min
+**Total Tests**: 14 tests across 5 phases
 
-**Incremental Approach**: Each phase can be tackled independently. Phases build on each other but don't block each other.
+**Incremental Approach**: Each phase can be tackled independently. Phases build on each other but don't block each other. Phase 1-2 provides foundation and highest ROI (catches actual production failures).
 
 ---
 
