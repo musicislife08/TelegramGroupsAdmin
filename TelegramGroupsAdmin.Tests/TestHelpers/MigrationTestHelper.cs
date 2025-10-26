@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql;
 using TelegramGroupsAdmin.Data;
 
@@ -90,6 +92,61 @@ public class MigrationTestHelper : IDisposable
         await connection.OpenAsync();
         await using var cmd = new NpgsqlCommand(sql, connection);
         return await cmd.ExecuteScalarAsync();
+    }
+
+    /// <summary>
+    /// Executes a scalar SQL query and returns the result cast to the specified type.
+    /// </summary>
+    public async Task<T?> ExecuteScalarAsync<T>(string sql)
+    {
+        var result = await ExecuteScalarAsync(sql);
+        if (result == null || result == DBNull.Value)
+            return default;
+        return (T)result;
+    }
+
+    /// <summary>
+    /// Creates the database and applies migrations up to (and including) a specific migration.
+    /// Useful for testing migration scenarios with production-like data.
+    /// </summary>
+    /// <param name="targetMigration">Migration name to migrate to (e.g., "20251024235959_AddNotificationPreferences")</param>
+    public async Task CreateDatabaseAndMigrateToAsync(string targetMigration)
+    {
+        // First, create the database using the postgres database connection
+        var adminBuilder = new NpgsqlConnectionStringBuilder(PostgresFixture.BaseConnectionString)
+        {
+            Database = "postgres"
+        };
+
+        await using (var connection = new NpgsqlConnection(adminBuilder.ConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var cmd = new NpgsqlCommand($"CREATE DATABASE \"{_databaseName}\"", connection);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        // Apply migrations up to the target migration using IMigrator
+        var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
+        optionsBuilder.UseNpgsql(_connectionString);
+
+        await using var context = new AppDbContext(optionsBuilder.Options);
+        var migrator = context.Database.GetService<IMigrator>();
+        await migrator.MigrateAsync(targetMigration);
+    }
+
+    /// <summary>
+    /// Applies a specific migration by name to an existing database.
+    /// Database must already exist and be at the correct migration state (one migration before).
+    /// </summary>
+    /// <param name="migrationName">Migration name to apply (e.g., "20251025003104_AddActorExclusiveArcToAuditLog")</param>
+    public async Task ApplyNextMigrationAsync(string migrationName)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
+        optionsBuilder.UseNpgsql(_connectionString);
+
+        await using var context = new AppDbContext(optionsBuilder.Options);
+        var migrator = context.Database.GetService<IMigrator>();
+        await migrator.MigrateAsync(migrationName);
     }
 
     /// <summary>
