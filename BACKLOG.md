@@ -74,53 +74,6 @@ git push --force --tags origin
 
 ---
 
-### SECURITY-2: Open Redirect Vulnerability
-
-**Status:** BACKLOG 📋 **HIGH - Security Issue**
-**Severity:** Security | **Impact:** Phishing attacks, credential theft
-**Discovered:** 2025-10-26 via security agent code review
-
-**Current State:**
-- `Setup2FA.razor` (line 227) and `LoginVerify.razor` (line 164) accept `returnUrl` query parameter without validation
-- Redirects to user-controlled URLs after authentication
-- Allows phishing attacks via malicious redirect URLs
-
-**Attack Scenario:**
-```
-https://your-site.com/login/setup-2fa?returnUrl=https://evil.com/steal-creds
-→ User completes 2FA → Redirected to attacker's site → Credentials stolen
-```
-
-**Proposed Solution:**
-Create `UrlHelpers.IsLocalUrl()` validation method:
-```csharp
-public static class UrlHelpers
-{
-    public static bool IsLocalUrl(string url)
-    {
-        if (string.IsNullOrEmpty(url)) return false;
-
-        // Reject absolute URLs
-        if (url.StartsWith("http://") || url.StartsWith("https://") || url.StartsWith("//"))
-            return false;
-
-        // Only allow relative URLs starting with /
-        return url.StartsWith("/") && !url.StartsWith("//");
-    }
-}
-```
-
-Apply to all redirect flows:
-- Setup2FA.razor:227
-- LoginVerify.razor:164
-- Any other pages using `returnUrl` parameter
-
-**Priority:** HIGH - Security vulnerability in authentication flow
-
-**Effort:** 30 minutes
-
----
-
 ### SECURITY-3: CSRF Protection on API Endpoints
 
 **Status:** BACKLOG 📋
@@ -646,6 +599,8 @@ Test 6 (CascadeBehaviorTests.UserDeletionCascade_FailsDueToCheckConstraintConfli
 ---
 
 ## Completed Work
+
+**2025-10-26**: SECURITY-2 (Open redirect vulnerability fixed - UrlHelpers.IsLocalUrl() validation on all auth redirects), BUG-LOGOUT (Missing /logout page - existed since Oct 6, found by user on Cloudflare tunnel exposure)
 
 **2025-10-25**: BUG-1 (False negative tracking - analytics now shows both FP and FN rates with overall accuracy metrics)
 
