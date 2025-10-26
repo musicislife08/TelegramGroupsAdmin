@@ -186,3 +186,4 @@ SELECT COUNT(*) FROM detection_results WHERE check_results_json LIKE '%"spam":%'
 - Never run app in normal mode (only one instance allowed, user runs in Rider for debugging)
 - Testing: Use `dotnet run --migrate-only` to catch startup issues after building
 - Always let user test manually - complex app, cannot validate runtime behavior automatically
+- dont include time estimates in your documentation
