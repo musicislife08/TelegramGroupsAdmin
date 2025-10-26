@@ -382,4 +382,89 @@ public class CriticalMigrationTests
         Assert.That(columnExists, Is.True,
             "spam_check_skip_reason column should exist with default value 0");
     }
+
+    /// <summary>
+    /// Test 4: Orphaned Foreign Key Protection
+    ///
+    /// Context: Migrations adding FK constraints failed because existing data had orphaned
+    /// references (deleted parents). This is common in production environments.
+    ///
+    /// This test validates that attempting to create FK constraints on data with orphaned
+    /// references properly fails, demonstrating the need for orphan cleanup before adding FKs.
+    /// </summary>
+    [Test]
+    public async Task OrphanedForeignKeyProtection_ShouldFailOnOrphanedReferences()
+    {
+        // Arrange - Create database and migrate to just before AddMessageTranslations
+        using var helper = new MigrationTestHelper();
+
+        // Find the migration before AddMessageTranslations (InitialCreate)
+        await helper.CreateDatabaseAndMigrateToAsync("20251024031020_InitialCreate");
+
+        // Create an orphaned translation (message_id=999 doesn't exist in messages table)
+        // We need to create the message_translations table manually since the migration hasn't run yet
+        await helper.ExecuteSqlAsync(@"
+            CREATE TABLE message_translations (
+                id BIGSERIAL PRIMARY KEY,
+                message_id BIGINT,
+                edit_id BIGINT,
+                translated_text TEXT NOT NULL,
+                detected_language VARCHAR(100) NOT NULL,
+                confidence DECIMAL,
+                translated_at TIMESTAMPTZ NOT NULL
+            );
+
+            -- Insert orphaned translation (message_id=999 doesn't exist)
+            INSERT INTO message_translations (message_id, translated_text, detected_language, translated_at)
+            VALUES (999, 'Orphaned translation', 'en', NOW());
+        ");
+
+        // Verify orphaned data exists
+        var orphanCount = await helper.ExecuteScalarAsync<long>(
+            "SELECT COUNT(*) FROM message_translations WHERE message_id = 999");
+        Assert.That(orphanCount, Is.EqualTo(1), "Should have 1 orphaned translation");
+
+        // Verify message 999 does NOT exist
+        var messageExists = await helper.ExecuteScalarAsync<bool>(
+            "SELECT EXISTS(SELECT 1 FROM messages WHERE message_id = 999)");
+        Assert.That(messageExists, Is.False, "Message 999 should NOT exist (orphaned reference)");
+
+        // Act & Assert - Attempt to add FK constraint (should fail)
+        var exception = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
+        {
+            await helper.ExecuteSqlAsync(@"
+                ALTER TABLE message_translations
+                ADD CONSTRAINT FK_message_translations_messages_message_id
+                FOREIGN KEY (message_id)
+                REFERENCES messages(message_id)
+                ON DELETE CASCADE;
+            ");
+        });
+
+        // Verify it's a foreign key violation
+        Assert.That(exception, Is.Not.Null);
+        Assert.That(exception!.SqlState, Is.EqualTo("23503"), // Foreign key violation
+            "Should fail with foreign key violation error code");
+        Assert.That(exception.Message, Does.Contain("violates foreign key constraint")
+            .Or.Contain("is not present in table"),
+            "Error message should mention FK constraint violation");
+
+        // Verify the orphaned data still exists (transaction rolled back)
+        var orphanCountAfter = await helper.ExecuteScalarAsync<long>(
+            "SELECT COUNT(*) FROM message_translations WHERE message_id = 999");
+        Assert.That(orphanCountAfter, Is.EqualTo(1),
+            "Orphaned translation should still exist after failed FK creation");
+
+        // Verify FK constraint was NOT created
+        var fkExists = await helper.ExecuteScalarAsync<bool>(@"
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.table_constraints
+                WHERE constraint_name = 'FK_message_translations_messages_message_id'
+                AND table_name = 'message_translations'
+            )
+        ");
+        Assert.That(fkExists, Is.False,
+            "FK constraint should NOT exist after failed creation");
+    }
 }
