@@ -285,6 +285,14 @@
             return;
 
         _loading = true;
+
+        // Clear existing data to force chart re-render
+        _trendsData = null;
+        _dailyVolumeChart = null;
+        _spamHamChart = null;
+        _perChatChart = null;
+        StateHasChanged(); // Clear old charts first
+
         try
         {
             _trendsData = await MessageHistoryRepository.GetMessageTrendsAsync(
