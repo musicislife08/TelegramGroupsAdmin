@@ -938,6 +938,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         List<long> chatIds,
         DateTimeOffset startDate,
         DateTimeOffset endDate,
+        string timeZoneId,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -970,42 +971,66 @@ public class MessageHistoryRepository : IMessageHistoryRepository
 
         var spamPercentage = totalMessages > 0 ? (spamCount / (double)totalMessages * 100.0) : 0;
 
-        // Daily volume
-        var dailyVolume = await baseQuery
-            .GroupBy(m => new { Date = DateOnly.FromDateTime(m.Timestamp.Date) })
+        // Daily volume - fetch data and group by user's local date
+        var volumeData = await baseQuery
+            .Select(m => new { m.Timestamp })
+            .ToListAsync(cancellationToken);
+
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        var dailyVolume = volumeData
+            .GroupBy(m => {
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
+                return DateOnly.FromDateTime(localTime);
+            })
             .Select(g => new UiModels.DailyVolumeData
             {
-                Date = g.Key.Date,
+                Date = g.Key,
                 Count = g.Count()
             })
             .OrderBy(d => d.Date)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
-        // Daily spam vs ham
-        var dailySpam = await (
+        // Daily spam - fetch spam message data and group by user's local date
+        var spamData = await (
             from m in baseQuery
             join dr in context.DetectionResults on m.MessageId equals dr.MessageId
             where dr.IsSpam
-            group m by new { Date = DateOnly.FromDateTime(m.Timestamp.Date) } into g
-            select new UiModels.DailyVolumeData
-            {
-                Date = g.Key.Date,
-                Count = g.Select(x => x.MessageId).Distinct().Count()
-            })
-            .OrderBy(d => d.Date)
+            select new { m.Timestamp, m.MessageId })
+            .Distinct()
             .ToListAsync(cancellationToken);
 
-        var dailyHam = await (
-            from m in baseQuery
-            where !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.IsSpam)
-            group m by new { Date = DateOnly.FromDateTime(m.Timestamp.Date) } into g
-            select new UiModels.DailyVolumeData
+        var dailySpam = spamData
+            .GroupBy(m => {
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
+                return DateOnly.FromDateTime(localTime);
+            })
+            .Select(g => new UiModels.DailyVolumeData
             {
-                Date = g.Key.Date,
+                Date = g.Key,
                 Count = g.Count()
             })
             .OrderBy(d => d.Date)
+            .ToList();
+
+        // Daily ham - fetch non-spam message data and group by user's local date
+        var hamData = await (
+            from m in baseQuery
+            where !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.IsSpam)
+            select new { m.Timestamp })
             .ToListAsync(cancellationToken);
+
+        var dailyHam = hamData
+            .GroupBy(m => {
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
+                return DateOnly.FromDateTime(localTime);
+            })
+            .Select(g => new UiModels.DailyVolumeData
+            {
+                Date = g.Key,
+                Count = g.Count()
+            })
+            .OrderBy(d => d.Date)
+            .ToList();
 
         // Per-chat breakdown (only if no specific chats selected)
         var perChatVolume = await (

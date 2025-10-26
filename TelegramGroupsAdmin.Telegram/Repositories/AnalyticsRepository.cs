@@ -20,6 +20,7 @@ public class AnalyticsRepository : IAnalyticsRepository
     public async Task<FalsePositiveStats> GetFalsePositiveStatsAsync(
         DateTimeOffset startDate,
         DateTimeOffset endDate,
+        string timeZoneId,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -48,23 +49,36 @@ public class AnalyticsRepository : IAnalyticsRepository
             .Where(dr => dr.DetectionSource != "manual") // Exclude manual reviews from total
             .CountAsync(cancellationToken);
 
-        // Group by date
-        var dailyBreakdown = falsePositives
-            .GroupBy(fp => DateOnly.FromDateTime(fp.DetectedAt.Date))
+        // Fetch detection results (database does filtering)
+        var detections = await context.DetectionResults
+            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
+            .Where(dr => dr.DetectionSource != "manual")
+            .Select(dr => new { dr.DetectedAt, dr.IsSpam, dr.MessageId })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        // Get false positive message IDs (for lookup)
+        var fpMessageIds = falsePositives.Select(fp => fp.MessageId).ToHashSet();
+
+        // Group by user's local date (C# server-side grouping)
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        var dailyBreakdownMapped = detections
+            .GroupBy(dr => {
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(dr.DetectedAt.UtcDateTime, timeZone);
+                return DateOnly.FromDateTime(localTime);
+            })
             .Select(g => new DailyFalsePositive
             {
                 Date = g.Key,
-                FalsePositiveCount = g.Count(),
-                TotalDetections = context.DetectionResults
-                    .Count(dr => DateOnly.FromDateTime(dr.DetectedAt.Date) == g.Key &&
-                                 dr.DetectionSource != "manual"),
-                Percentage = 0 // Will calculate below
+                TotalDetections = g.Count(),
+                FalsePositiveCount = g.Count(dr => fpMessageIds.Contains(dr.MessageId)),
+                Percentage = 0 // Calculate below
             })
             .OrderBy(d => d.Date)
             .ToList();
 
         // Calculate percentages
-        foreach (var day in dailyBreakdown)
+        foreach (var day in dailyBreakdownMapped)
         {
             day.Percentage = day.TotalDetections > 0
                 ? (day.FalsePositiveCount / (double)day.TotalDetections * 100.0)
@@ -73,7 +87,7 @@ public class AnalyticsRepository : IAnalyticsRepository
 
         return new FalsePositiveStats
         {
-            DailyBreakdown = dailyBreakdown,
+            DailyBreakdown = dailyBreakdownMapped,
             TotalFalsePositives = falsePositives.Count,
             TotalDetections = totalDetections,
             OverallPercentage = totalDetections > 0
@@ -85,6 +99,7 @@ public class AnalyticsRepository : IAnalyticsRepository
     public async Task<ResponseTimeStats> GetResponseTimeStatsAsync(
         DateTimeOffset startDate,
         DateTimeOffset endDate,
+        string timeZoneId,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -119,9 +134,13 @@ public class AnalyticsRepository : IAnalyticsRepository
             };
         }
 
-        // Calculate daily averages
+        // Calculate daily averages (group by user's local date)
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         var dailyAverages = responseTimes
-            .GroupBy(rt => DateOnly.FromDateTime(rt.DetectedAt.Date))
+            .GroupBy(rt => {
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(rt.DetectedAt.UtcDateTime, timeZone);
+                return DateOnly.FromDateTime(localTime);
+            })
             .Select(g => new DailyResponseTime
             {
                 Date = g.Key,
@@ -150,6 +169,7 @@ public class AnalyticsRepository : IAnalyticsRepository
     public async Task<List<DetectionMethodStats>> GetDetectionMethodComparisonAsync(
         DateTimeOffset startDate,
         DateTimeOffset endDate,
+        string timeZoneId,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -209,13 +229,25 @@ public class AnalyticsRepository : IAnalyticsRepository
     public async Task<List<DailyDetectionTrend>> GetDailyDetectionTrendsAsync(
         DateTimeOffset startDate,
         DateTimeOffset endDate,
+        string timeZoneId,
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var dailyTrends = await context.DetectionResults
+        // Fetch detection results (database does filtering)
+        var detections = await context.DetectionResults
             .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .GroupBy(dr => DateOnly.FromDateTime(dr.DetectedAt.Date))
+            .Select(dr => new { dr.DetectedAt, dr.IsSpam })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        // Group by user's local date (C# server-side grouping)
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        var dailyTrends = detections
+            .GroupBy(dr => {
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(dr.DetectedAt.UtcDateTime, timeZone);
+                return DateOnly.FromDateTime(localTime);
+            })
             .Select(g => new DailyDetectionTrend
             {
                 Date = g.Key,
@@ -223,8 +255,7 @@ public class AnalyticsRepository : IAnalyticsRepository
                 HamCount = g.Count(dr => !dr.IsSpam)
             })
             .OrderBy(d => d.Date)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         return dailyTrends;
     }

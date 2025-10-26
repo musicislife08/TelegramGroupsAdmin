@@ -15,6 +15,7 @@ public interface IAnalyticsRepository
     Task<FalsePositiveStats> GetFalsePositiveStatsAsync(
         DateTimeOffset startDate,
         DateTimeOffset endDate,
+        string timeZoneId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -24,6 +25,7 @@ public interface IAnalyticsRepository
     Task<ResponseTimeStats> GetResponseTimeStatsAsync(
         DateTimeOffset startDate,
         DateTimeOffset endDate,
+        string timeZoneId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -33,6 +35,7 @@ public interface IAnalyticsRepository
     Task<List<DetectionMethodStats>> GetDetectionMethodComparisonAsync(
         DateTimeOffset startDate,
         DateTimeOffset endDate,
+        string timeZoneId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -42,5 +45,6 @@ public interface IAnalyticsRepository
     Task<List<DailyDetectionTrend>> GetDailyDetectionTrendsAsync(
         DateTimeOffset startDate,
         DateTimeOffset endDate,
+        string timeZoneId,
         CancellationToken cancellationToken = default);
 }

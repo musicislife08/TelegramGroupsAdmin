@@ -46,6 +46,7 @@ public interface IMessageHistoryRepository
         List<long> chatIds, // Empty = all accessible chats (filtered by caller)
         DateTimeOffset startDate,
         DateTimeOffset endDate,
+        string timeZoneId,
         CancellationToken cancellationToken = default);
 
     // Cross-chat ban cleanup (FEATURE-4.23)

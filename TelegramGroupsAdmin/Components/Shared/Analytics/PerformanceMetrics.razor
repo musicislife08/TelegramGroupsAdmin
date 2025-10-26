@@ -1,11 +1,13 @@
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Telegram.Models
 @using ApexCharts
+@using Microsoft.JSInterop
 @using MudColor = MudBlazor.Color
 @using MudSize = MudBlazor.Size
 @using MudAlign = MudBlazor.Align
 @inject IAnalyticsRepository AnalyticsRepository
 @inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
 
 <MudStack Spacing="4">
     @* Date Range Selector *@
@@ -158,14 +160,14 @@
                                     Items="_dailyTrends"
                                     Name="Spam Detections"
                                     SeriesType="SeriesType.Line"
-                                    XValue="@(e => e.Date.ToString("MMM dd"))"
+                                    XValue="@(e => DateToUnixMs(e.Date))"
                                     YAggregate="@(e => e.Sum(x => x.SpamCount))"
                                     OrderBy="e => e.X" />
                     <ApexPointSeries TItem="DailyDetectionTrend"
                                     Items="_dailyTrends"
                                     Name="Ham Detections"
                                     SeriesType="SeriesType.Line"
-                                    XValue="@(e => e.Date.ToString("MMM dd"))"
+                                    XValue="@(e => DateToUnixMs(e.Date))"
                                     YAggregate="@(e => e.Sum(x => x.HamCount))"
                                     OrderBy="e => e.X" />
                 </ApexChart>
@@ -188,7 +190,7 @@
                                     Items="_responseTimeStats.DailyAverages"
                                     Name="Response Time (seconds)"
                                     SeriesType="SeriesType.Bar"
-                                    XValue="@(e => e.Date.ToString("MMM dd"))"
+                                    XValue="@(e => DateToUnixMs(e.Date))"
                                     YAggregate="@(e => (decimal)e.Sum(x => x.AverageMs / 1000.0))"
                                     OrderBy="e => e.X" />
                 </ApexChart>
@@ -210,6 +212,7 @@
     private bool _dataLoaded = false;
     private DateTimeOffset? _startDate;
     private DateTimeOffset? _endDate;
+    private string _userTimeZone = "UTC"; // Default to UTC until detected
 
     // Analytics data
     private FalsePositiveStats? _falsePositiveStats;
@@ -221,8 +224,23 @@
     private ApexChartOptions<DailyDetectionTrend>? _dailyTrendsChart;
     private ApexChartOptions<DailyResponseTime>? _responseTimeChart;
 
+    // Helper to convert DateOnly to Unix timestamp (milliseconds) for ApexCharts
+    private static long DateToUnixMs(DateOnly date) =>
+        new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero).ToUnixTimeMilliseconds();
+
     protected override async Task OnInitializedAsync()
     {
+        // Detect user's timezone from browser
+        try
+        {
+            _userTimeZone = await JSRuntime.InvokeAsync<string>("getUserTimeZone");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to detect timezone, using UTC: {ex.Message}");
+            _userTimeZone = "UTC";
+        }
+
         await LoadLast30Days();
     }
 
@@ -256,10 +274,10 @@
         try
         {
             // Load all analytics data in parallel
-            var falsePositivesTask = AnalyticsRepository.GetFalsePositiveStatsAsync(_startDate.Value, _endDate.Value);
-            var responseTimeTask = AnalyticsRepository.GetResponseTimeStatsAsync(_startDate.Value, _endDate.Value);
-            var methodComparisonTask = AnalyticsRepository.GetDetectionMethodComparisonAsync(_startDate.Value, _endDate.Value);
-            var dailyTrendsTask = AnalyticsRepository.GetDailyDetectionTrendsAsync(_startDate.Value, _endDate.Value);
+            var falsePositivesTask = AnalyticsRepository.GetFalsePositiveStatsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
+            var responseTimeTask = AnalyticsRepository.GetResponseTimeStatsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
+            var methodComparisonTask = AnalyticsRepository.GetDetectionMethodComparisonAsync(_startDate.Value, _endDate.Value, _userTimeZone);
+            var dailyTrendsTask = AnalyticsRepository.GetDailyDetectionTrendsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
 
             await Task.WhenAll(falsePositivesTask, responseTimeTask, methodComparisonTask, dailyTrendsTask);
 
@@ -296,7 +314,11 @@
             },
             Stroke = new Stroke { Curve = Curve.Smooth, Width = 3 },
             Colors = new List<string> { "#F44336", "#4CAF50" }, // Red for spam, green for ham
-            Xaxis = new XAxis { Type = XAxisType.Category },
+            Xaxis = new XAxis
+            {
+                Type = XAxisType.Datetime,
+                Labels = new XAxisLabels { Format = "MMM dd" }
+            },
             Yaxis = new List<YAxis> { new YAxis { Title = new AxisTitle { Text = "Number of Detections" } } },
             Legend = new Legend { Position = LegendPosition.Top }
         };
@@ -311,7 +333,11 @@
                     Toolbar = new Toolbar { Show = false }
                 },
                 Colors = new List<string> { "#2196F3" }, // Blue
-                Xaxis = new XAxis { Type = XAxisType.Category },
+                Xaxis = new XAxis
+                {
+                    Type = XAxisType.Datetime,
+                    Labels = new XAxisLabels { Format = "MMM dd" }
+                },
                 Yaxis = new List<YAxis>
                 {
                     new YAxis

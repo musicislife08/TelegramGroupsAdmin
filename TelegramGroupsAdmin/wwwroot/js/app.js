@@ -139,6 +139,16 @@ window.setupPasteListener = (dotNetHelper) => {
     };
 }
 
+// Get user's IANA timezone (e.g., "America/Los_Angeles", "America/New_York")
+window.getUserTimeZone = () => {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch (error) {
+        console.warn('Failed to detect timezone, defaulting to UTC:', error);
+        return 'UTC';
+    }
+};
+
 // Format timestamp in user's local timezone with 12-hour format
 window.formatLocalTimestamp = (utcTimestamp) => {
     const date = new Date(utcTimestamp);

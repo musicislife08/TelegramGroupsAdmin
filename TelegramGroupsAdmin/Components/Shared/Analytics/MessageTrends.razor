@@ -1,10 +1,34 @@
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Services
 @using ApexCharts
+@using Microsoft.JSInterop
 @inject IMessageHistoryRepository MessageHistoryRepository
+@inject IManagedChatsRepository ChatsRepository
+@inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
 
 <MudStack Spacing="4">
+    @* Chat Filter *@
+    @if (_accessibleChats.Any())
+    {
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Filter by Chat:</MudText>
+            <MudChipSet SelectedValue="_selectedChatId"
+                        SelectedValueChanged="OnChatSelectionChanged"
+                        SelectionMode="SelectionMode.SingleSelection"
+                        T="long">
+                <MudChip Value="@(0L)" @key="0">All Chats</MudChip>
+                @foreach (var chat in _accessibleChats)
+                {
+                    <MudChip Value="@chat.ChatId" @key="@chat.ChatId">@chat.ChatName</MudChip>
+                }
+            </MudChipSet>
+        </MudPaper>
+    }
+
     @* Date Range Selector *@
     <MudPaper Class="pa-4" Elevation="2">
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
@@ -104,7 +128,7 @@
                                     Items="_trendsData.DailyVolume"
                                     Name="Messages"
                                     SeriesType="SeriesType.Line"
-                                    XValue="@(e => e.Date.ToString("MMM dd"))"
+                                    XValue="@(e => DateToUnixMs(e.Date))"
                                     YAggregate="@(e => e.Sum(x => x.Count))"
                                     OrderBy="e => e.X" />
                 </ApexChart>
@@ -124,14 +148,14 @@
                                     Items="_trendsData.DailySpam"
                                     Name="Spam"
                                     SeriesType="SeriesType.Area"
-                                    XValue="@(e => e.Date.ToString("MMM dd"))"
+                                    XValue="@(e => DateToUnixMs(e.Date))"
                                     YAggregate="@(e => e.Sum(x => x.Count))"
                                     OrderBy="e => e.X" />
                     <ApexPointSeries TItem="DailyVolumeData"
                                     Items="_trendsData.DailyHam"
                                     Name="Clean"
                                     SeriesType="SeriesType.Area"
-                                    XValue="@(e => e.Date.ToString("MMM dd"))"
+                                    XValue="@(e => DateToUnixMs(e.Date))"
                                     YAggregate="@(e => e.Sum(x => x.Count))"
                                     OrderBy="e => e.X" />
                 </ApexChart>
@@ -170,20 +194,67 @@
 </MudStack>
 
 @code {
-    [Parameter] public List<long> SelectedChatIds { get; set; } = new();
-
     private bool _loading = true;
     private bool _dataLoaded = false;
     private DateTimeOffset? _startDate;
     private DateTimeOffset? _endDate;
+    private string _userTimeZone = "UTC"; // Default to UTC until detected
+
+    private List<ManagedChatRecord> _accessibleChats = new();
+    private long _selectedChatId = 0L;
 
     private MessageTrendsData? _trendsData;
     private ApexChartOptions<DailyVolumeData>? _dailyVolumeChart;
     private ApexChartOptions<DailyVolumeData>? _spamHamChart;
     private ApexChartOptions<ChatVolumeData>? _perChatChart;
 
+    // Helper to convert DateOnly to Unix timestamp (milliseconds) for ApexCharts
+    private static long DateToUnixMs(DateOnly date) =>
+        new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+    private async Task OnChatSelectionChanged(long newChatId)
+    {
+        _selectedChatId = newChatId;
+        await LoadData();
+    }
+
+    private List<long> GetSelectedChatIds()
+    {
+        // If "All" chip is selected (Value = 0 = global), return empty list (all accessible chats)
+        if (_selectedChatId == 0L)
+        {
+            return new List<long>();
+        }
+
+        // Otherwise return the single selected chat ID as a list
+        return new List<long> { _selectedChatId };
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        // Detect user's timezone from browser
+        try
+        {
+            _userTimeZone = await JSRuntime.InvokeAsync<string>("getUserTimeZone");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to detect timezone, using UTC: {ex.Message}");
+            _userTimeZone = "UTC";
+        }
+
+        // Load accessible chats based on permissions
+        var userId = await AuthHelper.GetCurrentUserIdAsync();
+        var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
+
+        if (!string.IsNullOrEmpty(userId))
+        {
+            _accessibleChats = await ChatsRepository.GetUserAccessibleChatsAsync(
+                userId,
+                permissionLevel,
+                CancellationToken.None);
+        }
+
         await LoadLast30Days();
     }
 
@@ -217,9 +288,10 @@
         try
         {
             _trendsData = await MessageHistoryRepository.GetMessageTrendsAsync(
-                SelectedChatIds,
+                GetSelectedChatIds(),
                 _startDate.Value,
                 _endDate.Value,
+                _userTimeZone,
                 CancellationToken.None);
 
             PrepareCharts();
@@ -249,7 +321,11 @@
             },
             Stroke = new Stroke { Curve = Curve.Smooth, Width = 3 },
             Colors = new List<string> { "#2196F3" },
-            Xaxis = new XAxis { Type = XAxisType.Category },
+            Xaxis = new XAxis
+            {
+                Type = XAxisType.Datetime,
+                Labels = new XAxisLabels { Format = "MMM dd" }
+            },
             Yaxis = new List<YAxis> { new YAxis { Title = new AxisTitle { Text = "Messages" } } }
         };
 
@@ -264,7 +340,11 @@
             },
             Stroke = new Stroke { Curve = Curve.Smooth, Width = 2 },
             Colors = new List<string> { "#F44336", "#4CAF50" },
-            Xaxis = new XAxis { Type = XAxisType.Category },
+            Xaxis = new XAxis
+            {
+                Type = XAxisType.Datetime,
+                Labels = new XAxisLabels { Format = "MMM dd" }
+            },
             Yaxis = new List<YAxis> { new YAxis { Title = new AxisTitle { Text = "Messages" } } },
             Fill = new Fill { Type = new List<FillType> { FillType.Gradient } }
         };

@@ -7,6 +7,7 @@
         <RootNamespace>TelegramGroupsAdmin</RootNamespace>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
         <SuppressNETCoreSdkPreviewMessage>true</SuppressNETCoreSdkPreviewMessage>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <!-- Suppress CS8669: Razor compiler doesn't emit #nullable enable in generated files when using nullable generics (e.g., T="string?")
              Blazor/Razor compiler bug tracked in dotnet/razor#7286. Re-test after .NET 10 GA (Nov 2025) -->
         <NoWarn>$(NoWarn);CS8669</NoWarn>
