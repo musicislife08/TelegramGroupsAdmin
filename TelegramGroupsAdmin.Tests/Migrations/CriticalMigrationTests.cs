@@ -467,4 +467,127 @@ public class CriticalMigrationTests
         Assert.That(fkExists, Is.False,
             "FK constraint should NOT exist after failed creation");
     }
+
+    /// <summary>
+    /// Test 5: NULL Exclusive Arc Validation
+    ///
+    /// **What it tests**: Validates that the exclusive arc CHECK constraints in audit_log
+    /// correctly handle NULL values.
+    ///
+    /// **Why it matters**: The actor constraint requires EXACTLY ONE non-NULL value.
+    /// The target constraint allows EITHER all-NULL (no target) OR exactly-one-non-NULL.
+    /// This test ensures NULLs are handled correctly and don't cause false constraint violations.
+    ///
+    /// **Production scenario**: After migration, some events may not have targets
+    /// (e.g., system config changes). The target exclusive arc must allow all-NULL state.
+    /// </summary>
+    [Test]
+    public async Task NullExclusiveArcValidation_ShouldAllowNullTargets()
+    {
+        // Arrange - Create database and apply full migration
+        using var helper = new MigrationTestHelper();
+        await helper.CreateDatabaseAndApplyMigrationsAsync();
+
+        // Create web user for actor FK
+        await using (var context = helper.GetDbContext())
+        {
+            context.Users.Add(new UserRecordDto
+            {
+                Id = "test-user-456",
+                Email = "test456@test.com",
+                NormalizedEmail = "TEST456@TEST.COM",
+                PasswordHash = "hash",
+                SecurityStamp = Guid.NewGuid().ToString(),
+                PermissionLevel = PermissionLevel.Owner,
+                Status = UserStatus.Active,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // Act & Assert 1: Insert event with actor but NO target (all target fields NULL)
+        // This should SUCCEED - target constraint allows all-NULL state
+        await helper.ExecuteSqlAsync(@"
+            INSERT INTO audit_log (event_type, timestamp, actor_web_user_id, value)
+            VALUES (2, NOW(), 'test-user-456', 'System config changed - no target');
+        ");
+
+        var noTargetCount = await helper.ExecuteScalarAsync<long>(
+            "SELECT COUNT(*) FROM audit_log WHERE value = 'System config changed - no target'");
+        Assert.That(noTargetCount, Is.EqualTo(1),
+            "Should allow audit log entry with actor but no target (all target fields NULL)");
+
+        // Act & Assert 2: Verify target has all NULLs
+        var targetWebUserId = await helper.ExecuteScalarAsync(
+            "SELECT target_web_user_id FROM audit_log WHERE value = 'System config changed - no target'");
+        var targetTelegramUserId = await helper.ExecuteScalarAsync(
+            "SELECT target_telegram_user_id FROM audit_log WHERE value = 'System config changed - no target'");
+        var targetSystemIdentifier = await helper.ExecuteScalarAsync(
+            "SELECT target_system_identifier FROM audit_log WHERE value = 'System config changed - no target'");
+
+        Assert.That(targetWebUserId, Is.Null.Or.EqualTo(DBNull.Value),
+            "target_web_user_id should be NULL");
+        Assert.That(targetTelegramUserId, Is.Null.Or.EqualTo(DBNull.Value),
+            "target_telegram_user_id should be NULL");
+        Assert.That(targetSystemIdentifier, Is.Null.Or.EqualTo(DBNull.Value),
+            "target_system_identifier should be NULL");
+
+        // Act & Assert 3: Insert event with system actor and no target
+        // Tests actor_system_identifier + all-NULL targets
+        await helper.ExecuteSqlAsync(@"
+            INSERT INTO audit_log (event_type, timestamp, actor_system_identifier, value)
+            VALUES (2, NOW(), 'SYSTEM', 'Automated cleanup - system actor, no target');
+        ");
+
+        var systemActorNoTargetCount = await helper.ExecuteScalarAsync<long>(
+            "SELECT COUNT(*) FROM audit_log WHERE value = 'Automated cleanup - system actor, no target'");
+        Assert.That(systemActorNoTargetCount, Is.EqualTo(1),
+            "Should allow system actor with no target");
+
+        // Act & Assert 4: Verify REJECTION of multiple actor fields (violates exclusive arc)
+        var actorException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
+        {
+            await helper.ExecuteSqlAsync(@"
+                INSERT INTO audit_log (event_type, timestamp, actor_web_user_id, actor_system_identifier, value)
+                VALUES (2, NOW(), 'test-user-456', 'DUPLICATE_SYSTEM', 'Invalid: two actors');
+            ");
+        });
+
+        Assert.That(actorException, Is.Not.Null);
+        Assert.That(actorException!.SqlState, Is.EqualTo("23514"), // CHECK constraint violation
+            "Should reject entry with multiple actor fields (exclusive arc violation)");
+        Assert.That(actorException.Message, Does.Contain("CK_audit_log_exclusive_actor"),
+            "Error should mention actor exclusive arc constraint");
+
+        // Act & Assert 5: Verify REJECTION of multiple target fields (violates exclusive arc)
+        var targetException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
+        {
+            await helper.ExecuteSqlAsync(@"
+                INSERT INTO audit_log (event_type, timestamp, actor_system_identifier,
+                                     target_web_user_id, target_system_identifier, value)
+                VALUES (2, NOW(), 'SYSTEM', 'test-user-456', 'DUPLICATE_TARGET', 'Invalid: two targets');
+            ");
+        });
+
+        Assert.That(targetException, Is.Not.Null);
+        Assert.That(targetException!.SqlState, Is.EqualTo("23514"), // CHECK constraint violation
+            "Should reject entry with multiple target fields (exclusive arc violation)");
+        Assert.That(targetException.Message, Does.Contain("CK_audit_log_exclusive_target"),
+            "Error should mention target exclusive arc constraint");
+
+        // Act & Assert 6: Verify REJECTION of zero actor fields (violates exclusive arc)
+        var noActorException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
+        {
+            await helper.ExecuteSqlAsync(@"
+                INSERT INTO audit_log (event_type, timestamp, value)
+                VALUES (2, NOW(), 'Invalid: no actor');
+            ");
+        });
+
+        Assert.That(noActorException, Is.Not.Null);
+        Assert.That(noActorException!.SqlState, Is.EqualTo("23514"), // CHECK constraint violation
+            "Should reject entry with no actor fields (exclusive arc requires exactly one)");
+        Assert.That(noActorException.Message, Does.Contain("CK_audit_log_exclusive_actor"),
+            "Error should mention actor exclusive arc constraint");
+    }
 }
