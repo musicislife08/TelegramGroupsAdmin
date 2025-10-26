@@ -156,6 +156,32 @@
 ## Next Steps After MVP Testing
 Backlog items (4.9, 4.15-4.18) deferred to post-MVP
 
+## Production Deployment Sync
+
+### One-Time Data Migrations
+When syncing code changes to production, run these SQL migrations to clean up legacy data formats:
+
+**Migration 1: Fix Legacy check_results_json Format (2025-10-25)**
+Early testing used `"spam":true/false` format. Current code uses `"result":"spam/clean"` format.
+
+```sql
+-- Verify how many rows need migration
+SELECT COUNT(*) FROM detection_results WHERE check_results_json LIKE '%"spam":%';
+
+-- Fix all rows with old format
+UPDATE detection_results
+SET check_results_json = REPLACE(
+    REPLACE(check_results_json, '"spam":false', '"result":"clean"'),
+    '"spam":true', '"result":"spam"'
+)
+WHERE check_results_json LIKE '%"spam":%';
+
+-- Verify migration (should return 0)
+SELECT COUNT(*) FROM detection_results WHERE check_results_json LIKE '%"spam":%';
+```
+
+**Expected Result**: 1 row updated on dev, similar count on production (early testing data only)
+
 ## CRITICAL RULES
 - Never run app in normal mode (only one instance allowed, user runs in Rider for debugging)
 - Testing: Use `dotnet run --migrate-only` to catch startup issues after building

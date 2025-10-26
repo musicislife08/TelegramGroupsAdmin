@@ -1,53 +1,46 @@
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
-/// Effectiveness statistics for a single spam detection method.
-/// Phase 5: Analytics for comparing the 9 detection algorithms
+/// Effectiveness statistics for a single spam detection algorithm.
+/// Phase 5: Analytics for individual algorithm performance (parsed from check_results_json)
 /// </summary>
 public class DetectionMethodStats
 {
     /// <summary>
-    /// Detection method name (e.g., "stop_words", "cas", "openai", etc.)
+    /// Algorithm name (e.g., "StopWords", "CAS", "OpenAI", etc.)
     /// </summary>
     public string MethodName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Total checks performed by this method
+    /// Total checks performed by this algorithm
     /// </summary>
     public int TotalChecks { get; set; }
 
     /// <summary>
-    /// Number of times this method detected spam
+    /// Number of times this algorithm individually voted "spam"
     /// </summary>
     public int SpamDetected { get; set; }
 
     /// <summary>
-    /// Spam detection rate as percentage (0-100)
+    /// Hit rate: % of checks where this algorithm voted spam (0-100)
     /// </summary>
     public double SpamPercentage { get; set; }
 
     /// <summary>
-    /// Average confidence score for this method (0-100)
+    /// Average confidence when voting spam (null for binary checks like CAS)
+    /// Binary checks always return 0 or 100, so avg is meaningless
     /// </summary>
-    public double AverageConfidence { get; set; }
+    public double? AverageSpamConfidence { get; set; }
 
     /// <summary>
-    /// Number of false positives (spam → ham corrections)
+    /// How many system false positives had this algorithm voting "spam"
+    /// Shows if algorithm is too aggressive
     /// </summary>
-    public int FalsePositives { get; set; }
+    public int ContributedToFalsePositives { get; set; }
 
     /// <summary>
-    /// False positive rate as percentage (0-100)
+    /// How many system false negatives had this algorithm voting "clean"
+    /// Shows if algorithm is missing spam
     /// </summary>
-    public double FalsePositiveRate { get; set; }
-
-    /// <summary>
-    /// Number of false negatives (ham → spam corrections)
-    /// </summary>
-    public int FalseNegatives { get; set; }
-
-    /// <summary>
-    /// False negative rate as percentage (0-100)
-    /// </summary>
-    public double FalseNegativeRate { get; set; }
+    public int ContributedToFalseNegatives { get; set; }
 }

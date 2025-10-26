@@ -25,48 +25,79 @@
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
         }
 
-        <!-- Overview Cards -->
-        <MudGrid>
-            <MudItem xs="12" sm="6" md="3">
-                <MudPaper Class="pa-4" Elevation="2">
-                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.Dataset" Size="Size.Large" Color="Color.Primary" />
-                        <MudText Typo="Typo.h4">@_totalSpamChecks</MudText>
-                        <MudText Typo="Typo.body2" Align="Align.Center">Total Checks</MudText>
+        <!-- Overview Stats -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Primary">Overview</MudText>
+
+                <!-- Total Checks (no bar) -->
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Dataset" Color="Color.Primary" />
+                    <MudText Typo="Typo.body1" Style="flex: 1;">Total Checks</MudText>
+                    <MudText Typo="Typo.h6">@_totalSpamChecks</MudText>
+                </MudStack>
+
+                <MudDivider />
+
+                <!-- Spam Detected (with bar) -->
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" />
+                        <MudText Typo="Typo.body1" Style="flex: 1;">Spam Detected</MudText>
+                        <MudText Typo="Typo.h6">@_spamDetected</MudText>
                     </MudStack>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
-                <MudPaper Class="pa-4" Elevation="2">
-                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Error" />
-                        <MudText Typo="Typo.h4">@_spamDetected</MudText>
-                        <MudText Typo="Typo.body2" Align="Align.Center">Spam Detected</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Error">@_spamPercentage.ToString("F1")%</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="padding-left: 40px;">
+                        <MudProgressLinear Color="Color.Error"
+                                          Value="@_spamPercentage"
+                                          Size="Size.Medium"
+                                          Style="flex: 1;" />
+                        <MudText Typo="Typo.body2" Color="Color.Error" Style="min-width: 60px; text-align: right;">
+                            @_spamPercentage.ToString("F1")%
+                        </MudText>
                     </MudStack>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
-                <MudPaper Class="pa-4" Elevation="2">
-                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Large" Color="Color.Secondary" />
-                        <MudText Typo="Typo.h4">@_totalStopWords</MudText>
-                        <MudText Typo="Typo.body2" Align="Align.Center">Stop Words</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Success">@_enabledStopWords enabled</MudText>
+                </MudStack>
+
+                <MudDivider />
+
+                <!-- Stop Words (with bar) -->
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Secondary" />
+                        <MudText Typo="Typo.body1" Style="flex: 1;">Stop Words Enabled</MudText>
+                        <MudText Typo="Typo.h6">@_enabledStopWords / @_totalStopWords</MudText>
                     </MudStack>
-                </MudPaper>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="3">
-                <MudPaper Class="pa-4" Elevation="2">
-                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                        <MudIcon Icon="@Icons.Material.Filled.Psychology" Size="Size.Large" Color="Color.Info" />
-                        <MudText Typo="Typo.h4">@_totalTrainingSamples</MudText>
-                        <MudText Typo="Typo.body2" Align="Align.Center">Detection Results</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Info">Used for training</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="padding-left: 40px;">
+                        <MudProgressLinear Color="Color.Success"
+                                          Value="@GetStopWordsPercentage()"
+                                          Size="Size.Medium"
+                                          Style="flex: 1;" />
+                        <MudText Typo="Typo.body2" Color="Color.Success" Style="min-width: 60px; text-align: right;">
+                            @GetStopWordsPercentage().ToString("F0")%
+                        </MudText>
                     </MudStack>
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
+                </MudStack>
+
+                <MudDivider />
+
+                <!-- Training Samples (with bar) -->
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Psychology" Color="Color.Info" />
+                        <MudText Typo="Typo.body1" Style="flex: 1;">Detection Results Used for Training</MudText>
+                        <MudText Typo="Typo.h6">@_totalTrainingSamples</MudText>
+                    </MudStack>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="padding-left: 40px;">
+                        <MudProgressLinear Color="Color.Info"
+                                          Value="@GetTrainingPercentage()"
+                                          Size="Size.Medium"
+                                          Style="flex: 1;" />
+                        <MudText Typo="Typo.body2" Color="Color.Info" Style="min-width: 60px; text-align: right;">
+                            @GetTrainingPercentage().ToString("F1")%
+                        </MudText>
+                    </MudStack>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
 
         <!-- Training Data Quality (from detection_results.used_for_training) -->
         <MudPaper Class="pa-4" Elevation="2">
@@ -313,6 +344,20 @@
         {
             Snackbar.Add($"Failed to load spam detection statistics: {ex.Message}", Severity.Warning);
         }
+    }
+
+    private double GetStopWordsPercentage()
+    {
+        return _totalStopWords > 0
+            ? (_enabledStopWords / (double)_totalStopWords * 100.0)
+            : 0;
+    }
+
+    private double GetTrainingPercentage()
+    {
+        return _totalSpamChecks > 0
+            ? (_totalTrainingSamples / (double)_totalSpamChecks * 100.0)
+            : 0;
     }
 
     private Color GetTrainingDataHealthColor()

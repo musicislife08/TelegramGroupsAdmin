@@ -36,5 +36,7 @@ public record MessageRecord(
     string? MediaLocalPath,     // Local storage path (e.g., "/data/media/...")
     int? MediaDuration,         // Duration in seconds (for audio/video)
     // Translation fields (Phase 4.20)
-    MessageTranslation? Translation // Translation of message text (if foreign language detected)
+    MessageTranslation? Translation, // Translation of message text (if foreign language detected)
+    // Spam check tracking
+    SpamCheckSkipReason SpamCheckSkipReason // Reason spam check was skipped (NotSkipped, UserTrusted, UserAdmin)
 );

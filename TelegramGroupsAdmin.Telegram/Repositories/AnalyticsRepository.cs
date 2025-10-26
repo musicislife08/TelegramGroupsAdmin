@@ -208,75 +208,155 @@ public class AnalyticsRepository : IAnalyticsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Group by detection method
-        var methodStats = await context.DetectionResults
+        // Fetch all detection results with JSON in date range
+        var allDetections = await context.DetectionResults
             .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
             .Where(dr => dr.DetectionSource != "manual") // Exclude manual reviews
-            .GroupBy(dr => dr.DetectionMethod)
-            .Select(g => new
+            .Where(dr => dr.CheckResultsJson != null) // Only rows with individual check data
+            .Select(dr => new
             {
-                MethodName = g.Key,
-                TotalChecks = g.Count(),
-                SpamDetected = g.Count(dr => dr.IsSpam),
-                AverageConfidence = g.Average(dr => dr.Confidence),
-                MessageIds = g.Select(dr => dr.MessageId).Distinct().ToList()
+                dr.MessageId,
+                dr.CheckResultsJson,
+                dr.IsSpam
             })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        var result = new List<DetectionMethodStats>();
+        // Get false positive message IDs (system said spam → user corrected to ham)
+        var fpMessageIds = await context.DetectionResults
+            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
+            .Where(dr => dr.IsSpam && dr.DetectionSource != "manual")
+            .Where(dr => context.DetectionResults.Any(correction =>
+                correction.MessageId == dr.MessageId &&
+                correction.DetectionSource == "manual" &&
+                !correction.IsSpam &&
+                correction.DetectedAt > dr.DetectedAt))
+            .Select(dr => dr.MessageId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
 
-        foreach (var method in methodStats)
+        // Get false negative message IDs (system said ham → user corrected to spam)
+        var fnMessageIds = await context.DetectionResults
+            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
+            .Where(dr => !dr.IsSpam && dr.DetectionSource != "manual")
+            .Where(dr => context.DetectionResults.Any(correction =>
+                correction.MessageId == dr.MessageId &&
+                correction.DetectionSource == "manual" &&
+                correction.IsSpam &&
+                correction.DetectedAt > dr.DetectedAt))
+            .Select(dr => dr.MessageId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var fpSet = fpMessageIds.ToHashSet();
+        var fnSet = fnMessageIds.ToHashSet();
+
+        // Parse JSON and aggregate per-algorithm stats
+        var algorithmStats = new Dictionary<string, AlgorithmStatsAccumulator>();
+
+        foreach (var detection in allDetections)
         {
-            // Find false positives for this method (spam → ham corrections)
-            var falsePositives = await context.DetectionResults
-                .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-                .Where(dr => dr.DetectionMethod == method.MethodName && dr.IsSpam)
-                .Where(dr => context.DetectionResults.Any(correction =>
-                    correction.MessageId == dr.MessageId &&
-                    correction.DetectionSource == "manual" &&
-                    !correction.IsSpam &&
-                    correction.DetectedAt > dr.DetectedAt))
-                .Select(dr => dr.MessageId)
-                .Distinct()
-                .CountAsync(cancellationToken);
+            var checks = ParseCheckResults(detection.CheckResultsJson);
+            var isFalsePositive = fpSet.Contains(detection.MessageId);
+            var isFalseNegative = fnSet.Contains(detection.MessageId);
 
-            // Find false negatives for this method (ham → spam corrections)
-            var falseNegatives = await context.DetectionResults
-                .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-                .Where(dr => dr.DetectionMethod == method.MethodName && !dr.IsSpam)
-                .Where(dr => context.DetectionResults.Any(correction =>
-                    correction.MessageId == dr.MessageId &&
-                    correction.DetectionSource == "manual" &&
-                    correction.IsSpam &&
-                    correction.DetectedAt > dr.DetectedAt))
-                .Select(dr => dr.MessageId)
-                .Distinct()
-                .CountAsync(cancellationToken);
-
-            var hamDetected = method.TotalChecks - method.SpamDetected;
-
-            result.Add(new DetectionMethodStats
+            foreach (var check in checks)
             {
-                MethodName = method.MethodName ?? "unknown",
-                TotalChecks = method.TotalChecks,
-                SpamDetected = method.SpamDetected,
-                SpamPercentage = method.TotalChecks > 0
-                    ? (method.SpamDetected / (double)method.TotalChecks * 100.0)
-                    : 0,
-                AverageConfidence = method.AverageConfidence,
-                FalsePositives = falsePositives,
-                FalsePositiveRate = method.SpamDetected > 0
-                    ? (falsePositives / (double)method.SpamDetected * 100.0)
-                    : 0,
-                FalseNegatives = falseNegatives,
-                FalseNegativeRate = hamDetected > 0
-                    ? (falseNegatives / (double)hamDetected * 100.0)
-                    : 0
-            });
+                if (!algorithmStats.ContainsKey(check.Name))
+                {
+                    algorithmStats[check.Name] = new AlgorithmStatsAccumulator();
+                }
+
+                var stats = algorithmStats[check.Name];
+                stats.TotalChecks++;
+
+                if (check.Result == "spam")
+                {
+                    stats.SpamVotes++;
+                    stats.SpamConfidences.Add(check.Confidence);
+
+                    if (isFalsePositive)
+                    {
+                        stats.ContributedToFPs++;
+                    }
+                }
+                else if (check.Result == "clean" && isFalseNegative)
+                {
+                    stats.ContributedToFNs++;
+                }
+            }
         }
 
-        return result.OrderByDescending(m => m.TotalChecks).ToList();
+        // Convert to result list
+        var result = algorithmStats.Select(kvp => new DetectionMethodStats
+        {
+            MethodName = kvp.Key,
+            TotalChecks = kvp.Value.TotalChecks,
+            SpamDetected = kvp.Value.SpamVotes,
+            SpamPercentage = kvp.Value.TotalChecks > 0
+                ? (kvp.Value.SpamVotes / (double)kvp.Value.TotalChecks * 100.0)
+                : 0,
+            AverageSpamConfidence = kvp.Value.SpamConfidences.Count > 0
+                ? kvp.Value.SpamConfidences.Average()
+                : null,
+            ContributedToFalsePositives = kvp.Value.ContributedToFPs,
+            ContributedToFalseNegatives = kvp.Value.ContributedToFNs
+        }).OrderByDescending(m => m.TotalChecks).ToList();
+
+        return result;
+    }
+
+    private List<CheckResult> ParseCheckResults(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return new List<CheckResult>();
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("checks", out var checksArray))
+                return new List<CheckResult>();
+
+            var results = new List<CheckResult>();
+
+            foreach (var check in checksArray.EnumerateArray())
+            {
+                var name = check.GetProperty("name").GetString() ?? "unknown";
+                var result = check.GetProperty("result").GetString() ?? "clean";
+                var conf = check.GetProperty("conf").GetDouble();
+
+                results.Add(new CheckResult
+                {
+                    Name = name,
+                    Result = result,
+                    Confidence = conf
+                });
+            }
+
+            return results;
+        }
+        catch
+        {
+            return new List<CheckResult>();
+        }
+    }
+
+    private class CheckResult
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Result { get; set; } = string.Empty;
+        public double Confidence { get; set; }
+    }
+
+    private class AlgorithmStatsAccumulator
+    {
+        public int TotalChecks { get; set; }
+        public int SpamVotes { get; set; }
+        public List<double> SpamConfidences { get; set; } = new();
+        public int ContributedToFPs { get; set; }
+        public int ContributedToFNs { get; set; }
     }
 
     public async Task<List<DailyDetectionTrend>> GetDailyDetectionTrendsAsync(

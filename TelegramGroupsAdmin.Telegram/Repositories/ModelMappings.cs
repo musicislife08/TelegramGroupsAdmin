@@ -230,7 +230,9 @@ public static class ModelMappings
         MediaLocalPath: data.MediaLocalPath,
         MediaDuration: data.MediaDuration,
         // Translation (Phase 4.20) - passed from repository query with LEFT JOIN
-        Translation: translation
+        Translation: translation,
+        // Spam check skip reason - convert Data enum to UI enum
+        SpamCheckSkipReason: data.SpamCheckSkipReason.ToTelegramModel()
     );
 
     public static DataModels.MessageRecordDto ToDto(this UiModels.MessageRecord ui) => new()
@@ -257,7 +259,9 @@ public static class ModelMappings
         MediaFileName = ui.MediaFileName,
         MediaMimeType = ui.MediaMimeType,
         MediaLocalPath = ui.MediaLocalPath,
-        MediaDuration = ui.MediaDuration
+        MediaDuration = ui.MediaDuration,
+        // Spam check skip reason - convert UI enum to Data enum
+        SpamCheckSkipReason = ui.SpamCheckSkipReason.ToDataModel()
     };
 
     // Note: PhotoMessageRecord, HistoryStats, SpamCheckRecord are UI-only models
@@ -865,4 +869,16 @@ public static class ModelMappings
         CreatedAt = ui.CreatedAt,
         UpdatedAt = ui.UpdatedAt
     };
+
+    /// <summary>
+    /// Convert SpamCheckSkipReason from Telegram layer to Data layer
+    /// </summary>
+    public static DataModels.SpamCheckSkipReason ToDataModel(this UiModels.SpamCheckSkipReason reason)
+        => (DataModels.SpamCheckSkipReason)(int)reason;
+
+    /// <summary>
+    /// Convert SpamCheckSkipReason from Data layer to Telegram layer
+    /// </summary>
+    public static UiModels.SpamCheckSkipReason ToTelegramModel(this DataModels.SpamCheckSkipReason reason)
+        => (UiModels.SpamCheckSkipReason)(int)reason;
 }

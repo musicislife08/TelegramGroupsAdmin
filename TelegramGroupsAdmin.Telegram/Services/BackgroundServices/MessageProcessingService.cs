@@ -398,6 +398,37 @@ public partial class MessageProcessingService(
                 }
             }
 
+            // Determine spam check skip reason (before saving message)
+            // Check if user is trusted or admin to set appropriate skip reason
+            var spamCheckSkipReason = SpamCheckSkipReason.NotSkipped; // Default: spam checks will run
+
+            if (message.From?.Id != null)
+            {
+                using var skipReasonScope = serviceProvider.CreateScope();
+                var userActionsRepository = skipReasonScope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+                var chatAdminsRepository = skipReasonScope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
+
+                // Check admin status first (higher priority)
+                bool isUserAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, message.From.Id, cancellationToken);
+                if (isUserAdmin)
+                {
+                    spamCheckSkipReason = SpamCheckSkipReason.UserAdmin;
+                }
+                else
+                {
+                    // Check trust status if not admin
+                    bool isUserTrusted = await userActionsRepository.IsUserTrustedAsync(
+                        message.From.Id,
+                        message.Chat.Id,
+                        cancellationToken);
+
+                    if (isUserTrusted)
+                    {
+                        spamCheckSkipReason = SpamCheckSkipReason.UserTrusted;
+                    }
+                }
+            }
+
             // User photo will be fetched asynchronously after message save (non-blocking)
             var messageRecord = new MessageRecord(
                 message.MessageId,
@@ -431,7 +462,9 @@ public partial class MessageProcessingService(
                 MediaLocalPath: mediaLocalPath,
                 MediaDuration: mediaDuration,
                 // Translation (Phase 4.20)
-                Translation: translation
+                Translation: translation,
+                // Spam check skip reason
+                SpamCheckSkipReason: spamCheckSkipReason
             );
 
             // Save message to database using a scoped repository
