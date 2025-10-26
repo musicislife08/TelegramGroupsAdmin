@@ -9,10 +9,10 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 public interface IAnalyticsRepository
 {
     /// <summary>
-    /// Get false positive statistics for the specified date range.
-    /// False positive = detection_results marked as spam, then corrected to ham via manual review
+    /// Get detection accuracy statistics (false positives + false negatives) for the specified date range.
+    /// False positive = spam → ham correction, False negative = ham → spam correction
     /// </summary>
-    Task<FalsePositiveStats> GetFalsePositiveStatsAsync(
+    Task<DetectionAccuracyStats> GetDetectionAccuracyStatsAsync(
         DateTimeOffset startDate,
         DateTimeOffset endDate,
         string timeZoneId,

@@ -32,7 +32,7 @@ public class DetectionMethodStats
     public double AverageConfidence { get; set; }
 
     /// <summary>
-    /// Number of false positives (if trackable - spam → ham corrections)
+    /// Number of false positives (spam → ham corrections)
     /// </summary>
     public int FalsePositives { get; set; }
 
@@ -40,4 +40,14 @@ public class DetectionMethodStats
     /// False positive rate as percentage (0-100)
     /// </summary>
     public double FalsePositiveRate { get; set; }
+
+    /// <summary>
+    /// Number of false negatives (ham → spam corrections)
+    /// </summary>
+    public int FalseNegatives { get; set; }
+
+    /// <summary>
+    /// False negative rate as percentage (0-100)
+    /// </summary>
+    public double FalseNegativeRate { get; set; }
 }

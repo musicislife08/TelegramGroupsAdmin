@@ -17,7 +17,7 @@ public class AnalyticsRepository : IAnalyticsRepository
         _contextFactory = contextFactory;
     }
 
-    public async Task<FalsePositiveStats> GetFalsePositiveStatsAsync(
+    public async Task<DetectionAccuracyStats> GetDetectionAccuracyStatsAsync(
         DateTimeOffset startDate,
         DateTimeOffset endDate,
         string timeZoneId,
@@ -44,6 +44,25 @@ public class AnalyticsRepository : IAnalyticsRepository
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
+        // False negative = message initially detected as ham, then manually marked as spam
+        // Strategy: Find ham detections that were later overridden by manual spam detection
+        var falseNegatives = await context.DetectionResults
+            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
+            .Where(dr => !dr.IsSpam && dr.DetectionSource != "manual") // Initial ham detection
+            .Where(dr => context.DetectionResults.Any(correction =>
+                correction.MessageId == dr.MessageId &&
+                correction.DetectionSource == "manual" &&
+                correction.IsSpam &&
+                correction.DetectedAt > dr.DetectedAt)) // Later corrected to spam
+            .Select(dr => new
+            {
+                dr.MessageId,
+                dr.DetectedAt
+            })
+            .Distinct()
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
         var totalDetections = await context.DetectionResults
             .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
             .Where(dr => dr.DetectionSource != "manual") // Exclude manual reviews from total
@@ -57,8 +76,9 @@ public class AnalyticsRepository : IAnalyticsRepository
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        // Get false positive message IDs (for lookup)
+        // Get false positive and false negative message IDs (for lookup)
         var fpMessageIds = falsePositives.Select(fp => fp.MessageId).ToHashSet();
+        var fnMessageIds = falseNegatives.Select(fn => fn.MessageId).ToHashSet();
 
         // Group by user's local date (C# server-side grouping)
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
@@ -67,12 +87,15 @@ public class AnalyticsRepository : IAnalyticsRepository
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(dr.DetectedAt.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })
-            .Select(g => new DailyFalsePositive
+            .Select(g => new DailyAccuracy
             {
                 Date = g.Key,
                 TotalDetections = g.Count(),
                 FalsePositiveCount = g.Count(dr => fpMessageIds.Contains(dr.MessageId)),
-                Percentage = 0 // Calculate below
+                FalseNegativeCount = g.Count(dr => fnMessageIds.Contains(dr.MessageId)),
+                FalsePositivePercentage = 0, // Calculate below
+                FalseNegativePercentage = 0, // Calculate below
+                Accuracy = 0 // Calculate below
             })
             .OrderBy(d => d.Date)
             .ToList();
@@ -80,18 +103,29 @@ public class AnalyticsRepository : IAnalyticsRepository
         // Calculate percentages
         foreach (var day in dailyBreakdownMapped)
         {
-            day.Percentage = day.TotalDetections > 0
+            day.FalsePositivePercentage = day.TotalDetections > 0
                 ? (day.FalsePositiveCount / (double)day.TotalDetections * 100.0)
+                : 0;
+            day.FalseNegativePercentage = day.TotalDetections > 0
+                ? (day.FalseNegativeCount / (double)day.TotalDetections * 100.0)
+                : 0;
+            var correctCount = day.TotalDetections - day.FalsePositiveCount - day.FalseNegativeCount;
+            day.Accuracy = day.TotalDetections > 0
+                ? (correctCount / (double)day.TotalDetections * 100.0)
                 : 0;
         }
 
-        return new FalsePositiveStats
+        return new DetectionAccuracyStats
         {
             DailyBreakdown = dailyBreakdownMapped,
             TotalFalsePositives = falsePositives.Count,
+            TotalFalseNegatives = falseNegatives.Count,
             TotalDetections = totalDetections,
-            OverallPercentage = totalDetections > 0
+            FalsePositivePercentage = totalDetections > 0
                 ? (falsePositives.Count / (double)totalDetections * 100.0)
+                : 0,
+            FalseNegativePercentage = totalDetections > 0
+                ? (falseNegatives.Count / (double)totalDetections * 100.0)
                 : 0
         };
     }
@@ -194,7 +228,7 @@ public class AnalyticsRepository : IAnalyticsRepository
 
         foreach (var method in methodStats)
         {
-            // Find false positives for this method
+            // Find false positives for this method (spam → ham corrections)
             var falsePositives = await context.DetectionResults
                 .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
                 .Where(dr => dr.DetectionMethod == method.MethodName && dr.IsSpam)
@@ -206,6 +240,21 @@ public class AnalyticsRepository : IAnalyticsRepository
                 .Select(dr => dr.MessageId)
                 .Distinct()
                 .CountAsync(cancellationToken);
+
+            // Find false negatives for this method (ham → spam corrections)
+            var falseNegatives = await context.DetectionResults
+                .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
+                .Where(dr => dr.DetectionMethod == method.MethodName && !dr.IsSpam)
+                .Where(dr => context.DetectionResults.Any(correction =>
+                    correction.MessageId == dr.MessageId &&
+                    correction.DetectionSource == "manual" &&
+                    correction.IsSpam &&
+                    correction.DetectedAt > dr.DetectedAt))
+                .Select(dr => dr.MessageId)
+                .Distinct()
+                .CountAsync(cancellationToken);
+
+            var hamDetected = method.TotalChecks - method.SpamDetected;
 
             result.Add(new DetectionMethodStats
             {
@@ -219,6 +268,10 @@ public class AnalyticsRepository : IAnalyticsRepository
                 FalsePositives = falsePositives,
                 FalsePositiveRate = method.SpamDetected > 0
                     ? (falsePositives / (double)method.SpamDetected * 100.0)
+                    : 0,
+                FalseNegatives = falseNegatives,
+                FalseNegativeRate = hamDetected > 0
+                    ? (falseNegatives / (double)hamDetected * 100.0)
                     : 0
             });
         }

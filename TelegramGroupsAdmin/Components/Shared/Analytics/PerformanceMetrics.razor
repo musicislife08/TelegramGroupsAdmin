@@ -44,50 +44,97 @@
     }
 
     @* Key Metrics Cards *@
-    @if (_falsePositiveStats != null && _responseTimeStats != null && _dailyTrends != null)
+    @if (_accuracyStats != null && _responseTimeStats != null && _dailyTrends != null)
     {
         <MudGrid>
-            <MudItem xs="12" md="4">
-                <MudCard>
-                    <MudCardContent>
-                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Size="MudSize.Large" Color="@GetFalsePositiveColor()" />
-                            <MudText Typo="Typo.h3">@_falsePositiveStats.OverallPercentage.ToString("F2")%</MudText>
-                            <MudText Typo="Typo.body1" Align="MudAlign.Center">False Positive Rate</MudText>
-                            <MudText Typo="Typo.caption" Color="MudColor.Secondary">
-                                @_falsePositiveStats.TotalFalsePositives of @_falsePositiveStats.TotalDetections checks
-                            </MudText>
-                        </MudStack>
+            <MudItem xs="12" md="3">
+                <MudCard Style="height: 100%; display: flex;">
+                    <MudCardContent Style="display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; margin: auto;">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%;">
+                            <div style="height: 40px; display: flex; align-items: center;">
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="MudSize.Large" Color="@GetAccuracyColor()" />
+                            </div>
+                            <div style="height: 60px; display: flex; align-items: center;">
+                                <MudText Typo="Typo.h3">@_accuracyStats.OverallAccuracy.ToString("F1")%</MudText>
+                            </div>
+                            <div style="height: 50px; display: flex; align-items: center;">
+                                <MudText Typo="Typo.body1" Align="MudAlign.Center">Overall Accuracy</MudText>
+                            </div>
+                            <div style="height: 40px; display: flex; align-items: center; justify-content: center;">
+                                <MudText Typo="Typo.caption" Color="MudColor.Secondary" Align="MudAlign.Center" Style="font-size: 0.5rem;">
+                                    @_accuracyStats.TotalCorrect of @_accuracyStats.TotalDetections correct
+                                </MudText>
+                            </div>
+                        </div>
                     </MudCardContent>
                 </MudCard>
             </MudItem>
 
-            <MudItem xs="12" md="4">
-                <MudCard>
-                    <MudCardContent>
-                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Timer" Size="MudSize.Large" Color="@GetResponseTimeColor()" />
-                            <MudText Typo="Typo.h3">@FormatResponseTime(_responseTimeStats.AverageMs)</MudText>
-                            <MudText Typo="Typo.body1" Align="MudAlign.Center">Avg Response Time</MudText>
-                            <MudText Typo="Typo.caption" Color="MudColor.Secondary">
-                                P95: @FormatResponseTime(_responseTimeStats.P95Ms)
-                            </MudText>
-                        </MudStack>
+            <MudItem xs="12" md="3">
+                <MudCard Style="height: 100%; display: flex;">
+                    <MudCardContent Style="display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; margin: auto;">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%;">
+                            <div style="height: 40px; display: flex; align-items: center;">
+                                <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Size="MudSize.Large" Color="@GetErrorRateColor(_accuracyStats.FalsePositivePercentage)" />
+                            </div>
+                            <div style="height: 60px; display: flex; align-items: center;">
+                                <MudText Typo="Typo.h3">@_accuracyStats.FalsePositivePercentage.ToString("F2")%</MudText>
+                            </div>
+                            <div style="height: 50px; display: flex; align-items: center;">
+                                <MudText Typo="Typo.body1" Align="MudAlign.Center">False Positive Rate</MudText>
+                            </div>
+                            <div style="height: 40px; display: flex; align-items: center; justify-content: center;">
+                                <MudText Typo="Typo.caption" Color="MudColor.Secondary" Align="MudAlign.Center" Style="font-size: 0.5rem;">
+                                    @_accuracyStats.TotalFalsePositives (said spam, was ham)
+                                </MudText>
+                            </div>
+                        </div>
                     </MudCardContent>
                 </MudCard>
             </MudItem>
 
-            <MudItem xs="12" md="4">
-                <MudCard>
-                    <MudCardContent>
-                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Dataset" Size="MudSize.Large" Color="MudColor.Primary" />
-                            <MudText Typo="Typo.h3">@_dailyTrends.Sum(d => d.TotalCount)</MudText>
-                            <MudText Typo="Typo.body1" Align="MudAlign.Center">Total Detections</MudText>
-                            <MudText Typo="Typo.caption" Color="MudColor.Secondary">
-                                @_dailyTrends.Sum(d => d.SpamCount) spam detected
-                            </MudText>
-                        </MudStack>
+            <MudItem xs="12" md="3">
+                <MudCard Style="height: 100%; display: flex;">
+                    <MudCardContent Style="display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; margin: auto;">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%;">
+                            <div style="height: 40px; display: flex; align-items: center;">
+                                <MudIcon Icon="@Icons.Material.Filled.VisibilityOff" Size="MudSize.Large" Color="@GetErrorRateColor(_accuracyStats.FalseNegativePercentage)" />
+                            </div>
+                            <div style="height: 60px; display: flex; align-items: center;">
+                                <MudText Typo="Typo.h3">@_accuracyStats.FalseNegativePercentage.ToString("F2")%</MudText>
+                            </div>
+                            <div style="height: 50px; display: flex; align-items: center;">
+                                <MudText Typo="Typo.body1" Align="MudAlign.Center">False Negative Rate</MudText>
+                            </div>
+                            <div style="height: 40px; display: flex; align-items: center; justify-content: center;">
+                                <MudText Typo="Typo.caption" Color="MudColor.Secondary" Align="MudAlign.Center" Style="font-size: 0.5rem;">
+                                    @_accuracyStats.TotalFalseNegatives (missed spam)
+                                </MudText>
+                            </div>
+                        </div>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudCard Style="height: 100%; display: flex;">
+                    <MudCardContent Style="display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; margin: auto;">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%;">
+                            <div style="height: 40px; display: flex; align-items: center;">
+                                <MudIcon Icon="@Icons.Material.Filled.Timer" Size="MudSize.Large" Color="@GetResponseTimeColor()" />
+                            </div>
+                            <div style="height: 60px; display: flex; align-items: center;">
+                                <MudText Typo="Typo.h3" Style="white-space: nowrap;">@FormatResponseTime(_responseTimeStats.AverageMs)</MudText>
+                            </div>
+                            <div style="height: 50px; display: flex; align-items: center;">
+                                <MudText Typo="Typo.body1" Align="MudAlign.Center" Style="font-size: 0.9rem;">Avg Response Time</MudText>
+                            </div>
+                            <div style="height: 40px; display: flex; align-items: center; justify-content: center;">
+                                <MudText Typo="Typo.caption" Color="MudColor.Secondary" Align="MudAlign.Center" Style="font-size: 0.5rem;">
+                                    P95: @FormatResponseTime(_responseTimeStats.P95Ms)
+                                </MudText>
+                            </div>
+                        </div>
                     </MudCardContent>
                 </MudCard>
             </MudItem>
@@ -109,7 +156,8 @@
                         <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.SpamDetected">Spam Detected</MudTableSortLabel></MudTh>
                         <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.SpamPercentage">Spam %</MudTableSortLabel></MudTh>
                         <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.AverageConfidence">Avg Confidence</MudTableSortLabel></MudTh>
-                        <MudTh>False Positive Rate</MudTh>
+                        <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.FalsePositiveRate">FP Rate</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.FalseNegativeRate">FN Rate</MudTableSortLabel></MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Method">
@@ -127,16 +175,28 @@
                                 @context.AverageConfidence.ToString("F0")
                             </MudChip>
                         </MudTd>
-                        <MudTd DataLabel="False Positive Rate">
+                        <MudTd DataLabel="FP Rate">
                             @if (context.FalsePositives > 0)
                             {
-                                <MudChip T="string" Size="MudSize.Small" Color="@GetFalsePositiveColor(context.FalsePositiveRate)">
+                                <MudChip T="string" Size="MudSize.Small" Color="@GetErrorRateColor(context.FalsePositiveRate)">
                                     @context.FalsePositiveRate.ToString("F1")% (@context.FalsePositives)
                                 </MudChip>
                             }
                             else
                             {
-                                <MudText Typo="Typo.caption" Color="MudColor.Success">No false positives</MudText>
+                                <MudText Typo="Typo.caption" Color="MudColor.Success">0%</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="FN Rate">
+                            @if (context.FalseNegatives > 0)
+                            {
+                                <MudChip T="string" Size="MudSize.Small" Color="@GetErrorRateColor(context.FalseNegativeRate)">
+                                    @context.FalseNegativeRate.ToString("F1")% (@context.FalseNegatives)
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="MudColor.Success">0%</MudText>
                             }
                         </MudTd>
                     </RowTemplate>
@@ -215,7 +275,7 @@
     private string _userTimeZone = "UTC"; // Default to UTC until detected
 
     // Analytics data
-    private FalsePositiveStats? _falsePositiveStats;
+    private DetectionAccuracyStats? _accuracyStats;
     private ResponseTimeStats? _responseTimeStats;
     private List<DetectionMethodStats>? _methodStats;
     private List<DailyDetectionTrend>? _dailyTrends;
@@ -274,14 +334,14 @@
         try
         {
             // Load all analytics data in parallel
-            var falsePositivesTask = AnalyticsRepository.GetFalsePositiveStatsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
+            var accuracyTask = AnalyticsRepository.GetDetectionAccuracyStatsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
             var responseTimeTask = AnalyticsRepository.GetResponseTimeStatsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
             var methodComparisonTask = AnalyticsRepository.GetDetectionMethodComparisonAsync(_startDate.Value, _endDate.Value, _userTimeZone);
             var dailyTrendsTask = AnalyticsRepository.GetDailyDetectionTrendsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
 
-            await Task.WhenAll(falsePositivesTask, responseTimeTask, methodComparisonTask, dailyTrendsTask);
+            await Task.WhenAll(accuracyTask, responseTimeTask, methodComparisonTask, dailyTrendsTask);
 
-            _falsePositiveStats = await falsePositivesTask;
+            _accuracyStats = await accuracyTask;
             _responseTimeStats = await responseTimeTask;
             _methodStats = await methodComparisonTask;
             _dailyTrends = await dailyTrendsTask;
@@ -374,16 +434,16 @@
         return $"{ms / 60000:F1} min";
     }
 
-    private MudColor GetFalsePositiveColor()
+    private MudColor GetAccuracyColor()
     {
-        if (_falsePositiveStats == null) return MudColor.Default;
+        if (_accuracyStats == null) return MudColor.Default;
 
-        if (_falsePositiveStats.OverallPercentage < 1.0) return MudColor.Success;
-        if (_falsePositiveStats.OverallPercentage < 5.0) return MudColor.Warning;
+        if (_accuracyStats.OverallAccuracy >= 95.0) return MudColor.Success;
+        if (_accuracyStats.OverallAccuracy >= 90.0) return MudColor.Warning;
         return MudColor.Error;
     }
 
-    private MudColor GetFalsePositiveColor(double rate)
+    private MudColor GetErrorRateColor(double rate)
     {
         if (rate < 1.0) return MudColor.Success;
         if (rate < 5.0) return MudColor.Warning;
