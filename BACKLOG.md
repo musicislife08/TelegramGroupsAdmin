@@ -495,6 +495,63 @@ SELECT SETVAL('table_name_id_seq', COALESCE((SELECT MAX(id) FROM table_name), 1)
 
 ---
 
+## Bugs
+
+### BUG-1: Analytics Only Tracks False Positives, Misses False Negatives
+
+**Status:** 🐛 OPEN (2025-10-24)
+**Severity:** Medium | **Impact:** Analytics accuracy, detection performance metrics incomplete
+
+**Issue:**
+The analytics system (`AnalyticsRepository.GetFalsePositiveStatsAsync`) only counts false positives (spam → ham corrections) but ignores false negatives (ham → spam corrections). This skews accuracy metrics and hides systemic detection failures.
+
+**Current Logic (lines 28-37):**
+```csharp
+// Only finds: System said SPAM → User corrected to HAM (false positive)
+var falsePositives = await context.DetectionResults
+    .Where(dr => dr.IsSpam && dr.DetectionSource != "manual") // Initial spam detection
+    .Where(dr => context.DetectionResults.Any(correction =>
+        correction.MessageId == dr.MessageId &&
+        correction.DetectionSource == "manual" &&
+        !correction.IsSpam &&  // <-- Only checks corrections to HAM
+        correction.DetectedAt > dr.DetectedAt))
+```
+
+**Missing Logic:**
+No code to find: System said HAM → User corrected to SPAM (false negative)
+
+**Example Case (Message 22053):**
+```
+Detection 1287: is_spam=false, confidence=-225, source='auto'  (System: not spam)
+Detection 1298: is_spam=true,  confidence=100,  source='manual' (User: actually spam)
+```
+
+This is a **false negative** - system failed to detect spam, user manually corrected it. Currently **not counted** in analytics.
+
+**Impact:**
+- Incomplete accuracy metrics (only showing half the picture)
+- Cannot track if system is under-detecting spam (false negatives)
+- Cannot compare false positive rate vs false negative rate
+- Per-algorithm stats (lines 198-208) also miss false negatives
+
+**Proposed Fix:**
+Add parallel tracking for false negatives:
+1. Create `GetFalseNegativeStatsAsync()` method (mirrors false positive logic, inverts conditions)
+2. Update analytics UI to show both metrics:
+   - False Positives: "Said spam, was actually ham"
+   - False Negatives: "Said ham, was actually spam"
+3. Add combined "Overall Accuracy" metric: `(TP + TN) / (TP + TN + FP + FN)`
+
+**Files to Update:**
+- `AnalyticsRepository.cs` - Add false negative query
+- `IAnalyticsRepository.cs` - Add interface method
+- `PerformanceMetrics.razor` - Add false negative display
+- `FalsePositiveStats.cs` - Rename to `DetectionAccuracyStats` with both FP and FN
+
+**Priority:** Medium (not blocking, but important for production monitoring)
+
+---
+
 ## Completed Work
 
 **2025-10-24**: ARCH-2 (Actor exclusive arc migration complete - audit_log table migrated with 6 new columns, 35+ call sites updated, UI updated, 84 rows migrated successfully)
