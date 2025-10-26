@@ -14,29 +14,23 @@ namespace TelegramGroupsAdmin.Tests.Migrations;
 public class CascadeBehaviorTests
 {
     /// <summary>
-    /// Test 6: User Deletion Cascade (audit_log) - CONSTRAINT CONFLICT DETECTED
+    /// Test 6: User Deletion Cascade (audit_log)
     ///
-    /// **What it tests**: Validates that deleting a web user FAILS due to CHECK constraint conflict.
-    /// The FK is configured as ON DELETE SET NULL, but the exclusive arc CHECK constraint requires
-    /// exactly ONE actor field to be non-NULL. This creates an impossible situation.
+    /// **What it tests**: Validates that deleting a web user CASCADE deletes audit_log entries
+    /// where the user is the actor (ON DELETE CASCADE).
     ///
-    /// **Why it matters**: This test documents a DESIGN ISSUE in the schema. When a user is deleted,
-    /// PostgreSQL tries to SET NULL the actor_web_user_id, but this leaves ALL actor fields NULL,
-    /// violating CK_audit_log_exclusive_actor CHECK constraint.
+    /// **Why it matters**: Audit entries without actor identity are useless for investigations.
+    /// CASCADE delete keeps audit log clean and actionable.
     ///
-    /// **Production impact**: Users cannot be deleted if they have audit_log entries as actor.
-    /// This prevents user deletion in production!
+    /// **Production scenario**: User deletion (cleanup, account removal) should automatically
+    /// remove associated audit entries where they were the actor.
     ///
-    /// **Resolution options**:
-    /// 1. Change FK to ON DELETE RESTRICT (prevent user deletion if audit entries exist)
-    /// 2. Change exclusive arc to allow all-NULL (relax CHECK constraint)
-    /// 3. Change FK to ON DELETE CASCADE (lose audit history - NOT recommended)
-    /// 4. Application-level: Set actor_system_identifier='DELETED_USER:{id}' before user deletion
-    ///
-    /// **Current test**: Documents the issue by expecting the constraint violation.
+    /// **KNOWN BUG (SCHEMA-1)**: Migration currently uses ON DELETE SET NULL which conflicts
+    /// with exclusive arc CHECK constraint. This test will FAIL until migration is fixed.
+    /// See BACKLOG.md SCHEMA-1 for details.
     /// </summary>
     [Test]
-    public async Task UserDeletionCascade_FailsDueToCheckConstraintConflict()
+    public async Task UserDeletionCascade_ShouldDeleteAuditLogEntries()
     {
         // Arrange - Create database and apply migrations
         using var helper = new MigrationTestHelper();
@@ -91,46 +85,47 @@ public class CascadeBehaviorTests
         var initialCount = await helper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM audit_log");
         Assert.That(initialCount, Is.EqualTo(3), "Should have 3 audit log entries before deletion");
 
-        // Act & Assert - Attempt to delete actor-user-789 (should FAIL)
-        var exception = Assert.ThrowsAsync<DbUpdateException>(async () =>
+        // Act - Delete actor-user-789 (should CASCADE delete related audit entries)
+        await using (var context = helper.GetDbContext())
         {
-            await using var context = helper.GetDbContext();
             var userToDelete = await context.Users.FindAsync("actor-user-789");
-            Assert.That(userToDelete, Is.Not.Null, "User should exist before deletion attempt");
+            Assert.That(userToDelete, Is.Not.Null, "User should exist before deletion");
 
             context.Users.Remove(userToDelete!);
             await context.SaveChangesAsync();
-        });
+        }
 
-        // Verify it's a CHECK constraint violation caused by SET NULL cascade
-        Assert.That(exception, Is.Not.Null);
-        Assert.That(exception!.InnerException, Is.InstanceOf<Npgsql.PostgresException>());
+        // Assert - Verify CASCADE delete behavior
 
-        var pgException = (Npgsql.PostgresException)exception.InnerException!;
-        Assert.That(pgException.SqlState, Is.EqualTo("23514"), // CHECK constraint violation
-            "Should fail with CHECK constraint violation error code");
-        Assert.That(pgException.ConstraintName, Is.EqualTo("CK_audit_log_exclusive_actor"),
-            "Violation should be on exclusive arc CHECK constraint");
-
-        // Verify error message explains the conflict
-        Assert.That(pgException.MessageText, Does.Contain("violates check constraint"),
-            "Error should mention CHECK constraint violation");
-
-        // Verify user was NOT deleted (transaction rolled back)
-        var userStillExists = await helper.ExecuteScalarAsync<bool>(
+        // 1. User should be deleted
+        var userExists = await helper.ExecuteScalarAsync<bool>(
             "SELECT EXISTS(SELECT 1 FROM users WHERE id = 'actor-user-789')");
-        Assert.That(userStillExists, Is.True,
-            "User deletion should be rolled back due to constraint violation");
+        Assert.That(userExists, Is.False, "User should be deleted");
 
-        // Verify all audit log entries still exist unchanged
-        var remainingCount = await helper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM audit_log");
-        Assert.That(remainingCount, Is.EqualTo(3),
-            "All audit log entries should remain unchanged after failed user deletion");
+        // 2. Audit entries where user was ACTOR should be CASCADE deleted
+        var entry1Exists = await helper.ExecuteScalarAsync<bool>(
+            "SELECT EXISTS(SELECT 1 FROM audit_log WHERE value = 'User created something')");
+        Assert.That(entry1Exists, Is.False,
+            "Entry 1 (user as actor) should be CASCADE deleted");
 
-        // NOTE: This test documents a REAL PRODUCTION ISSUE.
-        // Resolution: Application code must handle user deletion by first updating
-        // audit_log entries to set actor_system_identifier='DELETED_USER:{id}' before
-        // deleting the user record.
+        var entry3Exists = await helper.ExecuteScalarAsync<bool>(
+            "SELECT EXISTS(SELECT 1 FROM audit_log WHERE value = 'Actor modified target')");
+        Assert.That(entry3Exists, Is.False,
+            "Entry 3 (user as actor) should be CASCADE deleted");
+
+        // 3. Entry 2 should still exist (user was target, not actor)
+        var entry2Exists = await helper.ExecuteScalarAsync<bool>(
+            "SELECT EXISTS(SELECT 1 FROM audit_log WHERE value = 'System updated user')");
+        Assert.That(entry2Exists, Is.True,
+            "Entry 2 (user as target) should still exist - only actor FK cascades in this test");
+
+        // 4. Verify final count: 1 entry remains (entry 2)
+        var finalCount = await helper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM audit_log");
+        Assert.That(finalCount, Is.EqualTo(1),
+            "Only 1 audit entry should remain (where deleted user was target, not actor)");
+
+        // Note: When SCHEMA-1 is fixed (migration changed to ON DELETE CASCADE),
+        // this test will pass. Until then, it will fail with CHECK constraint violation.
     }
 
     /// <summary>
