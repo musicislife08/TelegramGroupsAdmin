@@ -13,6 +13,7 @@
 - **TelegramGroupsAdmin.Telegram.Abstractions**: TelegramBotClientFactory, job payloads (breaks circular deps)
 - **TelegramGroupsAdmin.SpamDetection**: 9 spam algorithms, self-contained, database-driven
 - **TelegramGroupsAdmin.ContentDetection**: URL filtering (blocklists, domain filters), impersonation detection (photo hash, Levenshtein), file scanning (ClamAV+VirusTotal), AddContentDetectionServices()
+- **TelegramGroupsAdmin.Tests**: Migration tests (NUnit + Testcontainers.PostgreSQL), 19 tests in 5 phases, validates migrations against real PostgreSQL 17
 
 ## Architecture Patterns
 **Extension Methods**: ServiceCollectionExtensions (AddBlazorServices, AddCookieAuthentication, AddApplicationServices, AddHttpClients, AddTelegramServices, AddRepositories, AddTgSpamWebDataServices, AddTickerQBackgroundJobs), WebApplicationExtensions (ConfigurePipeline, MapApiEndpoints, RunDatabaseMigrationsAsync), ConfigurationExtensions (AddApplicationConfiguration)
@@ -110,6 +111,14 @@
 
 ## Code Quality
 88/100 score. See BACKLOG.md for deferred features, DI audit (partial), and completed optimizations
+
+## Testing
+**Database Migration Tests**: 19 tests (18 passing, 1 failing due to SCHEMA-1 bug)
+- Run tests: `dotnet test TelegramGroupsAdmin.Tests/TelegramGroupsAdmin.Tests.csproj`
+- Tests validate migrations against real PostgreSQL 17 via Testcontainers
+- Execution time: ~12 seconds
+- **Known failing test**: Test 6 (UserDeletionCascade) - expects CASCADE behavior, fails until SCHEMA-1 migration fix applied
+- See BACKLOG.md SCHEMA-1 for audit_log FK cascade conflict details
 
 ## Status
 **Phase 4 Complete** ✅ - All 20 core features shipped (including Phase 4.20 Translation Storage, Phase 4.21 Language Warnings)
