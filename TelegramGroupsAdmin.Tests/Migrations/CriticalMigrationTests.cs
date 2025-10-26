@@ -139,4 +139,88 @@ public class CriticalMigrationTests
         Assert.That(checkExists, Is.True,
             "Exclusive arc CHECK constraint should exist");
     }
+
+    /// <summary>
+    /// Test 2: Duplicate Translation Prevention
+    ///
+    /// Context: Found 2 translations for message 22053 despite exclusive arc CHECK constraint.
+    /// CHECK constraint validated exclusive arc but didn't prevent duplicates.
+    ///
+    /// This test validates AddUniqueConstraintToMessageTranslations migration creates
+    /// unique partial indexes that prevent duplicate translations for the same message/edit.
+    /// </summary>
+    [Test]
+    public async Task DuplicateTranslationPrevention_ShouldRejectDuplicateMessageTranslation()
+    {
+        // Arrange - Apply all migrations (including AddUniqueConstraintToMessageTranslations)
+        using var helper = new MigrationTestHelper();
+        await helper.CreateDatabaseAndApplyMigrationsAsync();
+
+        // Create a message to attach translation to
+        await using (var context = helper.GetDbContext())
+        {
+            context.Messages.Add(new MessageRecordDto
+            {
+                MessageId = 1,
+                UserId = 100,
+                ChatId = 200,
+                Timestamp = DateTimeOffset.UtcNow,
+                MessageText = "Test message"
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // Act & Assert - Insert first translation (should succeed)
+        await using (var context = helper.GetDbContext())
+        {
+            context.MessageTranslations.Add(new MessageTranslationDto
+            {
+                MessageId = 1,
+                TranslatedText = "First translation",
+                DetectedLanguage = "en",
+                TranslatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // Verify first translation was inserted
+        var count1 = await helper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM message_translations WHERE message_id = 1");
+        Assert.That(count1, Is.EqualTo(1), "First translation should be inserted successfully");
+
+        // Attempt to insert second translation for same message_id (should fail)
+        var exception = Assert.ThrowsAsync<DbUpdateException>(async () =>
+        {
+            await using var context = helper.GetDbContext();
+            context.MessageTranslations.Add(new MessageTranslationDto
+            {
+                MessageId = 1,  // Same message_id as first translation
+                TranslatedText = "Second translation (duplicate)",
+                DetectedLanguage = "en",
+                TranslatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        });
+
+        // Verify exception is due to unique constraint violation
+        Assert.That(exception, Is.Not.Null);
+        Assert.That(exception!.InnerException?.Message, Does.Contain("IX_message_translations_message_id")
+            .Or.Contain("duplicate key"),
+            "Exception should mention unique index violation");
+
+        // Verify only 1 translation exists (duplicate was rejected)
+        var count2 = await helper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM message_translations WHERE message_id = 1");
+        Assert.That(count2, Is.EqualTo(1), "Should still have only 1 translation after duplicate rejection");
+
+        // Verify unique index exists
+        var indexExists = await helper.ExecuteScalarAsync<bool>(@"
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_indexes
+                WHERE indexname = 'IX_message_translations_message_id'
+                AND indexdef LIKE '%UNIQUE%'
+            )
+        ");
+        Assert.That(indexExists, Is.True,
+            "Unique partial index on message_id should exist");
+    }
 }
