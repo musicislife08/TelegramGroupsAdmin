@@ -495,6 +495,61 @@ SELECT SETVAL('table_name_id_seq', COALESCE((SELECT MAX(id) FROM table_name), 1)
 
 ---
 
+### SCHEMA-1: Fix Audit Log FK Cascade Rules
+
+**Status:** BACKLOG 📋 **Priority: High**
+**Severity:** Schema Bug | **Impact:** User deletion blocked, broken FK behavior
+**Discovered:** 2025-10-26 via Test 6 (CascadeBehaviorTests)
+
+**Current State:**
+- `audit_log` FKs use `ON DELETE SET NULL` for actor/target user references
+- Exclusive arc CHECK constraint requires exactly ONE actor field to be non-NULL
+- CONFLICT: SET NULL cascade violates CHECK constraint when user is deleted
+- Result: User deletion fails with `23514` CHECK constraint violation
+
+**Production Impact:**
+- ❌ Cannot delete users who have audit_log entries as actor
+- ❌ User cleanup/deactivation workflows broken
+- ❌ Orphaned audit entries with NULL actors provide no value (can't attribute actions)
+
+**Root Cause:**
+Migration `20251025003104_AddActorExclusiveArcToAuditLog.cs` configured:
+```csharp
+onDelete: ReferentialAction.SetNull  // Lines 137, 145, 153, 161
+```
+
+But also added:
+```csharp
+CK_audit_log_exclusive_actor: requires exactly ONE actor field non-NULL  // Line 124
+```
+
+These constraints are mathematically incompatible.
+
+**Proposed Solution:**
+Create new migration `FixAuditLogCascadeRules.cs`:
+1. Drop existing FK constraints (4 total: actor_web_user_id, target_web_user_id, actor_telegram_user_id, target_telegram_user_id)
+2. Re-add with `ReferentialAction.Cascade` (delete user → delete audit entries)
+3. Rationale: Audit entries without actor identity are useless for investigations/attribution
+4. Clean up any existing NULL actor entries (if any exist from manual testing)
+
+**Affected FKs:**
+- `FK_audit_log_users_actor_web_user_id`
+- `FK_audit_log_users_target_web_user_id`
+- `FK_audit_log_telegram_users_actor_telegram_user_id`
+- `FK_audit_log_telegram_users_target_telegram_user_id`
+
+**Test Coverage:**
+Test 6 (CascadeBehaviorTests.UserDeletionCascade_FailsDueToCheckConstraintConflict) currently documents the bug. After migration fix, update test to validate CASCADE behavior works correctly.
+
+**Acceptance Criteria:**
+- [ ] Migration created and tested
+- [ ] User deletion succeeds and cascades to audit_log
+- [ ] Test 6 updated to validate CASCADE behavior (delete user → verify audit entries removed)
+- [ ] No orphaned audit entries with NULL actors remain
+- [ ] Exclusive arc CHECK constraint still enforced (exactly one actor field non-NULL for existing entries)
+
+---
+
 ## Bugs
 
 (No open bugs)
