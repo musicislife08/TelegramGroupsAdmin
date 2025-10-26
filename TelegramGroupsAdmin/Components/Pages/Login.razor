@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Authentication.Cookies
 @using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Helpers
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Services.Auth
 @inject IAuthService AuthService
@@ -116,6 +117,9 @@
 
         try
         {
+            // Validate and sanitize returnUrl once to prevent open redirect attacks
+            var safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
+
             // Validate credentials server-side
             var result = await AuthService.LoginAsync(_model.Email, _model.Password);
 
@@ -131,12 +135,7 @@
                 // SECURITY: Generate intermediate authentication token (valid for 5 minutes)
                 var intermediateToken = IntermediateAuthService.CreateToken(result.UserId!);
 
-                // Redirect to mandatory TOTP setup
-                var cleanReturnUrl = string.IsNullOrEmpty(ReturnUrl) || ReturnUrl.Contains("/login")
-                    ? "/"
-                    : ReturnUrl;
-
-                var setupUrl = $"/login/setup-2fa?userId={result.UserId}&token={Uri.EscapeDataString(intermediateToken)}&returnUrl={Uri.EscapeDataString(cleanReturnUrl)}";
+                var setupUrl = $"/login/setup-2fa?userId={result.UserId}&token={Uri.EscapeDataString(intermediateToken)}&returnUrl={Uri.EscapeDataString(safeReturnUrl)}";
                 HttpContextAccessor.HttpContext?.Response.Redirect(setupUrl);
                 return;
             }
@@ -149,12 +148,7 @@
                 // access /login/verify?userId=VICTIM_ID and brute-force TOTP codes
                 var intermediateToken = IntermediateAuthService.CreateToken(result.UserId!);
 
-                // Avoid nested returnUrl loops - only pass through if it's a real destination, not login/verify itself
-                var cleanReturnUrl = string.IsNullOrEmpty(ReturnUrl) || ReturnUrl.Contains("/login")
-                    ? "/"
-                    : ReturnUrl;
-
-                var verifyUrl = $"/login/verify?userId={result.UserId}&token={Uri.EscapeDataString(intermediateToken)}&returnUrl={Uri.EscapeDataString(cleanReturnUrl)}";
+                var verifyUrl = $"/login/verify?userId={result.UserId}&token={Uri.EscapeDataString(intermediateToken)}&returnUrl={Uri.EscapeDataString(safeReturnUrl)}";
                 HttpContextAccessor.HttpContext?.Response.Redirect(verifyUrl);
                 return;
             }
@@ -189,8 +183,8 @@
                 claimsPrincipal,
                 authProperties);
 
-            // Redirect using HttpContext (works in Static SSR)
-            httpContext.Response.Redirect(ReturnUrl ?? "/");
+            // Redirect using HttpContext (safeReturnUrl validated at top of try block)
+            httpContext.Response.Redirect(safeReturnUrl);
         }
         catch (Exception ex)
         {

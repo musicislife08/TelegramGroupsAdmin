@@ -8,6 +8,7 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Services.Auth
 @using QRCoder
+@using TelegramGroupsAdmin.Helpers
 @inject IAuthService AuthService
 @inject IIntermediateAuthService IntermediateAuthService
 @inject IHttpContextAccessor HttpContextAccessor
@@ -223,8 +224,9 @@
                 claimsPrincipal,
                 authProperties);
 
-            // Redirect
-            httpContext.Response.Redirect(ReturnUrl ?? "/");
+            // Redirect (validate URL to prevent open redirect attacks)
+            var safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
+            httpContext.Response.Redirect(safeReturnUrl);
         }
         catch (Exception ex)
         {

@@ -5,6 +5,7 @@
 @using Microsoft.AspNetCore.Authentication.Cookies
 @using Microsoft.AspNetCore.Components.Forms
 @using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Helpers
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Services.Auth
 @inject IAuthService AuthService
@@ -160,8 +161,9 @@
                 claimsPrincipal,
                 authProperties);
 
-            // Redirect using HttpContext (works in Static SSR)
-            httpContext.Response.Redirect(ReturnUrl ?? "/");
+            // Redirect using HttpContext (validate URL to prevent open redirect attacks)
+            var safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
+            httpContext.Response.Redirect(safeReturnUrl);
         }
         catch (Exception ex)
         {
