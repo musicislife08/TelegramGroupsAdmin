@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using nClam;
 using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Repositories;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -13,25 +14,28 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 public class ClamAVScannerService : IFileScannerService
 {
     private readonly ILogger<ClamAVScannerService> _logger;
-    private readonly IOptionsMonitor<FileScanningConfig> _configMonitor;
+    private readonly IFileScanningConfigRepository _configRepository;
 
     public string ScannerName => "ClamAV";
 
     public ClamAVScannerService(
         ILogger<ClamAVScannerService> logger,
-        IOptionsMonitor<FileScanningConfig> configMonitor)
+        IFileScanningConfigRepository configRepository)
     {
         _logger = logger;
-        _configMonitor = configMonitor;
+        _configRepository = configRepository;
     }
 
-    // Helper property to get current config (supports hot-reload)
-    private FileScanningConfig Config => _configMonitor.CurrentValue;
+    // Helper method to get current config from database
+    private async Task<FileScanningConfig> GetConfigAsync(CancellationToken cancellationToken = default)
+    {
+        return await _configRepository.GetAsync(chatId: null, cancellationToken);
+    }
 
     // Helper method to create ClamClient with current config values
-    private ClamClient CreateClamClient()
+    private async Task<ClamClient> CreateClamClientAsync(CancellationToken cancellationToken = default)
     {
-        var config = Config;
+        var config = await GetConfigAsync(cancellationToken);
         return new ClamClient(
             config.Tier1.ClamAV.Host,
             config.Tier1.ClamAV.Port);
@@ -46,8 +50,11 @@ public class ClamAVScannerService : IFileScannerService
 
         try
         {
+            // Get current config from database
+            var config = await GetConfigAsync(cancellationToken);
+
             // Check if ClamAV is enabled
-            if (!Config.Tier1.ClamAV.Enabled)
+            if (!config.Tier1.ClamAV.Enabled)
             {
                 _logger.LogDebug("ClamAV scanner is disabled, returning clean result");
                 return new FileScanResult
@@ -90,14 +97,14 @@ public class ClamAVScannerService : IFileScannerService
                 try
                 {
                     // Ping ClamAV before scan attempt to detect connection issues early
-                    var clamClient = CreateClamClient();
+                    var clamClient = await CreateClamClientAsync(cancellationToken);
                     var pingResult = await clamClient.PingAsync(cancellationToken);
                     if (!pingResult)
                     {
                         if (attempt == maxRetries)
                         {
                             _logger.LogError("ClamAV daemon not responding to ping after {Attempts} attempts at {Host}:{Port}",
-                                maxRetries, Config.Tier1.ClamAV.Host, Config.Tier1.ClamAV.Port);
+                                maxRetries, config.Tier1.ClamAV.Host, config.Tier1.ClamAV.Port);
 
                             return new FileScanResult
                             {
@@ -243,8 +250,11 @@ public class ClamAVScannerService : IFileScannerService
     {
         try
         {
-            var clamClient = CreateClamClient();
-            var config = Config;
+            var config = await GetConfigAsync(cancellationToken);
+            _logger.LogDebug("ClamAV health check attempting connection to {Host}:{Port}",
+                config.Tier1.ClamAV.Host, config.Tier1.ClamAV.Port);
+
+            var clamClient = await CreateClamClientAsync(cancellationToken);
 
             // Ping ClamAV daemon
             var pingResult = await clamClient.PingAsync(cancellationToken);
