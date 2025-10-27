@@ -13,22 +13,28 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 public class ClamAVScannerService : IFileScannerService
 {
     private readonly ILogger<ClamAVScannerService> _logger;
-    private readonly FileScanningConfig _config;
-    private readonly ClamClient _clamClient;
+    private readonly IOptionsMonitor<FileScanningConfig> _configMonitor;
 
     public string ScannerName => "ClamAV";
 
     public ClamAVScannerService(
         ILogger<ClamAVScannerService> logger,
-        IOptions<FileScanningConfig> config)
+        IOptionsMonitor<FileScanningConfig> configMonitor)
     {
         _logger = logger;
-        _config = config.Value;
+        _configMonitor = configMonitor;
+    }
 
-        // Initialize ClamClient with configured host/port
-        _clamClient = new ClamClient(
-            _config.Tier1.ClamAV.Host,
-            _config.Tier1.ClamAV.Port);
+    // Helper property to get current config (supports hot-reload)
+    private FileScanningConfig Config => _configMonitor.CurrentValue;
+
+    // Helper method to create ClamClient with current config values
+    private ClamClient CreateClamClient()
+    {
+        var config = Config;
+        return new ClamClient(
+            config.Tier1.ClamAV.Host,
+            config.Tier1.ClamAV.Port);
     }
 
     public async Task<FileScanResult> ScanFileAsync(
@@ -41,7 +47,7 @@ public class ClamAVScannerService : IFileScannerService
         try
         {
             // Check if ClamAV is enabled
-            if (!_config.Tier1.ClamAV.Enabled)
+            if (!Config.Tier1.ClamAV.Enabled)
             {
                 _logger.LogDebug("ClamAV scanner is disabled, returning clean result");
                 return new FileScanResult
@@ -84,13 +90,14 @@ public class ClamAVScannerService : IFileScannerService
                 try
                 {
                     // Ping ClamAV before scan attempt to detect connection issues early
-                    var pingResult = await _clamClient.PingAsync(cancellationToken);
+                    var clamClient = CreateClamClient();
+                    var pingResult = await clamClient.PingAsync(cancellationToken);
                     if (!pingResult)
                     {
                         if (attempt == maxRetries)
                         {
                             _logger.LogError("ClamAV daemon not responding to ping after {Attempts} attempts at {Host}:{Port}",
-                                maxRetries, _config.Tier1.ClamAV.Host, _config.Tier1.ClamAV.Port);
+                                maxRetries, Config.Tier1.ClamAV.Host, Config.Tier1.ClamAV.Port);
 
                             return new FileScanResult
                             {
@@ -110,7 +117,7 @@ public class ClamAVScannerService : IFileScannerService
                     }
 
                     // Perform the actual scan
-                    scanResult = await _clamClient.SendAndScanFileAsync(fileBytes, cancellationToken);
+                    scanResult = await clamClient.SendAndScanFileAsync(fileBytes, cancellationToken);
                     break; // Success, exit retry loop
                 }
                 catch (Exception ex) when (attempt < maxRetries && IsTransientClamAVError(ex))
@@ -236,26 +243,29 @@ public class ClamAVScannerService : IFileScannerService
     {
         try
         {
+            var clamClient = CreateClamClient();
+            var config = Config;
+
             // Ping ClamAV daemon
-            var pingResult = await _clamClient.PingAsync(cancellationToken);
+            var pingResult = await clamClient.PingAsync(cancellationToken);
             if (!pingResult)
             {
                 return new ClamAVHealthResult
                 {
                     IsHealthy = false,
-                    ErrorMessage = $"ClamAV daemon not responding at {_config.Tier1.ClamAV.Host}:{_config.Tier1.ClamAV.Port}"
+                    ErrorMessage = $"ClamAV daemon not responding at {config.Tier1.ClamAV.Host}:{config.Tier1.ClamAV.Port}"
                 };
             }
 
             // Get version information (includes signature count)
-            var versionResult = await _clamClient.GetVersionAsync(cancellationToken);
+            var versionResult = await clamClient.GetVersionAsync(cancellationToken);
 
             return new ClamAVHealthResult
             {
                 IsHealthy = true,
                 Version = versionResult ?? "Unknown",
-                Host = _config.Tier1.ClamAV.Host,
-                Port = _config.Tier1.ClamAV.Port
+                Host = config.Tier1.ClamAV.Host,
+                Port = config.Tier1.ClamAV.Port
             };
         }
         catch (Exception ex)
