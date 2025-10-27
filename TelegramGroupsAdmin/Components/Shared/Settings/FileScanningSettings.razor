@@ -67,24 +67,49 @@
                                 <MudNumericField T="int" Label="Port" @bind-Value="_config.Tier1.ClamAV.Port" Variant="Variant.Outlined" />
                                 <MudNumericField T="int" Label="Timeout (seconds)" @bind-Value="_config.Tier1.ClamAV.TimeoutSeconds" Variant="Variant.Outlined" />
 
-                                <MudButton Variant="Variant.Filled"
-                                           Color="Color.Primary"
-                                           OnClick="SaveConfigAsync"
-                                           Disabled="@_isSaving"
-                                           StartIcon="@Icons.Material.Filled.Save">
-                                    @if (_isSaving)
-                                    {
-                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                        <text>&nbsp;Saving...</text>
-                                    }
-                                    else
-                                    {
-                                        <text>Save ClamAV Settings</text>
-                                    }
-                                </MudButton>
+                                <MudStack Row="true" Spacing="2">
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Secondary"
+                                               OnClick="TestClamAVConnectionAsync"
+                                               Disabled="@_isTestingClamAV"
+                                               StartIcon="@Icons.Material.Filled.NetworkCheck">
+                                        @if (_isTestingClamAV)
+                                        {
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                            <text>&nbsp;Testing...</text>
+                                        }
+                                        else
+                                        {
+                                            <text>Test Connection</text>
+                                        }
+                                    </MudButton>
+
+                                    <MudButton Variant="Variant.Filled"
+                                               Color="Color.Primary"
+                                               OnClick="SaveConfigAsync"
+                                               Disabled="@_isSaving"
+                                               StartIcon="@Icons.Material.Filled.Save">
+                                        @if (_isSaving)
+                                        {
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                            <text>&nbsp;Saving...</text>
+                                        }
+                                        else
+                                        {
+                                            <text>Save Settings</text>
+                                        }
+                                    </MudButton>
+                                </MudStack>
+
+                                @if (!string.IsNullOrEmpty(_clamAvTestResult))
+                                {
+                                    <MudAlert Severity="@_clamAvTestSeverity" Dense="true">
+                                        @_clamAvTestResult
+                                    </MudAlert>
+                                }
 
                                 <MudAlert Severity="Severity.Info" Dense="true">
-                                    ClamAV connection settings. Ensure ClamAV is running and accessible at the configured host and port.
+                                    ClamAV connection settings. Use "Test Connection" to verify settings before saving.
                                 </MudAlert>
                             </MudStack>
                         </ChildContent>
@@ -516,7 +541,10 @@
     private bool _isLoadingHealth = false;
     private bool _isLoadingScanResults = false;
     private bool _isClearingCache = false;
+    private bool _isTestingClamAV = false;
     private bool _virusTotalConfigured = false;
+    private string _clamAvTestResult = string.Empty;
+    private Severity _clamAvTestSeverity = Severity.Info;
 
     // Pagination for scan results
     private int _currentPage = 1;
@@ -678,6 +706,45 @@
             len = len / 1024;
         }
         return $"{len:0.##} {sizes[order]}";
+    }
+
+    private async Task TestClamAVConnectionAsync()
+    {
+        _isTestingClamAV = true;
+        _clamAvTestResult = string.Empty;
+
+        try
+        {
+            var host = _config.Tier1.ClamAV.Host;
+            var port = _config.Tier1.ClamAV.Port;
+            var timeout = _config.Tier1.ClamAV.TimeoutSeconds;
+
+            _clamAvTestResult = $"Testing connection to {host}:{port} (timeout: {timeout}s)...";
+            StateHasChanged();
+            await Task.Delay(100); // Brief delay to show "testing" message
+
+            // Create a temporary ClamClient to test with current form values
+            var testClient = new nClam.ClamClient(host, port);
+
+            // Test ping (with cancellation token for timeout)
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeout));
+            await testClient.PingAsync(cts.Token);
+
+            // Get version to confirm it's really working
+            var version = await testClient.GetVersionAsync(cts.Token);
+
+            _clamAvTestResult = $"✅ Connection successful! ClamAV version: {version} at {host}:{port}";
+            _clamAvTestSeverity = Severity.Success;
+        }
+        catch (Exception ex)
+        {
+            _clamAvTestResult = $"❌ Connection failed: {ex.Message}\n\nHost: {_config.Tier1.ClamAV.Host}\nPort: {_config.Tier1.ClamAV.Port}\n\nTroubleshooting:\n- Check if ClamAV container is running\n- Verify host/port values match your Docker Compose\n- Check network connectivity between containers";
+            _clamAvTestSeverity = Severity.Error;
+        }
+        finally
+        {
+            _isTestingClamAV = false;
+        }
     }
 
     private async Task LoadHealthData()
