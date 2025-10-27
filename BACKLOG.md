@@ -373,44 +373,6 @@ endpoints.MapPost("/api/auth/logout", async (HttpContext context, ...) =>
 
 ---
 
-### ANALYTICS-4: Welcome System Lifecycle Events
-
-**Status:** BACKLOG 📋
-**Severity:** Feature | **Impact:** Analytics visibility for onboarding success metrics
-
-**Current Behavior:**
-- New user joins and welcome responses tracked in `welcome_responses` table
-- State changes logged via ILogger only (not visible in web UI)
-- No AuditEventType values for Telegram events (only web user events)
-- Analytics cannot query welcome completion rates, timeout patterns, etc.
-
-**Proposed Enhancement:**
-Add welcome system events to audit_log table for analytics:
-- `TelegramUserJoined` - New user joined a chat
-- `TelegramWelcomeAccepted` - User accepted welcome agreement
-- `TelegramWelcomeDenied` - User denied welcome agreement
-- `TelegramWelcomeTimeout` - User timed out without responding
-- `TelegramUserLeft` - User left before responding
-
-**Implementation:**
-1. Add 5 new AuditEventType enum values
-2. Update WelcomeService to call audit log service when state changes occur
-3. Create analytics queries/UI to show:
-   - Join rates by chat
-   - Welcome completion rates
-   - Time-to-acceptance metrics
-   - Timeout/denial patterns
-
-**Data Already Available:**
-- `welcome_responses` table tracks all state (Pending/Accepted/Denied/Timeout/Left)
-- WelcomeService logs "New user joined" (line 160)
-- Just needs surfacing to audit_log for web UI visibility
-
-**Priority:** MEDIUM - Analytics enhancement for understanding user onboarding
-
-**Effort:** 2-3 hours
-
----
 
 ### FEATURE-4.23: Cross-Chat Ban Message Cleanup
 
@@ -588,7 +550,7 @@ SELECT SETVAL('table_name_id_seq', COALESCE((SELECT MAX(id) FROM table_name), 1)
 
 ## Completed Work
 
-**2025-10-27**: SCHEMA-1 (Audit log FK cascade rules fixed - migration 20251027002019, user deletion now works, 22/22 tests passing)
+**2025-10-27**: ANALYTICS-4 (Welcome system analytics - 4 new repository methods, WelcomeAnalytics.razor component, /analytics#welcome tab with join trends/response distribution/per-chat stats, timezone-aware queries), SCHEMA-1 (Audit log FK cascade rules fixed - migration 20251027002019, user deletion now works, 22/22 tests passing)
 
 **2025-10-26**: SECURITY-2 (Open redirect vulnerability fixed - UrlHelpers.IsLocalUrl() validation on all auth redirects), BUG-LOGOUT (Missing /logout page - existed since Oct 6, found by user on Cloudflare tunnel exposure)
 

@@ -47,4 +47,40 @@ public interface IAnalyticsRepository
         DateTimeOffset endDate,
         string timeZoneId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get welcome system summary statistics (total joins, acceptance rate, avg time to accept, timeout rate).
+    /// </summary>
+    Task<WelcomeStatsSummary> GetWelcomeStatsSummaryAsync(
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        string timeZoneId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get daily welcome join trends for charting (date in user's timezone, join count per day).
+    /// </summary>
+    Task<List<DailyWelcomeJoinTrend>> GetDailyWelcomeJoinTrendsAsync(
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        string timeZoneId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get welcome response distribution (Accepted/Denied/Timeout/Left counts and percentages).
+    /// </summary>
+    Task<WelcomeResponseDistribution> GetWelcomeResponseDistributionAsync(
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        string timeZoneId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get per-chat welcome statistics breakdown (joins, acceptance rate, timeout rate by chat).
+    /// </summary>
+    Task<List<ChatWelcomeStats>> GetChatWelcomeStatsAsync(
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        string timeZoneId,
+        CancellationToken cancellationToken = default);
 }

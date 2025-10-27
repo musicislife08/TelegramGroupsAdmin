@@ -1,0 +1,370 @@
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@using ApexCharts
+@using Microsoft.JSInterop
+@using MudColor = MudBlazor.Color
+@using MudSize = MudBlazor.Size
+@using MudAlign = MudBlazor.Align
+@inject IAnalyticsRepository AnalyticsRepository
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+
+<MudStack Spacing="4">
+    @* Date Range Selector *@
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h6">Welcome System Analytics</MudText>
+            <MudStack Row="true" Spacing="2">
+                <MudButtonGroup Variant="Variant.Outlined" Color="MudColor.Primary">
+                    <MudButton OnClick="() => LoadLast7Days()">Last 7 Days</MudButton>
+                    <MudButton OnClick="() => LoadLast30Days()">Last 30 Days</MudButton>
+                    <MudButton OnClick="() => LoadLast90Days()">Last 90 Days</MudButton>
+                </MudButtonGroup>
+                <MudButton Variant="Variant.Filled"
+                          Color="MudColor.Primary"
+                          StartIcon="@Icons.Material.Filled.Refresh"
+                          OnClick="LoadData"
+                          Disabled="@_loading">
+                    Refresh
+                </MudButton>
+            </MudStack>
+        </MudStack>
+
+        @if (_startDate.HasValue && _endDate.HasValue)
+        {
+            <MudText Typo="Typo.caption" Color="MudColor.Secondary" Class="mt-2">
+                Showing data from @_startDate.Value.ToString("MMM dd, yyyy") to @_endDate.Value.ToString("MMM dd, yyyy")
+            </MudText>
+        }
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Color="MudColor.Primary" Indeterminate="true" />
+    }
+
+    @* Summary Cards *@
+    @if (_summary != null)
+    {
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="MudColor.Primary">Performance Overview</MudText>
+
+                <!-- Total Joins -->
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Color="MudColor.Info" />
+                        <MudText Typo="Typo.body1" Style="flex: 1;">Total Joins</MudText>
+                        <MudText Typo="Typo.h6">@_summary.TotalJoins</MudText>
+                    </MudStack>
+                </MudStack>
+
+                <MudDivider />
+
+                <!-- Acceptance Rate -->
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="@GetAcceptanceColor()" />
+                        <MudText Typo="Typo.body1" Style="flex: 1;">Acceptance Rate</MudText>
+                        <MudText Typo="Typo.h6">@_summary.AcceptanceRate.ToString("F1")%</MudText>
+                    </MudStack>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="padding-left: 40px;">
+                        <MudProgressLinear Color="@GetAcceptanceColor()"
+                                          Value="@_summary.AcceptanceRate"
+                                          Size="MudSize.Medium"
+                                          Style="flex: 1;" />
+                        <MudText Typo="Typo.body2" Color="MudColor.Secondary" Style="min-width: 150px; text-align: right;">
+                            @_summary.TotalAccepted / @_summary.TotalJoins accepted
+                        </MudText>
+                    </MudStack>
+                </MudStack>
+
+                <MudDivider />
+
+                <!-- Average Time to Accept -->
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Timer" Color="MudColor.Info" />
+                        <MudText Typo="Typo.body1" Style="flex: 1;">Avg Time to Accept</MudText>
+                        <MudText Typo="Typo.h6">@FormatTimeToAccept(_summary.AverageMinutesToAccept)</MudText>
+                    </MudStack>
+                </MudStack>
+
+                <MudDivider />
+
+                <!-- Timeout Rate -->
+                <MudStack Spacing="1">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Timelapse" Color="@GetTimeoutColor()" />
+                        <MudText Typo="Typo.body1" Style="flex: 1;">Timeout Rate</MudText>
+                        <MudText Typo="Typo.h6">@_summary.TimeoutRate.ToString("F1")%</MudText>
+                    </MudStack>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="padding-left: 40px;">
+                        <MudProgressLinear Color="@GetTimeoutColor()"
+                                          Value="@_summary.TimeoutRate"
+                                          Size="MudSize.Medium"
+                                          Style="flex: 1;" />
+                        <MudText Typo="Typo.body2" Color="MudColor.Secondary" Style="min-width: 150px; text-align: right;">
+                            @_summary.TotalTimedOut / @_summary.TotalJoins timed out
+                        </MudText>
+                    </MudStack>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+
+    @* Join Trends Chart *@
+    @if (_dailyTrends != null && _dailyTrends.Any())
+    {
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-4">Daily Join Trends</MudText>
+            <ApexChart TItem="DailyWelcomeJoinTrend"
+                      Title="New User Joins Over Time"
+                      Height="300">
+                <ApexPointSeries TItem="DailyWelcomeJoinTrend"
+                                Items="_dailyTrends"
+                                Name="Joins"
+                                SeriesType="SeriesType.Line"
+                                XValue="@(e => e.Date.ToString("MMM dd"))"
+                                YAggregate="@(e => e.Sum(x => x.JoinCount))"
+                                OrderBy="e => e.X" />
+            </ApexChart>
+        </MudPaper>
+    }
+
+    @* Response Distribution Pie Chart *@
+    @if (_distribution != null && _distribution.TotalResponses > 0)
+    {
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-4">Response Distribution</MudText>
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <ApexChart TItem="ResponseDistributionItem"
+                              Title="Welcome Response Types"
+                              Height="300">
+                        <ApexPointSeries TItem="ResponseDistributionItem"
+                                        Items="GetDistributionItems()"
+                                        SeriesType="SeriesType.Pie"
+                                        Name="Count"
+                                        XValue="@(e => e.Label)"
+                                        YAggregate="@(e => e.Sum(x => x.Count))" />
+                    </ApexChart>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudStack Spacing="2" Justify="Justify.Center" Style="height: 100%;">
+                        <MudText Typo="Typo.body1" Class="mt-4">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="MudColor.Success" Size="MudSize.Small" />
+                            <strong>Accepted:</strong> @_distribution.AcceptedCount (@_distribution.AcceptedPercentage.ToString("F1")%)
+                        </MudText>
+                        <MudText Typo="Typo.body1">
+                            <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="MudColor.Error" Size="MudSize.Small" />
+                            <strong>Denied:</strong> @_distribution.DeniedCount (@_distribution.DeniedPercentage.ToString("F1")%)
+                        </MudText>
+                        <MudText Typo="Typo.body1">
+                            <MudIcon Icon="@Icons.Material.Filled.Timelapse" Color="MudColor.Warning" Size="MudSize.Small" />
+                            <strong>Timeout:</strong> @_distribution.TimeoutCount (@_distribution.TimeoutPercentage.ToString("F1")%)
+                        </MudText>
+                        <MudText Typo="Typo.body1">
+                            <MudIcon Icon="@Icons.Material.Filled.ExitToApp" Color="MudColor.Secondary" Size="MudSize.Small" />
+                            <strong>Left:</strong> @_distribution.LeftCount (@_distribution.LeftPercentage.ToString("F1")%)
+                        </MudText>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+    }
+
+    @* Per-Chat Breakdown Table *@
+    @if (_chatStats != null && _chatStats.Any())
+    {
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.h6" Class="mb-4">Per-Chat Breakdown</MudText>
+            <MudTable Items="_chatStats" Hover="true" Dense="true" Striped="true">
+                <HeaderContent>
+                    <MudTh>Chat Name</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<ChatWelcomeStats, object>(x => x.TotalJoins)">Total Joins</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<ChatWelcomeStats, object>(x => x.AcceptanceRate)">Acceptance Rate</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<ChatWelcomeStats, object>(x => x.TimeoutRate)">Timeout Rate</MudTableSortLabel></MudTh>
+                    <MudTh>Accepted</MudTh>
+                    <MudTh>Denied</MudTh>
+                    <MudTh>Timeout</MudTh>
+                    <MudTh>Left</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Chat Name">@context.ChatName</MudTd>
+                    <MudTd DataLabel="Total Joins">@context.TotalJoins</MudTd>
+                    <MudTd DataLabel="Acceptance Rate">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudProgressLinear Color="@GetChatAcceptanceColor(context.AcceptanceRate)"
+                                              Value="@context.AcceptanceRate"
+                                              Size="MudSize.Small"
+                                              Style="width: 60px;" />
+                            <MudText Typo="Typo.body2">@context.AcceptanceRate.ToString("F1")%</MudText>
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Timeout Rate">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudProgressLinear Color="@GetChatTimeoutColor(context.TimeoutRate)"
+                                              Value="@context.TimeoutRate"
+                                              Size="MudSize.Small"
+                                              Style="width: 60px;" />
+                            <MudText Typo="Typo.body2">@context.TimeoutRate.ToString("F1")%</MudText>
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Accepted">@context.AcceptedCount</MudTd>
+                    <MudTd DataLabel="Denied">@context.DeniedCount</MudTd>
+                    <MudTd DataLabel="Timeout">@context.TimeoutCount</MudTd>
+                    <MudTd DataLabel="Left">@context.LeftCount</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
+    }
+
+    @* Empty State *@
+    @if (!_loading && _summary?.TotalJoins == 0)
+    {
+        <MudAlert Severity="Severity.Info">
+            No welcome data found for the selected date range. Try expanding the date range or check if the welcome system is enabled.
+        </MudAlert>
+    }
+</MudStack>
+
+@code {
+    private bool _loading = false;
+    private DateTimeOffset? _startDate;
+    private DateTimeOffset? _endDate;
+    private string _timeZoneId = "America/New_York"; // Default timezone
+
+    private WelcomeStatsSummary? _summary;
+    private List<DailyWelcomeJoinTrend>? _dailyTrends;
+    private WelcomeResponseDistribution? _distribution;
+    private List<ChatWelcomeStats>? _chatStats;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Detect user's timezone from browser
+        _timeZoneId = await JSRuntime.InvokeAsync<string>("eval", "Intl.DateTimeFormat().resolvedOptions().timeZone");
+        await LoadLast30Days();
+    }
+
+    private async Task LoadLast7Days()
+    {
+        _endDate = DateTimeOffset.UtcNow;
+        _startDate = _endDate.Value.AddDays(-7);
+        await LoadData();
+    }
+
+    private async Task LoadLast30Days()
+    {
+        _endDate = DateTimeOffset.UtcNow;
+        _startDate = _endDate.Value.AddDays(-30);
+        await LoadData();
+    }
+
+    private async Task LoadLast90Days()
+    {
+        _endDate = DateTimeOffset.UtcNow;
+        _startDate = _endDate.Value.AddDays(-90);
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        if (!_startDate.HasValue || !_endDate.HasValue)
+            return;
+
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Load all data in parallel
+            var summaryTask = AnalyticsRepository.GetWelcomeStatsSummaryAsync(_startDate.Value, _endDate.Value, _timeZoneId);
+            var trendsTask = AnalyticsRepository.GetDailyWelcomeJoinTrendsAsync(_startDate.Value, _endDate.Value, _timeZoneId);
+            var distributionTask = AnalyticsRepository.GetWelcomeResponseDistributionAsync(_startDate.Value, _endDate.Value, _timeZoneId);
+            var chatStatsTask = AnalyticsRepository.GetChatWelcomeStatsAsync(_startDate.Value, _endDate.Value, _timeZoneId);
+
+            await Task.WhenAll(summaryTask, trendsTask, distributionTask, chatStatsTask);
+
+            _summary = await summaryTask;
+            _dailyTrends = await trendsTask;
+            _distribution = await distributionTask;
+            _chatStats = await chatStatsTask;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load welcome analytics: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private MudColor GetAcceptanceColor()
+    {
+        if (_summary == null) return MudColor.Default;
+        if (_summary.AcceptanceRate >= 80) return MudColor.Success;
+        if (_summary.AcceptanceRate >= 60) return MudColor.Info;
+        if (_summary.AcceptanceRate >= 40) return MudColor.Warning;
+        return MudColor.Error;
+    }
+
+    private MudColor GetTimeoutColor()
+    {
+        if (_summary == null) return MudColor.Default;
+        if (_summary.TimeoutRate >= 30) return MudColor.Error;
+        if (_summary.TimeoutRate >= 15) return MudColor.Warning;
+        if (_summary.TimeoutRate >= 5) return MudColor.Info;
+        return MudColor.Success;
+    }
+
+    private MudColor GetChatAcceptanceColor(double rate)
+    {
+        if (rate >= 80) return MudColor.Success;
+        if (rate >= 60) return MudColor.Info;
+        if (rate >= 40) return MudColor.Warning;
+        return MudColor.Error;
+    }
+
+    private MudColor GetChatTimeoutColor(double rate)
+    {
+        if (rate >= 30) return MudColor.Error;
+        if (rate >= 15) return MudColor.Warning;
+        if (rate >= 5) return MudColor.Info;
+        return MudColor.Success;
+    }
+
+    private string FormatTimeToAccept(double minutes)
+    {
+        if (minutes < 1)
+            return $"{(int)(minutes * 60)}s";
+        if (minutes < 60)
+            return $"{minutes:F1}m";
+        var hours = minutes / 60;
+        if (hours < 24)
+            return $"{hours:F1}h";
+        var days = hours / 24;
+        return $"{days:F1}d";
+    }
+
+    private List<ResponseDistributionItem> GetDistributionItems()
+    {
+        if (_distribution == null) return new();
+
+        return new List<ResponseDistributionItem>
+        {
+            new() { Label = "Accepted", Count = _distribution.AcceptedCount },
+            new() { Label = "Denied", Count = _distribution.DeniedCount },
+            new() { Label = "Timeout", Count = _distribution.TimeoutCount },
+            new() { Label = "Left", Count = _distribution.LeftCount }
+        };
+    }
+
+    private class ResponseDistributionItem
+    {
+        public string Label { get; set; } = string.Empty;
+        public int Count { get; set; }
+    }
+}

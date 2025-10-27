@@ -392,4 +392,198 @@ public class AnalyticsRepository : IAnalyticsRepository
 
         return dailyTrends;
     }
+
+    public async Task<WelcomeStatsSummary> GetWelcomeStatsSummaryAsync(
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        string timeZoneId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Fetch all welcome responses in date range (UTC filter)
+        var responses = await context.WelcomeResponses
+            .Where(wr => wr.CreatedAt >= startDate && wr.CreatedAt <= endDate)
+            .Select(wr => new { wr.Response, wr.CreatedAt, wr.RespondedAt })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var totalJoins = responses.Count;
+
+        if (totalJoins == 0)
+        {
+            return new WelcomeStatsSummary
+            {
+                TotalJoins = 0,
+                TotalAccepted = 0,
+                TotalDenied = 0,
+                TotalTimedOut = 0,
+                TotalLeft = 0,
+                AcceptanceRate = 0,
+                TimeoutRate = 0,
+                AverageMinutesToAccept = 0
+            };
+        }
+
+        var totalAccepted = responses.Count(r => r.Response == Data.Models.WelcomeResponseType.Accepted);
+        var totalDenied = responses.Count(r => r.Response == Data.Models.WelcomeResponseType.Denied);
+        var totalTimedOut = responses.Count(r => r.Response == Data.Models.WelcomeResponseType.Timeout);
+        var totalLeft = responses.Count(r => r.Response == Data.Models.WelcomeResponseType.Left);
+
+        // Calculate average time to accept (only for accepted responses)
+        var acceptedResponses = responses.Where(r => r.Response == Data.Models.WelcomeResponseType.Accepted).ToList();
+        var avgMinutes = acceptedResponses.Any()
+            ? acceptedResponses.Average(r => (r.RespondedAt - r.CreatedAt).TotalMinutes)
+            : 0;
+
+        return new WelcomeStatsSummary
+        {
+            TotalJoins = totalJoins,
+            TotalAccepted = totalAccepted,
+            TotalDenied = totalDenied,
+            TotalTimedOut = totalTimedOut,
+            TotalLeft = totalLeft,
+            AcceptanceRate = totalJoins > 0 ? (totalAccepted / (double)totalJoins * 100.0) : 0,
+            TimeoutRate = totalJoins > 0 ? (totalTimedOut / (double)totalJoins * 100.0) : 0,
+            AverageMinutesToAccept = avgMinutes
+        };
+    }
+
+    public async Task<List<DailyWelcomeJoinTrend>> GetDailyWelcomeJoinTrendsAsync(
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        string timeZoneId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Fetch welcome responses (UTC filter)
+        var responses = await context.WelcomeResponses
+            .Where(wr => wr.CreatedAt >= startDate && wr.CreatedAt <= endDate)
+            .Select(wr => new { wr.CreatedAt })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        // Group by user's local date (C# side conversion)
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        var dailyTrends = responses
+            .GroupBy(wr => {
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(wr.CreatedAt.UtcDateTime, timeZone);
+                return DateOnly.FromDateTime(localTime);
+            })
+            .Select(g => new DailyWelcomeJoinTrend
+            {
+                Date = g.Key,
+                JoinCount = g.Count()
+            })
+            .OrderBy(d => d.Date)
+            .ToList();
+
+        return dailyTrends;
+    }
+
+    public async Task<WelcomeResponseDistribution> GetWelcomeResponseDistributionAsync(
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        string timeZoneId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Fetch welcome responses (UTC filter)
+        var responses = await context.WelcomeResponses
+            .Where(wr => wr.CreatedAt >= startDate && wr.CreatedAt <= endDate)
+            .Select(wr => new { wr.Response })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var totalResponses = responses.Count;
+
+        if (totalResponses == 0)
+        {
+            return new WelcomeResponseDistribution
+            {
+                AcceptedCount = 0,
+                DeniedCount = 0,
+                TimeoutCount = 0,
+                LeftCount = 0,
+                TotalResponses = 0,
+                AcceptedPercentage = 0,
+                DeniedPercentage = 0,
+                TimeoutPercentage = 0,
+                LeftPercentage = 0
+            };
+        }
+
+        var acceptedCount = responses.Count(r => r.Response == Data.Models.WelcomeResponseType.Accepted);
+        var deniedCount = responses.Count(r => r.Response == Data.Models.WelcomeResponseType.Denied);
+        var timeoutCount = responses.Count(r => r.Response == Data.Models.WelcomeResponseType.Timeout);
+        var leftCount = responses.Count(r => r.Response == Data.Models.WelcomeResponseType.Left);
+
+        return new WelcomeResponseDistribution
+        {
+            AcceptedCount = acceptedCount,
+            DeniedCount = deniedCount,
+            TimeoutCount = timeoutCount,
+            LeftCount = leftCount,
+            TotalResponses = totalResponses,
+            AcceptedPercentage = totalResponses > 0 ? (acceptedCount / (double)totalResponses * 100.0) : 0,
+            DeniedPercentage = totalResponses > 0 ? (deniedCount / (double)totalResponses * 100.0) : 0,
+            TimeoutPercentage = totalResponses > 0 ? (timeoutCount / (double)totalResponses * 100.0) : 0,
+            LeftPercentage = totalResponses > 0 ? (leftCount / (double)totalResponses * 100.0) : 0
+        };
+    }
+
+    public async Task<List<ChatWelcomeStats>> GetChatWelcomeStatsAsync(
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        string timeZoneId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Join welcome_responses with managed_chats to get chat names
+        var chatStats = await (
+            from wr in context.WelcomeResponses
+            where wr.CreatedAt >= startDate && wr.CreatedAt <= endDate
+            join mc in context.ManagedChats on wr.ChatId equals mc.ChatId into chatGroup
+            from mc in chatGroup.DefaultIfEmpty()
+            select new
+            {
+                wr.ChatId,
+                ChatName = mc != null ? mc.ChatName : "Unknown Chat",
+                wr.Response
+            })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        // Group by chat and calculate stats
+        var result = chatStats
+            .GroupBy(cs => new { cs.ChatId, cs.ChatName })
+            .Select(g =>
+            {
+                var totalJoins = g.Count();
+                var acceptedCount = g.Count(cs => cs.Response == Data.Models.WelcomeResponseType.Accepted);
+                var deniedCount = g.Count(cs => cs.Response == Data.Models.WelcomeResponseType.Denied);
+                var timeoutCount = g.Count(cs => cs.Response == Data.Models.WelcomeResponseType.Timeout);
+                var leftCount = g.Count(cs => cs.Response == Data.Models.WelcomeResponseType.Left);
+
+                return new ChatWelcomeStats
+                {
+                    ChatId = g.Key.ChatId,
+                    ChatName = g.Key.ChatName,
+                    TotalJoins = totalJoins,
+                    AcceptedCount = acceptedCount,
+                    DeniedCount = deniedCount,
+                    TimeoutCount = timeoutCount,
+                    LeftCount = leftCount,
+                    AcceptanceRate = totalJoins > 0 ? (acceptedCount / (double)totalJoins * 100.0) : 0,
+                    TimeoutRate = totalJoins > 0 ? (timeoutCount / (double)totalJoins * 100.0) : 0
+                };
+            })
+            .OrderByDescending(cs => cs.TotalJoins)
+            .ToList();
+
+        return result;
+    }
 }

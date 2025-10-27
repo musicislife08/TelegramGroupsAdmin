@@ -24,6 +24,11 @@
             <MudAlert Severity="Severity.Info" Class="mb-4">Performance metrics show global statistics across all chats to evaluate overall spam detection effectiveness.</MudAlert>
             <PerformanceMetrics />
         </MudTabPanel>
+
+        <MudTabPanel Text="Welcome Analytics" Icon="@Icons.Material.Filled.People">
+            <MudAlert Severity="Severity.Info" Class="mb-4">Welcome system metrics track user onboarding success rates, join trends, and per-chat performance.</MudAlert>
+            <WelcomeAnalytics />
+        </MudTabPanel>
     </MudTabs>
 </MudContainer>
 
@@ -39,6 +44,7 @@
             "spam" => 0,
             "trends" => 1,
             "performance" => 2,
+            "welcome" => 3,
             _ => 0
         };
 
@@ -53,6 +59,7 @@
             "spam" => 0,
             "trends" => 1,
             "performance" => 2,
+            "welcome" => 3,
             _ => 0
         };
 
@@ -72,6 +79,7 @@
             0 => "spam",
             1 => "trends",
             2 => "performance",
+            3 => "welcome",
             _ => "spam"
         };
 
