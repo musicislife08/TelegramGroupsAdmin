@@ -31,4 +31,20 @@ public interface IFileScanningConfigRepository
     /// <param name="chatId">Chat ID</param>
     /// <param name="cancellationToken">Cancellation token</param>
     Task DeleteAsync(long chatId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get API keys for external services (global only - chat_id = NULL)
+    /// Keys are stored encrypted in configs.api_keys JSONB column using Data Protection
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>API keys or null if not configured</returns>
+    Task<ApiKeysConfig?> GetApiKeysAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Save API keys for external services (global only - chat_id = NULL)
+    /// Keys are automatically encrypted using Data Protection before storing
+    /// </summary>
+    /// <param name="apiKeys">API keys to save</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task SaveApiKeysAsync(ApiKeysConfig apiKeys, CancellationToken cancellationToken = default);
 }

@@ -63,13 +63,28 @@
                             <MudStack Spacing="2" Class="mt-2">
                                 <MudText Typo="Typo.body2">Industry-standard open-source antivirus engine</MudText>
 
-                                <MudTextField T="string" Label="Host" Value="@_config.Tier1.ClamAV.Host" Disabled="true" Variant="Variant.Outlined" />
-                                <MudNumericField T="int" Label="Port" Value="@_config.Tier1.ClamAV.Port" Disabled="true" Variant="Variant.Outlined" />
-                                <MudNumericField T="int" Label="Timeout (seconds)" Value="@_config.Tier1.ClamAV.TimeoutSeconds" Disabled="true" Variant="Variant.Outlined" />
+                                <MudTextField T="string" Label="Host" @bind-Value="_config.Tier1.ClamAV.Host" Variant="Variant.Outlined" />
+                                <MudNumericField T="int" Label="Port" @bind-Value="_config.Tier1.ClamAV.Port" Variant="Variant.Outlined" />
+                                <MudNumericField T="int" Label="Timeout (seconds)" @bind-Value="_config.Tier1.ClamAV.TimeoutSeconds" Variant="Variant.Outlined" />
+
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           OnClick="SaveConfigAsync"
+                                           Disabled="@_isSaving"
+                                           StartIcon="@Icons.Material.Filled.Save">
+                                    @if (_isSaving)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                        <text>&nbsp;Saving...</text>
+                                    }
+                                    else
+                                    {
+                                        <text>Save ClamAV Settings</text>
+                                    }
+                                </MudButton>
 
                                 <MudAlert Severity="Severity.Info" Dense="true">
-                                    ClamAV configuration is managed via Docker Compose and environment variables.
-                                    See <code>compose/compose.yml</code> to modify settings.
+                                    ClamAV connection settings. Ensure ClamAV is running and accessible at the configured host and port.
                                 </MudAlert>
                             </MudStack>
                         </ChildContent>
@@ -122,19 +137,44 @@
                             <MudStack Spacing="2" Class="mt-2">
                                 <MudText Typo="Typo.body2">Multi-engine cloud scanning with 70+ antivirus engines</MudText>
 
+                                <MudTextField @bind-Value="_apiKeys.VirusTotal"
+                                              Label="API Key"
+                                              Variant="Variant.Outlined"
+                                              InputType="InputType.Password"
+                                              HelperText="Get your API key from https://www.virustotal.com/gui/my-apikey"
+                                              Adornment="Adornment.End"
+                                              AdornmentIcon="@Icons.Material.Filled.Key">
+                                </MudTextField>
+
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           OnClick="SaveApiKeysAsync"
+                                           Disabled="@_isSavingApiKeys"
+                                           StartIcon="@Icons.Material.Filled.Save">
+                                    @if (_isSavingApiKeys)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                        <text>&nbsp;Saving...</text>
+                                    }
+                                    else
+                                    {
+                                        <text>Save API Keys</text>
+                                    }
+                                </MudButton>
+
                                 <MudStack Row="true" Spacing="2">
                                     <MudNumericField T="int" Label="Daily Limit" Value="@_config.Tier2.VirusTotal.DailyLimit" ValueChanged="OnDailyLimitChanged" Variant="Variant.Outlined" HelperText="Free tier: 500 requests/day" />
                                     <MudNumericField T="int" Label="Rate Limit (/min)" Value="@_config.Tier2.VirusTotal.PerMinuteLimit" ValueChanged="OnPerMinuteLimitChanged" Variant="Variant.Outlined" HelperText="Free tier: 4 requests/minute" />
                                 </MudStack>
 
-                                <MudAlert Severity="_virusTotalConfigured ? Severity.Success : Severity.Warning" Dense="true">
+                                <MudAlert Severity="_virusTotalConfigured ? Severity.Success : Severity.Info" Dense="true">
                                     @if (_virusTotalConfigured)
                                     {
-                                        <text><strong>Configured:</strong> API key set via environment variable VIRUSTOTAL__APIKEY</text>
+                                        <text><strong>Configured:</strong> API key is set and ready to use.</text>
                                     }
                                     else
                                     {
-                                        <text><strong>Not Configured:</strong> Set VIRUSTOTAL__APIKEY environment variable. VirusTotal will be skipped until configured.</text>
+                                        <text><strong>Not Configured:</strong> Add your VirusTotal API key above. VirusTotal will be skipped until configured.</text>
                                     }
                                 </MudAlert>
                             </MudStack>
@@ -465,11 +505,13 @@
 
 @code {
     private FileScanningConfig _config = new();
+    private ApiKeysConfig _apiKeys = new();
     private List<FileScanQuotaModel> _quotas = new();
     private ClamAVHealthResult? _clamAvHealth;
     private Dictionary<string, int> _scanStats = new();
     private List<TelegramGroupsAdmin.Telegram.Models.DetectionResultRecord> _scanResults = new();
     private bool _isSaving = false;
+    private bool _isSavingApiKeys = false;
     private bool _isLoadingQuotas = false;
     private bool _isLoadingHealth = false;
     private bool _isLoadingScanResults = false;
@@ -485,6 +527,7 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadConfig();
+        await LoadApiKeys();
         await LoadQuotas();
         await LoadHealthData();
         await LoadScanResults();
@@ -522,10 +565,58 @@
         }
     }
 
+    private async Task LoadApiKeys()
+    {
+        try
+        {
+            var apiKeys = await ConfigRepository.GetApiKeysAsync();
+            _apiKeys = apiKeys ?? new ApiKeysConfig();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading API keys: {ex.Message}", Severity.Error);
+            _apiKeys = new ApiKeysConfig();
+        }
+    }
+
     private void CheckVirusTotalConfiguration()
     {
-        var apiKey = Configuration["VirusTotal:ApiKey"];
-        _virusTotalConfigured = !string.IsNullOrWhiteSpace(apiKey);
+        // Check database first, fallback to env var
+        _virusTotalConfigured = !string.IsNullOrWhiteSpace(_apiKeys.VirusTotal) ||
+                                !string.IsNullOrWhiteSpace(Configuration["VirusTotal:ApiKey"]);
+    }
+
+    private async Task SaveApiKeysAsync()
+    {
+        _isSavingApiKeys = true;
+        try
+        {
+            await ConfigRepository.SaveApiKeysAsync(_apiKeys);
+
+            // Create audit log entry
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    Actor.FromWebUser(userId),
+                    Actor.FromWebUser(userId),
+                    "file_scanning:api_keys_updated");
+            }
+
+            // Update configuration status
+            CheckVirusTotalConfiguration();
+
+            Snackbar.Add("API keys saved successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving API keys: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSavingApiKeys = false;
+        }
     }
 
     private async Task SaveConfigAsync()

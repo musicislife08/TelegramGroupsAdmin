@@ -78,10 +78,12 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 5. CleanupBackgroundService - Message retention (keeps spam/ham samples)
 
 ## Configuration (Env Vars)
-**Required**: VIRUSTOTAL__APIKEY, OPENAI__APIKEY, TELEGRAM__BOTTOKEN, TELEGRAM__CHATID, SPAMDETECTION__APIKEY, SENDGRID__APIKEY/FROMEMAIL/FROMNAME
+**Required**: OPENAI__APIKEY, TELEGRAM__BOTTOKEN, TELEGRAM__CHATID, SPAMDETECTION__APIKEY, SENDGRID__APIKEY/FROMEMAIL/FROMNAME
 **Optional**: APP__BASEURL, OPENAI__MODEL/MAXTOKENS, MESSAGEHISTORY__*, IDENTITY__DATABASEPATH, DATAPROTECTION__KEYSPATH
+**Database-Managed**: VIRUSTOTAL__APIKEY (migrated to encrypted database storage, env var fallback supported)
 
 ## Key Implementations
+- **API Key Management**: File scanning API keys (VirusTotal, MetaDefender, HybridAnalysis, Intezer) stored encrypted in configs.api_keys (TEXT column, ASP.NET Core Data Protection). ApiKeyMigrationService migrates env vars on first startup. ApiKeyDelegatingHandler dynamically loads keys from database at request time with env var fallback. Settings UI allows editing. Backup/restore auto-handles decryption/re-encryption via [ProtectedData] attribute.
 - **Rate Limiting**: VirusTotal (Polly PartitionedRateLimiter, 4/min), OpenAI (429 detection), both fail-open
 - **Edit Detection**: On edit → message_edits, update messages, re-run spam detection, action if spam
 - **Email Verification**: 24h token (32 random bytes), login blocked until verified (except first Owner)

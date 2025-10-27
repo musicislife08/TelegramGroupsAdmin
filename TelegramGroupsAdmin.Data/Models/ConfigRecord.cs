@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using TelegramGroupsAdmin.Data.Attributes;
 
 namespace TelegramGroupsAdmin.Data.Models;
 
@@ -69,6 +70,17 @@ public class ConfigRecordDto
     /// </summary>
     [Column("background_jobs_config", TypeName = "jsonb")]
     public string? BackgroundJobsConfig { get; set; }
+
+    /// <summary>
+    /// API keys for external services (encrypted TEXT, not JSONB)
+    /// Stores VirusTotal, MetaDefender, HybridAnalysis, Intezer API keys encrypted with Data Protection
+    /// Encrypted at rest, automatically decrypted during backup export and re-encrypted during restore
+    /// Only used for global config (chat_id = NULL)
+    /// Note: Uses TEXT not JSONB because encrypted data is base64, not valid JSON
+    /// </summary>
+    [Column("api_keys")]
+    [ProtectedData]
+    public string? ApiKeys { get; set; }
 
     /// <summary>
     /// Cached permanent invite link for this chat (NULL for global config or public chats)

@@ -12,6 +12,7 @@ using Polly.RateLimiting;
 using TickerQ.DependencyInjection;
 using TickerQ.EntityFrameworkCore.DependencyInjection;
 using TickerQ.Dashboard.DependencyInjection;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -173,6 +174,9 @@ public static class ServiceCollectionExtensions
         // Recurring job scheduler (Phase 4.X: Generic TickerQ job scheduler with interval/cron support)
         services.AddHostedService<Services.BackgroundServices.RecurringJobSchedulerService>();
 
+        // API key migration service (one-time migration from env vars to encrypted database storage)
+        services.AddScoped<ApiKeyMigrationService>();
+
         return services;
     }
 
@@ -230,16 +234,16 @@ public static class ServiceCollectionExtensions
             OnRejected = static _ => ValueTask.CompletedTask
         };
 
-        // Named HttpClient for VirusTotal
+        // Named HttpClient for VirusTotal (with dynamic API key from database)
         services.AddHttpClient("VirusTotal", client =>
             {
                 client.BaseAddress = new Uri("https://www.virustotal.com/api/v3/");
-                var apiKey = configuration["VirusTotal:ApiKey"];
-                if (!string.IsNullOrEmpty(apiKey))
-                {
-                    client.DefaultRequestHeaders.Add("x-apikey", apiKey);
-                }
             })
+            .AddHttpMessageHandler(sp => new Services.ApiKeyDelegatingHandler(
+                sp,
+                configuration,
+                serviceName: "VirusTotal",
+                headerName: "x-apikey"))
             .AddResilienceHandler("virustotal", resiliencePipelineBuilder =>
             {
                 resiliencePipelineBuilder.AddRateLimiter(limiterOptions);

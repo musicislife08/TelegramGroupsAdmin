@@ -4,6 +4,7 @@ using TickerQ.DependencyInjection;
 using TickerQ.Dashboard.DependencyInjection;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Endpoints;
 
@@ -97,6 +98,17 @@ public static class WebApplicationExtensions
         await context.Database.MigrateAsync();
 
         app.Logger.LogInformation("PostgreSQL database migration complete");
+
+        // One-time migration: Populate api_keys column from environment variables
+        try
+        {
+            var apiKeyMigration = scope.ServiceProvider.GetRequiredService<ApiKeyMigrationService>();
+            await apiKeyMigration.MigrateApiKeysFromEnvironmentAsync();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Failed to migrate API keys from environment variables (non-fatal)");
+        }
     }
 
     /// <summary>

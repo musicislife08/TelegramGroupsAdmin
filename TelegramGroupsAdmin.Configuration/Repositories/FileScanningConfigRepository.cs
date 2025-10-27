@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
@@ -14,14 +15,17 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
 {
     private readonly ILogger<FileScanningConfigRepository> _logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IDataProtectionProvider _dataProtectionProvider;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public FileScanningConfigRepository(
         ILogger<FileScanningConfigRepository> logger,
-        IDbContextFactory<AppDbContext> contextFactory)
+        IDbContextFactory<AppDbContext> contextFactory,
+        IDataProtectionProvider dataProtectionProvider)
     {
         _logger = logger;
         _contextFactory = contextFactory;
+        _dataProtectionProvider = dataProtectionProvider;
         _jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -144,5 +148,77 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
                 chatId == null ? "global" : $"chat {chatId}");
             return null;
         }
+    }
+
+    public async Task<ApiKeysConfig?> GetApiKeysAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+
+        // API keys are global only (chat_id = NULL)
+        var configRecord = await context.Configs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ChatId == null, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (configRecord?.ApiKeys == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            // Decrypt using Data Protection
+            var protector = _dataProtectionProvider.CreateProtector("ApiKeys");
+            var decryptedJson = protector.Unprotect(configRecord.ApiKeys);
+
+            // Deserialize from JSON
+            return JsonSerializer.Deserialize<ApiKeysConfig>(decryptedJson, _jsonOptions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to decrypt/deserialize API keys");
+            return null;
+        }
+    }
+
+    public async Task SaveApiKeysAsync(ApiKeysConfig apiKeys, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("Saving API keys to encrypted database storage");
+
+        // Serialize to JSON
+        var jsonKeys = JsonSerializer.Serialize(apiKeys, _jsonOptions);
+
+        // Encrypt using Data Protection
+        var protector = _dataProtectionProvider.CreateProtector("ApiKeys");
+        var encryptedKeys = protector.Protect(jsonKeys);
+
+        // Find or create global config record (chat_id = NULL)
+        var configRecord = await context.Configs
+            .FirstOrDefaultAsync(c => c.ChatId == null, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (configRecord == null)
+        {
+            // Create new global config record
+            configRecord = new Data.Models.ConfigRecordDto
+            {
+                ChatId = null,
+                ApiKeys = encryptedKeys,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await context.Configs.AddAsync(configRecord, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            // Update existing global config
+            configRecord.ApiKeys = encryptedKeys;
+            configRecord.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        _logger.LogInformation("API keys saved successfully to encrypted database storage");
     }
 }
