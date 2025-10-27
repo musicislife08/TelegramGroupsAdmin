@@ -17,17 +17,16 @@ public class CascadeBehaviorTests
     /// Test 6: User Deletion Cascade (audit_log)
     ///
     /// **What it tests**: Validates that deleting a web user CASCADE deletes audit_log entries
-    /// where the user is the actor (ON DELETE CASCADE).
+    /// where the user is either the actor OR target (ON DELETE CASCADE for all 4 FKs).
     ///
-    /// **Why it matters**: Audit entries without actor identity are useless for investigations.
-    /// CASCADE delete keeps audit log clean and actionable.
+    /// **Why it matters**: Audit entries without actor/target identity are useless for investigations.
+    /// CASCADE delete keeps audit log clean and actionable when users are permanently removed.
     ///
     /// **Production scenario**: User deletion (cleanup, account removal) should automatically
-    /// remove associated audit entries where they were the actor.
+    /// remove associated audit entries where they were either the actor or target.
     ///
-    /// **KNOWN BUG (SCHEMA-1)**: Migration currently uses ON DELETE SET NULL which conflicts
-    /// with exclusive arc CHECK constraint. This test will FAIL until migration is fixed.
-    /// See BACKLOG.md SCHEMA-1 for details.
+    /// **Fixed in SCHEMA-1 migration**: Changed from ON DELETE SET NULL to ON DELETE CASCADE
+    /// to prevent CHECK constraint violations (exclusive arc pattern requires non-NULL actor/target).
     /// </summary>
     [Test]
     public async Task UserDeletionCascade_ShouldDeleteAuditLogEntries()
@@ -113,19 +112,19 @@ public class CascadeBehaviorTests
         Assert.That(entry3Exists, Is.False,
             "Entry 3 (user as actor) should be CASCADE deleted");
 
-        // 3. Entry 2 should still exist (user was target, not actor)
+        // 3. Entry 2 should still exist (different user 'target-user-101' as target)
         var entry2Exists = await helper.ExecuteScalarAsync<bool>(
             "SELECT EXISTS(SELECT 1 FROM audit_log WHERE value = 'System updated user')");
         Assert.That(entry2Exists, Is.True,
-            "Entry 2 (user as target) should still exist - only actor FK cascades in this test");
+            "Entry 2 should still exist - references different user (target-user-101), not the deleted user");
 
         // 4. Verify final count: 1 entry remains (entry 2)
         var finalCount = await helper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM audit_log");
         Assert.That(finalCount, Is.EqualTo(1),
-            "Only 1 audit entry should remain (where deleted user was target, not actor)");
+            "Only 1 audit entry should remain (entry 2 with different target user)");
 
-        // Note: When SCHEMA-1 is fixed (migration changed to ON DELETE CASCADE),
-        // this test will pass. Until then, it will fail with CHECK constraint violation.
+        // Note: This test validates SCHEMA-1 fix (CASCADE behavior for all 4 audit_log FKs).
+        // Entries are CASCADE deleted when their actor OR target user is deleted.
     }
 
     /// <summary>

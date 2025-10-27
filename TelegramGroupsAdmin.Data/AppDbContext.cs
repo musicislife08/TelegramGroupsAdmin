@@ -294,30 +294,34 @@ public class AppDbContext : DbContext
             .OnDelete(DeleteBehavior.SetNull);
 
         // AuditLog actor FKs (ARCH-2 migration)
+        // CASCADE delete: When an actor is deleted, remove their audit log entries
+        // (incompatible with SetNull due to CK_audit_log_exclusive_actor constraint)
         modelBuilder.Entity<AuditLogRecordDto>()
             .HasOne<UserRecordDto>()
             .WithMany()
             .HasForeignKey(al => al.ActorWebUserId)
-            .OnDelete(DeleteBehavior.SetNull);
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<AuditLogRecordDto>()
             .HasOne<TelegramUserDto>()
             .WithMany()
             .HasForeignKey(al => al.ActorTelegramUserId)
-            .OnDelete(DeleteBehavior.SetNull);
+            .OnDelete(DeleteBehavior.Cascade);
 
         // AuditLog target FKs (ARCH-2 migration)
+        // CASCADE delete: When a target is deleted, remove their audit log entries
+        // (incompatible with SetNull due to CK_audit_log_exclusive_target constraint)
         modelBuilder.Entity<AuditLogRecordDto>()
             .HasOne<UserRecordDto>()
             .WithMany()
             .HasForeignKey(al => al.TargetWebUserId)
-            .OnDelete(DeleteBehavior.SetNull);
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<AuditLogRecordDto>()
             .HasOne<TelegramUserDto>()
             .WithMany()
             .HasForeignKey(al => al.TargetTelegramUserId)
-            .OnDelete(DeleteBehavior.SetNull);
+            .OnDelete(DeleteBehavior.Cascade);
 
         // ============================================================================
         // Actor System CHECK Constraints (Phase 4.19)

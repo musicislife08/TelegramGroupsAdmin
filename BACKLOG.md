@@ -373,6 +373,45 @@ endpoints.MapPost("/api/auth/logout", async (HttpContext context, ...) =>
 
 ---
 
+### ANALYTICS-4: Welcome System Lifecycle Events
+
+**Status:** BACKLOG 📋
+**Severity:** Feature | **Impact:** Analytics visibility for onboarding success metrics
+
+**Current Behavior:**
+- New user joins and welcome responses tracked in `welcome_responses` table
+- State changes logged via ILogger only (not visible in web UI)
+- No AuditEventType values for Telegram events (only web user events)
+- Analytics cannot query welcome completion rates, timeout patterns, etc.
+
+**Proposed Enhancement:**
+Add welcome system events to audit_log table for analytics:
+- `TelegramUserJoined` - New user joined a chat
+- `TelegramWelcomeAccepted` - User accepted welcome agreement
+- `TelegramWelcomeDenied` - User denied welcome agreement
+- `TelegramWelcomeTimeout` - User timed out without responding
+- `TelegramUserLeft` - User left before responding
+
+**Implementation:**
+1. Add 5 new AuditEventType enum values
+2. Update WelcomeService to call audit log service when state changes occur
+3. Create analytics queries/UI to show:
+   - Join rates by chat
+   - Welcome completion rates
+   - Time-to-acceptance metrics
+   - Timeout/denial patterns
+
+**Data Already Available:**
+- `welcome_responses` table tracks all state (Pending/Accepted/Denied/Timeout/Left)
+- WelcomeService logs "New user joined" (line 160)
+- Just needs surfacing to audit_log for web UI visibility
+
+**Priority:** MEDIUM - Analytics enhancement for understanding user onboarding
+
+**Effort:** 2-3 hours
+
+---
+
 ### FEATURE-4.23: Cross-Chat Ban Message Cleanup
 
 **Status:** BACKLOG 📋
@@ -466,44 +505,47 @@ endpoints.MapPost("/api/auth/logout", async (HttpContext context, ...) =>
 
 ### FEATURE-4.20: Auto-Fix Database Sequences on Backup Restore
 
-**Status:** BACKLOG 📋
+**Status:** DEFERRED ⏸️
 **Severity:** Bug Fix | **Impact:** Data integrity, user experience
+**Investigation Date:** 2025-10-26
 
 **Current Behavior:**
-- When restoring from backup, database sequences are not automatically synchronized with max IDs
-- Sequence values remain at their pre-restore state (e.g., sequence=2 but max ID=84)
+- Sequence mismatches occurred on both dev and prod databases independently
+- `detection_results`: seq=1, max=1284
+- `reports`: seq=1, max=9
+- `audit_log`: seq=2, max=84
 - Subsequent inserts fail with "duplicate key value violates unique constraint" errors
-- Requires manual SQL execution to reset all sequences after restore
 
-**Proposed Enhancement:**
-- Automatically detect and fix sequence mismatches during backup restore
-- Add post-restore hook to sync all sequences with max IDs
-- Display warning if sequences are out of sync before restore
-- Include sequence reset as part of restore transaction
+**Investigation Results:**
+- ✅ Production backup/restore **DOES** preserve sequence values correctly
+- ✅ After restore from prod → dev: all sequences synchronized perfectly
+- ⚠️ Root cause unknown - sequences drift **between** restores (not during restore)
+- Possible causes: manual SQL, bulk imports, migration bug, or external tool
 
-**Use Cases:**
-- Database restore from backup
-- Database migration from another instance
-- Recovery from corruption
+**Test Coverage:**
+- ✅ Created `SequenceIntegrityTests.cs` (3 tests) to detect mismatches in CI
+- Tests validate sequences after fresh migrations and data inserts
+- Can detect manual sequence bypass scenarios
 
-**Implementation Considerations:**
-- Query all sequences and their corresponding tables dynamically
-- Execute `SETVAL` for each sequence based on `MAX(id)` from table
-- Handle tables with no rows (use COALESCE for null safety)
-- Log which sequences were reset and their new values
-- Consider adding to BackupService.RestoreAsync() method
+**Proposed Enhancement (deferred):**
+- Startup sequence validation and auto-fix (<100ms overhead)
+- Log WARNING when mismatches detected and auto-corrected
+- Prevents crashes, self-healing until root cause identified
+
+**Decision:** Deferred pending more data
+- Manual fix: `SELECT SETVAL('table_id_seq', COALESCE(MAX(id), 1), true);`
+- Test coverage added to catch in CI
+- Will implement startup check if problem recurs
 
 **SQL Pattern:**
 ```sql
 SELECT SETVAL('table_name_id_seq', COALESCE((SELECT MAX(id) FROM table_name), 1), true);
 ```
 
-**Affected Tables:** 27+ sequences across all auto-incrementing ID columns
-
-**Priority:** Medium (affects restore operations, manual workaround exists)
+**Priority:** LOW - Monitor and revisit if sequences drift again
 
 **Related Files:**
-- `/src/TelegramGroupsAdmin/Services/Backup/BackupService.cs` (line ~390-450)
+- `TelegramGroupsAdmin.Tests/Migrations/SequenceIntegrityTests.cs` (new)
 
 ---
 
@@ -537,60 +579,6 @@ SELECT SETVAL('table_name_id_seq', COALESCE((SELECT MAX(id) FROM table_name), 1)
 
 ---
 
-### SCHEMA-1: Fix Audit Log FK Cascade Rules
-
-**Status:** BACKLOG 📋 **Priority: High**
-**Severity:** Schema Bug | **Impact:** User deletion blocked, broken FK behavior
-**Discovered:** 2025-10-26 via Test 6 (CascadeBehaviorTests)
-
-**Current State:**
-- `audit_log` FKs use `ON DELETE SET NULL` for actor/target user references
-- Exclusive arc CHECK constraint requires exactly ONE actor field to be non-NULL
-- CONFLICT: SET NULL cascade violates CHECK constraint when user is deleted
-- Result: User deletion fails with `23514` CHECK constraint violation
-
-**Production Impact:**
-- ❌ Cannot delete users who have audit_log entries as actor
-- ❌ User cleanup/deactivation workflows broken
-- ❌ Orphaned audit entries with NULL actors provide no value (can't attribute actions)
-
-**Root Cause:**
-Migration `20251025003104_AddActorExclusiveArcToAuditLog.cs` configured:
-```csharp
-onDelete: ReferentialAction.SetNull  // Lines 137, 145, 153, 161
-```
-
-But also added:
-```csharp
-CK_audit_log_exclusive_actor: requires exactly ONE actor field non-NULL  // Line 124
-```
-
-These constraints are mathematically incompatible.
-
-**Proposed Solution:**
-Create new migration `FixAuditLogCascadeRules.cs`:
-1. Drop existing FK constraints (4 total: actor_web_user_id, target_web_user_id, actor_telegram_user_id, target_telegram_user_id)
-2. Re-add with `ReferentialAction.Cascade` (delete user → delete audit entries)
-3. Rationale: Audit entries without actor identity are useless for investigations/attribution
-4. Clean up any existing NULL actor entries (if any exist from manual testing)
-
-**Affected FKs:**
-- `FK_audit_log_users_actor_web_user_id`
-- `FK_audit_log_users_target_web_user_id`
-- `FK_audit_log_telegram_users_actor_telegram_user_id`
-- `FK_audit_log_telegram_users_target_telegram_user_id`
-
-**Test Coverage:**
-Test 6 (CascadeBehaviorTests.UserDeletionCascade_FailsDueToCheckConstraintConflict) currently documents the bug. After migration fix, update test to validate CASCADE behavior works correctly.
-
-**Acceptance Criteria:**
-- [ ] Migration created and tested
-- [ ] User deletion succeeds and cascades to audit_log
-- [ ] Test 6 updated to validate CASCADE behavior (delete user → verify audit entries removed)
-- [ ] No orphaned audit entries with NULL actors remain
-- [ ] Exclusive arc CHECK constraint still enforced (exactly one actor field non-NULL for existing entries)
-
----
 
 ## Bugs
 
@@ -599,6 +587,8 @@ Test 6 (CascadeBehaviorTests.UserDeletionCascade_FailsDueToCheckConstraintConfli
 ---
 
 ## Completed Work
+
+**2025-10-27**: SCHEMA-1 (Audit log FK cascade rules fixed - migration 20251027002019, user deletion now works, 22/22 tests passing)
 
 **2025-10-26**: SECURITY-2 (Open redirect vulnerability fixed - UrlHelpers.IsLocalUrl() validation on all auth redirects), BUG-LOGOUT (Missing /logout page - existed since Oct 6, found by user on Cloudflare tunnel exposure)
 

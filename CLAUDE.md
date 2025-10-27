@@ -168,12 +168,18 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 See BACKLOG.md for deferred features, DI audit (partial), and completed optimizations. Code review (2025-10-26) validated claims against homelab deployment context.
 
 ## Testing
-**Database Migration Tests**: 19 tests (18 passing, 1 failing due to SCHEMA-1 bug)
+**Database Migration Tests**: 22 tests (all passing) ✅
 - Run tests: `dotnet test TelegramGroupsAdmin.Tests/TelegramGroupsAdmin.Tests.csproj`
 - Tests validate migrations against real PostgreSQL 17 via Testcontainers
-- Execution time: ~12 seconds
-- **Known failing test**: Test 6 (UserDeletionCascade) - expects CASCADE behavior, fails until SCHEMA-1 migration fix applied
-- See BACKLOG.md SCHEMA-1 for audit_log FK cascade conflict details
+- Execution time: ~7 seconds
+- Test coverage includes:
+  - Phase 1: Basic migrations (table creation, indexes)
+  - Phase 2: Foreign key constraints
+  - Phase 3: Cascade behavior (8 tests)
+  - Phase 4: Data integrity (4 tests)
+  - Phase 5: Migration workflow (2 tests)
+  - **NEW**: Sequence integrity (3 tests) - detects sequence drift bugs
+- **SCHEMA-1 FIX APPLIED** ✅: audit_log FK CASCADE rules corrected (migration 20251027002019)
 
 ## Status
 **Phase 4 Complete** ✅ - All 20 core features shipped (including Phase 4.20 Translation Storage, Phase 4.21 Language Warnings)
