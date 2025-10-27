@@ -270,6 +270,9 @@ public class ClamAVScannerService : IFileScannerService
             // Get version information (includes signature count)
             var versionResult = await clamClient.GetVersionAsync(cancellationToken);
 
+            _logger.LogInformation("✅ ClamAV health check successful: {Version} at {Host}:{Port}",
+                versionResult, config.Tier1.ClamAV.Host, config.Tier1.ClamAV.Port);
+
             return new ClamAVHealthResult
             {
                 IsHealthy = true,
