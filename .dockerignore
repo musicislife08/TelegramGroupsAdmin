@@ -38,7 +38,8 @@
 **/.nuget
 **/packages
 
-# Test results
+# Test projects and results (not needed in runtime image)
+TelegramGroupsAdmin.Tests/
 **/TestResults
 **/*.trx
 **/*.coverage

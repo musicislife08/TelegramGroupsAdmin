@@ -15,6 +15,7 @@ WORKDIR /src
 RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
 
 # Copy solution and project files (for better layer caching)
+# Excludes TelegramGroupsAdmin.Tests - not needed for production runtime
 COPY ["TelegramGroupsAdmin.sln", "./"]
 COPY ["TelegramGroupsAdmin/TelegramGroupsAdmin.csproj", "TelegramGroupsAdmin/"]
 COPY ["TelegramGroupsAdmin.Configuration/TelegramGroupsAdmin.Configuration.csproj", "TelegramGroupsAdmin.Configuration/"]
@@ -23,7 +24,6 @@ COPY ["TelegramGroupsAdmin.Data/TelegramGroupsAdmin.Data.csproj", "TelegramGroup
 COPY ["TelegramGroupsAdmin.Telegram/TelegramGroupsAdmin.Telegram.csproj", "TelegramGroupsAdmin.Telegram/"]
 COPY ["TelegramGroupsAdmin.Telegram.Abstractions/TelegramGroupsAdmin.Telegram.Abstractions.csproj", "TelegramGroupsAdmin.Telegram.Abstractions/"]
 COPY ["TelegramGroupsAdmin.ContentDetection/TelegramGroupsAdmin.ContentDetection.csproj", "TelegramGroupsAdmin.ContentDetection/"]
-COPY ["TelegramGroupsAdmin.Tests/TelegramGroupsAdmin.Tests.csproj", "TelegramGroupsAdmin.Tests/"]
 
 # Restore dependencies (cached layer if project files unchanged)
 RUN dotnet restore "TelegramGroupsAdmin/TelegramGroupsAdmin.csproj"
