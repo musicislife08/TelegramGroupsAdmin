@@ -17,7 +17,7 @@
             {
                 <MudAlert Severity="Severity.Info" Dense="true">
                     <strong>What is backup encryption?</strong><br/>
-                    Your backups will be encrypted with AES-256-GCM using a randomly generated 32-character passphrase.
+                    Your backups will be encrypted with AES-256-GCM using a @(_useCustomPassphrase ? "custom" : "randomly generated") passphrase.
                     The passphrase will be stored encrypted in the database for automatic backups.
                 </MudAlert>
 
@@ -25,6 +25,37 @@
                     <strong>Important:</strong> You will be shown the passphrase ONCE. Copy it to your password manager.
                     If the database is lost, you'll need this passphrase to decrypt backups.
                 </MudAlert>
+
+                <MudExpansionPanels Gutters="false" Dense="true">
+                    <MudExpansionPanel Text="Advanced Options" Dense="true">
+                        <MudStack Spacing="2" Class="mt-2">
+                            <MudSwitch @bind-Value="_useCustomPassphrase"
+                                       Color="Color.Primary"
+                                       Label="Use custom passphrase (instead of auto-generated)" />
+
+                            @if (_useCustomPassphrase)
+                            {
+                                <MudTextField @bind-Value="_customPassphrase"
+                                              Label="Custom Passphrase"
+                                              HelperText="Minimum 16 characters recommended. Use a strong, unique passphrase."
+                                              Variant="Variant.Outlined"
+                                              InputType="@PassphraseInputType"
+                                              Adornment="Adornment.End"
+                                              AdornmentIcon="@PassphraseVisibilityIcon"
+                                              OnAdornmentClick="TogglePassphraseVisibility"
+                                              Immediate="true"
+                                              FullWidth="true" />
+
+                                @if (!string.IsNullOrWhiteSpace(_customPassphrase) && _customPassphrase.Length < 16)
+                                {
+                                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-0">
+                                        Passphrase is too short. Recommend at least 16 characters for security.
+                                    </MudAlert>
+                                }
+                            }
+                        </MudStack>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
 
                 <MudCheckBox @bind-Value="_understood" Color="Color.Primary" Dense="true">
                     I understand that I need to save the passphrase securely
@@ -70,15 +101,15 @@
             <MudButton Color="Color.Primary"
                        Variant="Variant.Filled"
                        OnClick="GenerateAndEnable"
-                       Disabled="@(!_understood || _isProcessing)">
+                       Disabled="@(!_understood || _isProcessing || (_useCustomPassphrase && string.IsNullOrWhiteSpace(_customPassphrase)))">
                 @if (_isProcessing)
                 {
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                    <span>Generating...</span>
+                    <span>@(_useCustomPassphrase ? "Saving..." : "Generating...")</span>
                 }
                 else
                 {
-                    <span>Generate Passphrase & Enable</span>
+                    <span>@(_useCustomPassphrase ? "Save Custom Passphrase & Enable" : "Generate Passphrase & Enable")</span>
                 }
             </MudButton>
         }
@@ -109,6 +140,14 @@
     private bool _confirmSaved = false;
     private bool _isProcessing = false;
     private string _generatedPassphrase = string.Empty;
+    private bool _useCustomPassphrase = false;
+    private string _customPassphrase = string.Empty;
+    private bool _showCustomPassphrase = false;
+
+    private InputType PassphraseInputType => _showCustomPassphrase ? InputType.Text : InputType.Password;
+    private string PassphraseVisibilityIcon => _showCustomPassphrase ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility;
+
+    private void TogglePassphraseVisibility() => _showCustomPassphrase = !_showCustomPassphrase;
 
     private async Task GenerateAndEnable()
     {
@@ -117,8 +156,21 @@
 
         try
         {
-            // Generate passphrase (6 words = 77.5 bits entropy)
-            _generatedPassphrase = PassphraseGenerator.Generate();
+            // Use custom passphrase if provided, otherwise generate
+            if (_useCustomPassphrase)
+            {
+                if (string.IsNullOrWhiteSpace(_customPassphrase))
+                {
+                    Snackbar.Add("Custom passphrase cannot be empty!", Severity.Error);
+                    return;
+                }
+                _generatedPassphrase = _customPassphrase.Trim();
+            }
+            else
+            {
+                // Generate passphrase (6 words = 77.5 bits entropy)
+                _generatedPassphrase = PassphraseGenerator.Generate();
+            }
 
             // Save to database using refactored service method
             await BackupService.SaveEncryptionConfigAsync(_generatedPassphrase);

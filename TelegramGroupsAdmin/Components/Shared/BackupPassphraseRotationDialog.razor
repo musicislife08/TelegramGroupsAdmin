@@ -21,7 +21,7 @@
             {
                 <MudAlert Severity="Severity.Warning" Dense="true">
                     <strong>What will happen:</strong><br/>
-                    A new passphrase will be generated and all existing backups in @BackupDirectory will be re-encrypted with the new passphrase.
+                    A new @(_useCustomPassphrase ? "custom" : "auto-generated") passphrase will be used and all existing backups in @BackupDirectory will be re-encrypted.
                     This may take several minutes depending on the number of backups.
                 </MudAlert>
 
@@ -29,6 +29,37 @@
                     <strong>Why rotate?</strong><br/>
                     Regular passphrase rotation is a security best practice. If you suspect your passphrase has been compromised, rotate immediately.
                 </MudAlert>
+
+                <MudExpansionPanels Gutters="false" Dense="true">
+                    <MudExpansionPanel Text="Advanced Options" Dense="true">
+                        <MudStack Spacing="2" Class="mt-2">
+                            <MudSwitch @bind-Value="_useCustomPassphrase"
+                                       Color="Color.Primary"
+                                       Label="Use custom passphrase (instead of auto-generated)" />
+
+                            @if (_useCustomPassphrase)
+                            {
+                                <MudTextField @bind-Value="_customPassphrase"
+                                              Label="Custom Passphrase"
+                                              HelperText="Minimum 16 characters recommended. Use a strong, unique passphrase."
+                                              Variant="Variant.Outlined"
+                                              InputType="@PassphraseInputType"
+                                              Adornment="Adornment.End"
+                                              AdornmentIcon="@PassphraseVisibilityIcon"
+                                              OnAdornmentClick="TogglePassphraseVisibility"
+                                              Immediate="true"
+                                              FullWidth="true" />
+
+                                @if (!string.IsNullOrWhiteSpace(_customPassphrase) && _customPassphrase.Length < 16)
+                                {
+                                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-0">
+                                        Passphrase is too short. Recommend at least 16 characters for security.
+                                    </MudAlert>
+                                }
+                            }
+                        </MudStack>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
 
                 <MudCheckBox @bind-Value="_understood" Color="Color.Primary" Dense="true">
                     I understand this will re-encrypt all existing backups
@@ -84,7 +115,7 @@
             <MudButton Color="Color.Primary"
                        Variant="Variant.Filled"
                        OnClick="StartRotation"
-                       Disabled="@(!_understood || _isProcessing)">
+                       Disabled="@(!_understood || _isProcessing || (_useCustomPassphrase && string.IsNullOrWhiteSpace(_customPassphrase)))">
                 @if (_isProcessing)
                 {
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
@@ -92,7 +123,7 @@
                 }
                 else
                 {
-                    <span>Rotate Passphrase</span>
+                    <span>@(_useCustomPassphrase ? "Set Custom Passphrase" : "Generate New Passphrase")</span>
                 }
             </MudButton>
         }
@@ -137,6 +168,14 @@
     private bool _isProcessing = false;
     private string _newPassphrase = string.Empty;
     private string _userId = string.Empty;
+    private bool _useCustomPassphrase = false;
+    private string _customPassphrase = string.Empty;
+    private bool _showCustomPassphrase = false;
+
+    private InputType PassphraseInputType => _showCustomPassphrase ? InputType.Text : InputType.Password;
+    private string PassphraseVisibilityIcon => _showCustomPassphrase ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility;
+
+    private void TogglePassphraseVisibility() => _showCustomPassphrase = !_showCustomPassphrase;
 
     private async Task StartRotation()
     {
@@ -162,16 +201,29 @@
             // Store userId for later when user confirms they saved the passphrase
             _userId = userId;
 
-            // Generate new passphrase (but DON'T queue job yet!)
-            _newPassphrase = TelegramGroupsAdmin.Core.Security.PassphraseGenerator.Generate();
+            // Use custom passphrase if provided, otherwise generate (but DON'T queue job yet!)
+            if (_useCustomPassphrase)
+            {
+                if (string.IsNullOrWhiteSpace(_customPassphrase))
+                {
+                    Snackbar.Add("Custom passphrase cannot be empty!", Severity.Error);
+                    _step = RotationStep.Confirmation;
+                    return;
+                }
+                _newPassphrase = _customPassphrase.Trim();
+            }
+            else
+            {
+                _newPassphrase = TelegramGroupsAdmin.Core.Security.PassphraseGenerator.Generate();
+            }
 
             // Move to display step - user MUST save passphrase before job starts
             _step = RotationStep.DisplayNewPassphrase;
-            Snackbar.Add("New passphrase generated. Please save it securely before confirming!", Severity.Info);
+            Snackbar.Add("New passphrase ready. Please save it securely before confirming!", Severity.Info);
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to generate passphrase: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Failed to prepare passphrase: {ex.Message}", Severity.Error);
             _step = RotationStep.Confirmation;
         }
         finally
