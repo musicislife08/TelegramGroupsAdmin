@@ -23,6 +23,7 @@ COPY ["TelegramGroupsAdmin.Data/TelegramGroupsAdmin.Data.csproj", "TelegramGroup
 COPY ["TelegramGroupsAdmin.Telegram/TelegramGroupsAdmin.Telegram.csproj", "TelegramGroupsAdmin.Telegram/"]
 COPY ["TelegramGroupsAdmin.Telegram.Abstractions/TelegramGroupsAdmin.Telegram.Abstractions.csproj", "TelegramGroupsAdmin.Telegram.Abstractions/"]
 COPY ["TelegramGroupsAdmin.ContentDetection/TelegramGroupsAdmin.ContentDetection.csproj", "TelegramGroupsAdmin.ContentDetection/"]
+COPY ["TelegramGroupsAdmin.Tests/TelegramGroupsAdmin.Tests.csproj", "TelegramGroupsAdmin.Tests/"]
 
 # Restore dependencies (cached layer if project files unchanged)
 RUN dotnet restore "TelegramGroupsAdmin/TelegramGroupsAdmin.csproj"

@@ -488,17 +488,16 @@
             foreach (var chat in _managedChats)
             {
                 // Get total message count for this chat
-                var messages = await MessageRepository.GetMessagesByChatIdAsync(chat.ChatId, limit: 1);
-                if (messages.Any())
-                {
-                    // For now, just get recent count. TODO: Add proper total count query to repo
-                    var recentMessages = await MessageRepository.GetMessagesByChatIdAsync(chat.ChatId, limit: 100);
-                    _chatMessageCounts[chat.ChatId] = recentMessages.Count;
+                var totalCount = await MessageRepository.GetMessageCountByChatIdAsync(chat.ChatId);
+                _chatMessageCounts[chat.ChatId] = totalCount;
 
-                    // Get last message preview
-                    if (recentMessages.Any())
+                // Get last message preview (only fetch 1 message for preview)
+                if (totalCount > 0)
+                {
+                    var lastMessages = await MessageRepository.GetMessagesByChatIdAsync(chat.ChatId, limit: 1);
+                    if (lastMessages.Any())
                     {
-                        var lastMessage = recentMessages.First();
+                        var lastMessage = lastMessages.First();
                         var hasPhoto = !string.IsNullOrEmpty(lastMessage.PhotoFileId);
                         var preview = lastMessage.MessageText ?? (hasPhoto ? "📷 Photo" : "Message");
                         _lastMessagePreviews[chat.ChatId] = preview;

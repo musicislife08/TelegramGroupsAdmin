@@ -35,6 +35,7 @@ public interface IMessageHistoryRepository
     Task<List<UiModels.DetectionResultRecord>> GetRecentDetectionsAsync(int limit = 100, CancellationToken cancellationToken = default);
     Task MarkMessageAsDeletedAsync(long messageId, string deletionSource, CancellationToken cancellationToken = default);
     Task<int> GetMessageCountAsync(long userId, long chatId, CancellationToken cancellationToken = default);
+    Task<int> GetMessageCountByChatIdAsync(long chatId, CancellationToken cancellationToken = default);
 
     // Translation methods (Phase 4.20)
     Task<UiModels.MessageTranslation?> GetTranslationForMessageAsync(long messageId, CancellationToken cancellationToken = default);

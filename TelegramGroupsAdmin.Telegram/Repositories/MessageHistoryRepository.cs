@@ -850,6 +850,14 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             .CountAsync(m => m.UserId == userId && m.ChatId == chatId, cancellationToken);
     }
 
+    public async Task<int> GetMessageCountByChatIdAsync(long chatId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.Messages
+            .AsNoTracking()
+            .CountAsync(m => m.ChatId == chatId, cancellationToken);
+    }
+
     /// <summary>
     /// Validates that media file exists on filesystem, nulls MediaLocalPath if missing
     /// This ensures UI shows placeholders for media that needs re-downloading
