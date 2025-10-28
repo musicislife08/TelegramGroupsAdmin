@@ -47,6 +47,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITelegramImageService, TelegramImageService>();
         services.AddSingleton<TelegramPhotoService>();
 
+        // Message processing handlers (REFACTOR-1: extracted from MessageProcessingService)
+        services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.MediaProcessingHandler>();
+        services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.FileScanningHandler>();
+        services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.TranslationHandler>();
+
         // Content check coordination (Phase 4.14: filters trusted/admin users, runs critical checks for all)
         services.AddScoped<IContentCheckCoordinator, ContentCheckCoordinator>();
 

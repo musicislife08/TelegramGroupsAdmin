@@ -2,12 +2,14 @@ using Telegram.Bot.Types;
 using TelegramBotDocument = Telegram.Bot.Types.Document;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Handlers;
 
 namespace TelegramGroupsAdmin.Tests.Telegram;
 
 /// <summary>
-/// Pre-refactoring tests for MessageProcessingService to establish baseline behavior
-/// before REFACTOR-1 extraction. These tests focus on pure static functions with zero
+/// REFACTOR-1: Tests updated to call extracted handler methods directly (no more reflection)
+/// Tests validate behavior is preserved after extraction from MessageProcessingService.
+/// These tests focus on pure static functions with zero
 /// dependencies that can be tested in isolation.
 ///
 /// Tests created: 2025-10-28 before REFACTOR-1
@@ -951,27 +953,23 @@ public class MessageProcessingServiceTests
 
     #endregion
 
-    #region Reflection Helper Methods
+    #region REFACTOR-1: Direct Handler Method Calls (No Reflection)
 
     /// <summary>
-    /// Call private static DetectMediaAttachment method using reflection
+    /// Call MediaProcessingHandler.DetectMediaAttachment (public static method)
     /// </summary>
     private static (MediaType MediaType, string FileId, long FileSize, string? FileName, string? MimeType, int? Duration)?
         CallDetectMediaAttachment(Message message)
     {
-        var method = typeof(MessageProcessingService).GetMethod(
-            "DetectMediaAttachment",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        var result = MediaProcessingHandler.DetectMediaAttachment(message);
+        if (result == null)
+            return null;
 
-        Assert.That(method, Is.Not.Null, "DetectMediaAttachment method not found");
-
-        var result = method!.Invoke(null, new object[] { message });
-
-        return ((MediaType, string, long, string?, string?, int?)?)result;
+        return (result.MediaType, result.FileId, result.FileSize, result.FileName, result.MimeType, result.Duration);
     }
 
     /// <summary>
-    /// Call private static HasFileAttachment method using reflection
+    /// Call FileScanningHandler.DetectScannableFile (public static method)
     /// </summary>
     private static bool CallHasFileAttachment(
         Message message,
@@ -980,37 +978,29 @@ public class MessageProcessingServiceTests
         out string? fileName,
         out string? contentType)
     {
-        var method = typeof(MessageProcessingService).GetMethod(
-            "HasFileAttachment",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        var result = FileScanningHandler.DetectScannableFile(message);
+        if (result == null)
+        {
+            fileId = null;
+            fileSize = 0;
+            fileName = null;
+            contentType = null;
+            return false;
+        }
 
-        Assert.That(method, Is.Not.Null, "HasFileAttachment method not found");
-
-        var parameters = new object?[] { message, null, 0L, null, null };
-        var result = (bool)method!.Invoke(null, parameters)!;
-
-        fileId = (string?)parameters[1];
-        fileSize = (long)parameters[2]!;
-        fileName = (string?)parameters[3];
-        contentType = (string?)parameters[4];
-
-        return result;
+        fileId = result.FileId;
+        fileSize = result.FileSize;
+        fileName = result.FileName;
+        contentType = result.ContentType;
+        return true;
     }
 
     /// <summary>
-    /// Call private static CalculateLatinScriptRatio method using reflection
+    /// Call TranslationHandler.CalculateLatinScriptRatio (public static method)
     /// </summary>
     private static double CallCalculateLatinScriptRatio(string text)
     {
-        var method = typeof(MessageProcessingService).GetMethod(
-            "CalculateLatinScriptRatio",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-
-        Assert.That(method, Is.Not.Null, "CalculateLatinScriptRatio method not found");
-
-        var result = method!.Invoke(null, new object[] { text });
-
-        return (double)result!;
+        return TranslationHandler.CalculateLatinScriptRatio(text);
     }
 
     #endregion

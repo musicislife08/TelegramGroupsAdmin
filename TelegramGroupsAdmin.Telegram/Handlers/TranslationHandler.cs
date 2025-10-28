@@ -1,0 +1,138 @@
+using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Telegram.Models;
+
+namespace TelegramGroupsAdmin.Telegram.Handlers;
+
+/// <summary>
+/// Handles translation detection and processing for non-English messages.
+/// Calculates Latin script ratio to determine if translation is needed,
+/// then coordinates translation via OpenAITranslationService.
+/// </summary>
+public class TranslationHandler
+{
+    private readonly ISpamDetectionConfigRepository _configRepository;
+    private readonly IOpenAITranslationService _translationService;
+    private readonly ILogger<TranslationHandler> _logger;
+
+    public TranslationHandler(
+        ISpamDetectionConfigRepository configRepository,
+        IOpenAITranslationService translationService,
+        ILogger<TranslationHandler> logger)
+    {
+        _configRepository = configRepository;
+        _translationService = translationService;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Process message for translation: check eligibility and translate if needed.
+    /// Returns translation result if message was translated, null otherwise.
+    /// Phase 4.20: Translate BEFORE saving to allow reuse in spam detection.
+    /// </summary>
+    public async Task<TranslationProcessingResult?> ProcessTranslationAsync(
+        string text,
+        int messageId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        // Load translation configuration
+        var spamConfig = await _configRepository.GetGlobalConfigAsync(cancellationToken);
+
+        // Check if translation is enabled and message meets minimum length
+        if (!spamConfig.Translation.Enabled ||
+            text.Length < spamConfig.Translation.MinMessageLength)
+        {
+            return null;
+        }
+
+        // Check if text is likely non-Latin script (non-English)
+        var latinRatio = CalculateLatinScriptRatio(text);
+        if (latinRatio >= spamConfig.Translation.LatinScriptThreshold)
+        {
+            // Text is already Latin script (likely English), skip translation
+            return null;
+        }
+
+        // Translate message
+        var translationResult = await _translationService.TranslateToEnglishAsync(text, cancellationToken);
+
+        if (translationResult == null || !translationResult.WasTranslated)
+        {
+            return null;
+        }
+
+        _logger.LogInformation(
+            "Translated message {MessageId} from {Language} to English",
+            messageId,
+            translationResult.DetectedLanguage);
+
+        // Build MessageTranslation record for database storage
+        var messageTranslation = new MessageTranslation(
+            Id: 0, // Will be set by INSERT
+            MessageId: messageId,
+            EditId: null,
+            TranslatedText: translationResult.TranslatedText,
+            DetectedLanguage: translationResult.DetectedLanguage,
+            Confidence: null, // OpenAI doesn't return confidence for translation
+            TranslatedAt: DateTimeOffset.UtcNow
+        );
+
+        return new TranslationProcessingResult(
+            Translation: messageTranslation,
+            LatinScriptRatio: latinRatio,
+            WasTranslated: true
+        );
+    }
+
+    /// <summary>
+    /// Calculate the ratio of Latin script characters to total characters (0.0 - 1.0).
+    /// Used to detect if text is likely English/Western European (skip expensive translation).
+    ///
+    /// Latin script includes:
+    /// - Basic Latin (0x0000-0x007F): A-Z, a-z, 0-9
+    /// - Latin-1 Supplement (0x0080-0x00FF): À, É, Ñ, etc.
+    /// - Latin Extended-A (0x0100-0x017F): Ā, Ę, Ł, etc.
+    /// - Latin Extended-B (0x0180-0x024F): Ș, Ț, Ơ, etc.
+    /// </summary>
+    public static double CalculateLatinScriptRatio(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return 0.0;
+
+        var totalChars = 0;
+        var latinChars = 0;
+
+        foreach (var c in text)
+        {
+            // Only count letter/digit characters (skip punctuation, whitespace, emoji)
+            if (char.IsLetterOrDigit(c))
+            {
+                totalChars++;
+
+                // Latin script: Basic Latin (0x0000-0x007F) + Latin-1 Supplement (0x0080-0x00FF) +
+                // Latin Extended-A (0x0100-0x017F) + Latin Extended-B (0x0180-0x024F)
+                if ((c >= 0x0000 && c <= 0x024F))
+                {
+                    latinChars++;
+                }
+            }
+        }
+
+        return totalChars > 0 ? (double)latinChars / totalChars : 0.0;
+    }
+}
+
+/// <summary>
+/// Result of translation processing (detection + coordination + translation)
+/// </summary>
+public record TranslationProcessingResult(
+    MessageTranslation Translation,
+    double LatinScriptRatio,
+    bool WasTranslated
+);

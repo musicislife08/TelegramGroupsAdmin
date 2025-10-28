@@ -22,6 +22,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 /// <summary>
 /// Handles message processing: new messages, edits, spam detection, image download
+/// REFACTOR-1: Orchestrates specialized handlers (media, file scanning, translation)
 /// </summary>
 public partial class MessageProcessingService(
     IServiceScopeFactory scopeFactory,
@@ -38,6 +39,10 @@ public partial class MessageProcessingService(
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
     private readonly TelegramPhotoService _photoService = telegramPhotoService;
     private readonly TelegramMediaService _mediaService = telegramMediaService;
+
+    // REFACTOR-1: Specialized handlers injected via scoped services (created per request)
+    // These are NOT injected in constructor since MessageProcessingService is Singleton
+    // Instead, resolved from scope when needed
 
     // Events for real-time UI updates
     public event Action<MessageRecord>? OnNewMessage;
@@ -300,7 +305,7 @@ public partial class MessageProcessingService(
                     cancellationToken);
             }
 
-            // Phase 4.X: Download and save media attachments (GIF, Video, Audio, Voice, Sticker, VideoNote)
+            // REFACTOR-1: Use MediaProcessingHandler for media detection and download
             MediaType? mediaType = null;
             string? mediaFileId = null;
             long? mediaFileSize = null;
@@ -309,46 +314,31 @@ public partial class MessageProcessingService(
             string? mediaLocalPath = null;
             int? mediaDuration = null;
 
-            var mediaInfo = DetectMediaAttachment(message);
-            if (mediaInfo.HasValue)
-            {
-                mediaType = mediaInfo.Value.MediaType;
-                mediaFileId = mediaInfo.Value.FileId;
-                mediaFileSize = mediaInfo.Value.FileSize;
-                mediaFileName = mediaInfo.Value.FileName;
-                mediaMimeType = mediaInfo.Value.MimeType;
-                mediaDuration = mediaInfo.Value.Duration;
+            var mediaHandler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.MediaProcessingHandler>();
+            var mediaResult = await mediaHandler.ProcessMediaAsync(
+                message,
+                message.Chat.Id,
+                message.MessageId,
+                cancellationToken);
 
-                // Download and save media file (EXCEPT Documents - metadata only for Documents)
-                // Document files are only downloaded temporarily by the file scanner for malware detection
-                if (mediaInfo.Value.MediaType != MediaType.Document)
-                {
-                    mediaLocalPath = await _mediaService.DownloadAndSaveMediaAsync(
-                        mediaInfo.Value.FileId,
-                        mediaInfo.Value.MediaType,
-                        mediaInfo.Value.FileName,
-                        message.Chat.Id,
-                        message.MessageId,
-                        cancellationToken);
-                }
-                // For Documents: mediaLocalPath stays null, UI will show filename/icon only
+            if (mediaResult != null)
+            {
+                mediaType = mediaResult.MediaType;
+                mediaFileId = mediaResult.FileId;
+                mediaFileSize = mediaResult.FileSize;
+                mediaFileName = mediaResult.FileName;
+                mediaMimeType = mediaResult.MimeType;
+                mediaDuration = mediaResult.Duration;
+                mediaLocalPath = mediaResult.LocalPath; // Null for Documents (metadata-only)
             }
 
-            // Phase 4.14: Schedule file scanning for Document attachments only
-            // Photos are handled separately above (image spam detection via OpenAI Vision)
-            // Media files (GIF/Video/Audio/Voice/Sticker) are NOT scanned (cannot contain executable malware)
-            if (HasFileAttachment(message, out var fileId, out var fileSize, out var fileName, out var contentType))
-            {
-                await ScheduleFileScanJobAsync(
-                    message.MessageId,
-                    message.Chat.Id,
-                    message.From!.Id,
-                    fileId!,
-                    fileSize,
-                    fileName,
-                    contentType,
-                    cancellationToken);
-            }
+            // REFACTOR-1: Use FileScanningHandler for document scanning
+            var fileScanHandler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.FileScanningHandler>();
+            await fileScanHandler.ProcessFileScanningAsync(
+                message,
+                message.Chat.Id,
+                message.From!.Id,
+                cancellationToken);
 
             // Calculate content hash for spam correlation
             var urlsJson = urls != null ? JsonSerializer.Serialize(urls) : "";
@@ -359,43 +349,19 @@ public partial class MessageProcessingService(
             var chatIconCachedPath = Path.Combine(_historyOptions.ImageStoragePath, "media", "chat_icons", chatIconFileName);
             var chatIconPath = File.Exists(chatIconCachedPath) ? $"chat_icons/{chatIconFileName}" : null;
 
-            // Phase 4.20: Translate message BEFORE saving (if enabled and non-English)
-            // This allows us to store translation AND reuse it in spam detection
+            // REFACTOR-1: Use TranslationHandler for translation detection and processing
             MessageTranslation? translation = null;
             if (!string.IsNullOrWhiteSpace(text))
             {
-                var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.ISpamDetectionConfigRepository>();
-                var spamConfig = await spamConfigRepo.GetGlobalConfigAsync(cancellationToken);
+                var translationHandler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.TranslationHandler>();
+                var translationResult = await translationHandler.ProcessTranslationAsync(
+                    text,
+                    message.MessageId,
+                    cancellationToken);
 
-                // Check if translation is enabled and message meets minimum length
-                if (spamConfig.Translation.Enabled &&
-                    text.Length >= spamConfig.Translation.MinMessageLength)
+                if (translationResult != null)
                 {
-                    // Check if text is likely non-Latin script (non-English)
-                    var latinRatio = CalculateLatinScriptRatio(text);
-                    if (latinRatio < spamConfig.Translation.LatinScriptThreshold)
-                    {
-                        var translationService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService>();
-                        var translationResult = await translationService.TranslateToEnglishAsync(text, cancellationToken);
-
-                        if (translationResult != null && translationResult.WasTranslated)
-                        {
-                            translation = new MessageTranslation(
-                                Id: 0, // Will be set by INSERT
-                                MessageId: message.MessageId,
-                                EditId: null,
-                                TranslatedText: translationResult.TranslatedText,
-                                DetectedLanguage: translationResult.DetectedLanguage,
-                                Confidence: null, // OpenAI doesn't return confidence for translation
-                                TranslatedAt: DateTimeOffset.UtcNow
-                            );
-
-                            logger.LogInformation(
-                                "Translated message {MessageId} from {Language} to English",
-                                message.MessageId,
-                                translationResult.DetectedLanguage);
-                        }
-                    }
+                    translation = translationResult.Translation;
                 }
             }
 
@@ -676,8 +642,8 @@ public partial class MessageProcessingService(
                 if (spamConfig.Translation.Enabled &&
                     newText.Length >= spamConfig.Translation.MinMessageLength)
                 {
-                    // Check if text is likely non-Latin script (non-English)
-                    var latinRatio = CalculateLatinScriptRatio(newText);
+                    // REFACTOR-1: Use TranslationHandler's static CalculateLatinScriptRatio method
+                    var latinRatio = TelegramGroupsAdmin.Telegram.Handlers.TranslationHandler.CalculateLatinScriptRatio(newText);
                     if (latinRatio < spamConfig.Translation.LatinScriptThreshold)
                     {
                         var translationService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService>();
@@ -1036,189 +1002,11 @@ public partial class MessageProcessingService(
             retries: 3); // Higher retries than photo fetch (ClamAV restart, VT rate limit scenarios)
     }
 
-    /// <summary>
-    /// Check if message has a scannable file attachment (Document type only)
-    /// Phase 4.14: Only scan documents (PDF, EXE, ZIP, Office files, etc.)
-    /// Excludes: Animation/GIF, Video, Audio, Voice, Sticker, VideoNote (media files cannot contain executable malware)
-    /// Photos are handled separately via image spam detection (OpenAI Vision)
-    /// Returns true if scannable document found, with out parameters for file metadata
-    ///
-    /// IMPORTANT: Telegram sends GIFs with BOTH Animation and Document properties set.
-    /// We must check for media properties first to avoid scanning GIFs as documents.
-    /// </summary>
-    private static bool HasFileAttachment(
-        Message message,
-        out string? fileId,
-        out long fileSize,
-        out string? fileName,
-        out string? contentType)
-    {
-        fileId = null;
-        fileSize = 0;
-        fileName = null;
-        contentType = null;
-
-        // CRITICAL: Check if this is actually a media file BEFORE checking Document
-        // Telegram populates BOTH Animation+Document for GIFs, Video+Document for videos, etc.
-        // We only want to scan pure Document attachments (PDFs, executables, Office files)
-        if (message.Animation != null ||
-            message.Video != null ||
-            message.Audio != null ||
-            message.Voice != null ||
-            message.Sticker != null ||
-            message.VideoNote != null)
-        {
-            return false; // This is a media file, not a scannable document
-        }
-
-        // Only scan pure Document type (PDF, DOCX, EXE, ZIP, APK, etc.)
-        // Media files cannot contain executable malware
-        if (message.Document != null)
-        {
-            fileId = message.Document.FileId;
-            fileSize = message.Document.FileSize ?? 0;
-            fileName = message.Document.FileName;
-            contentType = message.Document.MimeType;
-            return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Detect media attachment in message and extract metadata
-    /// Phase 4.X: Handles Animation (GIF), Video, Audio, Voice, Sticker, VideoNote, Document
-    /// Documents: Metadata saved (filename, size) but NOT downloaded (file scanner handles temporary download for scanning only)
-    /// Returns null if no media attachment found, otherwise returns media info struct
-    /// </summary>
-    private static (MediaType MediaType, string FileId, long FileSize, string? FileName, string? MimeType, int? Duration)? DetectMediaAttachment(Message message)
-    {
-        // Animation (GIF)
-        if (message.Animation != null)
-        {
-            return (
-                MediaType.Animation,
-                message.Animation.FileId,
-                message.Animation.FileSize ?? 0,
-                message.Animation.FileName,
-                message.Animation.MimeType ?? "video/mp4",
-                message.Animation.Duration
-            );
-        }
-
-        // Video
-        if (message.Video != null)
-        {
-            return (
-                MediaType.Video,
-                message.Video.FileId,
-                message.Video.FileSize ?? 0,
-                message.Video.FileName,
-                message.Video.MimeType ?? "video/mp4",
-                message.Video.Duration
-            );
-        }
-
-        // Audio (music files with metadata)
-        if (message.Audio != null)
-        {
-            return (
-                MediaType.Audio,
-                message.Audio.FileId,
-                message.Audio.FileSize ?? 0,
-                message.Audio.FileName ?? message.Audio.Title ?? $"audio_{message.Audio.FileUniqueId}.mp3",
-                message.Audio.MimeType ?? "audio/mpeg",
-                message.Audio.Duration
-            );
-        }
-
-        // Voice message (OGG format voice note)
-        if (message.Voice != null)
-        {
-            return (
-                MediaType.Voice,
-                message.Voice.FileId,
-                message.Voice.FileSize ?? 0,
-                $"voice_{message.Voice.FileUniqueId}.ogg",
-                message.Voice.MimeType ?? "audio/ogg",
-                message.Voice.Duration
-            );
-        }
-
-        // Sticker (WebP format)
-        if (message.Sticker != null)
-        {
-            return (
-                MediaType.Sticker,
-                message.Sticker.FileId,
-                message.Sticker.FileSize ?? 0,
-                $"sticker_{message.Sticker.FileUniqueId}.webp",
-                "image/webp",
-                null // Stickers don't have duration
-            );
-        }
-
-        // Video note (circular video message)
-        if (message.VideoNote != null)
-        {
-            return (
-                MediaType.VideoNote,
-                message.VideoNote.FileId,
-                message.VideoNote.FileSize ?? 0,
-                $"videonote_{message.VideoNote.FileUniqueId}.mp4",
-                "video/mp4",
-                message.VideoNote.Duration
-            );
-        }
-
-        // Document attachments: Save metadata ONLY (filename, size, MIME type)
-        // DON'T download for display - file scanner handles temporary download for malware scanning
-        // UI will show document icon with filename but no preview/download link
-        if (message.Document != null)
-        {
-            return (
-                MediaType.Document,
-                message.Document.FileId,
-                message.Document.FileSize ?? 0,
-                message.Document.FileName ?? "document",
-                message.Document.MimeType,
-                null // Documents don't have duration
-            );
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Calculate the ratio of Latin script characters to total characters (0.0 - 1.0)
-    /// Used to detect if text is likely English/Western European (skip expensive translation)
-    /// </summary>
-    private static double CalculateLatinScriptRatio(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return 0.0;
-
-        var totalChars = 0;
-        var latinChars = 0;
-
-        foreach (var c in text)
-        {
-            // Only count letter/digit characters (skip punctuation, whitespace, emoji)
-            if (char.IsLetterOrDigit(c))
-            {
-                totalChars++;
-
-                // Latin script: Basic Latin (0x0000-0x007F) + Latin-1 Supplement (0x0080-0x00FF) +
-                // Latin Extended-A (0x0100-0x017F) + Latin Extended-B (0x0180-0x024F)
-                if ((c >= 0x0000 && c <= 0x024F))
-                {
-                    latinChars++;
-                }
-            }
-        }
-
-        return totalChars > 0 ? (double)latinChars / totalChars : 0.0;
-    }
+    // REFACTOR-1: Removed HasFileAttachment, DetectMediaAttachment, CalculateLatinScriptRatio
+    // These methods have been extracted to specialized handlers:
+    // - FileScanningHandler.DetectScannableFile()
+    // - MediaProcessingHandler.DetectMediaAttachment()
+    // - TranslationHandler.CalculateLatinScriptRatio()
 
     /// <summary>
     /// Phase 4.21: Handle language warning for non-English non-spam messages from untrusted users
