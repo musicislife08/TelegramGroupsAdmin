@@ -20,16 +20,15 @@ The tests use **WireMock.Net** to create a real HTTP server that mimics the Open
 Tests are organized into logical groups:
 
 1. **ShouldExecute Tests**: Validation of execution conditions
-2. **JSON Response Parsing Tests**: Modern JSON response format handling
+2. **JSON Response Parsing Tests**: JSON response format handling
 3. **Veto Mode Tests**: OpenAI veto behavior (confirming/overriding other checks)
-4. **Legacy Text Response Parsing Tests**: Fallback parsing for non-JSON responses
-5. **Error Handling Tests**: HTTP errors, timeouts, malformed responses
-6. **Cache Behavior Tests**: MemoryCache integration
-7. **Message Length Tests**: Short message handling
-8. **History Context Tests**: Message history integration
-9. **Confidence Calculation Tests**: Score conversion and rounding
-10. **Custom Prompt Tests**: Custom vs default system prompts
-11. **API Request Format Tests**: Request structure validation
+4. **Error Handling Tests**: HTTP errors, timeouts, malformed responses
+5. **Cache Behavior Tests**: MemoryCache integration
+6. **Message Length Tests**: Short message handling
+7. **History Context Tests**: Message history integration
+8. **Confidence Calculation Tests**: Score conversion and rounding
+9. **Custom Prompt Tests**: Custom vs default system prompts
+10. **API Request Format Tests**: Request structure validation
 
 ## Test Coverage
 
@@ -49,17 +48,10 @@ Tests are organized into logical groups:
 - ✅ Unknown result types default to "clean" (fail-open)
 - ✅ Null confidence defaults to 80%
 
-#### Legacy Text Parsing (Fallback)
-- ✅ Text containing "SPAM" detected as spam
-- ✅ Text without "SPAM" marked as clean
-- ✅ "NOT_SPAM" keyword overrides spam detection
-- ✅ Legacy veto mode responses handled
-- ✅ Lower confidence scores for legacy parsing (75%)
-
 #### Error Handling (Fail-Open Philosophy)
 - ✅ HTTP 429 (Rate Limit) → Clean with error logged
 - ✅ HTTP 500 (Server Error) → Clean with error logged
-- ✅ Malformed JSON → Fallback to legacy parsing
+- ✅ Malformed JSON → Clean with JSON parsing error
 - ✅ Empty API response → Clean with error
 - ✅ Null choices array → Clean with error
 - ✅ Empty content → Clean with error
@@ -94,7 +86,7 @@ Tests are organized into logical groups:
 #### Confidence Calculation
 - ✅ 0.0 → 0%, 0.5 → 50%, 1.0 → 100%
 - ✅ Correct rounding (0.845 → 85%)
-- ✅ Legacy parsing returns 75% for spam, 0% for clean
+- ✅ Error conditions return 0% confidence
 
 #### Custom Prompts
 - ✅ Custom system prompts included in request
@@ -152,9 +144,9 @@ _cache = new MemoryCache(new MemoryCacheOptions());
 - Verifies cache key generation
 - Ensures cache isolation between tests
 
-### 4. Legacy Fallback Support
+### 4. JSON Response Format
 
-Modern API uses JSON responses:
+All OpenAI responses must be valid JSON:
 ```json
 {
   "result": "spam",
@@ -163,12 +155,7 @@ Modern API uses JSON responses:
 }
 ```
 
-But code falls back to legacy text parsing if JSON fails:
-```
-"This message contains SPAM content..."
-```
-
-**Tests ensure both paths work correctly.**
+Malformed or non-JSON responses fail open (return Clean with confidence 0).
 
 ### 5. Veto Mode Testing
 

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -126,7 +127,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithValidJsonSpamResponse_ReturnsSpamResult()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Buy crypto now!", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Buy crypto now! This is a longer message to meet minimum length", vetoMode: false, minMessageLength: 0);
         MockSuccessfulJsonResponse("spam", "Contains promotional content", 0.95);
 
         // Act
@@ -145,7 +146,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithValidJsonCleanResponse_ReturnsCleanResult()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Hello everyone, how are you?", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Hello everyone, how are you today?", vetoMode: false, minMessageLength: 0);
         MockSuccessfulJsonResponse("clean", "Normal conversation", 0.85);
 
         // Act
@@ -164,7 +165,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithValidJsonReviewResponse_ReturnsReviewResult()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Check out this link", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Check out this link for more details", vetoMode: false, minMessageLength: 0);
         MockSuccessfulJsonResponse("review", "Uncertain - needs human review", 0.5);
 
         // Act
@@ -183,7 +184,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithJsonResponse_UppercaseResult_ParsesCorrectly()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Test message for uppercase parsing", vetoMode: false, minMessageLength: 0);
         MockSuccessfulJsonResponse("SPAM", "Test uppercase", 0.9);
 
         // Act
@@ -198,7 +199,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithJsonResponse_MixedCaseResult_ParsesCorrectly()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Test message for mixed case parsing", vetoMode: false, minMessageLength: 0);
         MockSuccessfulJsonResponse("ClEaN", "Test mixed case", 0.8);
 
         // Act
@@ -212,7 +213,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithJsonResponse_UnknownResult_DefaultsToClean()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Test message for unknown result parsing", vetoMode: false, minMessageLength: 0);
         MockSuccessfulJsonResponse("unknown", "Unknown result type", 0.5);
 
         // Act
@@ -227,7 +228,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithJsonResponse_NullConfidence_DefaultsTo80Percent()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Test message for null confidence handling", vetoMode: false, minMessageLength: 0);
         var jsonResponse = @"{
             ""result"": ""spam"",
             ""reason"": ""Test without confidence"",
@@ -312,105 +313,13 @@ public class OpenAIContentCheckTests
 
     #endregion
 
-    #region Legacy Text Response Parsing Tests
-
-    [Test]
-    public async Task CheckAsync_WithLegacySpamResponse_ReturnsSpamResult()
-    {
-        // Arrange
-        var request = CreateOpenAICheckRequest("Buy crypto now!", vetoMode: false);
-        var legacyResponse = "This message contains SPAM content related to crypto trading.";
-        MockOpenAISuccessResponse(legacyResponse);
-
-        // Act
-        var response = await _sut.CheckAsync(request);
-
-        // Assert
-        Assert.That(response.Result, Is.EqualTo(CheckResultType.Spam));
-        Assert.That(response.Confidence, Is.EqualTo(75), "Legacy parsing should return 75% confidence");
-        Assert.That(response.Details, Does.Contain("OpenAI detected spam (legacy)"));
-    }
-
-    [Test]
-    public async Task CheckAsync_WithLegacyCleanResponse_ReturnsCleanResult()
-    {
-        // Arrange
-        var request = CreateOpenAICheckRequest("Hello everyone", vetoMode: false);
-        var legacyResponse = "This is a normal message, not spam.";
-        MockOpenAISuccessResponse(legacyResponse);
-
-        // Act
-        var response = await _sut.CheckAsync(request);
-
-        // Assert
-        Assert.That(response.Result, Is.EqualTo(CheckResultType.Clean));
-        Assert.That(response.Confidence, Is.EqualTo(0), "Legacy clean responses return 0 confidence");
-        Assert.That(response.Details, Does.Contain("OpenAI found no spam (legacy)"));
-    }
-
-    [Test]
-    public async Task CheckAsync_WithLegacyResponse_NotSpamKeyword_ReturnsClean()
-    {
-        // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
-        var legacyResponse = "This is NOT_SPAM, it's a legitimate message about SPAM email filters.";
-        MockOpenAISuccessResponse(legacyResponse);
-
-        // Act
-        var response = await _sut.CheckAsync(request);
-
-        // Assert
-        Assert.That(response.Result, Is.EqualTo(CheckResultType.Clean),
-            "NOT_SPAM keyword should override SPAM detection in legacy parsing");
-    }
-
-    [Test]
-    public async Task CheckAsync_WithLegacyVetoMode_SpamResponse_ConfirmsSpam()
-    {
-        // Arrange
-        var request = CreateOpenAICheckRequest(
-            "Buy crypto now!",
-            vetoMode: true,
-            hasSpamFlags: true);
-        var legacyResponse = "Confirmed: SPAM";
-        MockOpenAISuccessResponse(legacyResponse);
-
-        // Act
-        var response = await _sut.CheckAsync(request);
-
-        // Assert
-        Assert.That(response.Result, Is.EqualTo(CheckResultType.Spam));
-        Assert.That(response.Details, Does.Contain("OpenAI confirmed spam (legacy)"));
-    }
-
-    [Test]
-    public async Task CheckAsync_WithLegacyVetoMode_CleanResponse_VetoesSpam()
-    {
-        // Arrange
-        var request = CreateOpenAICheckRequest(
-            "Legitimate message",
-            vetoMode: true,
-            hasSpamFlags: true);
-        var legacyResponse = "This is not spam, false positive.";
-        MockOpenAISuccessResponse(legacyResponse);
-
-        // Act
-        var response = await _sut.CheckAsync(request);
-
-        // Assert
-        Assert.That(response.Result, Is.EqualTo(CheckResultType.Clean));
-        Assert.That(response.Details, Does.Contain("OpenAI vetoed spam (legacy)"));
-    }
-
-    #endregion
-
     #region Error Handling Tests
 
     [Test]
-    public async Task CheckAsync_WithMalformedJson_FallsBackToLegacyParsing()
+    public async Task CheckAsync_WithMalformedJson_FailsOpen()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Test message for malformed JSON handling", vetoMode: false, minMessageLength: 0);
         var malformedJson = @"{""result"": ""spam"", ""reason"": ""Missing closing brace""";
         MockOpenAISuccessResponse(malformedJson);
 
@@ -418,16 +327,17 @@ public class OpenAIContentCheckTests
         var response = await _sut.CheckAsync(request);
 
         // Assert
-        Assert.That(response.Result, Is.EqualTo(CheckResultType.Spam), "Should fallback to legacy parsing");
-        Assert.That(response.Confidence, Is.EqualTo(75), "Legacy confidence");
-        Assert.That(response.Details, Does.Contain("(legacy)"));
+        Assert.That(response.Result, Is.EqualTo(CheckResultType.Clean), "Should fail open on malformed JSON");
+        Assert.That(response.Confidence, Is.EqualTo(0));
+        Assert.That(response.Details, Does.Contain("OpenAI error"));
+        Assert.That(response.Details, Does.Contain("JSON parsing error"));
     }
 
     [Test]
     public async Task CheckAsync_WithEmptyJsonResponse_ReturnsCleanWithFallback()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Test message for empty JSON response", vetoMode: false, minMessageLength: 0);
         MockOpenAISuccessResponse("{}");
 
         // Act
@@ -435,14 +345,14 @@ public class OpenAIContentCheckTests
 
         // Assert
         Assert.That(response.Result, Is.EqualTo(CheckResultType.Clean));
-        Assert.That(response.Confidence, Is.EqualTo(0));
+        Assert.That(response.Confidence, Is.EqualTo(80), "Null confidence defaults to 80%");
     }
 
     [Test]
     public async Task CheckAsync_WithHttp429RateLimit_ReturnsCleanAndFailsOpen()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Test message for rate limit handling", vetoMode: false, minMessageLength: 0);
         _mockServer
             .Given(Request.Create().WithPath("/chat/completions").UsingPost())
             .RespondWith(Response.Create()
@@ -464,7 +374,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithHttp500ServerError_ReturnsCleanAndFailsOpen()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Test message for server error handling", vetoMode: false, minMessageLength: 0);
         _mockServer
             .Given(Request.Create().WithPath("/chat/completions").UsingPost())
             .RespondWith(Response.Create()
@@ -476,7 +386,8 @@ public class OpenAIContentCheckTests
 
         // Assert
         Assert.That(response.Result, Is.EqualTo(CheckResultType.Clean), "Should fail open on server errors");
-        Assert.That(response.Details, Does.Contain("OpenAI API error: 500"));
+        Assert.That(response.Details, Does.Contain("OpenAI API error"));
+        Assert.That(response.Details, Does.Contain("InternalServerError"));
         Assert.That(response.Confidence, Is.EqualTo(0));
         Assert.That(response.Error, Is.Not.Null);
     }
@@ -485,7 +396,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithEmptyApiResponse_ReturnsClean()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Test message for empty API response", vetoMode: false, minMessageLength: 0);
         var emptyResponse = @"{""choices"": []}";
         MockOpenAISuccessResponse(emptyResponse);
 
@@ -502,7 +413,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithNullChoices_ReturnsClean()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Test message for null choices handling", vetoMode: false, minMessageLength: 0);
         var nullChoicesResponse = @"{""choices"": null}";
         MockOpenAISuccessResponse(nullChoicesResponse);
 
@@ -518,7 +429,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithEmptyContent_ReturnsClean()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Test message for empty content handling", vetoMode: false, minMessageLength: 0);
         var emptyContentResponse = @"{
             ""choices"": [{
                 ""message"": {
@@ -541,7 +452,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithMissingApiKey_ReturnsCleanWithError()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false, apiKey: "");
+        var request = CreateOpenAICheckRequest("Test message for missing API key handling", vetoMode: false, apiKey: "", minMessageLength: 0);
 
         // Act
         var response = await _sut.CheckAsync(request);
@@ -557,20 +468,20 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithNetworkTimeout_ReturnsCleanAndFailsOpen()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
         _mockServer
             .Given(Request.Create().WithPath("/chat/completions").UsingPost())
             .RespondWith(Response.Create()
                 .WithDelay(TimeSpan.FromSeconds(10)) // Longer than CancellationToken timeout
                 .WithStatusCode(HttpStatusCode.OK));
 
-        // Create a short timeout token - recreate request with timeout
+        // Create a short timeout token
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
-        request = CreateOpenAICheckRequest(
-            message: request.Message,
+        var request = CreateOpenAICheckRequest(
+            message: "Test message for network timeout handling",
             vetoMode: false,
             hasSpamFlags: false,
             systemPrompt: null,
+            minMessageLength: 0,
             model: "gpt-4",
             cancellationToken: cts.Token);
 
@@ -592,7 +503,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithCachedResult_UsesCache()
     {
         // Arrange
-        var request = CreateOpenAICheckRequest("Test message for caching", vetoMode: false);
+        var request = CreateOpenAICheckRequest("Test message for caching behavior validation", vetoMode: false, minMessageLength: 0);
         MockSuccessfulJsonResponse("spam", "Cached spam detection", 0.9);
 
         // Act - First call populates cache
@@ -622,8 +533,8 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_WithDifferentMessages_UsesDistinctCacheKeys()
     {
         // Arrange
-        var request1 = CreateOpenAICheckRequest("First message", vetoMode: false);
-        var request2 = CreateOpenAICheckRequest("Second message", vetoMode: false);
+        var request1 = CreateOpenAICheckRequest("First message for cache key testing", vetoMode: false, minMessageLength: 0);
+        var request2 = CreateOpenAICheckRequest("Second message for cache key testing", vetoMode: false, minMessageLength: 0);
 
         MockSuccessfulJsonResponse("spam", "First is spam", 0.9);
 
@@ -813,13 +724,13 @@ public class OpenAIContentCheckTests
     {
         // Arrange
         var request = CreateOpenAICheckRequest("Test message", vetoMode: false);
-        MockSuccessfulJsonResponse("spam", "Test rounding", 0.845); // Should round to 85
+        MockSuccessfulJsonResponse("spam", "Test rounding", 0.845); // 0.845 * 100 = 84.5 → 84 (banker's rounding)
 
         // Act
         var response = await _sut.CheckAsync(request);
 
         // Assert
-        Assert.That(response.Confidence, Is.EqualTo(85));
+        Assert.That(response.Confidence, Is.EqualTo(84));
     }
 
     #endregion
@@ -843,10 +754,12 @@ public class OpenAIContentCheckTests
         // Assert
         Assert.That(response.Result, Is.EqualTo(CheckResultType.Spam));
 
-        // Verify custom prompt was included in request
+        // Verify custom prompt was included in request (check for escaped version in JSON)
         var logEntry = _mockServer.LogEntries.First();
         var requestBody = logEntry.RequestMessage.Body;
-        Assert.That(requestBody, Does.Contain(customPrompt));
+        // Custom prompt should appear in the system message content
+        Assert.That(requestBody, Does.Contain("Custom rule:"));
+        Assert.That(requestBody, Does.Contain("Flag messages containing"));
     }
 
     [Test]
@@ -945,7 +858,7 @@ public class OpenAIContentCheckTests
         bool vetoMode,
         bool hasSpamFlags = false,
         string? systemPrompt = null,
-        int minMessageLength = 20,
+        int minMessageLength = 0,
         bool checkShortMessages = false,
         string apiKey = "test-api-key",
         string model = "gpt-3.5-turbo",
@@ -975,22 +888,44 @@ public class OpenAIContentCheckTests
 
     private void MockSuccessfulJsonResponse(string result, string reason, double confidence)
     {
-        var jsonResponse = $@"{{
-            ""choices"": [{{
-                ""message"": {{
-                    ""role"": ""assistant"",
-                    ""content"": ""{{\""\""result\""\""\"": \""\""\""{result}\""\""\"", \""\""reason\""\""\"": \""\""\""{reason}\""\""\"", \""\""confidence\""\""\"": {confidence.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}""
-                }},
-                ""finish_reason"": ""stop""
-            }}],
-            ""usage"": {{
-                ""prompt_tokens"": 100,
-                ""completion_tokens"": 50,
-                ""total_tokens"": 150
-            }}
-        }}";
+        // Create the inner JSON response that OpenAI returns in the content field
+        var innerJsonResponse = new
+        {
+            result = result,
+            reason = reason,
+            confidence = confidence
+        };
+        var innerJson = JsonSerializer.Serialize(innerJsonResponse);
 
-        MockOpenAISuccessResponse(jsonResponse);
+        // Create the full OpenAI API response structure using actual types
+        var response = new OpenAIResponse
+        {
+            Choices = new[]
+            {
+                new OpenAIChoice
+                {
+                    Message = new OpenAIMessage
+                    {
+                        Role = "assistant",
+                        Content = innerJson
+                    },
+                    FinishReason = "stop"
+                }
+            },
+            Usage = new OpenAIUsage
+            {
+                PromptTokens = 100,
+                CompletionTokens = 50,
+                TotalTokens = 150
+            }
+        };
+
+        var responseJson = JsonSerializer.Serialize(response, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        MockOpenAISuccessResponse(responseJson);
     }
 
     private void MockOpenAISuccessResponse(string content)

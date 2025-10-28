@@ -5,13 +5,12 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
-/// Static utility class for parsing OpenAI API responses
-/// Extracted from OpenAISpamCheck (JSON parsing and fallback logic)
+/// Static utility class for parsing OpenAI API responses (JSON-only)
 /// </summary>
 public static class OpenAIResponseParser
 {
     /// <summary>
-    /// Create spam check response from OpenAI API response with JSON parsing and fallback
+    /// Create spam check response from OpenAI API response
     /// </summary>
     public static ContentCheckResponse ParseResponse(
         OpenAIResponse openaiResponse,
@@ -24,83 +23,77 @@ public static class OpenAIResponseParser
 
         if (string.IsNullOrEmpty(content))
         {
-            return CreateFallbackResponse("Empty OpenAI response", fromCache);
+            logger.LogWarning("OpenAI returned empty content");
+            return CreateFailureResponse("Empty OpenAI response", fromCache);
         }
 
-        // Try to parse JSON response
+        // Parse JSON response
         try
         {
-            var jsonResponse = ParseJsonResponse(content);
-
-            if (jsonResponse != null)
+            var jsonResponse = JsonSerializer.Deserialize<OpenAIJsonResponse>(content, new JsonSerializerOptions
             {
-                // Parse the result string into enum (type-safe)
-                var result = (jsonResponse.Result?.ToLowerInvariant()) switch
-                {
-                    "spam" => CheckResultType.Spam,
-                    "clean" => CheckResultType.Clean,
-                    "review" => CheckResultType.Review,
-                    _ => CheckResultType.Clean // Default fail-open
-                };
+                PropertyNameCaseInsensitive = true
+            });
 
-                var confidence = (int)Math.Round((jsonResponse.Confidence ?? 0.8) * 100);
-
-                // Build details message based on result
-                var details = result switch
-                {
-                    CheckResultType.Spam => req.VetoMode
-                        ? $"OpenAI confirmed spam: {jsonResponse.Reason}"
-                        : $"OpenAI detected spam: {jsonResponse.Reason}",
-                    CheckResultType.Clean => req.VetoMode
-                        ? $"OpenAI vetoed spam: {jsonResponse.Reason}"
-                        : $"OpenAI found no spam: {jsonResponse.Reason}",
-                    CheckResultType.Review => $"OpenAI flagged for review: {jsonResponse.Reason}",
-                    _ => $"OpenAI result: {jsonResponse.Reason}"
-                };
-
-                if (fromCache)
-                {
-                    details += " (cached)";
-                }
-
-                logger.LogDebug("OpenAI check completed: Result={Result}, Confidence={Confidence}, Reason={Reason}, FromCache={FromCache}",
-                    result, confidence, jsonResponse.Reason, fromCache);
-
-                return new ContentCheckResponse
-                {
-                    CheckName = "OpenAI",
-                    Result = result,
-                    Details = details,
-                    Confidence = confidence
-                };
+            if (jsonResponse == null)
+            {
+                logger.LogWarning("Failed to deserialize OpenAI JSON response: {Content}", content);
+                return CreateFailureResponse("Invalid JSON response", fromCache);
             }
+
+            // Parse the result string into enum (type-safe)
+            var result = (jsonResponse.Result?.ToLowerInvariant()) switch
+            {
+                "spam" => CheckResultType.Spam,
+                "clean" => CheckResultType.Clean,
+                "review" => CheckResultType.Review,
+                _ => CheckResultType.Clean // Default fail-open for unknown results
+            };
+
+            var confidence = (int)Math.Round((jsonResponse.Confidence ?? 0.8) * 100);
+
+            // Build details message based on result
+            var details = result switch
+            {
+                CheckResultType.Spam => req.VetoMode
+                    ? $"OpenAI confirmed spam: {jsonResponse.Reason}"
+                    : $"OpenAI detected spam: {jsonResponse.Reason}",
+                CheckResultType.Clean => req.VetoMode
+                    ? $"OpenAI vetoed spam: {jsonResponse.Reason}"
+                    : $"OpenAI found no spam: {jsonResponse.Reason}",
+                CheckResultType.Review => $"OpenAI flagged for review: {jsonResponse.Reason}",
+                _ => $"OpenAI result: {jsonResponse.Reason}"
+            };
+
+            if (fromCache)
+            {
+                details += " (cached)";
+            }
+
+            logger.LogDebug("OpenAI check completed: Result={Result}, Confidence={Confidence}, Reason={Reason}, FromCache={FromCache}",
+                result, confidence, jsonResponse.Reason, fromCache);
+
+            return new ContentCheckResponse
+            {
+                CheckName = "OpenAI",
+                Result = result,
+                Details = details,
+                Confidence = confidence
+            };
         }
         catch (JsonException ex)
         {
-            logger.LogWarning(ex, "Failed to parse OpenAI JSON response: {Content}", content);
+            logger.LogError(ex, "Failed to parse OpenAI JSON response: {Content}", content);
+            return CreateFailureResponse($"JSON parsing error: {ex.Message}", fromCache);
         }
-
-        // Fallback to legacy parsing if JSON fails
-        return ParseLegacyResponse(content, req, fromCache, logger);
     }
 
     /// <summary>
-    /// Parse JSON response from OpenAI
+    /// Create failure response when OpenAI parsing fails (fail-open)
     /// </summary>
-    public static OpenAIJsonResponse? ParseJsonResponse(string content)
+    private static ContentCheckResponse CreateFailureResponse(string reason, bool fromCache)
     {
-        return JsonSerializer.Deserialize<OpenAIJsonResponse>(content, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
-    }
-
-    /// <summary>
-    /// Create fallback response when OpenAI fails
-    /// </summary>
-    public static ContentCheckResponse CreateFallbackResponse(string reason, bool fromCache)
-    {
-        var details = $"OpenAI fallback: {reason} - allowing message";
+        var details = $"OpenAI error: {reason} - allowing message";
         if (fromCache)
         {
             details += " (cached)";
@@ -112,41 +105,6 @@ public static class OpenAIResponseParser
             Result = CheckResultType.Clean, // Fail open
             Details = details,
             Confidence = 0
-        };
-    }
-
-    /// <summary>
-    /// Legacy response parsing for non-JSON responses
-    /// </summary>
-    public static ContentCheckResponse ParseLegacyResponse(
-        string content,
-        OpenAICheckRequest req,
-        bool fromCache,
-        ILogger logger)
-    {
-        var upperContent = content.ToUpperInvariant();
-        var isSpam = upperContent.Contains("SPAM") && !upperContent.Contains("NOT_SPAM");
-        var result = isSpam ? CheckResultType.Spam : CheckResultType.Clean;
-        var confidence = isSpam ? 75 : 0; // Lower confidence for legacy parsing
-
-        var details = req.VetoMode
-            ? (isSpam ? "OpenAI confirmed spam (legacy)" : "OpenAI vetoed spam (legacy)")
-            : (isSpam ? "OpenAI detected spam (legacy)" : "OpenAI found no spam (legacy)");
-
-        if (fromCache)
-        {
-            details += " (cached)";
-        }
-
-        logger.LogDebug("OpenAI legacy parsing: Result={Result}, Confidence={Confidence}, Content={Content}",
-            result, confidence, content.Length > 100 ? content[..100] + "..." : content);
-
-        return new ContentCheckResponse
-        {
-            CheckName = "OpenAI",
-            Result = result,
-            Details = details,
-            Confidence = confidence
         };
     }
 }
