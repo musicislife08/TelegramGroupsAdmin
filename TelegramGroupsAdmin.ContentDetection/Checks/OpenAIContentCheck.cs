@@ -33,6 +33,17 @@ public class OpenAIContentCheck(
             return false;
         }
 
+        // PERF-3 Option B: Skip expensive OpenAI API calls for trusted/admin users
+        // OpenAI is not a critical check - it's expensive and should skip for trusted users
+        if (request.IsUserTrusted || request.IsUserAdmin)
+        {
+            logger.LogDebug(
+                "Skipping OpenAI check for user {UserId}: User is {UserType}",
+                request.UserId,
+                request.IsUserTrusted ? "trusted" : "admin");
+            return false;
+        }
+
         // Check if enabled is done in CheckAsync since we need to load config from DB
         return true;
     }

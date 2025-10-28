@@ -41,6 +41,16 @@ public record ContentCheckRequest
     public bool HasSpamFlags { get; init; } = false;
 
     /// <summary>
+    /// Whether the user is marked as trusted (allows non-critical checks to skip expensive operations)
+    /// </summary>
+    public bool IsUserTrusted { get; init; } = false;
+
+    /// <summary>
+    /// Whether the user is an admin (allows non-critical checks to skip expensive operations)
+    /// </summary>
+    public bool IsUserAdmin { get; init; } = false;
+
+    /// <summary>
     /// Image data for image spam detection (optional)
     /// </summary>
     public Stream? ImageData { get; init; }

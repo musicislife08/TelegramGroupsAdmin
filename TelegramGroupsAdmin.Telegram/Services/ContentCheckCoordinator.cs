@@ -99,7 +99,15 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
             isUserTrusted,
             isUserAdmin);
 
-        var fullResult = await _spamDetectionEngine.CheckMessageAsync(request, cancellationToken).ConfigureAwait(false);
+        // PERF-3 Option B: Pass trust context to individual checks
+        // Allows non-critical checks (Bayes, Similarity, OpenAI) to skip expensive operations for trusted/admin users
+        var enrichedRequest = request with
+        {
+            IsUserTrusted = isUserTrusted,
+            IsUserAdmin = isUserAdmin
+        };
+
+        var fullResult = await _spamDetectionEngine.CheckMessageAsync(enrichedRequest, cancellationToken).ConfigureAwait(false);
 
         // Phase 3: Separate critical violations from regular spam results
         var criticalViolations = new List<string>();

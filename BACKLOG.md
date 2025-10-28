@@ -678,7 +678,7 @@ Two different notification systems that don't integrate:
 
 ## Completed Work
 
-**2025-10-28**: PERF-3 Option A (Spam detection early exit for trusted users - 80%+ overhead reduction via ContentCheckCoordinator.cs line 71 early return when no critical checks configured, Option B architectural fix deferred to REFACTOR-13)
+**2025-10-28**: PERF-3 complete (Option A: Spam detection early exit in ContentCheckCoordinator when no critical checks, Option B: Trust context passed to individual checks via ContentCheckRequest.IsUserTrusted/IsUserAdmin fields, OpenAIContentCheck.ShouldExecute() skips API calls for trusted users), REFACTOR-13 (OpenAI extraction: 556 lines → 3 files [192 + 215 + 190], removed legacy text parsing [120 lines], 40/40 tests passing with WireMock + object serialization)
 
 **2025-10-27**: CODE-9 (Removed reflection in MessageProcessingService - extracted CheckResultsSerializer static utility, compile-time safe, no performance overhead), CODE-1 + CODE-2 (Complete code organization overhaul - split ~60 files into 140+ individual files, fixed 7 name mismatches, renamed TotpProtectionService→DataProtectionService, one type per file achieved, 164 files changed), ANALYTICS-4 (Welcome system analytics - 4 new repository methods, WelcomeAnalytics.razor component, /analytics#welcome tab with join trends/response distribution/per-chat stats, timezone-aware queries), SCHEMA-1 (Audit log FK cascade rules fixed - migration 20251027002019, user deletion now works, 22/22 tests passing)
 
@@ -697,70 +697,9 @@ Two different notification systems that don't integrate:
 
 **Deployment Context:** 10+ chats, 1000+ users, 100-1000 messages/day, Messages page primary moderation tool
 
-### Medium Priority (1 issue)
+### Medium Priority (0 issues)
 
-### PERF-3: Spam Detection Runs for Trusted Users Then Discards Results
-
-**Status:** BACKLOG 📋
-**Severity:** Performance | **Impact:** Unnecessary CPU/memory usage on every trusted user message
-**Discovered:** 2025-10-28 via production log analysis
-
-**Current State:**
-- `ContentCheckCoordinator.CheckAsync()` always runs full spam detection pipeline
-- Expensive operations run even for trusted/admin users:
-  - "Refreshing similarity cache for chat" - loads 200+ spam samples from database
-  - "Built vocabulary with 1976 unique words" - TF-IDF vectorization
-  - "Bayes classifier trained with 236 samples" - retrains classifier on every message
-- THEN checks if user is trusted/admin and discards all results
-- Logs: "Skipping regular spam detection for user X: User is trusted"
-
-**Why It Does This:**
-- Phase 4.14 feature: "Critical checks" (always_run=true) should run even for trusted users
-- Example: URL filtering might be critical even for admins
-- So it runs everything, then filters results based on trust status
-
-**Problem:**
-- Production logs show this happens on EVERY message from trusted users
-- In active chats with mostly trusted users, 80%+ of spam checks are wasted
-- Each check: ~50ms + DB queries + memory allocation
-- Multiplied by hundreds of messages/day = significant waste
-
-**Root Cause:**
-ContentCheckCoordinator.cs lines 32-120:
-1. Line 46-52: Checks if user is trusted/admin (EARLY)
-2. Line 76: Runs ALL spam checks including expensive training (ALWAYS)
-3. Line 102-114: Decides to skip checks AFTER running them (TOO LATE)
-
-**Solution Options:**
-
-**Option A: Skip spam detection entirely if no critical checks** (simplest)
-- Line 56: Get critical checks list
-- NEW: If `criticalCheckNames.Count == 0` AND `(isUserTrusted || isUserAdmin)`, skip line 76 entirely
-- Only run spam detection if critical checks exist OR user is untrusted
-- Estimated savings: 80%+ of spam detection overhead for trusted users
-
-**Option B: Pass trust context to engine** (cleaner architecture)
-- Add `IsUserTrusted` + `IsUserAdmin` fields to ContentCheckRequest
-- Individual checks (Bayes, Similarity) can skip expensive operations if user trusted
-- Critical checks still run, but non-critical checks bail early
-- Better separation of concerns, more flexible
-
-**Option C: Optimize caching strategy** (bigger refactor)
-- Move Bayes training + Similarity cache to background job/startup
-- Don't refresh on every message
-- Requires cache invalidation strategy when new spam samples added
-
-**Implementation Status:**
-- ✅ **Option A: COMPLETED (2025-10-28)** - Early exit added to ContentCheckCoordinator.cs line 71
-  - Skips spam detection entirely when `criticalCheckNames.Count == 0` and user is trusted/admin
-  - Estimated 80%+ reduction in wasted spam detection overhead
-  - Zero risk, minimal code change
-- ⏳ **Option B: DEFERRED to REFACTOR-13** - Architectural improvement
-  - When refactoring OpenAISpamCheck (REFACTOR-13), pass trust context to individual checks
-  - Allows non-critical checks to bail early even when critical checks exist
-  - Better separation of concerns
-
-**Priority:** Option A complete (quick win achieved), Option B bundled with REFACTOR-13
+(No medium priority performance issues)
 
 ---
 
@@ -768,7 +707,7 @@ ContentCheckCoordinator.cs lines 32-120:
 
 **Deployment Context:** 10+ chats, 100-1000 messages/day (10-50 spam checks/day on new users), 1000+ users, Messages page primary tool
 
-**Total Issues Remaining:** 0 (PERF-3 Option A complete, Option B deferred to REFACTOR-13)
+**Total Issues Remaining:** 0 (PERF-3 fully complete)
 
 **Implementation Priority:** Implement opportunistically during related refactoring work
 
@@ -1267,29 +1206,29 @@ activity?.SetTag("detection.result", result.Action.ToString());
 
 ---
 
-### REFACTOR-13: Extract OpenAISpamCheck Components (555 lines)
+### REFACTOR-13: Extract OpenAISpamCheck Components (555 lines) - ✅ COMPLETE
 
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** OpenAI testing without API calls
+**Status:** COMPLETED 🎉 (2025-10-28)
+**Severity:** Refactoring | **Impact:** OpenAI testing without API calls + PERF-3 Option B
 **Priority:** MEDIUM
 **Discovered:** 2025-10-27 via file size audit
 
-**Extract:**
-- `OpenAIPromptBuilder` - Prompt building (PURE FUNCTIONS!)
-- `OpenAIResponseParser` - Response parsing
+**Completed:**
+- ✅ Extracted `OpenAIPromptBuilder` (215 lines) - Pure functions for prompt generation
+- ✅ Extracted `OpenAIResponseParser` (110 lines) - JSON response parsing
+- ✅ Removed legacy text parsing (120 lines eliminated) - JSON-only for unreleased application
+- ✅ OpenAIContentCheck reduced to 192 lines (65% reduction)
+- ✅ PERF-3 Option B: Added `IsUserTrusted`/`IsUserAdmin` to `ContentCheckRequest`
+- ✅ ContentCheckCoordinator passes trust context with `with` syntax
+- ✅ OpenAIContentCheck.ShouldExecute() skips expensive API calls for trusted users
+- ✅ 40/40 tests passing with WireMock + object serialization (no manual JSON strings)
 
-**Additional Work (PERF-3 Option B):**
-- Add `IsUserTrusted` + `IsUserAdmin` fields to `ContentCheckRequest`
-- Pass trust context from ContentCheckCoordinator to individual spam checks
-- Allow non-critical checks (Bayes, Similarity, OpenAI) to bail early if user is trusted/admin
-- Better separation of concerns than current Option A early-exit approach
-
-**Testing Wins:**
-- Test prompt building without API calls!
-- Test response parsing with mock responses
-- Verify prompt templates separately
-- Test trust-based check skipping logic
-
+**Files:**
+- `TelegramGroupsAdmin.ContentDetection/Checks/OpenAIContentCheck.cs` (556 → 192 lines)
+- `TelegramGroupsAdmin.ContentDetection/Services/OpenAIPromptBuilder.cs` (NEW, 215 lines)
+- `TelegramGroupsAdmin.ContentDetection/Services/OpenAIResponseParser.cs` (NEW, 110 lines)
+- `TelegramGroupsAdmin.ContentDetection/Models/ContentCheckRequest.cs` (+2 properties)
+- `TelegramGroupsAdmin.Telegram/Services/ContentCheckCoordinator.cs` (trust context enrichment)
 
 ---
 
