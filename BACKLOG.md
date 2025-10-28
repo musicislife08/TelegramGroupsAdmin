@@ -695,9 +695,64 @@ Two different notification systems that don't integrate:
 
 **Deployment Context:** 10+ chats, 1000+ users, 100-1000 messages/day, Messages page primary moderation tool
 
-### Medium Priority (0 issues)
+### Medium Priority (1 issue)
 
-**All medium-priority performance optimizations completed!**
+### PERF-3: Spam Detection Runs for Trusted Users Then Discards Results
+
+**Status:** BACKLOG 📋
+**Severity:** Performance | **Impact:** Unnecessary CPU/memory usage on every trusted user message
+**Discovered:** 2025-10-28 via production log analysis
+
+**Current State:**
+- `ContentCheckCoordinator.CheckAsync()` always runs full spam detection pipeline
+- Expensive operations run even for trusted/admin users:
+  - "Refreshing similarity cache for chat" - loads 200+ spam samples from database
+  - "Built vocabulary with 1976 unique words" - TF-IDF vectorization
+  - "Bayes classifier trained with 236 samples" - retrains classifier on every message
+- THEN checks if user is trusted/admin and discards all results
+- Logs: "Skipping regular spam detection for user X: User is trusted"
+
+**Why It Does This:**
+- Phase 4.14 feature: "Critical checks" (always_run=true) should run even for trusted users
+- Example: URL filtering might be critical even for admins
+- So it runs everything, then filters results based on trust status
+
+**Problem:**
+- Production logs show this happens on EVERY message from trusted users
+- In active chats with mostly trusted users, 80%+ of spam checks are wasted
+- Each check: ~50ms + DB queries + memory allocation
+- Multiplied by hundreds of messages/day = significant waste
+
+**Root Cause:**
+ContentCheckCoordinator.cs lines 32-120:
+1. Line 46-52: Checks if user is trusted/admin (EARLY)
+2. Line 76: Runs ALL spam checks including expensive training (ALWAYS)
+3. Line 102-114: Decides to skip checks AFTER running them (TOO LATE)
+
+**Solution Options:**
+
+**Option A: Skip spam detection entirely if no critical checks** (simplest)
+- Line 56: Get critical checks list
+- NEW: If `criticalCheckNames.Count == 0` AND `(isUserTrusted || isUserAdmin)`, skip line 76 entirely
+- Only run spam detection if critical checks exist OR user is untrusted
+- Estimated savings: 80%+ of spam detection overhead for trusted users
+
+**Option B: Pass trust context to engine** (cleaner architecture)
+- Add `IsUserTrusted` + `IsUserAdmin` fields to ContentCheckRequest
+- Individual checks (Bayes, Similarity) can skip expensive operations if user trusted
+- Critical checks still run, but non-critical checks bail early
+- Better separation of concerns, more flexible
+
+**Option C: Optimize caching strategy** (bigger refactor)
+- Move Bayes training + Similarity cache to background job/startup
+- Don't refresh on every message
+- Requires cache invalidation strategy when new spam samples added
+
+**Recommended:** Option A for quick fix, Option B for proper long-term solution
+
+**Effort:** 1-2 hours for Option A, 3-4 hours for Option B
+
+**Priority:** Medium (optimization, not bug - system works correctly, just wasteful)
 
 ---
 
@@ -705,7 +760,7 @@ Two different notification systems that don't integrate:
 
 **Deployment Context:** 10+ chats, 100-1000 messages/day (10-50 spam checks/day on new users), 1000+ users, Messages page primary tool
 
-**Total Issues Remaining:** 0 (down from 52 initial findings, 38 false positives + 4 completed optimizations)
+**Total Issues Remaining:** 1 (PERF-3: Spam detection waste on trusted users)
 
 **Implementation Priority:** Implement opportunistically during related refactoring work
 
