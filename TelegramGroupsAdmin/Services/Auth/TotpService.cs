@@ -85,7 +85,9 @@ public class TotpService(
         var totpSecret = totpProtection.Unprotect(user.TotpSecret);
         var totp = new Totp(Base32Encoding.ToBytes(totpSecret));
 
-        if (!totp.VerifyTotp(code, out _, new VerificationWindow(2, 2)))
+        // Increased tolerance to ±2.5 minutes (5 steps) to handle real-world clock drift
+        // Testing showed 1-2 minute drift is common on mobile devices between NTP syncs
+        if (!totp.VerifyTotp(code, out _, new VerificationWindow(5, 5)))
         {
             logger.LogWarning("Invalid TOTP verification code during setup for user: {UserId}", userId);
             return false;
@@ -122,7 +124,9 @@ public class TotpService(
         var totpSecret = totpProtection.Unprotect(user.TotpSecret);
         var totp = new Totp(Base32Encoding.ToBytes(totpSecret));
 
-        if (!totp.VerifyTotp(code, out _, new VerificationWindow(2, 2)))
+        // Increased tolerance to ±2.5 minutes (5 steps) to handle real-world clock drift
+        // Testing showed 1-2 minute drift is common on mobile devices between NTP syncs
+        if (!totp.VerifyTotp(code, out _, new VerificationWindow(5, 5)))
         {
             logger.LogWarning("Invalid TOTP code for user: {UserId}", userId);
             return false;
