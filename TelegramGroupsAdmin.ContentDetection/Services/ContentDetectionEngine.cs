@@ -627,26 +627,4 @@ public class ContentDetectionEngine : IContentDetectionEngine
         // If >= threshold of letters are Latin script, likely English/Western European language
         return (double)latinCount / letterCount > threshold;
     }
-
-    /// <summary>
-    /// Phase 2.6: Serialize check results to JSON for storage in detection_results.check_results
-    /// Phase 4.5: Updated to use Result enum instead of IsSpam boolean
-    /// Returns compact JSON with minimal field names to save space
-    /// </summary>
-    public static string SerializeCheckResults(List<ContentCheckResponse> checkResults)
-    {
-        var checks = checkResults.Select(c => new
-        {
-            name = c.CheckName,
-            result = c.Result.ToString().ToLowerInvariant(), // "spam", "clean", or "review"
-            conf = c.Confidence,
-            reason = c.Details
-        });
-
-        return JsonSerializer.Serialize(new { checks }, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = false // Compact JSON
-        });
-    }
 }

@@ -10,6 +10,7 @@ using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
@@ -821,9 +822,7 @@ public partial class MessageProcessingService(
                     AddedBy = Actor.AutoDetection, // Phase 4.19: Actor system
                     UsedForTraining = SpamActionService.DetermineIfTrainingWorthy(result.SpamResult),
                     NetConfidence = result.SpamResult.NetConfidence,
-                    CheckResultsJson = spamDetectionEngine.GetType()
-                        .GetMethod("SerializeCheckResults", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
-                        ?.Invoke(null, new object[] { result.SpamResult.CheckResults }) as string,
+                    CheckResultsJson = CheckResultsSerializer.Serialize(result.SpamResult.CheckResults),
                     EditVersion = editVersion
                 };
 
