@@ -153,10 +153,17 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 ## CRITICAL RULES
 
-- Never run app in normal mode (only one instance allowed, user runs in Rider for debugging)
-- Testing: Use `dotnet run --migrate-only` to catch startup issues after building
-- Always let user test manually - complex app, cannot validate runtime behavior automatically
-- dont include time estimates in your documentation
-- when creating dialogs using MudBlazor remember in v8 its now IMudDialogInstance not MudDialogInstance
-- when you need to create a migration for this project remember we use efcore so changes to the models and appdbcontext need to be done first.  then create with eftools.  never the reverse
-- with efcore always try to do as much as you can for indexes, constraints and anything else that can be configured using the appdbcontext. not manually in custom sql blocks
+**Application Runtime**
+- NEVER run the app in normal mode - only one instance allowed (Telegram singleton constraint), user tests in Rider
+- Validate builds with `dotnet run --migrate-only` to catch startup issues without running the bot
+- Always defer to manual user testing for runtime behavior - too complex to validate automatically
+
+**EF Core Migrations**
+- Workflow: Modify Data models + AppDbContext FIRST → then run `dotnet ef migrations add` (never reverse)
+- Prefer Fluent API configuration in AppDbContext over custom SQL for indexes, constraints, relationships
+
+**UI Frameworks**
+- MudBlazor v8+: Use `IMudDialogInstance` (interface), not `MudDialogInstance` (concrete class)
+
+**Documentation**
+- Never include time estimates in documentation or backlog items
