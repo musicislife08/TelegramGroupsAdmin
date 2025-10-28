@@ -7,67 +7,6 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
-/// <summary>
-/// Service for sending messages to users with DM preference handling and fallback.
-/// Attempts private DM first (if user enabled), falls back to chat mentions on failure.
-/// </summary>
-public interface IUserMessagingService
-{
-    /// <summary>
-    /// Send a message to a user, attempting DM first if enabled, falling back to chat mention.
-    /// </summary>
-    /// <param name="botClient">Telegram bot client</param>
-    /// <param name="userId">Target user's Telegram ID</param>
-    /// <param name="chatId">Chat ID for fallback mention (required)</param>
-    /// <param name="messageText">Message to send</param>
-    /// <param name="replyToMessageId">Optional message ID to reply to in chat fallback</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>True if message was sent successfully (either DM or fallback), false if both failed</returns>
-    Task<MessageSendResult> SendToUserAsync(
-        ITelegramBotClient botClient,
-        long userId,
-        long chatId,
-        string messageText,
-        int? replyToMessageId = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Send a notification to multiple users (e.g., all admins in a chat).
-    /// Each user gets DM if available, otherwise fallback to single chat mention.
-    /// </summary>
-    Task<List<MessageSendResult>> SendToMultipleUsersAsync(
-        ITelegramBotClient botClient,
-        List<long> userIds,
-        long chatId,
-        string messageText,
-        int? replyToMessageId = null,
-        CancellationToken cancellationToken = default);
-}
-
-/// <summary>
-/// Result of a message send attempt
-/// </summary>
-public record MessageSendResult(
-    long UserId,
-    bool Success,
-    MessageDeliveryMethod DeliveryMethod,
-    string? ErrorMessage = null);
-
-/// <summary>
-/// Message delivery method classification
-/// </summary>
-public enum MessageDeliveryMethod
-{
-    /// <summary>Message sent via private DM</summary>
-    PrivateDm,
-
-    /// <summary>Message sent as chat mention (fallback)</summary>
-    ChatMention,
-
-    /// <summary>Both DM and fallback failed</summary>
-    Failed
-}
-
 public class UserMessagingService : IUserMessagingService
 {
     private readonly ITelegramUserRepository _telegramUserRepository;

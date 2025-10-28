@@ -22,17 +22,3 @@ public interface INotificationChannel
         Notification notification,
         CancellationToken cancellationToken = default);
 }
-
-/// <summary>
-/// Notification message to be sent through a channel
-/// </summary>
-/// <param name="Type">Notification type identifier (e.g., "warning", "mystatus", "welcome", "admin_report")</param>
-/// <param name="Message">The formatted message text to send</param>
-public record Notification(string Type, string Message);
-
-/// <summary>
-/// Result of a notification delivery attempt
-/// </summary>
-/// <param name="Success">True if the notification was delivered successfully</param>
-/// <param name="ErrorMessage">Optional error message if delivery failed</param>
-public record DeliveryResult(bool Success, string? ErrorMessage = null);

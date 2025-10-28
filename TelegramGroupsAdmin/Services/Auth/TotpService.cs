@@ -11,7 +11,7 @@ namespace TelegramGroupsAdmin.Services.Auth;
 public class TotpService(
     IUserRepository userRepository,
     IAuditService auditLog,
-    ITotpProtectionService totpProtection,
+    IDataProtectionService totpProtection,
     IPasswordHasher passwordHasher,
     ILogger<TotpService> logger)
     : ITotpService

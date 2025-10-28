@@ -24,7 +24,7 @@ public class BackupService : IBackupService
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly ILogger<BackupService> _logger;
-    private readonly ITotpProtectionService _totpProtection;
+    private readonly IDataProtectionService _totpProtection;
     private readonly IDataProtectionProvider _dataProtectionProvider;
     private readonly INotificationService _notificationService;
     private readonly IBackupEncryptionService _encryptionService;
@@ -34,7 +34,7 @@ public class BackupService : IBackupService
     public BackupService(
         NpgsqlDataSource dataSource,
         ILogger<BackupService> logger,
-        ITotpProtectionService totpProtection,
+        IDataProtectionService totpProtection,
         IDataProtectionProvider dataProtectionProvider,
         INotificationService notificationService,
         IBackupEncryptionService encryptionService,

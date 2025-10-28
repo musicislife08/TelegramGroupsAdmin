@@ -3,18 +3,6 @@ using TelegramGroupsAdmin.Telegram.Models;
 namespace TelegramGroupsAdmin.Services.Media;
 
 /// <summary>
-/// Type of refetch operation requested
-/// </summary>
-public enum RefetchType
-{
-    /// <summary>Media file (video, audio, sticker, etc.)</summary>
-    Media,
-
-    /// <summary>User profile photo</summary>
-    UserPhoto
-}
-
-/// <summary>
 /// Request to refetch media or user photo from Telegram
 /// Used by MediaRefetchQueueService to queue downloads
 /// </summary>

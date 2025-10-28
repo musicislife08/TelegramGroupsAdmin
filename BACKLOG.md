@@ -859,34 +859,26 @@ Two different notification systems that don't integrate:
 
 ### CODE-2: Rename TotpProtectionService to DataProtectionService
 
-**Status:** BACKLOG 📋
+**Status:** COMPLETED ✅ 2025-10-27
 **Severity:** Code Quality | **Impact:** Developer confusion, misleading naming
 **Discovered:** 2025-10-27 during backup encryption implementation
 
-**Current State:**
-- `TotpProtectionService` is a general-purpose wrapper around ASP.NET Core Data Protection
-- Used for encrypting API keys, backup passphrases, TOTP secrets, and other sensitive data
-- Name suggests it's TOTP-specific, but it's actually a generic encryption service
-- Creates confusion when injecting: "Why do I need TotpProtectionService to encrypt my passphrase?"
+**Completed Work:**
+- Renamed `ITotpProtectionService` → `IDataProtectionService`
+- Renamed `TotpProtectionService` → `DataProtectionService`
+- Updated DI registration in ServiceCollectionExtensions
+- Updated all injection sites (TotpService, BackupService)
+- Method names kept as `Protect()`/`Unprotect()` (generic, appropriate)
 
-**Refactoring Required:**
-1. Rename `ITotpProtectionService` → `IDataProtectionService`
-2. Rename `TotpProtectionService` → `DataProtectionService`
-3. Update all injection sites (20+ files across projects)
-4. Update method names if needed (`Protect()`/`Unprotect()` are fine, generic)
-
-**Files to Update:**
+**Files Updated:**
+- `TelegramGroupsAdmin.Data/Services/ITotpProtectionService.cs`
 - `TelegramGroupsAdmin.Data/Services/TotpProtectionService.cs`
-- All DI registration sites
-- All injection sites in backup, auth, config services
+- `TelegramGroupsAdmin/ServiceCollectionExtensions.cs`
+- `TelegramGroupsAdmin/Services/Auth/TotpService.cs`
+- `TelegramGroupsAdmin/Services/Backup/BackupService.cs`
+- `BACKLOG.md`
 
-**Effort:** 1-2 hours (find/replace + verify builds)
-
-**Priority:** LOW - Quality improvement, not urgent
-
-**When to Do:**
-- Alongside CODE-1 file naming consistency work
-- Part of broader code quality cleanup before open sourcing
+**Effort:** 30 minutes
 
 ---
 

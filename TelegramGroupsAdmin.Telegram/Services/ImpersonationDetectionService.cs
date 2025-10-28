@@ -15,54 +15,6 @@ using TelegramGroupsAdmin.Telegram.Repositories;
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
-/// Result of impersonation detection check
-/// </summary>
-public record ImpersonationCheckResult
-{
-    public bool ShouldTakeAction => TotalScore >= 50;
-    public bool ShouldAutoBan => TotalScore >= 100;
-
-    public int TotalScore { get; init; }
-    public ImpersonationRiskLevel RiskLevel { get; init; }
-
-    public long SuspectedUserId { get; init; }
-    public long TargetUserId { get; init; }
-    public long ChatId { get; init; }
-
-    public bool NameMatch { get; init; }
-    public bool PhotoMatch { get; init; }
-    public double? PhotoSimilarityScore { get; init; }
-}
-
-/// <summary>
-/// Service for detecting impersonation attempts (name + photo matching)
-/// </summary>
-public interface IImpersonationDetectionService
-{
-    /// <summary>
-    /// Checks if a user should be checked for impersonation
-    /// based on message count and trusted status
-    /// </summary>
-    Task<bool> ShouldCheckUserAsync(long userId, long chatId);
-
-    /// <summary>
-    /// Checks a user for impersonation against all chat admins
-    /// Returns null if no matches found (score = 0)
-    /// </summary>
-    Task<ImpersonationCheckResult?> CheckUserAsync(
-        long userId,
-        long chatId,
-        string? firstName,
-        string? lastName,
-        string? photoPath);
-
-    /// <summary>
-    /// Executes action based on check result (auto-ban, log alert)
-    /// </summary>
-    Task ExecuteActionAsync(ImpersonationCheckResult result);
-}
-
-/// <summary>
 /// Service for detecting potential admin impersonators using composite scoring.
 /// Checks: Name similarity (50 pts) + Photo similarity (50 pts) = 0-100 pts
 /// - 100 pts = Auto-ban (high confidence, both name AND photo match)

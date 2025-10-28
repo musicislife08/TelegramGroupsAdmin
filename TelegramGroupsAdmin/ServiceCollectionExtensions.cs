@@ -35,7 +35,7 @@ public static class ServiceCollectionExtensions
         ConfigureDataProtection(services, dataProtectionKeysPath);
 
         // Identity-related repositories and services
-        services.AddSingleton<ITotpProtectionService, TotpProtectionService>();
+        services.AddSingleton<IDataProtectionService, DataProtectionService>();
         services.AddScoped<Repositories.InviteRepository>();
         services.AddScoped<Repositories.VerificationTokenRepository>();
         services.AddScoped<Repositories.INotificationPreferencesRepository, Repositories.NotificationPreferencesRepository>(); // Phase 5.1

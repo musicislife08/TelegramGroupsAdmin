@@ -206,8 +206,3 @@ public static class AuthEndpoints
             authProperties);
     }
 }
-
-public record LoginRequest(string Email, string Password);
-public record RegisterRequest(string Email, string Password, string? InviteToken);
-public record VerifyTotpRequest(string UserId, string Code, string IntermediateToken);
-public record VerifyRecoveryCodeRequest(string UserId, string RecoveryCode, string IntermediateToken);

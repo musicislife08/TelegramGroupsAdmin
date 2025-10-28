@@ -1,5 +1,3 @@
-using TelegramGroupsAdmin.Telegram.Models;
-
 namespace TelegramGroupsAdmin.Services;
 
 public interface IAuthService
@@ -19,25 +17,3 @@ public interface IAuthService
     Task<bool> RequestPasswordResetAsync(string email, CancellationToken ct = default);
     Task<bool> ResetPasswordAsync(string token, string newPassword, CancellationToken ct = default);
 }
-
-public record AuthResult(
-    bool Success,
-    string? UserId,
-    string? Email,
-    int? PermissionLevel,
-    bool TotpEnabled,
-    bool RequiresTotp,
-    string? ErrorMessage
-);
-
-public record RegisterResult(
-    bool Success,
-    string? UserId,
-    string? ErrorMessage
-);
-
-public record TotpSetupResult(
-    string Secret,
-    string QrCodeUri,
-    string ManualEntryKey
-);

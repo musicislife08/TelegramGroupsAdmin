@@ -11,19 +11,3 @@ public interface IInviteService
     Task<List<InviteWithCreator>> GetAllInvitesAsync(string? filter = "pending", CancellationToken ct = default);
     Task<bool> RevokeInviteAsync(string token, string revokedBy, CancellationToken ct = default);
 }
-
-public record InviteResult(
-    string Token,
-    string Url,
-    DateTimeOffset ExpiresAt
-);
-
-public record InviteListItem(
-    string Token,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset ExpiresAt,
-    string? UsedBy,
-    DateTimeOffset? UsedAt,
-    bool IsExpired,
-    bool IsUsed
-);
