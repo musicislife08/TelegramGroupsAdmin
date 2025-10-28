@@ -163,6 +163,7 @@
     private bool _loading = false;
     private bool _loadingMore = false;
     private bool _hasMore = true;
+    private bool _needsObserverInit = false;
     private DateTime _lastUpdate = DateTime.Now;
 
     // User state
@@ -231,14 +232,29 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // Initialize IntersectionObserver for infinite scroll
-        if (firstRender && _selectedChatId.HasValue && _hasMore)
+        // Import module on first render, but re-initialize observer whenever a chat is loaded with more pages
+        if (firstRender)
         {
             try
             {
                 _infiniteScrollModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/infinite-scroll.js");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to import infinite scroll module");
+            }
+        }
+
+        // (Re)initialize observer when needed (chat loaded with _hasMore = true)
+        if (_needsObserverInit && _infiniteScrollModule != null && _selectedChatId.HasValue && _hasMore && _scrollSentinel.Id != null)
+        {
+            try
+            {
                 await _infiniteScrollModule.InvokeVoidAsync("initializeIntersectionObserver",
                     _scrollSentinel,
                     DotNetObjectReference.Create(this));
+                _needsObserverInit = false;
+                Logger.LogDebug("Infinite scroll observer initialized for chat {ChatId}", _selectedChatId);
             }
             catch (Exception ex)
             {
@@ -576,6 +592,12 @@
 
             // Detect and queue missing media for automatic re-download (Phase 4.X: Media refetch system)
             await QueueMissingMediaForRefetchAsync();
+
+            // Request observer initialization if there are more pages to load
+            if (_hasMore)
+            {
+                _needsObserverInit = true;
+            }
         }
         catch (Exception ex)
         {
