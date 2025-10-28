@@ -1,6 +1,6 @@
 # Development Backlog - TelegramGroupsAdmin
 
-**Last Updated:** 2025-10-26
+**Last Updated:** 2025-10-27
 **Status:** Pre-production (breaking changes acceptable)
 **Overall Code Quality:** 89/100 (Excellent - homelab-optimized)
 
@@ -683,7 +683,7 @@ Two different notification systems that don't integrate:
 
 ## Completed Work
 
-**2025-10-27**: ANALYTICS-4 (Welcome system analytics - 4 new repository methods, WelcomeAnalytics.razor component, /analytics#welcome tab with join trends/response distribution/per-chat stats, timezone-aware queries), SCHEMA-1 (Audit log FK cascade rules fixed - migration 20251027002019, user deletion now works, 22/22 tests passing)
+**2025-10-27**: CODE-1 + CODE-2 (Complete code organization overhaul - split ~60 files into 140+ individual files, fixed 7 name mismatches, renamed TotpProtectionService→DataProtectionService, one type per file achieved, 164 files changed), ANALYTICS-4 (Welcome system analytics - 4 new repository methods, WelcomeAnalytics.razor component, /analytics#welcome tab with join trends/response distribution/per-chat stats, timezone-aware queries), SCHEMA-1 (Audit log FK cascade rules fixed - migration 20251027002019, user deletion now works, 22/22 tests passing)
 
 **2025-10-26**: SECURITY-2 (Open redirect vulnerability fixed - UrlHelpers.IsLocalUrl() validation on all auth redirects), BUG-LOGOUT (Missing /logout page - existed since Oct 6, found by user on Cloudflare tunnel exposure)
 
@@ -731,154 +731,6 @@ Two different notification systems that don't integrate:
 - Document exceptions where concrete types are intentionally injected
 
 **Progress:** Created interfaces for 4 repositories (IAuditLogRepository, IUserRepository, IMessageHistoryRepository, ITelegramUserRepository), updated DI registrations, verified runtime
-
----
-
-### CODE-1: File Naming Consistency Audit
-
-**Status:** BACKLOG 📋
-**Severity:** Code Quality | **Impact:** IDE navigation, developer experience, maintainability
-
-**Current State:**
-- 5 parallel explore agents audited all C# files across 7 projects (2025-10-25)
-- Found **7 critical name mismatches** where file name doesn't match primary type name
-- Found **major consolidation files** with 9-13 types in single file
-- Found **~20 acceptable patterns** (interface + DTOs in same file)
-
-**Critical Name Mismatches (Fix file name to match model/interface name):**
-
-**ContentDetection Project:**
-1. `ISpamCheck.cs` → should be `IContentCheck.cs` (contains `IContentCheck` interface)
-2. `ISpamDetector.cs` → should be `IContentDetector.cs` (contains `IContentDetector` interface)
-3. `SpamDetectionEngine.cs` → should be `ContentDetectionEngine.cs` (contains `ContentDetectionEngine` class)
-
-**Data Project:**
-4. `AdminNote.cs` → should be `AdminNoteDto.cs` (contains `AdminNoteDto` class)
-5. `UserTag.cs` → should be `UserTagDto.cs` (contains `UserTagDto` class)
-6. `ConfigRecord.cs` → should be `ConfigRecordDto.cs` (contains `ConfigRecordDto` class)
-
-**Telegram Project:**
-7. `ChatAdminModels.cs` → should be `ChatAdmin.cs` (contains single `ChatAdmin` class, not plural)
-
-**Files with Multiple Top-Level Types (All Must Be Split):**
-
-**CRITICAL - Multiple major types make file search inefficient:**
-- AI agents must scan file contents instead of using file names for navigation
-- Excessive context usage when searching for types
-- Breaks single-responsibility principle for file organization
-- **Rule: One file per major type (class/interface/record/enum)**
-
-**Files Requiring Splits:**
-
-**ContentDetection Project:**
-- `SpamDetectionConfig.cs` - **13 config classes** → Split into individual files (StopWordsConfig.cs, SimilarityConfig.cs, CasConfig.cs, etc.)
-- `SpamCheckResponse.cs` - 4 types (CheckResultType, ContentCheckResponse, ContentCheckResult, SpamAction) → Split into 4 files
-- `SpamCheckRequest.cs` - 2 types (ContentCheckRequest, ContentCheckMetadata) → Split into 2 files
-- `ISpamDetectionConfigRepository.cs` - 2 types (interface, ChatConfigInfo record) → Split into 2 files
-- `ICloudScannerService.cs` - 5 types (interface + 4 supporting types) → Split into 5 files
-- `IContentDetectionEngine.cs` - 2 types (interface, ContentDetectionResult) → Split into 2 files
-- `IFileScannerService.cs` - 3 types (interface + 2 supporting types) → Split into 3 files
-- `IFileScanningTestService.cs` - 3 types (interface + 2 supporting types) → Split into 3 files
-- `IMessageHistoryService.cs` - 2 types (interface, HistoryMessage record) → Split into 2 files
-- `IOpenAITranslationService.cs` - 2 types (interface, TranslationResult) → Split into 2 files
-- `ClamAVScannerService.cs` - 2 types (service, ClamAVHealthResult) → Split into 2 files
-- `Tier1VotingCoordinator.cs` - 2 types (coordinator, Tier1ScanResult) → Split into 2 files
-- `Tier2QueueCoordinator.cs` - 2 types (coordinator, Tier2ScanResult) → Split into 2 files
-- `TokenizerService.cs` - 4 types (interface, 2 partial classes, options) → Split into 4 files
-- `UrlPreFilterService.cs` - 2 types (interface, implementation) → Split into 2 files
-
-**Data Project:**
-- `UserRecord.cs` - **9 types** (4 enums + 5 classes) → Split into 9 files (PermissionLevel.cs, UserStatus.cs, InviteStatus.cs, AuditEventType.cs, UserRecordDto.cs, RecoveryCodeRecordDto.cs, InviteRecordDto.cs, InviteWithCreatorDto.cs, AuditLogRecordDto.cs)
-- `MessageRecord.cs` - 2 types (MessageRecordDto, MessageEditRecordDto) → Split into 2 files
-- `UserActionRecord.cs` - 2 types (enum, class) → Split into 2 files
-- `VerificationToken.cs` - 2 types (enum, class) → Split into 2 files
-- `ManagedChatRecord.cs` - 3 types (2 enums, 1 class) → Split into 3 files
-- `ImpersonationAlertRecordDto.cs` - 3 types (2 enums, 1 class) → Split into 3 files
-- `TagColor.cs` - 2 types (enum, extensions class) → Split into 2 files
-
-**Telegram Project:**
-- `TelegramPhotoService.cs` - 2 types (UserPhotoResult record, service class) → Split into 2 files
-- `ChatInviteLinkService.cs` - 2 types (interface, implementation) → Split into 2 files
-- `UserMessagingService.cs` - 3 types (interface, record, class) → Split into 3 files
-- `ImpersonationDetectionService.cs` - 3 types (record, interface, class) → Split into 3 files
-- `IContentCheckCoordinator.cs` - 2 types (interface, record) → Split into 2 files
-- `IDmDeliveryService.cs` - 2 types (record, interface) → Split into 2 files
-- `INotificationChannel.cs` - 3 types (interface, 2 records) → Split into 3 files
-- `MessageTrendsData.cs` - 4 types (4 related records) → Split into 4 files
-- `FalsePositiveStats.cs` - 2 types (2 related classes) → Split into 2 files
-
-**Main App (TelegramGroupsAdmin):**
-- `MessageExportService.cs` - 2 types (interface, implementation) → Split into 2 files
-- `RefetchRequest.cs` - 2 types (enum, record) → Split into 2 files
-- `IAuthService.cs` - 4 types (interface + 3 records) → Split into 4 files
-- `IInviteService.cs` - 3 types (interface + 2 records) → Split into 3 files
-- `RuntimeLoggingService.cs` - 2 types (interface, implementation) → Split into 2 files
-- `IEmailService.cs` - 3 types (interface, enum, record) → Split into 3 files
-- `AuthEndpoints.cs` - 5 types (endpoints class + 4 request records) → Split into 5 files
-- `DialogModels.cs` - **7 classes** → Split into 7 files
-- `PromptBuilderModels.cs` - 3 types (2 classes, 1 enum) → Split into 3 files
-- `BackupModels.cs` - 2 types (2 classes) → Split into 2 files
-
-**Core/Configuration/Abstractions Projects:**
-- `BackgroundJobConfig.cs` - 2 types (BackgroundJobConfig, BackgroundJobsConfig) → Split into 2 files
-- `Actor.cs` - 2 types (ActorType enum, Actor record) → Split into 2 files
-- `ConfigRepository.cs` - 2 types (interface, implementation) → Split into 2 files
-- `FileScanningConfig.cs` - **9 classes** → Split into 9 files
-- `JobPayloads.cs` - 4 payload records → Split into 4 files
-
-**Total Files to Split: ~60+ files containing ~130+ types**
-
-**Implementation Priority:**
-1. **Fix 7 name mismatches** - Quick wins (rename operations)
-2. **Split all multiple-type files** - Critical for AI/human navigation efficiency
-3. **Files ordered by impact**: Start with worst offenders (9-13 types) then work down to 2-type files
-
-**Success Criteria:**
-- All file names match their primary public type names
-- Every file contains exactly one major top-level type (class/interface/record/enum)
-- Zero IDE confusion when navigating to definitions (F12 works perfectly)
-- AI agents can find types by file name instead of scanning file contents
-- Reduced context usage in AI-assisted development
-- Consistent single-responsibility file organization across all projects
-
-**Effort:** 8-12 hours total
-- Name mismatches: 1 hour (7 renames)
-- High-priority splits (9-13 types): 3-4 hours (UserRecord, SpamDetectionConfig, FileScanningConfig, DialogModels)
-- Medium splits (3-5 types): 2-3 hours
-- Simple splits (2 types): 2-4 hours
-
-**Priority:** MEDIUM - Quality improvement that directly impacts AI development efficiency
-
-**When to Do:**
-- After security sanitization (blocking)
-- After migration testing (higher priority)
-- **BEFORE open sourcing** - Shows professional code organization
-- Can be done incrementally: worst offenders first, then work down the list
-
----
-
-### CODE-2: Rename TotpProtectionService to DataProtectionService
-
-**Status:** COMPLETED ✅ 2025-10-27
-**Severity:** Code Quality | **Impact:** Developer confusion, misleading naming
-**Discovered:** 2025-10-27 during backup encryption implementation
-
-**Completed Work:**
-- Renamed `ITotpProtectionService` → `IDataProtectionService`
-- Renamed `TotpProtectionService` → `DataProtectionService`
-- Updated DI registration in ServiceCollectionExtensions
-- Updated all injection sites (TotpService, BackupService)
-- Method names kept as `Protect()`/`Unprotect()` (generic, appropriate)
-
-**Files Updated:**
-- `TelegramGroupsAdmin.Data/Services/ITotpProtectionService.cs`
-- `TelegramGroupsAdmin.Data/Services/TotpProtectionService.cs`
-- `TelegramGroupsAdmin/ServiceCollectionExtensions.cs`
-- `TelegramGroupsAdmin/Services/Auth/TotpService.cs`
-- `TelegramGroupsAdmin/Services/Backup/BackupService.cs`
-- `BACKLOG.md`
-
-**Effort:** 30 minutes
 
 ---
 
