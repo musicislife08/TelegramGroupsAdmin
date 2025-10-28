@@ -66,7 +66,6 @@ git push --force --tags origin
 
 **Priority:** HIGH - Must complete before GitHub migration
 
-**Effort:** 1-2 hours
 
 **Related Work:**
 - Document secret management in README (environment variables only)
@@ -110,7 +109,6 @@ endpoints.MapPost("/api/auth/logout", async (HttpContext context, ...) =>
 
 **Priority:** MEDIUM - Defense-in-depth, not critical for homelab
 
-**Effort:** 1 hour
 
 ---
 
@@ -152,7 +150,6 @@ grep -r "newPassphrase\|_generatedPassphrase" --include="*.cs" | grep -i "log"
 
 **Priority:** LOW - Preventative measure, no known leaks
 
-**Effort:** 1 hour (grep + fix any findings)
 
 **When to Do:**
 - Before open sourcing (prevents credentials in logs if deployed publicly)
@@ -473,7 +470,7 @@ grep -r "newPassphrase\|_generatedPassphrase" --include="*.cs" | grep -i "log"
   - TelegramGroupsAdmin.Telegram.Abstractions/TelegramGroupsAdmin.Telegram.Abstractions.csproj
 - Build and count nullability errors that surface
 
-**Phase 2: Fix Nullable Warnings** (~1-2 hours)
+**Phase 2: Fix Nullable Warnings** ()
 - Fix all nullable warnings revealed by Phase 1
 - Focus on critical warnings first (CS8600, CS8602, CS8603 - actual null dereference risk)
 - Use null-forgiving operator (`!`) sparingly for legitimate false positives
@@ -501,7 +498,6 @@ grep -r "newPassphrase\|_generatedPassphrase" --include="*.cs" | grep -i "log"
 
 **Priority:** MEDIUM - Quality improvement, not blocking
 
-**Effort:** 1.5-2 hours total (15 min to enable, 1-2 hours to fix warnings)
 
 **When to Do:**
 - NOT before security sanitization (security is blocking)
@@ -639,7 +635,6 @@ Two different notification systems that don't integrate:
 - Scheduled jobs that run at 3am won't show notifications (addressed in Phase 2 with database)
 
 **Priority:** MEDIUM - Infrastructure for multiple features
-**Effort:** Phase 1: 3-4 hours | Phase 2: 4-6 hours
 **Blocked By:** None (can implement anytime)
 
 ---
@@ -771,7 +766,6 @@ _ = Task.Run(async () =>
 
 **Priority:** MEDIUM - Good practice for debugging, not breaking
 
-**Effort:** 1 hour (15 min per location)
 
 ---
 
@@ -805,7 +799,6 @@ public class MessageHistoryOptions
 
 **Priority:** LOW - Nice to have, not blocking
 
-**Effort:** 1-2 hours
 
 ---
 
@@ -836,7 +829,6 @@ List<string> items = [];
 
 **Priority:** LOW - Cosmetic improvement
 
-**Effort:** 2 hours (automated refactoring with IDE)
 
 ---
 
@@ -863,7 +855,6 @@ Remove all `.ConfigureAwait(false)` calls - unnecessary in ASP.NET Core
 
 **Priority:** LOW - Code consistency improvement
 
-**Effort:** 15 minutes
 
 ---
 
@@ -904,7 +895,6 @@ var isAdmin = await _cache.GetOrCreateAsync($"admin:{chatId}:{userId}", async en
 
 **Priority:** MEDIUM - Performance improvement for homelab
 
-**Effort:** 2-4 hours
 
 ---
 
@@ -943,7 +933,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 
 **Priority:** MEDIUM - Useful for homelab monitoring
 
-**Effort:** 4-6 hours
 
 ---
 
@@ -978,7 +967,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - Unit tests for each handler
 - Method complexity < 10
 
-**Effort:** 6-8 hours
 
 ---
 
@@ -1012,7 +1000,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - Each component < 300 lines
 - Comprehensive encryption unit tests
 
-**Effort:** 8-10 hours
 
 ---
 
@@ -1045,7 +1032,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - Each service < 300 lines
 - Query logic testable without DB
 
-**Effort:** 6-8 hours
 
 ---
 
@@ -1077,7 +1063,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - MessageBuilder all pure functions (zero I/O)
 - Each component < 300 lines
 
-**Effort:** 6-8 hours
 
 ---
 
@@ -1102,7 +1087,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - Mock trust logic
 - Test warning thresholds in isolation
 
-**Effort:** 4-6 hours
 
 ---
 
@@ -1130,7 +1114,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - Easier to find/modify specific mapping
 - Clearer organization
 
-**Effort:** 2-3 hours (mechanical split)
 
 ---
 
@@ -1146,7 +1129,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - `RecoveryCodeService` - Recovery code management
 - `EmailVerificationService` - Email verification flows
 
-**Effort:** 4-5 hours
 
 ---
 
@@ -1161,7 +1143,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - `AdminCacheService` - Admin cache management
 - `ChatHealthCheckService` - Health check logic
 
-**Effort:** 3-4 hours
 
 ---
 
@@ -1176,7 +1157,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - `UserPhotoService` - Photo download/hash logic
 - `UserSyncService` - User synchronization
 
-**Effort:** 3-4 hours
 
 ---
 
@@ -1191,7 +1171,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - `CheckAggregationService` - Result aggregation logic
 - `ConfigurationLoader` - Config loading/caching
 
-**Effort:** 3-4 hours
 
 ---
 
@@ -1207,7 +1186,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - `WelcomeAnalyticsQueries` - Welcome-specific queries
 - `UserAnalyticsQueries` - User-specific queries
 
-**Effort:** 3-4 hours
 
 ---
 
@@ -1223,7 +1201,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - `AutoBanService` - Automatic ban logic
 - `ReportGenerationService` - Report creation
 
-**Effort:** 4-5 hours
 
 ---
 
@@ -1243,7 +1220,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - Test response parsing with mock responses
 - Verify prompt templates separately
 
-**Effort:** 3-4 hours
 
 ---
 
@@ -1258,7 +1234,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 - `FalsePositiveTracker` - FP/FN tracking logic
 - `AccuracyCalculator` - Accuracy calculation
 
-**Effort:** 3-4 hours
 
 ---
 
@@ -1274,7 +1249,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 **Extract (if needed):**
 - `EntityTypeConfiguration<T>` classes per entity
 
-**Effort:** 2-3 hours (optional)
 
 ---
 
@@ -1282,7 +1256,7 @@ activity?.SetTag("detection.result", result.Action.ToString());
 
 **Key Principle:** Extract with testing in mind - pure functions, dependency injection, single responsibility.
 
-**Total Effort:** 60-79 hours across 15 files
+**Total:** 15 files across 3 priority tiers
 
 **Priority Order:**
 1. REFACTOR-1 to REFACTOR-4 (Critical: >1000 lines)
@@ -1339,6 +1313,5 @@ Move audit system from Telegram → Core:
 
 **Priority:** MEDIUM - Quality improvement, not blocking features
 
-**Effort:** 2-3 hours (move files, update imports, verify tests pass)
 
 ---
