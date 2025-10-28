@@ -947,56 +947,359 @@ activity?.SetTag("detection.result", result.Action.ToString());
 
 ---
 
-### REFACTOR-1: Method Extraction for Unit Testing
+### REFACTOR-1: Extract MessageProcessingService Handlers (1,316 lines)
 
 **Status:** BACKLOG 📋
 **Severity:** Refactoring | **Impact:** Testability, maintainability
-**Discovered:** 2025-10-26 via refactor agent code review
-**User Priority:** HIGH (preparing for unit test migration)
+**Priority:** CRITICAL - Largest file, highest complexity
+**Discovered:** 2025-10-27 via file size audit
 
 **Current State:**
-- `MessageProcessingService.HandleNewMessageAsync` - 550+ lines
-- Single responsibility violated (handles 15+ concerns)
+- 1,316 lines total
+- HandleNewMessageAsync: 550+ lines, handles 15+ concerns
+- Single responsibility violated
 - Difficult to unit test individual behaviors
-- High cognitive complexity
 
-**Target:**
-Reduce to ~300-350 lines by extracting 3-5 focused handlers:
-- MediaDownloadHandler - Photo/video/media download logic
-- FileScanningHandler - ClamAV/VirusTotal coordination
-- Keep inline: Translation, impersonation, spam detection (core orchestration)
+**Extract:**
+- `MediaDownloadHandler` - Photo/video/media download logic
+- `FileScanningHandler` - ClamAV/VirusTotal coordination
+- `TranslationHandler` - Message translation logic
+- Keep inline: Core orchestration, spam detection
 
-**Example Refactoring:**
-```csharp
-public async Task HandleNewMessageAsync(...)
-{
-    if (ShouldSkipMessage(message)) return;
+**Testing Wins:**
+- Mock each handler independently
+- Test orchestration without I/O
+- Isolate media download logic from Telegram API
+- Test file scanning coordination separately
 
-    var messageContext = await BuildMessageContextAsync(...);
-    await ExecuteCommandsIfPresentAsync(...);
-    await HandleAdminMentionsAsync(...);
+**Success Criteria:**
+- MessageProcessingService < 400 lines
+- Each handler < 200 lines
+- Unit tests for each handler
+- Method complexity < 10
 
-    // Extract to MediaDownloadHandler
-    await _mediaDownloadHandler.DownloadMediaAttachmentsAsync(message, messageContext);
+**Effort:** 6-8 hours
 
-    // Extract to FileScanningHandler
-    await _fileScanningHandler.ScheduleFileScansAsync(message, messageContext);
+---
 
-    await TranslateMessageIfNeededAsync(...);
-    await SaveMessageToHistoryAsync(...);
-    await RunContentDetectionAsync(...);
-}
-```
+### REFACTOR-2: Extract BackupService Components (1,202 lines)
 
-**Benefits:**
-- Unit testable components
-- Easier to understand and modify
-- Reduced cognitive load
-- Prep for comprehensive unit test suite
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Testability, security testing
+**Priority:** CRITICAL - Complex encryption logic needs testing
+**Discovered:** 2025-10-27 via file size audit
 
-**Priority:** HIGH - User confirmed, preparing for unit tests
+**Current State:**
+- 1,202 lines total
+- Backup creation, restore, encryption, passphrase rotation all mixed
+- Difficult to test encryption separately
 
-**Effort:** 4-6 hours (extract 3-5 handlers, update DI, add tests)
+**Extract:**
+- `BackupEncryptionService` - AES-256-GCM encryption/decryption (pure functions!)
+- `BackupMetadataService` - Metadata creation/parsing
+- `BackupRotationService` - Passphrase rotation logic
+- `TableExportService` - Database table export logic
+
+**Testing Wins:**
+- Test encryption without database
+- Mock table export for backup tests
+- Test passphrase rotation in isolation
+- Verify metadata parsing with edge cases
+
+**Success Criteria:**
+- BackupService < 400 lines
+- Encryption service pure functions (no DB access)
+- Each component < 300 lines
+- Comprehensive encryption unit tests
+
+**Effort:** 8-10 hours
+
+---
+
+### REFACTOR-3: Extract MessageHistoryRepository Services (1,085 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Query testability
+**Priority:** CRITICAL - Complex queries need isolated testing
+**Discovered:** 2025-10-27 via file size audit
+
+**Current State:**
+- 1,085 lines total
+- Message CRUD, queries, translations, edits all mixed
+- Complex pagination logic hard to test
+
+**Extract:**
+- `MessageQueryService` - Complex queries (pagination, filtering)
+- `MessageTranslationService` - Translation CRUD operations
+- `MessageEditService` - Edit history management
+- Keep: Basic CRUD in repository
+
+**Testing Wins:**
+- Test query logic without database
+- Mock translation service
+- Test pagination edge cases
+- Verify edit history integrity
+
+**Success Criteria:**
+- Repository < 400 lines
+- Each service < 300 lines
+- Query logic testable without DB
+
+**Effort:** 6-8 hours
+
+---
+
+### REFACTOR-4: Extract WelcomeService Components (1,070 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Message building testability
+**Priority:** CRITICAL - Pure function opportunities
+**Discovered:** 2025-10-27 via file size audit
+
+**Current State:**
+- 1,070 lines total
+- Welcome messages, timeouts, verification, captcha logic mixed
+- Message formatting tied to Telegram API
+
+**Extract:**
+- `WelcomeMessageBuilder` - Message formatting (PURE FUNCTIONS!)
+- `WelcomeVerificationService` - Verification flow logic
+- `WelcomeTimeoutService` - Timeout scheduling/handling
+
+**Testing Wins:**
+- Test message building without Telegram API
+- Test verification flows in isolation
+- Mock timeout scheduling
+- Verify captcha logic separately
+
+**Success Criteria:**
+- WelcomeService < 400 lines
+- MessageBuilder all pure functions (zero I/O)
+- Each component < 300 lines
+
+**Effort:** 6-8 hours
+
+---
+
+### REFACTOR-5: Extract ModerationActionService Handlers (946 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Moderation logic testability
+**Priority:** HIGH
+**Discovered:** 2025-10-27 via file size audit
+
+**Current State:**
+- 946 lines total
+- Bans, warnings, trust, cross-chat actions all mixed
+
+**Extract:**
+- `CrossChatBanService` - Cross-chat ban coordination
+- `TrustManagementService` - User trust/untrust logic
+- `WarningService` - Warning accumulation/threshold logic
+
+**Testing Wins:**
+- Test cross-chat coordination separately
+- Mock trust logic
+- Test warning thresholds in isolation
+
+**Effort:** 4-6 hours
+
+---
+
+### REFACTOR-6: Split ModelMappings by Entity (884 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Code organization, findability
+**Priority:** HIGH - Mechanical split, quick win
+**Discovered:** 2025-10-27 via file size audit
+
+**Current State:**
+- 884 lines total
+- ALL .ToModel()/.ToDto() extensions in one file
+- Hard to find specific mapping
+
+**Extract:** Split by entity type
+- `MessageMappings.cs` (~200 lines)
+- `UserMappings.cs` (~200 lines)
+- `ConfigMappings.cs` (~150 lines)
+- `DetectionMappings.cs` (~150 lines)
+- `AnalyticsMappings.cs` (~150 lines)
+
+**Testing Wins:**
+- Test mappings in isolation
+- Easier to find/modify specific mapping
+- Clearer organization
+
+**Effort:** 2-3 hours (mechanical split)
+
+---
+
+### REFACTOR-7: Extract AuthService Components (694 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Authentication testing
+**Priority:** MEDIUM
+**Discovered:** 2025-10-27 via file size audit
+
+**Extract:**
+- `TotpService` - TOTP generation/validation
+- `RecoveryCodeService` - Recovery code management
+- `EmailVerificationService` - Email verification flows
+
+**Effort:** 4-5 hours
+
+---
+
+### REFACTOR-8: Extract ChatManagementService Components (688 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Chat management testing
+**Priority:** MEDIUM
+**Discovered:** 2025-10-27 via file size audit
+
+**Extract:**
+- `AdminCacheService` - Admin cache management
+- `ChatHealthCheckService` - Health check logic
+
+**Effort:** 3-4 hours
+
+---
+
+### REFACTOR-9: Extract TelegramUserRepository Services (675 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** User sync testability
+**Priority:** MEDIUM
+**Discovered:** 2025-10-27 via file size audit
+
+**Extract:**
+- `UserPhotoService` - Photo download/hash logic
+- `UserSyncService` - User synchronization
+
+**Effort:** 3-4 hours
+
+---
+
+### REFACTOR-10: Extract ContentDetectionEngine Services (629 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Detection logic testing
+**Priority:** MEDIUM
+**Discovered:** 2025-10-27 via file size audit
+
+**Extract:**
+- `CheckAggregationService` - Result aggregation logic
+- `ConfigurationLoader` - Config loading/caching
+
+**Effort:** 3-4 hours
+
+---
+
+### REFACTOR-11: Split AnalyticsRepository by Type (589 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Analytics testing
+**Priority:** MEDIUM
+**Discovered:** 2025-10-27 via file size audit
+
+**Extract:**
+- `SpamAnalyticsQueries` - Spam-specific queries
+- `WelcomeAnalyticsQueries` - Welcome-specific queries
+- `UserAnalyticsQueries` - User-specific queries
+
+**Effort:** 3-4 hours
+
+---
+
+### REFACTOR-12: Extract SpamActionService Components (587 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Spam action testing
+**Priority:** MEDIUM
+**Discovered:** 2025-10-27 via file size audit
+
+**Extract:**
+- `TrainingQualityService` - Training sample quality checks
+- `AutoBanService` - Automatic ban logic
+- `ReportGenerationService` - Report creation
+
+**Effort:** 4-5 hours
+
+---
+
+### REFACTOR-13: Extract OpenAISpamCheck Components (555 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** OpenAI testing without API calls
+**Priority:** MEDIUM
+**Discovered:** 2025-10-27 via file size audit
+
+**Extract:**
+- `OpenAIPromptBuilder` - Prompt building (PURE FUNCTIONS!)
+- `OpenAIResponseParser` - Response parsing
+
+**Testing Wins:**
+- Test prompt building without API calls!
+- Test response parsing with mock responses
+- Verify prompt templates separately
+
+**Effort:** 3-4 hours
+
+---
+
+### REFACTOR-14: Extract DetectionResultsRepository Components (506 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Accuracy tracking testing
+**Priority:** MEDIUM
+**Discovered:** 2025-10-27 via file size audit
+
+**Extract:**
+- `FalsePositiveTracker` - FP/FN tracking logic
+- `AccuracyCalculator` - Accuracy calculation
+
+**Effort:** 3-4 hours
+
+---
+
+### REFACTOR-15: Extract AppDbContext EntityTypeConfigurations (637 lines)
+
+**Status:** BACKLOG 📋
+**Severity:** Refactoring | **Impact:** Code organization
+**Priority:** LOW - Optional, DbContext acceptable at this size
+**Discovered:** 2025-10-27 via file size audit
+
+**Note:** EF Core DbContext, mostly entity configurations. Only extract if > 800 lines.
+
+**Extract (if needed):**
+- `EntityTypeConfiguration<T>` classes per entity
+
+**Effort:** 2-3 hours (optional)
+
+---
+
+## Refactoring Summary
+
+**Key Principle:** Extract with testing in mind - pure functions, dependency injection, single responsibility.
+
+**Total Effort:** 60-79 hours across 15 files
+
+**Priority Order:**
+1. REFACTOR-1 to REFACTOR-4 (Critical: >1000 lines)
+2. REFACTOR-5 to REFACTOR-6 (High: 900-1000 lines)
+3. REFACTOR-7 to REFACTOR-14 (Medium: 500-700 lines)
+4. REFACTOR-15 (Low: Optional)
+
+**Success Criteria (All):**
+- ✅ All files under 500 lines (ideally under 300)
+- ✅ Each extracted class has single responsibility
+- ✅ Pure functions extracted (no side effects = easy testing)
+- ✅ Dependencies injected (mockable for tests)
+- ✅ Complex logic isolated from I/O operations
+- ✅ Method complexity < 10 (cyclomatic complexity)
+- ✅ Unit tests added as we extract (NOT after)
+
+**Related:** Once refactored, enables QUALITY-1 (Nullable reference hardening) and comprehensive unit test suite
 
 ---
 
