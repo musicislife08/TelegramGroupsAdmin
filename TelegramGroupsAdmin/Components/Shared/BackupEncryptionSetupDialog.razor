@@ -1,0 +1,166 @@
+@using TelegramGroupsAdmin.Services.Backup
+@using TelegramGroupsAdmin.Core.Security
+@inject IBackupService BackupService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mr-2" />
+            Enable Backup Encryption
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (_step == SetupStep.Confirmation)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <strong>What is backup encryption?</strong><br/>
+                    Your backups will be encrypted with AES-256-GCM using a randomly generated 32-character passphrase.
+                    The passphrase will be stored encrypted in the database for automatic backups.
+                </MudAlert>
+
+                <MudAlert Severity="Severity.Warning" Dense="true">
+                    <strong>Important:</strong> You will be shown the passphrase ONCE. Copy it to your password manager.
+                    If the database is lost, you'll need this passphrase to decrypt backups.
+                </MudAlert>
+
+                <MudCheckBox @bind-Value="_understood" Color="Color.Primary" Dense="true">
+                    I understand that I need to save the passphrase securely
+                </MudCheckBox>
+            }
+            else if (_step == SetupStep.DisplayPassphrase)
+            {
+                <MudAlert Severity="Severity.Success" Dense="true">
+                    <strong>Encryption Enabled!</strong><br/>
+                    Copy this passphrase and store it in your password manager. This is the ONLY time you'll see it.
+                </MudAlert>
+
+                <MudPaper Class="pa-4" Elevation="0" Outlined="true" Style="background-color: var(--mud-palette-background-grey);">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Your Backup Encryption Passphrase:</MudText>
+                    <MudText Typo="Typo.body1" Style="font-family: monospace; word-break: break-all; user-select: all;">
+                        <strong>@_generatedPassphrase</strong>
+                    </MudText>
+                </MudPaper>
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.ContentCopy"
+                           OnClick="CopyPassphraseToClipboard"
+                           FullWidth="true">
+                    Copy to Clipboard
+                </MudButton>
+
+                <MudAlert Severity="Severity.Error" Dense="true">
+                    <strong>Do NOT close this dialog until you've copied the passphrase!</strong><br/>
+                    It will not be shown again. If you lose it, encrypted backups cannot be restored without the passphrase.
+                </MudAlert>
+
+                <MudCheckBox @bind-Value="_confirmSaved" Color="Color.Error" Dense="true">
+                    I have securely saved this passphrase
+                </MudCheckBox>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        @if (_step == SetupStep.Confirmation)
+        {
+            <MudButton OnClick="OnCancel">Cancel</MudButton>
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       OnClick="GenerateAndEnable"
+                       Disabled="@(!_understood || _isProcessing)">
+                @if (_isProcessing)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Generating...</span>
+                }
+                else
+                {
+                    <span>Generate Passphrase & Enable</span>
+                }
+            </MudButton>
+        }
+        else if (_step == SetupStep.DisplayPassphrase)
+        {
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       OnClick="OnComplete"
+                       Disabled="@(!_confirmSaved)">
+                I've Saved It - Close Dialog
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public EventCallback OnEncryptionEnabled { get; set; }
+
+    private enum SetupStep
+    {
+        Confirmation,
+        DisplayPassphrase
+    }
+
+    private SetupStep _step = SetupStep.Confirmation;
+    private bool _understood = false;
+    private bool _confirmSaved = false;
+    private bool _isProcessing = false;
+    private string _generatedPassphrase = string.Empty;
+
+    private async Task GenerateAndEnable()
+    {
+        _isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            // Generate passphrase (6 words = 77.5 bits entropy)
+            _generatedPassphrase = PassphraseGenerator.Generate();
+
+            // Save to database using refactored service method
+            await BackupService.SaveEncryptionConfigAsync(_generatedPassphrase);
+
+            // Move to display step
+            _step = SetupStep.DisplayPassphrase;
+            Snackbar.Add("Backup encryption enabled successfully!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to enable encryption: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyPassphraseToClipboard()
+    {
+        try
+        {
+            // Use Clipboard API via JS interop
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _generatedPassphrase);
+            Snackbar.Add("Passphrase copied to clipboard!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to copy: {ex.Message}. Please copy manually.", Severity.Warning);
+        }
+    }
+
+    private void OnCancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task OnComplete()
+    {
+        // Notify parent that encryption was enabled
+        await OnEncryptionEnabled.InvokeAsync();
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+}

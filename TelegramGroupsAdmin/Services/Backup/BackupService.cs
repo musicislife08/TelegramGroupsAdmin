@@ -6,11 +6,16 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using Dapper;
+using Microsoft.AspNetCore.DataProtection;
 using Npgsql;
+using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Core.Security;
 using TelegramGroupsAdmin.Data.Attributes;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Abstractions.JobPayloads;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Services.Backup;
@@ -20,22 +25,67 @@ public class BackupService : IBackupService
     private readonly NpgsqlDataSource _dataSource;
     private readonly ILogger<BackupService> _logger;
     private readonly ITotpProtectionService _totpProtection;
+    private readonly IDataProtectionProvider _dataProtectionProvider;
     private readonly INotificationService _notificationService;
+    private readonly IBackupEncryptionService _encryptionService;
+    private readonly IServiceProvider _serviceProvider;
     private const string CurrentVersion = "2.0";
 
     public BackupService(
         NpgsqlDataSource dataSource,
         ILogger<BackupService> logger,
         ITotpProtectionService totpProtection,
-        INotificationService notificationService)
+        IDataProtectionProvider dataProtectionProvider,
+        INotificationService notificationService,
+        IBackupEncryptionService encryptionService,
+        IServiceProvider serviceProvider)
     {
         _dataSource = dataSource;
         _logger = logger;
         _totpProtection = totpProtection;
+        _dataProtectionProvider = dataProtectionProvider;
         _notificationService = notificationService;
+        _encryptionService = encryptionService;
+        _serviceProvider = serviceProvider;
     }
 
     public async Task<byte[]> ExportAsync()
+    {
+        return await ExportInternalAsync(encryptAfter: true);
+    }
+
+    /// <summary>
+    /// Export backup with explicit passphrase override (for CLI usage)
+    /// </summary>
+    public async Task<byte[]> ExportAsync(string passphraseOverride)
+    {
+        if (string.IsNullOrWhiteSpace(passphraseOverride))
+            throw new ArgumentException("Passphrase cannot be empty", nameof(passphraseOverride));
+
+        _logger.LogInformation("Starting backup export with explicit passphrase");
+
+        // Export backup normally (will be unencrypted initially)
+        var unencryptedBackup = await ExportInternalAsync(encryptAfter: false);
+
+        // Encrypt with provided passphrase
+        var encryptedBackup = _encryptionService.EncryptBackup(unencryptedBackup, passphraseOverride);
+        _logger.LogInformation("Encrypted backup with explicit passphrase: {Original} → {Encrypted} bytes",
+            unencryptedBackup.Length, encryptedBackup.Length);
+
+        // Validate
+        if (!await ValidateBackupAsync(encryptedBackup, passphraseOverride))
+        {
+            throw new InvalidOperationException("Backup validation failed after encryption");
+        }
+
+        _logger.LogInformation("✅ Backup export with explicit passphrase complete: {Size} bytes", encryptedBackup.Length);
+        return encryptedBackup;
+    }
+
+    /// <summary>
+    /// Internal export method that can skip encryption for passphrase override scenario
+    /// </summary>
+    private async Task<byte[]> ExportInternalAsync(bool encryptAfter = true)
     {
         _logger.LogInformation("Starting full system backup export");
 
@@ -112,8 +162,38 @@ public class BackupService : IBackupService
         _logger.LogInformation("Compressed database: {OriginalSize} bytes → {CompressedSize} bytes ({Ratio:P1} compression)",
             jsonBytes.Length, compressedJson.Length, 1 - (double)compressedJson.Length / jsonBytes.Length);
 
-        _logger.LogInformation("✅ Backup export complete: {Size} bytes", compressedJson.Length);
-        return compressedJson;
+        if (!encryptAfter)
+        {
+            return compressedJson;
+        }
+
+        // Encryption is mandatory - check configuration
+        var encryptionConfig = await GetEncryptionConfigAsync();
+
+        if (encryptionConfig?.Enabled != true)
+        {
+            throw new InvalidOperationException(
+                "Backup encryption is not configured. Please set up encryption before creating backups. " +
+                "Navigate to Settings → Backup & Restore to enable encryption.");
+        }
+
+        // Get decrypted passphrase from database (reads from passphrase_encrypted column)
+        var passphrase = await GetDecryptedPassphraseAsync();
+
+        // Encrypt the compressed JSON
+        var finalBackup = _encryptionService.EncryptBackup(compressedJson, passphrase);
+        _logger.LogInformation("Encrypted backup: {CompressedSize} bytes → {EncryptedSize} bytes",
+            compressedJson.Length, finalBackup.Length);
+
+        // Validate the encrypted backup
+        if (!await ValidateBackupAsync(finalBackup, passphrase))
+        {
+            throw new InvalidOperationException("Backup validation failed after encryption - backup may be corrupted");
+        }
+
+        _logger.LogInformation("✅ Backup validated successfully");
+
+        return finalBackup;
     }
 
     /// <summary>
@@ -299,10 +379,15 @@ public class BackupService : IBackupService
                 {
                     try
                     {
-                        // Decrypt using current machine's keys
-                        var decryptedValue = _totpProtection.Unprotect(encryptedValue);
+                        // Get the purpose from the attribute
+                        var protectedDataAttr = prop.GetCustomAttribute<ProtectedDataAttribute>();
+                        var purpose = protectedDataAttr?.Purpose ?? "TgSpamPreFilter.TotpSecrets";
+
+                        // Decrypt using the correct protector for this purpose
+                        var protector = _dataProtectionProvider.CreateProtector(purpose);
+                        var decryptedValue = protector.Unprotect(encryptedValue);
                         prop.SetValue(recordCopy, decryptedValue);
-                        _logger.LogDebug("Decrypted protected property {PropertyName}", prop.Name);
+                        _logger.LogDebug("Decrypted protected property {PropertyName} with purpose {Purpose}", prop.Name, purpose);
                     }
                     catch (Exception ex)
                     {
@@ -350,10 +435,15 @@ public class BackupService : IBackupService
             {
                 try
                 {
-                    // Encrypt using new machine's keys
-                    var encryptedValue = _totpProtection.Protect(decryptedValue);
+                    // Get the purpose from the attribute
+                    var protectedDataAttr = prop.GetCustomAttribute<ProtectedDataAttribute>();
+                    var purpose = protectedDataAttr?.Purpose ?? "TgSpamPreFilter.TotpSecrets";
+
+                    // Encrypt using the correct protector for this purpose
+                    var protector = _dataProtectionProvider.CreateProtector(purpose);
+                    var encryptedValue = protector.Protect(decryptedValue);
                     prop.SetValue(encryptedDto, encryptedValue);
-                    _logger.LogDebug("Encrypted protected property {PropertyName}", prop.Name);
+                    _logger.LogDebug("Encrypted protected property {PropertyName} with purpose {Purpose}", prop.Name, purpose);
                 }
                 catch (Exception ex)
                 {
@@ -373,11 +463,62 @@ public class BackupService : IBackupService
 
     public async Task RestoreAsync(byte[] backupBytes)
     {
+        // Auto-detect encryption and use passphrase from DB if encrypted
+        string? passphrase = null;
+
+        if (_encryptionService.IsEncrypted(backupBytes))
+        {
+            try
+            {
+                passphrase = await GetDecryptedPassphraseAsync();
+                _logger.LogInformation("Detected encrypted backup, using passphrase from database");
+            }
+            catch (InvalidOperationException)
+            {
+                throw new InvalidOperationException(
+                    "Backup is encrypted but no passphrase is configured in the database. " +
+                    "Use RestoreAsync(backupBytes, passphrase) to provide passphrase explicitly.");
+            }
+        }
+
+        await RestoreInternalAsync(backupBytes, passphrase);
+    }
+
+    public async Task RestoreAsync(byte[] backupBytes, string passphrase)
+    {
+        if (string.IsNullOrWhiteSpace(passphrase))
+            throw new ArgumentException("Passphrase cannot be empty", nameof(passphrase));
+
+        _logger.LogInformation("Restoring backup with explicit passphrase");
+        await RestoreInternalAsync(backupBytes, passphrase);
+    }
+
+    private async Task RestoreInternalAsync(byte[] backupBytes, string? passphrase)
+    {
         _logger.LogWarning("Starting full system restore - THIS WILL WIPE ALL DATA");
+
+        // Decrypt if encrypted
+        byte[] compressedBytes;
+        if (_encryptionService.IsEncrypted(backupBytes))
+        {
+            if (string.IsNullOrWhiteSpace(passphrase))
+            {
+                throw new InvalidOperationException("Backup is encrypted but no passphrase provided");
+            }
+
+            compressedBytes = _encryptionService.DecryptBackup(backupBytes, passphrase);
+            _logger.LogInformation("Decrypted backup: {EncryptedSize} bytes → {DecryptedSize} bytes",
+                backupBytes.Length, compressedBytes.Length);
+        }
+        else
+        {
+            compressedBytes = backupBytes;
+            _logger.LogInformation("Backup is not encrypted");
+        }
 
         // Decompress gzip
         byte[] jsonBytes;
-        using (var inputStream = new MemoryStream(backupBytes))
+        using (var inputStream = new MemoryStream(compressedBytes))
         await using (var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
         using (var outputStream = new MemoryStream())
         {
@@ -475,6 +616,10 @@ public class BackupService : IBackupService
                     await RestoreTableAsync(connection, transaction, tableName, dtoType, records);
                     totalRecordsRestored += records.Count;
                     tablesRestored++;
+
+                    // Reset sequence immediately after restoring data for this table
+                    // This ensures sequence is always in sync with table state, preventing duplicate key errors
+                    await ResetSequenceForTableAsync(connection, tableName);
                 }
                 catch (Exception ex)
                 {
@@ -482,9 +627,6 @@ public class BackupService : IBackupService
                     throw;
                 }
             }
-
-            // Reset all identity sequences to prevent duplicate key violations (before commit, within transaction)
-            await ResetSequencesAsync(connection, sortedTables);
 
             await transaction.CommitAsync();
             _logger.LogInformation("✅ System restore complete: {Tables} tables, {Records} total records restored",
@@ -593,33 +735,35 @@ public class BackupService : IBackupService
         _logger.LogDebug("Inserted {Count} records into {TableName}", records.Count, tableName);
     }
 
-    private async Task ResetSequencesAsync(NpgsqlConnection connection, List<string> tables)
+    /// <summary>
+    /// Resets the sequence for a single table immediately after data is restored.
+    /// More robust than batch reset because sequence is synced with table state before moving to next table.
+    /// </summary>
+    private async Task ResetSequenceForTableAsync(NpgsqlConnection connection, string tableName)
     {
-        // Query for all identity columns and their sequences
-        // Includes both SERIAL (column_default LIKE 'nextval%') and IDENTITY columns (is_identity = 'YES')
+        // Query for identity column and its sequence in this specific table
         const string sequenceQuery = """
             SELECT
-                c.table_name,
                 c.column_name,
                 pg_get_serial_sequence(quote_ident(c.table_name), quote_ident(c.column_name)) as sequence_name
             FROM information_schema.columns c
             WHERE c.table_schema = 'public'
-                AND c.table_name = ANY(@tables)
+                AND c.table_name = @tableName
                 AND (c.is_identity = 'YES' OR c.column_default LIKE 'nextval%')
             """;
 
-        var identityColumns = await connection.QueryAsync<(string table_name, string column_name, string sequence_name)>(
+        var identityColumns = await connection.QueryAsync<(string column_name, string sequence_name)>(
             sequenceQuery,
-            new { tables }
+            new { tableName }
         );
 
-        foreach (var (tableName, columnName, sequenceName) in identityColumns)
+        foreach (var (columnName, sequenceName) in identityColumns)
         {
             if (string.IsNullOrEmpty(sequenceName))
                 continue;
 
             // Reset sequence to max(positive values) from the table
-            // Ignore negative values (manual inserts like negative message_ids)
+            // Ignore negative values (manual inserts like negative message_ids for training samples)
             // Sequences only generate positive integers, so we only care about max positive value
             var resetSql = $"SELECT setval('{sequenceName}', COALESCE((SELECT MAX({columnName}) FROM {tableName} WHERE {columnName} > 0), 1))";
             var newSeqValue = await connection.ExecuteScalarAsync<long>(resetSql);
@@ -627,8 +771,6 @@ public class BackupService : IBackupService
             _logger.LogDebug("Reset sequence {SequenceName} for {TableName}.{ColumnName} to {NewValue}",
                 sequenceName, tableName, columnName, newSeqValue);
         }
-
-        _logger.LogInformation("All identity sequences reset successfully");
     }
 
     private async Task WipeAllTablesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<string> tables)
@@ -716,10 +858,47 @@ public class BackupService : IBackupService
 
     public async Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes)
     {
+        return await GetMetadataAsync(backupBytes, passphrase: null);
+    }
+
+    /// <summary>
+    /// Check if backup file is encrypted by checking for TGAENC magic header
+    /// </summary>
+    public async Task<bool> IsEncryptedAsync(byte[] backupBytes)
+    {
+        return await Task.FromResult(_encryptionService.IsEncrypted(backupBytes));
+    }
+
+    private async Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes, string? passphrase)
+    {
         try
         {
+            // Decrypt if encrypted
+            byte[] compressedBytes;
+            if (_encryptionService.IsEncrypted(backupBytes))
+            {
+                if (string.IsNullOrWhiteSpace(passphrase))
+                {
+                    // Try to get passphrase from DB
+                    try
+                    {
+                        passphrase = await GetDecryptedPassphraseAsync();
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        throw new InvalidOperationException("Backup is encrypted but no passphrase available");
+                    }
+                }
+
+                compressedBytes = _encryptionService.DecryptBackup(backupBytes, passphrase);
+            }
+            else
+            {
+                compressedBytes = backupBytes;
+            }
+
             // Decompress gzip
-            using var inputStream = new MemoryStream(backupBytes);
+            using var inputStream = new MemoryStream(compressedBytes);
             await using var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress);
             using var outputStream = new MemoryStream();
             await gzipStream.CopyToAsync(outputStream);
@@ -742,6 +921,65 @@ public class BackupService : IBackupService
         {
             _logger.LogError(ex, "Failed to read backup metadata");
             throw new InvalidOperationException("Invalid backup file format", ex);
+        }
+    }
+
+    /// <summary>
+    /// Retrieves backup encryption configuration from database
+    /// </summary>
+    private async Task<Configuration.Models.BackupEncryptionConfig?> GetEncryptionConfigAsync()
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync();
+
+        const string sql = """
+            SELECT backup_encryption_config
+            FROM configs
+            WHERE chat_id IS NULL
+            LIMIT 1
+            """;
+
+        var configJson = await connection.QuerySingleOrDefaultAsync<string>(sql);
+
+        if (string.IsNullOrEmpty(configJson))
+            return null;
+
+        var jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        return JsonSerializer.Deserialize<Configuration.Models.BackupEncryptionConfig>(configJson, jsonOptions);
+    }
+
+    /// <summary>
+    /// Validates backup by attempting to decompress/decrypt and verify metadata
+    /// </summary>
+    private async Task<bool> ValidateBackupAsync(byte[] backupBytes, string? passphrase = null)
+    {
+        try
+        {
+            // Try to read metadata
+            var metadata = await GetMetadataAsync(backupBytes, passphrase);
+
+            // Basic validation checks
+            if (metadata == null)
+                return false;
+
+            if (string.IsNullOrEmpty(metadata.Version))
+                return false;
+
+            if (metadata.TableCount <= 0)
+                return false;
+
+            _logger.LogDebug("Backup validation successful: version={Version}, tables={TableCount}",
+                metadata.Version, metadata.TableCount);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Backup validation failed");
+            return false;
         }
     }
 
@@ -769,6 +1007,163 @@ public class BackupService : IBackupService
         }
 
         return result.ToString();
+    }
+
+    /// <summary>
+    /// Rotate backup encryption passphrase.
+    /// Generates a new passphrase and queues a background job to re-encrypt all existing backups.
+    /// </summary>
+    public async Task<string> RotatePassphraseAsync(string backupDirectory, string userId)
+    {
+        _logger.LogInformation("Initiating passphrase rotation for user {UserId}", userId);
+
+        // Generate new passphrase (6 words = 77.5 bits entropy)
+        var newPassphrase = PassphraseGenerator.Generate();
+
+        _logger.LogInformation("Generated new passphrase, queuing re-encryption job");
+
+        // Queue background job to re-encrypt all backups
+        var payload = new RotateBackupPassphrasePayload(newPassphrase, backupDirectory, userId);
+
+        var jobId = await TickerQUtilities.ScheduleJobAsync(
+            _serviceProvider,
+            _logger,
+            "rotate_backup_passphrase",
+            payload,
+            delaySeconds: 0, // Execute immediately
+            retries: 1,
+            retryIntervals: [60]); // Retry after 60 seconds if it fails
+
+        if (jobId == null)
+        {
+            throw new InvalidOperationException("Failed to schedule passphrase rotation job");
+        }
+
+        _logger.LogInformation("Passphrase rotation job queued successfully (JobId: {JobId})", jobId);
+
+        // Return the new passphrase so user can save it
+        return newPassphrase;
+    }
+
+    // ========== Backup Encryption Config Management (Composition Pattern) ==========
+
+    /// <summary>
+    /// Sets up initial backup encryption configuration.
+    /// Creates new config with CreatedAt timestamp.
+    /// </summary>
+    public async Task SaveEncryptionConfigAsync(string passphrase)
+    {
+        var encryptedPassphrase = EncryptPassphrase(passphrase);
+        var config = CreateNewEncryptionConfig();
+        await SaveEncryptionConfigToDatabaseAsync(config, encryptedPassphrase);
+    }
+
+    /// <summary>
+    /// Updates existing backup encryption configuration with new passphrase.
+    /// Updates LastRotatedAt timestamp.
+    /// </summary>
+    public async Task UpdateEncryptionConfigAsync(string passphrase)
+    {
+        var encryptedPassphrase = EncryptPassphrase(passphrase);
+        var config = await UpdateExistingEncryptionConfigAsync();
+        await SaveEncryptionConfigToDatabaseAsync(config, encryptedPassphrase);
+    }
+
+    /// <summary>
+    /// Gets the current decrypted passphrase from database.
+    /// </summary>
+    public async Task<string> GetDecryptedPassphraseAsync()
+    {
+        await using var context = await _dataSource.OpenConnectionAsync();
+
+        // Read encrypted passphrase from dedicated column
+        var encryptedPassphrase = await context.QuerySingleOrDefaultAsync<string>(
+            "SELECT passphrase_encrypted FROM configs WHERE chat_id IS NULL");
+
+        if (string.IsNullOrEmpty(encryptedPassphrase))
+        {
+            throw new InvalidOperationException("No passphrase found in encryption config");
+        }
+
+        return _totpProtection.Unprotect(encryptedPassphrase);
+    }
+
+    // Private helper methods - shared implementation
+
+    private string EncryptPassphrase(string passphrase)
+    {
+        return _totpProtection.Protect(passphrase);
+    }
+
+    private BackupEncryptionConfig CreateNewEncryptionConfig()
+    {
+        return new BackupEncryptionConfig
+        {
+            Enabled = true,
+            Algorithm = "AES-256-GCM",
+            Iterations = 100000,
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastRotatedAt = null  // First setup
+        };
+    }
+
+    private async Task<BackupEncryptionConfig> UpdateExistingEncryptionConfigAsync()
+    {
+        var existing = await GetEncryptionConfigAsync();
+        if (existing == null)
+        {
+            throw new InvalidOperationException("Cannot update encryption config - no existing configuration found");
+        }
+
+        existing.LastRotatedAt = DateTimeOffset.UtcNow;
+
+        return existing;
+    }
+
+    private async Task SaveEncryptionConfigToDatabaseAsync(BackupEncryptionConfig config, string encryptedPassphrase)
+    {
+        await using var context = await _dataSource.OpenConnectionAsync();
+
+        // Load or create global config record
+        var configRecord = await context.QueryFirstOrDefaultAsync<DataModels.ConfigRecordDto>(
+            "SELECT * FROM configs WHERE chat_id IS NULL");
+
+        if (configRecord == null)
+        {
+            configRecord = new DataModels.ConfigRecordDto
+            {
+                ChatId = null,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+        }
+
+        // Save config metadata to JSONB (without passphrase)
+        configRecord.BackupEncryptionConfig = JsonSerializer.Serialize(config);
+        // Save encrypted passphrase to dedicated TEXT column
+        configRecord.PassphraseEncrypted = encryptedPassphrase;
+        configRecord.UpdatedAt = DateTimeOffset.UtcNow;
+
+        if (configRecord.Id == 0)
+        {
+            // Insert
+            await context.ExecuteAsync(
+                @"INSERT INTO configs (chat_id, backup_encryption_config, passphrase_encrypted, created_at, updated_at)
+                  VALUES (@ChatId, @BackupEncryptionConfig::jsonb, @PassphraseEncrypted, @CreatedAt, @UpdatedAt)",
+                configRecord);
+        }
+        else
+        {
+            // Update
+            await context.ExecuteAsync(
+                @"UPDATE configs
+                  SET backup_encryption_config = @BackupEncryptionConfig::jsonb,
+                      passphrase_encrypted = @PassphraseEncrypted,
+                      updated_at = @UpdatedAt
+                  WHERE id = @Id",
+                configRecord);
+        }
+
+        _logger.LogInformation("Saved backup encryption config and passphrase to database");
     }
 }
 

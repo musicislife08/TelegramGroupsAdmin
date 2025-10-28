@@ -109,8 +109,6 @@ public enum AuditEventType
     UserTotpReset = 18,
     /// <summary>User enabled TOTP/2FA</summary>
     UserTotpEnabled = 19,
-    /// <summary>User automatically whitelisted</summary>
-    UserAutoWhitelisted = 26,
 
     // Settings Changes (20-29 reserved for settings)
     /// <summary>Spam detection configuration changed</summary>
@@ -124,7 +122,15 @@ public enum AuditEventType
     /// <summary>Security settings changed</summary>
     SecuritySettingsChanged = 24,
     /// <summary>Integration settings changed</summary>
-    IntegrationSettingsChanged = 25
+    IntegrationSettingsChanged = 25,
+    /// <summary>User automatically whitelisted</summary>
+    UserAutoWhitelisted = 26,
+    /// <summary>Report reviewed and actioned (spam/ban/warn/dismiss)</summary>
+    ReportReviewed = 27,
+    /// <summary>System configuration changed (spam detection, file scanning, logging, etc.)</summary>
+    ConfigurationChanged = 28,
+    /// <summary>Backup encryption passphrase rotated</summary>
+    BackupPassphraseRotated = 29
 }
 
 /// <summary>

@@ -90,30 +90,67 @@ if (args.Contains("--migrate-only") || args.Contains("--migrate"))
     Environment.Exit(0);
 }
 
-// Check for --export flag to create full system backup
-if (args.Contains("--export"))
+// Check for --backup flag to create encrypted backup (requires --passphrase)
+if (args.Contains("--backup"))
 {
-    var exportPath = args.SkipWhile(a => a != "--export").Skip(1).FirstOrDefault() ?? $"backup_{DateTimeOffset.UtcNow:yyyyMMdd_HHmmss}.tar.gz";
+    var backupPath = args.SkipWhile(a => a != "--backup").Skip(1).FirstOrDefault() ?? $"backup_{DateTimeOffset.UtcNow:yyyyMMdd_HHmmss}.tar.gz";
+    var passphraseIndex = Array.IndexOf(args, "--passphrase");
+
+    if (passphraseIndex == -1 || passphraseIndex + 1 >= args.Length)
+    {
+        app.Logger.LogError("--backup requires --passphrase argument. Usage: --backup [path] --passphrase <passphrase>");
+        app.Logger.LogError("Example: dotnet run --backup /data/backups/backup.tar.gz --passphrase \"your-32-char-passphrase\"");
+        Environment.Exit(1);
+    }
+
+    var passphrase = args[passphraseIndex + 1];
+    if (string.IsNullOrWhiteSpace(passphrase))
+    {
+        app.Logger.LogError("Passphrase cannot be empty");
+        Environment.Exit(1);
+    }
+
     using var scope = app.Services.CreateScope();
     var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Services.Backup.IBackupService>();
-    var backupBytes = await backupService.ExportAsync();
-    await File.WriteAllBytesAsync(exportPath, backupBytes);
-    app.Logger.LogInformation("System backup exported to {Path} ({Size} bytes). Exiting (--export flag).", exportPath, backupBytes.Length);
+
+    app.Logger.LogInformation("Creating encrypted backup...");
+    var backupBytes = await backupService.ExportAsync(passphrase); // Use passphrase override for CLI
+    await File.WriteAllBytesAsync(backupPath, backupBytes);
+
+    app.Logger.LogInformation("✅ Encrypted backup created: {Path} ({Size:F2} MB)",
+        backupPath, backupBytes.Length / 1024.0 / 1024.0);
+    app.Logger.LogInformation("🔐 Store your passphrase securely - you'll need it to restore this backup!");
+    app.Logger.LogInformation("Exiting (--backup flag).");
     Environment.Exit(0);
 }
 
-// Check for --import flag to restore full system backup (WIPES ALL DATA)
-if (args.Contains("--import"))
+// Check for --restore flag to restore encrypted backup (WIPES ALL DATA, requires --passphrase)
+if (args.Contains("--restore"))
 {
-    var importPath = args.SkipWhile(a => a != "--import").Skip(1).FirstOrDefault();
-    if (importPath == null)
+    var restorePath = args.SkipWhile(a => a != "--restore").Skip(1).FirstOrDefault();
+    if (restorePath == null)
     {
-        app.Logger.LogError("--import requires a file path argument");
+        app.Logger.LogError("--restore requires a file path argument");
         Environment.Exit(1);
     }
-    if (!File.Exists(importPath))
+    if (!File.Exists(restorePath))
     {
-        app.Logger.LogError("Import file not found: {Path}", importPath);
+        app.Logger.LogError("Backup file not found: {Path}", restorePath);
+        Environment.Exit(1);
+    }
+
+    var passphraseIndex = Array.IndexOf(args, "--passphrase");
+    if (passphraseIndex == -1 || passphraseIndex + 1 >= args.Length)
+    {
+        app.Logger.LogError("--restore requires --passphrase argument. Usage: --restore <path> --passphrase <passphrase>");
+        app.Logger.LogError("Example: dotnet run --restore /data/backups/backup.tar.gz --passphrase \"your-32-char-passphrase\"");
+        Environment.Exit(1);
+    }
+
+    var passphrase = args[passphraseIndex + 1];
+    if (string.IsNullOrWhiteSpace(passphrase))
+    {
+        app.Logger.LogError("Passphrase cannot be empty");
         Environment.Exit(1);
     }
 
@@ -123,9 +160,14 @@ if (args.Contains("--import"))
 
     using var scope = app.Services.CreateScope();
     var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Services.Backup.IBackupService>();
-    var backupBytes = await File.ReadAllBytesAsync(importPath);
-    await backupService.RestoreAsync(backupBytes);
-    app.Logger.LogInformation("System restore complete. Exiting (--import flag).");
+
+    app.Logger.LogInformation("Reading encrypted backup...");
+    var backupBytes = await File.ReadAllBytesAsync(restorePath);
+
+    app.Logger.LogInformation("Decrypting and restoring backup...");
+    await backupService.RestoreAsync(backupBytes, passphrase); // Use explicit passphrase for CLI restore
+
+    app.Logger.LogInformation("✅ System restore complete. Exiting (--restore flag).");
     Environment.Exit(0);
 }
 

@@ -79,8 +79,27 @@ public class ConfigRecordDto
     /// Note: Uses TEXT not JSONB because encrypted data is base64, not valid JSON
     /// </summary>
     [Column("api_keys")]
-    [ProtectedData]
+    [ProtectedData(Purpose = "ApiKeys")]
     public string? ApiKeys { get; set; }
+
+    /// <summary>
+    /// Backup encryption configuration (JSONB)
+    /// Metadata for backup encryption (algorithm, iterations, timestamps)
+    /// Note: Passphrase moved to separate passphrase_encrypted column for proper backup/restore handling
+    /// Only used for global config (chat_id = NULL)
+    /// </summary>
+    [Column("backup_encryption_config", TypeName = "jsonb")]
+    public string? BackupEncryptionConfig { get; set; }
+
+    /// <summary>
+    /// Backup encryption passphrase (encrypted TEXT, not JSONB)
+    /// Encrypted at rest with Data Protection, automatically decrypted during backup export and re-encrypted during restore
+    /// Moved from BackupEncryptionConfig JSONB to dedicated column for cross-machine compatibility
+    /// Only used for global config (chat_id = NULL)
+    /// </summary>
+    [Column("passphrase_encrypted")]
+    [ProtectedData(Purpose = "TgSpamPreFilter.TotpSecrets")]
+    public string? PassphraseEncrypted { get; set; }
 
     /// <summary>
     /// Cached permanent invite link for this chat (NULL for global config or public chats)

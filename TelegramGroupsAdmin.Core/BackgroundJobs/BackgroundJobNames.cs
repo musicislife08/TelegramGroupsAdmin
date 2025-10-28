@@ -50,8 +50,12 @@ public static class BackgroundJobNames
 /// </summary>
 public static class BackgroundJobSettings
 {
-    // Scheduled Backup settings
-    public const string RetentionDays = "RetentionDays";
+    // Scheduled Backup settings (granular 5-tier retention)
+    public const string RetainHourlyBackups = "RetainHourlyBackups";
+    public const string RetainDailyBackups = "RetainDailyBackups";
+    public const string RetainWeeklyBackups = "RetainWeeklyBackups";
+    public const string RetainMonthlyBackups = "RetainMonthlyBackups";
+    public const string RetainYearlyBackups = "RetainYearlyBackups";
     public const string BackupDirectory = "BackupDirectory";
 
     // Message Cleanup settings

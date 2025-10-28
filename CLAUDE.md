@@ -254,6 +254,45 @@ SELECT COUNT(*) FROM detection_results WHERE check_results_json LIKE '%"spam":%'
 
 **Expected Result**: 1 row updated on dev, similar count on production (early testing data only)
 
+**Migration 2: Sequence Drift Prevention (2025-10-27)**
+Backup/restore system had bug where sequences weren't reset for tables with restored data, causing duplicate key violations.
+
+**Root Cause**: `ResetSequencesAsync()` was called once at end of restore with list of tables from backup. If backup was taken when table was empty but production had data, sequence stayed out of sync after wipe.
+
+**Fix Applied**: `ResetSequenceForTableAsync()` now called immediately after restoring each table's data. More robust - sequences always match table state before moving to next table. If restore fails mid-way, already-restored tables have correct sequences.
+
+**One-Time Production Fix** (already applied):
+```sql
+-- Reset all sequences to match current max IDs
+DO $$
+DECLARE
+    seq_record RECORD;
+    new_val BIGINT;
+BEGIN
+    FOR seq_record IN
+        SELECT
+            c.table_name,
+            c.column_name,
+            pg_get_serial_sequence(quote_ident(c.table_name), quote_ident(c.column_name)) as sequence_name
+        FROM information_schema.columns c
+        WHERE c.table_schema = 'public'
+            AND (c.is_identity = 'YES' OR c.column_default LIKE 'nextval%')
+    LOOP
+        IF seq_record.sequence_name IS NOT NULL THEN
+            EXECUTE format(
+                'SELECT setval(%L, COALESCE((SELECT MAX(%I) FROM %I WHERE %I > 0), 1))',
+                seq_record.sequence_name,
+                seq_record.column_name,
+                seq_record.table_name,
+                seq_record.column_name
+            ) INTO new_val;
+        END IF;
+    END LOOP;
+END $$;
+```
+
+**Prevention**: Code fix ensures future backup/restore operations won't cause sequence drift. Manual sequence resets should never be needed again.
+
 ## CRITICAL RULES
 - Never run app in normal mode (only one instance allowed, user runs in Rider for debugging)
 - Testing: Use `dotnet run --migrate-only` to catch startup issues after building

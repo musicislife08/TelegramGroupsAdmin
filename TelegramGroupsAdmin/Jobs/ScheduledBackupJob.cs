@@ -36,10 +36,13 @@ public class ScheduledBackupJob
                 return;
             }
 
-            _logger.LogInformation("Starting scheduled backup (retention: {RetentionDays} days)", payload.RetentionDays);
+            _logger.LogInformation("Starting scheduled backup (retention: {Hourly}h/{Daily}d/{Weekly}w/{Monthly}m/{Yearly}y)",
+                payload.RetainHourlyBackups, payload.RetainDailyBackups, payload.RetainWeeklyBackups,
+                payload.RetainMonthlyBackups, payload.RetainYearlyBackups);
 
             using var scope = _scopeFactory.CreateScope();
             var backupService = scope.ServiceProvider.GetRequiredService<IBackupService>();
+            var retentionService = scope.ServiceProvider.GetRequiredService<BackupRetentionService>();
 
             // Generate backup
             var backupBytes = await backupService.ExportAsync();
@@ -49,40 +52,54 @@ public class ScheduledBackupJob
             var backupDir = payload.BackupDirectory ?? Path.Combine("data", "backups");
             Directory.CreateDirectory(backupDir); // Ensure directory exists
 
-            // Save backup with timestamp
+            // Save backup with timestamp (updated extension to .tar.gz for encrypted backups)
             var timestamp = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss");
-            var filename = $"backup_{timestamp}.json.gz";
+            var filename = $"backup_{timestamp}.tar.gz";
             var filepath = Path.Combine(backupDir, filename);
 
             await File.WriteAllBytesAsync(filepath, backupBytes, cancellationToken);
             _logger.LogInformation("Backup saved to {Filepath} ({SizeMB:F2} MB)", filepath, backupSizeMB);
 
-            // Clean up old backups (retention management)
-            var retentionCutoff = DateTimeOffset.UtcNow.AddDays(-payload.RetentionDays);
+            // Clean up old backups using granular retention strategy
+            var backupFiles = Directory.GetFiles(backupDir, "backup_*.tar.gz")
+                .Concat(Directory.GetFiles(backupDir, "backup_*.json.gz")) // Include legacy extension
+                .Select(f => new BackupFileInfo
+                {
+                    FilePath = f,
+                    CreatedAt = File.GetCreationTimeUtc(f),
+                    FileSizeBytes = new FileInfo(f).Length
+                })
+                .ToList();
+
+            var retentionConfig = new RetentionConfig
+            {
+                RetainHourlyBackups = payload.RetainHourlyBackups,
+                RetainDailyBackups = payload.RetainDailyBackups,
+                RetainWeeklyBackups = payload.RetainWeeklyBackups,
+                RetainMonthlyBackups = payload.RetainMonthlyBackups,
+                RetainYearlyBackups = payload.RetainYearlyBackups
+            };
+
+            var toDelete = retentionService.GetBackupsToDelete(backupFiles, retentionConfig);
             var deletedCount = 0;
 
-            var backupFiles = Directory.GetFiles(backupDir, "backup_*.json.gz");
-            foreach (var file in backupFiles)
+            foreach (var backup in toDelete)
             {
-                var fileInfo = new FileInfo(file);
-                if (fileInfo.CreationTimeUtc < retentionCutoff.UtcDateTime)
+                try
                 {
-                    try
-                    {
-                        File.Delete(file);
-                        deletedCount++;
-                        _logger.LogDebug("Deleted old backup: {Filename}", Path.GetFileName(file));
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to delete old backup: {Filename}", Path.GetFileName(file));
-                    }
+                    File.Delete(backup.FilePath);
+                    deletedCount++;
+                    _logger.LogDebug("Deleted old backup: {Filename}", Path.GetFileName(backup.FilePath));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete old backup: {Filename}", Path.GetFileName(backup.FilePath));
                 }
             }
 
             if (deletedCount > 0)
             {
-                _logger.LogInformation("Deleted {Count} old backups (retention: {RetentionDays} days)", deletedCount, payload.RetentionDays);
+                _logger.LogInformation("Deleted {Count} old backups via granular retention policy", deletedCount);
             }
 
             _logger.LogInformation("Scheduled backup completed successfully");

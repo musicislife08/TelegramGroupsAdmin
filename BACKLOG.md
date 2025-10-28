@@ -114,6 +114,52 @@ endpoints.MapPost("/api/auth/logout", async (HttpContext context, ...) =>
 
 ---
 
+### SECURITY-4: Backup Passphrase Logging Audit
+
+**Status:** BACKLOG 📋
+**Severity:** Security | **Impact:** Prevents credential leakage via logs
+**Discovered:** 2025-10-27 during backup encryption implementation review
+
+**Current State:**
+- Backup passphrases passed as `string` parameters through multiple layers
+- No SecureString usage (acceptable - Microsoft discourages it in modern .NET)
+- Passphrase lifetime is milliseconds (encrypt immediately after generation/input)
+- Unknown if any code paths accidentally log the passphrase
+
+**Threat Model:**
+- **HIGH RISK**: Passphrase appearing in exception messages or debug logs
+- **MEDIUM RISK**: Passphrase in stack traces when exceptions occur
+- **LOW RISK**: Memory dumps (homelab environment, requires system-level access)
+
+**Audit Required:**
+Grep codebase for potential passphrase logging in:
+1. BackupService.cs - exception handlers, log statements
+2. BackupEncryptionSetupDialog.razor - error handling
+3. BackupPassphraseRotationDialog.razor - error handling
+4. RotateBackupPassphraseJob.cs - exception logging
+5. Any method accepting passphrase parameter
+
+**Search Patterns:**
+```bash
+grep -r "passphrase" --include="*.cs" | grep -i "log\|exception\|throw"
+grep -r "newPassphrase\|_generatedPassphrase" --include="*.cs" | grep -i "log"
+```
+
+**Remediation:**
+- Replace passphrase with `[REDACTED]` in all log statements
+- Ensure exceptions don't include passphrase in message
+- Document: "Never log passphrase parameter values"
+
+**Priority:** LOW - Preventative measure, no known leaks
+
+**Effort:** 1 hour (grep + fix any findings)
+
+**When to Do:**
+- Before open sourcing (prevents credentials in logs if deployed publicly)
+- Part of security hardening pass
+
+---
+
 ### DOCS-1: README.md (Pre-Open Source)
 
 **Status:** BACKLOG 📋 **HIGH - Blocking for open source**
@@ -511,6 +557,93 @@ SELECT SETVAL('table_name_id_seq', COALESCE((SELECT MAX(id) FROM table_name), 1)
 
 ---
 
+### FEATURE-5.2: Universal Notification Center
+
+**Status:** BACKLOG 📋
+**Severity:** Feature | **Impact:** User experience, cross-feature infrastructure
+**Designed:** 2025-10-27
+
+**Current State:**
+- Background jobs (file scans, backup rotation, etc.) have no unified notification mechanism
+- Existing INotificationService sends email/Telegram DMs (heavy-handed for routine events)
+- No in-app notification center for user-initiated background jobs
+- No browser notification API integration for when user has another tab focused
+
+**Problem:**
+Two different notification systems that don't integrate:
+1. **INotificationService**: Email + Telegram DMs for critical system events (spam, bans, alerts)
+2. **Missing**: In-app bell icon for routine job completions (backup rotation, file scans, report generation)
+
+**Proposed Solution - Two Phases:**
+
+**Phase 1: In-Memory Foundation**
+```
+┌─────────────────────────────────────────┐
+│  MainLayout.razor                        │
+│  └─ NotificationBell.razor              │  ← Bell icon + badge + dropdown
+│     ├─ Shows unread count               │
+│     ├─ Dropdown with recent 10          │
+│     └─ Mark as read / Clear all         │
+└─────────────────────────────────────────┘
+         ↓ subscribes to
+┌─────────────────────────────────────────┐
+│  NotificationEventService (Singleton)   │
+│  ├─ event OnNotificationAdded           │
+│  ├─ PublishAsync(title, message, ...)   │
+│  └─ ConcurrentQueue<Notification>       │
+└─────────────────────────────────────────┘
+         ↑ background jobs call
+   RotateBackupPassphraseJob
+   FileScanJob, ScheduledBackupJob, etc.
+```
+
+**Implementation Details (Phase 1):**
+- NotificationBell component uses ProtectedLocalStorage for persistence
+- Guards localStorage with OnAfterRender(firstRender) to avoid prerender issues
+- Background jobs fire events → Component receives via InvokeAsync() → Writes to localStorage
+- Persists across server restarts (client-side storage)
+- Event-driven architecture (no SignalR hub needed - Blazor Server circuit handles it)
+
+**Phase 2: Database Persistence + Browser Notifications**
+- Add `notifications` table (id, user_id, title, message, type, severity, read, created_at, metadata JSONB)
+- Aggressive cleanup: read notifications deleted after 7 days, unread after 30 days
+- Browser Notification API via JS interop:
+  - Check `document.hasFocus()` - if false, send browser notification (OS notification center)
+  - Request permission on first use
+  - Desktop notifications for background job completions when tabbed away
+- Cross-device notification sync
+- Server-side audit trail
+
+**Use Cases:**
+- ✅ Backup passphrase rotation complete (show new passphrase in metadata)
+- ✅ File scan results (malware detected, clean, failed)
+- ✅ Scheduled backup complete
+- ✅ Background job failures
+- ✅ Report generation complete
+- ✅ System alerts (low disk space, API quota warnings)
+
+**Integration with Existing INotificationService:**
+- Critical events (spam bans, raid detection) → INotificationService (email/Telegram DM)
+- Routine events (job completions) → In-app notification center
+- User configurable: "Also send email for backup completions" (future Phase 3)
+
+**Benefits:**
+- ✅ Non-blocking UI for background jobs
+- ✅ User sees progress if they stay on page (e.g., backup rotation dialog)
+- ✅ Single notification if they navigate away
+- ✅ Foundation for all future background job notifications
+- ✅ Browser notifications when user has another tab focused
+
+**Limitations (Phase 1):**
+- Events lost if browser closed when job completes (acceptable for user-initiated actions)
+- Scheduled jobs that run at 3am won't show notifications (addressed in Phase 2 with database)
+
+**Priority:** MEDIUM - Infrastructure for multiple features
+**Effort:** Phase 1: 3-4 hours | Phase 2: 4-6 hours
+**Blocked By:** None (can implement anytime)
+
+---
+
 ### FEATURE-4.9: Bot Configuration Hot-Reload
 
 **Status:** BACKLOG 📋
@@ -721,6 +854,39 @@ SELECT SETVAL('table_name_id_seq', COALESCE((SELECT MAX(id) FROM table_name), 1)
 - After migration testing (higher priority)
 - **BEFORE open sourcing** - Shows professional code organization
 - Can be done incrementally: worst offenders first, then work down the list
+
+---
+
+### CODE-2: Rename TotpProtectionService to DataProtectionService
+
+**Status:** BACKLOG 📋
+**Severity:** Code Quality | **Impact:** Developer confusion, misleading naming
+**Discovered:** 2025-10-27 during backup encryption implementation
+
+**Current State:**
+- `TotpProtectionService` is a general-purpose wrapper around ASP.NET Core Data Protection
+- Used for encrypting API keys, backup passphrases, TOTP secrets, and other sensitive data
+- Name suggests it's TOTP-specific, but it's actually a generic encryption service
+- Creates confusion when injecting: "Why do I need TotpProtectionService to encrypt my passphrase?"
+
+**Refactoring Required:**
+1. Rename `ITotpProtectionService` → `IDataProtectionService`
+2. Rename `TotpProtectionService` → `DataProtectionService`
+3. Update all injection sites (20+ files across projects)
+4. Update method names if needed (`Protect()`/`Unprotect()` are fine, generic)
+
+**Files to Update:**
+- `TelegramGroupsAdmin.Data/Services/TotpProtectionService.cs`
+- All DI registration sites
+- All injection sites in backup, auth, config services
+
+**Effort:** 1-2 hours (find/replace + verify builds)
+
+**Priority:** LOW - Quality improvement, not urgent
+
+**When to Do:**
+- Alongside CODE-1 file naming consistency work
+- Part of broader code quality cleanup before open sourcing
 
 ---
 
@@ -1015,5 +1181,45 @@ public async Task HandleNewMessageAsync(...)
 **Priority:** HIGH - User confirmed, preparing for unit tests
 
 **Effort:** 4-6 hours (extract 3-5 handlers, update DI, add tests)
+
+---
+
+### ARCH-3: Consolidate Audit System to Core
+
+**Status:** BACKLOG 📋
+**Severity:** Architecture | **Impact:** Code organization, maintainability
+**Discovered:** 2025-10-27 during backup passphrase rotation implementation
+
+**Current State:**
+- General audit log (user logins, password changes, system config) lives in Telegram namespace
+- `AuditEventType` enum duplicated in two locations:
+  - `TelegramGroupsAdmin.Data.Models.AuditEventType` (canonical, 127 lines)
+  - `TelegramGroupsAdmin.Telegram.Models.AuditEventType` (duplicate, has extra events)
+- Enums out of sync (Data.Models missing `ConfigurationChanged=28`, `ReportReviewed=27`)
+- Audit models/services in Telegram namespace despite being core system feature
+- Separate `user_actions` table is Telegram-specific (bans, warnings, etc.)
+
+**Problem:**
+- Enum duplication creates maintenance overhead
+- Misplaced namespace suggests audit is Telegram-specific when it's not
+- Database stores enums as integers anyway, so duplication provides no benefit
+
+**Proposed Solution:**
+Move audit system from Telegram → Core:
+1. Move `AuditEventType` enum to Core (single source of truth)
+2. Move `AuditLogRecord` model to Core
+3. Move `IAuditService` / `AuditService` to Core
+4. Keep `user_actions` table and related models in Telegram (those are Telegram-specific)
+5. Update all imports across codebase
+
+**Benefits:**
+- Single source of truth for audit event types
+- Clearer separation: Core audit vs Telegram user actions
+- Easier to maintain and extend
+- Better namespace organization
+
+**Priority:** MEDIUM - Quality improvement, not blocking features
+
+**Effort:** 2-3 hours (move files, update imports, verify tests pass)
 
 ---

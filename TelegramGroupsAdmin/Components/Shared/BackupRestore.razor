@@ -1,143 +1,526 @@
 @using TelegramGroupsAdmin.Services.Backup
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Configuration.Models
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Core.BackgroundJobs
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.EntityFrameworkCore
+@using TelegramGroupsAdmin.Data
+@using System.Text.Json
 @inject IBackupService BackupService
+@inject IBackgroundJobConfigService JobConfigService
+@inject IDbContextFactory<AppDbContext> ContextFactory
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
+@inject IDialogService DialogService
 
-<MudGrid>
-    <!-- Backup Section -->
-    <MudItem xs="12" md="6">
-        <MudPaper Class="pa-4" Elevation="0" Outlined="true">
-            <MudText Typo="Typo.h6" Class="mb-2">
-                <MudIcon Icon="@Icons.Material.Filled.Backup" Class="mr-2" />
-                Create Backup
-            </MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
-                Export a complete backup of all system data (users, messages, spam config, TOTP secrets, etc.)
-            </MudText>
-
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       StartIcon="@Icons.Material.Filled.Download"
-                       OnClick="ExportBackup"
-                       Disabled="@_isExporting"
-                       FullWidth="true">
-                @if (_isExporting)
-                {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                    <span>Creating backup...</span>
-                }
-                else
-                {
-                    <span>Create & Download Backup</span>
-                }
-            </MudButton>
-
-            @if (_lastBackupSize > 0)
-            {
-                <MudAlert Severity="Severity.Success" Class="mt-4">
-                    Backup created: @FormatBytes(_lastBackupSize)
-                </MudAlert>
-            }
-
-            <MudAlert Severity="Severity.Info" Class="mt-4" Dense="true">
-                <MudText Typo="Typo.body2">
-                    <strong>What's included:</strong> Users, messages, spam config, bans/warnings, Telegram mappings, chats, reports, audit logs
+@if (!_encryptionConfigured)
+{
+    <!-- Encryption setup required banner -->
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mb-4">
+        <MudText Typo="Typo.h6">Backup Encryption Setup Required</MudText>
+        <MudText Typo="Typo.body2">
+            All backups are encrypted for security. Click the button below to generate your encryption passphrase.
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Warning"
+                   StartIcon="@Icons.Material.Filled.Lock"
+                   OnClick="OpenEncryptionSetupDialog"
+                   Class="mt-2">
+            Set Up Encryption Now
+        </MudButton>
+    </MudAlert>
+}
+else
+{
+    <MudGrid>
+        <!-- Create Backup Section -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Backup" Class="mr-2" />
+                    Create Encrypted Backup
                 </MudText>
-            </MudAlert>
-
-            <MudAlert Severity="Severity.Warning" Class="mt-2" Dense="true">
-                <MudText Typo="Typo.body2">
-                    <strong>Security:</strong> Contains TOTP secrets and password hashes. Store securely and delete after transfer.
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                    Export a complete encrypted backup of all system data
                 </MudText>
-            </MudAlert>
-        </MudPaper>
-    </MudItem>
-
-    <!-- Restore Section -->
-    <MudItem xs="12" md="6">
-        <MudPaper Class="pa-4" Elevation="0" Outlined="true">
-            <MudText Typo="Typo.h6" Class="mb-2">
-                <MudIcon Icon="@Icons.Material.Filled.SettingsBackupRestore" Class="mr-2" />
-                Restore from Backup
-            </MudText>
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
-                Restore system from a backup file (THIS WILL WIPE ALL CURRENT DATA)
-            </MudText>
-
-            @if (_metadata != null)
-            {
-                <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
-                    <MudText Typo="Typo.subtitle2" Class="mb-2">Backup Info</MudText>
-                    <MudText Typo="Typo.body2"><strong>Created:</strong> @DateTimeOffset.FromUnixTimeSeconds(_metadata.CreatedAt).ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
-                    <MudText Typo="Typo.body2"><strong>Version:</strong> @_metadata.Version | <strong>Tables:</strong> @_metadata.TableCount</MudText>
-                    <MudText Typo="Typo.body2"><strong>Size:</strong> @FormatBytes(_selectedFile?.Size ?? 0)</MudText>
-                </MudPaper>
-            }
-
-            <MudFileUpload T="IBrowserFile" FilesChanged="OnFileSelected" Accept=".tar.gz,.gz">
-                <ActivatorContent>
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.Upload"
-                               Disabled="@_isRestoring"
-                               FullWidth="true">
-                        Select Backup File
-                    </MudButton>
-                </ActivatorContent>
-            </MudFileUpload>
-
-            @if (_selectedFile != null)
-            {
-                <MudText Typo="Typo.body2" Class="mt-2">
-                    <strong>@_selectedFile.Name</strong> (@FormatBytes(_selectedFile.Size))
-                </MudText>
-            }
-
-            @if (_metadata != null && !_isRestoring)
-            {
-                <MudCheckBox @bind-Value="_confirmWipe" Color="Color.Error" Class="mt-3" Dense="true">
-                    I understand this will <strong>permanently delete all current data</strong>
-                </MudCheckBox>
 
                 <MudButton Variant="Variant.Filled"
-                           Color="Color.Error"
-                           StartIcon="@Icons.Material.Filled.RestoreFromTrash"
-                           OnClick="RestoreBackup"
-                           Disabled="@(!_confirmWipe)"
-                           FullWidth="true"
-                           Class="mt-2">
-                    WIPE & RESTORE FROM BACKUP
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Download"
+                           OnClick="ExportBackup"
+                           Disabled="@_isExporting"
+                           FullWidth="true">
+                    @if (_isExporting)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <span>Creating encrypted backup...</span>
+                    }
+                    else
+                    {
+                        <span>Create & Download Backup</span>
+                    }
                 </MudButton>
-            }
 
-            @if (_isRestoring)
-            {
-                <MudProgressLinear Indeterminate="true" Class="mt-3" />
-                <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
-                    Restoring... This may take a few minutes.
-                </MudText>
-            }
+                @if (_lastBackupSize > 0)
+                {
+                    <MudAlert Severity="Severity.Success" Class="mt-4">
+                        Encrypted backup created: @FormatBytes(_lastBackupSize)
+                    </MudAlert>
+                }
 
-            <MudAlert Severity="Severity.Error" Class="mt-3" Dense="true">
-                <MudText Typo="Typo.body2">
-                    <strong>Warning:</strong> Restore wipes ALL data and replaces it with the backup. You will be logged out after restore.
+                <MudAlert Severity="Severity.Info" Class="mt-4" Dense="true">
+                    <MudText Typo="Typo.body2">
+                        <strong>What's included:</strong> Users, messages, spam config, bans/warnings, Telegram mappings, chats, reports, audit logs
+                    </MudText>
+                </MudAlert>
+
+                <MudAlert Severity="Severity.Success" Class="mt-2" Dense="true">
+                    <MudText Typo="Typo.body2">
+                        <strong>Security:</strong> All backups are encrypted with AES-256-GCM. Your passphrase is stored encrypted in the database.
+                    </MudText>
+                </MudAlert>
+
+                <MudDivider Class="my-4" />
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           StartIcon="@Icons.Material.Filled.Autorenew"
+                           OnClick="OpenRotatePassphraseDialog"
+                           FullWidth="true">
+                    Rotate Encryption Passphrase
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Restore from Upload Section -->
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.SettingsBackupRestore" Class="mr-2" />
+                    Restore from Upload
                 </MudText>
-            </MudAlert>
-        </MudPaper>
-    </MudItem>
-</MudGrid>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                    Upload a backup file to restore (THIS WILL WIPE ALL CURRENT DATA)
+                </MudText>
+
+                @if (_uploadMetadata != null)
+                {
+                    <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Backup Info</MudText>
+                        <MudText Typo="Typo.body2"><strong>Created:</strong> @DateTimeOffset.FromUnixTimeSeconds(_uploadMetadata.CreatedAt).ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudText>
+                        <MudText Typo="Typo.body2"><strong>Version:</strong> @_uploadMetadata.Version | <strong>Tables:</strong> @_uploadMetadata.TableCount</MudText>
+                        <MudText Typo="Typo.body2"><strong>Size:</strong> @FormatBytes(_selectedFile?.Size ?? 0)</MudText>
+                        @if (_uploadIsEncrypted)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Lock" Class="mt-2">Encrypted</MudChip>
+                        }
+                    </MudPaper>
+                }
+
+                <MudFileUpload T="IBrowserFile" FilesChanged="OnFileSelected" Accept=".tar.gz,.gz">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Upload"
+                                   Disabled="@_isRestoring"
+                                   FullWidth="true">
+                            Select Backup File
+                        </MudButton>
+                    </ActivatorContent>
+                </MudFileUpload>
+
+                @if (_selectedFile != null)
+                {
+                    <MudText Typo="Typo.body2" Class="mt-2">
+                        <strong>@_selectedFile.Name</strong> (@FormatBytes(_selectedFile.Size))
+                    </MudText>
+                }
+
+                @if (_uploadMetadata != null && !_isRestoring)
+                {
+                    <MudCheckBox @bind-Value="_confirmWipe" Color="Color.Error" Class="mt-3" Dense="true">
+                        I understand this will <strong>permanently delete all current data</strong>
+                    </MudCheckBox>
+
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.RestoreFromTrash"
+                               OnClick="RestoreFromUpload"
+                               Disabled="@(!_confirmWipe)"
+                               FullWidth="true"
+                               Class="mt-2">
+                        WIPE & RESTORE FROM BACKUP
+                    </MudButton>
+                }
+
+                @if (_isRestoring)
+                {
+                    <MudProgressLinear Indeterminate="true" Class="mt-3" />
+                    <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-2">
+                        Restoring... This may take a few minutes.
+                    </MudText>
+                }
+
+                <MudAlert Severity="Severity.Error" Class="mt-3" Dense="true">
+                    <MudText Typo="Typo.body2">
+                        <strong>Warning:</strong> Restore wipes ALL data and replaces it with the backup. You will be logged out after restore.
+                    </MudText>
+                </MudAlert>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Backup Browser Section -->
+        <MudItem xs="12">
+            <BackupBrowser BackupDirectory="@_currentBackupDirectory" OnRestoreRequested="RestoreFromBrowser" @ref="_backupBrowser" />
+        </MudItem>
+
+        <!-- Backup Configuration Section -->
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.h6">
+                        <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-2" />
+                        Backup Configuration
+                    </MudText>
+
+                    @if (_backupConfig == null)
+                    {
+                        <MudProgressLinear Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <MudTextField @bind-Value="_editBackupDirectory"
+                                     Label="Backup Directory"
+                                     Variant="Variant.Outlined"
+                                     HelperText="Absolute path where backups are stored"
+                                     Placeholder="/data/backups"
+                                     Disabled="@_isSavingConfig" />
+
+                        <MudText Typo="Typo.subtitle2">Schedule</MudText>
+                        <MudRadioGroup @bind-Value="_editScheduleType" Disabled="@_isSavingConfig">
+                            <MudRadio Value="@("interval")" Color="Color.Primary">
+                                <MudText Typo="Typo.body2">Simple (Every X hours)</MudText>
+                            </MudRadio>
+                            <MudRadio Value="@("cron")" Color="Color.Primary">
+                                <MudText Typo="Typo.body2">Advanced (Cron Expression)</MudText>
+                            </MudRadio>
+                        </MudRadioGroup>
+
+                        @if (_editScheduleType == "interval")
+                        {
+                            <MudTextField @bind-Value="_editIntervalDuration"
+                                         Label="Run Every"
+                                         Variant="Variant.Outlined"
+                                         HelperText="Examples: 30m, 1h, 6h, 24h, 7d, 1w"
+                                         Placeholder="24h"
+                                         Disabled="@_isSavingConfig" />
+
+                            @if (TimeSpanUtilities.TryParseDuration(_editIntervalDuration ?? "24h", out var duration))
+                            {
+                                <MudAlert Severity="Severity.Info" Dense="true">
+                                    Automated backups will run every <strong>@TimeSpanUtilities.FormatDuration(duration)</strong>
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Warning" Dense="true">
+                                    Invalid duration format. Use examples like: 30m, 1h, 24h, 7d, 1w
+                                </MudAlert>
+                            }
+                        }
+                        else
+                        {
+                            <MudTextField @bind-Value="_editCronExpression"
+                                         Label="Cron Expression"
+                                         Variant="Variant.Outlined"
+                                         HelperText="Standard cron format: minute hour day month weekday"
+                                         Placeholder="0 2 * * *"
+                                         Disabled="@_isSavingConfig" />
+
+                            <MudAlert Severity="Severity.Info" Dense="true">
+                                <MudText Typo="Typo.body2"><strong>Common Examples:</strong></MudText>
+                                <MudText Typo="Typo.caption">• <code>0 2 * * *</code> - Daily at 2:00 AM</MudText>
+                                <MudText Typo="Typo.caption">• <code>0 3 * * 0</code> - Sundays at 3:00 AM</MudText>
+                                <MudText Typo="Typo.caption">• <code>0 */6 * * *</code> - Every 6 hours</MudText>
+                            </MudAlert>
+                        }
+
+                        <MudText Typo="Typo.subtitle2">Retention Strategy (Grandfather-Father-Son)</MudText>
+                        <MudAlert Severity="Severity.Info" Dense="true">
+                            Keeps multiple backup tiers: hourly (short-term), daily, weekly, monthly, yearly (long-term)
+                        </MudAlert>
+
+                        <MudNumericField @bind-Value="_editRetainHourlyBackups"
+                                       Label="Hourly Backups"
+                                       Variant="Variant.Outlined"
+                                       Min="0"
+                                       Max="168"
+                                       HelperText="Keep last N hourly backups (0-168 = 1 week)"
+                                       Disabled="@_isSavingConfig" />
+
+                        <MudNumericField @bind-Value="_editRetainDailyBackups"
+                                       Label="Daily Backups"
+                                       Variant="Variant.Outlined"
+                                       Min="0"
+                                       Max="31"
+                                       HelperText="Keep last N daily backups (0-31)"
+                                       Disabled="@_isSavingConfig" />
+
+                        <MudNumericField @bind-Value="_editRetainWeeklyBackups"
+                                       Label="Weekly Backups"
+                                       Variant="Variant.Outlined"
+                                       Min="0"
+                                       Max="52"
+                                       HelperText="Keep last N weekly backups (0-52)"
+                                       Disabled="@_isSavingConfig" />
+
+                        <MudNumericField @bind-Value="_editRetainMonthlyBackups"
+                                       Label="Monthly Backups"
+                                       Variant="Variant.Outlined"
+                                       Min="0"
+                                       Max="60"
+                                       HelperText="Keep last N monthly backups (0-60 = 5 years)"
+                                       Disabled="@_isSavingConfig" />
+
+                        <MudNumericField @bind-Value="_editRetainYearlyBackups"
+                                       Label="Yearly Backups"
+                                       Variant="Variant.Outlined"
+                                       Min="0"
+                                       Max="20"
+                                       HelperText="Keep last N yearly backups (0-20)"
+                                       Disabled="@_isSavingConfig" />
+
+                        <MudStack Row="true" Spacing="2">
+                            <MudSwitch @bind-Value="_backupConfig.Enabled"
+                                      Color="Color.Success"
+                                      Label="@(_backupConfig.Enabled ? "Enabled" : "Disabled")"
+                                      Disabled="@_isSavingConfig" />
+                            <MudSpacer />
+                            <MudButton Variant="Variant.Filled"
+                                      Color="Color.Primary"
+                                      StartIcon="@Icons.Material.Filled.Save"
+                                      OnClick="SaveBackupConfigAsync"
+                                      Disabled="@_isSavingConfig">
+                                @if (_isSavingConfig)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    <span>Saving...</span>
+                                }
+                                else
+                                {
+                                    <span>Save Configuration</span>
+                                }
+                            </MudButton>
+                        </MudStack>
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
 
 @code {
+    private bool _encryptionConfigured = false;
     private bool _isExporting = false;
     private long _lastBackupSize = 0;
 
+    // Upload restore state
     private IBrowserFile? _selectedFile;
-    private BackupMetadata? _metadata;
+    private BackupMetadata? _uploadMetadata;
+    private bool _uploadIsEncrypted = false;
     private bool _confirmWipe = false;
     private bool _isRestoring = false;
     private byte[]? _backupBytes;
+
+    // Backup browser reference
+    private BackupBrowser? _backupBrowser;
+
+    // Backup configuration state
+    private BackgroundJobConfig? _backupConfig;
+    private bool _isSavingConfig = false;
+    private string _editScheduleType = "interval";
+    private string? _editIntervalDuration = "24h";
+    private string? _editCronExpression;
+    private int _editRetainHourlyBackups = 24;
+    private int _editRetainDailyBackups = 7;
+    private int _editRetainWeeklyBackups = 4;
+    private int _editRetainMonthlyBackups = 12;
+    private int _editRetainYearlyBackups = 3;
+    private string? _editBackupDirectory;
+    private string _currentBackupDirectory = "/data/backups"; // Dynamic from config
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBackupConfigAsync();
+        await CheckEncryptionConfigAsync();
+    }
+
+    private async Task LoadBackupConfigAsync()
+    {
+        try
+        {
+            // Ensure default configs exist
+            await JobConfigService.EnsureDefaultConfigsAsync();
+
+            _backupConfig = await JobConfigService.GetJobConfigAsync(BackgroundJobNames.ScheduledBackup);
+
+            if (_backupConfig != null)
+            {
+                // Load schedule settings
+                _editScheduleType = _backupConfig.ScheduleType;
+                _editIntervalDuration = _backupConfig.IntervalDuration ?? "24h";
+                _editCronExpression = _backupConfig.CronExpression;
+
+                // Load backup-specific settings
+                if (_backupConfig.Settings != null)
+                {
+                    if (_backupConfig.Settings.TryGetValue(BackgroundJobSettings.RetainHourlyBackups, out var hourly))
+                        _editRetainHourlyBackups = Convert.ToInt32(((JsonElement)hourly).GetInt32());
+                    if (_backupConfig.Settings.TryGetValue(BackgroundJobSettings.RetainDailyBackups, out var daily))
+                        _editRetainDailyBackups = Convert.ToInt32(((JsonElement)daily).GetInt32());
+                    if (_backupConfig.Settings.TryGetValue(BackgroundJobSettings.RetainWeeklyBackups, out var weekly))
+                        _editRetainWeeklyBackups = Convert.ToInt32(((JsonElement)weekly).GetInt32());
+                    if (_backupConfig.Settings.TryGetValue(BackgroundJobSettings.RetainMonthlyBackups, out var monthly))
+                        _editRetainMonthlyBackups = Convert.ToInt32(((JsonElement)monthly).GetInt32());
+                    if (_backupConfig.Settings.TryGetValue(BackgroundJobSettings.RetainYearlyBackups, out var yearly))
+                        _editRetainYearlyBackups = Convert.ToInt32(((JsonElement)yearly).GetInt32());
+                    if (_backupConfig.Settings.TryGetValue(BackgroundJobSettings.BackupDirectory, out var dir))
+                    {
+                        _editBackupDirectory = ((JsonElement)dir).GetString();
+                        _currentBackupDirectory = _editBackupDirectory ?? "/data/backups";
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load backup configuration: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task SaveBackupConfigAsync()
+    {
+        if (_backupConfig == null)
+            return;
+
+        _isSavingConfig = true;
+        StateHasChanged();
+
+        try
+        {
+            // Validate interval duration if using interval schedule
+            if (_editScheduleType == "interval")
+            {
+                if (string.IsNullOrWhiteSpace(_editIntervalDuration) ||
+                    !TimeSpanUtilities.TryParseDuration(_editIntervalDuration, out _))
+                {
+                    Snackbar.Add("Invalid duration format. Use examples like: 30m, 1h, 24h, 7d", Severity.Warning);
+                    return;
+                }
+            }
+
+            // Update schedule
+            _backupConfig.ScheduleType = _editScheduleType;
+            if (_editScheduleType == "interval")
+            {
+                _backupConfig.IntervalDuration = _editIntervalDuration;
+                _backupConfig.CronExpression = null;
+            }
+            else
+            {
+                _backupConfig.CronExpression = _editCronExpression;
+                _backupConfig.IntervalDuration = null;
+            }
+
+            // Update backup-specific settings
+            _backupConfig.Settings ??= new Dictionary<string, object>();
+            _backupConfig.Settings[BackgroundJobSettings.RetainHourlyBackups] = _editRetainHourlyBackups;
+            _backupConfig.Settings[BackgroundJobSettings.RetainDailyBackups] = _editRetainDailyBackups;
+            _backupConfig.Settings[BackgroundJobSettings.RetainWeeklyBackups] = _editRetainWeeklyBackups;
+            _backupConfig.Settings[BackgroundJobSettings.RetainMonthlyBackups] = _editRetainMonthlyBackups;
+            _backupConfig.Settings[BackgroundJobSettings.RetainYearlyBackups] = _editRetainYearlyBackups;
+
+            if (!string.IsNullOrWhiteSpace(_editBackupDirectory))
+            {
+                _backupConfig.Settings[BackgroundJobSettings.BackupDirectory] = _editBackupDirectory;
+                _currentBackupDirectory = _editBackupDirectory;
+            }
+            else
+            {
+                _currentBackupDirectory = "/data/backups"; // Default fallback
+            }
+
+            await JobConfigService.UpdateJobConfigAsync(BackgroundJobNames.ScheduledBackup, _backupConfig);
+
+            Snackbar.Add("Backup configuration saved successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSavingConfig = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CheckEncryptionConfigAsync()
+    {
+        try
+        {
+            await using var context = await ContextFactory.CreateDbContextAsync();
+            var config = await context.Configs
+                .AsNoTracking()
+                .Where(c => c.ChatId == null)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrEmpty(config?.BackupEncryptionConfig))
+            {
+                var encryptionConfig = JsonSerializer.Deserialize<BackupEncryptionConfig>(config.BackupEncryptionConfig);
+                // Check both config enabled and passphrase exists in database column
+                _encryptionConfigured = encryptionConfig?.Enabled == true && !string.IsNullOrEmpty(config.PassphraseEncrypted);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to check encryption config: {ex.Message}", Severity.Error);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OpenEncryptionSetupDialog()
+    {
+        var dialog = await DialogService.ShowAsync<BackupEncryptionSetupDialog>("Enable Backup Encryption");
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            _encryptionConfigured = true;
+            Snackbar.Add("Backup encryption enabled! You can now create backups.", Severity.Success);
+            StateHasChanged();
+        }
+    }
+
+    private async Task OpenRotatePassphraseDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            ["BackupDirectory"] = _currentBackupDirectory
+        };
+
+        var dialog = await DialogService.ShowAsync<BackupPassphraseRotationDialog>("Rotate Backup Passphrase", parameters);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            Snackbar.Add("Passphrase rotation in progress! Check logs for status.", Severity.Info);
+        }
+    }
 
     private async Task ExportBackup()
     {
@@ -153,7 +536,13 @@
             var fileName = $"telegram_groups_admin_backup_{DateTimeOffset.UtcNow:yyyyMMdd_HHmmss}.tar.gz";
             await JS.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(backupBytes));
 
-            Snackbar.Add($"Backup created successfully! ({FormatBytes(backupBytes.Length)})", Severity.Success);
+            Snackbar.Add($"Encrypted backup created successfully! ({FormatBytes(backupBytes.Length)})", Severity.Success);
+
+            // Refresh backup browser
+            if (_backupBrowser != null)
+            {
+                await _backupBrowser.LoadBackupsAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -169,7 +558,8 @@
     private async Task OnFileSelected(IBrowserFile file)
     {
         _selectedFile = file;
-        _metadata = null;
+        _uploadMetadata = null;
+        _uploadIsEncrypted = false;
         _confirmWipe = false;
         StateHasChanged();
 
@@ -180,7 +570,20 @@
             await stream.CopyToAsync(ms);
             _backupBytes = ms.ToArray();
 
-            _metadata = await BackupService.GetMetadataAsync(_backupBytes);
+            // Check if encrypted
+            _uploadIsEncrypted = await BackupService.IsEncryptedAsync(_backupBytes);
+
+            // Try to get metadata (only works for unencrypted backups without passphrase)
+            if (!_uploadIsEncrypted)
+            {
+                _uploadMetadata = await BackupService.GetMetadataAsync(_backupBytes);
+            }
+            else
+            {
+                // For encrypted backups, we'll prompt for passphrase during restore
+                Snackbar.Add("Backup is encrypted. You'll be prompted for the passphrase during restore.", Severity.Info);
+            }
+
             Snackbar.Add("Backup file loaded successfully", Severity.Success);
         }
         catch (Exception ex)
@@ -193,17 +596,47 @@
         StateHasChanged();
     }
 
-    private async Task RestoreBackup()
+    private async Task RestoreFromUpload()
     {
         if (_backupBytes == null || !_confirmWipe)
             return;
 
+        // If encrypted, we use DB passphrase (auto-decrypt)
+        await PerformRestoreAsync(_backupBytes);
+    }
+
+    private async Task RestoreFromBrowser(BackupFileInfo backup)
+    {
+        // Confirm wipe
+        bool? confirmResult = await DialogService.ShowMessageBox(
+            "Confirm Restore",
+            $"Are you sure you want to restore from {backup.FileName}? This will PERMANENTLY DELETE all current data.",
+            yesText: "WIPE & RESTORE", cancelText: "Cancel",
+            options: new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small });
+
+        if (confirmResult != true)
+            return;
+
+        try
+        {
+            var bytes = await File.ReadAllBytesAsync(backup.FilePath);
+            await PerformRestoreAsync(bytes);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load backup file: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task PerformRestoreAsync(byte[] backupBytes)
+    {
         _isRestoring = true;
         StateHasChanged();
 
         try
         {
-            await BackupService.RestoreAsync(_backupBytes);
+            // RestoreAsync auto-detects encryption and uses DB passphrase
+            await BackupService.RestoreAsync(backupBytes);
             Snackbar.Add("System restored successfully! You will be logged out.", Severity.Success);
 
             await Task.Delay(2000);

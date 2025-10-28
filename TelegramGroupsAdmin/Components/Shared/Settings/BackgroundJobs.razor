@@ -13,6 +13,7 @@
 @inject IServiceProvider ServiceProvider
 @inject ISnackbar Snackbar
 @inject ILogger<BackgroundJobs> Logger
+@inject NavigationManager Navigation
 @implements IDisposable
 
 <MudStack Spacing="4">
@@ -190,18 +191,51 @@
                     <MudDivider />
                     <MudText Typo="Typo.subtitle2">Backup Settings</MudText>
 
-                    <MudNumericField @bind-Value="_editRetentionDays"
-                                   Label="Retention (days)"
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        <strong>Grandfather-Father-Son Retention Strategy</strong><br/>
+                        Keeps multiple backup tiers: hourly (short-term), daily, weekly, monthly, yearly (long-term)
+                    </MudAlert>
+
+                    <MudNumericField @bind-Value="_editRetainHourlyBackups"
+                                   Label="Hourly Backups"
                                    Variant="Variant.Outlined"
-                                   Min="1"
-                                   Max="365"
-                                   HelperText="How long to keep old backups (1-365 days)" />
+                                   Min="0"
+                                   Max="168"
+                                   HelperText="Keep last N hourly backups (0-168 = 1 week)" />
+
+                    <MudNumericField @bind-Value="_editRetainDailyBackups"
+                                   Label="Daily Backups"
+                                   Variant="Variant.Outlined"
+                                   Min="0"
+                                   Max="31"
+                                   HelperText="Keep last N daily backups (0-31)" />
+
+                    <MudNumericField @bind-Value="_editRetainWeeklyBackups"
+                                   Label="Weekly Backups"
+                                   Variant="Variant.Outlined"
+                                   Min="0"
+                                   Max="52"
+                                   HelperText="Keep last N weekly backups (0-52)" />
+
+                    <MudNumericField @bind-Value="_editRetainMonthlyBackups"
+                                   Label="Monthly Backups"
+                                   Variant="Variant.Outlined"
+                                   Min="0"
+                                   Max="60"
+                                   HelperText="Keep last N monthly backups (0-60 = 5 years)" />
+
+                    <MudNumericField @bind-Value="_editRetainYearlyBackups"
+                                   Label="Yearly Backups"
+                                   Variant="Variant.Outlined"
+                                   Min="0"
+                                   Max="20"
+                                   HelperText="Keep last N yearly backups (0-20)" />
 
                     <MudTextField @bind-Value="_editBackupDirectory"
                                 Label="Backup Directory"
                                 Variant="Variant.Outlined"
-                                HelperText="Leave empty for default (./data/backups)"
-                                Placeholder="./data/backups" />
+                                HelperText="Leave empty for default (/data/backups)"
+                                Placeholder="/data/backups" />
                 }
                 else if (_editingJob.JobName == BackgroundJobNames.DatabaseMaintenance)
                 {
@@ -240,8 +274,15 @@
     private string _editScheduleType = "interval";
     private string? _editIntervalDuration = "1h";
     private string? _editCronExpression;
-    private int _editRetentionDays = 7;
+
+    // Granular backup retention settings (5-tier)
+    private int _editRetainHourlyBackups = 24;
+    private int _editRetainDailyBackups = 7;
+    private int _editRetainWeeklyBackups = 4;
+    private int _editRetainMonthlyBackups = 12;
+    private int _editRetainYearlyBackups = 3;
     private string? _editBackupDirectory;
+
     private bool _editRunVacuum = true;
     private bool _editRunAnalyze = true;
 
@@ -331,6 +372,13 @@
 
     private void OpenConfigDialog(BackgroundJobConfig job)
     {
+        // Redirect to backup page for backup job configuration
+        if (job.JobName == BackgroundJobNames.ScheduledBackup)
+        {
+            Navigation.NavigateTo("/settings/backup");
+            return;
+        }
+
         _editingJob = job;
         _editScheduleType = job.ScheduleType;
         _editIntervalDuration = job.IntervalDuration ?? "1h";
@@ -341,8 +389,17 @@
         {
             if (job.JobName == BackgroundJobNames.ScheduledBackup)
             {
-                if (job.Settings.TryGetValue(BackgroundJobSettings.RetentionDays, out var retention))
-                    _editRetentionDays = Convert.ToInt32(((JsonElement)retention).GetInt32());
+                // Load granular retention settings
+                if (job.Settings.TryGetValue(BackgroundJobSettings.RetainHourlyBackups, out var hourly))
+                    _editRetainHourlyBackups = Convert.ToInt32(((JsonElement)hourly).GetInt32());
+                if (job.Settings.TryGetValue(BackgroundJobSettings.RetainDailyBackups, out var daily))
+                    _editRetainDailyBackups = Convert.ToInt32(((JsonElement)daily).GetInt32());
+                if (job.Settings.TryGetValue(BackgroundJobSettings.RetainWeeklyBackups, out var weekly))
+                    _editRetainWeeklyBackups = Convert.ToInt32(((JsonElement)weekly).GetInt32());
+                if (job.Settings.TryGetValue(BackgroundJobSettings.RetainMonthlyBackups, out var monthly))
+                    _editRetainMonthlyBackups = Convert.ToInt32(((JsonElement)monthly).GetInt32());
+                if (job.Settings.TryGetValue(BackgroundJobSettings.RetainYearlyBackups, out var yearly))
+                    _editRetainYearlyBackups = Convert.ToInt32(((JsonElement)yearly).GetInt32());
                 if (job.Settings.TryGetValue(BackgroundJobSettings.BackupDirectory, out var dir))
                     _editBackupDirectory = ((JsonElement)dir).GetString();
             }
@@ -400,7 +457,12 @@
 
             if (_editingJob.JobName == BackgroundJobNames.ScheduledBackup)
             {
-                _editingJob.Settings[BackgroundJobSettings.RetentionDays] = _editRetentionDays;
+                // Save granular retention settings
+                _editingJob.Settings[BackgroundJobSettings.RetainHourlyBackups] = _editRetainHourlyBackups;
+                _editingJob.Settings[BackgroundJobSettings.RetainDailyBackups] = _editRetainDailyBackups;
+                _editingJob.Settings[BackgroundJobSettings.RetainWeeklyBackups] = _editRetainWeeklyBackups;
+                _editingJob.Settings[BackgroundJobSettings.RetainMonthlyBackups] = _editRetainMonthlyBackups;
+                _editingJob.Settings[BackgroundJobSettings.RetainYearlyBackups] = _editRetainYearlyBackups;
                 if (!string.IsNullOrWhiteSpace(_editBackupDirectory))
                     _editingJob.Settings[BackgroundJobSettings.BackupDirectory] = _editBackupDirectory;
             }
@@ -424,20 +486,37 @@
 
     private object BuildBackupPayload(BackgroundJobConfig job)
     {
-        var retentionDays = 7;
+        // Granular retention settings (5-tier)
+        var retainHourly = 24;
+        var retainDaily = 7;
+        var retainWeekly = 4;
+        var retainMonthly = 12;
+        var retainYearly = 3;
         string? backupDir = null;
 
         if (job.Settings != null)
         {
-            if (job.Settings.TryGetValue(BackgroundJobSettings.RetentionDays, out var retention))
-                retentionDays = Convert.ToInt32(((JsonElement)retention).GetInt32());
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainHourlyBackups, out var hourly))
+                retainHourly = Convert.ToInt32(((JsonElement)hourly).GetInt32());
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainDailyBackups, out var daily))
+                retainDaily = Convert.ToInt32(((JsonElement)daily).GetInt32());
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainWeeklyBackups, out var weekly))
+                retainWeekly = Convert.ToInt32(((JsonElement)weekly).GetInt32());
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainMonthlyBackups, out var monthly))
+                retainMonthly = Convert.ToInt32(((JsonElement)monthly).GetInt32());
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainYearlyBackups, out var yearly))
+                retainYearly = Convert.ToInt32(((JsonElement)yearly).GetInt32());
             if (job.Settings.TryGetValue(BackgroundJobSettings.BackupDirectory, out var dir))
                 backupDir = ((JsonElement)dir).GetString();
         }
 
         return new ScheduledBackupPayload
         {
-            RetentionDays = retentionDays,
+            RetainHourlyBackups = retainHourly,
+            RetainDailyBackups = retainDaily,
+            RetainWeeklyBackups = retainWeekly,
+            RetainMonthlyBackups = retainMonthly,
+            RetainYearlyBackups = retainYearly,
             BackupDirectory = backupDir
         };
     }

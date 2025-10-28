@@ -1,0 +1,309 @@
+@using TelegramGroupsAdmin.Services.Backup
+@inject IBackupService BackupService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<MudPaper Class="pa-4" Elevation="0" Outlined="true">
+    <MudStack Spacing="3">
+        <div>
+            <MudText Typo="Typo.h6" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Class="mr-2" />
+                Backup Browser
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Browse and manage backups in @BackupDirectory
+            </MudText>
+        </div>
+
+        @if (_isLoading)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (!_backups.Any())
+        {
+            <MudAlert Severity="Severity.Info">
+                No backups found in @BackupDirectory
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@_backups" Hover="true" Dense="true" Elevation="0" Outlined="true">
+                <HeaderContent>
+                    <MudTh>Filename</MudTh>
+                    <MudTh>Created</MudTh>
+                    <MudTh>Size</MudTh>
+                    <MudTh>Encrypted</MudTh>
+                    <MudTh Style="width: 200px;">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Filename">
+                        <MudText Typo="Typo.body2" Class="d-flex align-center">
+                            <MudIcon Icon="@Icons.Material.Filled.Archive" Size="Size.Small" Class="mr-2" Color="Color.Primary" />
+                            @context.FileName
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Created">
+                        @context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                    </MudTd>
+                    <MudTd DataLabel="Size">
+                        @FormatBytes(context.FileSizeBytes)
+                    </MudTd>
+                    <MudTd DataLabel="Encrypted">
+                        @if (context.IsEncrypted)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Lock">Encrypted</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.LockOpen">Unencrypted</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                            <MudIconButton Icon="@Icons.Material.Filled.Info"
+                                           Color="Color.Primary"
+                                           Size="Size.Small"
+                                           OnClick="@(() => ViewMetadata(context))"
+                                           title="View Metadata" />
+                            <MudIconButton Icon="@Icons.Material.Filled.SettingsBackupRestore"
+                                           Color="Color.Secondary"
+                                           Size="Size.Small"
+                                           OnClick="@(() => OnRestoreRequested.InvokeAsync(context))"
+                                           title="Wipe & Restore from this Backup" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                           Color="Color.Info"
+                                           Size="Size.Small"
+                                           OnClick="@(() => DownloadBackup(context))"
+                                           title="Download" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Color="Color.Error"
+                                           Size="Size.Small"
+                                           OnClick="@(() => DeleteBackup(context))"
+                                           title="Delete" />
+                        </MudButtonGroup>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Right">
+                @_backups.Count backup(s) | @FormatBytes(_backups.Sum(b => b.FileSizeBytes)) total
+            </MudText>
+        }
+
+        <MudButton Variant="Variant.Text"
+                   StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="LoadBackupsAsync"
+                   Size="Size.Small">
+            Refresh List
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+<!-- Metadata Dialog -->
+<MudDialog @bind-Visible="_showMetadataDialog" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Info" Class="mr-2" />
+            Backup Metadata
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_viewingBackup != null && _viewingMetadata != null)
+        {
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle2">File Information</MudText>
+                <MudSimpleTable Dense="true" Bordered="true">
+                    <tbody>
+                        <tr>
+                            <td><strong>Filename:</strong></td>
+                            <td>@_viewingBackup.FileName</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Created:</strong></td>
+                            <td>@_viewingBackup.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Size:</strong></td>
+                            <td>@FormatBytes(_viewingBackup.FileSizeBytes)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Encrypted:</strong></td>
+                            <td>
+                                @if (_viewingBackup.IsEncrypted)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Lock">Yes</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.LockOpen">No</MudChip>
+                                }
+                            </td>
+                        </tr>
+                    </tbody>
+                </MudSimpleTable>
+
+                <MudDivider />
+
+                <MudText Typo="Typo.subtitle2">Backup Contents</MudText>
+                <MudSimpleTable Dense="true" Bordered="true">
+                    <tbody>
+                        <tr>
+                            <td><strong>Version:</strong></td>
+                            <td>@_viewingMetadata.Version</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Tables:</strong></td>
+                            <td>@_viewingMetadata.TableCount</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Created At:</strong></td>
+                            <td>@DateTimeOffset.FromUnixTimeSeconds(_viewingMetadata.CreatedAt).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        </tr>
+                        <tr>
+                            <td><strong>App Version:</strong></td>
+                            <td>@_viewingMetadata.AppVersion</td>
+                        </tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudStack>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Error">Failed to load backup metadata</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showMetadataDialog = false)">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter] public string BackupDirectory { get; set; } = "/data/backups";
+    [Parameter] public EventCallback<BackupFileInfo> OnRestoreRequested { get; set; }
+
+    private List<BackupFileInfo> _backups = new();
+    private bool _isLoading = false;
+
+    // Metadata dialog
+    private bool _showMetadataDialog = false;
+    private BackupFileInfo? _viewingBackup;
+    private BackupMetadata? _viewingMetadata;
+
+    private readonly DialogOptions _dialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Medium,
+        FullWidth = true
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBackupsAsync();
+    }
+
+    public async Task LoadBackupsAsync()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Ensure directory exists
+            if (!Directory.Exists(BackupDirectory))
+            {
+                Directory.CreateDirectory(BackupDirectory);
+                _backups = new List<BackupFileInfo>();
+                return;
+            }
+
+            // Get all .tar.gz backup files
+            var files = Directory.GetFiles(BackupDirectory, "*.tar.gz")
+                .Select(async filepath =>
+                {
+                    var fileInfo = new FileInfo(filepath);
+                    var bytes = await File.ReadAllBytesAsync(filepath);
+                    var isEncrypted = await BackupService.IsEncryptedAsync(bytes);
+
+                    return new BackupFileInfo
+                    {
+                        FilePath = filepath,
+                        CreatedAt = new DateTimeOffset(fileInfo.CreationTimeUtc),
+                        FileSizeBytes = fileInfo.Length,
+                        IsEncrypted = isEncrypted
+                    };
+                })
+                .ToList();
+
+            _backups = (await Task.WhenAll(files))
+                .OrderByDescending(b => b.CreatedAt)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load backups: {ex.Message}", Severity.Error);
+            _backups = new List<BackupFileInfo>();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ViewMetadata(BackupFileInfo backup)
+    {
+        try
+        {
+            var bytes = await File.ReadAllBytesAsync(backup.FilePath);
+
+            // GetMetadataAsync will automatically use stored passphrase for encrypted backups
+            _viewingMetadata = await BackupService.GetMetadataAsync(bytes);
+            _viewingBackup = backup;
+            _showMetadataDialog = true;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to read metadata: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DownloadBackup(BackupFileInfo backup)
+    {
+        try
+        {
+            var bytes = await File.ReadAllBytesAsync(backup.FilePath);
+            await JS.InvokeVoidAsync("downloadFile", backup.FileName, Convert.ToBase64String(bytes));
+            Snackbar.Add($"Downloading {backup.FileName}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Download failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteBackup(BackupFileInfo backup)
+    {
+        try
+        {
+            File.Delete(backup.FilePath);
+            Snackbar.Add($"Deleted {backup.FileName}", Severity.Success);
+            await LoadBackupsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Delete failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len /= 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
+    }
+}

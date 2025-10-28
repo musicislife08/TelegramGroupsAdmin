@@ -201,7 +201,12 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 CronExpression = "0 2 * * *", // Daily at 2 AM
                 Settings = new Dictionary<string, object>
                 {
-                    [BackgroundJobSettings.RetentionDays] = 7
+                    [BackgroundJobSettings.RetainHourlyBackups] = 24,  // Last 24 hours
+                    [BackgroundJobSettings.RetainDailyBackups] = 7,    // Last 7 days
+                    [BackgroundJobSettings.RetainWeeklyBackups] = 4,   // Last 4 weeks
+                    [BackgroundJobSettings.RetainMonthlyBackups] = 12, // Last 12 months
+                    [BackgroundJobSettings.RetainYearlyBackups] = 3,   // Last 3 years
+                    [BackgroundJobSettings.BackupDirectory] = "/data/backups"
                 }
             },
             [BackgroundJobNames.MessageCleanup] = new BackgroundJobConfig

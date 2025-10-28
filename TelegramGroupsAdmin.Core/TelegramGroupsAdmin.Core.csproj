@@ -18,4 +18,8 @@
     </PackageReference>
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Security\eff_large_wordlist.txt" />
+  </ItemGroup>
+
 </Project>

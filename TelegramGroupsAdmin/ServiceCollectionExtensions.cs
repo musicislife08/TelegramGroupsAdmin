@@ -142,8 +142,10 @@ public static class ServiceCollectionExtensions
         // Prompt builder service (Phase 4.X: AI-powered prompt generation)
         services.AddScoped<TelegramGroupsAdmin.Services.PromptBuilder.IPromptBuilderService, TelegramGroupsAdmin.Services.PromptBuilder.PromptBuilderService>();
 
-        // Backup service (replaces old UserDataExportService)
+        // Backup services (replaces old UserDataExportService)
         services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupService, TelegramGroupsAdmin.Services.Backup.BackupService>();
+        services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupEncryptionService, TelegramGroupsAdmin.Services.Backup.BackupEncryptionService>();
+        services.AddScoped<TelegramGroupsAdmin.Services.Backup.BackupRetentionService>();
 
         // Email service (SendGrid)
         services.AddScoped<TelegramGroupsAdmin.Services.Email.IEmailService, TelegramGroupsAdmin.Services.Email.SendGridEmailService>();
@@ -363,6 +365,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<Jobs.BlocklistSyncJob>(); // Phase 4.13: URL Filtering
         services.AddScoped<Jobs.RefreshUserPhotosJob>(); // Phase 4.X: Nightly user photo refresh
         services.AddScoped<Jobs.ScheduledBackupJob>(); // Background Jobs Management: Automatic database backups
+        services.AddScoped<Jobs.RotateBackupPassphraseJob>(); // Backup passphrase rotation with re-encryption
         services.AddScoped<Jobs.DatabaseMaintenanceJob>(); // Background Jobs Management: PostgreSQL maintenance (STUB)
         services.AddScoped<Jobs.ChatHealthCheckJob>(); // Phase 4.X: Chat health monitoring (replaces PeriodicTimer)
 

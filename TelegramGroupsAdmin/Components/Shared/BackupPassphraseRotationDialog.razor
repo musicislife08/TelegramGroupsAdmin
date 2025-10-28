@@ -1,0 +1,233 @@
+@using TelegramGroupsAdmin.Services.Backup
+@using Microsoft.EntityFrameworkCore
+@using TelegramGroupsAdmin.Data
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IBackupService BackupService
+@inject IDbContextFactory<AppDbContext> ContextFactory
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthStateProvider
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Autorenew" Class="mr-2" />
+            Rotate Backup Passphrase
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (_step == RotationStep.Confirmation)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true">
+                    <strong>What will happen:</strong><br/>
+                    A new passphrase will be generated and all existing backups in @BackupDirectory will be re-encrypted with the new passphrase.
+                    This may take several minutes depending on the number of backups.
+                </MudAlert>
+
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <strong>Why rotate?</strong><br/>
+                    Regular passphrase rotation is a security best practice. If you suspect your passphrase has been compromised, rotate immediately.
+                </MudAlert>
+
+                <MudCheckBox @bind-Value="_understood" Color="Color.Primary" Dense="true">
+                    I understand this will re-encrypt all existing backups
+                </MudCheckBox>
+            }
+            else if (_step == RotationStep.Processing)
+            {
+                <MudProgressLinear Indeterminate="true" Class="mb-3" />
+                <MudText Typo="Typo.body1" Align="Align.Center">
+                    Rotating passphrase and re-encrypting backups...
+                </MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                    This may take a few minutes. Do not close this dialog.
+                </MudText>
+            }
+            else if (_step == RotationStep.DisplayNewPassphrase)
+            {
+                <MudAlert Severity="Severity.Success" Dense="true">
+                    <strong>Rotation Complete!</strong><br/>
+                    A background job is re-encrypting your backups. Copy this NEW passphrase and store it securely.
+                </MudAlert>
+
+                <MudPaper Class="pa-4" Elevation="0" Outlined="true" Style="background-color: var(--mud-palette-background-grey);">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Your NEW Backup Encryption Passphrase:</MudText>
+                    <MudText Typo="Typo.body1" Style="font-family: monospace; word-break: break-all; user-select: all;">
+                        <strong>@_newPassphrase</strong>
+                    </MudText>
+                </MudPaper>
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.ContentCopy"
+                           OnClick="CopyPassphraseToClipboard"
+                           FullWidth="true">
+                    Copy to Clipboard
+                </MudButton>
+
+                <MudAlert Severity="Severity.Error" Dense="true">
+                    <strong>Save this passphrase now!</strong><br/>
+                    You will need it to restore backups. The old passphrase will no longer work once re-encryption completes.
+                </MudAlert>
+
+                <MudCheckBox @bind-Value="_confirmSaved" Color="Color.Error" Dense="true">
+                    I have securely saved this NEW passphrase
+                </MudCheckBox>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        @if (_step == RotationStep.Confirmation)
+        {
+            <MudButton OnClick="OnCancel">Cancel</MudButton>
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       OnClick="StartRotation"
+                       Disabled="@(!_understood || _isProcessing)">
+                @if (_isProcessing)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Starting...</span>
+                }
+                else
+                {
+                    <span>Rotate Passphrase</span>
+                }
+            </MudButton>
+        }
+        else if (_step == RotationStep.Processing)
+        {
+            <MudButton Disabled="true">Please wait...</MudButton>
+        }
+        else if (_step == RotationStep.DisplayNewPassphrase)
+        {
+            <MudButton Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       OnClick="OnComplete"
+                       Disabled="@(!_confirmSaved || _isProcessing)">
+                @if (_isProcessing)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Starting Rotation...</span>
+                }
+                else
+                {
+                    <span>I've Saved It - Start Rotation</span>
+                }
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string BackupDirectory { get; set; } = "/data/backups";
+
+    private enum RotationStep
+    {
+        Confirmation,
+        Processing,
+        DisplayNewPassphrase
+    }
+
+    private RotationStep _step = RotationStep.Confirmation;
+    private bool _understood = false;
+    private bool _confirmSaved = false;
+    private bool _isProcessing = false;
+    private string _newPassphrase = string.Empty;
+    private string _userId = string.Empty;
+
+    private async Task StartRotation()
+    {
+        _isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            // Get current user ID (web user GUID string)
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+
+            // Get user ID claim (ClaimTypes.NameIdentifier contains the GUID string)
+            var userIdClaim = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
+
+            if (userIdClaim == null)
+            {
+                var availableClaims = string.Join(", ", authState.User.Claims.Select(c => c.Type));
+                throw new InvalidOperationException($"User ID claim not found. Available claims: {availableClaims}");
+            }
+
+            var userId = userIdClaim.Value; // Web user GUID string (e.g., "b388ee38-0ed3-4c09-9def-5715f9f07f56")
+
+            // Store userId for later when user confirms they saved the passphrase
+            _userId = userId;
+
+            // Generate new passphrase (but DON'T queue job yet!)
+            _newPassphrase = TelegramGroupsAdmin.Core.Security.PassphraseGenerator.Generate();
+
+            // Move to display step - user MUST save passphrase before job starts
+            _step = RotationStep.DisplayNewPassphrase;
+            Snackbar.Add("New passphrase generated. Please save it securely before confirming!", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to generate passphrase: {ex.Message}", Severity.Error);
+            _step = RotationStep.Confirmation;
+        }
+        finally
+        {
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyPassphraseToClipboard()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _newPassphrase);
+            Snackbar.Add("Passphrase copied to clipboard!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to copy: {ex.Message}. Please copy manually.", Severity.Warning);
+        }
+    }
+
+    private void OnCancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private async Task OnComplete()
+    {
+        if (!_confirmSaved)
+        {
+            Snackbar.Add("Please confirm you've saved the passphrase before continuing!", Severity.Warning);
+            return;
+        }
+
+        _isProcessing = true;
+        _step = RotationStep.Processing;
+        StateHasChanged();
+
+        try
+        {
+            // NOW queue the background job to re-encrypt backups
+            await BackupService.RotatePassphraseAsync(BackupDirectory, _userId);
+
+            Snackbar.Add("Passphrase rotation started! Background job is re-encrypting your backups.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(_newPassphrase));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to start rotation: {ex.Message}", Severity.Error);
+            _step = RotationStep.DisplayNewPassphrase;
+        }
+        finally
+        {
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+}

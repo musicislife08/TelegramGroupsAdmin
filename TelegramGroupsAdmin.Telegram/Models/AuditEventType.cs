@@ -97,5 +97,8 @@ public enum AuditEventType
     ConfigurationChanged = 28,
 
     /// <summary>Report reviewed and actioned (spam/ban/warn/dismiss)</summary>
-    ReportReviewed = 27
+    ReportReviewed = 27,
+
+    /// <summary>Backup encryption passphrase rotated</summary>
+    BackupPassphraseRotated = 29
 }

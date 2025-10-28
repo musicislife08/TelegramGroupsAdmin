@@ -150,20 +150,37 @@ public class RecurringJobSchedulerService : BackgroundService
     // Payload builders (same as BackgroundJobs.razor)
     private static ScheduledBackupPayload BuildBackupPayload(BackgroundJobConfig job)
     {
-        var retentionDays = 7;
+        // Granular retention settings (5-tier)
+        var retainHourly = 24;
+        var retainDaily = 7;
+        var retainWeekly = 4;
+        var retainMonthly = 12;
+        var retainYearly = 3;
         string? backupDir = null;
 
         if (job.Settings != null)
         {
-            if (job.Settings.TryGetValue(BackgroundJobSettings.RetentionDays, out var retention))
-                retentionDays = Convert.ToInt32(((JsonElement)retention).GetInt32());
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainHourlyBackups, out var hourly))
+                retainHourly = Convert.ToInt32(((JsonElement)hourly).GetInt32());
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainDailyBackups, out var daily))
+                retainDaily = Convert.ToInt32(((JsonElement)daily).GetInt32());
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainWeeklyBackups, out var weekly))
+                retainWeekly = Convert.ToInt32(((JsonElement)weekly).GetInt32());
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainMonthlyBackups, out var monthly))
+                retainMonthly = Convert.ToInt32(((JsonElement)monthly).GetInt32());
+            if (job.Settings.TryGetValue(BackgroundJobSettings.RetainYearlyBackups, out var yearly))
+                retainYearly = Convert.ToInt32(((JsonElement)yearly).GetInt32());
             if (job.Settings.TryGetValue(BackgroundJobSettings.BackupDirectory, out var dir))
                 backupDir = ((JsonElement)dir).GetString();
         }
 
         return new ScheduledBackupPayload
         {
-            RetentionDays = retentionDays,
+            RetainHourlyBackups = retainHourly,
+            RetainDailyBackups = retainDaily,
+            RetainWeeklyBackups = retainWeekly,
+            RetainMonthlyBackups = retainMonthly,
+            RetainYearlyBackups = retainYearly,
             BackupDirectory = backupDir
         };
     }
