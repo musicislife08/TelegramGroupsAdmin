@@ -65,6 +65,32 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
             criticalCheckNames.Count,
             string.Join(", ", criticalCheckNames));
 
+        // PERF-3 Option A: Early exit if no critical checks and user is trusted/admin
+        // Avoids expensive spam detection operations (DB queries, Bayes training, TF-IDF vectorization)
+        // for trusted users when no critical checks are configured
+        if (criticalCheckNames.Count == 0 && (isUserTrusted || isUserAdmin))
+        {
+            var skipReason = isUserTrusted
+                ? "User is trusted and no critical checks configured"
+                : "User is admin and no critical checks configured";
+
+            _logger.LogInformation(
+                "Skipping all spam detection for user {UserId} in chat {ChatId}: {Reason}",
+                request.UserId,
+                request.ChatId,
+                skipReason);
+
+            return new ContentCheckCoordinatorResult
+            {
+                IsUserTrusted = isUserTrusted,
+                IsUserAdmin = isUserAdmin,
+                SpamCheckSkipped = true,
+                SkipReason = skipReason,
+                CriticalCheckViolations = new List<string>(),
+                SpamResult = null
+            };
+        }
+
         // Phase 2: Run all content checks
         _logger.LogDebug(
             "Running content detection for user {UserId} in chat {ChatId} (Trusted: {Trusted}, Admin: {Admin})",
