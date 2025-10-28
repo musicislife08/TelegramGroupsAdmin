@@ -139,7 +139,7 @@ else
                     </MudText>
                 }
 
-                @if (_uploadMetadata != null && !_isRestoring)
+                @if (_backupBytes != null && !_isRestoring)
                 {
                     <MudCheckBox @bind-Value="_confirmWipe" Color="Color.Error" Class="mt-3" Dense="true">
                         I understand this will <strong>permanently delete all current data</strong>
@@ -601,8 +601,41 @@ else
         if (_backupBytes == null || !_confirmWipe)
             return;
 
-        // If encrypted, we use DB passphrase (auto-decrypt)
-        await PerformRestoreAsync(_backupBytes);
+        try
+        {
+            // Check if backup is encrypted - if so, ALWAYS prompt for passphrase (don't assume DB passphrase matches)
+            var isEncrypted = await BackupService.IsEncryptedAsync(_backupBytes);
+
+            if (isEncrypted)
+            {
+                // Prompt for passphrase
+                var dialog = await DialogService.ShowAsync<PassphrasePromptDialog>("Enter Backup Passphrase");
+                var dialogResult = await dialog.Result;
+
+            if (dialogResult is null || dialogResult.Canceled || dialogResult.Data == null)
+            {
+                Snackbar.Add("Restore canceled", Severity.Info);
+                return;
+            }
+
+            var passphrase = dialogResult.Data as string;
+            if (string.IsNullOrWhiteSpace(passphrase))
+            {
+                Snackbar.Add("Passphrase is required for encrypted backups", Severity.Warning);
+                return;
+            }
+
+                await PerformRestoreAsync(_backupBytes, passphrase);
+            }
+            else
+            {
+                await PerformRestoreAsync(_backupBytes, null);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Restore failed: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task RestoreFromBrowser(BackupFileInfo backup)
@@ -620,7 +653,35 @@ else
         try
         {
             var bytes = await File.ReadAllBytesAsync(backup.FilePath);
-            await PerformRestoreAsync(bytes);
+
+            // Check if backup is encrypted - if so, ALWAYS prompt for passphrase (don't assume DB passphrase matches)
+            var isEncrypted = await BackupService.IsEncryptedAsync(bytes);
+
+            if (isEncrypted)
+            {
+                // Prompt for passphrase
+                var dialog = await DialogService.ShowAsync<PassphrasePromptDialog>("Enter Backup Passphrase");
+                var dialogResult = await dialog.Result;
+
+                if (dialogResult is null || dialogResult.Canceled || dialogResult.Data == null)
+                {
+                    Snackbar.Add("Restore canceled", Severity.Info);
+                    return;
+                }
+
+                var passphrase = dialogResult.Data as string;
+                if (string.IsNullOrWhiteSpace(passphrase))
+                {
+                    Snackbar.Add("Passphrase is required for encrypted backups", Severity.Warning);
+                    return;
+                }
+
+                await PerformRestoreAsync(bytes, passphrase);
+            }
+            else
+            {
+                await PerformRestoreAsync(bytes, null);
+            }
         }
         catch (Exception ex)
         {
@@ -628,15 +689,23 @@ else
         }
     }
 
-    private async Task PerformRestoreAsync(byte[] backupBytes)
+    private async Task PerformRestoreAsync(byte[] backupBytes, string? passphrase)
     {
         _isRestoring = true;
         StateHasChanged();
 
         try
         {
-            // RestoreAsync auto-detects encryption and uses DB passphrase
-            await BackupService.RestoreAsync(backupBytes);
+            // Use explicit passphrase if provided, otherwise auto-detect and use DB passphrase
+            if (passphrase != null)
+            {
+                await BackupService.RestoreAsync(backupBytes, passphrase);
+            }
+            else
+            {
+                await BackupService.RestoreAsync(backupBytes);
+            }
+
             Snackbar.Add("System restored successfully! You will be logged out.", Severity.Success);
 
             await Task.Delay(2000);

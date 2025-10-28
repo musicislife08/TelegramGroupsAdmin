@@ -1,0 +1,74 @@
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mr-2" />
+            Enter Backup Passphrase
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Info" Dense="true">
+                This backup is encrypted. Enter the passphrase to decrypt and restore.
+            </MudAlert>
+
+            <MudTextField @bind-Value="_passphrase"
+                          Label="Passphrase"
+                          Variant="Variant.Outlined"
+                          InputType="@_passphraseInputType"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@_passphraseVisibilityIcon"
+                          OnAdornmentClick="TogglePassphraseVisibility"
+                          Immediate="true"
+                          FullWidth="true"
+                          AutoFocus="true"
+                          @onkeydown="HandleKeyDown" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="OnCancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="OnSubmit"
+                   Disabled="@string.IsNullOrWhiteSpace(_passphrase)">
+            Decrypt & Restore
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private string _passphrase = string.Empty;
+    private bool _showPassphrase = false;
+
+    private InputType _passphraseInputType => _showPassphrase ? InputType.Text : InputType.Password;
+    private string _passphraseVisibilityIcon => _showPassphrase ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility;
+
+    private void TogglePassphraseVisibility() => _showPassphrase = !_showPassphrase;
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_passphrase))
+        {
+            OnSubmit();
+        }
+    }
+
+    private void OnCancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void OnSubmit()
+    {
+        if (string.IsNullOrWhiteSpace(_passphrase))
+        {
+            Snackbar.Add("Passphrase cannot be empty", Severity.Warning);
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(_passphrase));
+    }
+}
