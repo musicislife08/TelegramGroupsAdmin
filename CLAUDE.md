@@ -90,7 +90,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - **TOTP Security**: IntermediateAuthService (5min tokens after password), 15min expiry for abandoned setups
 - **TickerQ Jobs**: All jobs re-throw exceptions for proper retry/logging. WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob, TempbanExpiryJob, FileScanJob. Jobs in main app for source generator, payloads in Abstractions. Polling interval: 5s (default 60s) via UpdateMissedJobCheckDelay().
 - **Infinite Scroll**: IntersectionObserver on scroll sentinel, timestamp-based pagination (`beforeTimestamp`), MudVirtualize, loads 50 messages/page
-- **Scroll Preservation**: Handles negative scrollTop (Chrome/Edge flex-reverse), captures state before DOM update, double requestAnimationFrame for layout completion, polarity-aware adjustment formula, 5px bottom threshold. TODO: Remove debug console.logs after production verification (app.js:318-440)
+- **Scroll Preservation**: Handles negative scrollTop (Chrome/Edge flex-reverse), captures state before DOM update, double requestAnimationFrame for layout completion, polarity-aware adjustment formula, 5px bottom threshold
 - **DM Notifications**: IDmDeliveryService (Singleton, creates scopes), pending_notifications (30d expiry), auto-delivery on `/start`. Account linking (`/link`) separate from DM setup. Future: Notification preferences UI with deep link to enable bot DMs.
 - **Media Attachments**: TelegramMediaService downloads and saves media (Animation/Video/Audio/Voice/Sticker/VideoNote) to /data/media, stored in messages table. Documents metadata-only (no download for display, file scanner handles temp download). MediaType enum duplicated in Data/Telegram layers (architectural boundary). UI displays media with HTML5 elements (video/audio controls, autoplay for GIFs).
 - **AI Prompt Builder**: Meta-AI feature using OpenAI to generate/improve custom spam detection prompts. Two workflows: (1) Generate from scratch via form (group topic, rules, strictness, training samples), (2) Improve existing version with feedback. prompt_versions table tracks history with versioning, metadata (generation params), created_by. Shared PromptImprovementDialog reused by generation flow and version history. Auto-grow textarea shows full prompt. Settings → Content Detection → OpenAI Integration shows version history with View/Restore/Improve buttons.
@@ -142,159 +142,21 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 **Job Syntax**: `using TickerQ.Utilities.Base;` (TickerFunctionAttribute), `using TickerQ.Utilities.Models;` (TickerFunctionContext<T>)
 
-## Development Roadmap
+## Development Status
 
-### Complete ✅
-**Phase 1-3**: Foundation (Blazor UI, auth+TOTP, user mgmt, audit), 9 spam algorithms (CAS, Bayes, TF-IDF, OpenAI, VirusTotal, Vision), cross-chat bans
-**Phase 4** (20/20 items - COMPLETE): TickerQ jobs, unified configs (JSONB), Telegram library, welcome system, /tempban, logging UI, settings UI, anti-impersonation (pHash), warning system, URL filtering (540K domains, 6 blocklists), file scanning (ClamAV+VirusTotal 96-98%, 16K files/month), file scan UI, DM notifications, media attachments (7 types), bot auto-ban, **AI prompt builder** (meta-AI feature, version history, iterative improvement), **tag management** (7 colors, CRUD UI, usage tracking, admin notes), **translation storage** (Phase 4.20: exclusive arc pattern, toggle UI, edit history, manual trigger), **language warnings** (Phase 4.21: auto-warn untrusted users posting non-spam non-English messages, configurable per-chat, DM delivery, warning system integration)
-**Phase 5** (partial): Analytics enhancements (false positive tracking, response time metrics, detection method comparison, daily trends), **notification preferences** (Phase 5.1: per-user notification preferences with JSONB event filters and channel configs, Telegram DM + Email delivery, hybrid routing - chat admins for chat events, Owners for system events, /profile/notifications UI)
-
-### Backlog 📋
-**4.9**: Bot hot-reload (IOptionsMonitor pattern), **4.15**: Report aggregation, **4.16**: Appeal system, **4.17.3**: Windows AMSI (deferred), **4.18**: Forum/topics support
-
-### Future 🔮
-**Phase 5**: Analytics (time-series, auto-trust, forwarded spam)
-**Phase 6**: ML insights (pattern detection, OpenAI recommendations), raid detection, bio spam, scheduled messages
-**Phase 7**: ML-based spam (10th algorithm)
-**Phase 8**: WTelegram integration (see WTELEGRAM_INTEGRATION.md)
-**Phase 9**: Mobile web support
-
-## Code Quality
-**Overall Score**: 89/100 (homelab-optimized, validated 2025-10-26)
-- **Build Quality**: 0 errors, 0 warnings (production-ready)
-- **Architecture**: 91/100 - Correctly optimized for Telegram singleton constraint, appropriate tech choices for homelab
-- **Performance**: Validated in production (255ms avg spam detection, 821ms P95)
-- **Security**: 8.5/10 after remediation (TOTP, parameterized queries, secure cookies, data protection)
-- **Maintainability**: 82/100 - Comprehensive documentation, solo-maintainer optimized
-
-See BACKLOG.md for deferred features, DI audit (partial), and completed optimizations. Code review (2025-10-26) validated claims against homelab deployment context.
+**Complete**: Phase 1-4 (Foundation, spam detection, TickerQ jobs, welcome system, file scanning, translations, notifications)
+**Roadmap**: See BACKLOG.md for all pending work and future features
 
 ## Testing
-**Database Migration Tests**: 22 tests (all passing) ✅
-- Run tests: `dotnet test TelegramGroupsAdmin.Tests/TelegramGroupsAdmin.Tests.csproj`
-- Tests validate migrations against real PostgreSQL 17 via Testcontainers
-- Execution time: ~7 seconds
-- Test coverage includes:
-  - Phase 1: Basic migrations (table creation, indexes)
-  - Phase 2: Foreign key constraints
-  - Phase 3: Cascade behavior (8 tests)
-  - Phase 4: Data integrity (4 tests)
-  - Phase 5: Migration workflow (2 tests)
-  - **NEW**: Sequence integrity (3 tests) - detects sequence drift bugs
-- **SCHEMA-1 FIX APPLIED** ✅: audit_log FK CASCADE rules corrected (migration 20251027002019)
 
-## Status
-**Phase 4 Complete** ✅ - All 20 core features shipped (including Phase 4.20 Translation Storage, Phase 4.21 Language Warnings)
-**Ready for MVP Deployment Testing** - See deployment testing checklist below
-
-## Pre-MVP Deployment Testing Checklist
-
-### Critical Path Testing
-1. **Database Setup** - Run all migrations on clean PostgreSQL 17 instance
-2. **First User Setup** - Owner creation, email verification, TOTP enrollment
-3. **Bot Connection** - Verify TelegramAdminBotService starts, polls, processes messages
-4. **Environment Variables** - All required vars set and validated
-5. **TickerQ Jobs** - All 5 background jobs discovered (0 Active Functions = source generator issue)
-6. **Spam Detection** - Test all 9 algorithms, OpenAI API connectivity, training data
-7. **File Scanning** - ClamAV connection (port 3310), VirusTotal API, FileScanJob execution
-8. **DM Notifications** - pending_notifications table, auto-delivery on /start
-9. **Media Download** - /data/media writable, all 7 types download correctly
-10. **Settings UI** - All configuration pages load, save, validation works
-
-### Feature Validation
-- AI Prompt Builder: Generate prompt, improve with feedback, version history
-- Tag Management: Create tags, assign to users, color display
-- File Scanner: Upload infected file, verify ClamAV+VirusTotal detection
-- Welcome System: New user joins, timeout job fires, welcome message sent
-- Anti-Impersonation: Duplicate photo detection, Levenshtein name matching
-- URL Filtering: Blocked domain detection (540K domains, 6 blocklists)
-- Translation Storage (Phase 4.20): Foreign language message auto-translates, toggle display, manual translation button, edit history shows translations
-- Language Warnings (Phase 4.21): Non-English non-spam messages from untrusted users trigger warnings, configurable message template with variables, DM delivery with chat fallback, warning system integration with auto-ban threshold
-
-### Performance Validation
-- Messages page: 50+ messages load without lag (infinite scroll)
-- Analytics queries: Response time under 100ms (optimized queries)
-- Spam detection: 255ms average, 821ms P95 (9 algorithms + OpenAI in veto mode)
-- File scanning: VirusTotal rate limit respected (4/min)
-
-### Security Validation
-- TOTP required for all users (except first Owner)
-- Email verification blocks login
-- Cookie authentication secure
-- Data Protection keys persistent (/data/keys)
-- SQL injection protection (parameterized queries)
-- XSS protection (Blazor auto-escaping)
-
-## Next Steps After MVP Testing
-Backlog items (4.9, 4.15-4.18) deferred to post-MVP
-
-## Production Deployment Sync
-
-### One-Time Data Migrations
-When syncing code changes to production, run these SQL migrations to clean up legacy data formats:
-
-**Migration 1: Fix Legacy check_results_json Format (2025-10-25)**
-Early testing used `"spam":true/false` format. Current code uses `"result":"spam/clean"` format.
-
-```sql
--- Verify how many rows need migration
-SELECT COUNT(*) FROM detection_results WHERE check_results_json LIKE '%"spam":%';
-
--- Fix all rows with old format
-UPDATE detection_results
-SET check_results_json = REPLACE(
-    REPLACE(check_results_json, '"spam":false', '"result":"clean"'),
-    '"spam":true', '"result":"spam"'
-)
-WHERE check_results_json LIKE '%"spam":%';
-
--- Verify migration (should return 0)
-SELECT COUNT(*) FROM detection_results WHERE check_results_json LIKE '%"spam":%';
-```
-
-**Expected Result**: 1 row updated on dev, similar count on production (early testing data only)
-
-**Migration 2: Sequence Drift Prevention (2025-10-27)**
-Backup/restore system had bug where sequences weren't reset for tables with restored data, causing duplicate key violations.
-
-**Root Cause**: `ResetSequencesAsync()` was called once at end of restore with list of tables from backup. If backup was taken when table was empty but production had data, sequence stayed out of sync after wipe.
-
-**Fix Applied**: `ResetSequenceForTableAsync()` now called immediately after restoring each table's data. More robust - sequences always match table state before moving to next table. If restore fails mid-way, already-restored tables have correct sequences.
-
-**One-Time Production Fix** (already applied):
-```sql
--- Reset all sequences to match current max IDs
-DO $$
-DECLARE
-    seq_record RECORD;
-    new_val BIGINT;
-BEGIN
-    FOR seq_record IN
-        SELECT
-            c.table_name,
-            c.column_name,
-            pg_get_serial_sequence(quote_ident(c.table_name), quote_ident(c.column_name)) as sequence_name
-        FROM information_schema.columns c
-        WHERE c.table_schema = 'public'
-            AND (c.is_identity = 'YES' OR c.column_default LIKE 'nextval%')
-    LOOP
-        IF seq_record.sequence_name IS NOT NULL THEN
-            EXECUTE format(
-                'SELECT setval(%L, COALESCE((SELECT MAX(%I) FROM %I WHERE %I > 0), 1))',
-                seq_record.sequence_name,
-                seq_record.column_name,
-                seq_record.table_name,
-                seq_record.column_name
-            ) INTO new_val;
-        END IF;
-    END LOOP;
-END $$;
-```
-
-**Prevention**: Code fix ensures future backup/restore operations won't cause sequence drift. Manual sequence resets should never be needed again.
+**Migration Tests**: 22 tests (all passing) via Testcontainers.PostgreSQL, validates against real PostgreSQL 17
 
 ## CRITICAL RULES
+
 - Never run app in normal mode (only one instance allowed, user runs in Rider for debugging)
 - Testing: Use `dotnet run --migrate-only` to catch startup issues after building
 - Always let user test manually - complex app, cannot validate runtime behavior automatically
 - dont include time estimates in your documentation
+- when creating dialogs using MudBlazor remember in v8 its now IMudDialogInstance not MudDialogInstance
+- when you need to create a migration for this project remember we use efcore so changes to the models and appdbcontext need to be done first.  then create with eftools.  never the reverse
+- with efcore always try to do as much as you can for indexes, constraints and anything else that can be configured using the appdbcontext. not manually in custom sql blocks
