@@ -12,689 +12,237 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ### SECURITY-1: Git History Sanitization (Pre-Open Source)
 
-**Status:** BACKLOG 📋 **CRITICAL - Blocking for open source**
-**Severity:** Security | **Impact:** Repository security, credential protection
+**Priority:** CRITICAL - Blocking for GitHub migration
+**Impact:** launchSettings.json with secrets in 10+ commits
 
-**Current State:**
-- launchSettings.json appears in 10+ commits in git history
-- File contains potential secrets (connection strings, API keys, environment-specific configs)
-- NOW in .gitignore (good) but historical commits still contain it (bad)
-- Git history is permanent - once pushed to public GitHub, secrets are exposed forever
-
-**Security Risk:**
-- API keys, database credentials, tokens in git history
-- GitHub scanning bots will find exposed secrets within minutes of public push
-- Cannot be undone easily once public (requires force push to all forks)
-- Credential leaks = immediate security breach requiring key rotation
-
-**Proposed Solution:**
-1. **Use BFG Repo-Cleaner** (recommended) to purge launchSettings.json from all history
-2. **Secret scanning audit** - grep for hardcoded credentials, API keys, tokens
-3. **Force push** to Gitea (requires coordination with production machine)
-4. **Re-clone** on both dev and production machines
-5. **Add pre-commit hooks** to prevent future secret commits (detect-secrets or git-secrets)
-
-**Implementation Steps:**
-```bash
-# Backup repo first
-cp -r TelegramGroupsAdmin TelegramGroupsAdmin-backup
-
-# Remove launchSettings.json from all history
-bfg --delete-files launchSettings.json TelegramGroupsAdmin
-
-# Clean up
-cd TelegramGroupsAdmin
-git reflog expire --expire=now --all
-git gc --prune=now --aggressive
-
-# Force push
-git push --force --all origin
-git push --force --tags origin
-```
-
-**Verification:**
-- `git log --all --full-history -- "*launchSettings.json"` returns no results
-- `git log -p | grep -i "password\|apikey"` finds no hardcoded secrets
-- Fresh clone has clean history
-
-**Files to Audit:**
-- TelegramGroupsAdmin/Properties/launchSettings.json (confirmed in 10+ commits)
-- Any other launchSettings.json in sub-projects
-- compose/compose.yml (contains Telegram bot token, OpenAI, VirusTotal, SendGrid API keys)
-- TelegramGroupsAdmin/http-client.private.env.json (contains API keys for HTTP testing)
-- Hardcoded secrets in code (connection strings, API keys)
-
-**Priority:** HIGH - Must complete before GitHub migration
-
-
-**Related Work:**
-- Document secret management in README (environment variables only)
-- Add pre-commit hooks to block future secret commits
+**Actions:**
+1. Use BFG Repo-Cleaner to purge launchSettings.json from all history
+2. Audit for other secrets (compose.yml, http-client.private.env.json)
+3. Force push to Gitea, re-clone on dev/prod
+4. Add pre-commit hooks (detect-secrets or git-secrets)
 
 ---
 
 ### SECURITY-3: CSRF Protection on API Endpoints
 
-**Status:** BACKLOG 📋
-**Severity:** Security | **Impact:** Defense-in-depth for state-changing operations
-**Discovered:** 2025-10-26 via security agent code review
+**Priority:** MEDIUM
+**Impact:** Defense-in-depth for state-changing operations (LOW risk for homelab)
 
-**Current State:**
-- `app.UseAntiforgery()` enabled in pipeline (WebApplicationExtensions.cs:40)
-- API endpoints don't validate antiforgery tokens
-- Cookie auth with `SameSite=Lax` provides partial protection
-
-**Risk Assessment:**
-- **LOW risk** for homelab deployment (Blazor Server uses SignalR/WebSocket)
-- **MEDIUM risk** if API endpoints called from JavaScript/AJAX
-- SameSite=Lax prevents most CSRF attacks but lacks defense-in-depth
-
-**Proposed Solution:**
-Add antiforgery validation to state-changing endpoints:
-```csharp
-endpoints.MapPost("/api/auth/logout", async (HttpContext context, ...) =>
-{
-    var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
-    await antiforgery.ValidateRequestAsync(context);
-    // ... rest of handler
-}).RequireAuthorization();
-```
-
-**Affected Endpoints:**
-- POST /api/auth/logout
-- POST /api/auth/register
-- POST /resend-verification
-- POST /forgot-password
-- POST /reset-password
-
-**Priority:** MEDIUM - Defense-in-depth, not critical for homelab
+**Action:** Add antiforgery validation to 5 POST endpoints (logout, register, resend-verification, forgot-password, reset-password)
 
 
 ---
 
 ### SECURITY-4: Backup Passphrase Logging Audit
 
-**Status:** BACKLOG 📋
-**Severity:** Security | **Impact:** Prevents credential leakage via logs
-**Discovered:** 2025-10-27 during backup encryption implementation review
-
-**Current State:**
-- Backup passphrases passed as `string` parameters through multiple layers
-- No SecureString usage (acceptable - Microsoft discourages it in modern .NET)
-- Passphrase lifetime is milliseconds (encrypt immediately after generation/input)
-- Unknown if any code paths accidentally log the passphrase
-
-**Threat Model:**
-- **HIGH RISK**: Passphrase appearing in exception messages or debug logs
-- **MEDIUM RISK**: Passphrase in stack traces when exceptions occur
-- **LOW RISK**: Memory dumps (homelab environment, requires system-level access)
-
-**Audit Required:**
-Grep codebase for potential passphrase logging in:
-1. BackupService.cs - exception handlers, log statements
-2. BackupEncryptionSetupDialog.razor - error handling
-3. BackupPassphraseRotationDialog.razor - error handling
-4. RotateBackupPassphraseJob.cs - exception logging
-5. Any method accepting passphrase parameter
-
-**Search Patterns:**
-```bash
-grep -r "passphrase" --include="*.cs" | grep -i "log\|exception\|throw"
-grep -r "newPassphrase\|_generatedPassphrase" --include="*.cs" | grep -i "log"
-```
-
-**Remediation:**
-- Replace passphrase with `[REDACTED]` in all log statements
-- Ensure exceptions don't include passphrase in message
-- Document: "Never log passphrase parameter values"
-
 **Priority:** LOW - Preventative measure, no known leaks
+**Impact:** Prevent passphrase exposure in logs/exceptions
 
-
-**When to Do:**
-- Before open sourcing (prevents credentials in logs if deployed publicly)
-- Part of security hardening pass
+**Action:** Audit BackupService, BackupEncryptionSetupDialog, BackupPassphraseRotationDialog, RotateBackupPassphraseJob for passphrase logging. Replace with `[REDACTED]` in all log statements.
 
 ---
 
 ### DOCS-1: README.md (Pre-Open Source)
 
-**Status:** BACKLOG 📋 **HIGH - Blocking for open source**
-**Severity:** Documentation | **Impact:** First impression, adoption rate
-
-**Current State:**
-- No README.md at repository root
-- GitHub landing page empty
-
-**What's Needed:**
-- Project description and value proposition
-- Screenshots of key features (Messages, Analytics, Settings)
-- Quick start (5 commands from zero to running)
-- Comparison to alternatives
-- Community links
-
 **Priority:** HIGH - Blocking for GitHub migration
+**Impact:** First impression, adoption rate
+
+**Needs:** Project description, screenshots, quick start, comparison to alternatives, community links
 
 ---
 
 ### DOCS-2: Setup Guide (Pre-Open Source)
 
-**Status:** BACKLOG 📋 **HIGH - Blocking for open source**
-**Severity:** Documentation | **Impact:** User onboarding success
-
-**What's Needed:**
-- Docker Compose walkthrough (simple copy/paste)
-- .env.example explanation (where to get each API key)
-- First user setup process
-- Health check verification
-- Common deployment targets
-
 **Priority:** HIGH - Blocking for GitHub migration
+**Impact:** User onboarding success
+
+**Needs:** Docker Compose walkthrough, .env.example explanation, first user setup, health check verification
 
 ---
 
 ### DOCS-3: Configuration Guide
 
-**Status:** BACKLOG 📋
-**Severity:** Documentation | **Impact:** Optimal spam detection tuning
+**Priority:** MEDIUM
+**Impact:** Optimal spam detection tuning
 
-**What's Needed:**
-- Explain all 9 algorithms in plain English
-- When to enable/disable each one
-- Example configurations (Strict / Moderate / Permissive)
-- Threshold tuning guidance
-- File scanning configuration
-- Auto-trust settings
-
-**Priority:** MEDIUM - Nice to have before launch
+**Needs:** Explain 9 algorithms, when to enable/disable, example configs (Strict/Moderate/Permissive), threshold tuning, file scanning config, auto-trust settings
 
 ---
 
 ### DOCS-4: LICENSE File (Pre-Open Source)
 
-**Status:** BACKLOG 📋 **HIGH - Blocking for open source**
-**Severity:** Legal | **Impact:** Usage clarity, contribution safety
-
-**Decision Needed:**
-- MIT (permissive, max adoption)
-- AGPL (copyleft, prevents commercial abuse)
-
 **Priority:** HIGH - Blocking for GitHub migration
+**Impact:** Usage clarity, contribution safety
+
+**Decision:** MIT vs AGPL
 
 ---
 
 ### DOCS-5: Contextual Help System
 
-**Status:** BACKLOG 📋
-**Severity:** UX | **Impact:** Reduces support burden, builds user confidence
+**Priority:** MEDIUM
+**Impact:** Reduces support burden
 
-**What's Needed:**
-- Help icons (?) next to complex settings
-- Tooltips explaining each option
-- "Learn more" expandable sections
-- Examples embedded in UI
-
-**Priority:** MEDIUM - Nice to have before launch
+**Needs:** Help icons next to settings, tooltips, expandable sections, embedded examples
 
 ---
 
 ### DOCS-6: First-Time Setup Guidance
 
-**Status:** BACKLOG 📋
-**Severity:** UX | **Impact:** Reduces misconfiguration
+**Priority:** LOW
+**Impact:** Reduces misconfiguration
 
-**What's Needed:**
-- Welcome modal on first login
-- Suggested default configurations
-- Optional guided wizard
-- "Getting Started" dashboard widget
-
-**Priority:** LOW - Post-launch enhancement
+**Needs:** Welcome modal, default configs, optional wizard, dashboard widget
 
 ---
 
 ### UX-1: Detection Explanation Enhancement
 
-**Status:** BACKLOG 📋
-**Severity:** UX | **Impact:** Trust and transparency
+**Priority:** MEDIUM
+**Impact:** Trust and transparency
 
-**Current State:**
-- Shows confidence scores and detection methods
-- Missing: WHY the decision was made
-
-**Enhancement:**
-- Show contributing factors for each detection
-- Explain threshold logic
-- Example: "Banned because: CAS (90%), Stop Words: 2 matches (85%), TF-IDF (73%)"
-- Example: "Allowed because: User is Trusted, Bayesian Filter (88% ham)"
-
-**Priority:** MEDIUM - Nice to have before launch
+**Enhancement:** Show contributing factors for each detection with threshold logic (e.g., "Banned: CAS 90%, Stop Words 85%, TF-IDF 73%")
 
 ---
 
 ### UX-2: Message Trends Analytics
 
-**Status:** BACKLOG 📋
-**Severity:** Feature | **Impact:** Complete analytics offering
+**Priority:** MEDIUM
+**Impact:** Complete analytics offering
 
-**Current State:**
-- Analytics → Message Trends tab says "Coming soon"
-
-**Implementation:**
-- Daily message volume charts
-- Messages per chat breakdown
-- Active users per day
-- Peak hours heatmap
-- Growth trends (week-over-week)
-- Spam vs ham ratio over time
-- Use existing messages/detection_results tables
-
-**Priority:** MEDIUM - Nice to have before launch
+**Needs:** Daily volume charts, per-chat breakdown, active users/day, peak hours heatmap, week-over-week growth, spam vs ham ratio over time
 
 ---
 
 ### ANALYTICS-1: Algorithm Reliability Dashboard
 
-**Status:** BACKLOG 📋
-**Severity:** Feature | **Impact:** Algorithm tuning confidence
+**Priority:** MEDIUM
+**Impact:** Algorithm tuning confidence
 
-**What It Shows:**
-- Performance metrics per algorithm (checks, spam flagged, false positives)
-- False positive rate by algorithm
-- Average confidence per algorithm
-- Trends over time
-- Recommendations (e.g., "Stop Words has 11.5% false positive rate - review list")
-
-**Data Source:** Existing detection_results + manual corrections
-
-**Priority:** MEDIUM - Nice to have before launch
+**Shows:** Performance metrics per algorithm, false positive rates, average confidence, trends, recommendations (e.g., "Stop Words: 11.5% FP rate")
 
 ---
 
 ### ANALYTICS-2: Algorithm Recommendations
 
-**Status:** BACKLOG 📋
-**Severity:** Feature | **Impact:** Automated optimization
+**Priority:** LOW
+**Impact:** Automated optimization
 
-**Auto-Suggest Configuration Changes:**
-- "CAS detected 0 spam in 30 days - consider disabling"
-- "OpenAI Vision has 98% accuracy - consider increasing weight"
-- "Stop Words false positive rate increased - review corrections"
-
-**Priority:** LOW - Post-launch enhancement
+**Auto-Suggest:** "CAS: 0 spam in 30 days - disable?", "OpenAI Vision: 98% accuracy - increase weight?", "Stop Words FP rate increased - review?"
 
 ---
 
 ### ANALYTICS-3: Export Features
 
-**Status:** BACKLOG 📋
-**Severity:** Feature | **Impact:** External analysis, compliance
+**Priority:** LOW
+**Impact:** External analysis, compliance
 
-**Export to CSV/Excel:**
-- Analytics data (detection stats, trends)
-- User lists (with tags, trust status)
-- Audit logs (compliance)
-- Message history (backup/migration)
-
-**Priority:** LOW - Post-launch enhancement
+**Export to CSV/Excel:** Analytics data, user lists, audit logs, message history
 
 ---
 
 ### ML-1: Algorithm Weight Optimization
 
-**Status:** BACKLOG 📋
-**Severity:** Enhancement | **Impact:** Fewer false positives
+**Priority:** LOW
+**Impact:** Fewer false positives
 
-**Current:** Confidence aggregation uses fixed weights
-**Enhancement:** Learn optimal weights from manual corrections
-- Train on correction history
-- Auto-tune weekly
-- Example: "OpenAI Vision weight increased 1.0 → 1.3 based on corrections"
-
-**Priority:** LOW - Post-launch experimentation
+**Enhancement:** Learn optimal weights from correction history, auto-tune weekly
 
 ---
 
 ### ML-2: Community-Specific Pattern Mining
 
-**Status:** BACKLOG 📋
-**Severity:** Enhancement | **Impact:** Personalized spam detection
+**Priority:** LOW
+**Impact:** Personalized spam detection
 
-**What It Does:**
-- Analyze banned messages, suggest new stop words
-- Extract patterns via TF-IDF
-- One-click add to config
-- Example: "These phrases appeared in 80% of your spam: [list]"
-
-**Priority:** LOW - Post-launch experimentation
+**Feature:** Analyze banned messages, suggest stop words via TF-IDF, one-click add to config
 
 ---
 
 ### ML-3: Anomaly Detection for Raids
 
-**Status:** BACKLOG 📋
-**Severity:** Feature | **Impact:** Early warning for coordinated attacks
+**Priority:** LOW
+**Impact:** Early warning for coordinated attacks
 
-**Detect Unusual Patterns:**
-- Burst of new joins (15 users in 5 minutes)
-- Similar messages from multiple users
-- Coordinated posting patterns
-- Alert: "⚠️ Unusual activity detected"
-
-**Priority:** LOW - Post-launch experimentation
+**Detect:** Burst joins (15 in 5min), similar messages from multiple users, coordinated posting patterns
 
 ---
 
 ### DEPLOY-1: Docker Compose Simplicity Validation
 
-**Status:** BACKLOG 📋 **HIGH - Blocking for open source**
-**Severity:** Deployment | **Impact:** Deployment friction
-
-**Audit Checklist:**
-- .env.example has all required variables
-- Clear CHANGEME markers for secrets
-- No complex args/profiles for basic setup
-- Works standalone (no required custom networks/volumes)
-- Power users can extend without breaking defaults
-
 **Priority:** HIGH - Blocking for GitHub migration
+**Impact:** Deployment friction
+
+**Audit:** .env.example completeness, CHANGEME markers, no complex args, standalone operation, extensible defaults
 
 ---
 
 ### DEPLOY-2: Troubleshooting Documentation
 
-**Status:** BACKLOG 📋
-**Severity:** Documentation | **Impact:** Support burden reduction
+**Priority:** MEDIUM
+**Impact:** Support burden reduction
 
-**Add to README:**
-- Common issues (ClamAV not starting, bot offline, database connection)
-- Health check commands (curl, docker logs)
-- Log debugging tips
-- Permission errors
-
-**Priority:** MEDIUM - Nice to have before launch
+**Add to README:** Common issues (ClamAV, bot offline, DB connection), health check commands, log debugging, permission errors
 
 ---
 
 ### SCHEMA-2: Migrate Data Protection Purpose String
 
-**Status:** BACKLOG 📋
-**Severity:** Schema | **Impact:** Breaking change for encrypted data
-**Discovered:** 2025-10-28 via legacy audit
+**Priority:** LOW - Cosmetic issue
+**Impact:** Old project name in encryption purpose string
 
-**Problem:**
-ProtectedDataAttribute uses "TgSpamPreFilter.TotpSecrets" as default purpose string (old project name). Changing this will break decryption of existing encrypted data (TOTP secrets, API keys, backup passphrases).
-
-**Current State:**
-- Purpose string: `"TgSpamPreFilter.TotpSecrets"` (hardcoded default)
-- Used for: TOTP secrets, API keys, backup passphrases
-- Cannot simply rename without data migration
-
-**Migration Strategy:**
-1. Create migration to decrypt all protected fields with old purpose
-2. Re-encrypt with new purpose: `"TelegramGroupsAdmin.Secrets"`
-3. Update ProtectedDataAttribute default
-4. Verify backup/restore still works
-
-**Tables Affected:**
-- users.totp_secret (TOTP secrets)
-- configs.api_keys (VirusTotal, etc.)
-- configs.passphrase_encrypted (backup passphrases)
-
-**Priority:** LOW - Rename complete, old purpose string still functional (cosmetic issue)
+**Migration:** Decrypt all protected fields with old purpose, re-encrypt with `TelegramGroupsAdmin.Secrets` (affects users.totp_secret, configs.api_keys, configs.passphrase_encrypted)
 
 ---
 
 
 ### FEATURE-4.23: Cross-Chat Ban Message Cleanup
 
-**Status:** BACKLOG 📋
-**Severity:** Feature | **Impact:** Complete spam removal, user experience
+**Priority:** MEDIUM
+**Impact:** Complete spam removal after cross-chat ban
 
-**Current Behavior:**
-- Cross-chat ban system bans user from all managed chats
-- Existing messages from banned user remain in all chats
-- Spam messages stay visible after ban
-
-**Enhancement:**
-- When high-confidence spam triggers cross-chat ban, delete ALL existing messages from that user across all chats
-- Use message history table to find all messages by telegram_user_id
-- Delete messages via Telegram Bot API (if within 48hr window) or mark as deleted in DB
-- Audit log all deletions
-
-**Implementation Notes:**
-- Only trigger on high-confidence spam (>90% confidence or OpenAI veto)
-- Query messages table: `WHERE telegram_user_id = ? AND deleted_at IS NULL`
-- Batch delete via TickerQ job (avoid blocking moderation action)
-- Handle Telegram API 48-hour deletion window (older messages can't be deleted via API)
-
-**Priority:** MEDIUM - Nice to have before launch
+**Enhancement:** When high-confidence spam (>90% or OpenAI veto) triggers cross-chat ban, delete ALL existing messages from that user via TickerQ job (Telegram API 48hr limit)
 
 ---
 
 ### QUALITY-1: Nullable Reference Type Hardening
 
-**Status:** BACKLOG 📋
-**Severity:** Code Quality | **Impact:** Bug prevention, developer experience
+**Priority:** MEDIUM
+**Impact:** Bug prevention, explicit intent
 
-**Current State:**
-- Nullable reference types enabled in ALL 7 projects (`<Nullable>enable</Nullable>`)
-- TreatWarningsAsErrors enabled in 3/7 projects (ContentDetection, Core, Data)
-- TreatWarningsAsErrors MISSING in 4/7 projects (main app, Configuration, Telegram, Telegram.Abstractions)
-- Unknown number of potential null dereference warnings in projects without strict enforcement
-- Build currently succeeds with 0 errors, 0 warnings (likely due to null-forgiving operators or selective suppression)
-
-**Motivation:**
-- Reduce potential NullReferenceException bugs
-- Make intent explicit (nullable vs non-nullable)
-- Show best practices for open source community
-- Leverage C# compiler for null safety without massive Option<T> rewrite
-
-**Proposed Solution:**
-**Phase 1: Enable TreatWarningsAsErrors in Remaining Projects** (~15 min)
-- Add `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` to 4 remaining projects:
-  - TelegramGroupsAdmin/TelegramGroupsAdmin.csproj (main app)
-  - TelegramGroupsAdmin.Configuration/TelegramGroupsAdmin.Configuration.csproj
-  - TelegramGroupsAdmin.Telegram/TelegramGroupsAdmin.Telegram.csproj
-  - TelegramGroupsAdmin.Telegram.Abstractions/TelegramGroupsAdmin.Telegram.Abstractions.csproj
-- Build and count nullability errors that surface
-
-**Phase 2: Fix Nullable Warnings** ()
-- Fix all nullable warnings revealed by Phase 1
-- Focus on critical warnings first (CS8600, CS8602, CS8603 - actual null dereference risk)
-- Use null-forgiving operator (`!`) sparingly for legitimate false positives
-- Prioritize hot paths (spam detection, message processing, bot services)
-
-**Phase 3: Ongoing Enforcement** (future)
-- Enforce for all new code
-- Gradual cleanup of remaining warnings
-- Code review checklist for null handling
-
-**Practical Guidelines:**
-- **DO**: Use `string?` for optional parameters
-- **DO**: Check null before dereferencing: `if (user?.Email != null)`
-- **DO**: Return empty collections instead of null: `Array.Empty<T>()`
-- **DON'T**: Use `!` everywhere to silence warnings
-- **DON'T**: Rewrite working code just to eliminate null
-- **DON'T**: Make every field nullable "to be safe"
-
-**Success Criteria:**
-- TreatWarningsAsErrors enabled in ALL 7 projects
-- Zero nullable warnings in entire solution
-- Build succeeds with 0 errors, 0 warnings
-- No new nullable warnings in future PRs
-- No production NullReferenceExceptions from new code
-
-**Priority:** MEDIUM - Quality improvement, not blocking
-
-
-**When to Do:**
-- NOT before security sanitization (security is blocking)
-- NOT before migration testing (higher priority)
-- MAYBE after migration testing Phase 2
-- DEFINITELY before open sourcing (shows code quality)
+**Phase 1:** Enable TreatWarningsAsErrors in 4 remaining projects (main app, Configuration, Telegram, Telegram.Abstractions)
+**Phase 2:** Fix nullable warnings (focus CS8600/CS8602/CS8603 first, prioritize hot paths)
 
 ---
 
 ### FEATURE-4.20: Auto-Fix Database Sequences on Backup Restore
 
 **Status:** DEFERRED ⏸️
-**Severity:** Bug Fix | **Impact:** Data integrity, user experience
-**Investigation Date:** 2025-10-26
+**Priority:** LOW - Monitor and revisit if recurs
+**Impact:** Data integrity (sequence drift between restores, root cause unknown)
 
-**Current Behavior:**
-- Sequence mismatches occurred on both dev and prod databases independently
-- `detection_results`: seq=1, max=1284
-- `reports`: seq=1, max=9
-- `audit_log`: seq=2, max=84
-- Subsequent inserts fail with "duplicate key value violates unique constraint" errors
-
-**Investigation Results:**
-- ✅ Production backup/restore **DOES** preserve sequence values correctly
-- ✅ After restore from prod → dev: all sequences synchronized perfectly
-- ⚠️ Root cause unknown - sequences drift **between** restores (not during restore)
-- Possible causes: manual SQL, bulk imports, migration bug, or external tool
-
-**Test Coverage:**
-- ✅ Created `SequenceIntegrityTests.cs` (3 tests) to detect mismatches in CI
-- Tests validate sequences after fresh migrations and data inserts
-- Can detect manual sequence bypass scenarios
-
-**Proposed Enhancement (deferred):**
-- Startup sequence validation and auto-fix (<100ms overhead)
-- Log WARNING when mismatches detected and auto-corrected
-- Prevents crashes, self-healing until root cause identified
-
-**Decision:** Deferred pending more data
-- Manual fix: `SELECT SETVAL('table_id_seq', COALESCE(MAX(id), 1), true);`
-- Test coverage added to catch in CI
-- Will implement startup check if problem recurs
-
-**SQL Pattern:**
-```sql
-SELECT SETVAL('table_name_id_seq', COALESCE((SELECT MAX(id) FROM table_name), 1), true);
-```
-
-**Priority:** LOW - Monitor and revisit if sequences drift again
-
-**Related Files:**
-- `TelegramGroupsAdmin.Tests/Migrations/SequenceIntegrityTests.cs` (new)
+**Decision:** Deferred - backup/restore preserves sequences correctly. Test coverage added (SequenceIntegrityTests.cs). Will implement startup validation if problem recurs.
 
 ---
 
 ### FEATURE-5.2: Universal Notification Center
 
-**Status:** BACKLOG 📋
-**Severity:** Feature | **Impact:** User experience, cross-feature infrastructure
-**Designed:** 2025-10-27
+**Priority:** MEDIUM
+**Impact:** In-app notifications for background jobs
 
-**Current State:**
-- Background jobs (file scans, backup rotation, etc.) have no unified notification mechanism
-- Existing INotificationService sends email/Telegram DMs (heavy-handed for routine events)
-- No in-app notification center for user-initiated background jobs
-- No browser notification API integration for when user has another tab focused
+**Phase 1 (In-Memory):** NotificationBell component with ProtectedLocalStorage, event-driven via Blazor Server circuit
+**Phase 2 (Database):** Persistent notifications table, browser notification API via JS interop, cross-device sync
 
-**Problem:**
-Two different notification systems that don't integrate:
-1. **INotificationService**: Email + Telegram DMs for critical system events (spam, bans, alerts)
-2. **Missing**: In-app bell icon for routine job completions (backup rotation, file scans, report generation)
-
-**Proposed Solution - Two Phases:**
-
-**Phase 1: In-Memory Foundation**
-```
-┌─────────────────────────────────────────┐
-│  MainLayout.razor                        │
-│  └─ NotificationBell.razor              │  ← Bell icon + badge + dropdown
-│     ├─ Shows unread count               │
-│     ├─ Dropdown with recent 10          │
-│     └─ Mark as read / Clear all         │
-└─────────────────────────────────────────┘
-         ↓ subscribes to
-┌─────────────────────────────────────────┐
-│  NotificationEventService (Singleton)   │
-│  ├─ event OnNotificationAdded           │
-│  ├─ PublishAsync(title, message, ...)   │
-│  └─ ConcurrentQueue<Notification>       │
-└─────────────────────────────────────────┘
-         ↑ background jobs call
-   RotateBackupPassphraseJob
-   FileScanJob, ScheduledBackupJob, etc.
-```
-
-**Implementation Details (Phase 1):**
-- NotificationBell component uses ProtectedLocalStorage for persistence
-- Guards localStorage with OnAfterRender(firstRender) to avoid prerender issues
-- Background jobs fire events → Component receives via InvokeAsync() → Writes to localStorage
-- Persists across server restarts (client-side storage)
-- Event-driven architecture (no SignalR hub needed - Blazor Server circuit handles it)
-
-**Phase 2: Database Persistence + Browser Notifications**
-- Add `notifications` table (id, user_id, title, message, type, severity, read, created_at, metadata JSONB)
-- Aggressive cleanup: read notifications deleted after 7 days, unread after 30 days
-- Browser Notification API via JS interop:
-  - Check `document.hasFocus()` - if false, send browser notification (OS notification center)
-  - Request permission on first use
-  - Desktop notifications for background job completions when tabbed away
-- Cross-device notification sync
-- Server-side audit trail
-
-**Use Cases:**
-- ✅ Backup passphrase rotation complete (show new passphrase in metadata)
-- ✅ File scan results (malware detected, clean, failed)
-- ✅ Scheduled backup complete
-- ✅ Background job failures
-- ✅ Report generation complete
-- ✅ System alerts (low disk space, API quota warnings)
-
-**Integration with Existing INotificationService:**
-- Critical events (spam bans, raid detection) → INotificationService (email/Telegram DM)
-- Routine events (job completions) → In-app notification center
-- User configurable: "Also send email for backup completions" (future Phase 3)
-
-**Benefits:**
-- ✅ Non-blocking UI for background jobs
-- ✅ User sees progress if they stay on page (e.g., backup rotation dialog)
-- ✅ Single notification if they navigate away
-- ✅ Foundation for all future background job notifications
-- ✅ Browser notifications when user has another tab focused
-
-**Limitations (Phase 1):**
-- Events lost if browser closed when job completes (acceptable for user-initiated actions)
-- Scheduled jobs that run at 3am won't show notifications (addressed in Phase 2 with database)
-
-**Priority:** MEDIUM - Infrastructure for multiple features
-**Blocked By:** None (can implement anytime)
+**Use Cases:** Backup rotation, file scans, job failures, system alerts
 
 ---
 
 ### FEATURE-4.9: Bot Configuration Hot-Reload
 
-**Status:** BACKLOG 📋
-**Severity:** Convenience | **Impact:** Developer experience, deployment flexibility
+**Priority:** LOW
+**Impact:** Developer experience, deployment flexibility
 
-**Current Behavior:**
-- Bot configuration changes require application restart
-- Telegram bot token, chat IDs, and other settings are read once at startup
-- Updates to environment variables or configuration files require full app restart
-
-**Proposed Enhancement:**
-- Implement `IOptionsMonitor<TelegramOptions>` or similar pattern for config hot-reload
-- Allow runtime updates to non-critical bot settings without restart
-- File watcher or admin UI trigger for configuration refresh
-
-**Use Cases:**
-- Adding new managed chats without downtime
-- Updating bot token during rotation
-- Adjusting rate limits or thresholds
-
-**Implementation Considerations:**
-- Some settings (like bot token) may require full reconnection
-- Need to handle partial config updates gracefully
-- Consider admin UI button "Reload Bot Configuration"
-- TelegramBotClientFactory may need IOptionsMonitor support
-
-**Priority:** Low (nice-to-have, not blocking MVP)
+**Enhancement:** Implement IOptionsMonitor for runtime config updates (new chats, bot token rotation, thresholds) without restart
 
 ---
 
@@ -771,413 +319,164 @@ Two different notification systems that don't integrate:
 
 ### CODE-10: Remove Pre-Release "Legacy" Code
 
-**Status:** BACKLOG 📋
-**Severity:** Code Quality | **Impact:** Code clarity, maintainability
-**Discovered:** 2025-10-28 via legacy audit
+**Priority:** MEDIUM - No users = no legacy
+**Impact:** Code clarity before release
 
-**Problem:**
-Pre-release application has "backward compatibility" and "legacy" code paths despite having zero users. No need to support old formats/APIs that don't exist yet.
-
-**Items to Remove:**
-
-1. **WebApplicationExtensions.cs:75** - Legacy /health endpoint (use /health/ready only)
-2. **ScheduledBackupJob.cs:65** - `.json.gz` backup support (use `.enc` only)
-3. **AuthService.cs:76,86** - `is_active` legacy field check (use `status` enum only)
-4. **IBackupEncryptionService.cs:29** - Unencrypted backup format detection (always encrypted)
-5. **BackupService.cs:346** - Backup version backward compatibility (enforce version checks)
-6. **Messages.razor:173** - Legacy filter state (unused)
-7. **Messages.razor:736** - Dictionary fallback for messages without detection history
-8. **DetectionHistoryDialog.razor:161** - Boolean spam property fallback
-9. **PermissionDialog.razor:60** - Default MaxPermissionLevel for backward compatibility
-10. **SimilaritySpamCheck.cs:148-152** - No-op backward compatibility code (detection count tracking removed)
-11. **ContentDetectionEngine.cs:507** - DetermineAction method marked "legacy" (delete method, unused)
-12. **SpamCheckRecord.cs:4** - "legacy - for backward compatibility" comment (delete model if unused)
-13. **ImageViewerDialog.razor:98,102** - "legacy messages" fallback for just filename (enforce subdirectory paths)
-14. **ManagedChatType.cs:11** - Remove "(legacy, up to 200 members)" from comment (just call it "Basic")
-
-**Priority:** MEDIUM - No users = no legacy, clean code before release
+**Remove:** 14 "legacy" code paths across WebApplicationExtensions, ScheduledBackupJob, AuthService, BackupService, Messages.razor, DetectionHistoryDialog, PermissionDialog, SimilaritySpamCheck, ContentDetectionEngine, SpamCheckRecord, ImageViewerDialog, ManagedChatType
 
 ---
 
 ### CODE-5: Fire-and-Forget Error Handling
 
-**Status:** BACKLOG 📋
-**Severity:** Code Quality | **Impact:** Silent failures, debugging difficulty
-**Discovered:** 2025-10-26 via performance agent code review
+**Priority:** MEDIUM
+**Impact:** Silent failures in 4 fire-and-forget tasks
 
-**Current State:**
-- 4 locations use `_ = Task.Run(...)` fire-and-forget pattern
-- Exceptions swallowed without logging
-- No timeout or cancellation support
-
-**Affected Locations:**
-1. `MessageProcessingService.cs:591` - Spam detection fire-and-forget
-2. `MessageProcessingService.cs:730` - Edit spam detection fire-and-forget
-3. `SpamActionService.cs:573` - Notification delivery fire-and-forget
-4. `IntermediateAuthService.cs:38` - Token cleanup fire-and-forget
-
-**Note:** OpenAI timeout is NOT an issue - HttpClient already configured with 30s timeout (ServiceCollectionExtensions.cs:252) and fail-open handling (OpenAISpamCheck.cs:171-176)
-
-**Proposed Solution:**
-Wrap all fire-and-forget tasks in try-catch with logging:
-```csharp
-_ = Task.Run(async () =>
-{
-    try
-    {
-        await RunSpamDetectionAsync(botClient, message, text, editVersion: 0, cancellationToken);
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError(ex, "Spam detection failed for message {MessageId}", message.MessageId);
-    }
-}, cancellationToken);
-```
-
-**Priority:** MEDIUM - Good practice for debugging, not breaking
-
+**Action:** Wrap all `_ = Task.Run(...)` in try-catch with logging (MessageProcessingService x2, SpamActionService, IntermediateAuthService)
 
 ---
 
 ### CODE-6: Extract Magic Numbers to Configuration
 
-**Status:** BACKLOG 📋
-**Severity:** Code Quality | **Impact:** Configuration flexibility
-**Discovered:** 2025-10-26 via refactor agent code review
-
-**Current State:**
-- Hardcoded retention periods, timeouts, thresholds throughout codebase
-- Examples:
-  - `MessageHistoryRepository.cs:68` - 30-day retention hardcoded
-  - Various timeout values (5s, 30s, 60s) scattered in code
-
-**Proposed Solution:**
-Extract to configuration classes:
-```csharp
-public class MessageHistoryOptions
-{
-    public int RetentionDays { get; set; } = 30;
-    public int CleanupBatchSize { get; set; } = 1000;
-}
-```
-
-**Affected Areas:**
-- Message retention periods
-- Background job polling intervals
-- API timeout values
-- Rate limit thresholds
-
-**Priority:** LOW - Nice to have, not blocking
-
+**Priority:** LOW
+**Action:** Extract hardcoded retention periods, timeouts, thresholds to configuration classes (MessageHistoryOptions, etc.)
 
 ---
 
 ### CODE-7: Modernize to C# 12 Collection Expressions
 
-**Status:** BACKLOG 📋
-**Severity:** Code Quality | **Impact:** Code modernization
-**Discovered:** 2025-10-26 via refactor agent code review
-
-**Current State:**
-- 67 occurrences of `new List<T>()` throughout codebase
-- C# 12 collection expressions available but not used
-- Requires explicit type declarations (can't use `var` with `[]`)
-
-**Proposed Solution:**
-Replace with modern syntax:
-```csharp
-// Before:
-var items = new List<string>();
-
-// After:
-List<string> items = [];
-```
-
-**Scope:**
-- 67 manual replacements (cannot use simple find/replace due to `var` → explicit type requirement)
-- More invasive than initially estimated
-
-**Priority:** LOW - Cosmetic improvement, significant manual effort
-
+**Priority:** LOW
+**Action:** Replace 67× `new List<T>()` with `[]` syntax (requires explicit types, no `var`)
 
 ---
 
 ### QUALITY-2: Implement HybridCache
 
-**Status:** BACKLOG 📋
-**Severity:** Code Quality | **Impact:** Performance optimization
-**Discovered:** 2025-10-26 via code review (AI agent recommended but never implemented)
+**Priority:** MEDIUM
+**Impact:** Performance improvement for homelab
 
-**Current State:**
-- HybridCache package added to project (Microsoft.Extensions.Caching.Hybrid v9.0.0)
-- Package never wired up or used
-- Zero caching strategy despite frequent config/admin lookups
-
-**Proposed Implementation:**
-Cache frequently-accessed data:
-```csharp
-// Config lookups (5min TTL)
-var config = await _cache.GetOrCreateAsync($"config:{chatId}", async entry =>
-{
-    entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
-    return await _configRepo.GetConfigAsync(chatId);
-});
-
-// Admin status (30s TTL)
-var isAdmin = await _cache.GetOrCreateAsync($"admin:{chatId}:{userId}", async entry =>
-{
-    entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(30);
-    return await _chatAdminsRepo.IsAdminAsync(chatId, userId);
-});
-```
-
-**Target Areas:**
-- Spam detection config per chat
-- Chat admin status lookups
-- Blocklist domain lookups
-- Tag/note data for message page
-
-**Priority:** MEDIUM - Performance improvement for homelab
+**Action:** Wire up HybridCache (v9.0.0) for spam detection config, admin status, blocklist domains, tag/note data
 
 
 ---
 
 ### PERF-2: Add Performance Telemetry
 
-**Status:** BACKLOG 📋
-**Severity:** Performance | **Impact:** Validate production metrics
-**Discovered:** 2025-10-26 via performance agent code review
-
-**Current State:**
-- Performance claims based on observation, not telemetry
-- No OpenTelemetry, no custom metrics
-- Cannot validate 255ms average spam detection claim
-
-**Proposed Solution:**
-Add OpenTelemetry with custom metrics:
-```csharp
-using var activity = ActivitySource.StartActivity("SpamDetection");
-activity?.SetTag("chat.id", chatId);
-activity?.SetTag("user.id", userId);
-// ... existing code ...
-activity?.SetTag("detection.duration_ms", stopwatch.ElapsedMilliseconds);
-activity?.SetTag("detection.result", result.Action.ToString());
-```
-
-**Metrics to Track:**
-- Spam detection duration (avg, P95, P99)
-- Analytics query response time
-- Message page load time
-- Background job execution time
-
-**Benefits:**
-- Validate performance claims with data
-- Identify regressions
-- Optimize based on metrics
-
-**Priority:** MEDIUM - Useful for homelab monitoring
-
-
----
-
-### REFACTOR-3: Extract MessageHistoryRepository Services (1,085 lines)
-
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Query testability
-**Priority:** CRITICAL - Complex queries need isolated testing
-**Discovered:** 2025-10-27 via file size audit
-
-**Current State:**
-- 1,085 lines total
-- Message CRUD, queries, translations, edits all mixed
-- Complex pagination logic hard to test
-
-**Extract:**
-- `MessageQueryService` - Complex queries (pagination, filtering)
-- `MessageTranslationService` - Translation CRUD operations
-- `MessageEditService` - Edit history management
-- Keep: Basic CRUD in repository
-
-**Testing Wins:**
-- Test query logic without database
-- Mock translation service
-- Test pagination edge cases
-- Verify edit history integrity
-
-**Success Criteria:**
-- Repository < 400 lines
-- Each service < 300 lines
-- Query logic testable without DB
-
-
----
-
-### REFACTOR-4: Extract WelcomeService Components (1,070 lines)
-
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Message building testability
-**Priority:** CRITICAL - Pure function opportunities
-**Discovered:** 2025-10-27 via file size audit
-
-**Current State:**
-- 1,070 lines total
-- Welcome messages, timeouts, verification, captcha logic mixed
-- Message formatting tied to Telegram API
-
-**Extract:**
-- `WelcomeMessageBuilder` - Message formatting (PURE FUNCTIONS!)
-- `WelcomeVerificationService` - Verification flow logic
-- `WelcomeTimeoutService` - Timeout scheduling/handling
-
-**Testing Wins:**
-- Test message building without Telegram API
-- Test verification flows in isolation
-- Mock timeout scheduling
-- Verify captcha logic separately
-
-**Success Criteria:**
-- WelcomeService < 400 lines
-- MessageBuilder all pure functions (zero I/O)
-- Each component < 300 lines
-
-
----
-
-### REFACTOR-5: Extract ModerationActionService Handlers (946 lines)
-
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Moderation logic testability
-**Priority:** HIGH
-**Discovered:** 2025-10-27 via file size audit
-
-**Current State:**
-- 946 lines total
-- Bans, warnings, trust, cross-chat actions all mixed
-
-**Extract:**
-- `CrossChatBanService` - Cross-chat ban coordination
-- `TrustManagementService` - User trust/untrust logic
-- `WarningService` - Warning accumulation/threshold logic
-
-**Testing Wins:**
-- Test cross-chat coordination separately
-- Mock trust logic
-- Test warning thresholds in isolation
-
-
----
-### REFACTOR-7: Extract AuthService Components (694 lines)
-
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Authentication testing
 **Priority:** MEDIUM
-**Discovered:** 2025-10-27 via file size audit
+**Impact:** Validate production metrics, identify regressions
+
+**Action:** Add OpenTelemetry for spam detection duration, analytics queries, page load, background jobs
+
+
+---
+
+### REFACTOR-3: Extract MessageHistoryRepository Services
+
+**Priority:** CRITICAL
+**Impact:** Complex query testing in isolation
+
+**Extract:**
+- `MessageQueryService` - Pagination, filtering
+- `MessageTranslationService` - Translation CRUD
+- `MessageEditService` - Edit history
+
+---
+
+### REFACTOR-4: Extract WelcomeService Components
+
+**Priority:** CRITICAL
+**Impact:** Pure function testing, message building without Telegram API
+
+**Extract:**
+- `WelcomeMessageBuilder` - Message formatting (pure functions)
+- `WelcomeVerificationService` - Verification flows
+- `WelcomeTimeoutService` - Timeout handling
+
+---
+
+### REFACTOR-5: Extract ModerationActionService Handlers
+
+**Priority:** HIGH
+**Impact:** Moderation logic testability
+
+**Extract:**
+- `CrossChatBanService` - Cross-chat coordination
+- `TrustManagementService` - Trust/untrust logic
+- `WarningService` - Warning thresholds
+
+---
+
+### REFACTOR-7: Extract AuthService Components
+
+**Priority:** MEDIUM
+**Impact:** Auth testing in isolation
 
 **Extract:**
 - `TotpService` - TOTP generation/validation
 - `RecoveryCodeService` - Recovery code management
-- `EmailVerificationService` - Email verification flows
-
+- `EmailVerificationService` - Email verification
 
 ---
 
-### REFACTOR-8: Extract ChatManagementService Components (688 lines)
+### REFACTOR-8: Extract ChatManagementService Components
 
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Chat management testing
 **Priority:** MEDIUM
-**Discovered:** 2025-10-27 via file size audit
-
 **Extract:**
 - `AdminCacheService` - Admin cache management
 - `ChatHealthCheckService` - Health check logic
 
-
 ---
 
-### REFACTOR-9: Extract TelegramUserRepository Services (675 lines)
+### REFACTOR-9: Extract TelegramUserRepository Services
 
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** User sync testability
 **Priority:** MEDIUM
-**Discovered:** 2025-10-27 via file size audit
-
 **Extract:**
-- `UserPhotoService` - Photo download/hash logic
+- `UserPhotoService` - Photo download/hash
 - `UserSyncService` - User synchronization
 
-
 ---
 
-### REFACTOR-10: Extract ContentDetectionEngine Services (629 lines)
+### REFACTOR-10: Extract ContentDetectionEngine Services
 
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Detection logic testing
 **Priority:** MEDIUM
-**Discovered:** 2025-10-27 via file size audit
-
 **Extract:**
-- `CheckAggregationService` - Result aggregation logic
+- `CheckAggregationService` - Result aggregation
 - `ConfigurationLoader` - Config loading/caching
 
+---
+
+### REFACTOR-11: Split AnalyticsRepository by Type
+
+**Priority:** MEDIUM
+**Extract:**
+- `SpamAnalyticsQueries`
+- `WelcomeAnalyticsQueries`
+- `UserAnalyticsQueries`
 
 ---
 
-### REFACTOR-11: Split AnalyticsRepository by Type (589 lines)
+### REFACTOR-12: Extract SpamActionService Components
 
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Analytics testing
 **Priority:** MEDIUM
-**Discovered:** 2025-10-27 via file size audit
-
 **Extract:**
-- `SpamAnalyticsQueries` - Spam-specific queries
-- `WelcomeAnalyticsQueries` - Welcome-specific queries
-- `UserAnalyticsQueries` - User-specific queries
-
-
----
-
-### REFACTOR-12: Extract SpamActionService Components (587 lines)
-
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Spam action testing
-**Priority:** MEDIUM
-**Discovered:** 2025-10-27 via file size audit
-
-**Extract:**
-- `TrainingQualityService` - Training sample quality checks
+- `TrainingQualityService` - Training sample quality
 - `AutoBanService` - Automatic ban logic
 - `ReportGenerationService` - Report creation
 
-
 ---
-### REFACTOR-14: Extract DetectionResultsRepository Components (506 lines)
 
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Accuracy tracking testing
+### REFACTOR-14: Extract DetectionResultsRepository Components
+
 **Priority:** MEDIUM
-**Discovered:** 2025-10-27 via file size audit
-
 **Extract:**
-- `FalsePositiveTracker` - FP/FN tracking logic
+- `FalsePositiveTracker` - FP/FN tracking
 - `AccuracyCalculator` - Accuracy calculation
 
-
 ---
 
-### REFACTOR-15: Extract AppDbContext EntityTypeConfigurations (637 lines)
+### REFACTOR-15: Extract AppDbContext EntityTypeConfigurations
 
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Code organization
-**Priority:** LOW - Optional, DbContext acceptable at this size
-**Discovered:** 2025-10-27 via file size audit
-
-**Note:** EF Core DbContext, mostly entity configurations. Only extract if > 800 lines.
-
-**Extract (if needed):**
-- `EntityTypeConfiguration<T>` classes per entity
-
+**Priority:** LOW
+**Note:** Only if DbContext grows > 800 lines
 
 ---
 
@@ -1208,84 +507,19 @@ activity?.SetTag("detection.result", result.Action.ToString());
 
 ### REFACTOR-16: BackupMetadata.CreatedAt Should Use DateTimeOffset
 
-**Status:** BACKLOG 📋
-**Severity:** Technical Debt | **Impact:** Type safety, developer experience
 **Priority:** LOW
-**Discovered:** 2025-10-28 during REFACTOR-2 baseline test development
+**Impact:** Type safety, consistency with codebase
 
-**Current State:**
-- `BackupMetadata.CreatedAt` is `long` (Unix timestamp in seconds)
-- Requires manual conversion to/from DateTimeOffset in consuming code
-- Legacy artifact from initial implementation
-
-**Problem:**
-- Type safety: Consumers must remember it's a Unix timestamp (not milliseconds, not ticks)
-- Conversion boilerplate: Every usage requires `DateTimeOffset.FromUnixTimeSeconds()` / `.ToUnixTimeSeconds()`
-- Error-prone: Easy to confuse with other timestamp formats (milliseconds, ticks, DateTime)
-- Inconsistent: Rest of codebase uses DateTimeOffset for timestamps
-
-**Proposed Solution:**
-```csharp
-public class BackupMetadata
-{
-    [JsonPropertyName("created_at")]
-    public DateTimeOffset CreatedAt { get; set; }  // Changed from long
-
-    // ... rest of properties
-}
-```
-
-JSON serialization handles Unix timestamp conversion automatically with proper JsonConverter attribute if needed.
-
-**Benefits:**
-- Type-safe timestamp handling
-- No manual conversion boilerplate
-- Consistent with rest of codebase (Data models use DateTimeOffset)
-- Better IntelliSense/tooling support
-
-**Risks:**
-- Breaking change for existing backup files (requires migration logic)
-- Could support both formats during transition: read `long` or `DateTimeOffset`, always write `DateTimeOffset`
-
-**Priority:** LOW - Quality improvement, not blocking features. Can be addressed during REFACTOR-2 (BackupMetadataService extraction) or later.
+**Change:** `BackupMetadata.CreatedAt` from `long` → `DateTimeOffset` (breaking change, requires migration logic for existing backups)
 
 ---
 
 ### ARCH-3: Consolidate Audit System to Core
 
-**Status:** BACKLOG 📋
-**Severity:** Architecture | **Impact:** Code organization, maintainability
-**Discovered:** 2025-10-27 during backup passphrase rotation implementation
+**Priority:** MEDIUM
+**Impact:** Code organization, enum duplication fix
 
-**Current State:**
-- General audit log (user logins, password changes, system config) lives in Telegram namespace
-- `AuditEventType` enum duplicated in two locations:
-  - `TelegramGroupsAdmin.Data.Models.AuditEventType` (canonical, 127 lines)
-  - `TelegramGroupsAdmin.Telegram.Models.AuditEventType` (duplicate, has extra events)
-- Enums out of sync (Data.Models missing `ConfigurationChanged=28`, `ReportReviewed=27`)
-- Audit models/services in Telegram namespace despite being core system feature
-- Separate `user_actions` table is Telegram-specific (bans, warnings, etc.)
-
-**Problem:**
-- Enum duplication creates maintenance overhead
-- Misplaced namespace suggests audit is Telegram-specific when it's not
-- Database stores enums as integers anyway, so duplication provides no benefit
-
-**Proposed Solution:**
-Move audit system from Telegram → Core:
-1. Move `AuditEventType` enum to Core (single source of truth)
-2. Move `AuditLogRecord` model to Core
-3. Move `IAuditService` / `AuditService` to Core
-4. Keep `user_actions` table and related models in Telegram (those are Telegram-specific)
-5. Update all imports across codebase
-
-**Benefits:**
-- Single source of truth for audit event types
-- Clearer separation: Core audit vs Telegram user actions
-- Easier to maintain and extend
-- Better namespace organization
-
-**Priority:** MEDIUM - Quality improvement, not blocking features
+**Action:** Move AuditEventType, AuditLogRecord, IAuditService from Telegram → Core. Keep user_actions in Telegram (Telegram-specific). Sync duplicated enums.
 
 
 ---
