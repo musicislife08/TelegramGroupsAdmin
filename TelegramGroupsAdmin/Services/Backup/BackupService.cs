@@ -16,6 +16,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Abstractions.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Services.Backup.Handlers;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Services.Backup;
@@ -29,6 +30,11 @@ public class BackupService : IBackupService
     private readonly INotificationService _notificationService;
     private readonly IBackupEncryptionService _encryptionService;
     private readonly IServiceProvider _serviceProvider;
+    private readonly TableDiscoveryService _tableDiscoveryService;
+    private readonly TableExportService _tableExportService;
+    private readonly IPassphraseManagementService _passphraseService;
+    private readonly IBackupConfigurationService _configService;
+    private readonly DependencyResolutionService _dependencyResolutionService;
     private const string CurrentVersion = "2.0";
 
     public BackupService(
@@ -38,7 +44,12 @@ public class BackupService : IBackupService
         IDataProtectionProvider dataProtectionProvider,
         INotificationService notificationService,
         IBackupEncryptionService encryptionService,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        TableDiscoveryService tableDiscoveryService,
+        TableExportService tableExportService,
+        IPassphraseManagementService passphraseService,
+        IBackupConfigurationService configService,
+        DependencyResolutionService dependencyResolutionService)
     {
         _dataSource = dataSource;
         _logger = logger;
@@ -47,6 +58,11 @@ public class BackupService : IBackupService
         _notificationService = notificationService;
         _encryptionService = encryptionService;
         _serviceProvider = serviceProvider;
+        _tableDiscoveryService = tableDiscoveryService;
+        _tableExportService = tableExportService;
+        _passphraseService = passphraseService;
+        _configService = configService;
+        _dependencyResolutionService = dependencyResolutionService;
     }
 
     public async Task<byte[]> ExportAsync()
@@ -102,7 +118,7 @@ public class BackupService : IBackupService
         await using var connection = await _dataSource.OpenConnectionAsync();
 
         // Discover all tables dynamically from database
-        var allTables = await DiscoverTablesAsync(connection);
+        var allTables = await _tableDiscoveryService.DiscoverTablesAsync(connection);
 
         // Exclude repullable cached data (blocklist domains can be re-synced)
         var excludedTables = new HashSet<string> { "cached_blocked_domains" };
@@ -120,7 +136,7 @@ public class BackupService : IBackupService
             try
             {
                 _logger.LogDebug("Exporting table: {TableName}", tableName);
-                var records = await ExportTableAsync(connection, tableName, dtoType);
+                var records = await _tableExportService.ExportTableAsync(connection, tableName, dtoType);
                 backup.Data[tableName] = records;
                 _logger.LogDebug("Exported {Count} records from {TableName}", records.Count, tableName);
             }
@@ -168,7 +184,7 @@ public class BackupService : IBackupService
         }
 
         // Encryption is mandatory - check configuration
-        var encryptionConfig = await GetEncryptionConfigAsync();
+        var encryptionConfig = await _configService.GetEncryptionConfigAsync();
 
         if (encryptionConfig?.Enabled != true)
         {
@@ -178,7 +194,7 @@ public class BackupService : IBackupService
         }
 
         // Get decrypted passphrase from database (reads from passphrase_encrypted column)
-        var passphrase = await GetDecryptedPassphraseAsync();
+        var passphrase = await _passphraseService.GetDecryptedPassphraseAsync();
 
         // Encrypt the compressed JSON
         var finalBackup = _encryptionService.EncryptBackup(compressedJson, passphrase);
@@ -196,217 +212,7 @@ public class BackupService : IBackupService
         return finalBackup;
     }
 
-    /// <summary>
-    /// Discover all tables and their corresponding DTO types by reflection
-    /// </summary>
-    private async Task<Dictionary<string, Type>> DiscoverTablesAsync(NpgsqlConnection connection)
-    {
-        // Get all tables from database
-        const string sql = """
-            SELECT table_name
-            FROM information_schema.tables
-            WHERE table_schema = 'public'
-            AND table_type = 'BASE TABLE'
-            ORDER BY table_name
-            """;
 
-        var tableNames = (await connection.QueryAsync<string>(sql)).ToList();
-
-        // Load TelegramGroupsAdmin.Data assembly and find all DTO types
-        var dataAssembly = AppDomain.CurrentDomain.GetAssemblies()
-            .FirstOrDefault(a => a.GetName().Name == "TelegramGroupsAdmin.Data")
-            ?? throw new InvalidOperationException("TelegramGroupsAdmin.Data assembly not found");
-
-        var dtoTypes = dataAssembly.GetTypes()
-            .Where(t => t.Namespace == "TelegramGroupsAdmin.Data.Models")
-            .Where(t => t.Name.EndsWith("Dto") && (t.IsClass || t.IsValueType))
-            .ToList();
-
-        _logger.LogDebug("Found {DtoCount} DTO types in Data assembly", dtoTypes.Count);
-
-        // Match tables to DTOs by convention (snake_case table name → PascalCaseDto)
-        var mapping = new Dictionary<string, Type>();
-        var knownSystemTables = new HashSet<string> { "VersionInfo" }; // FluentMigrator table
-
-        foreach (var tableName in tableNames)
-        {
-            // Skip known system tables
-            if (knownSystemTables.Contains(tableName))
-            {
-                _logger.LogDebug("Skipping system table '{TableName}'", tableName);
-                continue;
-            }
-
-            var dtoType = FindDtoForTable(tableName, dtoTypes);
-            if (dtoType != null)
-            {
-                mapping[tableName] = dtoType;
-                _logger.LogDebug("Mapped table '{TableName}' → {DtoType}", tableName, dtoType.Name);
-            }
-            else
-            {
-                _logger.LogWarning("No DTO found for table '{TableName}', skipping", tableName);
-            }
-        }
-
-        return mapping;
-    }
-
-    /// <summary>
-    /// Find DTO type for a table using naming conventions
-    /// Examples: users → UserRecordDto, stop_words → StopWordDto
-    /// </summary>
-    private Type? FindDtoForTable(string tableName, List<Type> dtoTypes)
-    {
-        // Try exact match first (e.g., "users" → "UserRecordDto")
-        var pascalName = ToPascalCase(tableName);
-
-        // Try common DTO naming patterns
-        var candidates = new[]
-        {
-            $"{pascalName}Dto",
-            $"{pascalName}RecordDto",
-            $"{Singularize(pascalName)}Dto",
-            $"{Singularize(pascalName)}RecordDto"
-        };
-
-        return dtoTypes.FirstOrDefault(dto =>
-            candidates.Any(c => dto.Name.Equals(c, StringComparison.OrdinalIgnoreCase)));
-    }
-
-    /// <summary>
-    /// Convert snake_case to PascalCase (e.g., "stop_words" → "StopWords")
-    /// </summary>
-    private static string ToPascalCase(string snakeCase)
-    {
-        var parts = snakeCase.Split('_', StringSplitOptions.RemoveEmptyEntries);
-        return string.Concat(parts.Select(p =>
-            p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant() : ""));
-    }
-
-    /// <summary>
-    /// Simple pluralization removal (users → user, stop_words → stop_word)
-    /// </summary>
-    private string Singularize(string plural)
-    {
-        if (plural.EndsWith("s", StringComparison.OrdinalIgnoreCase))
-            return plural.Substring(0, plural.Length - 1);
-        return plural;
-    }
-
-    private async Task<List<object>> ExportTableAsync(NpgsqlConnection connection, string tableName, Type dtoType)
-    {
-        // Get all properties from DTO using reflection
-        var properties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-
-        // EF Core models: exclude navigation properties (virtual) and [NotMapped] properties
-        // Only include properties with [Column] attribute (actual database columns)
-        var columnMappings = properties
-            .Where(p => !p.GetGetMethod()!.IsVirtual) // Exclude navigation properties
-            .Where(p => p.GetCustomAttribute<NotMappedAttribute>() == null) // Exclude [NotMapped]
-            .Where(p => p.GetCustomAttribute<ColumnAttribute>() != null) // Must have [Column]
-            .Select(p => new
-            {
-                ColumnName = p.GetCustomAttribute<ColumnAttribute>()!.Name,
-                PropertyName = p.Name
-            })
-            .ToList();
-
-        // Build column list with aliases to match property names (fixes Dapper reflection mapping issue)
-        var columnList = string.Join(", ", columnMappings.Select(m =>
-            m.ColumnName == m.PropertyName.ToLowerInvariant()
-                ? m.ColumnName  // No alias needed if names match
-                : $"{m.ColumnName} AS {m.PropertyName}"));  // Add alias for Dapper mapping
-
-        var columnNames = columnMappings.Select(m => m.ColumnName).ToList();
-
-        // Determine sort column (prefer id, created_at, or first column)
-        var sortColumn = columnNames.Contains("id") ? "id" :
-                        columnNames.Contains("created_at") ? "created_at" :
-                        columnNames.FirstOrDefault() ?? "id";
-
-        var sql = $"SELECT {columnList} FROM {tableName} ORDER BY {sortColumn}";
-
-        // Use Dapper with reflection to query and deserialize to DTO type
-        var queryAsync = typeof(SqlMapper).GetMethod("QueryAsync", 1,
-            new[] { typeof(IDbConnection), typeof(string), typeof(object), typeof(IDbTransaction), typeof(int?), typeof(CommandType?) });
-        var genericMethod = queryAsync!.MakeGenericMethod(dtoType);
-        var task = (Task)genericMethod.Invoke(null, new object?[] { connection, sql, null, null, null, null })!;
-        await task.ConfigureAwait(false);
-
-        var resultProperty = task.GetType().GetProperty("Result");
-        var enumerable = (IEnumerable<object>)resultProperty!.GetValue(task)!;
-        var records = enumerable.ToList();
-
-        // Check if this DTO has any properties with [ProtectedData] attribute
-        var protectedProperties = dtoType.GetProperties()
-            .Where(p => p.GetCustomAttribute<ProtectedDataAttribute>() != null)
-            .ToList();
-
-        if (protectedProperties.Any())
-        {
-            records = await DecryptProtectedDataAsync(records, dtoType, protectedProperties);
-        }
-
-        return records;
-    }
-
-    /// <summary>
-    /// Decrypt Data Protection encrypted fields for cross-machine backup
-    /// </summary>
-    private Task<List<object>> DecryptProtectedDataAsync(List<object> records, Type dtoType, List<PropertyInfo> protectedProperties)
-    {
-        var decryptedRecords = new List<object>();
-
-        // Only process properties that are actual database columns (same filter as ExportTableAsync)
-        var writableProperties = dtoType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => !p.GetGetMethod()!.IsVirtual) // Exclude navigation properties
-            .Where(p => p.GetCustomAttribute<NotMappedAttribute>() == null) // Exclude [NotMapped]
-            .Where(p => p.GetCustomAttribute<ColumnAttribute>() != null) // Must have [Column]
-            .Where(p => p.CanWrite) // Must have a setter
-            .ToList();
-
-        foreach (var record in records)
-        {
-            var recordCopy = Activator.CreateInstance(dtoType)!;
-
-            foreach (var prop in writableProperties)
-            {
-                var value = prop.GetValue(record);
-
-                // Check if this property has [ProtectedData] attribute and has a value
-                if (protectedProperties.Contains(prop) && value is string encryptedValue && !string.IsNullOrEmpty(encryptedValue))
-                {
-                    try
-                    {
-                        // Get the purpose from the attribute
-                        var protectedDataAttr = prop.GetCustomAttribute<ProtectedDataAttribute>();
-                        var purpose = protectedDataAttr?.Purpose ?? "TgSpamPreFilter.TotpSecrets";
-
-                        // Decrypt using the correct protector for this purpose
-                        var protector = _dataProtectionProvider.CreateProtector(purpose);
-                        var decryptedValue = protector.Unprotect(encryptedValue);
-                        prop.SetValue(recordCopy, decryptedValue);
-                        _logger.LogDebug("Decrypted protected property {PropertyName} with purpose {Purpose}", prop.Name, purpose);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to decrypt protected property {PropertyName}, keeping encrypted value", prop.Name);
-                        prop.SetValue(recordCopy, value);
-                    }
-                }
-                else
-                {
-                    // Copy non-protected properties as-is
-                    prop.SetValue(recordCopy, value);
-                }
-            }
-
-            decryptedRecords.Add(recordCopy);
-        }
-
-        return Task.FromResult(decryptedRecords);
-    }
 
     /// <summary>
     /// Encrypt Data Protection fields using the new machine's keys during restore
@@ -470,7 +276,7 @@ public class BackupService : IBackupService
         {
             try
             {
-                passphrase = await GetDecryptedPassphraseAsync();
+                passphrase = await _passphraseService.GetDecryptedPassphraseAsync();
                 _logger.LogInformation("Detected encrypted backup, using passphrase from database");
             }
             catch (InvalidOperationException)
@@ -553,7 +359,7 @@ public class BackupService : IBackupService
         try
         {
             // Discover current table/DTO mappings
-            var currentTables = await DiscoverTablesAsync(connection);
+            var currentTables = await _tableDiscoveryService.DiscoverTablesAsync(connection);
 
             // Validate that all backup tables have DTOs (except known system tables)
             var knownSystemTables = new HashSet<string> { "VersionInfo" };
@@ -574,22 +380,12 @@ public class BackupService : IBackupService
             await WipeAllTablesAsync(connection, transaction, currentTables.Keys.ToList());
 
             // Get foreign key dependencies for proper restore order
-            const string fkQuery = """
-                SELECT
-                    tc.table_name,
-                    ccu.table_name AS foreign_table_name
-                FROM information_schema.table_constraints AS tc
-                JOIN information_schema.constraint_column_usage AS ccu
-                    ON tc.constraint_name = ccu.constraint_name
-                WHERE tc.constraint_type = 'FOREIGN KEY'
-                """;
-
-            var fkDeps = await connection.QueryAsync<(string table_name, string foreign_table_name)>(fkQuery);
+            var fkDeps = await _dependencyResolutionService.GetForeignKeyDependenciesAsync(connection);
 
             // Sort tables in dependency order (parents before children) for restore
             var tablesToRestore = backup.Data.Keys.Where(t => currentTables.ContainsKey(t)).ToList();
             _logger.LogInformation("Tables to restore: {Tables}", string.Join(", ", tablesToRestore));
-            var sortedTables = TopologicalSort(tablesToRestore, fkDeps.ToList());
+            var sortedTables = _dependencyResolutionService.TopologicalSort(tablesToRestore, fkDeps);
             // TopologicalSort already returns in correct order for insertion (handles circular deps)
             _logger.LogInformation("Restore order after sort: {Tables}", string.Join(", ", sortedTables));
 
@@ -776,20 +572,10 @@ public class BackupService : IBackupService
     private async Task WipeAllTablesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, List<string> tables)
     {
         // Query foreign key dependencies to determine deletion order
-        const string fkQuery = """
-            SELECT
-                tc.table_name,
-                ccu.table_name AS foreign_table_name
-            FROM information_schema.table_constraints AS tc
-            JOIN information_schema.constraint_column_usage AS ccu
-                ON tc.constraint_name = ccu.constraint_name
-            WHERE tc.constraint_type = 'FOREIGN KEY'
-            """;
-
-        var fkDeps = await connection.QueryAsync<(string table_name, string foreign_table_name)>(fkQuery);
+        var fkDeps = await _dependencyResolutionService.GetForeignKeyDependenciesAsync(connection);
 
         // Build dependency graph and perform topological sort
-        var sortedTables = TopologicalSort(tables, fkDeps.ToList());
+        var sortedTables = _dependencyResolutionService.TopologicalSort(tables, fkDeps);
         sortedTables.Reverse(); // Reverse for deletion order (children before parents)
 
         foreach (var table in sortedTables)
@@ -799,62 +585,6 @@ public class BackupService : IBackupService
         }
     }
 
-    /// <summary>
-    /// Topological sort for table restore/insertion order (parents before children)
-    /// </summary>
-    private List<string> TopologicalSort(List<string> tables, List<(string child, string parent)> dependencies)
-    {
-        var graph = new Dictionary<string, List<string>>();
-        var inDegree = new Dictionary<string, int>();
-
-        // Initialize graph
-        foreach (var table in tables)
-        {
-            graph[table] = new List<string>();
-            inDegree[table] = 0;
-        }
-
-        // Build adjacency list (parent → children)
-        // Skip self-referencing foreign keys (circular dependencies within same table)
-        foreach (var (child, parent) in dependencies)
-        {
-            // Skip if child and parent are the same table (self-referencing FK)
-            if (child == parent)
-                continue;
-
-            if (graph.ContainsKey(parent) && graph.ContainsKey(child))
-            {
-                graph[parent].Add(child);
-                inDegree[child]++;
-            }
-        }
-
-        // Kahn's algorithm for topological sort
-        var queue = new Queue<string>(tables.Where(t => inDegree[t] == 0));
-        var result = new List<string>();
-
-        while (queue.Count > 0)
-        {
-            var current = queue.Dequeue();
-            result.Add(current);
-
-            foreach (var neighbor in graph[current])
-            {
-                inDegree[neighbor]--;
-                if (inDegree[neighbor] == 0)
-                    queue.Enqueue(neighbor);
-            }
-        }
-
-        // Add any remaining tables (circular dependencies or isolated tables)
-        var remaining = tables.Where(t => !result.Contains(t)).ToList();
-        result.AddRange(remaining);
-
-        // Result is currently in insertion order (parents before children)
-        // Reverse ONLY for deletion in WipeAllTablesAsync
-        // For restore, we DON'T reverse (keep insertion order)
-        return result;
-    }
 
     public async Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes)
     {
@@ -882,7 +612,7 @@ public class BackupService : IBackupService
                     // Try to get passphrase from DB
                     try
                     {
-                        passphrase = await GetDecryptedPassphraseAsync();
+                        passphrase = await _passphraseService.GetDecryptedPassphraseAsync();
                     }
                     catch (InvalidOperationException)
                     {
@@ -924,32 +654,6 @@ public class BackupService : IBackupService
         }
     }
 
-    /// <summary>
-    /// Retrieves backup encryption configuration from database
-    /// </summary>
-    private async Task<Configuration.Models.BackupEncryptionConfig?> GetEncryptionConfigAsync()
-    {
-        await using var connection = await _dataSource.OpenConnectionAsync();
-
-        const string sql = """
-            SELECT backup_encryption_config
-            FROM configs
-            WHERE chat_id IS NULL
-            LIMIT 1
-            """;
-
-        var configJson = await connection.QuerySingleOrDefaultAsync<string>(sql);
-
-        if (string.IsNullOrEmpty(configJson))
-            return null;
-
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        };
-
-        return JsonSerializer.Deserialize<Configuration.Models.BackupEncryptionConfig>(configJson, jsonOptions);
-    }
 
     /// <summary>
     /// Validates backup by attempting to decompress/decrypt and verify metadata
@@ -1009,162 +713,6 @@ public class BackupService : IBackupService
         return result.ToString();
     }
 
-    /// <summary>
-    /// Rotate backup encryption passphrase.
-    /// Generates a new passphrase and queues a background job to re-encrypt all existing backups.
-    /// </summary>
-    public async Task<string> RotatePassphraseAsync(string backupDirectory, string userId)
-    {
-        _logger.LogInformation("Initiating passphrase rotation for user {UserId}", userId);
-
-        // Generate new passphrase (6 words = 77.5 bits entropy)
-        var newPassphrase = PassphraseGenerator.Generate();
-
-        _logger.LogInformation("Generated new passphrase, queuing re-encryption job");
-
-        // Queue background job to re-encrypt all backups
-        var payload = new RotateBackupPassphrasePayload(newPassphrase, backupDirectory, userId);
-
-        var jobId = await TickerQUtilities.ScheduleJobAsync(
-            _serviceProvider,
-            _logger,
-            "rotate_backup_passphrase",
-            payload,
-            delaySeconds: 0, // Execute immediately
-            retries: 1,
-            retryIntervals: [60]); // Retry after 60 seconds if it fails
-
-        if (jobId == null)
-        {
-            throw new InvalidOperationException("Failed to schedule passphrase rotation job");
-        }
-
-        _logger.LogInformation("Passphrase rotation job queued successfully (JobId: {JobId})", jobId);
-
-        // Return the new passphrase so user can save it
-        return newPassphrase;
-    }
-
-    // ========== Backup Encryption Config Management (Composition Pattern) ==========
-
-    /// <summary>
-    /// Sets up initial backup encryption configuration.
-    /// Creates new config with CreatedAt timestamp.
-    /// </summary>
-    public async Task SaveEncryptionConfigAsync(string passphrase)
-    {
-        var encryptedPassphrase = EncryptPassphrase(passphrase);
-        var config = CreateNewEncryptionConfig();
-        await SaveEncryptionConfigToDatabaseAsync(config, encryptedPassphrase);
-    }
-
-    /// <summary>
-    /// Updates existing backup encryption configuration with new passphrase.
-    /// Updates LastRotatedAt timestamp.
-    /// </summary>
-    public async Task UpdateEncryptionConfigAsync(string passphrase)
-    {
-        var encryptedPassphrase = EncryptPassphrase(passphrase);
-        var config = await UpdateExistingEncryptionConfigAsync();
-        await SaveEncryptionConfigToDatabaseAsync(config, encryptedPassphrase);
-    }
-
-    /// <summary>
-    /// Gets the current decrypted passphrase from database.
-    /// </summary>
-    public async Task<string> GetDecryptedPassphraseAsync()
-    {
-        await using var context = await _dataSource.OpenConnectionAsync();
-
-        // Read encrypted passphrase from dedicated column
-        var encryptedPassphrase = await context.QuerySingleOrDefaultAsync<string>(
-            "SELECT passphrase_encrypted FROM configs WHERE chat_id IS NULL");
-
-        if (string.IsNullOrEmpty(encryptedPassphrase))
-        {
-            throw new InvalidOperationException("No passphrase found in encryption config");
-        }
-
-        return _totpProtection.Unprotect(encryptedPassphrase);
-    }
-
-    // Private helper methods - shared implementation
-
-    private string EncryptPassphrase(string passphrase)
-    {
-        return _totpProtection.Protect(passphrase);
-    }
-
-    private BackupEncryptionConfig CreateNewEncryptionConfig()
-    {
-        return new BackupEncryptionConfig
-        {
-            Enabled = true,
-            Algorithm = "AES-256-GCM",
-            Iterations = 100000,
-            CreatedAt = DateTimeOffset.UtcNow,
-            LastRotatedAt = null  // First setup
-        };
-    }
-
-    private async Task<BackupEncryptionConfig> UpdateExistingEncryptionConfigAsync()
-    {
-        var existing = await GetEncryptionConfigAsync();
-        if (existing == null)
-        {
-            throw new InvalidOperationException("Cannot update encryption config - no existing configuration found");
-        }
-
-        existing.LastRotatedAt = DateTimeOffset.UtcNow;
-
-        return existing;
-    }
-
-    private async Task SaveEncryptionConfigToDatabaseAsync(BackupEncryptionConfig config, string encryptedPassphrase)
-    {
-        await using var context = await _dataSource.OpenConnectionAsync();
-
-        // Load or create global config record
-        var configRecord = await context.QueryFirstOrDefaultAsync<DataModels.ConfigRecordDto>(
-            "SELECT * FROM configs WHERE chat_id IS NULL");
-
-        if (configRecord == null)
-        {
-            configRecord = new DataModels.ConfigRecordDto
-            {
-                ChatId = null,
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-        }
-
-        // Save config metadata to JSONB (without passphrase)
-        configRecord.BackupEncryptionConfig = JsonSerializer.Serialize(config);
-        // Save encrypted passphrase to dedicated TEXT column
-        configRecord.PassphraseEncrypted = encryptedPassphrase;
-        configRecord.UpdatedAt = DateTimeOffset.UtcNow;
-
-        if (configRecord.Id == 0)
-        {
-            // Insert
-            await context.ExecuteAsync(
-                @"INSERT INTO configs (chat_id, backup_encryption_config, passphrase_encrypted, created_at, updated_at)
-                  VALUES (@ChatId, @BackupEncryptionConfig::jsonb, @PassphraseEncrypted, @CreatedAt, @UpdatedAt)",
-                configRecord);
-        }
-        else
-        {
-            // Update
-            await context.ExecuteAsync(
-                @"UPDATE configs
-                  SET backup_encryption_config = @BackupEncryptionConfig::jsonb,
-                      passphrase_encrypted = @PassphraseEncrypted,
-                      updated_at = @UpdatedAt
-                  WHERE id = @Id",
-                configRecord);
-        }
-
-        _logger.LogInformation("Saved backup encryption config and passphrase to database");
-    }
 }
 
 /// <summary>

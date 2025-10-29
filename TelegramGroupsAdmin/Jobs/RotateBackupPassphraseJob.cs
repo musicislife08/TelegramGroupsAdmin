@@ -16,17 +16,20 @@ public class RotateBackupPassphraseJob
 {
     private readonly IBackupEncryptionService _encryptionService;
     private readonly IBackupService _backupService;
+    private readonly IPassphraseManagementService _passphraseService;
     private readonly IAuditService _auditService;
     private readonly ILogger<RotateBackupPassphraseJob> _logger;
 
     public RotateBackupPassphraseJob(
         IBackupEncryptionService encryptionService,
         IBackupService backupService,
+        IPassphraseManagementService passphraseService,
         IAuditService auditService,
         ILogger<RotateBackupPassphraseJob> logger)
     {
         _encryptionService = encryptionService;
         _backupService = backupService;
+        _passphraseService = passphraseService;
         _auditService = auditService;
         _logger = logger;
     }
@@ -49,7 +52,7 @@ public class RotateBackupPassphraseJob
         try
         {
             // Get decrypted old passphrase from database
-            var oldPassphrase = await _backupService.GetDecryptedPassphraseAsync();
+            var oldPassphrase = await _passphraseService.GetDecryptedPassphraseAsync();
 
             // Find all backup files
             if (!Directory.Exists(backupDirectory))
@@ -172,7 +175,7 @@ public class RotateBackupPassphraseJob
     private async Task UpdateConfigWithNewPassphrase(string newPassphrase)
     {
         // Use refactored service method
-        await _backupService.UpdateEncryptionConfigAsync(newPassphrase);
+        await _passphraseService.UpdateEncryptionConfigAsync(newPassphrase);
         _logger.LogInformation("Updated encryption config with new passphrase");
     }
 }

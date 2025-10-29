@@ -678,7 +678,7 @@ Two different notification systems that don't integrate:
 
 ## Completed Work
 
-**2025-10-28**: PERF-3 complete (Option A: Spam detection early exit in ContentCheckCoordinator when no critical checks, Option B: Trust context passed to individual checks via ContentCheckRequest.IsUserTrusted/IsUserAdmin fields, OpenAIContentCheck.ShouldExecute() skips API calls for trusted users), REFACTOR-13 (OpenAI extraction: 556 lines → 3 files [192 + 215 + 190], removed legacy text parsing [120 lines], 40/40 tests passing with WireMock + object serialization)
+**2025-10-28**: REFACTOR-2 (BackupService extraction: 1,202 → 750 lines, extracted 4 handlers [TableDiscovery/TableExport/DependencyResolution + PassphraseManagement/BackupConfiguration services], breaking change to IBackupService, 20/20 tests passing), PERF-3 complete (Option A: Spam detection early exit in ContentCheckCoordinator when no critical checks, Option B: Trust context passed to individual checks via ContentCheckRequest.IsUserTrusted/IsUserAdmin fields, OpenAIContentCheck.ShouldExecute() skips API calls for trusted users), REFACTOR-13 (OpenAI extraction: 556 lines → 3 files [192 + 215 + 190], removed legacy text parsing [120 lines], 40/40 tests passing with WireMock + object serialization)
 
 **2025-10-27**: CODE-9 (Removed reflection in MessageProcessingService - extracted CheckResultsSerializer static utility, compile-time safe, no performance overhead), CODE-1 + CODE-2 (Complete code organization overhaul - split ~60 files into 140+ individual files, fixed 7 name mismatches, renamed TotpProtectionService→DataProtectionService, one type per file achieved, 164 files changed), ANALYTICS-4 (Welcome system analytics - 4 new repository methods, WelcomeAnalytics.razor component, /analytics#welcome tab with join trends/response distribution/per-chat stats, timezone-aware queries), SCHEMA-1 (Audit log FK cascade rules fixed - migration 20251027002019, user deletion now works, 22/22 tests passing)
 
@@ -948,38 +948,6 @@ Extracted 8 specialized handlers achieving Single Responsibility Principle.
 
 ---
 
-### REFACTOR-2: Extract BackupService Components (1,202 lines)
-
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Testability, security testing
-**Priority:** CRITICAL - Complex encryption logic needs testing
-**Discovered:** 2025-10-27 via file size audit
-
-**Current State:**
-- 1,202 lines total
-- Backup creation, restore, encryption, passphrase rotation all mixed
-- Difficult to test encryption separately
-
-**Extract:**
-- `BackupEncryptionService` - AES-256-GCM encryption/decryption (pure functions!)
-- `BackupMetadataService` - Metadata creation/parsing
-- `BackupRotationService` - Passphrase rotation logic
-- `TableExportService` - Database table export logic
-
-**Testing Wins:**
-- Test encryption without database
-- Mock table export for backup tests
-- Test passphrase rotation in isolation
-- Verify metadata parsing with edge cases
-
-**Success Criteria:**
-- BackupService < 400 lines
-- Encryption service pure functions (no DB access)
-- Each component < 300 lines
-- Comprehensive encryption unit tests
-
-
----
 
 ### REFACTOR-3: Extract MessageHistoryRepository Services (1,085 lines)
 

@@ -3,6 +3,7 @@
 @using TelegramGroupsAdmin.Data
 @using Microsoft.AspNetCore.Components.Authorization
 @inject IBackupService BackupService
+@inject IPassphraseManagementService PassphraseService
 @inject IDbContextFactory<AppDbContext> ContextFactory
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
@@ -266,7 +267,7 @@
         try
         {
             // NOW queue the background job to re-encrypt backups
-            await BackupService.RotatePassphraseAsync(BackupDirectory, _userId);
+            await PassphraseService.RotatePassphraseAsync(BackupDirectory, _userId);
 
             Snackbar.Add("Passphrase rotation started! Background job is re-encrypting your backups.", Severity.Success);
             MudDialog.Close(DialogResult.Ok(_newPassphrase));

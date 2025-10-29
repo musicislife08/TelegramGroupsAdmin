@@ -39,7 +39,8 @@ public class BackupServiceTests
 {
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
-    private BackupService? _backupService;
+    private IBackupService? _backupService;
+    private IPassphraseManagementService? _passphraseService;
     private IBackupEncryptionService? _encryptionService;
     private IDataProtectionProvider? _dataProtectionProvider;
 
@@ -71,9 +72,6 @@ public class BackupServiceTests
         // Add logging
         services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
 
-        // Add BackupEncryptionService (already extracted)
-        services.AddSingleton<IBackupEncryptionService, BackupEncryptionService>();
-
         // Add mock services (BackupService dependencies)
         services.AddSingleton<IDmDeliveryService, MockDmDeliveryService>();
         services.AddSingleton<IDataProtectionService, MockDataProtectionService>();
@@ -87,8 +85,8 @@ public class BackupServiceTests
             .Returns(Task.FromResult(default(TickerQ.Utilities.Models.TickerResult<TickerQ.Utilities.Models.Ticker.TimeTicker>)));
         services.AddScoped(_ => mockTickerManager);
 
-        // Add BackupService
-        services.AddScoped<BackupService>();
+        // Add backup services (using shared extension method from main app)
+        services.AddBackupServices();
 
         _serviceProvider = services.BuildServiceProvider();
         _dataProtectionProvider = _serviceProvider.GetRequiredService<IDataProtectionProvider>();
@@ -100,12 +98,13 @@ public class BackupServiceTests
             await GoldenDataset.SeedDatabaseAsync(context, _dataProtectionProvider);
         }
 
-        // Create BackupService in a new scope
+        // Create BackupService in a new scope (using interface)
         var scope = _serviceProvider.CreateScope();
-        _backupService = scope.ServiceProvider.GetRequiredService<BackupService>();
+        _backupService = scope.ServiceProvider.GetRequiredService<IBackupService>();
+        _passphraseService = scope.ServiceProvider.GetRequiredService<IPassphraseManagementService>();
 
         // Set up default encryption config for all tests
-        await _backupService.SaveEncryptionConfigAsync("test-passphrase-12345");
+        await _passphraseService.SaveEncryptionConfigAsync("test-passphrase-12345");
     }
 
     [TearDown]
@@ -500,7 +499,7 @@ public class BackupServiceTests
         const string testPassphrase = "initial-config-pass-456";
 
         // Act
-        await _backupService!.SaveEncryptionConfigAsync(testPassphrase);
+        await _passphraseService!.SaveEncryptionConfigAsync(testPassphrase);
 
         // Assert - Verify config created
         await using (var context = _testHelper.GetDbContext())
@@ -526,7 +525,7 @@ public class BackupServiceTests
         }
 
         // Act
-        var decrypted = await _backupService!.GetDecryptedPassphraseAsync();
+        var decrypted = await _passphraseService!.GetDecryptedPassphraseAsync();
 
         // Assert
         Assert.That(decrypted, Is.EqualTo(testPassphrase));
@@ -546,7 +545,7 @@ public class BackupServiceTests
         // Act & Assert - Should throw when passphrase is missing
         Assert.ThrowsAsync<InvalidOperationException>(async () =>
         {
-            await _backupService!.GetDecryptedPassphraseAsync();
+            await _passphraseService!.GetDecryptedPassphraseAsync();
         });
     }
 

@@ -143,9 +143,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TelegramGroupsAdmin.Services.PromptBuilder.IPromptBuilderService, TelegramGroupsAdmin.Services.PromptBuilder.PromptBuilderService>();
 
         // Backup services (replaces old UserDataExportService)
-        services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupService, TelegramGroupsAdmin.Services.Backup.BackupService>();
-        services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupEncryptionService, TelegramGroupsAdmin.Services.Backup.BackupEncryptionService>();
-        services.AddScoped<TelegramGroupsAdmin.Services.Backup.BackupRetentionService>();
+        services.AddBackupServices();
 
         // Email service (SendGrid)
         services.AddScoped<TelegramGroupsAdmin.Services.Email.IEmailService, TelegramGroupsAdmin.Services.Email.SendGridEmailService>();
@@ -383,5 +381,34 @@ file sealed class RejectedRateLimitLease : RateLimitLease
     {
         metadata = null;
         return false;
+    }
+}
+
+/// <summary>
+/// Extension methods for registering backup services
+/// Used by both main app and tests to ensure consistent registration
+/// </summary>
+public static class BackupServiceCollectionExtensions
+{
+    /// <summary>
+    /// Add backup services and handlers to DI container
+    /// </summary>
+    public static IServiceCollection AddBackupServices(this IServiceCollection services)
+    {
+        // Core backup services
+        services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupService, TelegramGroupsAdmin.Services.Backup.BackupService>();
+        services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupEncryptionService, TelegramGroupsAdmin.Services.Backup.BackupEncryptionService>();
+        services.AddScoped<TelegramGroupsAdmin.Services.Backup.BackupRetentionService>();
+
+        // Backup configuration and passphrase management (REFACTOR-2)
+        services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupConfigurationService, TelegramGroupsAdmin.Services.Backup.BackupConfigurationService>();
+        services.AddScoped<TelegramGroupsAdmin.Services.Backup.IPassphraseManagementService, TelegramGroupsAdmin.Services.Backup.PassphraseManagementService>();
+
+        // Backup handlers (REFACTOR-2 - internal implementation details)
+        services.AddScoped<TelegramGroupsAdmin.Services.Backup.Handlers.TableDiscoveryService>();
+        services.AddScoped<TelegramGroupsAdmin.Services.Backup.Handlers.TableExportService>();
+        services.AddScoped<TelegramGroupsAdmin.Services.Backup.Handlers.DependencyResolutionService>();
+
+        return services;
     }
 }

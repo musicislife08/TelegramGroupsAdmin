@@ -1,6 +1,7 @@
 @using TelegramGroupsAdmin.Services.Backup
 @using TelegramGroupsAdmin.Core.Security
 @inject IBackupService BackupService
+@inject IPassphraseManagementService PassphraseService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 
@@ -173,7 +174,7 @@
             }
 
             // Save to database using refactored service method
-            await BackupService.SaveEncryptionConfigAsync(_generatedPassphrase);
+            await PassphraseService.SaveEncryptionConfigAsync(_generatedPassphrase);
 
             // Move to display step
             _step = SetupStep.DisplayPassphrase;
