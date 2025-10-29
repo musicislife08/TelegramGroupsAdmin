@@ -416,6 +416,35 @@ grep -r "newPassphrase\|_generatedPassphrase" --include="*.cs" | grep -i "log"
 
 ---
 
+### SCHEMA-2: Migrate Data Protection Purpose String
+
+**Status:** BACKLOG 📋
+**Severity:** Schema | **Impact:** Breaking change for encrypted data
+**Discovered:** 2025-10-28 via legacy audit
+
+**Problem:**
+ProtectedDataAttribute uses "TgSpamPreFilter.TotpSecrets" as default purpose string (old project name). Changing this will break decryption of existing encrypted data (TOTP secrets, API keys, backup passphrases).
+
+**Current State:**
+- Purpose string: `"TgSpamPreFilter.TotpSecrets"` (hardcoded default)
+- Used for: TOTP secrets, API keys, backup passphrases
+- Cannot simply rename without data migration
+
+**Migration Strategy:**
+1. Create migration to decrypt all protected fields with old purpose
+2. Re-encrypt with new purpose: `"TelegramGroupsAdmin.Secrets"`
+3. Update ProtectedDataAttribute default
+4. Verify backup/restore still works
+
+**Tables Affected:**
+- users.totp_secret (TOTP secrets)
+- configs.api_keys (VirusTotal, etc.)
+- configs.passphrase_encrypted (backup passphrases)
+
+**Priority:** LOW - Rename complete, old purpose string still functional (cosmetic issue)
+
+---
+
 
 ### FEATURE-4.23: Cross-Chat Ban Message Cleanup
 
@@ -745,7 +774,7 @@ Two different notification systems that don't integrate:
 **Discovered:** 2025-10-28 via legacy audit
 
 **Problem:**
-Pre-release application has 10 "backward compatibility" and "legacy" code paths despite having zero users. No need to support old formats/APIs that don't exist yet.
+Pre-release application has "backward compatibility" and "legacy" code paths despite having zero users. No need to support old formats/APIs that don't exist yet.
 
 **Items to Remove:**
 
@@ -758,8 +787,11 @@ Pre-release application has 10 "backward compatibility" and "legacy" code paths 
 7. **Messages.razor:736** - Dictionary fallback for messages without detection history
 8. **DetectionHistoryDialog.razor:161** - Boolean spam property fallback
 9. **PermissionDialog.razor:60** - Default MaxPermissionLevel for backward compatibility
-10. **ProtectedDataAttribute.cs:13** - "TgSpamPreFilter" purpose string (rename project complete)
-11. **SimilaritySpamCheck.cs:148** - No-op backward compatibility code
+10. **SimilaritySpamCheck.cs:148-152** - No-op backward compatibility code (detection count tracking removed)
+11. **ContentDetectionEngine.cs:507** - DetermineAction method marked "legacy" (delete method, unused)
+12. **SpamCheckRecord.cs:4** - "legacy - for backward compatibility" comment (delete model if unused)
+13. **ImageViewerDialog.razor:98,102** - "legacy messages" fallback for just filename (enforce subdirectory paths)
+14. **ManagedChatType.cs:11** - Remove "(legacy, up to 200 members)" from comment (just call it "Basic")
 
 **Priority:** MEDIUM - No users = no legacy, clean code before release
 
