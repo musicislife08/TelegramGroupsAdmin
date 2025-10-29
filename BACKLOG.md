@@ -1,6 +1,6 @@
 # Development Backlog - TelegramGroupsAdmin
 
-**Last Updated:** 2025-10-27
+**Last Updated:** 2025-10-29
 **Status:** Pre-production (breaking changes acceptable)
 **Overall Code Quality:** 89/100 (Excellent - homelab-optimized)
 
@@ -154,146 +154,6 @@ grep -r "newPassphrase\|_generatedPassphrase" --include="*.cs" | grep -i "log"
 **When to Do:**
 - Before open sourcing (prevents credentials in logs if deployed publicly)
 - Part of security hardening pass
-
----
-
-### SECURITY-5: Settings Page Authorization Bypass
-
-**Status:** BACKLOG 📋
-**Severity:** Security | **Impact:** Privilege escalation, unauthorized infrastructure access
-**Discovered:** 2025-10-28 via REFACTOR-2 Red Team review
-
-**Current State:**
-- Settings page uses `@attribute [Authorize]` - only checks authentication, NOT permission level
-- Admin (chat-scoped, Level 0) users can access ALL settings including infrastructure
-- GlobalAdmin users can access infrastructure sections (backup, background jobs, bot config) that should be Owner-only
-- `_canEditInfrastructure` flag is loaded but never checked before rendering components
-
-**Security Policy Violations:**
-
-**Admin Users (Level 0 - Chat Scoped):**
-- ❌ SHOULD NOT access `/settings` at all (entire page)
-- ❌ Currently CAN access all settings including backup/restore
-- ✅ Should only manage assigned chats in main UI
-
-**GlobalAdmin Users (Level 1 - Global Moderation):**
-- ✅ SHOULD access content detection, stop words, training samples
-- ❌ SHOULD NOT access backup/restore (infrastructure)
-- ❌ SHOULD NOT access background jobs (infrastructure)
-- ❌ SHOULD NOT access bot connection settings (infrastructure)
-- ❌ SHOULD NOT access system security settings (infrastructure)
-- ❌ Currently CAN access all of the above
-
-**Files Affected:**
-- `TelegramGroupsAdmin/Components/Pages/Settings.razor` - needs `@attribute [Authorize(Policy = "RequireGlobalAdmin")]`
-- Infrastructure sections (backup, background-jobs, security, general, telegram/bot) need `if (_canEditInfrastructure)` checks
-- Navigation menu (lines 22-31) needs Owner-only conditionals for infrastructure links
-
-**Fix Required:**
-```razor
-// 1. Page-level: Block Admin users entirely
-@attribute [Authorize(Policy = "RequireGlobalAdmin")]
-
-// 2. Component-level: Owner checks for infrastructure
-case "backup":
-    if (_canEditInfrastructure)
-    {
-        <BackupRestore />
-    }
-    else
-    {
-        <MudAlert Severity="Severity.Error">Owner access required</MudAlert>
-    }
-    break;
-
-// 3. Navigation menu: Hide infrastructure links from GlobalAdmin
-@if (_canEditInfrastructure)
-{
-    <MudNavLink Href="/settings/system/backup">Backup & Restore</MudNavLink>
-    <MudNavLink Href="/settings/system/background-jobs">Background Jobs</MudNavLink>
-    <MudNavLink Href="/settings/system/security">Security</MudNavLink>
-    <MudNavLink Href="/settings/telegram/bot">Bot Connection</MudNavLink>
-}
-```
-
-**Priority:** HIGH - Privilege escalation vulnerability, allows Admin users to perform Owner-only operations
-
----
-
-### SECURITY-6: User Management Permission Check Missing
-
-**Status:** BACKLOG 📋
-**Severity:** Security | **Impact:** GlobalAdmin cannot add users, missing escalation prevention
-**Discovered:** 2025-10-28 via REFACTOR-2 Red Team review
-
-**Current State:**
-```csharp
-// BlazorAuthHelper.cs - WRONG!
-public async Task<bool> CanManageAdminAccountsAsync()
-{
-    var permissionLevel = await GetCurrentPermissionLevelAsync();
-    return permissionLevel >= PermissionLevel.Owner;  // ← Only Owner allowed
-}
-```
-
-**Issues:**
-
-1. **GlobalAdmin Blocked from User Management:**
-   - GlobalAdmin (Level 1) should be able to add Admin/GlobalAdmin users
-   - Currently only Owner (Level 2) can access `/settings/system/accounts`
-   - Violates documented security model where GlobalAdmin manages global moderation team
-
-2. **Missing Permission Escalation Check:**
-   - No validation that users can't create accounts above their permission level
-   - GlobalAdmin should NOT be able to create Owner users
-   - Need check: `newUserPermission <= currentUserPermission`
-
-**Security Model (Correct):**
-- Admin (Level 0) - Cannot manage users
-- GlobalAdmin (Level 1) - Can create Admin/GlobalAdmin, NOT Owner
-- Owner (Level 2) - Can create any permission level
-
-**Fix Required:**
-
-1. **Allow GlobalAdmin to manage users:**
-```csharp
-public async Task<bool> CanManageAdminAccountsAsync()
-{
-    var permissionLevel = await GetCurrentPermissionLevelAsync();
-    return permissionLevel >= PermissionLevel.GlobalAdmin;  // ← GlobalAdmin or Owner
-}
-```
-
-2. **Add escalation prevention in user creation/invite flow:**
-```csharp
-// InviteService.cs (or wherever user creation happens)
-if (newUserPermission > currentUserPermission)
-{
-    throw new UnauthorizedAccessException(
-        $"Cannot create user with permission level {newUserPermission} (current: {currentUserPermission})"
-    );
-}
-```
-
-3. **UI should hide Owner option for GlobalAdmin users:**
-```razor
-// PermissionDialog or invite flow
-<MudSelect @bind-Value="PermissionLevel">
-    <MudSelectItem Value="PermissionLevel.Admin">Admin</MudSelectItem>
-    <MudSelectItem Value="PermissionLevel.GlobalAdmin">Global Admin</MudSelectItem>
-    @if (await AuthHelper.IsOwnerAsync())  // ← Only Owner sees this
-    {
-        <MudSelectItem Value="PermissionLevel.Owner">Owner</MudSelectItem>
-    }
-</MudSelect>
-```
-
-**Files Affected:**
-- `TelegramGroupsAdmin/Services/BlazorAuthHelper.cs` - Fix CanManageAdminAccountsAsync
-- `TelegramGroupsAdmin/Services/InviteService.cs` - Add escalation prevention check
-- `TelegramGroupsAdmin/Components/Shared/PermissionDialog.razor` - Hide Owner option for non-Owners
-
-**Priority:** MEDIUM - Functional issue (GlobalAdmin can't add users) + missing security control (escalation prevention)
 
 ---
 
@@ -847,6 +707,8 @@ Two different notification systems that don't integrate:
 
 ## Completed Work
 
+**2025-10-29**: SECURITY-5 (Settings page authorization bypass fixed - GlobalAdminOrOwner policy + Owner-only infrastructure checks), SECURITY-6 (User management permission checks - GlobalAdmin can manage users, escalation prevention), cSpell configuration (29 domain terms, 0 spell warnings), Interface splits (3 files: WelcomeResponsesRepository, BotProtectionService, WelcomeService), REFACTOR-6 (ModelMappings 884 lines → 26 files in Mappings/ subdirectory, 69 files changed)
+
 **2025-10-28**: CODE-8 (Removed 157× ConfigureAwait - unnecessary in ASP.NET Core), DI-1 audit (175 registrations, 66 concrete-only justified, created DI-2 for 2 inconsistent repos), REFACTOR-2 (BackupService 1,202 → 750 lines, 4 handlers + 2 services extracted, breaking changes, 20/20 tests), PERF-3 (trust context early exit), REFACTOR-13 (OpenAI extraction, 40/40 tests)
 
 **2025-10-27**: CODE-9 (Removed reflection in MessageProcessingService - extracted CheckResultsSerializer static utility, compile-time safe, no performance overhead), CODE-1 + CODE-2 (Complete code organization overhaul - split ~60 files into 140+ individual files, fixed 7 name mismatches, renamed TotpProtectionService→DataProtectionService, one type per file achieved, 164 files changed), ANALYTICS-4 (Welcome system analytics - 4 new repository methods, WelcomeAnalytics.razor component, /analytics#welcome tab with join trends/response distribution/per-chat stats, timezone-aware queries), SCHEMA-1 (Audit log FK cascade rules fixed - migration 20251027002019, user deletion now works, 22/22 tests passing)
@@ -1040,32 +902,6 @@ List<string> items = [];
 
 ---
 
-### CODE-8: Remove Inconsistent ConfigureAwait Usage
-
-**Status:** BACKLOG 📋
-**Severity:** Code Quality | **Impact:** Code consistency
-**Discovered:** 2025-10-26 via refactor agent code review
-
-**Current State:**
-- Only 7 uses of `.ConfigureAwait(false)` across entire codebase
-- Inconsistent application suggests uncertainty about the pattern
-- ASP.NET Core doesn't require ConfigureAwait(false) (no SynchronizationContext)
-
-**Affected Files:**
-- ContentCheckCoordinator.cs (4 occurrences)
-- SpamActionService.cs (2 occurrences)
-- MessageProcessingService.cs (1 occurrence)
-
-**Proposed Solution:**
-Remove all `.ConfigureAwait(false)` calls - unnecessary in ASP.NET Core
-
-**Microsoft Guidance:** ASP.NET Core apps don't need ConfigureAwait(false) because there's no SynchronizationContext to capture
-
-**Priority:** LOW - Code consistency improvement
-
-
----
-
 ### QUALITY-2: Implement HybridCache
 
 **Status:** BACKLOG 📋
@@ -1143,17 +979,6 @@ activity?.SetTag("detection.result", result.Action.ToString());
 
 
 ---
-
-### REFACTOR-1: MessageProcessingService Refactoring
-
-**Status:** ✅ COMPLETED (2025-10-28)
-**Result:** 1,316 → 649 lines (-667 total, 501 code lines)
-
-Extracted 8 specialized handlers achieving Single Responsibility Principle.
-
-
----
-
 
 ### REFACTOR-3: Extract MessageHistoryRepository Services (1,085 lines)
 
@@ -1241,44 +1066,6 @@ Extracted 8 specialized handlers achieving Single Responsibility Principle.
 
 
 ---
-
-### REFACTOR-6: Split ModelMappings by Entity (884 lines → 14 files)
-
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Code organization, findability
-**Priority:** MEDIUM - Not a "quick win" as originally estimated
-**Discovered:** 2025-10-27 via file size audit
-
-**Current State:**
-- 884 lines in single file (TelegramGroupsAdmin.Telegram/Repositories/ModelMappings.cs)
-- 14 different entity mapping groups identified
-- Hard to find specific mapping
-
-**Scope (Actual):**
-Split into 14 separate files by entity:
-1. ActorMappings.cs (~50 lines) - Actor conversion helpers
-2. ChatAdminMappings.cs (~25 lines)
-3. UserMappings.cs (~50 lines)
-4. RecoveryCodeMappings.cs (~10 lines)
-5. InviteMappings.cs (~30 lines)
-6. AuditLogMappings.cs (~30 lines)
-7. MessageMappings.cs (~120 lines) - Largest, complex JOINs
-8. VerificationTokenMappings.cs (~30 lines)
-9. DetectionResultMappings.cs (~60 lines)
-10. UserActionMappings.cs (~40 lines)
-11. ManagedChatMappings.cs (~35 lines)
-12. TelegramUserMappingMappings.cs (~25 lines)
-13. TelegramLinkTokenMappings.cs (~25 lines)
-14. ReportMappings.cs (~330 lines) - Complex nested mappings
-15. MessageTranslationMappings.cs (~25 lines)
-
-**Estimated Effort:** 60-90 minutes (14 file splits, namespace updates, verify imports)
-
-**Priority:** MEDIUM - Organizational improvement, not urgent
-
-
----
-
 ### REFACTOR-7: Extract AuthService Components (694 lines)
 
 **Status:** BACKLOG 📋
@@ -1365,33 +1152,6 @@ Split into 14 separate files by entity:
 
 
 ---
-
-### REFACTOR-13: Extract OpenAISpamCheck Components (555 lines) - ✅ COMPLETE
-
-**Status:** COMPLETED 🎉 (2025-10-28)
-**Severity:** Refactoring | **Impact:** OpenAI testing without API calls + PERF-3 Option B
-**Priority:** MEDIUM
-**Discovered:** 2025-10-27 via file size audit
-
-**Completed:**
-- ✅ Extracted `OpenAIPromptBuilder` (215 lines) - Pure functions for prompt generation
-- ✅ Extracted `OpenAIResponseParser` (110 lines) - JSON response parsing
-- ✅ Removed legacy text parsing (120 lines eliminated) - JSON-only for unreleased application
-- ✅ OpenAIContentCheck reduced to 192 lines (65% reduction)
-- ✅ PERF-3 Option B: Added `IsUserTrusted`/`IsUserAdmin` to `ContentCheckRequest`
-- ✅ ContentCheckCoordinator passes trust context with `with` syntax
-- ✅ OpenAIContentCheck.ShouldExecute() skips expensive API calls for trusted users
-- ✅ 40/40 tests passing with WireMock + object serialization (no manual JSON strings)
-
-**Files:**
-- `TelegramGroupsAdmin.ContentDetection/Checks/OpenAIContentCheck.cs` (556 → 192 lines)
-- `TelegramGroupsAdmin.ContentDetection/Services/OpenAIPromptBuilder.cs` (NEW, 215 lines)
-- `TelegramGroupsAdmin.ContentDetection/Services/OpenAIResponseParser.cs` (NEW, 110 lines)
-- `TelegramGroupsAdmin.ContentDetection/Models/ContentCheckRequest.cs` (+2 properties)
-- `TelegramGroupsAdmin.Telegram/Services/ContentCheckCoordinator.cs` (trust context enrichment)
-
----
-
 ### REFACTOR-14: Extract DetectionResultsRepository Components (506 lines)
 
 **Status:** BACKLOG 📋
