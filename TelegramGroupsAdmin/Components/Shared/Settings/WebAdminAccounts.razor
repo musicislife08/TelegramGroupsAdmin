@@ -250,7 +250,7 @@
 
             try
             {
-                await UserManagementService.UpdatePermissionLevelAsync(user.Id, (int)newLevel, _currentUserId!);
+                await UserManagementService.UpdatePermissionLevelAsync(user.Id, (int)newLevel, _currentUserId!, (int)_currentUserPermissionLevel);
                 Snackbar.Add($"Updated {user.Email} to {GetPermissionName(newLevel)}", Severity.Success);
                 await LoadUsersAsync();
             }
@@ -325,7 +325,7 @@
                 var permissionLevelEnum = permissionLevelProperty?.GetValue(data) as PermissionLevel? ?? PermissionLevel.Admin;
                 var permissionLevel = (int)permissionLevelEnum; // Cast enum to int for service layer
 
-                var token = await InviteService.CreateInviteWithPermissionAsync(_currentUserId, permissionLevel, validDays);
+                var token = await InviteService.CreateInviteWithPermissionAsync(_currentUserId, permissionLevel, (int)_currentUserPermissionLevel, validDays);
                 var inviteLink = $"{Navigation.BaseUri}register?invite={token}";
                 var expiresAt = DateTimeOffset.UtcNow.AddDays(validDays);
 

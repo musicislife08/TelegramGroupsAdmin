@@ -110,12 +110,13 @@ public class BlazorAuthHelper
 
     /// <summary>
     /// Check if current user can manage admin accounts.
-    /// Only Owner can manage admin accounts.
+    /// GlobalAdmin and Owner can manage admin accounts.
+    /// GlobalAdmin can only create Admin/GlobalAdmin users (escalation prevention enforced at API level).
     /// </summary>
     public async Task<bool> CanManageAdminAccountsAsync()
     {
         var permissionLevel = await GetCurrentPermissionLevelAsync();
-        return permissionLevel >= PermissionLevel.Owner;
+        return permissionLevel >= PermissionLevel.GlobalAdmin;
     }
 
     /// <summary>

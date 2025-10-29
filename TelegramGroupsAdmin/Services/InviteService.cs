@@ -76,8 +76,31 @@ public class InviteService : IInviteService
         )).ToList();
     }
 
-    public async Task<string> CreateInviteWithPermissionAsync(string createdBy, int permissionLevel, int validDays = 7, CancellationToken ct = default)
+    public async Task<string> CreateInviteWithPermissionAsync(string createdBy, int permissionLevel, int creatorPermissionLevel, int validDays = 7, CancellationToken ct = default)
     {
+        // Escalation prevention: Users cannot create invites for permission levels above their own
+        if (permissionLevel > creatorPermissionLevel)
+        {
+            var creatorPermissionName = creatorPermissionLevel switch
+            {
+                0 => "Admin",
+                1 => "GlobalAdmin",
+                2 => "Owner",
+                _ => creatorPermissionLevel.ToString()
+            };
+
+            var requestedPermissionName = permissionLevel switch
+            {
+                0 => "Admin",
+                1 => "GlobalAdmin",
+                2 => "Owner",
+                _ => permissionLevel.ToString()
+            };
+
+            throw new UnauthorizedAccessException(
+                $"Cannot create invite with permission level {requestedPermissionName} (your level: {creatorPermissionName})");
+        }
+
         var token = await _inviteRepository.CreateAsync(createdBy, validDays, permissionLevel, ct);
 
         var permissionName = permissionLevel switch

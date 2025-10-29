@@ -16,12 +16,35 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
         return await userRepository.GetByIdAsync(userId, ct);
     }
 
-    public async Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, CancellationToken ct = default)
+    public async Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, int modifierPermissionLevel, CancellationToken ct = default)
     {
         // Validate permission level (0=Admin, 1=GlobalAdmin, 2=Owner)
         if (permissionLevel < 0 || permissionLevel > 2)
         {
             throw new ArgumentException("Permission level must be 0 (Admin), 1 (GlobalAdmin), or 2 (Owner)", nameof(permissionLevel));
+        }
+
+        // Escalation prevention: Users cannot assign permission levels above their own
+        if (permissionLevel > modifierPermissionLevel)
+        {
+            var modifierPermissionName = modifierPermissionLevel switch
+            {
+                0 => "Admin",
+                1 => "GlobalAdmin",
+                2 => "Owner",
+                _ => modifierPermissionLevel.ToString()
+            };
+
+            var requestedPermissionName = permissionLevel switch
+            {
+                0 => "Admin",
+                1 => "GlobalAdmin",
+                2 => "Owner",
+                _ => permissionLevel.ToString()
+            };
+
+            throw new UnauthorizedAccessException(
+                $"Cannot assign permission level {requestedPermissionName} (your level: {modifierPermissionName})");
         }
 
         // Get old permission level for audit log
