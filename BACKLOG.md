@@ -157,6 +157,146 @@ grep -r "newPassphrase\|_generatedPassphrase" --include="*.cs" | grep -i "log"
 
 ---
 
+### SECURITY-5: Settings Page Authorization Bypass
+
+**Status:** BACKLOG 📋
+**Severity:** Security | **Impact:** Privilege escalation, unauthorized infrastructure access
+**Discovered:** 2025-10-28 via REFACTOR-2 Red Team review
+
+**Current State:**
+- Settings page uses `@attribute [Authorize]` - only checks authentication, NOT permission level
+- Admin (chat-scoped, Level 0) users can access ALL settings including infrastructure
+- GlobalAdmin users can access infrastructure sections (backup, background jobs, bot config) that should be Owner-only
+- `_canEditInfrastructure` flag is loaded but never checked before rendering components
+
+**Security Policy Violations:**
+
+**Admin Users (Level 0 - Chat Scoped):**
+- ❌ SHOULD NOT access `/settings` at all (entire page)
+- ❌ Currently CAN access all settings including backup/restore
+- ✅ Should only manage assigned chats in main UI
+
+**GlobalAdmin Users (Level 1 - Global Moderation):**
+- ✅ SHOULD access content detection, stop words, training samples
+- ❌ SHOULD NOT access backup/restore (infrastructure)
+- ❌ SHOULD NOT access background jobs (infrastructure)
+- ❌ SHOULD NOT access bot connection settings (infrastructure)
+- ❌ SHOULD NOT access system security settings (infrastructure)
+- ❌ Currently CAN access all of the above
+
+**Files Affected:**
+- `TelegramGroupsAdmin/Components/Pages/Settings.razor` - needs `@attribute [Authorize(Policy = "RequireGlobalAdmin")]`
+- Infrastructure sections (backup, background-jobs, security, general, telegram/bot) need `if (_canEditInfrastructure)` checks
+- Navigation menu (lines 22-31) needs Owner-only conditionals for infrastructure links
+
+**Fix Required:**
+```razor
+// 1. Page-level: Block Admin users entirely
+@attribute [Authorize(Policy = "RequireGlobalAdmin")]
+
+// 2. Component-level: Owner checks for infrastructure
+case "backup":
+    if (_canEditInfrastructure)
+    {
+        <BackupRestore />
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Error">Owner access required</MudAlert>
+    }
+    break;
+
+// 3. Navigation menu: Hide infrastructure links from GlobalAdmin
+@if (_canEditInfrastructure)
+{
+    <MudNavLink Href="/settings/system/backup">Backup & Restore</MudNavLink>
+    <MudNavLink Href="/settings/system/background-jobs">Background Jobs</MudNavLink>
+    <MudNavLink Href="/settings/system/security">Security</MudNavLink>
+    <MudNavLink Href="/settings/telegram/bot">Bot Connection</MudNavLink>
+}
+```
+
+**Priority:** HIGH - Privilege escalation vulnerability, allows Admin users to perform Owner-only operations
+
+---
+
+### SECURITY-6: User Management Permission Check Missing
+
+**Status:** BACKLOG 📋
+**Severity:** Security | **Impact:** GlobalAdmin cannot add users, missing escalation prevention
+**Discovered:** 2025-10-28 via REFACTOR-2 Red Team review
+
+**Current State:**
+```csharp
+// BlazorAuthHelper.cs - WRONG!
+public async Task<bool> CanManageAdminAccountsAsync()
+{
+    var permissionLevel = await GetCurrentPermissionLevelAsync();
+    return permissionLevel >= PermissionLevel.Owner;  // ← Only Owner allowed
+}
+```
+
+**Issues:**
+
+1. **GlobalAdmin Blocked from User Management:**
+   - GlobalAdmin (Level 1) should be able to add Admin/GlobalAdmin users
+   - Currently only Owner (Level 2) can access `/settings/system/accounts`
+   - Violates documented security model where GlobalAdmin manages global moderation team
+
+2. **Missing Permission Escalation Check:**
+   - No validation that users can't create accounts above their permission level
+   - GlobalAdmin should NOT be able to create Owner users
+   - Need check: `newUserPermission <= currentUserPermission`
+
+**Security Model (Correct):**
+- Admin (Level 0) - Cannot manage users
+- GlobalAdmin (Level 1) - Can create Admin/GlobalAdmin, NOT Owner
+- Owner (Level 2) - Can create any permission level
+
+**Fix Required:**
+
+1. **Allow GlobalAdmin to manage users:**
+```csharp
+public async Task<bool> CanManageAdminAccountsAsync()
+{
+    var permissionLevel = await GetCurrentPermissionLevelAsync();
+    return permissionLevel >= PermissionLevel.GlobalAdmin;  // ← GlobalAdmin or Owner
+}
+```
+
+2. **Add escalation prevention in user creation/invite flow:**
+```csharp
+// InviteService.cs (or wherever user creation happens)
+if (newUserPermission > currentUserPermission)
+{
+    throw new UnauthorizedAccessException(
+        $"Cannot create user with permission level {newUserPermission} (current: {currentUserPermission})"
+    );
+}
+```
+
+3. **UI should hide Owner option for GlobalAdmin users:**
+```razor
+// PermissionDialog or invite flow
+<MudSelect @bind-Value="PermissionLevel">
+    <MudSelectItem Value="PermissionLevel.Admin">Admin</MudSelectItem>
+    <MudSelectItem Value="PermissionLevel.GlobalAdmin">Global Admin</MudSelectItem>
+    @if (await AuthHelper.IsOwnerAsync())  // ← Only Owner sees this
+    {
+        <MudSelectItem Value="PermissionLevel.Owner">Owner</MudSelectItem>
+    }
+</MudSelect>
+```
+
+**Files Affected:**
+- `TelegramGroupsAdmin/Services/BlazorAuthHelper.cs` - Fix CanManageAdminAccountsAsync
+- `TelegramGroupsAdmin/Services/InviteService.cs` - Add escalation prevention check
+- `TelegramGroupsAdmin/Components/Shared/PermissionDialog.razor` - Hide Owner option for non-Owners
+
+**Priority:** MEDIUM - Functional issue (GlobalAdmin can't add users) + missing security control (escalation prevention)
+
+---
+
 ### DOCS-1: README.md (Pre-Open Source)
 
 **Status:** BACKLOG 📋 **HIGH - Blocking for open source**
