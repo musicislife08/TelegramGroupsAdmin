@@ -738,6 +738,33 @@ Two different notification systems that don't integrate:
 
 ---
 
+### CODE-10: Remove Pre-Release "Legacy" Code
+
+**Status:** BACKLOG 📋
+**Severity:** Code Quality | **Impact:** Code clarity, maintainability
+**Discovered:** 2025-10-28 via legacy audit
+
+**Problem:**
+Pre-release application has 10 "backward compatibility" and "legacy" code paths despite having zero users. No need to support old formats/APIs that don't exist yet.
+
+**Items to Remove:**
+
+1. **WebApplicationExtensions.cs:75** - Legacy /health endpoint (use /health/ready only)
+2. **ScheduledBackupJob.cs:65** - `.json.gz` backup support (use `.enc` only)
+3. **AuthService.cs:76,86** - `is_active` legacy field check (use `status` enum only)
+4. **IBackupEncryptionService.cs:29** - Unencrypted backup format detection (always encrypted)
+5. **BackupService.cs:346** - Backup version backward compatibility (enforce version checks)
+6. **Messages.razor:173** - Legacy filter state (unused)
+7. **Messages.razor:736** - Dictionary fallback for messages without detection history
+8. **DetectionHistoryDialog.razor:161** - Boolean spam property fallback
+9. **PermissionDialog.razor:60** - Default MaxPermissionLevel for backward compatibility
+10. **ProtectedDataAttribute.cs:13** - "TgSpamPreFilter" purpose string (rename project complete)
+11. **SimilaritySpamCheck.cs:148** - No-op backward compatibility code
+
+**Priority:** MEDIUM - No users = no legacy, clean code before release
+
+---
+
 ### CODE-5: Fire-and-Forget Error Handling
 
 **Status:** BACKLOG 📋
