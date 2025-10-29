@@ -57,7 +57,7 @@ public class DetectionResultRecordDto
     [Required]
     public int NetConfidence { get; set; }
 
-    [Column("check_results_json")]
+    [Column("check_results_json", TypeName = "jsonb")]
     public string? CheckResultsJson { get; set; }
 
     [Column("edit_version")]

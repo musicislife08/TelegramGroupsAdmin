@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
@@ -502,6 +503,182 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return await context.DetectionResults
             .Where(dr => dr.DetectionSource == "file_scan")
             .CountAsync(cancellationToken);
+    }
+
+    public async Task<OpenAIVetoAnalytics> GetOpenAIVetoAnalyticsAsync(DateTimeOffset since, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Get all detections where is_spam = false (OpenAI may have vetoed)
+        // and check_results_json contains both OpenAI "clean" result and other "spam" results
+        var vetoedDetections = await context.DetectionResults
+            .Where(dr => dr.DetectedAt >= since && !dr.IsSpam && dr.CheckResultsJson != null)
+            .Select(dr => new { dr.Id, dr.CheckResultsJson })
+            .ToListAsync(cancellationToken);
+
+        // Parse JSON to find actual vetoes (OpenAI clean + other checks spam)
+        var actualVetoes = vetoedDetections
+            .Select(d =>
+            {
+                try
+                {
+                    var json = JsonDocument.Parse(d.CheckResultsJson!);
+                    var checks = json.RootElement.GetProperty("checks");
+                    var checkList = new List<(string name, string result)>();
+
+                    foreach (var check in checks.EnumerateArray())
+                    {
+                        var name = check.GetProperty("name").GetString() ?? "";
+                        var result = check.GetProperty("result").GetString() ?? "";
+                        checkList.Add((name, result));
+                    }
+
+                    // Check if OpenAI returned "clean" and at least one other check returned "spam"
+                    var hasOpenAIClean = checkList.Any(c => c.name == "OpenAI" && c.result == "clean");
+                    var hasOtherSpam = checkList.Any(c => c.name != "OpenAI" && c.result == "spam");
+
+                    if (hasOpenAIClean && hasOtherSpam)
+                    {
+                        return new { d.Id, Checks = checkList };
+                    }
+                }
+                catch
+                {
+                    // Skip malformed JSON
+                }
+
+                return null;
+            })
+            .Where(v => v != null)
+            .ToList();
+
+        // Calculate per-algorithm statistics
+        var algorithmStats = actualVetoes
+            .SelectMany(v => v!.Checks.Where(c => c.name != "OpenAI" && c.result == "spam").Select(c => c.name))
+            .GroupBy(name => name)
+            .Select(g => new AlgorithmVetoStats
+            {
+                AlgorithmName = g.Key,
+                SpamFlagsCount = g.Count(),
+                VetoedCount = g.Count(), // All these were vetoed
+                VetoRate = 100.0m // Will recalculate with total spam flags below
+            })
+            .ToList();
+
+        // Get total spam flags per algorithm for accurate veto rate
+        var allDetections = await context.DetectionResults
+            .Where(dr => dr.DetectedAt >= since && dr.CheckResultsJson != null)
+            .Select(dr => dr.CheckResultsJson)
+            .ToListAsync(cancellationToken);
+
+        var totalSpamFlagsByAlgorithm = new Dictionary<string, int>();
+        foreach (var json in allDetections)
+        {
+            try
+            {
+                var doc = JsonDocument.Parse(json!);
+                var checks = doc.RootElement.GetProperty("checks");
+
+                foreach (var check in checks.EnumerateArray())
+                {
+                    var name = check.GetProperty("name").GetString();
+                    var result = check.GetProperty("result").GetString();
+
+                    if (name != "OpenAI" && result == "spam")
+                    {
+                        totalSpamFlagsByAlgorithm[name!] = totalSpamFlagsByAlgorithm.GetValueOrDefault(name!, 0) + 1;
+                    }
+                }
+            }
+            catch
+            {
+                // Skip malformed JSON
+            }
+        }
+
+        // Recalculate veto rates with actual totals
+        foreach (var stat in algorithmStats)
+        {
+            if (totalSpamFlagsByAlgorithm.TryGetValue(stat.AlgorithmName, out var total) && total > 0)
+            {
+                stat.VetoRate = (decimal)stat.VetoedCount / total * 100;
+                stat.SpamFlagsCount = total;
+            }
+        }
+
+        var totalDetections = allDetections.Count;
+        var vetoedCount = actualVetoes.Count;
+
+        return new OpenAIVetoAnalytics
+        {
+            TotalDetections = totalDetections,
+            VetoedCount = vetoedCount,
+            VetoRate = totalDetections > 0 ? (decimal)vetoedCount / totalDetections * 100 : 0,
+            AlgorithmStats = algorithmStats.OrderByDescending(s => s.VetoRate).ToList()
+        };
+    }
+
+    public async Task<List<VetoedMessage>> GetRecentVetoedMessagesAsync(int limit = 50, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Get recent non-spam detections with their message text
+        var detections = await context.DetectionResults
+            .Where(dr => !dr.IsSpam && dr.CheckResultsJson != null)
+            .OrderByDescending(dr => dr.DetectedAt)
+            .Take(limit * 2) // Get extra to filter after JSON parsing
+            .Join(context.Messages,
+                dr => dr.MessageId,
+                m => m.MessageId,
+                (dr, m) => new { dr.Id, dr.MessageId, dr.DetectedAt, dr.CheckResultsJson, m.MessageText })
+            .ToListAsync(cancellationToken);
+
+        var vetoedMessages = new List<VetoedMessage>();
+
+        foreach (var detection in detections)
+        {
+            try
+            {
+                var json = JsonDocument.Parse(detection.CheckResultsJson!);
+                var checks = json.RootElement.GetProperty("checks");
+
+                var openAICheck = checks.EnumerateArray()
+                    .FirstOrDefault(c => c.GetProperty("name").GetString() == "OpenAI");
+
+                var spamChecks = checks.EnumerateArray()
+                    .Where(c => c.GetProperty("name").GetString() != "OpenAI" &&
+                               c.GetProperty("result").GetString() == "spam")
+                    .Select(c => c.GetProperty("name").GetString() ?? "")
+                    .ToList();
+
+                // Only include if OpenAI vetoed (clean) and other checks flagged spam
+                if (openAICheck.ValueKind != JsonValueKind.Undefined &&
+                    openAICheck.GetProperty("result").GetString() == "clean" &&
+                    spamChecks.Any())
+                {
+                    vetoedMessages.Add(new VetoedMessage
+                    {
+                        MessageId = detection.MessageId,
+                        DetectedAt = detection.DetectedAt,
+                        MessagePreview = detection.MessageText?.Length > 100
+                            ? detection.MessageText.Substring(0, 100) + "..."
+                            : detection.MessageText,
+                        SpamCheckNames = spamChecks,
+                        OpenAIConfidence = (int)openAICheck.GetProperty("conf").GetDouble(),
+                        OpenAIReason = openAICheck.GetProperty("reason").GetString()
+                    });
+                }
+
+                if (vetoedMessages.Count >= limit)
+                    break;
+            }
+            catch
+            {
+                // Skip malformed JSON
+            }
+        }
+
+        return vetoedMessages;
     }
 
 }

@@ -430,6 +430,17 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<DetectionResultRecordDto>()
             .HasIndex(dr => dr.UsedForTraining);
 
+        // Performance indexes for veto queries and analytics
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .HasIndex(dr => dr.IsSpam)
+            .HasDatabaseName("ix_detection_results_is_spam");
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .HasIndex(dr => new { dr.IsSpam, dr.DetectedAt })
+            .HasDatabaseName("ix_detection_results_is_spam_detected_at");
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .HasIndex(dr => dr.DetectionSource)
+            .HasDatabaseName("ix_detection_results_detection_source");
+
         // UserActions indexes
         modelBuilder.Entity<UserActionRecordDto>()
             .HasIndex(ua => ua.UserId);

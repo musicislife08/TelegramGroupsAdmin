@@ -134,4 +134,22 @@ public interface IDetectionResultsRepository
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Total count of file scan results</returns>
     Task<int> GetFileScanResultsCountAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get analytics for messages flagged as spam by detection algorithms but vetoed (overridden) by OpenAI.
+    /// Returns overall veto statistics and per-algorithm breakdown to identify overly aggressive checks.
+    /// </summary>
+    /// <param name="since">Start date for analytics period</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Analytics showing veto rates and per-algorithm statistics</returns>
+    Task<OpenAIVetoAnalytics> GetOpenAIVetoAnalyticsAsync(DateTimeOffset since, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get recent messages that were flagged as spam but vetoed by OpenAI.
+    /// Used for manual inspection and algorithm tuning.
+    /// </summary>
+    /// <param name="limit">Maximum number of messages to return (default 50)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>List of vetoed messages with details about which checks flagged them</returns>
+    Task<List<VetoedMessage>> GetRecentVetoedMessagesAsync(int limit = 50, CancellationToken cancellationToken = default);
 }

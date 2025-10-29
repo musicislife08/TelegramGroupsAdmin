@@ -1,8 +1,11 @@
 @using Microsoft.EntityFrameworkCore
 @using TelegramGroupsAdmin.Data
 @using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
 @inject IStopWordsRepository StopWordsRepository
 @inject IMessageHistoryRepository MessageHistoryRepository
+@inject IDetectionResultsRepository DetectionResultsRepository
 @inject IDbContextFactory<AppDbContext> DbContextFactory
 @inject ISnackbar Snackbar
 
@@ -10,7 +13,7 @@
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <MudStack Spacing="4">
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-            <MudText Typo="Typo.h4">Spam Detection Analytics</MudText>
+            <MudText Typo="Typo.h4">Content Detection Analytics</MudText>
             <MudButton Variant="Variant.Outlined"
                       Color="Color.Primary"
                       StartIcon="@Icons.Material.Filled.Refresh"
@@ -227,6 +230,126 @@
                 </MudGrid>
             </MudStack>
         </MudPaper>
+
+        <!-- OpenAI Veto Analysis -->
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" />
+                    <MudText Typo="Typo.h6">OpenAI False Positive Prevention</MudText>
+                </MudStack>
+
+                @if (_vetoAnalytics != null)
+                {
+                    <!-- Summary Alert -->
+                    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body1">
+                                OpenAI prevented <strong>@_vetoAnalytics.VetoedCount</strong> false positives
+                                (<strong>@_vetoAnalytics.VetoRate.ToString("F1")%</strong> of detections) in the last 30 days.
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Default">
+                                This shows how often OpenAI overrides other algorithms' spam flags to allow legitimate messages.
+                            </MudText>
+                        </MudStack>
+                    </MudAlert>
+
+                    <!-- Algorithm Veto Rates Table -->
+                    @if (_vetoAnalytics.AlgorithmStats.Any())
+                    {
+                        <MudText Typo="Typo.subtitle1" Class="mt-2">
+                            <strong>Algorithm Veto Rates</strong> - High veto rates indicate algorithms that may need threshold tuning
+                        </MudText>
+
+                        <MudSimpleTable Hover="true" Dense="true" Striped="true">
+                            <thead>
+                                <tr>
+                                    <th>Algorithm</th>
+                                    <th style="text-align: right;">Spam Flags</th>
+                                    <th style="text-align: right;">Vetoed by OpenAI</th>
+                                    <th style="text-align: right;">Veto Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var stat in _vetoAnalytics.AlgorithmStats.Take(10))
+                                {
+                                    <tr>
+                                        <td><strong>@stat.AlgorithmName</strong></td>
+                                        <td style="text-align: right;">@stat.SpamFlagsCount</td>
+                                        <td style="text-align: right;">@stat.VetoedCount</td>
+                                        <td style="text-align: right;">
+                                            <MudChip T="string" Size="Size.Small" Color="@GetVetoRateColor(stat.VetoRate)">
+                                                @stat.VetoRate.ToString("F1")%
+                                            </MudChip>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                    else
+                    {
+                        <MudAlert Severity="Severity.Info">
+                            No veto data available for the last 30 days. Vetoes occur when OpenAI overrides other algorithms' spam flags.
+                        </MudAlert>
+                    }
+
+                    <!-- Recent Vetoed Messages (Collapsible) -->
+                    @if (_vetoedMessages.Any())
+                    {
+                        <MudExpansionPanels Class="mt-2">
+                            <MudExpansionPanel Text="@($"Recent Vetoed Messages ({_vetoedMessages.Count})")">
+                                <MudText Typo="Typo.caption" Class="mb-2">
+                                    These messages were flagged as spam by detection algorithms but OpenAI determined they were legitimate.
+                                </MudText>
+                                <MudSimpleTable Hover="true" Dense="true">
+                                    <thead>
+                                        <tr>
+                                            <th>Time</th>
+                                            <th>Message Preview</th>
+                                            <th>Spam Checks Triggered</th>
+                                            <th style="text-align: right;">OpenAI Confidence</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var msg in _vetoedMessages.Take(20))
+                                        {
+                                            <tr>
+                                                <td style="white-space: nowrap;">@msg.DetectedAt.ToString("g")</td>
+                                                <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis;">
+                                                    @msg.MessagePreview
+                                                </td>
+                                                <td>
+                                                    <MudStack Row="true" Spacing="1">
+                                                        @foreach (var check in msg.SpamCheckNames.Take(3))
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">@check</MudChip>
+                                                        }
+                                                        @if (msg.SpamCheckNames.Count > 3)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default">+@(msg.SpamCheckNames.Count - 3) more</MudChip>
+                                                        }
+                                                    </MudStack>
+                                                </td>
+                                                <td style="text-align: right;">
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">@msg.OpenAIConfidence%</MudChip>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    }
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info">
+                        Loading veto analytics...
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
     </MudStack>
 </MudContainer>
 
@@ -248,6 +371,10 @@
     // Detailed data
     private List<SpamCheckRecord>? _recentSpamChecks;
 
+    // OpenAI veto analytics
+    private OpenAIVetoAnalytics? _vetoAnalytics;
+    private List<VetoedMessage> _vetoedMessages = [];
+
     protected override async Task OnInitializedAsync()
     {
         await LoadAnalytics();
@@ -267,8 +394,9 @@
             var stopWordsTask = LoadStopWordsStats();
             var trainingCountTask = LoadTrainingCount();
             var spamChecksTask = LoadSpamCheckStats();
+            var vetoAnalyticsTask = LoadVetoAnalytics();
 
-            await Task.WhenAll(stopWordsTask, trainingCountTask, spamChecksTask);
+            await Task.WhenAll(stopWordsTask, trainingCountTask, spamChecksTask, vetoAnalyticsTask);
         }
         catch (Exception ex)
         {
@@ -378,6 +506,31 @@
             >= 50 => "Good",
             >= 20 => "Basic",
             _ => "Insufficient"
+        };
+    }
+
+    private async Task LoadVetoAnalytics()
+    {
+        try
+        {
+            // Get veto analytics for last 30 days
+            var since = DateTimeOffset.UtcNow.AddDays(-30);
+            _vetoAnalytics = await DetectionResultsRepository.GetOpenAIVetoAnalyticsAsync(since);
+            _vetoedMessages = await DetectionResultsRepository.GetRecentVetoedMessagesAsync(50);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load veto analytics: {ex.Message}", Severity.Warning);
+        }
+    }
+
+    private Color GetVetoRateColor(decimal rate)
+    {
+        return rate switch
+        {
+            >= 15 => Color.Error,      // Red: >15% (too aggressive)
+            >= 10 => Color.Warning,    // Yellow: 10-15% (review)
+            _ => Color.Success          // Green: <10% (good)
         };
     }
 

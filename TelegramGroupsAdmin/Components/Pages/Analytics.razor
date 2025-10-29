@@ -1,6 +1,6 @@
 @page "/analytics"
 @attribute [Authorize(Roles = "GlobalAdmin,Owner")]
-@using TelegramGroupsAdmin.Components.Shared.SpamManagement
+@using TelegramGroupsAdmin.Components.Shared.ContentDetection
 @using TelegramGroupsAdmin.Components.Shared.Analytics
 @inject NavigationManager Navigation
 @implements IDisposable
@@ -12,8 +12,8 @@
     <MudText Typo="Typo.body1" Class="mb-4">Deep-dive statistics and trends across all managed chats</MudText>
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6" ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnTabChanged">
-        <MudTabPanel Text="Spam Analytics" Icon="@Icons.Material.Filled.Shield">
-            <SpamAnalytics />
+        <MudTabPanel Text="Content Detection" Icon="@Icons.Material.Filled.Shield">
+            <ContentDetectionAnalytics />
         </MudTabPanel>
 
         <MudTabPanel Text="Message Trends" Icon="@Icons.Material.Filled.TrendingUp">
@@ -41,7 +41,7 @@
         var fragment = new Uri(Navigation.Uri).Fragment.TrimStart('#');
         _activeTabIndex = fragment switch
         {
-            "spam" => 0,
+            "detection" or "spam" => 0,  // Support both for backwards compatibility
             "trends" => 1,
             "performance" => 2,
             "welcome" => 3,
@@ -56,7 +56,7 @@
         var fragment = new Uri(e.Location).Fragment.TrimStart('#');
         var newIndex = fragment switch
         {
-            "spam" => 0,
+            "detection" or "spam" => 0,  // Support both for backwards compatibility
             "trends" => 1,
             "performance" => 2,
             "welcome" => 3,
@@ -76,11 +76,11 @@
 
         var fragment = index switch
         {
-            0 => "spam",
+            0 => "detection",
             1 => "trends",
             2 => "performance",
             3 => "welcome",
-            _ => "spam"
+            _ => "detection"
         };
 
         Navigation.NavigateTo($"/analytics#{fragment}", false);
