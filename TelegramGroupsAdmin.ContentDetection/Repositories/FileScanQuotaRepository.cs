@@ -29,7 +29,7 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
         string quotaType,
         CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
 
@@ -42,7 +42,7 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
                 q.QuotaWindowStart <= now &&
                 q.QuotaWindowEnd > now)
             .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         if (currentQuota == null)
         {
@@ -67,7 +67,7 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
         int limitValue,
         CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
 
@@ -81,7 +81,7 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
                 q.QuotaType == quotaType &&
                 q.QuotaWindowStart == windowStart)
             .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         if (quota == null)
         {
@@ -112,7 +112,7 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
                 serviceName, quotaType, quota.Count, quota.LimitValue);
         }
 
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<FileScanQuotaModel?> GetCurrentQuotaAsync(
@@ -120,7 +120,7 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
         string quotaType,
         CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
 
@@ -132,14 +132,14 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
                 q.QuotaWindowStart <= now &&
                 q.QuotaWindowEnd > now)
             .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         return quota?.ToModel();
     }
 
     public async Task<int> CleanupExpiredQuotasAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
 
@@ -147,7 +147,7 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
         var expiredQuotas = await context.FileScanQuotas
             .Where(q => q.QuotaWindowEnd <= now)
             .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         if (!expiredQuotas.Any())
         {
@@ -156,7 +156,7 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
         }
 
         context.FileScanQuotas.RemoveRange(expiredQuotas);
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Cleaned up {Count} expired quota records", expiredQuotas.Count);
 
@@ -167,14 +167,14 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
         string serviceName,
         CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var quotas = await context.FileScanQuotas
             .AsNoTracking()
             .Where(q => q.Service == serviceName)
             .OrderByDescending(q => q.QuotaWindowStart)
             .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         return quotas.Select(q => q.ToModel()).ToList();
     }
@@ -184,7 +184,7 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
         string quotaType,
         CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
 
@@ -196,12 +196,12 @@ public class FileScanQuotaRepository : IFileScanQuotaRepository
                 q.QuotaWindowStart <= now &&
                 q.QuotaWindowEnd > now)
             .FirstOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         if (quota != null)
         {
             context.FileScanQuotas.Remove(quota);
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogWarning("Admin reset quota for {Service} ({QuotaType})", serviceName, quotaType);
         }

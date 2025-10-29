@@ -35,7 +35,7 @@ public class MessageHistoryService : IMessageHistoryService
                 ORDER BY timestamp DESC
                 LIMIT @Count";
 
-            var messages = await _connection.QueryAsync<HistoryMessageDto>(sql, new { ChatId = chatId, Count = count }).ConfigureAwait(false);
+            var messages = await _connection.QueryAsync<HistoryMessageDto>(sql, new { ChatId = chatId, Count = count });
 
             return messages.Select(m => new HistoryMessage
             {

@@ -504,7 +504,7 @@ public class SpamActionService(
             // Step 1: Delete the violating message
             try
             {
-                await botClient.DeleteMessage(chatId, message.MessageId, cancellationToken).ConfigureAwait(false);
+                await botClient.DeleteMessage(chatId, message.MessageId, cancellationToken);
                 logger.LogInformation(
                     "Deleted message {MessageId} from chat {ChatId} due to critical check violations",
                     message.MessageId,
@@ -529,7 +529,7 @@ public class SpamActionService(
                 chatId,
                 notificationMessage,
                 replyToMessageId: null,  // Original message already deleted
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
 
             if (sendResult.Success)
             {

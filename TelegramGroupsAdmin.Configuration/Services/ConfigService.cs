@@ -24,7 +24,7 @@ public class ConfigService(IConfigRepository configRepository, IMemoryCache cach
         ArgumentNullException.ThrowIfNull(config);
 
         var json = JsonSerializer.Serialize(config, JsonOptions);
-        var record = await configRepository.GetAsync(chatId).ConfigureAwait(false);
+        var record = await configRepository.GetAsync(chatId);
 
         if (record == null)
         {
@@ -38,7 +38,7 @@ public class ConfigService(IConfigRepository configRepository, IMemoryCache cach
         // Set the appropriate config column based on config type
         SetConfigColumn(record, configType, json);
 
-        await configRepository.UpsertAsync(record).ConfigureAwait(false);
+        await configRepository.UpsertAsync(record);
 
         // CRITICAL: Invalidate cache immediately for instant UI updates
         var cacheKey = $"cfg_{configType}_{chatId}";
@@ -72,7 +72,7 @@ public class ConfigService(IConfigRepository configRepository, IMemoryCache cach
         }
 
         // Slow path: cache miss - fetch from DB and populate cache
-        var record = await configRepository.GetAsync(chatId).ConfigureAwait(false);
+        var record = await configRepository.GetAsync(chatId);
         if (record == null)
         {
             return null;
@@ -100,7 +100,7 @@ public class ConfigService(IConfigRepository configRepository, IMemoryCache cach
         // If requesting global config, just return it directly (uses cached GetAsync)
         if (chatId == null)
         {
-            return await GetAsync<T>(configType, null).ConfigureAwait(false);
+            return await GetAsync<T>(configType, null);
         }
 
         // Cache the effective (merged) config too
@@ -112,8 +112,8 @@ public class ConfigService(IConfigRepository configRepository, IMemoryCache cach
         }
 
         // Get both global and chat-specific configs (both use cached GetAsync)
-        var globalConfig = await GetAsync<T>(configType, null).ConfigureAwait(false);
-        var chatConfig = await GetAsync<T>(configType, chatId).ConfigureAwait(false);
+        var globalConfig = await GetAsync<T>(configType, null);
+        var chatConfig = await GetAsync<T>(configType, chatId);
 
         T? effectiveConfig;
 
@@ -147,7 +147,7 @@ public class ConfigService(IConfigRepository configRepository, IMemoryCache cach
 
     public async Task DeleteAsync(ConfigType configType, long? chatId)
     {
-        var record = await configRepository.GetAsync(chatId).ConfigureAwait(false);
+        var record = await configRepository.GetAsync(chatId);
         if (record == null)
         {
             return;
@@ -159,11 +159,11 @@ public class ConfigService(IConfigRepository configRepository, IMemoryCache cach
         // If all config columns are null, delete the entire row
         if (IsRecordEmpty(record))
         {
-            await configRepository.DeleteAsync(chatId).ConfigureAwait(false);
+            await configRepository.DeleteAsync(chatId);
         }
         else
         {
-            await configRepository.UpsertAsync(record).ConfigureAwait(false);
+            await configRepository.UpsertAsync(record);
         }
 
         // Invalidate cache after deletion

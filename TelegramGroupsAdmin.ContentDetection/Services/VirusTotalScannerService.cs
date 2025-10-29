@@ -46,7 +46,7 @@ public class VirusTotalScannerService : ICloudScannerService
         CancellationToken cancellationToken = default)
     {
         // Load config from database
-        var config = await _configRepository.GetAsync(chatId: null, cancellationToken).ConfigureAwait(false);
+        var config = await _configRepository.GetAsync(chatId: null, cancellationToken);
 
         if (!config.Tier2.VirusTotal.Enabled)
         {
@@ -221,7 +221,7 @@ public class VirusTotalScannerService : ICloudScannerService
         CancellationToken cancellationToken = default)
     {
         // Load config from database
-        var config = await _configRepository.GetAsync(chatId: null, cancellationToken).ConfigureAwait(false);
+        var config = await _configRepository.GetAsync(chatId: null, cancellationToken);
 
         if (!config.Tier2.VirusTotal.Enabled)
         {

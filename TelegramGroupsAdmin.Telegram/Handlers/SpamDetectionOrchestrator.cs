@@ -78,7 +78,7 @@ public class SpamDetectionOrchestrator
                     botClient,
                     message,
                     result.CriticalCheckViolations,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken);
 
                 // If critical violations found, don't process regular spam (already handled)
                 return;

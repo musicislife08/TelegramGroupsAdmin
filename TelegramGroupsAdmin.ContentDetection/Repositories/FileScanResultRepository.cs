@@ -28,7 +28,7 @@ public class FileScanResultRepository : IFileScanResultRepository
         string fileHash,
         CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var cutoffTime = DateTimeOffset.UtcNow - CacheTtl;
 
@@ -37,7 +37,7 @@ public class FileScanResultRepository : IFileScanResultRepository
             .Where(fsr => fsr.FileHash == fileHash && fsr.ScannedAt >= cutoffTime)
             .OrderByDescending(fsr => fsr.ScannedAt)
             .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         _logger.LogDebug("Cache lookup for hash {FileHash}: {Count} results found within TTL",
             fileHash, cachedResults.Count);
@@ -49,12 +49,12 @@ public class FileScanResultRepository : IFileScanResultRepository
         FileScanResultModel scanResult,
         CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var dto = scanResult.ToDto();
         context.FileScanResults.Add(dto);
 
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogDebug("Cached scan result: hash={FileHash}, scanner={Scanner}, result={Result}",
             dto.FileHash, dto.Scanner, dto.Result);
@@ -64,14 +64,14 @@ public class FileScanResultRepository : IFileScanResultRepository
 
     public async Task<int> CleanupExpiredResultsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var cutoffTime = DateTimeOffset.UtcNow - CacheTtl;
 
         var expiredResults = await context.FileScanResults
             .Where(fsr => fsr.ScannedAt < cutoffTime)
             .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         if (!expiredResults.Any())
         {
@@ -80,7 +80,7 @@ public class FileScanResultRepository : IFileScanResultRepository
         }
 
         context.FileScanResults.RemoveRange(expiredResults);
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Cleaned up {Count} expired scan results (older than {TTL})",
             expiredResults.Count, CacheTtl);
@@ -90,11 +90,11 @@ public class FileScanResultRepository : IFileScanResultRepository
 
     public async Task<int> ClearAllCacheAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var allResults = await context.FileScanResults
             .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         if (!allResults.Any())
         {
@@ -103,7 +103,7 @@ public class FileScanResultRepository : IFileScanResultRepository
         }
 
         context.FileScanResults.RemoveRange(allResults);
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogWarning("Cleared ALL {Count} cached scan results (testing/debugging operation)",
             allResults.Count);

@@ -35,7 +35,7 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
             query = query.Where(bs => bs.ChatId == 0 || bs.ChatId == chatId);
         }
 
-        var dtos = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+        var dtos = await query.ToListAsync(cancellationToken);
         return dtos.Select(ToModel).ToList();
     }
 
@@ -50,14 +50,14 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
             query = query.Where(bs => bs.BlockMode == (int)blockMode.Value);
         }
 
-        var dtos = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+        var dtos = await query.ToListAsync(cancellationToken);
         return dtos.Select(ToModel).ToList();
     }
 
     public async Task<BlocklistSubscription?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
         var dto = await _context.BlocklistSubscriptions
-            .FirstOrDefaultAsync(bs => bs.Id == id, cancellationToken).ConfigureAwait(false);
+            .FirstOrDefaultAsync(bs => bs.Id == id, cancellationToken);
 
         return dto == null ? null : ToModel(dto);
     }
@@ -84,7 +84,7 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
         };
 
         _context.BlocklistSubscriptions.Add(dto);
-        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _context.SaveChangesAsync(cancellationToken);
 
         return dto.Id;
     }
@@ -92,7 +92,7 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
     public async Task UpdateAsync(BlocklistSubscription subscription, CancellationToken cancellationToken = default)
     {
         var dto = await _context.BlocklistSubscriptions
-            .FirstOrDefaultAsync(bs => bs.Id == subscription.Id, cancellationToken).ConfigureAwait(false);
+            .FirstOrDefaultAsync(bs => bs.Id == subscription.Id, cancellationToken);
 
         if (dto == null)
         {
@@ -108,31 +108,31 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
         dto.RefreshIntervalHours = subscription.RefreshIntervalHours;
         dto.Notes = subscription.Notes;
 
-        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task DeleteAsync(long id, CancellationToken cancellationToken = default)
     {
         var dto = await _context.BlocklistSubscriptions
-            .FirstOrDefaultAsync(bs => bs.Id == id, cancellationToken).ConfigureAwait(false);
+            .FirstOrDefaultAsync(bs => bs.Id == id, cancellationToken);
 
         if (dto != null)
         {
             _context.BlocklistSubscriptions.Remove(dto);
-            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await _context.SaveChangesAsync(cancellationToken);
         }
     }
 
     public async Task UpdateFetchMetadataAsync(long id, DateTimeOffset lastFetched, int entryCount, CancellationToken cancellationToken = default)
     {
         var dto = await _context.BlocklistSubscriptions
-            .FirstOrDefaultAsync(bs => bs.Id == id, cancellationToken).ConfigureAwait(false);
+            .FirstOrDefaultAsync(bs => bs.Id == id, cancellationToken);
 
         if (dto != null)
         {
             dto.LastFetched = lastFetched;
             dto.EntryCount = entryCount;
-            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await _context.SaveChangesAsync(cancellationToken);
         }
     }
 
@@ -152,7 +152,7 @@ public class BlocklistSubscriptionsRepository : IBlocklistSubscriptionsRepositor
             query = query.Where(bs => bs.ChatId == 0 || bs.ChatId == chatId);
         }
 
-        var dtos = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+        var dtos = await query.ToListAsync(cancellationToken);
         return dtos.Select(ToModel).ToList();
     }
 

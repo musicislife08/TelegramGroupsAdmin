@@ -40,7 +40,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
             query = query.Where(cbd => cbd.BlockMode == (int)blockMode.Value);
         }
 
-        var dtos = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+        var dtos = await query.ToListAsync(cancellationToken);
         return dtos.Select(ToModel).ToList();
     }
 
@@ -54,7 +54,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
                 cbd.Domain == domain &&
                 (cbd.ChatId == 0 || cbd.ChatId == chatId) &&
                 cbd.BlockMode == (int)blockMode,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
 
         return dto == null ? null : ToModel(dto);
     }
@@ -70,7 +70,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
                 cbd.Domain == domain &&
                 (cbd.ChatId == 0 || cbd.ChatId == chatId) &&
                 cbd.BlockMode == (int)BlockMode.Hard,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
 
         return dto == null ? null : ToModel(dto);
     }
@@ -144,7 +144,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
             notesArray
         };
 
-        await _context.Database.ExecuteSqlRawAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
+        await _context.Database.ExecuteSqlRawAsync(sql, parameters, cancellationToken);
     }
 
     public async Task DeleteBySourceAsync(string sourceType, long sourceId, CancellationToken cancellationToken = default)
@@ -153,7 +153,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         // Use ExecuteDeleteAsync to avoid loading entities into memory and prevent concurrency issues
         await _context.CachedBlockedDomains
             .Where(cbd => cbd.SourceSubscriptionId == sourceId)
-            .ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            .ExecuteDeleteAsync(cancellationToken);
     }
 
     public async Task DeleteAllAsync(long chatId = 0, CancellationToken cancellationToken = default)
@@ -172,7 +172,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         }
 
         // Use ExecuteDeleteAsync to avoid loading entities into memory and prevent concurrency issues
-        await query.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        await query.ExecuteDeleteAsync(cancellationToken);
     }
 
     public async Task<UrlFilterStats> GetStatsAsync(long chatId = 0, CancellationToken cancellationToken = default)
@@ -195,7 +195,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         var domainStats = await query
             .GroupBy(cbd => cbd.BlockMode)
             .Select(g => new { BlockMode = g.Key, Count = g.Count() })
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
+            .ToListAsync(cancellationToken);
 
         var totalCachedDomains = domainStats.Sum(s => s.Count);
         var hardBlockDomains = domainStats.FirstOrDefault(s => s.BlockMode == (int)BlockMode.Hard)?.Count ?? 0;
@@ -205,7 +205,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         var subscriptionStats = await _context.BlocklistSubscriptions
             .GroupBy(bs => new { bs.Enabled, bs.BlockMode })
             .Select(g => new { g.Key.Enabled, g.Key.BlockMode, Count = g.Count() })
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
+            .ToListAsync(cancellationToken);
 
         var totalSubscriptions = subscriptionStats.Sum(s => s.Count);
         var enabledSubscriptions = subscriptionStats.Where(s => s.Enabled).Sum(s => s.Count);
@@ -217,7 +217,7 @@ public class CachedBlockedDomainsRepository : ICachedBlockedDomainsRepository
         // Count whitelisted domains (domain_filters with FilterType=Whitelist)
         // Single query - already optimal
         var whitelistedDomains = await _context.DomainFilters
-            .CountAsync(df => df.Enabled && df.FilterType == 1, cancellationToken).ConfigureAwait(false);  // 1 = Whitelist
+            .CountAsync(df => df.Enabled && df.FilterType == 1, cancellationToken);  // 1 = Whitelist
 
         return new UrlFilterStats(
             TotalSubscriptions: totalSubscriptions,

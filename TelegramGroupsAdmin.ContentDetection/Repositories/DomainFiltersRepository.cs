@@ -35,7 +35,7 @@ public class DomainFiltersRepository : IDomainFiltersRepository
             query = query.Where(df => df.ChatId == 0 || df.ChatId == chatId);
         }
 
-        var dtos = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+        var dtos = await query.ToListAsync(cancellationToken);
         return dtos.Select(ToModel).ToList();
     }
 
@@ -55,14 +55,14 @@ public class DomainFiltersRepository : IDomainFiltersRepository
             query = query.Where(df => df.BlockMode == (int)blockMode.Value);
         }
 
-        var dtos = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+        var dtos = await query.ToListAsync(cancellationToken);
         return dtos.Select(ToModel).ToList();
     }
 
     public async Task<DomainFilter?> GetByIdAsync(long id, CancellationToken cancellationToken = default)
     {
         var dto = await _context.DomainFilters
-            .FirstOrDefaultAsync(df => df.Id == id, cancellationToken).ConfigureAwait(false);
+            .FirstOrDefaultAsync(df => df.Id == id, cancellationToken);
 
         return dto == null ? null : ToModel(dto);
     }
@@ -84,7 +84,7 @@ public class DomainFiltersRepository : IDomainFiltersRepository
         };
 
         _context.DomainFilters.Add(dto);
-        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _context.SaveChangesAsync(cancellationToken);
 
         return dto.Id;
     }
@@ -92,7 +92,7 @@ public class DomainFiltersRepository : IDomainFiltersRepository
     public async Task UpdateAsync(DomainFilter filter, CancellationToken cancellationToken = default)
     {
         var dto = await _context.DomainFilters
-            .FirstOrDefaultAsync(df => df.Id == filter.Id, cancellationToken).ConfigureAwait(false);
+            .FirstOrDefaultAsync(df => df.Id == filter.Id, cancellationToken);
 
         if (dto == null)
         {
@@ -106,18 +106,18 @@ public class DomainFiltersRepository : IDomainFiltersRepository
         dto.Enabled = filter.Enabled;
         dto.Notes = filter.Notes;
 
-        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     public async Task DeleteAsync(long id, CancellationToken cancellationToken = default)
     {
         var dto = await _context.DomainFilters
-            .FirstOrDefaultAsync(df => df.Id == id, cancellationToken).ConfigureAwait(false);
+            .FirstOrDefaultAsync(df => df.Id == id, cancellationToken);
 
         if (dto != null)
         {
             _context.DomainFilters.Remove(dto);
-            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await _context.SaveChangesAsync(cancellationToken);
         }
     }
 

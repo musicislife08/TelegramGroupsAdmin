@@ -43,7 +43,7 @@ public class UrlPreFilterService : IUrlPreFilterService
             chatId,
             DomainFilterType.Whitelist,
             blockMode: null,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
         var whitelistDomains = whitelistFilters
             .Select(f => f.Domain.ToLowerInvariant())
             .ToHashSet();
@@ -64,7 +64,7 @@ public class UrlPreFilterService : IUrlPreFilterService
         // Check hard block cache (blocklists + manual filters with BlockMode = Hard)
         foreach (var domain in domains)
         {
-            var blockedDomain = await _cacheRepo.FindHardBlockAsync(domain!, chatId, cancellationToken).ConfigureAwait(false);
+            var blockedDomain = await _cacheRepo.FindHardBlockAsync(domain!, chatId, cancellationToken);
             if (blockedDomain != null)
             {
                 var reason = blockedDomain.SourceSubscriptionId.HasValue

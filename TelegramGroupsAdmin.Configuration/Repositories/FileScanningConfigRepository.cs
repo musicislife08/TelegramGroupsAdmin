@@ -35,10 +35,10 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
 
     public async Task<FileScanningConfig> GetAsync(long? chatId = null, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // Load global config
-        var globalConfig = await LoadConfigFromDbAsync(context, null, cancellationToken).ConfigureAwait(false);
+        var globalConfig = await LoadConfigFromDbAsync(context, null, cancellationToken);
 
         // If no chat ID specified, return global
         if (chatId == null)
@@ -47,7 +47,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
         }
 
         // Load chat-specific config
-        var chatConfig = await LoadConfigFromDbAsync(context, chatId, cancellationToken).ConfigureAwait(false);
+        var chatConfig = await LoadConfigFromDbAsync(context, chatId, cancellationToken);
 
         // If no chat config, return global
         if (chatConfig == null)
@@ -63,7 +63,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
 
     public async Task SaveAsync(FileScanningConfig config, long? chatId = null, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         config.LastModified = DateTimeOffset.UtcNow;
 
@@ -75,7 +75,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
         // Find or create config record
         var configRecord = await context.Configs
             .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         if (configRecord == null)
         {
@@ -86,7 +86,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
                 FileScanningConfig = jsonConfig,
                 CreatedAt = DateTimeOffset.UtcNow
             };
-            await context.Configs.AddAsync(configRecord, cancellationToken).ConfigureAwait(false);
+            await context.Configs.AddAsync(configRecord, cancellationToken);
         }
         else
         {
@@ -95,26 +95,26 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
             configRecord.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("File scanning config saved successfully for {ChatType}", chatId == null ? "global" : $"chat {chatId}");
     }
 
     public async Task DeleteAsync(long chatId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         _logger.LogInformation("Deleting file scanning config for chat {ChatId}", chatId);
 
         var configRecord = await context.Configs
             .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         if (configRecord != null)
         {
             configRecord.FileScanningConfig = null;
             configRecord.UpdatedAt = DateTimeOffset.UtcNow;
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("File scanning config deleted for chat {ChatId}", chatId);
         }
@@ -131,7 +131,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
         var configRecord = await context.Configs
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         if (configRecord?.FileScanningConfig == null)
         {
@@ -152,13 +152,13 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
 
     public async Task<ApiKeysConfig?> GetApiKeysAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         // API keys are global only (chat_id = NULL)
         var configRecord = await context.Configs
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.ChatId == null, cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         if (configRecord?.ApiKeys == null)
         {
@@ -183,7 +183,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
 
     public async Task SaveApiKeysAsync(ApiKeysConfig apiKeys, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         _logger.LogInformation("Saving API keys to encrypted database storage");
 
@@ -197,7 +197,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
         // Find or create global config record (chat_id = NULL)
         var configRecord = await context.Configs
             .FirstOrDefaultAsync(c => c.ChatId == null, cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         if (configRecord == null)
         {
@@ -208,7 +208,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
                 ApiKeys = encryptedKeys,
                 CreatedAt = DateTimeOffset.UtcNow
             };
-            await context.Configs.AddAsync(configRecord, cancellationToken).ConfigureAwait(false);
+            await context.Configs.AddAsync(configRecord, cancellationToken);
         }
         else
         {
@@ -217,7 +217,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
             configRecord.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("API keys saved successfully to encrypted database storage");
     }

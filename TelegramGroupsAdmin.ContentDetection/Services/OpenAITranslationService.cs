@@ -63,7 +63,7 @@ IMPORTANT: Respond with ONLY the raw JSON object. Do NOT wrap it in markdown cod
 
             // Use named "OpenAI" HttpClient (configured in ServiceCollectionExtensions)
             var httpClient = _httpClientFactory.CreateClient("OpenAI");
-            var response = await httpClient.PostAsJsonAsync("chat/completions", request, cancellationToken).ConfigureAwait(false);
+            var response = await httpClient.PostAsJsonAsync("chat/completions", request, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -71,7 +71,7 @@ IMPORTANT: Respond with ONLY the raw JSON object. Do NOT wrap it in markdown cod
                 return null;
             }
 
-            var jsonContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var jsonContent = await response.Content.ReadAsStringAsync(cancellationToken);
             var openAiResponse = JsonSerializer.Deserialize<OpenAIResponse>(jsonContent, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true

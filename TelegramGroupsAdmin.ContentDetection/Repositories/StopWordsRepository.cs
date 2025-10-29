@@ -26,7 +26,7 @@ public class StopWordsRepository : IStopWordsRepository
     /// </summary>
     public async Task<IEnumerable<string>> GetEnabledStopWordsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             return await context.StopWords
@@ -34,7 +34,7 @@ public class StopWordsRepository : IStopWordsRepository
                 .Where(sw => sw.Enabled)
                 .OrderBy(sw => sw.Word)
                 .Select(sw => sw.Word)
-                .ToListAsync(cancellationToken).ConfigureAwait(false);
+                .ToListAsync(cancellationToken);
         }
         catch (Exception ex)
         {
@@ -48,12 +48,12 @@ public class StopWordsRepository : IStopWordsRepository
     /// </summary>
     public async Task<long> AddStopWordAsync(Models.StopWord stopWord, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             var dto = stopWord.ToDto();
             context.StopWords.Add(dto);
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Added stop word: {Word} (ID: {Id})", stopWord.Word, dto.Id);
             return dto.Id;
@@ -70,17 +70,17 @@ public class StopWordsRepository : IStopWordsRepository
     /// </summary>
     public async Task<bool> SetStopWordEnabledAsync(long id, bool enabled, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var stopWord = await context.StopWords.FindAsync([id], cancellationToken).ConfigureAwait(false);
+            var stopWord = await context.StopWords.FindAsync([id], cancellationToken);
             if (stopWord == null)
             {
                 return false;
             }
 
             stopWord.Enabled = enabled;
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Updated stop word {Id} enabled status to {Enabled}", id, enabled);
             return true;
@@ -97,12 +97,12 @@ public class StopWordsRepository : IStopWordsRepository
     /// </summary>
     public async Task<bool> ExistsAsync(string word, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             return await context.StopWords
                 .AsNoTracking()
-                .AnyAsync(sw => sw.Word == word.ToLowerInvariant(), cancellationToken).ConfigureAwait(false);
+                .AnyAsync(sw => sw.Word == word.ToLowerInvariant(), cancellationToken);
         }
         catch (Exception ex)
         {
@@ -116,7 +116,7 @@ public class StopWordsRepository : IStopWordsRepository
     /// </summary>
     public async Task<IEnumerable<Models.StopWord>> GetAllStopWordsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             // Query with LEFT JOINs to resolve actor display names (Phase 4.19)
@@ -146,7 +146,7 @@ public class StopWordsRepository : IStopWordsRepository
                             : x.sw.SystemIdentifier ?? "System",
                     x.sw.Notes
                 ))
-                .ToListAsync(cancellationToken).ConfigureAwait(false);
+                .ToListAsync(cancellationToken);
 
             return stopWords;
         }
@@ -162,17 +162,17 @@ public class StopWordsRepository : IStopWordsRepository
     /// </summary>
     public async Task<bool> UpdateStopWordNotesAsync(long id, string? notes, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var stopWord = await context.StopWords.FindAsync([id], cancellationToken).ConfigureAwait(false);
+            var stopWord = await context.StopWords.FindAsync([id], cancellationToken);
             if (stopWord == null)
             {
                 return false;
             }
 
             stopWord.Notes = notes;
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Updated stop word {Id} notes", id);
             return true;

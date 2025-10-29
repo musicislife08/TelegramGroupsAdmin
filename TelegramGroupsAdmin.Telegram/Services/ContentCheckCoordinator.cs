@@ -46,14 +46,14 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
         isUserTrusted = await userActionsRepository.IsUserTrustedAsync(
             request.UserId,
             request.ChatId,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken);
 
         // Check if user is a chat admin
-        isUserAdmin = await chatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, cancellationToken).ConfigureAwait(false);
+        isUserAdmin = await chatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, cancellationToken);
 
         // Phase 4.14: 2-Phase Detection
         // Phase 1: Get list of critical checks (always_run=true) for this chat
-        var criticalChecks = await contentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, cancellationToken).ConfigureAwait(false);
+        var criticalChecks = await contentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, cancellationToken);
         var criticalCheckNames = criticalChecks
             .Where(c => c.Enabled && c.AlwaysRun)
             .Select(c => c.CheckName)
@@ -107,7 +107,7 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
             IsUserAdmin = isUserAdmin
         };
 
-        var fullResult = await _spamDetectionEngine.CheckMessageAsync(enrichedRequest, cancellationToken).ConfigureAwait(false);
+        var fullResult = await _spamDetectionEngine.CheckMessageAsync(enrichedRequest, cancellationToken);
 
         // Phase 3: Separate critical violations from regular spam results
         var criticalViolations = new List<string>();

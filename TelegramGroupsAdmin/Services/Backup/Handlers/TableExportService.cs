@@ -66,7 +66,7 @@ public class TableExportService
             new[] { typeof(IDbConnection), typeof(string), typeof(object), typeof(IDbTransaction), typeof(int?), typeof(CommandType?) });
         var genericMethod = queryAsync!.MakeGenericMethod(dtoType);
         var task = (Task)genericMethod.Invoke(null, new object?[] { connection, sql, null, null, null, null })!;
-        await task.ConfigureAwait(false);
+        await task;
 
         var resultProperty = task.GetType().GetProperty("Result");
         var enumerable = (IEnumerable<object>)resultProperty!.GetValue(task)!;

@@ -678,7 +678,7 @@ Two different notification systems that don't integrate:
 
 ## Completed Work
 
-**2025-10-28**: REFACTOR-2 (BackupService extraction: 1,202 → 750 lines, extracted 4 handlers [TableDiscovery/TableExport/DependencyResolution + PassphraseManagement/BackupConfiguration services], breaking change to IBackupService, 20/20 tests passing), PERF-3 complete (Option A: Spam detection early exit in ContentCheckCoordinator when no critical checks, Option B: Trust context passed to individual checks via ContentCheckRequest.IsUserTrusted/IsUserAdmin fields, OpenAIContentCheck.ShouldExecute() skips API calls for trusted users), REFACTOR-13 (OpenAI extraction: 556 lines → 3 files [192 + 215 + 190], removed legacy text parsing [120 lines], 40/40 tests passing with WireMock + object serialization)
+**2025-10-28**: CODE-8 (Removed 157× ConfigureAwait - unnecessary in ASP.NET Core), DI-1 audit (175 registrations, 66 concrete-only justified, created DI-2 for 2 inconsistent repos), REFACTOR-2 (BackupService 1,202 → 750 lines, 4 handlers + 2 services extracted, breaking changes, 20/20 tests), PERF-3 (trust context early exit), REFACTOR-13 (OpenAI extraction, 40/40 tests)
 
 **2025-10-27**: CODE-9 (Removed reflection in MessageProcessingService - extracted CheckResultsSerializer static utility, compile-time safe, no performance overhead), CODE-1 + CODE-2 (Complete code organization overhaul - split ~60 files into 140+ individual files, fixed 7 name mismatches, renamed TotpProtectionService→DataProtectionService, one type per file achieved, 164 files changed), ANALYTICS-4 (Welcome system analytics - 4 new repository methods, WelcomeAnalytics.razor component, /analytics#welcome tab with join trends/response distribution/per-chat stats, timezone-aware queries), SCHEMA-1 (Audit log FK cascade rules fixed - migration 20251027002019, user deletion now works, 22/22 tests passing)
 
@@ -717,17 +717,24 @@ Two different notification systems that don't integrate:
 
 ---
 
-### DI-1: Interface-Only Dependency Injection Audit
+### DI-2: Create Interfaces for InviteRepository and VerificationTokenRepository
 
-**Status:** PENDING ⏳
-**Severity:** Best Practice | **Impact:** Testability, maintainability
+**Status:** BACKLOG 📋
+**Severity:** Best Practice | **Impact:** Consistency, testability
+**Discovered:** 2025-10-28 via DI audit
 
-**Remaining Work:**
-- Audit all services/repositories to verify they use interfaces (HttpClient/framework types OK)
-- Verify all DI registrations follow `services.AddScoped<IFoo, Foo>()` pattern
-- Document exceptions where concrete types are intentionally injected
+**Current State:**
+- InviteRepository and VerificationTokenRepository registered as concrete types
+- Inconsistent with rest of codebase (109 other services use interface-based DI)
+- Both are actively used repositories in TelegramGroupsAdmin/Repositories/
 
-**Progress:** Created interfaces for 4 repositories (IAuditLogRepository, IUserRepository, IMessageHistoryRepository, ITelegramUserRepository), updated DI registrations, verified runtime
+**Work Required:**
+- Create IInviteRepository interface (3 methods)
+- Create IVerificationTokenRepository interface (4 methods)
+- Update DI registrations in ServiceCollectionExtensions.cs (2 lines)
+- Update consuming code to inject interfaces
+
+**Priority:** LOW - Consistency improvement, not blocking
 
 ---
 
@@ -811,8 +818,9 @@ public class MessageHistoryOptions
 **Discovered:** 2025-10-26 via refactor agent code review
 
 **Current State:**
-- Uses `new List<string>()` throughout codebase
+- 67 occurrences of `new List<T>()` throughout codebase
 - C# 12 collection expressions available but not used
+- Requires explicit type declarations (can't use `var` with `[]`)
 
 **Proposed Solution:**
 Replace with modern syntax:
@@ -824,12 +832,11 @@ var items = new List<string>();
 List<string> items = [];
 ```
 
-**Benefits:**
-- More concise
-- Compiler can optimize allocation
-- Consistent with .NET 9 idioms
+**Scope:**
+- 67 manual replacements (cannot use simple find/replace due to `var` → explicit type requirement)
+- More invasive than initially estimated
 
-**Priority:** LOW - Cosmetic improvement
+**Priority:** LOW - Cosmetic improvement, significant manual effort
 
 
 ---
@@ -1036,29 +1043,39 @@ Extracted 8 specialized handlers achieving Single Responsibility Principle.
 
 ---
 
-### REFACTOR-6: Split ModelMappings by Entity (884 lines)
+### REFACTOR-6: Split ModelMappings by Entity (884 lines → 14 files)
 
 **Status:** BACKLOG 📋
 **Severity:** Refactoring | **Impact:** Code organization, findability
-**Priority:** HIGH - Mechanical split, quick win
+**Priority:** MEDIUM - Not a "quick win" as originally estimated
 **Discovered:** 2025-10-27 via file size audit
 
 **Current State:**
-- 884 lines total
-- ALL .ToModel()/.ToDto() extensions in one file
+- 884 lines in single file (TelegramGroupsAdmin.Telegram/Repositories/ModelMappings.cs)
+- 14 different entity mapping groups identified
 - Hard to find specific mapping
 
-**Extract:** Split by entity type
-- `MessageMappings.cs` (~200 lines)
-- `UserMappings.cs` (~200 lines)
-- `ConfigMappings.cs` (~150 lines)
-- `DetectionMappings.cs` (~150 lines)
-- `AnalyticsMappings.cs` (~150 lines)
+**Scope (Actual):**
+Split into 14 separate files by entity:
+1. ActorMappings.cs (~50 lines) - Actor conversion helpers
+2. ChatAdminMappings.cs (~25 lines)
+3. UserMappings.cs (~50 lines)
+4. RecoveryCodeMappings.cs (~10 lines)
+5. InviteMappings.cs (~30 lines)
+6. AuditLogMappings.cs (~30 lines)
+7. MessageMappings.cs (~120 lines) - Largest, complex JOINs
+8. VerificationTokenMappings.cs (~30 lines)
+9. DetectionResultMappings.cs (~60 lines)
+10. UserActionMappings.cs (~40 lines)
+11. ManagedChatMappings.cs (~35 lines)
+12. TelegramUserMappingMappings.cs (~25 lines)
+13. TelegramLinkTokenMappings.cs (~25 lines)
+14. ReportMappings.cs (~330 lines) - Complex nested mappings
+15. MessageTranslationMappings.cs (~25 lines)
 
-**Testing Wins:**
-- Test mappings in isolation
-- Easier to find/modify specific mapping
-- Clearer organization
+**Estimated Effort:** 60-90 minutes (14 file splits, namespace updates, verify imports)
+
+**Priority:** MEDIUM - Organizational improvement, not urgent
 
 
 ---

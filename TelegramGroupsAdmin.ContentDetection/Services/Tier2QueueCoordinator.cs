@@ -48,7 +48,7 @@ public class Tier2QueueCoordinator
         CancellationToken cancellationToken = default)
     {
         // Load config from database
-        var config = await _configRepository.GetAsync(chatId: null, cancellationToken).ConfigureAwait(false);
+        var config = await _configRepository.GetAsync(chatId: null, cancellationToken);
 
         _logger.LogInformation("Starting Tier 2 cloud queue scan (file: {FileName}, hash: {Hash}, size: {Size} bytes)",
             fileName ?? "unknown", fileHash[..16] + "...", fileBytes.Length);

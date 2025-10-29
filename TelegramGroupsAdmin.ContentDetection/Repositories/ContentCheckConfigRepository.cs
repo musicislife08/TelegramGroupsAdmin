@@ -27,14 +27,14 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
     /// </summary>
     public async Task<IEnumerable<ContentCheckConfig>> GetCriticalChecksAsync(long chatId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             // Get chat-specific critical checks, fall back to global (chatId=0) if none found
             var chatConfigs = await context.SpamCheckConfigs
                 .AsNoTracking()
                 .Where(c => c.ChatId == chatId && c.AlwaysRun)
-                .ToListAsync(cancellationToken).ConfigureAwait(false);
+                .ToListAsync(cancellationToken);
 
             // If chat has no specific critical checks, use global configs
             if (!chatConfigs.Any())
@@ -42,7 +42,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
                 chatConfigs = await context.SpamCheckConfigs
                     .AsNoTracking()
                     .Where(c => c.ChatId == 0 && c.AlwaysRun)
-                    .ToListAsync(cancellationToken).ConfigureAwait(false);
+                    .ToListAsync(cancellationToken);
             }
 
             return chatConfigs.Select(c => c.ToModel());
@@ -60,20 +60,20 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
     /// </summary>
     public async Task<ContentCheckConfig?> GetCheckConfigAsync(long chatId, string checkName, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             // Try chat-specific config first
             var config = await context.SpamCheckConfigs
                 .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.ChatId == chatId && c.CheckName == checkName, cancellationToken).ConfigureAwait(false);
+                .FirstOrDefaultAsync(c => c.ChatId == chatId && c.CheckName == checkName, cancellationToken);
 
             // Fall back to global config if no chat-specific config
             if (config == null)
             {
                 config = await context.SpamCheckConfigs
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(c => c.ChatId == 0 && c.CheckName == checkName, cancellationToken).ConfigureAwait(false);
+                    .FirstOrDefaultAsync(c => c.ChatId == 0 && c.CheckName == checkName, cancellationToken);
             }
 
             return config?.ToModel();
@@ -91,7 +91,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
     /// </summary>
     public async Task<IEnumerable<ContentCheckConfig>> GetAllCheckConfigsAsync(long chatId, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             // Get both global and chat-specific configs
@@ -99,7 +99,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
                 .AsNoTracking()
                 .Where(c => c.ChatId == 0 || c.ChatId == chatId)
                 .OrderBy(c => c.CheckName)
-                .ToListAsync(cancellationToken).ConfigureAwait(false);
+                .ToListAsync(cancellationToken);
 
             // Group by check name and take chat-specific over global
             var effectiveConfigs = allConfigs
@@ -121,11 +121,11 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
     /// </summary>
     public async Task<ContentCheckConfig> UpsertCheckConfigAsync(ContentCheckConfig config, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             var existing = await context.SpamCheckConfigs
-                .FirstOrDefaultAsync(c => c.ChatId == config.ChatId && c.CheckName == config.CheckName, cancellationToken).ConfigureAwait(false);
+                .FirstOrDefaultAsync(c => c.ChatId == config.ChatId && c.CheckName == config.CheckName, cancellationToken);
 
             if (existing != null)
             {
@@ -146,7 +146,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
                 existing = dto;
             }
 
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Upserted config for check {CheckName} in chat {ChatId}", config.CheckName, config.ChatId);
             return existing.ToModel();
@@ -164,11 +164,11 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
     /// </summary>
     public async Task<bool> SetAlwaysRunAsync(string checkName, bool alwaysRun, string modifiedBy, CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             var config = await context.SpamCheckConfigs
-                .FirstOrDefaultAsync(c => c.ChatId == 0 && c.CheckName == checkName, cancellationToken).ConfigureAwait(false);
+                .FirstOrDefaultAsync(c => c.ChatId == 0 && c.CheckName == checkName, cancellationToken);
 
             if (config == null)
             {
@@ -191,7 +191,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
                 config.ModifiedBy = modifiedBy;
             }
 
-            await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Set always_run={AlwaysRun} for check {CheckName}", alwaysRun, checkName);
             return true;
@@ -209,14 +209,14 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
     /// </summary>
     public async Task<IEnumerable<ContentCheckConfig>> GetGlobalConfigsAsync(CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
             var configs = await context.SpamCheckConfigs
                 .AsNoTracking()
                 .Where(c => c.ChatId == 0)
                 .OrderBy(c => c.CheckName)
-                .ToListAsync(cancellationToken).ConfigureAwait(false);
+                .ToListAsync(cancellationToken);
 
             return configs.Select(c => c.ToModel());
         }

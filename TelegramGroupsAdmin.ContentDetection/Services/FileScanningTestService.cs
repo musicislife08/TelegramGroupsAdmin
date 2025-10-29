@@ -33,7 +33,7 @@ public class FileScanningTestService : IFileScanningTestService
 
         // Run Tier 1 scan
         var tier1Result = await _tier1Coordinator.ScanFileAsync(fileBytes, fileName, cancellationToken)
-            .ConfigureAwait(false);
+            ;
 
         // Map to UI-friendly result
         var result = new FileScanTestResult
