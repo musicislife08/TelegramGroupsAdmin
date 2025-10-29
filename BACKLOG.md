@@ -1262,6 +1262,51 @@ Extracted 8 specialized handlers achieving Single Responsibility Principle.
 
 ---
 
+### REFACTOR-16: BackupMetadata.CreatedAt Should Use DateTimeOffset
+
+**Status:** BACKLOG 📋
+**Severity:** Technical Debt | **Impact:** Type safety, developer experience
+**Priority:** LOW
+**Discovered:** 2025-10-28 during REFACTOR-2 baseline test development
+
+**Current State:**
+- `BackupMetadata.CreatedAt` is `long` (Unix timestamp in seconds)
+- Requires manual conversion to/from DateTimeOffset in consuming code
+- Legacy artifact from initial implementation
+
+**Problem:**
+- Type safety: Consumers must remember it's a Unix timestamp (not milliseconds, not ticks)
+- Conversion boilerplate: Every usage requires `DateTimeOffset.FromUnixTimeSeconds()` / `.ToUnixTimeSeconds()`
+- Error-prone: Easy to confuse with other timestamp formats (milliseconds, ticks, DateTime)
+- Inconsistent: Rest of codebase uses DateTimeOffset for timestamps
+
+**Proposed Solution:**
+```csharp
+public class BackupMetadata
+{
+    [JsonPropertyName("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }  // Changed from long
+
+    // ... rest of properties
+}
+```
+
+JSON serialization handles Unix timestamp conversion automatically with proper JsonConverter attribute if needed.
+
+**Benefits:**
+- Type-safe timestamp handling
+- No manual conversion boilerplate
+- Consistent with rest of codebase (Data models use DateTimeOffset)
+- Better IntelliSense/tooling support
+
+**Risks:**
+- Breaking change for existing backup files (requires migration logic)
+- Could support both formats during transition: read `long` or `DateTimeOffset`, always write `DateTimeOffset`
+
+**Priority:** LOW - Quality improvement, not blocking features. Can be addressed during REFACTOR-2 (BackupMetadataService extraction) or later.
+
+---
+
 ### ARCH-3: Consolidate Audit System to Core
 
 **Status:** BACKLOG 📋
