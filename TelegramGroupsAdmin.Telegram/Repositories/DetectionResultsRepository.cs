@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -73,7 +74,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 IsSpam = x.dr.IsSpam,
                 Confidence = x.dr.Confidence,
                 Reason = x.dr.Reason,
-                AddedBy = ModelMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName),
+                AddedBy = ActorMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName),
                 UsedForTraining = x.dr.UsedForTraining,
                 NetConfidence = x.dr.NetConfidence,
                 CheckResultsJson = x.dr.CheckResultsJson,

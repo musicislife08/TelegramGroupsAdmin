@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using TelegramGroupsAdmin.Core.Models;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;

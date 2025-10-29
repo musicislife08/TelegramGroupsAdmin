@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
@@ -420,11 +421,11 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                         TelegramUserId = t.TelegramUserId,
                         TagName = t.TagName,
                         TagColor = (UiModels.TagColor)t.TagColor, // Enum cast from Data to UI layer
-                        AddedBy = ModelMappings.ToActor(t.ActorWebUserId, t.ActorTelegramUserId, t.ActorSystemIdentifier),
+                        AddedBy = ActorMappings.ToActor(t.ActorWebUserId, t.ActorTelegramUserId, t.ActorSystemIdentifier),
                         AddedAt = t.AddedAt,
                         RemovedAt = t.RemovedAt,
                         RemovedBy = t.RemovedAt.HasValue
-                            ? ModelMappings.ToActor(t.RemovedByWebUserId, t.RemovedByTelegramUserId, t.RemovedBySystemIdentifier)
+                            ? ActorMappings.ToActor(t.RemovedByWebUserId, t.RemovedByTelegramUserId, t.RemovedBySystemIdentifier)
                             : null
                     })
                     .ToList(),
@@ -434,7 +435,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                         Id = n.Id,
                         TelegramUserId = n.TelegramUserId,
                         NoteText = n.NoteText,
-                        CreatedBy = ModelMappings.ToActor(n.ActorWebUserId, n.ActorTelegramUserId, n.ActorSystemIdentifier),
+                        CreatedBy = ActorMappings.ToActor(n.ActorWebUserId, n.ActorTelegramUserId, n.ActorSystemIdentifier),
                         CreatedAt = n.CreatedAt,
                         UpdatedAt = n.UpdatedAt,
                         IsPinned = n.IsPinned
@@ -803,7 +804,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                 IsSpam = x.dr.IsSpam,
                 Confidence = x.dr.Confidence,
                 Reason = x.dr.Reason,
-                AddedBy = ModelMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName),
+                AddedBy = ActorMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName),
                 UsedForTraining = x.dr.UsedForTraining,
                 NetConfidence = x.dr.NetConfidence,
                 CheckResultsJson = x.dr.CheckResultsJson,
