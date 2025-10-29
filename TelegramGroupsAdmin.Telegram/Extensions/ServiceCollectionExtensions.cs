@@ -52,6 +52,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.FileScanningHandler>();
         services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.TranslationHandler>();
 
+        // REFACTOR-2: Additional handlers for image processing and job scheduling
+        services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.ImageProcessingHandler>();
+        services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.BackgroundJobScheduler>();
+        services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.SpamDetectionOrchestrator>();
+        services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.LanguageWarningHandler>();
+        services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.MessageEditProcessor>();
+
         // Content check coordination (Phase 4.14: filters trusted/admin users, runs critical checks for all)
         services.AddScoped<IContentCheckCoordinator, ContentCheckCoordinator>();
 

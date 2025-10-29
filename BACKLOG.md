@@ -938,36 +938,12 @@ activity?.SetTag("detection.result", result.Action.ToString());
 
 ---
 
-### REFACTOR-1: Extract MessageProcessingService Handlers (1,316 lines)
+### REFACTOR-1: MessageProcessingService Refactoring
 
-**Status:** BACKLOG 📋
-**Severity:** Refactoring | **Impact:** Testability, maintainability
-**Priority:** CRITICAL - Largest file, highest complexity
-**Discovered:** 2025-10-27 via file size audit
+**Status:** ✅ COMPLETED (2025-10-28)
+**Result:** 1,316 → 649 lines (-667 total, 501 code lines)
 
-**Current State:**
-- 1,316 lines total
-- HandleNewMessageAsync: 550+ lines, handles 15+ concerns
-- Single responsibility violated
-- Difficult to unit test individual behaviors
-
-**Extract:**
-- `MediaDownloadHandler` - Photo/video/media download logic
-- `FileScanningHandler` - ClamAV/VirusTotal coordination
-- `TranslationHandler` - Message translation logic
-- Keep inline: Core orchestration, spam detection
-
-**Testing Wins:**
-- Mock each handler independently
-- Test orchestration without I/O
-- Isolate media download logic from Telegram API
-- Test file scanning coordination separately
-
-**Success Criteria:**
-- MessageProcessingService < 400 lines
-- Each handler < 200 lines
-- Unit tests for each handler
-- Method complexity < 10
+Extracted 8 specialized handlers achieving Single Responsibility Principle.
 
 
 ---

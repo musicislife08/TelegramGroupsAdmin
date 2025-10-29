@@ -3,8 +3,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
 using Telegram.Bot;
 using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
@@ -21,15 +19,15 @@ using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 /// <summary>
-/// Handles message processing: new messages, edits, spam detection, image download
+/// Handles message processing: new messages, edits, spam detection
 /// REFACTOR-1: Orchestrates specialized handlers (media, file scanning, translation)
+/// REFACTOR-2: Additional handlers for image processing and background job scheduling
 /// </summary>
 public partial class MessageProcessingService(
     IServiceScopeFactory scopeFactory,
     IOptions<MessageHistoryOptions> historyOptions,
     CommandRouter commandRouter,
     ChatManagementService chatManagementService,
-    SpamActionService spamActionService,
     TelegramPhotoService telegramPhotoService,
     TelegramMediaService telegramMediaService,
     IServiceProvider serviceProvider,
@@ -235,10 +233,11 @@ public partial class MessageProcessingService(
                                 replyParameters: new ReplyParameters { MessageId = message.MessageId },
                                 cancellationToken: cancellationToken);
 
-                            // Schedule auto-delete if requested
+                            // REFACTOR-2: Schedule auto-delete if requested using BackgroundJobScheduler
                             if (commandResult.DeleteResponseAfterSeconds.HasValue)
                             {
-                                await ScheduleMessageDeleteAsync(
+                                var jobScheduler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.BackgroundJobScheduler>();
+                                await jobScheduler.ScheduleMessageDeleteAsync(
                                     message.Chat.Id,
                                     responseMessage.MessageId,
                                     commandResult.DeleteResponseAfterSeconds.Value,
@@ -284,25 +283,26 @@ public partial class MessageProcessingService(
             // Extract URLs from message text
             var urls = UrlUtilities.ExtractUrls(text);
 
-            // Get photo file ID if present and download image
+            // REFACTOR-2: Use ImageProcessingHandler for photo detection and processing
             string? photoFileId = null;
             int? photoFileSize = null;
             string? photoLocalPath = null;
             string? photoThumbnailPath = null;
 
-            if (message.Photo is { Length: > 0 } photos)
-            {
-                var largestPhoto = photos.OrderByDescending(p => p.FileSize).First();
-                photoFileId = largestPhoto.FileId;
-                photoFileSize = largestPhoto.FileSize.HasValue ? (int)largestPhoto.FileSize.Value : null;
+            var imageHandler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.ImageProcessingHandler>();
+            var imageResult = await imageHandler.ProcessImageAsync(
+                botClient,
+                message,
+                message.Chat.Id,
+                message.MessageId,
+                cancellationToken);
 
-                // Download and process image
-                (photoLocalPath, photoThumbnailPath) = await DownloadAndProcessImageAsync(
-                    botClient,
-                    photoFileId,
-                    message.Chat.Id,
-                    message.MessageId,
-                    cancellationToken);
+            if (imageResult != null)
+            {
+                photoFileId = imageResult.FileId;
+                photoFileSize = imageResult.FileSize;
+                photoLocalPath = imageResult.FullPath;
+                photoThumbnailPath = imageResult.ThumbnailPath;
             }
 
             // REFACTOR-1: Use MediaProcessingHandler for media detection and download
@@ -545,19 +545,22 @@ public partial class MessageProcessingService(
                 }
             }
 
-            // Fetch user profile photo via TickerQ (0s delay for instant execution, with persistence/retry)
+            // REFACTOR-2: Fetch user profile photo via TickerQ using BackgroundJobScheduler
             if (message.From?.Id != null)
             {
-                await ScheduleUserPhotoFetchAsync(message.MessageId, message.From.Id, cancellationToken);
+                var jobScheduler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.BackgroundJobScheduler>();
+                await jobScheduler.ScheduleUserPhotoFetchAsync(message.MessageId, message.From.Id, cancellationToken);
             }
 
-            // Phase 2.6: Automatic spam detection with detection result storage
+            // REFACTOR-2: Automatic spam detection using SpamDetectionOrchestrator
             // Skip spam detection for command messages (already processed by CommandRouter)
             if (commandResult == null && !string.IsNullOrWhiteSpace(text))
             {
                 _ = Task.Run(async () =>
                 {
-                    await RunSpamDetectionAsync(botClient, message, text, editVersion: 0, CancellationToken.None);
+                    using var detectionScope = serviceProvider.CreateScope();
+                    var spamOrchestrator = detectionScope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.SpamDetectionOrchestrator>();
+                    await spamOrchestrator.RunDetectionAsync(botClient, message, text, editVersion: 0, CancellationToken.None);
                 }, CancellationToken.None);
             }
         }
@@ -572,148 +575,21 @@ public partial class MessageProcessingService(
     }
 
     /// <summary>
-    /// Handle edited messages: save edit history, update message, re-scan for spam
+    /// REFACTOR-2: Handle edited messages using MessageEditProcessor
     /// </summary>
     public async Task HandleEditedMessageAsync(ITelegramBotClient botClient, Message editedMessage, CancellationToken cancellationToken = default)
     {
         try
         {
             using var scope = _scopeFactory.CreateScope();
-            var repository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+            var editProcessor = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.MessageEditProcessor>();
 
-            // Get the old message from the database
-            var oldMessage = await repository.GetMessageAsync(editedMessage.MessageId, cancellationToken);
-            if (oldMessage == null)
+            var editRecord = await editProcessor.ProcessEditAsync(botClient, editedMessage, scope, cancellationToken);
+
+            // Raise event for real-time UI updates (if edit actually occurred)
+            if (editRecord != null)
             {
-                logger.LogWarning(
-                    "Received edit for unknown message {MessageId}",
-                    editedMessage.MessageId);
-                return;
-            }
-
-            var oldText = oldMessage.MessageText;
-            var newText = editedMessage.Text ?? editedMessage.Caption;
-
-            // Skip if text hasn't actually changed
-            if (oldText == newText)
-            {
-                logger.LogDebug(
-                    "Edit event for message {MessageId} but text unchanged, skipping",
-                    editedMessage.MessageId);
-                return;
-            }
-
-            var editDate = editedMessage.EditDate.HasValue
-                ? new DateTimeOffset(editedMessage.EditDate.Value, TimeSpan.Zero)
-                : DateTimeOffset.UtcNow;
-
-            // Extract URLs and calculate content hashes
-            var oldUrls = UrlUtilities.ExtractUrls(oldText);
-            var newUrls = UrlUtilities.ExtractUrls(newText);
-
-            var oldContentHash = HashUtilities.ComputeContentHash(oldText ?? "", oldUrls != null ? JsonSerializer.Serialize(oldUrls) : "");
-            var newContentHash = HashUtilities.ComputeContentHash(newText ?? "", newUrls != null ? JsonSerializer.Serialize(newUrls) : "");
-
-            // Create edit record
-            var editRecord = new MessageEditRecord(
-                Id: 0, // Will be set by INSERT
-                MessageId: editedMessage.MessageId,
-                EditDate: editDate,
-                OldText: oldText,
-                NewText: newText,
-                OldContentHash: oldContentHash,
-                NewContentHash: newContentHash
-            );
-
-            await repository.InsertMessageEditAsync(editRecord, cancellationToken);
-
-            // Phase 4.20: Translate edited message if non-English (before spam detection)
-            // After InsertMessageEditAsync, editRecord.Id is populated by the database
-            // Need to re-fetch to get the generated ID
-            var editsForMessage = await repository.GetEditsForMessageAsync(editedMessage.MessageId, cancellationToken);
-            var savedEdit = editsForMessage.OrderByDescending(e => e.EditDate).FirstOrDefault();
-
-            if (savedEdit != null && !string.IsNullOrWhiteSpace(newText))
-            {
-                var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.ISpamDetectionConfigRepository>();
-                var spamConfig = await spamConfigRepo.GetGlobalConfigAsync(cancellationToken);
-
-                // Check if translation is enabled and message meets minimum length
-                if (spamConfig.Translation.Enabled &&
-                    newText.Length >= spamConfig.Translation.MinMessageLength)
-                {
-                    // REFACTOR-1: Use TranslationHandler's static CalculateLatinScriptRatio method
-                    var latinRatio = TelegramGroupsAdmin.Telegram.Handlers.TranslationHandler.CalculateLatinScriptRatio(newText);
-                    if (latinRatio < spamConfig.Translation.LatinScriptThreshold)
-                    {
-                        var translationService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService>();
-                        var translationResult = await translationService.TranslateToEnglishAsync(newText, cancellationToken);
-
-                        if (translationResult != null && translationResult.WasTranslated)
-                        {
-                            var translation = new MessageTranslation(
-                                Id: 0, // Will be set by INSERT
-                                MessageId: null, // Exclusive arc: translation belongs to EDIT, not message
-                                EditId: savedEdit.Id,
-                                TranslatedText: translationResult.TranslatedText,
-                                DetectedLanguage: translationResult.DetectedLanguage,
-                                Confidence: null, // OpenAI doesn't return confidence for translation
-                                TranslatedAt: DateTimeOffset.UtcNow
-                            );
-
-                            await repository.InsertTranslationAsync(translation, cancellationToken);
-
-                            logger.LogInformation(
-                                "Translated edit #{EditId} for message {MessageId} from {Language} to English",
-                                savedEdit.Id,
-                                editedMessage.MessageId,
-                                translationResult.DetectedLanguage);
-                        }
-                    }
-                }
-            }
-
-            // Update the message in the messages table with new text and edit date
-            var updatedMessage = oldMessage with
-            {
-                MessageText = newText,
-                EditDate = editDate,
-                Urls = newUrls != null ? JsonSerializer.Serialize(newUrls) : null,
-                ContentHash = newContentHash
-            };
-            await repository.UpdateMessageAsync(updatedMessage, cancellationToken);
-
-            // Raise event for real-time UI updates
-            OnMessageEdited?.Invoke(editRecord);
-
-            logger.LogInformation(
-                "Recorded edit for message {MessageId} in chat {ChatId}",
-                editedMessage.MessageId,
-                editedMessage.Chat.Id);
-
-            // Phase 2.7: Re-scan edited message for spam (detect "post innocent, edit to spam" tactic)
-            if (!string.IsNullOrWhiteSpace(newText))
-            {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        using var scope = serviceProvider.CreateScope();
-                        var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
-
-                        // Get the latest edit_version for this message
-                        var existingResults = await detectionResultsRepo.GetByMessageIdAsync(editedMessage.MessageId, CancellationToken.None);
-                        var maxEditVersion = existingResults.Any()
-                            ? existingResults.Max(r => r.EditVersion)
-                            : 0;
-
-                        await RunSpamDetectionAsync(botClient, editedMessage, newText, editVersion: maxEditVersion + 1, CancellationToken.None);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Failed to re-scan edited message {MessageId} for spam", editedMessage.MessageId);
-                    }
-                }, CancellationToken.None);
+                OnMessageEdited?.Invoke(editRecord);
             }
         }
         catch (Exception ex)
@@ -724,242 +600,10 @@ public partial class MessageProcessingService(
         }
     }
 
-    /// <summary>
-    /// Run spam detection on a message and take appropriate actions
-    /// </summary>
-    private async Task RunSpamDetectionAsync(ITelegramBotClient botClient, Message message, string text, int editVersion, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            using var scope = serviceProvider.CreateScope();
-            var coordinator = scope.ServiceProvider.GetRequiredService<IContentCheckCoordinator>();
-            var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
-            var spamDetectionEngine = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IContentDetectionEngine>();
-
-            var request = new TelegramGroupsAdmin.ContentDetection.Models.ContentCheckRequest
-            {
-                Message = text,
-                UserId = message.From?.Id ?? 0,
-                UserName = message.From?.Username,
-                ChatId = message.Chat.Id
-            };
-
-            var result = await coordinator.CheckAsync(request, cancellationToken);
-
-            // Phase 4.14: Handle critical check violations FIRST (before regular spam)
-            // Critical violations apply to ALL users (trusted/admin included)
-            if (result.HasCriticalViolations)
-            {
-                logger.LogWarning(
-                    "Critical check violations detected for message {MessageId} from user {UserId}: {Violations}",
-                    message.MessageId,
-                    message.From?.Id,
-                    string.Join("; ", result.CriticalCheckViolations));
-
-                // Use SpamActionService to handle critical violations
-                // Policy: Delete + DM notice, NO ban/warn for trusted/admin users
-                await spamActionService.HandleCriticalCheckViolationAsync(
-                    botClient,
-                    message,
-                    result.CriticalCheckViolations,
-                    cancellationToken).ConfigureAwait(false);
-
-                // If critical violations found, don't process regular spam (already handled)
-                return;
-            }
-
-            // Store detection result (spam or ham) for analytics and training
-            // Only store if spam detection actually ran (not skipped for trusted/admin users)
-            if (!result.SpamCheckSkipped && result.SpamResult != null)
-            {
-                var reasonPrefix = editVersion > 0 ? $"[Edit #{editVersion}] " : "";
-
-                var detectionResult = new DetectionResultRecord
-                {
-                    MessageId = message.MessageId,
-                    DetectedAt = DateTimeOffset.UtcNow,
-                    DetectionSource = "auto",
-                    DetectionMethod = result.SpamResult.CheckResults.Count > 0
-                        ? string.Join(", ", result.SpamResult.CheckResults.Select(c => c.CheckName))
-                        : "Unknown",
-                    // IsSpam is computed from net_confidence (don't set it here)
-                    Confidence = result.SpamResult.MaxConfidence,
-                    Reason = $"{reasonPrefix}{result.SpamResult.PrimaryReason}",
-                    AddedBy = Actor.AutoDetection, // Phase 4.19: Actor system
-                    UsedForTraining = SpamActionService.DetermineIfTrainingWorthy(result.SpamResult),
-                    NetConfidence = result.SpamResult.NetConfidence,
-                    CheckResultsJson = CheckResultsSerializer.Serialize(result.SpamResult.CheckResults),
-                    EditVersion = editVersion
-                };
-
-                await detectionResultsRepo.InsertAsync(detectionResult, cancellationToken);
-
-                var editInfo = editVersion > 0 ? $" (edit #{editVersion})" : "";
-                logger.LogInformation(
-                    "Stored detection result for message {MessageId}{EditInfo}: {IsSpam} (net: {NetConfidence}, training: {UsedForTraining})",
-                    message.MessageId,
-                    editInfo,
-                    result.SpamResult.IsSpam ? "spam" : "ham",
-                    result.SpamResult.NetConfidence,
-                    detectionResult.UsedForTraining);
-
-                // Check for auto-trust after storing non-spam detection result
-                if (!result.SpamResult.IsSpam && message.From?.Id != null)
-                {
-                    var autoTrustService = scope.ServiceProvider.GetRequiredService<UserAutoTrustService>();
-                    await autoTrustService.CheckAndApplyAutoTrustAsync(message.From.Id, message.Chat.Id, cancellationToken);
-                }
-
-                // Phase 4.21: Language warning for non-English non-spam messages from untrusted users
-                // Note: Language detection happens earlier in ProcessNewMessageAsync, check translation there
-                if (!result.SpamResult.IsSpam && message.From?.Id != null)
-                {
-                    await HandleLanguageWarningAsync(botClient, message, scope, cancellationToken);
-                }
-
-                // Phase 2.7: Handle spam actions based on net confidence
-                await spamActionService.HandleSpamDetectionActionsAsync(
-                    message,
-                    result.SpamResult,
-                    detectionResult,
-                    cancellationToken);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to run spam detection for message {MessageId}", message.MessageId);
-        }
-    }
-
-
-    /// <summary>
-    /// Download and process image from Telegram (full + thumbnail)
-    /// </summary>
-    private async Task<(string? fullPath, string? thumbPath)> DownloadAndProcessImageAsync(
-        ITelegramBotClient botClient,
-        string photoFileId,
-        long chatId,
-        long messageId,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            // Create directory structure: {ImageStoragePath}/media/full/{chat_id}/ and media/thumbs/{chat_id}/
-            var basePath = _historyOptions.ImageStoragePath;
-            var mediaPath = Path.Combine(basePath, "media");
-            var fullDir = Path.Combine(mediaPath, "full", chatId.ToString());
-            var thumbDir = Path.Combine(mediaPath, "thumbs", chatId.ToString());
-
-            Directory.CreateDirectory(fullDir);
-            Directory.CreateDirectory(thumbDir);
-
-            var fileName = $"{messageId}.jpg";
-            var fullPath = Path.Combine(fullDir, fileName);
-            var thumbPath = Path.Combine(thumbDir, fileName);
-
-            // Download file from Telegram
-            var file = await botClient.GetFile(photoFileId, cancellationToken);
-            if (file.FilePath == null)
-            {
-                logger.LogWarning("Unable to get file path for photo {FileId}", photoFileId);
-                return (null, null);
-            }
-
-            // Download to temp file first
-            var tempPath = Path.GetTempFileName();
-            try
-            {
-                await using (var fileStream = System.IO.File.Create(tempPath))
-                {
-                    await botClient.DownloadFile(file.FilePath, fileStream, cancellationToken);
-                }
-
-                // Copy to full image location
-                System.IO.File.Copy(tempPath, fullPath, overwrite: true);
-
-                // Generate thumbnail using ImageSharp
-                using (var image = await Image.LoadAsync(tempPath, cancellationToken))
-                {
-                    var thumbnailSize = _historyOptions.ThumbnailSize;
-                    image.Mutate(x => x.Resize(new ResizeOptions
-                    {
-                        Size = new Size(thumbnailSize, thumbnailSize),
-                        Mode = ResizeMode.Max // Maintain aspect ratio
-                    }));
-
-                    await image.SaveAsJpegAsync(thumbPath, cancellationToken);
-                }
-
-                logger.LogDebug(
-                    "Downloaded and processed image for message {MessageId} in chat {ChatId}",
-                    messageId, chatId);
-
-                // Return relative paths for storage in database
-                return ($"full/{chatId}/{fileName}", $"thumbs/{chatId}/{fileName}");
-            }
-            finally
-            {
-                // Clean up temp file
-                if (System.IO.File.Exists(tempPath))
-                    System.IO.File.Delete(tempPath);
-            }
-        }
-        catch (IOException ioEx)
-        {
-            // Disk full or permissions error - fail open (don't block message, just skip image)
-            logger.LogWarning(ioEx,
-                "Filesystem error downloading image for message {MessageId} in chat {ChatId}. Message will be stored without image.",
-                messageId, chatId);
-            return (null, null);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex,
-                "Error downloading/processing image for message {MessageId} in chat {ChatId}",
-                messageId, chatId);
-            return (null, null);
-        }
-    }
-
-
-    /// <summary>
-    /// Schedule a message for deletion via TickerQ
-    /// </summary>
-    private async Task ScheduleMessageDeleteAsync(long chatId, int messageId, int delaySeconds, string reason, CancellationToken cancellationToken = default)
-    {
-        var deletePayload = new TelegramGroupsAdmin.Telegram.Abstractions.Jobs.DeleteMessagePayload(
-            chatId,
-            messageId,
-            reason
-        );
-
-        await TickerQUtilities.ScheduleJobAsync(
-            serviceProvider,
-            logger,
-            "DeleteMessage",
-            deletePayload,
-            delaySeconds,
-            retries: 0);
-    }
-
-    /// <summary>
-    /// Schedule user photo fetch via TickerQ with 0s delay (instant execution with persistence/retry)
-    /// </summary>
-    private async Task ScheduleUserPhotoFetchAsync(long messageId, long userId, CancellationToken cancellationToken = default)
-    {
-        var photoPayload = new TelegramGroupsAdmin.Telegram.Abstractions.Jobs.FetchUserPhotoPayload(
-            messageId,
-            userId
-        );
-
-        await TickerQUtilities.ScheduleJobAsync(
-            serviceProvider,
-            logger,
-            "FetchUserPhoto",
-            photoPayload,
-            delaySeconds: 0,
-            retries: 2);
-    }
+    // REFACTOR-2: Extracted methods to specialized handlers
+    //   Phase 1: ImageProcessingHandler, BackgroundJobScheduler
+    //   Phase 2: SpamDetectionOrchestrator, LanguageWarningHandler
+    //   Phase 3: MessageEditProcessor
 
     /// <summary>
     /// Schedule file scanning via TickerQ with 0s delay for instant execution
@@ -1002,103 +646,4 @@ public partial class MessageProcessingService(
             retries: 3); // Higher retries than photo fetch (ClamAV restart, VT rate limit scenarios)
     }
 
-    // REFACTOR-1: Removed HasFileAttachment, DetectMediaAttachment, CalculateLatinScriptRatio
-    // These methods have been extracted to specialized handlers:
-    // - FileScanningHandler.DetectScannableFile()
-    // - MediaProcessingHandler.DetectMediaAttachment()
-    // - TranslationHandler.CalculateLatinScriptRatio()
-
-    /// <summary>
-    /// Phase 4.21: Handle language warning for non-English non-spam messages from untrusted users
-    /// </summary>
-    private async Task HandleLanguageWarningAsync(
-        ITelegramBotClient botClient,
-        Message message,
-        IServiceScope scope,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            // Get message translation to check if it was non-English
-            var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
-            var translation = await messageRepo.GetTranslationForMessageAsync(message.MessageId, cancellationToken);
-
-            // Skip if no translation (message was in English)
-            if (translation == null)
-                return;
-
-            // Get configuration
-            var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.ISpamDetectionConfigRepository>();
-            var spamConfig = await spamConfigRepo.GetGlobalConfigAsync(cancellationToken);
-
-            // Check if language warnings are enabled
-            if (!spamConfig.Translation.WarnNonEnglish)
-                return;
-
-            // Check if user is trusted or admin (skip warning for them)
-            var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-            var user = await userRepo.GetByIdAsync(message.From!.Id, cancellationToken);
-
-            if (user?.IsTrusted == true)
-                return;
-
-            // Check if user is admin in this chat
-            var chatMember = await botClient.GetChatMember(message.Chat.Id, message.From.Id, cancellationToken);
-            if (chatMember.Status == ChatMemberStatus.Administrator || chatMember.Status == ChatMemberStatus.Creator)
-                return;
-
-            // Get warning system config for auto-ban threshold
-            var configService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Configuration.Services.IConfigService>();
-            var warningConfig = await configService.GetEffectiveAsync<WarningSystemConfig>(ConfigType.Moderation, message.Chat.Id)
-                               ?? WarningSystemConfig.Default;
-
-            // Get current warning count
-            var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-            var currentWarnings = await userActionsRepo.GetWarnCountAsync(message.From.Id, message.Chat.Id, cancellationToken);
-
-            // Calculate warnings remaining
-            var warningsRemaining = warningConfig.AutoBanThreshold - currentWarnings;
-            if (warningsRemaining <= 0)
-                warningsRemaining = 1; // Edge case: user already at threshold but not banned yet
-
-            // Build warning message with variable substitution (in English)
-            var chatName = message.Chat.Title ?? "this chat";
-            var warningMessage = spamConfig.Translation.WarningMessage
-                .Replace("{chat_name}", chatName)
-                .Replace("{language}", translation.DetectedLanguage)
-                .Replace("{warnings_remaining}", warningsRemaining.ToString());
-
-            // Issue warning using moderation system
-            var moderationService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
-            await moderationService.WarnUserAsync(
-                userId: message.From.Id,
-                messageId: message.MessageId,
-                executor: Actor.LanguageWarning,
-                reason: $"Non-English message ({translation.DetectedLanguage})",
-                chatId: message.Chat.Id,
-                cancellationToken: cancellationToken);
-
-            // Send warning to user via DM with chat fallback
-            var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
-            await messagingService.SendToUserAsync(
-                botClient: botClient,
-                userId: message.From.Id,
-                chatId: message.Chat.Id,
-                messageText: warningMessage,
-                replyToMessageId: message.MessageId,
-                cancellationToken: cancellationToken);
-
-            logger.LogInformation(
-                "Language warning issued to user {UserId} for {Language} message in chat {ChatId} ({Warnings}/{Threshold})",
-                message.From.Id,
-                translation.DetectedLanguage,
-                message.Chat.Id,
-                currentWarnings + 1,
-                warningConfig.AutoBanThreshold);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to handle language warning for message {MessageId}", message.MessageId);
-        }
-    }
 }
