@@ -1,6 +1,6 @@
 @page "/settings"
 @page "/settings/{Section?}/{SubSection?}"
-@attribute [Authorize]
+@attribute [Authorize(Policy = "GlobalAdminOrOwner")]
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Components.Shared.SpamManagement
 @using TelegramGroupsAdmin.Components.Shared
@@ -19,20 +19,29 @@
             <MudNavMenu>
                 <!-- System Group -->
                 <MudNavGroup Title="System" Icon="@Icons.Material.Filled.Computer" Expanded="@_systemExpanded" ExpandedChanged="@((bool expanded) => _systemExpanded = expanded)">
-                    <MudNavLink Href="/settings/system/general" Icon="@Icons.Material.Filled.Tune" Match="NavLinkMatch.All">General Settings</MudNavLink>
-                    <MudNavLink Href="/settings/system/security" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">Security</MudNavLink>
+                    @if (_canEditInfrastructure)
+                    {
+                        <MudNavLink Href="/settings/system/general" Icon="@Icons.Material.Filled.Tune" Match="NavLinkMatch.All">General Settings</MudNavLink>
+                        <MudNavLink Href="/settings/system/security" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">Security</MudNavLink>
+                    }
                     @if (_canManageAdminAccounts)
                     {
                         <MudNavLink Href="/settings/system/accounts" Icon="@Icons.Material.Filled.ManageAccounts" Match="NavLinkMatch.All">Admin Accounts</MudNavLink>
                     }
                     <MudNavLink Href="/settings/system/logging" Icon="@Icons.Material.Filled.Terminal" Match="NavLinkMatch.All">Logging</MudNavLink>
-                    <MudNavLink Href="/settings/system/background-jobs" Icon="@Icons.Material.Filled.Schedule" Match="NavLinkMatch.All">Background Jobs</MudNavLink>
-                    <MudNavLink Href="/settings/system/backup" Icon="@Icons.Material.Filled.Backup" Match="NavLinkMatch.All">Backup & Restore</MudNavLink>
+                    @if (_canEditInfrastructure)
+                    {
+                        <MudNavLink Href="/settings/system/background-jobs" Icon="@Icons.Material.Filled.Schedule" Match="NavLinkMatch.All">Background Jobs</MudNavLink>
+                        <MudNavLink Href="/settings/system/backup" Icon="@Icons.Material.Filled.Backup" Match="NavLinkMatch.All">Backup & Restore</MudNavLink>
+                    }
                 </MudNavGroup>
 
                 <!-- Telegram Group -->
                 <MudNavGroup Title="Telegram" Icon="@Icons.Material.Filled.SmartToy" Expanded="@_telegramExpanded" ExpandedChanged="@((bool expanded) => _telegramExpanded = expanded)">
-                    <MudNavLink Href="/settings/telegram/bot" Icon="@Icons.Material.Filled.Settings" Match="NavLinkMatch.All">Bot Connection</MudNavLink>
+                    @if (_canEditInfrastructure)
+                    {
+                        <MudNavLink Href="/settings/telegram/bot" Icon="@Icons.Material.Filled.Settings" Match="NavLinkMatch.All">Bot Connection</MudNavLink>
+                    }
                     <MudNavLink Href="/settings/telegram/notifications" Icon="@Icons.Material.Filled.Notifications" Match="NavLinkMatch.All">Notifications</MudNavLink>
                 </MudNavGroup>
 
@@ -73,10 +82,24 @@
                     @switch (_currentSubSection)
                     {
                         case "general":
-                            <GeneralSettings />
+                            @if (_canEditInfrastructure)
+                            {
+                                <GeneralSettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
                             break;
                         case "security":
-                            <SecuritySettings />
+                            @if (_canEditInfrastructure)
+                            {
+                                <SecuritySettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
                             break;
                         case "accounts":
                             <WebAdminAccounts />
@@ -85,13 +108,34 @@
                             <LoggingSettings />
                             break;
                         case "background-jobs":
-                            <BackgroundJobs />
+                            @if (_canEditInfrastructure)
+                            {
+                                <BackgroundJobs />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
                             break;
                         case "backup":
-                            <BackupRestore />
+                            @if (_canEditInfrastructure)
+                            {
+                                <BackupRestore />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
                             break;
                         default:
-                            <GeneralSettings />
+                            @if (_canEditInfrastructure)
+                            {
+                                <GeneralSettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
                             break;
                     }
                     break;
@@ -101,13 +145,27 @@
                     @switch (_currentSubSection)
                     {
                         case "bot":
-                            <TelegramBotSettings />
+                            @if (_canEditInfrastructure)
+                            {
+                                <TelegramBotSettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
                             break;
                         case "notifications":
                             <NotificationsSettings />
                             break;
                         default:
-                            <TelegramBotSettings />
+                            @if (_canEditInfrastructure)
+                            {
+                                <TelegramBotSettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
                             break;
                     }
                     break;
