@@ -980,6 +980,5 @@ TELEGRAM__APIHASH=abcdef1234567890abcdef1234567890
 ---
 
 ## Related Documents
-- TELEGRAM_USERS_UI.md - User management interface (Phase 4.12)
 - CLAUDE.md - Main project documentation
-- REFACTORING_BACKLOG.md - Code quality improvements
+- BACKLOG.md - Feature roadmap and pending work
