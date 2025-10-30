@@ -47,6 +47,7 @@ public class AppDbContext : DbContext
     public DbSet<SpamDetectionConfigRecordDto> SpamDetectionConfigs => Set<SpamDetectionConfigRecordDto>();
     public DbSet<SpamCheckConfigRecordDto> SpamCheckConfigs => Set<SpamCheckConfigRecordDto>();
     public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
+    public DbSet<ThresholdRecommendationDto> ThresholdRecommendations => Set<ThresholdRecommendationDto>();
 
     // URL filtering tables (Phase 4.13)
     public DbSet<BlocklistSubscriptionDto> BlocklistSubscriptions => Set<BlocklistSubscriptionDto>();
@@ -562,6 +563,14 @@ public class AppDbContext : DbContext
         // Index for analytics (notifications by type)
         modelBuilder.Entity<PendingNotificationRecord>()
             .HasIndex(pn => new { pn.NotificationType, pn.CreatedAt });
+
+        // ThresholdRecommendations indexes
+        modelBuilder.Entity<ThresholdRecommendationDto>()
+            .HasIndex(tr => tr.Status);  // Filter by status (pending, applied, rejected)
+        modelBuilder.Entity<ThresholdRecommendationDto>()
+            .HasIndex(tr => tr.CreatedAt);  // Sort by date
+        modelBuilder.Entity<ThresholdRecommendationDto>()
+            .HasIndex(tr => new { tr.AlgorithmName, tr.Status });  // Filter by algorithm + status
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)

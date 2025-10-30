@@ -168,6 +168,29 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ---
 
+### ML-4: Bidirectional Threshold Optimization (Phase 2)
+
+**Priority:** MEDIUM
+**Impact:** Balanced spam detection, reduce both false positives AND false negatives
+
+**Current State:** ML threshold optimizer (Phase 1) only considers false positives (OpenAI vetoes). Ignores false negatives (admin marks missed spam).
+
+**Enhancement:** Incorporate admin manual overrides to calculate:
+- **False Positives**: Auto spam → OpenAI veto OR admin marks ham
+- **False Negatives**: Auto ham → Admin marks spam
+- Calculate Precision, Recall, F1 score per threshold
+- Optimize for F1-score (balanced) or configurable FP/FN cost ratio
+
+**Open Questions:**
+1. Optimization strategy: F1-Score (balanced), Cost-based (weighted FP/FN), or Target-Recall (safety-first)?
+2. Minimum data requirements for each algorithm?
+3. Show which messages would change at recommended threshold?
+4. Allow admins to configure FP cost vs FN cost?
+
+**Implementation:** Extend `ThresholdRecommendationService` to parse admin manual overrides from `detection_results` where `detection_source='manual'`, calculate confusion matrix per threshold, find optimal balance point.
+
+---
+
 ### DEPLOY-1: Docker Compose Simplicity Validation
 
 **Priority:** HIGH - Blocking for GitHub migration

@@ -63,6 +63,7 @@
                 <!-- Tools Group -->
                 <MudNavGroup Title="Tools & Testing" Icon="@Icons.Material.Filled.Construction" Expanded="@_toolsExpanded" ExpandedChanged="@((bool expanded) => _toolsExpanded = expanded)">
                     <MudNavLink Href="/settings/tools/tester" Icon="@Icons.Material.Filled.BugReport" Match="NavLinkMatch.All">Content Tester</MudNavLink>
+                    <MudNavLink Href="/settings/tools/threshold-recommendations" Icon="@Icons.Material.Filled.Insights" Match="NavLinkMatch.All">Threshold Recommendations</MudNavLink>
                     <MudNavLink Href="/settings/tools/integrations" Icon="@Icons.Material.Filled.Extension" Match="NavLinkMatch.All">Integrations</MudNavLink>
                 </MudNavGroup>
             </MudNavMenu>
@@ -218,6 +219,9 @@
                         case "tester":
                             <ContentTester />
                             break;
+                        case "threshold-recommendations":
+                            <ThresholdRecommendations />
+                            break;
                         case "integrations":
                             <IntegrationsSettings />
                             break;
@@ -312,6 +316,7 @@
 
             // Tools
             ("tools", "tester") => "Content Tester",
+            ("tools", "threshold-recommendations") => "Threshold Recommendations",
             ("tools", "integrations") => "Integration Settings",
 
             _ => "Settings"

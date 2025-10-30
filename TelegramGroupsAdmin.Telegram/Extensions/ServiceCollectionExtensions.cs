@@ -41,6 +41,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
         services.AddScoped<IPromptVersionRepository, PromptVersionRepository>(); // Phase 4.X: AI-powered prompt builder
+        services.AddScoped<IThresholdRecommendationsRepository, ThresholdRecommendationsRepository>(); // ML.NET threshold optimization
 
         // Telegram infrastructure
         services.AddSingleton<TelegramBotClientFactory>();

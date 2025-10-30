@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -58,6 +59,10 @@ public static class ServiceCollectionExtensions
 
         // Register file scanning utilities
         services.AddScoped<IFileScanningTestService, FileScanningTestService>();  // UI testing service
+
+        // Register ML.NET threshold optimization services
+        services.AddScoped<FeatureExtractionService>();
+        services.AddScoped<IThresholdRecommendationService, ThresholdRecommendationService>();
 
         // Register individual content checks
         // NOTE: Translation happens in ContentDetectionEngine preprocessing, not as a content check

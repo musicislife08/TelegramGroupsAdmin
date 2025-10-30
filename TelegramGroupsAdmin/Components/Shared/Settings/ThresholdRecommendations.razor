@@ -1,0 +1,468 @@
+@using TelegramGroupsAdmin.Auth
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.ContentDetection.ML
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Models
+@inject IThresholdRecommendationsRepository RecommendationsRepository
+@inject IThresholdRecommendationService RecommendationService
+@inject IAuditService AuditService
+@inject BlazorAuthHelper AuthHelper
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<MudGrid>
+    <!-- Info Alert -->
+    <MudItem xs="12">
+        <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+            <MudText Typo="Typo.subtitle2"><strong>ML-Powered Threshold Optimization</strong></MudText>
+            <MudText Typo="Typo.body2">
+                Analyzes <strong>OpenAI veto patterns</strong> to identify algorithms that are flagging too many false positives.
+                Uses <strong>ML.NET binary classification</strong> to predict optimal thresholds that minimize veto rates while maintaining spam detection effectiveness.
+            </MudText>
+        </MudAlert>
+    </MudItem>
+
+    <!-- Generate New Recommendations -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.AutoFixHigh" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Generate Recommendations</MudText>
+                </MudStack>
+
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Analyze detection results from a specific time period to generate threshold optimization recommendations.
+                    Requires at least 50 detection samples for training.
+                </MudText>
+
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudDatePicker Label="Analysis Period Start"
+                                   @bind-Date="_analysisPeriodStart"
+                                   Variant="Variant.Outlined"
+                                   MaxDate="DateTime.Now" />
+
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               OnClick="GenerateRecommendationsAsync"
+                               Disabled="@_isGenerating"
+                               StartIcon="@Icons.Material.Filled.Psychology">
+                        @if (_isGenerating)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            <text>&nbsp;Analyzing...</text>
+                        }
+                        else
+                        {
+                            <text>Generate Recommendations</text>
+                        }
+                    </MudButton>
+                </MudStack>
+
+                @if (!string.IsNullOrEmpty(_generationMessage))
+                {
+                    <MudAlert Severity="@_generationMessageSeverity">@_generationMessage</MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Status Filter -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudText Typo="Typo.subtitle1">Filter by Status:</MudText>
+                <MudToggleGroup T="string" SelectionMode="SelectionMode.MultiSelection" Values="_selectedStatuses" ValuesChanged="OnFilterChanged" CheckMark="true">
+                    <MudToggleItem Value="@("pending")" Text="Pending" />
+                    <MudToggleItem Value="@("applied")" Text="Applied" />
+                    <MudToggleItem Value="@("rejected")" Text="Rejected" />
+                </MudToggleGroup>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Recommendations List -->
+    <MudItem xs="12">
+        <MudText Typo="Typo.h6" Class="mb-2">
+            Recommendations (@_filteredRecommendations.Count)
+        </MudText>
+
+        @if (_isLoading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_filteredRecommendations.Count == 0)
+        {
+            <MudPaper Class="pa-8" Elevation="0">
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Insights" Size="Size.Large" Color="Color.Secondary" />
+                    <MudText Typo="Typo.h6" Color="Color.Secondary">No recommendations found</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Generate new recommendations to get started</MudText>
+                </MudStack>
+            </MudPaper>
+        }
+        else
+        {
+            @foreach (var recommendation in _filteredRecommendations.OrderByDescending(r => r.CreatedAt))
+            {
+                <MudPaper Class="pa-4 mb-3" Elevation="2">
+                    <MudGrid>
+                        <MudItem xs="12" md="8">
+                            <MudStack Spacing="2">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudText Typo="Typo.h6">@recommendation.AlgorithmName</MudText>
+                                    <MudChip T="string" Size="Size.Small"
+                                             Color="@GetStatusColor(recommendation.Status)"
+                                             Variant="Variant.Text">
+                                        @recommendation.Status
+                                    </MudChip>
+                                </MudStack>
+
+                                <MudStack Row="true" Spacing="4">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Current Threshold</MudText>
+                                        <MudText Typo="Typo.body1"><strong>@(recommendation.CurrentThreshold?.ToString() ?? "N/A")</strong></MudText>
+                                    </MudStack>
+                                    <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Color="Color.Secondary" />
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Recommended</MudText>
+                                        <MudText Typo="Typo.body1" Color="Color.Primary"><strong>@recommendation.RecommendedThreshold</strong></MudText>
+                                    </MudStack>
+                                </MudStack>
+
+                                <MudStack Row="true" Spacing="4">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Veto Rate Before</MudText>
+                                        <MudText Typo="Typo.body2">@recommendation.VetoRateBefore.ToString("F1")%</MudText>
+                                    </MudStack>
+                                    @if (recommendation.EstimatedVetoRateAfter.HasValue)
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Color="Color.Secondary" Size="Size.Small" />
+                                        <MudStack Spacing="0">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Estimated After</MudText>
+                                            <MudText Typo="Typo.body2" Color="Color.Success">@recommendation.EstimatedVetoRateAfter.Value.ToString("F1")%</MudText>
+                                        </MudStack>
+                                    }
+                                </MudStack>
+
+                                <MudStack Row="true" Spacing="4">
+                                    <MudText Typo="Typo.caption">
+                                        <strong>Confidence:</strong> @recommendation.ConfidenceScore.ToString("F0")%
+                                    </MudText>
+                                    <MudText Typo="Typo.caption">
+                                        <strong>Samples:</strong> @recommendation.VetoedCount vetoed / @recommendation.SpamFlagsCount flags
+                                    </MudText>
+                                </MudStack>
+
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Training period: <span class="local-timestamp" data-utc="@recommendation.TrainingPeriodStart.ToString("o")">@recommendation.TrainingPeriodStart.ToLocalTime().ToString("MMM d, yyyy")</span> to <span class="local-timestamp" data-utc="@recommendation.TrainingPeriodEnd.ToString("o")">@recommendation.TrainingPeriodEnd.ToLocalTime().ToString("MMM d, yyyy")</span>
+                                </MudText>
+
+                                @if (recommendation.Status == "applied" && !string.IsNullOrEmpty(recommendation.ReviewedByUserId) && recommendation.ReviewedAt.HasValue)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Success">
+                                        Applied by @(recommendation.ReviewedByUsername ?? $"User #{recommendation.ReviewedByUserId}") on <span class="local-timestamp" data-utc="@recommendation.ReviewedAt.Value.ToString("o")">@recommendation.ReviewedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                    </MudText>
+                                }
+                                @if (recommendation.Status == "rejected" && !string.IsNullOrEmpty(recommendation.ReviewedByUserId) && recommendation.ReviewedAt.HasValue)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Error">
+                                        Rejected by @(recommendation.ReviewedByUsername ?? $"User #{recommendation.ReviewedByUserId}") on <span class="local-timestamp" data-utc="@recommendation.ReviewedAt.Value.ToString("o")">@recommendation.ReviewedAt.Value.ToLocalTime().ToString("MMM d, yyyy h:mm tt")</span>
+                                        @if (!string.IsNullOrEmpty(recommendation.ReviewNotes))
+                                        {
+                                            <text> - @recommendation.ReviewNotes</text>
+                                        }
+                                    </MudText>
+                                }
+                            </MudStack>
+                        </MudItem>
+
+                        <MudItem xs="12" md="4">
+                            <MudStack Spacing="2" AlignItems="AlignItems.End">
+                                @if (recommendation.Status == "pending")
+                                {
+                                    <MudButton Variant="Variant.Filled"
+                                               Color="Color.Success"
+                                               Size="Size.Small"
+                                               OnClick="@(() => ApplyRecommendationAsync(recommendation))"
+                                               Disabled="@_isApplying"
+                                               StartIcon="@Icons.Material.Filled.Check"
+                                               FullWidth="true">
+                                        Apply Threshold
+                                    </MudButton>
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Error"
+                                               Size="Size.Small"
+                                               OnClick="@(() => RejectRecommendationAsync(recommendation))"
+                                               Disabled="@_isRejecting"
+                                               StartIcon="@Icons.Material.Filled.Close"
+                                               FullWidth="true">
+                                        Reject
+                                    </MudButton>
+                                }
+
+                                <MudButton Variant="Variant.Text"
+                                           Color="Color.Info"
+                                           Size="Size.Small"
+                                           OnClick="@(() => ViewSampleMessages(recommendation))"
+                                           StartIcon="@Icons.Material.Filled.Visibility"
+                                           FullWidth="true">
+                                    View Sample Messages
+                                </MudButton>
+                            </MudStack>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            }
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<ThresholdRecommendation> _recommendations = new();
+    private List<ThresholdRecommendation> _filteredRecommendations = new();
+    private IEnumerable<string> _selectedStatuses = new List<string>
+    {
+        "pending",
+        "applied",
+        "rejected"
+    };
+
+    private DateTime? _analysisPeriodStart = DateTime.Now.AddDays(-30);
+    private bool _isLoading = false;
+    private bool _isGenerating = false;
+    private bool _isApplying = false;
+    private bool _isRejecting = false;
+    private string _generationMessage = "";
+    private Severity _generationMessageSeverity = Severity.Info;
+    private string _userTimeZone = "UTC";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get user's timezone from browser
+        try
+        {
+            _userTimeZone = await JSRuntime.InvokeAsync<string>("getUserTimeZone");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to detect timezone, using UTC: {ex.Message}");
+            _userTimeZone = "UTC";
+        }
+
+        await LoadRecommendationsAsync();
+    }
+
+    private async Task LoadRecommendationsAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _recommendations = await RecommendationsRepository.GetAllRecommendationsAsync();
+            FilterRecommendations();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load recommendations: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void FilterRecommendations()
+    {
+        var selectedStatuses = _selectedStatuses.ToHashSet();
+        _filteredRecommendations = _recommendations
+            .Where(r => selectedStatuses.Contains(r.Status))
+            .ToList();
+    }
+
+    private void OnFilterChanged(IEnumerable<string> newValues)
+    {
+        _selectedStatuses = newValues.ToList();
+        FilterRecommendations();
+    }
+
+    private async Task GenerateRecommendationsAsync()
+    {
+        if (!_analysisPeriodStart.HasValue)
+        {
+            Snackbar.Add("Please select an analysis period start date", Severity.Warning);
+            return;
+        }
+
+        _isGenerating = true;
+        _generationMessage = "";
+        try
+        {
+            // Convert date picker value (unspecified kind) to UTC based on user's timezone
+            // The date picker returns midnight in the user's browser timezone
+            var userTimeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(_userTimeZone);
+            var dateInUserTz = DateTime.SpecifyKind(_analysisPeriodStart.Value, DateTimeKind.Unspecified);
+            var utcDate = TimeZoneInfo.ConvertTimeToUtc(dateInUserTz, userTimeZoneInfo);
+            var since = new DateTimeOffset(utcDate, TimeSpan.Zero);
+
+            var dtos = await RecommendationService.GenerateRecommendationsAsync(since);
+
+            if (dtos.Count == 0)
+            {
+                _generationMessage = "No recommendations generated. Either insufficient training data (<50 samples) or no algorithms with high veto rates (>10%).";
+                _generationMessageSeverity = Severity.Warning;
+            }
+            else
+            {
+                // Persist DTOs to database
+                var userId = await AuthHelper.GetCurrentUserIdAsync();
+                var persisted = 0;
+
+                foreach (var dto in dtos)
+                {
+                    var recommendation = new ThresholdRecommendation
+                    {
+                        AlgorithmName = dto.AlgorithmName,
+                        CurrentThreshold = dto.CurrentThreshold,
+                        RecommendedThreshold = dto.RecommendedThreshold,
+                        ConfidenceScore = dto.ConfidenceScore,
+                        VetoRateBefore = dto.VetoRateBefore,
+                        EstimatedVetoRateAfter = dto.EstimatedVetoRateAfter,
+                        SampleVetoedMessageIds = dto.SampleVetoedMessageIds,
+                        SpamFlagsCount = dto.SpamFlagsCount,
+                        VetoedCount = dto.VetoedCount,
+                        TrainingPeriodStart = dto.TrainingPeriodStart,
+                        TrainingPeriodEnd = dto.TrainingPeriodEnd,
+                        Status = "pending",
+                        CreatedAt = DateTimeOffset.UtcNow
+                    };
+
+                    await RecommendationsRepository.AddRecommendationAsync(recommendation);
+                    persisted++;
+                }
+
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    await AuditService.LogEventAsync(
+                        AuditEventType.ConfigurationChanged,
+                        Actor.FromWebUser(userId),
+                        null,
+                        $"Generated {persisted} ML threshold recommendations"
+                    );
+                }
+
+                _generationMessage = $"Successfully generated {persisted} threshold recommendation(s)!";
+                _generationMessageSeverity = Severity.Success;
+
+                await LoadRecommendationsAsync();
+                Snackbar.Add($"Generated {persisted} recommendations", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            _generationMessage = $"Failed to generate recommendations: {ex.Message}";
+            _generationMessageSeverity = Severity.Error;
+            Snackbar.Add($"Generation failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isGenerating = false;
+        }
+    }
+
+    private async Task ApplyRecommendationAsync(ThresholdRecommendation recommendation)
+    {
+        _isApplying = true;
+        try
+        {
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+            {
+                Snackbar.Add("Unable to identify user", Severity.Error);
+                return;
+            }
+
+            await RecommendationsRepository.ApplyRecommendationAsync(recommendation.Id, userId);
+
+            await AuditService.LogEventAsync(
+                AuditEventType.ConfigurationChanged,
+                Actor.FromWebUser(userId),
+                null,
+                $"Applied threshold recommendation for {recommendation.AlgorithmName}: {recommendation.CurrentThreshold} → {recommendation.RecommendedThreshold}"
+            );
+
+            Snackbar.Add($"Applied recommendation for {recommendation.AlgorithmName}. Don't forget to update the config!", Severity.Success);
+            await LoadRecommendationsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to apply recommendation: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isApplying = false;
+        }
+    }
+
+    private async Task RejectRecommendationAsync(ThresholdRecommendation recommendation)
+    {
+        _isRejecting = true;
+        try
+        {
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            if (string.IsNullOrEmpty(userId))
+            {
+                Snackbar.Add("Unable to identify user", Severity.Error);
+                return;
+            }
+
+            var reason = "Rejected by admin"; // TODO: Add dialog for rejection reason
+
+            await RecommendationsRepository.RejectRecommendationAsync(recommendation.Id, userId, reason);
+
+            await AuditService.LogEventAsync(
+                AuditEventType.ConfigurationChanged,
+                Actor.FromWebUser(userId),
+                null,
+                $"Rejected threshold recommendation for {recommendation.AlgorithmName}"
+            );
+
+            Snackbar.Add($"Rejected recommendation for {recommendation.AlgorithmName}", Severity.Info);
+            await LoadRecommendationsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to reject recommendation: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isRejecting = false;
+        }
+    }
+
+    private void ViewSampleMessages(ThresholdRecommendation recommendation)
+    {
+        if (recommendation.SampleVetoedMessageIds.Count > 0)
+        {
+            // Navigate to messages page with filter for these message IDs
+            var messageId = recommendation.SampleVetoedMessageIds.First();
+            Navigation.NavigateTo($"/messages?detectionId={messageId}");
+        }
+        else
+        {
+            Snackbar.Add("No sample messages available", Severity.Warning);
+        }
+    }
+
+    private Color GetStatusColor(string status)
+    {
+        return status switch
+        {
+            "pending" => Color.Warning,
+            "applied" => Color.Success,
+            "rejected" => Color.Error,
+            _ => Color.Default
+        };
+    }
+}
