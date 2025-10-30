@@ -504,22 +504,6 @@ public class ContentDetectionEngine : IContentDetectionEngine
     }
 
     /// <summary>
-    /// Determine recommended action based on confidence score (legacy method)
-    /// </summary>
-    private SpamAction DetermineAction(int confidence, SpamDetectionConfig config)
-    {
-        if (confidence >= config.AutoBanThreshold)
-        {
-            return SpamAction.AutoBan;
-        }
-        if (confidence >= config.ReviewQueueThreshold)
-        {
-            return SpamAction.ReviewQueue;
-        }
-        return SpamAction.Allow;
-    }
-
-    /// <summary>
     /// Phase 2.6: Determine recommended action based on net confidence (weighted voting)
     /// Net > ReviewQueueThreshold: Run OpenAI veto (safety before ban)
     /// Net ≤ ReviewQueueThreshold AND > 0: Admin review queue (skip OpenAI cost)

@@ -95,11 +95,11 @@
             return string.Empty;
 
         // Path may already include subdirectory (e.g., "chat_icons/file.jpg" or "thumbnails/file.jpg")
-        // or just filename for legacy messages (e.g., "file.jpg")
+        // or just filename (e.g., "file.jpg")
         // If it contains a directory separator, preserve it; otherwise just use filename
         var relativePath = path.Contains('/') || path.Contains('\\')
             ? path.Replace('\\', '/')  // Normalize path separators
-            : Path.GetFileName(path);   // Legacy: just filename
+            : Path.GetFileName(path);   // Just filename
 
         return $"/media/{relativePath}";
     }

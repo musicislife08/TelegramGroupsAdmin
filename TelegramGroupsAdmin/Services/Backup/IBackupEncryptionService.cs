@@ -26,6 +26,6 @@ public interface IBackupEncryptionService
     /// Checks if backup file is encrypted (has TGAENC magic header)
     /// </summary>
     /// <param name="backupBytes">Backup file bytes</param>
-    /// <returns>True if encrypted, false if legacy unencrypted format</returns>
+    /// <returns>True if encrypted, false if unencrypted format</returns>
     bool IsEncrypted(byte[] backupBytes);
 }

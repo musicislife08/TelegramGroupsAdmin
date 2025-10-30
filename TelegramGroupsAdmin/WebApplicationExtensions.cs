@@ -72,13 +72,6 @@ public static class WebApplicationExtensions
         })
         .AllowAnonymous();
 
-        // Legacy /health endpoint for backward compatibility (same as readiness)
-        app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
-        {
-            Predicate = healthCheck => healthCheck.Tags.Contains("ready")
-        })
-        .AllowAnonymous();
-
         app.MapAuthEndpoints();
         app.MapEmailVerificationEndpoints();
 

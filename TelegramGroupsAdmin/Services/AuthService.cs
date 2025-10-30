@@ -74,22 +74,6 @@ public class AuthService(
             return new AuthResult(false, null, null, null, false, false, "Account has been deleted. Please contact an administrator.");
         }
 
-        // Check legacy is_active field (should be redundant with status check, but keep for safety)
-        if (!user.IsActive)
-        {
-            logger.LogWarning("Login attempt for inactive user: {UserId}", user.Id);
-
-            // Audit log - failed login (inactive account)
-            await auditLog.LogEventAsync(
-                AuditEventType.UserLoginFailed,
-                actor: Actor.FromWebUser(user.Id),
-                target: Actor.FromWebUser(user.Id),
-                value: "Account inactive (legacy flag)",
-                ct: ct);
-
-            return new AuthResult(false, null, null, null, false, false, "Account is inactive");
-        }
-
         if (!passwordHasher.VerifyPassword(password, user.PasswordHash))
         {
             logger.LogWarning("Invalid password for user: {UserId}", user.Id);

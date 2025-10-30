@@ -1,7 +1,7 @@
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
-/// Spam check record for UI display (legacy - for backward compatibility)
+/// Spam check record for UI display
 /// </summary>
 public record SpamCheckRecord(
     long Id,

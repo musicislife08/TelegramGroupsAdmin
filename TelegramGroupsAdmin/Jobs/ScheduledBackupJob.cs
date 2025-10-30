@@ -62,7 +62,6 @@ public class ScheduledBackupJob
 
             // Clean up old backups using granular retention strategy
             var backupFiles = Directory.GetFiles(backupDir, "backup_*.tar.gz")
-                .Concat(Directory.GetFiles(backupDir, "backup_*.json.gz")) // Include legacy extension
                 .Select(f => new BackupFileInfo
                 {
                     FilePath = f,

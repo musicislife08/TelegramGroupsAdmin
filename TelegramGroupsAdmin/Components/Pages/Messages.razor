@@ -170,7 +170,6 @@
     private PermissionLevel _userPermissionLevel = PermissionLevel.Admin; // Default to Admin
     private HashSet<long> _userTelegramIds = new(); // Current user's linked Telegram IDs
 
-    // Legacy filter state (not shown in UI for now, but kept for compatibility)
     private MessageFilterState _filterState = new();
     private long? _highlightMessageId = null; // Message to scroll to and highlight
     private bool _firstRenderComplete = false; // Track if we've done the initial auto-scroll
