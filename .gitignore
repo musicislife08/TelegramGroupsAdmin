@@ -7,4 +7,42 @@ tg-spam/
 compose/*
 !compose/compose.yml
 *.DotSettings.user
-TelegramGroupsAdmin/Properties/launchSettings.json
+
+# === SECURITY: Dotnet Secret Files ===
+# Never commit these - they contain API keys, tokens, connection strings
+
+# Launch settings (local dev environment config)
+**/Properties/launchSettings.json
+launchSettings.json
+
+# User secrets (dotnet user-secrets tool)
+**/secrets.json
+
+# HTTP client environment files (JetBrains Rider)
+http-client.private.env.json
+**/http-client.private*.json
+
+# appsettings with secrets (should use env vars instead)
+appsettings.Development.json
+appsettings.Local.json
+appsettings.*.local.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Docker secrets
+docker-compose.override.yml
+compose.override.yml
+
+# Azure/cloud secrets
+**/azure-*.json
+**/aws-*.json
+
+# Certificate files
+**/*.pfx
+**/*.p12
+**/*.key
+**/*.pem

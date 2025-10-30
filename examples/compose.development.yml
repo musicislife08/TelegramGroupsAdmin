@@ -1,0 +1,226 @@
+# =============================================================================
+# TelegramGroupsAdmin - Development Deployment (Build from Source)
+# =============================================================================
+# This compose file builds the application from local source code
+# Use this for development, testing, or when you want to customize the code
+#
+# Quick Start:
+# 1. Copy this file: cp examples/compose.development.yml compose.yml
+# 2. Edit compose.yml - replace all CHANGE_ME values with your actual credentials
+# 3. Run: docker compose up -d --build
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Database
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:17-alpine
+    container_name: telegram-groups-admin-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: telegram_groups_admin
+      POSTGRES_USER: tgadmin
+      POSTGRES_PASSWORD: CHANGE_ME_STRONG_PASSWORD  # CHANGE THIS!
+      # Performance tuning
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      POSTGRES_MAX_CONNECTIONS: 100
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tgadmin -d telegram_groups_admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - telegram-admin
+
+  # ---------------------------------------------------------------------------
+  # ClamAV Antivirus Scanner
+  # ---------------------------------------------------------------------------
+  clamav:
+    image: clamav/clamav:latest
+    container_name: telegram-groups-admin-clamav
+    platform: linux/amd64  # Force AMD64 on ARM Macs
+    restart: unless-stopped
+    ports:
+      - "3310:3310"
+    volumes:
+      - ./data/clamav:/var/lib/clamav
+    environment:
+      # ClamAV has a hard 2GB limit - files larger than this will skip ClamAV and use VirusTotal only
+      # Telegram file size limits: Free=2GB, Premium=4GB
+      CLAMD_CONF_StreamMaxLength: 2000M       # 2GB - ClamAV's maximum supported size
+      CLAMD_CONF_MaxFileSize: 2000M           # Maximum file size to scan
+      CLAMD_CONF_MaxScanSize: 2000M           # Maximum amount of data to scan
+      CLAMD_CONF_MaxScanTime: 300000          # 5 minutes max scan time
+      CLAMD_CONF_PCREMaxFileSize: 100M        # PCRE pattern matching limit (reduce for performance)
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10  # Allow up to 5 minutes of retries (10 * 30s) for first-time signature download
+      start_period: 60s  # Give ClamAV daemon 1 minute to start, then begin health checks
+    networks:
+      - telegram-admin
+
+  # ---------------------------------------------------------------------------
+  # TelegramGroupsAdmin Application (Build from Source)
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: ..  # Parent directory (repository root)
+      dockerfile: TelegramGroupsAdmin/Dockerfile
+      # Optional: Override default UID/GID at build time (default 1654)
+      # args:
+      #   PUID: 1000
+      #   PGID: 1000
+    image: telegramgroupsadmin:local
+    container_name: telegram-groups-admin-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+    volumes:
+      - ./data:/data
+    # Optional: Set user/group ID to match your host system (must match build args above)
+    # Uncomment and adjust if you need specific UID/GID (default is 1654)
+    # user: "1000:1000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"      # Rotate when log file reaches 10MB
+        max-file: "15"       # Keep up to 15 rotated files (10MB * 15 = 150MB total)
+        compress: "true"     # Compress rotated logs to save disk space
+    environment:
+      # =======================================================================
+      # System Configuration
+      # =======================================================================
+      TZ: America/Phoenix  # Set your timezone (e.g., America/New_York, Europe/London, UTC)
+      # Note: PUID/PGID are set via build args and 'user:' directive above if needed
+
+      # =======================================================================
+      # ASP.NET Core Configuration
+      # =======================================================================
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+
+      # =======================================================================
+      # Application Settings
+      # =======================================================================
+      APP__BASEURL: http://localhost:8080  # Change to your domain (e.g., https://telegram-admin.yourdomain.com)
+      APP__DATAPATH: /data  # Base path for all app data (images, media, keys)
+
+      # =======================================================================
+      # Database Connection
+      # =======================================================================
+      # Make sure password matches POSTGRES_PASSWORD above!
+      ConnectionStrings__PostgreSQL: "Host=postgres;Port=5432;Database=telegram_groups_admin;Username=tgadmin;Password=CHANGE_ME_STRONG_PASSWORD"
+
+      # =======================================================================
+      # REQUIRED: Telegram Bot Configuration
+      # =======================================================================
+      # How to get: Message @BotFather on Telegram, create a new bot
+      # Format: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz-1234567890
+      # The bot automatically discovers all groups it's added to
+      TELEGRAM__BOTTOKEN: "CHANGE_ME_GET_FROM_BOTFATHER"
+
+      # =======================================================================
+      # REQUIRED: OpenAI API Configuration
+      # =======================================================================
+      # How to get: https://platform.openai.com/api-keys
+      # Click "Create new secret key", copy the sk-proj-... value
+      OPENAI__APIKEY: "CHANGE_ME_GET_FROM_OPENAI"
+      OPENAI__MODEL: "gpt-4o-mini"  # Recommended for cost/performance
+      OPENAI__MAXTOKENS: "150"
+
+      # =======================================================================
+      # REQUIRED: VirusTotal API Configuration
+      # =======================================================================
+      # How to get: https://www.virustotal.com/gui/my-apikey
+      # Sign up for free account, copy API key from profile
+      VIRUSTOTAL__APIKEY: "CHANGE_ME_GET_FROM_VIRUSTOTAL"
+
+      # =======================================================================
+      # REQUIRED: CAS (Combot Anti-Spam) API Configuration
+      # =======================================================================
+      # How to get: https://cas.chat/
+      # Sign up and generate API key
+      SPAMDETECTION__APIKEY: "CHANGE_ME_GET_FROM_CAS"
+
+      # =======================================================================
+      # REQUIRED: SendGrid Email Configuration
+      # =======================================================================
+      # How to get: https://app.sendgrid.com/settings/api_keys
+      # Create API key with "Mail Send" permissions
+      SENDGRID__APIKEY: "CHANGE_ME_GET_FROM_SENDGRID"
+      SENDGRID__FROMEMAIL: "CHANGE_ME_YOUR_EMAIL@example.com"
+      SENDGRID__FROMNAME: "Telegram Groups Admin"
+
+      # =======================================================================
+      # ClamAV Connection (Internal Docker Network)
+      # =======================================================================
+      CLAMAV__HOST: clamav
+      CLAMAV__PORT: "3310"
+
+      # =======================================================================
+      # Message History Configuration
+      # =======================================================================
+      MESSAGEHISTORY__ENABLED: "true"
+      MESSAGEHISTORY__RETENTIONHOURS: "720"  # 30 days
+    healthcheck:
+      # Use liveness probe for Docker (checks if app is alive, not if dependencies are healthy)
+      # Database failures shouldn't cause container restart
+      test: ["CMD", "/usr/bin/wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - telegram-admin
+
+networks:
+  telegram-admin:
+    name: telegram-admin
+
+# =============================================================================
+# IMPORTANT: Replace ALL "CHANGE_ME" values before starting!
+# =============================================================================
+# Required API Keys (get them from these URLs):
+# 1. Telegram Bot Token: https://t.me/BotFather
+# 2. OpenAI API Key: https://platform.openai.com/api-keys
+# 3. VirusTotal API Key: https://www.virustotal.com/gui/my-apikey
+# 4. CAS API Key: https://cas.chat/
+# 5. SendGrid API Key: https://app.sendgrid.com/settings/api_keys
+# 6. PostgreSQL Password: Make this a strong password!
+# =============================================================================
+
+# =============================================================================
+# Development Notes
+# =============================================================================
+# - This file builds from source code in the parent directory
+# - The Dockerfile is located at ../TelegramGroupsAdmin/Dockerfile
+# - Multi-stage build produces optimized production image
+# - Build time: ~2-5 minutes depending on machine
+# - To rebuild: docker compose build --no-cache app
+# =============================================================================
+
+# =============================================================================
+# Data Persistence (all relative to compose file location)
+# =============================================================================
+# ./data/postgres/  - PostgreSQL database files
+# ./data/clamav/    - ClamAV virus signatures (~200MB)
+# ./data/app/       - Application data:
+#   ./data/app/keys/   - Data Protection keys (DO NOT DELETE!)
+#   ./data/app/images/ - Downloaded message images
+#   ./data/app/media/  - Downloaded media files (videos, audio, etc.)
+# ./backups/        - Database backup files (from /export command)
+# =============================================================================
