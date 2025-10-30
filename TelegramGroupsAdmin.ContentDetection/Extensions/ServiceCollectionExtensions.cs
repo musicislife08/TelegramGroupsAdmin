@@ -52,9 +52,6 @@ public static class ServiceCollectionExtensions
 
         // Register file scanning services (Phase 4.17 - Phase 2: Tier 2 cloud scanners)
         services.AddScoped<VirusTotalScannerService>();
-        services.AddScoped<MetaDefenderScannerService>();
-        services.AddScoped<HybridAnalysisScannerService>();
-        services.AddScoped<IntezerScannerService>();
         services.AddScoped<Tier2QueueCoordinator>();
 
         // Register file scanning utilities

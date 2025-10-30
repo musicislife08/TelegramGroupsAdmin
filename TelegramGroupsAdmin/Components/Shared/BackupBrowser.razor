@@ -1,5 +1,6 @@
 @using TelegramGroupsAdmin.Services.Backup
 @inject IBackupService BackupService
+@inject BackupRetentionService RetentionService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 
@@ -27,66 +28,102 @@
         }
         else
         {
-            <MudTable Items="@_backups" Hover="true" Dense="true" Elevation="0" Outlined="true">
-                <HeaderContent>
-                    <MudTh>Filename</MudTh>
-                    <MudTh>Created</MudTh>
-                    <MudTh>Size</MudTh>
-                    <MudTh>Encrypted</MudTh>
-                    <MudTh Style="width: 200px;">Actions</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Filename">
-                        <MudText Typo="Typo.body2" Class="d-flex align-center">
-                            <MudIcon Icon="@Icons.Material.Filled.Archive" Size="Size.Small" Class="mr-2" Color="Color.Primary" />
-                            @context.FileName
-                        </MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Created">
-                        @context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
-                    </MudTd>
-                    <MudTd DataLabel="Size">
-                        @FormatBytes(context.FileSizeBytes)
-                    </MudTd>
-                    <MudTd DataLabel="Encrypted">
-                        @if (context.IsEncrypted)
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Lock">Encrypted</MudChip>
-                        }
-                        else
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.LockOpen">Unencrypted</MudChip>
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Actions">
-                        <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
-                            <MudIconButton Icon="@Icons.Material.Filled.Info"
-                                           Color="Color.Primary"
-                                           Size="Size.Small"
-                                           OnClick="@(() => ViewMetadata(context))"
-                                           title="View Metadata" />
-                            <MudIconButton Icon="@Icons.Material.Filled.SettingsBackupRestore"
-                                           Color="Color.Secondary"
-                                           Size="Size.Small"
-                                           OnClick="@(() => OnRestoreRequested.InvokeAsync(context))"
-                                           title="Wipe & Restore from this Backup" />
-                            <MudIconButton Icon="@Icons.Material.Filled.Download"
-                                           Color="Color.Info"
-                                           Size="Size.Small"
-                                           OnClick="@(() => DownloadBackup(context))"
-                                           title="Download" />
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                           Color="Color.Error"
-                                           Size="Size.Small"
-                                           OnClick="@(() => DeleteBackup(context))"
-                                           title="Delete" />
-                        </MudButtonGroup>
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
+            @* Grouped by retention tier *@
+            @foreach (var tierGroup in _tierGroups.OrderByDescending(g => g.Tier))
+            {
+                var tierBackups = tierGroup.Backups.OrderByDescending(b => b.CreatedAt).ToList();
+                var tierSize = tierBackups.Sum(b => b.FileSizeBytes);
+                var tierColor = GetTierColor(tierGroup.Tier);
 
-            <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Right">
-                @_backups.Count backup(s) | @FormatBytes(_backups.Sum(b => b.FileSizeBytes)) total
+                <MudExpansionPanel Class="mb-2">
+                    <TitleContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@GetTierIcon(tierGroup.Tier)" Color="@tierColor" />
+                            <MudText Typo="Typo.subtitle1"><strong>@tierGroup.Tier</strong></MudText>
+                            <MudChip T="string" Size="Size.Small" Color="@tierColor" Variant="Variant.Text">
+                                @tierBackups.Count backup@(tierBackups.Count != 1 ? "s" : "")
+                            </MudChip>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @FormatBytes(tierSize)
+                            </MudText>
+                        </MudStack>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudStack Spacing="2" Class="pa-2">
+                            @foreach (var backup in tierBackups)
+                            {
+                                var willBeKept = _backupRetentionInfo.TryGetValue(backup.FilePath, out var info) && info.WillBeKept;
+
+                                <MudPaper Class="pa-3" Elevation="1">
+                                    <MudGrid>
+                                        <MudItem xs="12" md="8">
+                                            <MudStack Spacing="1">
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Archive" Size="Size.Small" Color="Color.Primary" />
+                                                    <MudText Typo="Typo.body2"><strong>@backup.FileName</strong></MudText>
+
+                                                    @if (backup.IsEncrypted)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Lock">Encrypted</MudChip>
+                                                    }
+                                                    else
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.LockOpen">Unencrypted</MudChip>
+                                                    }
+
+                                                    @if (!willBeKept)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.DeleteSweep" title="Will be deleted on next cleanup">
+                                                            Will be deleted
+                                                        </MudChip>
+                                                    }
+                                                </MudStack>
+
+                                                <MudStack Row="true" Spacing="4">
+                                                    <MudText Typo="Typo.caption">
+                                                        <strong>Created:</strong> @backup.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                                    </MudText>
+                                                    <MudText Typo="Typo.caption">
+                                                        <strong>Size:</strong> @FormatBytes(backup.FileSizeBytes)
+                                                    </MudText>
+                                                </MudStack>
+                                            </MudStack>
+                                        </MudItem>
+
+                                        <MudItem xs="12" md="4" Class="d-flex justify-end align-center">
+                                            <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                                                <MudIconButton Icon="@Icons.Material.Filled.Info"
+                                                               Color="Color.Primary"
+                                                               Size="Size.Small"
+                                                               OnClick="@(() => ViewMetadata(backup))"
+                                                               title="View Metadata" />
+                                                <MudIconButton Icon="@Icons.Material.Filled.SettingsBackupRestore"
+                                                               Color="Color.Secondary"
+                                                               Size="Size.Small"
+                                                               OnClick="@(() => OnRestoreRequested.InvokeAsync(backup))"
+                                                               title="Wipe & Restore from this Backup" />
+                                                <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                                               Color="Color.Info"
+                                                               Size="Size.Small"
+                                                               OnClick="@(() => DownloadBackup(backup))"
+                                                               title="Download" />
+                                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                               Color="Color.Error"
+                                                               Size="Size.Small"
+                                                               OnClick="@(() => DeleteBackup(backup))"
+                                                               title="Delete" />
+                                            </MudButtonGroup>
+                                        </MudItem>
+                                    </MudGrid>
+                                </MudPaper>
+                            }
+                        </MudStack>
+                    </ChildContent>
+                </MudExpansionPanel>
+            }
+
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Right" Class="mt-2">
+                @_backups.Count backup(s) total | @FormatBytes(_backups.Sum(b => b.FileSizeBytes))
             </MudText>
         }
 
@@ -182,7 +219,10 @@
     [Parameter] public EventCallback<BackupFileInfo> OnRestoreRequested { get; set; }
 
     private List<BackupFileInfo> _backups = new();
+    private List<TierGroup> _tierGroups = new();
+    private Dictionary<string, (BackupTier PrimaryTier, bool WillBeKept)> _backupRetentionInfo = new();
     private bool _isLoading = false;
+    private RetentionConfig _retentionConfig = new(); // Default retention policy
 
     // Metadata dialog
     private bool _showMetadataDialog = false;
@@ -194,6 +234,12 @@
         MaxWidth = MaxWidth.Medium,
         FullWidth = true
     };
+
+    private class TierGroup
+    {
+        public BackupTier Tier { get; set; }
+        public List<BackupFileInfo> Backups { get; set; } = new();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -235,6 +281,24 @@
 
             _backups = (await Task.WhenAll(files))
                 .OrderByDescending(b => b.CreatedAt)
+                .ToList();
+
+            // Calculate retention info for each backup
+            _backupRetentionInfo.Clear();
+            foreach (var backup in _backups)
+            {
+                var info = RetentionService.GetBackupRetentionInfo(backup, _backups, _retentionConfig);
+                _backupRetentionInfo[backup.FilePath] = info;
+            }
+
+            // Group backups by primary tier
+            _tierGroups = _backups
+                .GroupBy(b => _backupRetentionInfo[b.FilePath].PrimaryTier)
+                .Select(g => new TierGroup
+                {
+                    Tier = g.Key,
+                    Backups = g.ToList()
+                })
                 .ToList();
         }
         catch (Exception ex)
@@ -305,5 +369,31 @@
             len /= 1024;
         }
         return $"{len:0.##} {sizes[order]}";
+    }
+
+    private Color GetTierColor(BackupTier tier)
+    {
+        return tier switch
+        {
+            BackupTier.Yearly => Color.Secondary,  // Purple/dark
+            BackupTier.Monthly => Color.Warning,   // Yellow
+            BackupTier.Weekly => Color.Success,    // Green
+            BackupTier.Daily => Color.Info,        // Blue
+            BackupTier.Hourly => Color.Default,    // Gray
+            _ => Color.Default
+        };
+    }
+
+    private string GetTierIcon(BackupTier tier)
+    {
+        return tier switch
+        {
+            BackupTier.Yearly => Icons.Material.Filled.CalendarMonth,
+            BackupTier.Monthly => Icons.Material.Filled.CalendarToday,
+            BackupTier.Weekly => Icons.Material.Filled.DateRange,
+            BackupTier.Daily => Icons.Material.Filled.Today,
+            BackupTier.Hourly => Icons.Material.Filled.Schedule,
+            _ => Icons.Material.Filled.Archive
+        };
     }
 }

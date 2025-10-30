@@ -44,9 +44,6 @@ public class ApiKeyDelegatingHandler : DelegatingHandler
                 apiKey = _serviceName switch
                 {
                     "VirusTotal" => apiKeys.VirusTotal,
-                    "MetaDefender" => apiKeys.MetaDefender,
-                    "HybridAnalysis" => apiKeys.HybridAnalysis,
-                    "Intezer" => apiKeys.Intezer,
                     _ => null
                 };
             }

@@ -53,10 +53,7 @@ public class ApiKeyMigrationService
         // Read API keys from environment variables
         var apiKeys = new ApiKeysConfig
         {
-            VirusTotal = _configuration["VirusTotal:ApiKey"],
-            MetaDefender = _configuration["MetaDefender:ApiKey"],
-            HybridAnalysis = _configuration["HybridAnalysis:ApiKey"],
-            Intezer = _configuration["Intezer:ApiKey"]
+            VirusTotal = _configuration["VirusTotal:ApiKey"]
         };
 
         // If no API keys found in env vars, skip migration

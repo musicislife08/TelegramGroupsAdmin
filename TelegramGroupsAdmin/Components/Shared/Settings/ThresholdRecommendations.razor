@@ -225,9 +225,7 @@
     private List<ThresholdRecommendation> _filteredRecommendations = new();
     private IEnumerable<string> _selectedStatuses = new List<string>
     {
-        "pending",
-        "applied",
-        "rejected"
+        "pending" // Only show pending by default - applied and rejected can be toggled on
     };
 
     private DateTime? _analysisPeriodStart = DateTime.Now.AddDays(-30);

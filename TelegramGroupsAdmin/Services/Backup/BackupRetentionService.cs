@@ -157,6 +157,35 @@ public class BackupRetentionService
     }
 
     /// <summary>
+    /// Determines the primary (highest) tier for a backup and whether it will be kept
+    /// </summary>
+    public (BackupTier PrimaryTier, bool WillBeKept) GetBackupRetentionInfo(
+        BackupFileInfo backup,
+        List<BackupFileInfo> allBackups,
+        RetentionConfig retentionConfig)
+    {
+        var classified = ClassifyBackups(allBackups.OrderBy(b => b.CreatedAt).ToList());
+
+        // Determine primary tier (highest priority)
+        BackupTier primaryTier = BackupTier.Hourly;
+
+        if (classified[BackupTier.Yearly].Any(b => b.FilePath == backup.FilePath))
+            primaryTier = BackupTier.Yearly;
+        else if (classified[BackupTier.Monthly].Any(b => b.FilePath == backup.FilePath))
+            primaryTier = BackupTier.Monthly;
+        else if (classified[BackupTier.Weekly].Any(b => b.FilePath == backup.FilePath))
+            primaryTier = BackupTier.Weekly;
+        else if (classified[BackupTier.Daily].Any(b => b.FilePath == backup.FilePath))
+            primaryTier = BackupTier.Daily;
+
+        // Check if this backup will be kept based on retention policy
+        var backupsToDelete = GetBackupsToDelete(allBackups, retentionConfig);
+        var willBeKept = !backupsToDelete.Any(b => b.FilePath == backup.FilePath);
+
+        return (primaryTier, willBeKept);
+    }
+
+    /// <summary>
     /// Gets week key in format "YYYY-Www" (ISO 8601 week date)
     /// </summary>
     private static string GetWeekKey(DateTimeOffset date)

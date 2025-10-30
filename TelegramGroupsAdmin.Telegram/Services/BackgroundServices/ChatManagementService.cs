@@ -253,6 +253,19 @@ public class ChatManagementService(
                     chat.Title ?? "Unknown",
                     user.Id,
                     user.Username ?? "unknown");
+
+                // Phase 5.2: Notify owners about admin promotion
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                var displayName = user.Username != null ? $"@{user.Username}" : user.FirstName ?? $"User {user.Id}";
+                _ = notificationService.SendSystemNotificationAsync(
+                    eventType: NotificationEventType.ChatAdminChanged,
+                    subject: $"New Admin Promoted: {chat.Title ?? "Unknown Chat"}",
+                    message: $"A new {(isCreator ? "creator" : "admin")} has been added to '{chat.Title ?? "Unknown"}'.\n\n" +
+                             $"User: {displayName}\n" +
+                             $"Telegram ID: {user.Id}\n" +
+                             $"Chat ID: {chat.Id}\n\n" +
+                             $"This is a security notification to keep you informed of permission changes.",
+                    ct: cancellationToken);
             }
             else
             {
@@ -265,6 +278,19 @@ public class ChatManagementService(
                     chat.Title ?? "Unknown",
                     user.Id,
                     user.Username ?? "unknown");
+
+                // Phase 5.2: Notify owners about admin demotion
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                var displayName = user.Username != null ? $"@{user.Username}" : user.FirstName ?? $"User {user.Id}";
+                _ = notificationService.SendSystemNotificationAsync(
+                    eventType: NotificationEventType.ChatAdminChanged,
+                    subject: $"Admin Demoted: {chat.Title ?? "Unknown Chat"}",
+                    message: $"An admin has been removed from '{chat.Title ?? "Unknown"}'.\n\n" +
+                             $"User: {displayName}\n" +
+                             $"Telegram ID: {user.Id}\n" +
+                             $"Chat ID: {chat.Id}\n\n" +
+                             $"This is a security notification to keep you informed of permission changes.",
+                    ct: cancellationToken);
             }
         }
         catch (Exception ex)

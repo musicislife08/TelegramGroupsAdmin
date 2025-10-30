@@ -15,34 +15,10 @@ public class ApiKeysConfig
     public string? VirusTotal { get; set; }
 
     /// <summary>
-    /// MetaDefender API key (https://metadefender.opswat.com)
-    /// Optional cloud scanner with 30+ engines
-    /// Free tier: 40 requests/day
-    /// </summary>
-    public string? MetaDefender { get; set; }
-
-    /// <summary>
-    /// Hybrid Analysis API key (https://www.hybrid-analysis.com)
-    /// Optional sandbox analysis service
-    /// Free tier: 30 requests/month
-    /// </summary>
-    public string? HybridAnalysis { get; set; }
-
-    /// <summary>
-    /// Intezer API key (https://analyze.intezer.com)
-    /// Optional genetic malware analysis service
-    /// Free tier: 10 requests/month
-    /// </summary>
-    public string? Intezer { get; set; }
-
-    /// <summary>
     /// Returns true if at least one API key is configured
     /// </summary>
     public bool HasAnyKey()
     {
-        return !string.IsNullOrWhiteSpace(VirusTotal) ||
-               !string.IsNullOrWhiteSpace(MetaDefender) ||
-               !string.IsNullOrWhiteSpace(HybridAnalysis) ||
-               !string.IsNullOrWhiteSpace(Intezer);
+        return !string.IsNullOrWhiteSpace(VirusTotal);
     }
 }

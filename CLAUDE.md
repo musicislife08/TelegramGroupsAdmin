@@ -92,7 +92,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 ## Key Implementations
 
-- **API Key Management**: File scanning API keys (VirusTotal, MetaDefender, HybridAnalysis, Intezer) stored encrypted in configs.api_keys (TEXT column, ASP.NET Core Data Protection). ApiKeyMigrationService migrates env vars on first startup. ApiKeyDelegatingHandler dynamically loads keys from database at request time with env var fallback. Settings UI allows editing. Backup/restore auto-handles decryption/re-encryption via [ProtectedData] attribute.
+- **API Key Management**: File scanning API key (VirusTotal) stored encrypted in configs.api_keys (TEXT column, ASP.NET Core Data Protection). ApiKeyMigrationService migrates env vars on first startup. ApiKeyDelegatingHandler dynamically loads keys from database at request time with env var fallback. Settings UI allows editing. Backup/restore auto-handles decryption/re-encryption via [ProtectedData] attribute.
 - **Rate Limiting**: VirusTotal (Polly PartitionedRateLimiter, 4/min), OpenAI (429 detection), both fail-open
 - **Edit Detection**: On edit → message_edits, update messages, re-run spam detection, action if spam
 - **Email Verification**: 24h token (32 random bytes), login blocked until verified (except first Owner)

@@ -19,10 +19,7 @@ public class Tier2QueueCoordinator
     public Tier2QueueCoordinator(
         ILogger<Tier2QueueCoordinator> logger,
         IFileScanningConfigRepository configRepository,
-        VirusTotalScannerService virusTotalScanner,
-        MetaDefenderScannerService metaDefenderScanner,
-        HybridAnalysisScannerService hybridAnalysisScanner,
-        IntezerScannerService intezerScanner)
+        VirusTotalScannerService virusTotalScanner)
     {
         _logger = logger;
         _configRepository = configRepository;
@@ -30,10 +27,7 @@ public class Tier2QueueCoordinator
         // Register all cloud scanners by name
         _cloudScanners = new Dictionary<string, ICloudScannerService>(StringComparer.OrdinalIgnoreCase)
         {
-            ["VirusTotal"] = virusTotalScanner,
-            ["MetaDefender"] = metaDefenderScanner,
-            ["HybridAnalysis"] = hybridAnalysisScanner,
-            ["Intezer"] = intezerScanner
+            ["VirusTotal"] = virusTotalScanner
         };
     }
 

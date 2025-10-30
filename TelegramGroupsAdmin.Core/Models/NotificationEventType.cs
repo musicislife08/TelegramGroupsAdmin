@@ -12,5 +12,6 @@ public enum NotificationEventType
     MessageReported,
     ChatHealthWarning,
     BackupFailed,
-    MalwareDetected
+    MalwareDetected,
+    ChatAdminChanged // Phase 5.2: Notify owners when admins are promoted/demoted
 }

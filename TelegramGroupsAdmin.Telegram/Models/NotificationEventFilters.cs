@@ -15,6 +15,7 @@ public class NotificationEventFilters
     public bool ChatHealthWarning { get; set; } = true;
     public bool BackupFailed { get; set; } = true;
     public bool MalwareDetected { get; set; } = true;
+    public bool ChatAdminChanged { get; set; } = true; // Phase 5.2: Enabled by default for security awareness
 
     /// <summary>
     /// Check if a specific event type should trigger notifications
@@ -30,6 +31,7 @@ public class NotificationEventFilters
             NotificationEventType.ChatHealthWarning => ChatHealthWarning,
             NotificationEventType.BackupFailed => BackupFailed,
             NotificationEventType.MalwareDetected => MalwareDetected,
+            NotificationEventType.ChatAdminChanged => ChatAdminChanged,
             _ => false
         };
     }
