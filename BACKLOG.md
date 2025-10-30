@@ -10,19 +10,6 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ## Feature Backlog
 
-### SECURITY-1: Git History Sanitization (Pre-Open Source)
-
-**Priority:** CRITICAL - Blocking for GitHub migration
-**Impact:** launchSettings.json with secrets in 10+ commits
-
-**Actions:**
-1. Use BFG Repo-Cleaner to purge launchSettings.json from all history
-2. Audit for other secrets (compose.yml, http-client.private.env.json)
-3. Force push to Gitea, re-clone on dev/prod
-4. Add pre-commit hooks (detect-secrets or git-secrets)
-
----
-
 ### SECURITY-3: CSRF Protection on API Endpoints
 
 **Priority:** MEDIUM
@@ -230,6 +217,76 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ---
 
+### FEATURE-5.3: Migrate API Keys to Database with UI Management
+
+**Priority:** HIGH - Better architecture, removes env var dependency
+**Impact:** All API keys managed via encrypted database storage with full UI controls
+
+**Architecture Changes:**
+
+**Encrypted Secrets (`configs.api_keys` JSONB):**
+- OpenAI API Key
+- VirusTotal API Key
+- SendGrid API Key
+- Telegram Bot Token
+
+**Plain Config (separate JSONB columns):**
+- `sendgrid_config`: {FromEmail, FromName, Enabled}
+- `telegram_config`: Already exists, just add UI
+- `openai_config`: {MaxTokens, AvailableModels[]} - global settings
+- Per-chat: Model selection in spam_detection_config (dropdown from cached models)
+
+**OpenAI Model Management:**
+- Store cached model list in `openai_config.AvailableModels`
+- "Refresh Model List" button calls OpenAI `/v1/models` API
+- Filter to chat models only (gpt-*, exclude embeddings/whisper)
+- Pre-seed with current models: gpt-4o, gpt-4o-mini, gpt-3.5-turbo, gpt-4-turbo
+- Per-chat model selection from cached list (no code changes for new models)
+
+**Settings UI Reorganization:**
+1. **System → Integrations** (infrastructure secrets + config):
+   - SendGrid: API Key (encrypted), FromEmail, FromName, Enabled toggle
+   - Telegram Bot: Token (encrypted)
+
+2. **Protection → External Services** (spam/security):
+   - OpenAI: API Key (encrypted), MaxTokens, Refresh Models button
+   - VirusTotal: API Key (encrypted)
+
+**All fields editable with show/hide toggles for secrets**
+
+**Migration Strategy:** Option B - DB-only, no env var migration
+- Remove `ApiKeyMigrationService`
+- Remove env var fallback from `ApiKeyDelegatingHandler`
+- Features disabled until configured via UI
+- Fresh installs: configure via UI only
+
+**Result:** Clean separation of secrets/config, no env var complexity, UI-driven configuration
+
+---
+
+### REFACTOR-7: Remove Unused File Scanning Services
+
+**Priority:** MEDIUM - Code cleanup
+**Impact:** Reduces maintenance burden, simplifies file scanning architecture
+
+**Context:** Currently support 4 cloud file scanning services (VirusTotal, MetaDefender, HybridAnalysis, Intezer). VirusTotal is industry standard and sufficient for our needs.
+
+**Tasks:**
+1. Delete scanner service classes: MetaDefenderScannerService, HybridAnalysisScannerService, IntezerScannerService
+2. Delete config classes: MetaDefenderConfig, HybridAnalysisConfig, IntezerConfig
+3. Update Tier2QueueCoordinator - remove 3 services from constructor/dictionary
+4. Update ServiceCollectionExtensions - remove DI registrations
+5. Update ApiKeyDelegatingHandler - remove key loading
+6. Update ApiKeyMigrationService - remove migration logic
+7. Update ApiKeysConfig - remove properties
+8. Update Tier2Config - update CloudQueuePriority defaults to only ["VirusTotal"]
+9. Consider FileScanQuotaRecord - remove columns (may need migration)
+10. Update docs (CLAUDE.md, FILE_SCANNING.md)
+
+**Result:** Single VirusTotal integration for file scanning, cleaner codebase
+
+---
+
 ### DEPLOY-1: Docker Compose Simplicity Validation
 
 **Priority:** HIGH - Blocking for GitHub migration
@@ -308,6 +365,37 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ---
 
+### FEATURE-5.4: OpenAI Moderation API for Content Safety (Post-Open Source)
+
+**Priority:** VERY LOW - Post-open source, community-focused feature
+**Impact:** Optional content safety layer for groups with strict moderation policies
+
+**Context:** OpenAI Moderation API (`/v1/moderations`) is FREE and detects content policy violations (violence, hate speech, harassment, self-harm, sexual content) across 40 languages with 95% accuracy. This is NOT for spam detection - it's for content safety/community guidelines enforcement.
+
+**Key Design Principles:**
+
+- **Always runs on ALL messages** (trusted users, admins, everyone) - content safety is universal
+- **Human-in-the-loop required** - Results go to manual review queue, never auto-ban
+- **Context-aware** - AI moderation can be heavy-handed; groups have different norms (gaming communities vs. professional groups)
+- **Opt-in per chat** - Disabled by default, admins explicitly enable for their community standards
+
+**Architecture:**
+
+1. New check: `OpenAIModerationCheck` (separate from spam detection pipeline)
+2. Configuration: `ModerationConfig` with per-category thresholds (violence, hate, harassment, etc.)
+3. Review queue: New "Content Safety" tab showing flagged messages with category scores
+4. Per-chat toggle: Settings → Chat Moderation → "Enable Content Safety Review"
+
+**Use Cases:**
+
+- Family-friendly communities (detect inappropriate content)
+- Professional groups (workplace harassment detection)
+- Educational communities (prevent bullying)
+- Gaming groups with strict codes of conduct
+
+**Why Post-Open Source:** Community-driven feature - different groups have vastly different moderation philosophies. Better to gather feedback from real users before building.
+
+---
 
 ## Bugs
 
@@ -316,6 +404,8 @@ This document tracks technical debt, performance optimizations, refactoring work
 ---
 
 ## Completed Work
+
+**2025-10-30**: SECURITY-1 (Git history sanitization complete - BFG purged launchSettings.json + http-client.private.env.json + examples/compose.*.yml from 660 commits, 11 old unencrypted backups deleted, pre-commit hook with 8 secret patterns installed, .gitignore enhanced with 20+ secret file patterns, .git reduced to 3.3MB)
 
 **2025-10-29**: SECURITY-5 (Settings page authorization bypass fixed - GlobalAdminOrOwner policy + Owner-only infrastructure checks), SECURITY-6 (User management permission checks - GlobalAdmin can manage users, escalation prevention), cSpell configuration (29 domain terms, 0 spell warnings), Interface splits (3 files: WelcomeResponsesRepository, BotProtectionService, WelcomeService), REFACTOR-6 (ModelMappings 884 lines → 26 files in Mappings/ subdirectory, 69 files changed)
 
