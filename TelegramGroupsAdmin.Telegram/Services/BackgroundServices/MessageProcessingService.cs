@@ -552,15 +552,22 @@ public partial class MessageProcessingService(
                 await jobScheduler.ScheduleUserPhotoFetchAsync(message.MessageId, message.From.Id, cancellationToken);
             }
 
-            // REFACTOR-2: Automatic spam detection using SpamDetectionOrchestrator
-            // Skip spam detection for command messages (already processed by CommandRouter)
-            if (commandResult == null && !string.IsNullOrWhiteSpace(text))
+            // REFACTOR-2: Automatic content detection using ContentDetectionOrchestrator
+            // Skip content detection for command messages (already processed by CommandRouter)
+            // Run content detection if message has text OR images (image-only spam detection)
+            if (commandResult == null && (!string.IsNullOrWhiteSpace(text) || photoLocalPath != null))
             {
                 _ = Task.Run(async () =>
                 {
                     using var detectionScope = serviceProvider.CreateScope();
-                    var spamOrchestrator = detectionScope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.SpamDetectionOrchestrator>();
-                    await spamOrchestrator.RunDetectionAsync(botClient, message, text, editVersion: 0, CancellationToken.None);
+                    var contentOrchestrator = detectionScope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.ContentDetectionOrchestrator>();
+                    await contentOrchestrator.RunDetectionAsync(
+                        botClient,
+                        message,
+                        text,
+                        photoLocalPath,
+                        editVersion: 0,
+                        CancellationToken.None);
                 }, CancellationToken.None);
             }
         }

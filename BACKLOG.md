@@ -191,6 +191,45 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ---
 
+### ML-5: ML-Based Image Spam Detection
+
+**Priority:** HIGH - Addresses growing image-only spam trend
+**Impact:** Pre-filter image spam before expensive OpenAI Vision API calls
+
+**Context:** Spammers increasingly use image-only messages to evade text-based filters. Currently all images hit OpenAI Vision ($0.01/image). Image spam is growing trend in production groups.
+
+**Feature:** Build ML classifier trained on manual image spam labels to pre-filter obvious spam/ham before OpenAI:
+
+1. **Training Data Architecture (Option 3 from analysis):**
+   - New table: `image_training_samples (id, message_id, photo_path, is_spam, marked_by_user_id, created_at)`
+   - Populate from `/spam` command on image messages (currently excluded from text training)
+   - Track manual classifications via Messages UI "Mark as Spam/Ham" buttons
+
+2. **ML Model Approach:**
+   - Start with simple perceptual hash + metadata features (file size, aspect ratio, color distribution)
+   - Upgrade to image embedding model (ResNet, CLIP) if needed
+   - Train binary classifier (spam/ham) with confidence scores
+   - Fall back to OpenAI Vision for borderline cases (confidence <80%)
+
+3. **Implementation Phases:**
+   - Phase 1: Create `image_training_samples` table and populate via moderation actions
+   - Phase 2: Implement minimum sample threshold check (e.g., 50 spam + 50 ham before enabling)
+   - Phase 3: Build training pipeline and ML check integration
+   - Phase 4: Add confidence threshold tuning UI
+
+4. **Performance Goals:**
+   - 70% reduction in OpenAI Vision API calls
+   - <100ms inference time (local model)
+   - >90% accuracy on obvious spam/ham (let OpenAI handle edge cases)
+
+**Open Questions:**
+- Minimum training samples threshold? (50 spam + 50 ham suggested)
+- Model refresh interval? (daily? weekly? on-demand?)
+- Feature extraction: Perceptual hash vs embeddings vs both?
+- Deployment: ONNX model in container vs external inference service?
+
+---
+
 ### DEPLOY-1: Docker Compose Simplicity Validation
 
 **Priority:** HIGH - Blocking for GitHub migration

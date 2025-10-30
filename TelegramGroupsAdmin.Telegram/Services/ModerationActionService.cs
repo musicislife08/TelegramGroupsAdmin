@@ -99,7 +99,11 @@ public class ModerationActionService
             // 2. Mark message as deleted in database
             await _messageHistoryRepository.MarkMessageAsDeletedAsync(messageId, "spam_action");
 
-            // 3. Create detection result (manual spam classification)
+            // 3. Check if message has text (skip training for image-only spam)
+            var message = await _messageHistoryRepository.GetMessageAsync(messageId, cancellationToken);
+            var hasText = !string.IsNullOrWhiteSpace(message?.MessageText);
+
+            // 4. Create detection result (manual spam classification)
             var detectionResult = new DetectionResultRecord
             {
                 MessageId = messageId,
@@ -111,18 +115,18 @@ public class ModerationActionService
                 Reason = reason,
                 AddedBy = executor,
                 UserId = userId,
-                UsedForTraining = true, // Manual decisions are always training-worthy
+                UsedForTraining = hasText, // Only use text messages for training (image-only spam excluded)
                 NetConfidence = 100, // Strong spam signal (manual admin decision)
                 CheckResultsJson = null,
                 EditVersion = 0
             };
             await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
 
-            // 4. Remove any existing trust actions (compromised account protection)
+            // 5. Remove any existing trust actions (compromised account protection)
             await _userActionsRepository.ExpireTrustsForUserAsync(userId, chatId: null, cancellationToken);
             result.TrustRemoved = true;
 
-            // 5. Ban user globally across all managed chats (PERF-TG-2: parallel execution with concurrency limit)
+            // 6. Ban user globally across all managed chats (PERF-TG-2: parallel execution with concurrency limit)
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 

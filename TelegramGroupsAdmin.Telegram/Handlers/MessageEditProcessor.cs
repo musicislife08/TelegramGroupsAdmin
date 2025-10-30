@@ -191,8 +191,8 @@ public class MessageEditProcessor
                     ? existingResults.Max(r => r.EditVersion)
                     : 0;
 
-                var spamOrchestrator = scope.ServiceProvider.GetRequiredService<SpamDetectionOrchestrator>();
-                await spamOrchestrator.RunDetectionAsync(botClient, editedMessage, newText, editVersion: maxEditVersion + 1, CancellationToken.None);
+                var contentOrchestrator = scope.ServiceProvider.GetRequiredService<ContentDetectionOrchestrator>();
+                await contentOrchestrator.RunDetectionAsync(botClient, editedMessage, newText, photoLocalPath: null, editVersion: maxEditVersion + 1, CancellationToken.None);
             }
             catch (Exception ex)
             {

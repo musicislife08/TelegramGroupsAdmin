@@ -56,7 +56,7 @@ public static class ServiceCollectionExtensions
         // REFACTOR-2: Additional handlers for image processing and job scheduling
         services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.ImageProcessingHandler>();
         services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.BackgroundJobScheduler>();
-        services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.SpamDetectionOrchestrator>();
+        services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.ContentDetectionOrchestrator>();
         services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.LanguageWarningHandler>();
         services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.MessageEditProcessor>();
 

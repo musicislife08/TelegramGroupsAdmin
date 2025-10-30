@@ -15,19 +15,19 @@ using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
 /// <summary>
-/// Orchestrates spam detection workflow for messages.
+/// Orchestrates content detection workflow for messages.
 /// Coordinates content checks, critical violations, detection result storage, auto-trust, and spam actions.
 /// </summary>
-public class SpamDetectionOrchestrator
+public class ContentDetectionOrchestrator
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly SpamActionService _spamActionService;
-    private readonly ILogger<SpamDetectionOrchestrator> _logger;
+    private readonly ILogger<ContentDetectionOrchestrator> _logger;
 
-    public SpamDetectionOrchestrator(
+    public ContentDetectionOrchestrator(
         IServiceProvider serviceProvider,
         SpamActionService spamActionService,
-        ILogger<SpamDetectionOrchestrator> logger)
+        ILogger<ContentDetectionOrchestrator> logger)
     {
         _serviceProvider = serviceProvider;
         _spamActionService = spamActionService;
@@ -41,7 +41,8 @@ public class SpamDetectionOrchestrator
     public async Task RunDetectionAsync(
         ITelegramBotClient botClient,
         Message message,
-        string text,
+        string? text,
+        string? photoLocalPath,
         int editVersion,
         CancellationToken cancellationToken = default)
     {
@@ -50,17 +51,36 @@ public class SpamDetectionOrchestrator
             using var scope = _serviceProvider.CreateScope();
             var coordinator = scope.ServiceProvider.GetRequiredService<IContentCheckCoordinator>();
             var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
+            var historyOptions = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TelegramGroupsAdmin.Configuration.MessageHistoryOptions>>();
 
             // Build spam detection request
-            var request = new ContentCheckRequest
+            Stream? imageStream = null;
+            try
             {
-                Message = text,
-                UserId = message.From?.Id ?? 0,
-                UserName = message.From?.Username,
-                ChatId = message.Chat.Id
-            };
+                // If photo exists, read from disk for OpenAI Vision analysis
+                if (!string.IsNullOrEmpty(photoLocalPath))
+                {
+                    var fullPath = Path.Combine(historyOptions.Value.ImageStoragePath, "media", photoLocalPath);
+                    if (File.Exists(fullPath))
+                    {
+                        imageStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Photo file not found for spam detection: {PhotoPath}", fullPath);
+                    }
+                }
 
-            var result = await coordinator.CheckAsync(request, cancellationToken);
+                var request = new ContentCheckRequest
+                {
+                    Message = text ?? "", // Empty string for image-only messages
+                    UserId = message.From?.Id ?? 0,
+                    UserName = message.From?.Username,
+                    ChatId = message.Chat.Id,
+                    ImageData = imageStream
+                };
+
+                var result = await coordinator.CheckAsync(request, cancellationToken);
 
             // Phase 4.14: Handle critical check violations FIRST (before regular spam)
             // Critical violations apply to ALL users (trusted/admin included)
@@ -119,10 +139,19 @@ public class SpamDetectionOrchestrator
                     detectionResult,
                     cancellationToken);
             }
+            }
+            finally
+            {
+                // Clean up image stream
+                if (imageStream != null)
+                {
+                    await imageStream.DisposeAsync();
+                }
+            }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to run spam detection for message {MessageId}", message.MessageId);
+            _logger.LogError(ex, "Failed to run content detection for message {MessageId}", message.MessageId);
         }
     }
 
