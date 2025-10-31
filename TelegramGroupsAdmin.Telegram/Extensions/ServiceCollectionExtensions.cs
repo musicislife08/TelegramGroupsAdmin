@@ -43,6 +43,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPromptVersionRepository, PromptVersionRepository>(); // Phase 4.X: AI-powered prompt builder
         services.AddScoped<IThresholdRecommendationsRepository, ThresholdRecommendationsRepository>(); // ML.NET threshold optimization
         services.AddScoped<IImageTrainingSamplesRepository, ImageTrainingSamplesRepository>(); // ML-5: Image spam training samples
+        services.AddScoped<IVideoTrainingSamplesRepository, VideoTrainingSamplesRepository>(); // ML-6: Video spam training samples
 
         // Telegram infrastructure
         services.AddSingleton<TelegramBotClientFactory>();

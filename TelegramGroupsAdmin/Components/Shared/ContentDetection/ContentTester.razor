@@ -73,23 +73,23 @@
                 Immediate="true" />
         </MudItem>
 
-        <!-- Image Upload -->
+        <!-- Media Upload (Images + Videos) -->
         <MudItem xs="12">
-            <MudText Typo="Typo.subtitle2" Class="mb-2">Image (optional)</MudText>
-            <MudFileUpload T="IBrowserFile" Accept="image/*" @bind-Files="_selectedImage" MaximumFileCount="1">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Media (optional)</MudText>
+            <MudFileUpload T="IBrowserFile" Accept="image/*,video/mp4,video/webm,video/quicktime,video/x-msvideo,video/x-matroska" @bind-Files="_selectedMedia" MaximumFileCount="1">
                 <ActivatorContent>
                     <MudButton HtmlTag="label"
                                Variant="Variant.Outlined"
                                Color="Color.Primary"
                                StartIcon="@Icons.Material.Filled.CloudUpload">
-                        Upload Image or Paste (Ctrl+V)
+                        Upload Image/Video or Paste (Ctrl+V)
                     </MudButton>
                 </ActivatorContent>
             </MudFileUpload>
-            @if (_selectedImage != null)
+            @if (_selectedMedia != null)
             {
-                <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.Image" OnClose="ClearImage" Class="mt-2">
-                    @_selectedImage.Name (@FormatFileSize(_selectedImage.Size))
+                <MudChip T="string" Color="Color.Success" Icon="@GetMediaIcon(_selectedMedia.ContentType)" OnClose="ClearMedia" Class="mt-2">
+                    @_selectedMedia.Name (@FormatFileSize(_selectedMedia.Size)) • @GetMediaType(_selectedMedia.ContentType)
                 </MudChip>
             }
             @if (_pastedImageData?.Length > 0)
@@ -98,6 +98,9 @@
                     Pasted image (@FormatFileSize(_pastedImageData.Length))
                 </MudChip>
             }
+            <MudText Typo="Typo.caption" Class="mt-1">
+                Supports: Images (JPG, PNG, GIF, WebP), Videos (MP4, WebM, MOV, AVI, MKV)
+            </MudText>
         </MudItem>
 
         <!-- File Upload -->
@@ -359,7 +362,7 @@
     private string _messageText = string.Empty;
     private string? _userId;
     private string? _userName;
-    private IBrowserFile? _selectedImage;
+    private IBrowserFile? _selectedMedia; // Changed from _selectedImage to support both images and videos
     private byte[]? _pastedImageData;
     private IBrowserFile? _selectedFile;
     private bool _isRunning;
@@ -426,7 +429,7 @@
     private bool HasContent()
     {
         return !string.IsNullOrWhiteSpace(_messageText) ||
-               _selectedImage != null ||
+               _selectedMedia != null ||
                _pastedImageData != null ||
                _selectedFile != null;
     }
@@ -442,38 +445,59 @@
         _isRunning = true;
         _result = null;
 
-        // Track temp file for cleanup
+        // Track temp files for cleanup
         string? tempImagePath = null;
+        string? tempVideoPath = null;
 
         try
         {
-            // Prepare image stream (uploaded or pasted)
+            // Prepare media stream (uploaded or pasted)
             Stream? imageStream = null;
             string? imageFileName = null;
+            bool isVideo = false;
 
-            if (_selectedImage != null)
+            if (_selectedMedia != null)
             {
-                imageStream = _selectedImage.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024); // 10MB
-                imageFileName = _selectedImage.Name;
+                // Determine if this is a video or image based on MIME type
+                isVideo = IsVideoFile(_selectedMedia.ContentType, _selectedMedia.Name);
+
+                var maxSize = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024; // 50MB for video, 10MB for image
+                imageStream = _selectedMedia.OpenReadStream(maxAllowedSize: maxSize);
+                imageFileName = _selectedMedia.Name;
             }
             else if (_pastedImageData != null)
             {
                 imageStream = new MemoryStream(_pastedImageData);
                 imageFileName = "pasted-image.png";
+                isVideo = false;
             }
 
-            // ML-5: Save image to temp file for OCR + hash similarity
+            // Save media to temp file for processing (ML-5 for images, ML-6 for videos)
             if (imageStream != null)
             {
-                tempImagePath = Path.Combine(Path.GetTempPath(), $"tester_{Guid.NewGuid()}.png");
-                using (var fileStream = File.Create(tempImagePath))
+                if (isVideo)
                 {
-                    await imageStream.CopyToAsync(fileStream);
+                    // ML-6: Save video to temp file for frame extraction
+                    var extension = Path.GetExtension(imageFileName) ?? ".mp4";
+                    tempVideoPath = Path.Combine(Path.GetTempPath(), $"tester_{Guid.NewGuid()}{extension}");
+                    using (var fileStream = File.Create(tempVideoPath))
+                    {
+                        await imageStream.CopyToAsync(fileStream);
+                    }
                 }
-                // Reset stream position for potential ImageData usage
-                if (imageStream.CanSeek)
+                else
                 {
-                    imageStream.Seek(0, SeekOrigin.Begin);
+                    // ML-5: Save image to temp file for OCR + hash similarity
+                    tempImagePath = Path.Combine(Path.GetTempPath(), $"tester_{Guid.NewGuid()}.png");
+                    using (var fileStream = File.Create(tempImagePath))
+                    {
+                        await imageStream.CopyToAsync(fileStream);
+                    }
+                    // Reset stream position for potential ImageData usage
+                    if (imageStream.CanSeek)
+                    {
+                        imageStream.Seek(0, SeekOrigin.Begin);
+                    }
                 }
             }
 
@@ -483,15 +507,19 @@
             // Build request - same structure as MessageProcessingService uses
             var request = new ContentCheckRequest
             {
-                Message = _messageText ?? string.Empty, // Empty string for image-only tests
+                Message = _messageText ?? string.Empty, // Empty string for media-only tests
                 UserId = string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId),
                 UserName = _userName,
                 ChatId = _selectedChatId ?? 0, // 0 = global config
-                ImageData = imageStream,
-                ImageFileName = imageFileName,
+                ImageData = isVideo ? null : imageStream, // Only for images
+                ImageFileName = isVideo ? null : imageFileName,
                 PhotoLocalPath = tempImagePath, // ML-5: Enable OCR + hash similarity layers
+                VideoLocalPath = tempVideoPath, // ML-6: Enable video spam detection
                 Urls = urls
             };
+
+            // Debug logging
+            Console.WriteLine($"[ContentTester] isVideo={isVideo}, tempVideoPath={tempVideoPath}, tempImagePath={tempImagePath}");
 
             // Call the SAME coordinator that real messages use
             _result = await ContentCheckCoordinator.CheckAsync(request, CancellationToken.None);
@@ -534,6 +562,19 @@
                     Console.WriteLine($"Failed to delete temp image: {ex.Message}");
                 }
             }
+
+            // Cleanup temp video file (ML-6)
+            if (!string.IsNullOrEmpty(tempVideoPath) && File.Exists(tempVideoPath))
+            {
+                try
+                {
+                    File.Delete(tempVideoPath);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to delete temp video: {ex.Message}");
+                }
+            }
         }
     }
 
@@ -563,9 +604,9 @@
         StateHasChanged();
     }
 
-    private void ClearImage()
+    private void ClearMedia()
     {
-        _selectedImage = null;
+        _selectedMedia = null;
         StateHasChanged();
     }
 
@@ -609,6 +650,45 @@
             ".exe" or ".dll" => Icons.Material.Filled.WarningAmber,
             _ => Icons.Material.Filled.InsertDriveFile
         };
+    }
+
+    private bool IsVideoFile(string contentType, string fileName)
+    {
+        // Check MIME type first
+        if (contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Fallback to file extension check
+        var ext = Path.GetExtension(fileName).ToLower();
+        return ext is ".mp4" or ".webm" or ".mov" or ".avi" or ".mkv" or ".wmv" or ".flv" or ".m4v";
+    }
+
+    private string GetMediaIcon(string contentType)
+    {
+        if (contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+        {
+            return Icons.Material.Filled.VideoFile;
+        }
+        else if (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return Icons.Material.Filled.Image;
+        }
+        return Icons.Material.Filled.InsertDriveFile;
+    }
+
+    private string GetMediaType(string contentType)
+    {
+        if (contentType.StartsWith("video/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Video";
+        }
+        else if (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Image";
+        }
+        return "Unknown";
     }
 
     public void Dispose()

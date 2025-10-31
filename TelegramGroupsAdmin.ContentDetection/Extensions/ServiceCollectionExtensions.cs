@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ITokenizerService, TokenizerService>();
         services.AddScoped<IOpenAITranslationService, OpenAITranslationService>();
         services.AddScoped<IImageTextExtractionService, ImageTextExtractionService>(); // ML-5: OCR service
+        services.AddScoped<IVideoFrameExtractionService, VideoFrameExtractionService>(); // ML-6: FFmpeg frame extraction
         // NOTE: IMessageHistoryService is registered by the main app (TelegramAdminBotService implements it)
 
         // Register repositories (needed by engine for config)
@@ -44,6 +45,9 @@ public static class ServiceCollectionExtensions
 
         // Register image training samples repository (ML-5: Layer 2 hash similarity)
         services.AddScoped<IImageTrainingSamplesRepository, ImageTrainingSamplesRepository>();
+
+        // Register video training samples repository (ML-6: Layer 2 hash similarity)
+        services.AddScoped<IVideoTrainingSamplesRepository, VideoTrainingSamplesRepository>();
 
         // Register URL filtering services (Phase 4.13)
         services.AddScoped<IBlocklistSyncService, BlocklistSyncService>();
@@ -78,6 +82,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IContentCheck, Checks.ThreatIntelSpamCheck>();
         services.AddScoped<IContentCheck, Checks.SeoScrapingSpamCheck>();
         services.AddScoped<IContentCheck, Checks.ImageSpamCheck>();
+        services.AddScoped<IContentCheck, Checks.VideoSpamCheck>();  // ML-6: Video spam detection
         services.AddScoped<IContentCheck, Checks.FileScanningCheck>();  // Phase 4.17: File scanning (always_run=true)
 
         // Register HTTP client for external API calls

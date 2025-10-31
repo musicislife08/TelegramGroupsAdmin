@@ -28,11 +28,15 @@
                     {
                         <MudNavLink Href="/settings/system/accounts" Icon="@Icons.Material.Filled.ManageAccounts" Match="NavLinkMatch.All">Admin Accounts</MudNavLink>
                     }
+                    @if (_canEditInfrastructure)
+                    {
+                        <MudNavLink Href="/settings/system/external-services" Icon="@Icons.Material.Filled.Extension" Match="NavLinkMatch.All">External Services</MudNavLink>
+                    }
                     <MudNavLink Href="/settings/system/logging" Icon="@Icons.Material.Filled.Terminal" Match="NavLinkMatch.All">Logging</MudNavLink>
                     @if (_canEditInfrastructure)
                     {
                         <MudNavLink Href="/settings/system/background-jobs" Icon="@Icons.Material.Filled.Schedule" Match="NavLinkMatch.All">Background Jobs</MudNavLink>
-                        <MudNavLink Href="/settings/system/backup" Icon="@Icons.Material.Filled.Backup" Match="NavLinkMatch.All">Backup & Restore</MudNavLink>
+                        <MudNavLink Href="/settings/system/backup-config" Icon="@Icons.Material.Filled.Backup" Match="NavLinkMatch.All">Backup Configuration</MudNavLink>
                     }
                 </MudNavGroup>
 
@@ -40,31 +44,24 @@
                 <MudNavGroup Title="Telegram" Icon="@Icons.Material.Filled.SmartToy" Expanded="@_telegramExpanded" ExpandedChanged="@((bool expanded) => _telegramExpanded = expanded)">
                     @if (_canEditInfrastructure)
                     {
-                        <MudNavLink Href="/settings/telegram/bot" Icon="@Icons.Material.Filled.Settings" Match="NavLinkMatch.All">Bot Connection</MudNavLink>
+                        <MudNavLink Href="/settings/telegram/bot-config" Icon="@Icons.Material.Filled.Settings" Match="NavLinkMatch.All">Bot Configuration</MudNavLink>
                     }
                     <MudNavLink Href="/settings/telegram/notifications" Icon="@Icons.Material.Filled.Notifications" Match="NavLinkMatch.All">Notifications</MudNavLink>
                 </MudNavGroup>
 
-                <!-- Protection Group -->
-                <MudNavGroup Title="Protection" Icon="@Icons.Material.Filled.Shield" Expanded="@_protectionExpanded" ExpandedChanged="@((bool expanded) => _protectionExpanded = expanded)">
-                    <MudNavLink Href="/settings/protection/content-detection" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">Content Detection</MudNavLink>
-                    <MudNavLink Href="/settings/protection/external" Icon="@Icons.Material.Filled.CloudSync" Match="NavLinkMatch.All">External Services</MudNavLink>
-                    <MudNavLink Href="/settings/protection/url-filters" Icon="@Icons.Material.Filled.Link" Match="NavLinkMatch.All">URL Filtering</MudNavLink>
-                    <MudNavLink Href="/settings/protection/file-scanning" Icon="@Icons.Material.Filled.Scanner" Match="NavLinkMatch.All">File Scanning</MudNavLink>
+                <!-- Content Detection Group -->
+                <MudNavGroup Title="Content Detection" Icon="@Icons.Material.Filled.Shield" Expanded="@_contentDetectionExpanded" ExpandedChanged="@((bool expanded) => _contentDetectionExpanded = expanded)">
+                    <MudNavLink Href="/settings/content-detection/algorithms" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">Detection Algorithms</MudNavLink>
+                    <MudNavLink Href="/settings/content-detection/tuning" Icon="@Icons.Material.Filled.Insights" Match="NavLinkMatch.All">Algorithm Tuning</MudNavLink>
+                    <MudNavLink Href="/settings/content-detection/external-services-config" Icon="@Icons.Material.Filled.CloudSync" Match="NavLinkMatch.All">External Services Config</MudNavLink>
+                    <MudNavLink Href="/settings/content-detection/url-filters" Icon="@Icons.Material.Filled.Link" Match="NavLinkMatch.All">URL Filtering</MudNavLink>
+                    <MudNavLink Href="/settings/content-detection/file-scanning" Icon="@Icons.Material.Filled.Scanner" Match="NavLinkMatch.All">File Scanning</MudNavLink>
                 </MudNavGroup>
 
-                <!-- Content Management Group -->
-                <MudNavGroup Title="Content Management" Icon="@Icons.Material.Filled.Inventory" Expanded="@_contentMgmtExpanded" ExpandedChanged="@((bool expanded) => _contentMgmtExpanded = expanded)">
-                    <MudNavLink Href="/settings/content/stopwords" Icon="@Icons.Material.Filled.List" Match="NavLinkMatch.All">Stop Words Library</MudNavLink>
-                    <MudNavLink Href="/settings/content/training" Icon="@Icons.Material.Filled.School" Match="NavLinkMatch.All">Training Samples</MudNavLink>
-                    <MudNavLink Href="/settings/content/tags" Icon="@Icons.Material.Filled.Label" Match="NavLinkMatch.All">Tags</MudNavLink>
-                </MudNavGroup>
-
-                <!-- Tools Group -->
-                <MudNavGroup Title="Tools & Testing" Icon="@Icons.Material.Filled.Construction" Expanded="@_toolsExpanded" ExpandedChanged="@((bool expanded) => _toolsExpanded = expanded)">
-                    <MudNavLink Href="/settings/tools/tester" Icon="@Icons.Material.Filled.BugReport" Match="NavLinkMatch.All">Content Tester</MudNavLink>
-                    <MudNavLink Href="/settings/tools/threshold-recommendations" Icon="@Icons.Material.Filled.Insights" Match="NavLinkMatch.All">Threshold Recommendations</MudNavLink>
-                    <MudNavLink Href="/settings/tools/integrations" Icon="@Icons.Material.Filled.Extension" Match="NavLinkMatch.All">Integrations</MudNavLink>
+                <!-- Training Data Group -->
+                <MudNavGroup Title="Training Data" Icon="@Icons.Material.Filled.School" Expanded="@_trainingDataExpanded" ExpandedChanged="@((bool expanded) => _trainingDataExpanded = expanded)">
+                    <MudNavLink Href="/settings/training-data/stopwords" Icon="@Icons.Material.Filled.List" Match="NavLinkMatch.All">Stop Words Library</MudNavLink>
+                    <MudNavLink Href="/settings/training-data/samples" Icon="@Icons.Material.Filled.Dataset" Match="NavLinkMatch.All">Training Samples</MudNavLink>
                 </MudNavGroup>
             </MudNavMenu>
         </MudPaper>
@@ -118,7 +115,17 @@
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
-                        case "backup":
+                        case "external-services":
+                            @if (_canEditInfrastructure)
+                            {
+                                <ExternalServicesSettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
+                            break;
+                        case "backup-config":
                             @if (_canEditInfrastructure)
                             {
                                 <BackupRestore />
@@ -145,7 +152,7 @@
                 case "telegram":
                     @switch (_currentSubSection)
                     {
-                        case "bot":
+                        case "bot-config":
                             @if (_canEditInfrastructure)
                             {
                                 <TelegramBotSettings />
@@ -171,14 +178,17 @@
                     }
                     break;
 
-                // Protection subsections
-                case "protection":
+                // Content Detection subsections
+                case "content-detection":
                     @switch (_currentSubSection)
                     {
-                        case "content-detection":
+                        case "algorithms":
                             <DetectionOverview />
                             break;
-                        case "external":
+                        case "tuning":
+                            <AlgorithmTuning />
+                            break;
+                        case "external-services-config":
                             <ContentDetectionExternal />
                             break;
                         case "url-filters":
@@ -193,40 +203,18 @@
                     }
                     break;
 
-                // Content Management subsections
-                case "content":
+                // Training Data subsections
+                case "training-data":
                     @switch (_currentSubSection)
                     {
                         case "stopwords":
                             <StopWords />
                             break;
-                        case "training":
+                        case "samples":
                             <TrainingData />
-                            break;
-                        case "tags":
-                            <TagManagement />
                             break;
                         default:
                             <StopWords />
-                            break;
-                    }
-                    break;
-
-                // Tools subsections
-                case "tools":
-                    @switch (_currentSubSection)
-                    {
-                        case "tester":
-                            <ContentTester />
-                            break;
-                        case "threshold-recommendations":
-                            <ThresholdRecommendations />
-                            break;
-                        case "integrations":
-                            <IntegrationsSettings />
-                            break;
-                        default:
-                            <ContentTester />
                             break;
                     }
                     break;
@@ -247,9 +235,8 @@
 
     private bool _systemExpanded = false;
     private bool _telegramExpanded = false;
-    private bool _protectionExpanded = false;
-    private bool _contentMgmtExpanded = false;
-    private bool _toolsExpanded = false;
+    private bool _contentDetectionExpanded = false;
+    private bool _trainingDataExpanded = false;
 
     private string _currentSection = "";
     private string _currentSubSection = "";
@@ -278,15 +265,14 @@
 
     private void UpdateCurrentSection()
     {
-        _currentSection = Section?.ToLowerInvariant() ?? "protection";
-        _currentSubSection = SubSection?.ToLowerInvariant() ?? "content-detection";
+        _currentSection = Section?.ToLowerInvariant() ?? "system";
+        _currentSubSection = SubSection?.ToLowerInvariant() ?? "general";
 
         // Auto-expand the appropriate group based on current section
         _systemExpanded = _currentSection == "system";
         _telegramExpanded = _currentSection == "telegram";
-        _protectionExpanded = _currentSection == "protection";
-        _contentMgmtExpanded = _currentSection == "content";
-        _toolsExpanded = _currentSection == "tools";
+        _contentDetectionExpanded = _currentSection == "content-detection";
+        _trainingDataExpanded = _currentSection == "training-data";
 
         // Set page title
         _pageTitle = (_currentSection, _currentSubSection) switch
@@ -295,29 +281,25 @@
             ("system", "general") => "General Settings",
             ("system", "security") => "Security Settings",
             ("system", "accounts") => "Admin Accounts",
+            ("system", "external-services") => "External Services",
             ("system", "logging") => "Logging Settings",
             ("system", "background-jobs") => "Background Jobs",
-            ("system", "backup") => "Backup & Restore",
+            ("system", "backup-config") => "Backup Configuration",
 
             // Telegram
-            ("telegram", "bot") => "Telegram Bot Connection",
+            ("telegram", "bot-config") => "Bot Configuration",
             ("telegram", "notifications") => "Notification Settings",
 
-            // Protection
-            ("protection", "content-detection") => "Content Detection",
-            ("protection", "external") => "External Services",
-            ("protection", "url-filters") => "URL Filtering",
-            ("protection", "file-scanning") => "File Scanning",
+            // Content Detection
+            ("content-detection", "algorithms") => "Detection Algorithms",
+            ("content-detection", "tuning") => "Algorithm Tuning",
+            ("content-detection", "external-services-config") => "External Services Configuration",
+            ("content-detection", "url-filters") => "URL Filtering",
+            ("content-detection", "file-scanning") => "File Scanning",
 
-            // Content Management
-            ("content", "stopwords") => "Stop Words Library",
-            ("content", "training") => "Training Samples",
-            ("content", "tags") => "Tag Management",
-
-            // Tools
-            ("tools", "tester") => "Content Tester",
-            ("tools", "threshold-recommendations") => "Threshold Recommendations",
-            ("tools", "integrations") => "Integration Settings",
+            // Training Data
+            ("training-data", "stopwords") => "Stop Words Library",
+            ("training-data", "samples") => "Training Samples",
 
             _ => "Settings"
         };

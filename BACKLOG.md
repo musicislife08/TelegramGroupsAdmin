@@ -178,85 +178,6 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ---
 
-### ML-6: Video Spam Detection (Frame Extraction + OCR)
-
-**Priority:** HIGH - Emerging spam vector (spammers adapting to image detection)
-**Impact:** Catch wallet/crypto spam videos before they bypass image filters
-
-**Context:** Spammers are now posting short videos (<5 seconds) of crypto wallets/investment schemes to evade image-based detection. These are essentially still images with minimal motion, same content as image spam.
-
-**Proposed Architecture:**
-
-1. **Video Fingerprinting** (Detect duplicates/near-duplicates)
-   - Extract 3-5 keyframes from video (start, middle, end)
-   - Compute perceptual hash (aHash) for each frame
-   - Compare against `video_training_samples` table (similar to image approach)
-   - >95% similarity on any frame → instant label match (spam/ham)
-
-2. **OCR on Video Frames** (Reuse image spam pipeline)
-   - Extract representative frame (middle frame or highest entropy frame)
-   - Run OCR via TesseractOCR (same as ML-5)
-   - Pass extracted text through ContentCheckCoordinator
-   - Detect wallet addresses, investment terms, crypto keywords
-
-3. **Metadata Heuristics** (Supplement detection)
-   - Very short videos (<10 seconds) + no audio = suspicious
-   - Static image videos (low motion score) = likely spam
-   - File size patterns (compressed screenshots exported as video)
-
-4. **OpenAI Vision Fallback** (Uncertain cases)
-   - Only call for borderline cases (same as ML-5 strategy)
-   - Extract 1-2 frames, send to GPT-4o Vision API
-   - Cost: ~$0.01-0.02 per video (2x image cost for 2 frames)
-
-**Database Schema:**
-
-```sql
-CREATE TABLE video_training_samples (
-    id BIGSERIAL PRIMARY KEY,
-    message_id BIGINT NOT NULL UNIQUE REFERENCES messages(id) ON DELETE CASCADE,
-    video_path TEXT NOT NULL,              -- /data/media/...
-    duration_seconds DECIMAL(5,2) NOT NULL,
-    file_size_bytes INT NOT NULL,
-    width INT NOT NULL,
-    height INT NOT NULL,
-    keyframe_hashes JSONB NOT NULL,        -- Array of perceptual hashes for 3-5 keyframes
-    has_audio BOOLEAN NOT NULL,
-    is_spam BOOLEAN NOT NULL,
-    -- Actor System (Phase 4.19)
-    marked_by_web_user_id VARCHAR(450),
-    marked_by_telegram_user_id BIGINT,
-    marked_by_system_identifier VARCHAR(50),
-    marked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT CK_video_training_exclusive_actor CHECK (...)
-);
-```
-
-**Implementation Dependencies:**
-- ✅ ML-5 (Image OCR infrastructure) - reuse TesseractOCR, ContentCheckCoordinator
-- FFmpeg or similar for frame extraction (add to Docker image)
-- Video download already implemented (TelegramMediaService supports Video/VideoNote)
-
-**Performance Goals:**
-- <500ms frame extraction (FFmpeg)
-- <100ms OCR per frame (reuse ML-5 pipeline)
-- 70-90% reduction in OpenAI Vision calls (same as images)
-- Total: <1 second for most videos (vs $0.02 OpenAI cost)
-
-**Training Data Collection:**
-- Extend `/spam` and `/ham` commands to support videos
-- Add UI buttons in Messages page for video labeling
-- Store keyframe hashes for similarity matching
-
-**Open Questions:**
-- How many keyframes optimal? (3 = start/mid/end, vs 5 for better coverage)
-- Motion detection threshold to identify "static videos"?
-- Should we extract audio and check for TTS spam voices? (future enhancement)
-
-**Related:** ML-5 provides the OCR and hash similarity foundation - this extends it to videos
-
----
-
 ### FEATURE-5.3: Migrate API Keys to Database with UI Management
 
 **Priority:** HIGH - Better architecture, removes env var dependency
@@ -445,7 +366,7 @@ CREATE TABLE video_training_samples (
 
 ## Completed Work
 
-**2025-10-30**: ML-5 (Image spam detection - 3-layer system: perceptual hash similarity + OCR text extraction + OpenAI Vision fallback, CLI wrapper for Tesseract with graceful degradation, ImageTextExtractionService with binary auto-detection, ImageTrainingSamplesRepository, database migration 20251030203913, StopWordsSpamCheck OrderBy fix for deterministic Take()), SECURITY-1 (Git history sanitization complete - BFG purged launchSettings.json + http-client.private.env.json + examples/compose.*.yml from 660 commits, 11 old unencrypted backups deleted, pre-commit hook with 8 secret patterns installed, .gitignore enhanced with 20+ secret file patterns, .git reduced to 3.3MB)
+**2025-10-30**: ML-6 (Video spam detection - 3-layer system reusing ML-5 pipeline: keyframe hash similarity + OCR on frames + OpenAI Vision fallback, VideoFrameExtractionService with FFmpeg static binary, smart short video handling, VideoTrainingSamplesRepository, database migration 20251030203913, Dockerfile with FFmpeg 7.0.2 pinned via build arg, 813MB final image), ML-5 (Image spam detection - 3-layer system: perceptual hash similarity + OCR text extraction + OpenAI Vision fallback, CLI wrapper for Tesseract with graceful degradation, ImageTextExtractionService with binary auto-detection, ImageTrainingSamplesRepository, database migration 20251030203913, StopWordsSpamCheck OrderBy fix for deterministic Take()), SECURITY-1 (Git history sanitization complete - BFG purged launchSettings.json + http-client.private.env.json + examples/compose.*.yml from 660 commits, 11 old unencrypted backups deleted, pre-commit hook with 8 secret patterns installed, .gitignore enhanced with 20+ secret file patterns, .git reduced to 3.3MB)
 
 **2025-10-29**: SECURITY-5 (Settings page authorization bypass fixed - GlobalAdminOrOwner policy + Owner-only infrastructure checks), SECURITY-6 (User management permission checks - GlobalAdmin can manage users, escalation prevention), cSpell configuration (29 domain terms, 0 spell warnings), Interface splits (3 files: WelcomeResponsesRepository, BotProtectionService, WelcomeService), REFACTOR-6 (ModelMappings 884 lines → 26 files in Mappings/ subdirectory, 69 files changed)
 

@@ -199,6 +199,19 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
+            CheckName.VideoSpam => new VideoCheckRequest
+            {
+                Message = originalRequest.Message ?? "",
+                UserId = originalRequest.UserId,
+                UserName = originalRequest.UserName,
+                ChatId = originalRequest.ChatId,
+                VideoLocalPath = originalRequest.VideoLocalPath ?? "",
+                CustomPrompt = null, // No config property
+                ConfidenceThreshold = 80, // No config property, using default
+                ApiKey = _openAIOptions.ApiKey,
+                CancellationToken = cancellationToken
+            },
+
             _ => throw new InvalidOperationException($"Unknown check type: {check.CheckName}")
         };
     }
@@ -223,6 +236,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
             CheckName.UrlBlocklist => config.UrlBlocklist.Enabled && request.Urls.Any(),
             CheckName.SeoScraping => config.SeoScraping.Enabled,
             CheckName.ImageSpam => config.ImageSpam.Enabled && (request.ImageData != null || !string.IsNullOrEmpty(request.PhotoFileId) || !string.IsNullOrEmpty(request.PhotoLocalPath)),
+            CheckName.VideoSpam => config.VideoSpam.Enabled && !string.IsNullOrEmpty(request.VideoLocalPath),
             CheckName.FileScanning => true, // Always run file scanning if check exists
             _ => false
         };

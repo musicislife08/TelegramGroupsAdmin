@@ -2,6 +2,14 @@
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @inject ISpamDetectionConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<MudStack Spacing="3" Class="mb-4">
+    <MudAlert Severity="Severity.Info" Dense="true">
+        Configure how content detection algorithms use external services. API keys are managed in
+        <MudLink OnClick="@(() => Navigation.NavigateTo("/settings/system/external-services"))" Style="cursor: pointer;" Color="Color.Primary"><strong>System → External Services</strong></MudLink>.
+    </MudAlert>
+</MudStack>
 
 <MudGrid>
     <MudItem xs="12" md="6">
@@ -12,7 +20,8 @@
                 @if (!_isGlobalView)
                 {
                     <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
-                        <MudSwitch T="bool" @bind-Value="_config.UrlBlocklist.UseGlobal"
+                        <MudSwitch T="bool" Value="_config.UrlBlocklist.UseGlobal"
+                                  ValueChanged="OnUrlUseGlobalChanged"
                                   Label="@(_config.UrlBlocklist.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
                                   Color="@(_config.UrlBlocklist.UseGlobal ? Color.Default : Color.Primary)" />
                     </MudPaper>
@@ -24,14 +33,16 @@
                     var urlCacheHours = (int)urlConfig.CacheDuration.TotalHours;
                 }
 
-                <MudSwitch T="bool" @bind-Value="urlConfig.Enabled"
+                <MudSwitch T="bool" Value="urlConfig.Enabled"
+                          ValueChanged="OnUrlEnabledChanged"
                           Label="Enable URL Blocklist Check"
                           Color="Color.Primary"
                           Disabled="@urlReadOnly" />
 
                 @if (urlConfig.Enabled)
                 {
-                    <MudNumericField @bind-Value="urlCacheHours"
+                    <MudNumericField Value="urlCacheHours"
+                                    ValueChanged="@((int val) => OnUrlCacheHoursChanged(val))"
                                     Label="Cache Duration (hours)"
                                     Min="1" Max="168"
                                     Disabled="@urlReadOnly"
@@ -49,7 +60,8 @@
                 @if (!_isGlobalView)
                 {
                     <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
-                        <MudSwitch T="bool" @bind-Value="_config.ThreatIntel.UseGlobal"
+                        <MudSwitch T="bool" Value="_config.ThreatIntel.UseGlobal"
+                                  ValueChanged="OnThreatUseGlobalChanged"
                                   Label="@(_config.ThreatIntel.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
                                   Color="@(_config.ThreatIntel.UseGlobal ? Color.Default : Color.Primary)" />
                     </MudPaper>
@@ -61,19 +73,22 @@
                     var threatTimeoutSeconds = (int)threatConfig.Timeout.TotalSeconds;
                 }
 
-                <MudSwitch T="bool" @bind-Value="threatConfig.Enabled"
+                <MudSwitch T="bool" Value="threatConfig.Enabled"
+                          ValueChanged="OnThreatEnabledChanged"
                           Label="Enable Threat Intelligence"
                           Color="Color.Primary"
                           Disabled="@threatReadOnly" />
 
                 @if (threatConfig.Enabled)
                 {
-                    <MudSwitch T="bool" @bind-Value="threatConfig.UseVirusTotal"
+                    <MudSwitch T="bool" Value="threatConfig.UseVirusTotal"
+                              ValueChanged="OnThreatUseVirusTotalChanged"
                               Label="Use VirusTotal"
                               Color="Color.Primary"
                               Disabled="@threatReadOnly" />
 
-                    <MudNumericField @bind-Value="threatTimeoutSeconds"
+                    <MudNumericField Value="threatTimeoutSeconds"
+                                    ValueChanged="@((int val) => OnThreatTimeoutChanged(val))"
                                     Label="Timeout (seconds)"
                                     Min="5" Max="60"
                                     Disabled="@threatReadOnly"
@@ -91,7 +106,8 @@
                 @if (!_isGlobalView)
                 {
                     <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
-                        <MudSwitch T="bool" @bind-Value="_config.SeoScraping.UseGlobal"
+                        <MudSwitch T="bool" Value="_config.SeoScraping.UseGlobal"
+                                  ValueChanged="OnSeoUseGlobalChanged"
                                   Label="@(_config.SeoScraping.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
                                   Color="@(_config.SeoScraping.UseGlobal ? Color.Default : Color.Primary)" />
                     </MudPaper>
@@ -103,14 +119,16 @@
                     var seoTimeoutSeconds = (int)seoConfig.Timeout.TotalSeconds;
                 }
 
-                <MudSwitch T="bool" @bind-Value="seoConfig.Enabled"
+                <MudSwitch T="bool" Value="seoConfig.Enabled"
+                          ValueChanged="OnSeoEnabledChanged"
                           Label="Enable SEO Scraping"
                           Color="Color.Primary"
                           Disabled="@seoReadOnly" />
 
                 @if (seoConfig.Enabled)
                 {
-                    <MudNumericField @bind-Value="seoTimeoutSeconds"
+                    <MudNumericField Value="seoTimeoutSeconds"
+                                    ValueChanged="@((int val) => OnSeoTimeoutChanged(val))"
                                     Label="Timeout (seconds)"
                                     Min="5" Max="30"
                                     Disabled="@seoReadOnly"
@@ -128,7 +146,8 @@
                 @if (!_isGlobalView)
                 {
                     <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
-                        <MudSwitch T="bool" @bind-Value="_config.ImageSpam.UseGlobal"
+                        <MudSwitch T="bool" Value="_config.ImageSpam.UseGlobal"
+                                  ValueChanged="OnImageUseGlobalChanged"
                                   Label="@(_config.ImageSpam.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
                                   Color="@(_config.ImageSpam.UseGlobal ? Color.Default : Color.Primary)" />
                     </MudPaper>
@@ -140,23 +159,72 @@
                     var imageTimeoutSeconds = (int)imageConfig.Timeout.TotalSeconds;
                 }
 
-                <MudSwitch T="bool" @bind-Value="imageConfig.Enabled"
+                <MudSwitch T="bool" Value="imageConfig.Enabled"
+                          ValueChanged="OnImageEnabledChanged"
                           Label="Enable Image Content Detection"
                           Color="Color.Primary"
                           Disabled="@imageReadOnly" />
 
                 @if (imageConfig.Enabled)
                 {
-                    <MudSwitch T="bool" @bind-Value="imageConfig.UseOpenAIVision"
+                    <MudSwitch T="bool" Value="imageConfig.UseOpenAIVision"
+                              ValueChanged="OnImageUseOpenAIVisionChanged"
                               Label="Use OpenAI Vision"
                               Color="Color.Primary"
                               Disabled="@imageReadOnly" />
 
-                    <MudNumericField @bind-Value="imageTimeoutSeconds"
+                    <MudNumericField Value="imageTimeoutSeconds"
+                                    ValueChanged="@((int val) => OnImageTimeoutChanged(val))"
                                     Label="Timeout (seconds)"
                                     Min="10" Max="60"
                                     Disabled="@imageReadOnly"
                                     HelperText="@(imageReadOnly ? $"Using global value: {imageTimeoutSeconds}s" : "Request timeout for image analysis")" />
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4" Elevation="1">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6" Color="Color.Primary">Video Content Detection</MudText>
+
+                @if (!_isGlobalView)
+                {
+                    <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
+                        <MudSwitch T="bool" Value="_config.VideoSpam.UseGlobal"
+                                  ValueChanged="OnVideoUseGlobalChanged"
+                                  Label="@(_config.VideoSpam.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
+                                  Color="@(_config.VideoSpam.UseGlobal ? Color.Default : Color.Primary)" />
+                    </MudPaper>
+                }
+
+                @{
+                    var videoConfig = (_isGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
+                    var videoReadOnly = !_isGlobalView && _config.VideoSpam.UseGlobal;
+                    var videoTimeoutSeconds = (int)videoConfig.Timeout.TotalSeconds;
+                }
+
+                <MudSwitch T="bool" Value="videoConfig.Enabled"
+                          ValueChanged="OnVideoEnabledChanged"
+                          Label="Enable Video Content Detection"
+                          Color="Color.Primary"
+                          Disabled="@videoReadOnly" />
+
+                @if (videoConfig.Enabled)
+                {
+                    <MudSwitch T="bool" Value="videoConfig.UseOpenAIVision"
+                              ValueChanged="OnVideoUseOpenAIVisionChanged"
+                              Label="Use OpenAI Vision"
+                              Color="Color.Primary"
+                              Disabled="@videoReadOnly" />
+
+                    <MudNumericField Value="videoTimeoutSeconds"
+                                    ValueChanged="@((int val) => OnVideoTimeoutChanged(val))"
+                                    Label="Timeout (seconds)"
+                                    Min="10" Max="120"
+                                    Disabled="@videoReadOnly"
+                                    HelperText="@(videoReadOnly ? $"Using global value: {videoTimeoutSeconds}s" : "Request timeout for video analysis")" />
                 }
             </MudStack>
         </MudPaper>
@@ -212,8 +280,175 @@
             _config.ThreatIntel.UseGlobal = true;
             _config.SeoScraping.UseGlobal = true;
             _config.ImageSpam.UseGlobal = true;
+            _config.VideoSpam.UseGlobal = true;
         }
 
         return _config;
+    }
+
+    private bool _isSaving = false;
+
+    private async Task SaveConfiguration()
+    {
+        if (_isSaving) return;
+
+        _isSaving = true;
+        try
+        {
+            // Ensure global configs have UseGlobal=true
+            if (_isGlobalView)
+            {
+                _config.UrlBlocklist.UseGlobal = true;
+                _config.ThreatIntel.UseGlobal = true;
+                _config.SeoScraping.UseGlobal = true;
+                _config.ImageSpam.UseGlobal = true;
+                _config.VideoSpam.UseGlobal = true;
+            }
+
+            if (_isGlobalView)
+            {
+                await ConfigRepository.UpdateGlobalConfigAsync(_config);
+                Snackbar.Add("Global settings saved", Severity.Success);
+            }
+            else
+            {
+                await ConfigRepository.UpdateChatConfigAsync(ChatId!.Value, _config);
+                Snackbar.Add("Chat settings saved", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    // URL Blocklist change handlers
+    private async Task OnUrlUseGlobalChanged(bool value)
+    {
+        _config.UrlBlocklist.UseGlobal = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnUrlEnabledChanged(bool value)
+    {
+        var config = (_isGlobalView || !_config.UrlBlocklist.UseGlobal) ? _config.UrlBlocklist : _globalConfig.UrlBlocklist;
+        config.Enabled = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnUrlCacheHoursChanged(int hours)
+    {
+        var config = (_isGlobalView || !_config.UrlBlocklist.UseGlobal) ? _config.UrlBlocklist : _globalConfig.UrlBlocklist;
+        config.CacheDuration = TimeSpan.FromHours(hours);
+        await SaveConfiguration();
+    }
+
+    // Threat Intelligence change handlers
+    private async Task OnThreatUseGlobalChanged(bool value)
+    {
+        _config.ThreatIntel.UseGlobal = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnThreatEnabledChanged(bool value)
+    {
+        var config = (_isGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
+        config.Enabled = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnThreatUseVirusTotalChanged(bool value)
+    {
+        var config = (_isGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
+        config.UseVirusTotal = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnThreatTimeoutChanged(int seconds)
+    {
+        var config = (_isGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
+        config.Timeout = TimeSpan.FromSeconds(seconds);
+        await SaveConfiguration();
+    }
+
+    // SEO Scraping change handlers
+    private async Task OnSeoUseGlobalChanged(bool value)
+    {
+        _config.SeoScraping.UseGlobal = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnSeoEnabledChanged(bool value)
+    {
+        var config = (_isGlobalView || !_config.SeoScraping.UseGlobal) ? _config.SeoScraping : _globalConfig.SeoScraping;
+        config.Enabled = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnSeoTimeoutChanged(int seconds)
+    {
+        var config = (_isGlobalView || !_config.SeoScraping.UseGlobal) ? _config.SeoScraping : _globalConfig.SeoScraping;
+        config.Timeout = TimeSpan.FromSeconds(seconds);
+        await SaveConfiguration();
+    }
+
+    // Image Content Detection change handlers
+    private async Task OnImageUseGlobalChanged(bool value)
+    {
+        _config.ImageSpam.UseGlobal = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnImageEnabledChanged(bool value)
+    {
+        var config = (_isGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
+        config.Enabled = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnImageUseOpenAIVisionChanged(bool value)
+    {
+        var config = (_isGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
+        config.UseOpenAIVision = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnImageTimeoutChanged(int seconds)
+    {
+        var config = (_isGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
+        config.Timeout = TimeSpan.FromSeconds(seconds);
+        await SaveConfiguration();
+    }
+
+    // Video Content Detection change handlers
+    private async Task OnVideoUseGlobalChanged(bool value)
+    {
+        _config.VideoSpam.UseGlobal = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnVideoEnabledChanged(bool value)
+    {
+        var config = (_isGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
+        config.Enabled = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnVideoUseOpenAIVisionChanged(bool value)
+    {
+        var config = (_isGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
+        config.UseOpenAIVision = value;
+        await SaveConfiguration();
+    }
+
+    private async Task OnVideoTimeoutChanged(int seconds)
+    {
+        var config = (_isGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
+        config.Timeout = TimeSpan.FromSeconds(seconds);
+        await SaveConfiguration();
     }
 }

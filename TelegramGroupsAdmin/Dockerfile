@@ -14,10 +14,12 @@ WORKDIR /src
 # Install build dependencies
 # wget: for health checks (smaller than curl, fewer dependencies)
 # tesseract-ocr, libleptonica-dev: for OCR-based image spam detection (ML-5)
+# xz-utils: for extracting FFmpeg static build archive (ML-6)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     tesseract-ocr \
     libleptonica-dev \
+    xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy solution and project files (for better layer caching)
@@ -42,6 +44,31 @@ COPY . .
 RUN wget -q https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata \
     -O /tmp/eng.traineddata && \
     echo "Downloaded eng.traineddata: $(du -h /tmp/eng.traineddata | cut -f1)"
+
+# Download FFmpeg static build (John Van Sickle's builds - most reliable)
+# ML-6: Video frame extraction for video spam detection
+# Auto-detects architecture: amd64 or arm64
+# Version: Pinned to stable release, update via build arg in CI
+ARG FFMPEG_VERSION=7.0.2
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then \
+        FFMPEG_ARCH="amd64"; \
+    elif [ "$ARCH" = "arm64" ]; then \
+        FFMPEG_ARCH="arm64"; \
+    else \
+        echo "Unsupported architecture: $ARCH" && exit 1; \
+    fi && \
+    echo "Downloading FFmpeg ${FFMPEG_VERSION} for $FFMPEG_ARCH..." && \
+    wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-${FFMPEG_VERSION}-$FFMPEG_ARCH-static.tar.xz \
+        -O /tmp/ffmpeg.tar.xz && \
+    echo "Extracting FFmpeg ${FFMPEG_VERSION}..." && \
+    mkdir -p /tmp/ffmpeg && \
+    tar -xf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg --strip-components=1 && \
+    cp /tmp/ffmpeg/ffmpeg /usr/local/bin/ffmpeg && \
+    cp /tmp/ffmpeg/ffprobe /usr/local/bin/ffprobe && \
+    chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe && \
+    rm -rf /tmp/ffmpeg /tmp/ffmpeg.tar.xz && \
+    echo "FFmpeg installed: $(/usr/local/bin/ffmpeg -version | head -n1)"
 
 # Publish
 WORKDIR /src/TelegramGroupsAdmin
@@ -81,11 +108,18 @@ COPY --from=build /usr/lib/*/libwebp* /usr/lib/
 COPY --from=build /usr/lib/*/libgif* /usr/lib/
 COPY --from=build /usr/lib/*/libopenjp2* /usr/lib/
 # Copy all runtime dependencies to /usr/lib (flattened structure)
+# Includes transitive deps for Tesseract/Leptonica (Pango, Cairo, X11, curl, etc.)
+# ~171MB but ensures all deps are present (Debian's leptonica-progs pulls in libarchive→curl)
 COPY --from=build /usr/lib/*/lib*.so.* /usr/lib/
 
 # Copy Tesseract language data from build stage (ML-5: OCR spam detection)
 # 14.7MB - tessdata_best for better accuracy on compressed spam images
 COPY --from=build --chown=$PUID:$PGID /tmp/eng.traineddata /tessdata/eng.traineddata
+
+# Copy FFmpeg static binaries from build stage (ML-6: Video frame extraction)
+# Static builds = no library dependencies, works in Chiseled runtime
+COPY --from=build /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=build /usr/local/bin/ffprobe /usr/local/bin/ffprobe
 
 # Create non-root user with customizable UID/GID
 # Chiseled images use UID 1654 by default (APP_UID)
@@ -134,6 +168,9 @@ ENTRYPOINT ["dotnet", "TelegramGroupsAdmin.dll"]
 # Build Instructions:
 # docker build -t telegramgroupsadmin:latest -f TelegramGroupsAdmin/Dockerfile .
 #
+# Build with specific FFmpeg version (for rollback or CI version bumps):
+# docker build --build-arg FFMPEG_VERSION=7.0.1 -t telegramgroupsadmin:latest -f TelegramGroupsAdmin/Dockerfile .
+#
 # Run Instructions:
 # docker run -d \
 #   --name telegram-groups-admin \
@@ -151,4 +188,5 @@ ENTRYPOINT ["dotnet", "TelegramGroupsAdmin.dll"]
 # - Read-only filesystem (except /app/data volume)
 # - Diagnostics disabled in production
 # - Single HTTP port exposure (HTTPS via reverse proxy)
+# - FFmpeg version pinned (7.0.2 default, override via build arg)
 # =============================================================================

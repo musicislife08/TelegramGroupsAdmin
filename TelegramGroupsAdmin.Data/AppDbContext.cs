@@ -49,6 +49,7 @@ public class AppDbContext : DbContext
     public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
     public DbSet<ThresholdRecommendationDto> ThresholdRecommendations => Set<ThresholdRecommendationDto>();
     public DbSet<ImageTrainingSampleDto> ImageTrainingSamples => Set<ImageTrainingSampleDto>();
+    public DbSet<VideoTrainingSampleDto> VideoTrainingSamples => Set<VideoTrainingSampleDto>();
 
     // URL filtering tables (Phase 4.13)
     public DbSet<BlocklistSubscriptionDto> BlocklistSubscriptions => Set<BlocklistSubscriptionDto>();
@@ -407,6 +408,19 @@ public class AppDbContext : DbContext
             .HasForeignKey(its => its.MessageId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // VideoTrainingSamples: Exactly one actor must be non-null
+        modelBuilder.Entity<VideoTrainingSampleDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_video_training_exclusive_actor",
+                "(marked_by_web_user_id IS NOT NULL)::int + (marked_by_telegram_user_id IS NOT NULL)::int + (marked_by_system_identifier IS NOT NULL)::int = 1"));
+
+        // VideoTrainingSamples relationships
+        modelBuilder.Entity<VideoTrainingSampleDto>()
+            .HasOne(vts => vts.Message)
+            .WithMany()
+            .HasForeignKey(vts => vts.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // Actor System Foreign Keys (web user, telegram user, system identifier)
         modelBuilder.Entity<ImageTrainingSampleDto>()
             .HasOne<UserRecordDto>()
@@ -605,6 +619,13 @@ public class AppDbContext : DbContext
             .IsUnique();  // One training sample per message
         modelBuilder.Entity<ImageTrainingSampleDto>()
             .HasIndex(its => new { its.IsSpam, its.MarkedAt });  // Filter spam/ham + sort by date
+
+        // VideoTrainingSamples indexes
+        modelBuilder.Entity<VideoTrainingSampleDto>()
+            .HasIndex(vts => vts.MessageId)
+            .IsUnique();  // One training sample per message
+        modelBuilder.Entity<VideoTrainingSampleDto>()
+            .HasIndex(vts => new { vts.IsSpam, vts.MarkedAt });  // Filter spam/ham + sort by date
         // Note: No index on photo_hash - Hamming distance similarity requires full table scan anyway
         // Note: No simple is_spam index - low cardinality boolean, sequential scan is faster
     }
@@ -693,5 +714,9 @@ public class AppDbContext : DbContext
         // Configure image_training_samples table
         modelBuilder.Entity<ImageTrainingSampleDto>()
             .ToTable("image_training_samples");
+
+        // Configure video_training_samples table
+        modelBuilder.Entity<VideoTrainingSampleDto>()
+            .ToTable("video_training_samples");
     }
 }

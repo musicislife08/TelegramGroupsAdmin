@@ -107,4 +107,9 @@ public class SpamDetectionConfig
     /// Image spam detection configuration
     /// </summary>
     public ImageSpamConfig ImageSpam { get; set; } = new();
+
+    /// <summary>
+    /// Video spam detection configuration (ML-6)
+    /// </summary>
+    public VideoSpamConfig VideoSpam { get; set; } = new();
 }

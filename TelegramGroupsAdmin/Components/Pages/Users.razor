@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Components.Shared
+@using TelegramGroupsAdmin.Components.Shared.Settings
 @inject TelegramUserManagementService UserManagementService
 @inject TelegramGroupsAdmin.Services.BlazorAuthHelper AuthHelper
 @inject TelegramGroupsAdmin.Telegram.Repositories.IManagedChatsRepository ManagedChatsRepository
@@ -307,6 +308,10 @@
                     </MudTd>
                 </RowTemplate>
             </MudTable>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Tags" Icon="@Icons.Material.Filled.LocalOffer">
+            <TagManagement />
         </MudTabPanel>
     </MudTabs>
 </MudContainer>

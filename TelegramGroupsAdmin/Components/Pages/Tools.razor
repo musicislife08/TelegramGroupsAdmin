@@ -1,0 +1,21 @@
+@page "/tools"
+@attribute [Authorize(Policy = "GlobalAdminOrOwner")]
+@using TelegramGroupsAdmin.Components.Shared.ContentDetection
+
+<PageTitle>Tools</PageTitle>
+
+<MudText Typo="Typo.h4" GutterBottom="true">Tools</MudText>
+
+<MudStack Spacing="3" Class="mb-4">
+    <MudAlert Severity="Severity.Info" Dense="true">
+        Operational tools for testing and diagnostics. These are not configuration settings - find those in the Settings page.
+    </MudAlert>
+</MudStack>
+
+<MudGrid>
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="1">
+            <ContentTester />
+        </MudPaper>
+    </MudItem>
+</MudGrid>

@@ -17,5 +17,6 @@ public enum CheckName
     UrlBlocklist,
     SeoScraping,
     ImageSpam,
+    VideoSpam,
     FileScanning
 }

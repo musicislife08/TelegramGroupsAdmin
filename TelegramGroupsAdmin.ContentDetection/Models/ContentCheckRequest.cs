@@ -79,4 +79,9 @@ public record ContentCheckRequest
     /// Local file path to downloaded photo (for OCR-based spam detection, ML-5)
     /// </summary>
     public string? PhotoLocalPath { get; init; }
+
+    /// <summary>
+    /// Local file path to downloaded video (for video spam detection, ML-6)
+    /// </summary>
+    public string? VideoLocalPath { get; init; }
 }
