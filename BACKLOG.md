@@ -430,15 +430,6 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ---
 
-### CODE-10: Remove Pre-Release "Legacy" Code
-
-**Priority:** MEDIUM - No users = no legacy
-**Impact:** Code clarity before release
-
-**Remove:** 14 "legacy" code paths across WebApplicationExtensions, ScheduledBackupJob, AuthService, BackupService, Messages.razor, DetectionHistoryDialog, PermissionDialog, SimilaritySpamCheck, ContentDetectionEngine, SpamCheckRecord, ImageViewerDialog, ManagedChatType
-
----
-
 ### CODE-5: Fire-and-Forget Error Handling
 
 **Priority:** MEDIUM
