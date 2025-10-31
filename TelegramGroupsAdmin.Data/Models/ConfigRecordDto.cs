@@ -57,6 +57,14 @@ public class ConfigRecordDto
     public string? BotProtectionConfig { get; set; }
 
     /// <summary>
+    /// Telegram bot service configuration (JSONB)
+    /// Controls whether the bot polling service is active
+    /// GLOBAL ONLY - only used when chat_id = NULL
+    /// </summary>
+    [Column("telegram_bot_config", TypeName = "jsonb")]
+    public string? TelegramBotConfig { get; set; }
+
+    /// <summary>
     /// File scanning configuration (JSONB)
     /// Phase 4.17: File Scanning (ClamAV, YARA, cloud services)
     /// </summary>

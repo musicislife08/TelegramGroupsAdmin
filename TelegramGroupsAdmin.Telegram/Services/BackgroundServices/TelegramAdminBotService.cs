@@ -1,11 +1,13 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -18,7 +20,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 public class TelegramAdminBotService(
     TelegramBotClientFactory botFactory,
     IOptions<TelegramOptions> options,
-    IOptions<MessageHistoryOptions> historyOptions,
+    IServiceScopeFactory scopeFactory,
     CommandRouter commandRouter,
     MessageProcessingService messageProcessingService,
     ChatManagementService chatManagementService,
@@ -27,7 +29,7 @@ public class TelegramAdminBotService(
     : BackgroundService, IMessageHistoryService
 {
     private readonly TelegramOptions _options = options.Value;
-    private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
+    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private ITelegramBotClient? _botClient;
 
     // Events for real-time UI updates (forwarded from child services)
@@ -68,11 +70,18 @@ public class TelegramAdminBotService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Check if Telegram admin bot is enabled
-        if (!_historyOptions.Enabled)
+        // Check if Telegram bot service is enabled (database-driven config)
+        using (var scope = _scopeFactory.CreateScope())
         {
-            logger.LogInformation("Telegram admin bot is disabled (MESSAGEHISTORY__ENABLED=false). Service will not start.");
-            return;
+            var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+            var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
+                           ?? TelegramBotConfig.Default;
+
+            if (!botConfig.BotEnabled)
+            {
+                logger.LogInformation("Telegram bot service is disabled (BotEnabled=false in database config). Service will not start.");
+                return;
+            }
         }
 
         _botClient = botFactory.GetOrCreate(_options.BotToken);
@@ -104,29 +113,83 @@ public class TelegramAdminBotService(
             DropPendingUpdates = true
         };
 
-        try
+        // Reconnection loop with exponential backoff - retries indefinitely during outages
+        const int maxRetryDelay = 60; // Cap at 60 seconds
+
+        while (!stoppingToken.IsCancellationRequested)
         {
-            await botClient.ReceiveAsync(
-                updateHandler: HandleUpdateAsync,
-                errorHandler: HandleErrorAsync,
-                receiverOptions: receiverOptions,
-                cancellationToken: stoppingToken);
-        }
-        catch (OperationCanceledException)
-        {
-            logger.LogInformation("HistoryBot stopped");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "HistoryBot encountered fatal error");
+            try
+            {
+                // If reconnecting after failure, log reconnection attempt
+                if (!_isConnected)
+                {
+                    logger.LogInformation("Attempting to reconnect to Telegram (retry delay: {Delay}s)", _retryDelay.TotalSeconds);
+                }
+
+                await botClient.ReceiveAsync(
+                    updateHandler: HandleUpdateAsync,
+                    errorHandler: HandleErrorAsync,
+                    receiverOptions: receiverOptions,
+                    cancellationToken: stoppingToken);
+
+                // If we reach here, ReceiveAsync ended gracefully (shouldn't happen unless cancelled)
+                logger.LogInformation("Telegram bot polling ended gracefully");
+                break;
+            }
+            catch (OperationCanceledException)
+            {
+                logger.LogInformation("Telegram bot stopped (cancellation requested)");
+                break;
+            }
+            catch (Exception ex)
+            {
+                // Connection lost - log and retry with exponential backoff
+                if (_isConnected)
+                {
+                    logger.LogError(ex, "Telegram bot connection lost - will retry automatically");
+                    _isConnected = false;
+                    _wasRecentlyDisconnected = true;
+                }
+                else
+                {
+                    logger.LogWarning(ex, "Telegram bot reconnection failed - retrying in {Delay}s", _retryDelay.TotalSeconds);
+                }
+
+                // Wait before retrying (exponential backoff, capped at 60s)
+                try
+                {
+                    await Task.Delay(_retryDelay, stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    logger.LogInformation("Telegram bot stopped during reconnection delay");
+                    break;
+                }
+
+                // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 60s (capped)
+                _retryDelay = TimeSpan.FromSeconds(Math.Min(_retryDelay.TotalSeconds * 2, maxRetryDelay));
+            }
         }
     }
+
+    private bool _wasRecentlyDisconnected = false;
+    private TimeSpan _retryDelay = TimeSpan.FromSeconds(1);
+    private bool _isConnected = true;
 
     private async Task HandleUpdateAsync(
         ITelegramBotClient botClient,
         Update update,
         CancellationToken cancellationToken)
     {
+        // Log successful reconnection on first update after disconnect
+        if (_wasRecentlyDisconnected)
+        {
+            logger.LogInformation("Telegram bot reconnected successfully - receiving updates");
+            _wasRecentlyDisconnected = false;
+            _isConnected = true;
+            _retryDelay = TimeSpan.FromSeconds(1);
+        }
+
         // Handle bot's chat member status changes (added/removed from chats)
         if (update.MyChatMember is { } myChatMember)
         {

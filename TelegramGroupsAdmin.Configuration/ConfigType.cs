@@ -38,5 +38,13 @@ public enum ConfigType
     /// Contains: UrlFilterConfig model
     /// Phase 4.13: URL Filtering System
     /// </summary>
-    UrlFilter
+    UrlFilter,
+
+    /// <summary>
+    /// Telegram bot service configuration (telegram_bot_config column)
+    /// Contains: TelegramBotConfig model
+    /// Controls whether the bot polling service is active
+    /// GLOBAL ONLY - not available for per-chat configuration
+    /// </summary>
+    TelegramBot
 }

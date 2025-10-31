@@ -6,10 +6,60 @@
 @inject IConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
 
-<MudPaper Class="pa-4" Elevation="1">
-    <MudText Typo="Typo.h6" GutterBottom="true">General Bot Settings</MudText>
+<!-- Bot Service Control (Global Only) -->
+<MudPaper Class="pa-4 mb-4" Elevation="1">
+    <MudText Typo="Typo.h6" GutterBottom="true">Bot Service Control</MudText>
     <MudText Typo="Typo.body2" Class="mb-4">
-        Configure general bot behavior and protection settings.
+        Enable or disable the Telegram bot polling service. When disabled, the bot stops responding to all updates.
+    </MudText>
+
+    @if (_loadingBotConfig)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_botConfig != null)
+    {
+        <MudGrid>
+            <MudItem xs="12">
+                <MudSwitch @bind-Value="_botConfig.BotEnabled"
+                           Color="Color.Primary"
+                           Label="Enable Telegram Bot Service" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Master switch for the entire bot service (applies globally to all chats)
+                </MudText>
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex justify-start">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="SaveBotConfig"
+                           Disabled="_savingBotConfig">
+                    @if (_savingBotConfig)
+                    {
+                        <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                        <span>Saving...</span>
+                    }
+                    else
+                    {
+                        <span>Save Bot Service Settings</span>
+                    }
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-4">
+            <MudText Typo="Typo.body2">
+                <strong>Note:</strong> Changing this setting requires an application restart for now.
+                Dynamic start/stop will be added in a future update.
+            </MudText>
+        </MudAlert>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4" Elevation="1">
+    <MudText Typo="Typo.h6" GutterBottom="true">Bot Protection Settings</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        Configure bot protection features to prevent unauthorized bots from joining chats.
     </MudText>
 
     @if (_loading)
@@ -161,9 +211,55 @@
     private BotProtectionConfig? _config;
     private string _whitelistText = "";
 
+    // Bot service control
+    private bool _loadingBotConfig = true;
+    private bool _savingBotConfig = false;
+    private TelegramBotConfig? _botConfig;
+
     protected override async Task OnInitializedAsync()
     {
-        await LoadConfig();
+        await Task.WhenAll(LoadConfig(), LoadBotConfig());
+    }
+
+    private async Task LoadBotConfig()
+    {
+        _loadingBotConfig = true;
+        try
+        {
+            // Load global bot config (chat_id = null)
+            _botConfig = await ConfigService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
+                         ?? TelegramBotConfig.Default;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load bot service configuration: {ex.Message}", Severity.Error);
+            _botConfig = TelegramBotConfig.Default;
+        }
+        finally
+        {
+            _loadingBotConfig = false;
+        }
+    }
+
+    private async Task SaveBotConfig()
+    {
+        if (_botConfig == null) return;
+
+        _savingBotConfig = true;
+        try
+        {
+            // Save as global config only (chat_id = null)
+            await ConfigService.SaveAsync(ConfigType.TelegramBot, null, _botConfig);
+            Snackbar.Add("Bot service configuration saved. Restart the application to apply changes.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save bot service configuration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _savingBotConfig = false;
+        }
     }
 
     private async Task LoadConfig()

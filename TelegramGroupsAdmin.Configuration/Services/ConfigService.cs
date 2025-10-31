@@ -197,6 +197,9 @@ public class ConfigService(IConfigRepository configRepository, IMemoryCache cach
             case ConfigType.UrlFilter:
                 record.BotProtectionConfig = json;
                 break;
+            case ConfigType.TelegramBot:
+                record.TelegramBotConfig = json;
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type");
         }
@@ -211,6 +214,7 @@ public class ConfigService(IConfigRepository configRepository, IMemoryCache cach
             ConfigType.Log => record.LogConfig,
             ConfigType.Moderation => record.ModerationConfig,
             ConfigType.UrlFilter => record.BotProtectionConfig,
+            ConfigType.TelegramBot => record.TelegramBotConfig,
             _ => throw new ArgumentOutOfRangeException(nameof(configType), configType, "Unknown config type")
         };
     }
@@ -221,7 +225,8 @@ public class ConfigService(IConfigRepository configRepository, IMemoryCache cach
             && string.IsNullOrEmpty(record.WelcomeConfig)
             && string.IsNullOrEmpty(record.LogConfig)
             && string.IsNullOrEmpty(record.ModerationConfig)
-            && string.IsNullOrEmpty(record.BotProtectionConfig);
+            && string.IsNullOrEmpty(record.BotProtectionConfig)
+            && string.IsNullOrEmpty(record.TelegramBotConfig);
     }
 
     /// <summary>
