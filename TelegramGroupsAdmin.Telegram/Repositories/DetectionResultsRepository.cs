@@ -166,9 +166,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // - Confident OpenAI results (85%+, marked as used_for_training = true)
         // This prevents low-quality auto-detections from polluting training data
         var results = await WithMessageJoin(
-                context.DetectionResults.AsNoTracking(),
+                context.DetectionResults.AsNoTracking()
+                    .Where(dr => dr.UsedForTraining == true), // Filter BEFORE join
                 context)
-            .Where(x => x.DetectionResult.UsedForTraining == true)
             .Where(x => x.Message.MessageText != null && x.Message.MessageText != "")
             .OrderByDescending(x => x.DetectionResult.IsSpam)
             .Select(x => new { x.Message.MessageText, x.DetectionResult.IsSpam })
@@ -186,9 +186,9 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Phase 2.6: Only use high-quality training samples for similarity matching
         var results = await WithMessageJoin(
-                context.DetectionResults.AsNoTracking(),
+                context.DetectionResults.AsNoTracking()
+                    .Where(dr => dr.IsSpam == true && dr.UsedForTraining == true), // Filter BEFORE join
                 context)
-            .Where(x => x.DetectionResult.IsSpam == true && x.DetectionResult.UsedForTraining == true)
             .Where(x => x.Message.MessageText != null && x.Message.MessageText != "")
             .OrderByDescending(x => x.DetectionResult.DetectedAt)
             .Take(limit)
