@@ -232,7 +232,7 @@ public class TelegramAdminBotService(
         // Handle bot's chat member status changes (added/removed from chats)
         if (update.MyChatMember is { } myChatMember)
         {
-            await chatManagementService.HandleMyChatMemberUpdateAsync(myChatMember);
+            await chatManagementService.HandleMyChatMemberUpdateAsync(botClient, myChatMember, cancellationToken);
             return;
         }
 

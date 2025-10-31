@@ -87,7 +87,7 @@ public partial class CommandRouter
             var command = (IBotCommand)scope.ServiceProvider.GetRequiredService(commandType);
 
             // Get actual permission level for all commands
-            var actualPermissionLevel = await GetPermissionLevelAsync(botClient, message.Chat.Id, message.From.Id, cancellationToken);
+            var actualPermissionLevel = await GetPermissionLevelAsync(message.Chat.Id, message.From.Id, cancellationToken);
 
             // Special cases: /link, /start, /report, /help, and /invite bypass permission checks (accessible to everyone)
             // BUT they still receive actual permission level for context (e.g., /help shows correct commands)
@@ -174,7 +174,7 @@ public partial class CommandRouter
     /// 3. Telegram group admin → Admin (1, per-chat only)
     /// 4. Not linked and not admin → -1 (no permission)
     /// </summary>
-    private async Task<int> GetPermissionLevelAsync(ITelegramBotClient botClient, long chatId, long telegramId, CancellationToken cancellationToken = default)
+    private async Task<int> GetPermissionLevelAsync(long chatId, long telegramId, CancellationToken cancellationToken = default)
     {
         using var scope = _serviceProvider.CreateScope();
 

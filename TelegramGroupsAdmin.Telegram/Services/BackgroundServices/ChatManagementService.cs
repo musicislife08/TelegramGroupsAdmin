@@ -35,7 +35,7 @@ public class ChatManagementService(
     /// Handle MyChatMember updates (bot added/removed, admin promotion/demotion)
     /// Only tracks groups/supergroups - private chats are not managed
     /// </summary>
-    public async Task HandleMyChatMemberUpdateAsync(ChatMemberUpdated myChatMember, CancellationToken cancellationToken = default)
+    public async Task HandleMyChatMemberUpdateAsync(ITelegramBotClient botClient, ChatMemberUpdated myChatMember, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -128,20 +128,19 @@ public class ChatManagementService(
                 }
             }
 
-            // If bot was just promoted to admin, refresh admin cache for this chat
+            // If bot was just promoted to admin, refresh admin cache for this chat immediately
             var botWasAdmin = oldStatus == ChatMemberStatus.Administrator;
             var botIsNowAdmin = newStatus == ChatMemberStatus.Administrator;
 
             if (!botWasAdmin && botIsNowAdmin)
             {
                 logger.LogInformation(
-                    "🎉 Bot promoted to admin in {ChatId} ({ChatName}), refreshing admin cache",
+                    "🎉 Bot promoted to admin in {ChatId} ({ChatName}), refreshing admin cache immediately",
                     chat.Id,
                     chat.Title ?? chat.Username ?? "Unknown");
 
-                // Note: Can't call RefreshChatAdminsAsync here because botClient not available
-                // Will be refreshed on next message or by background health check
-                // TODO: Consider passing botClient to this method for immediate refresh
+                // Refresh admin cache immediately instead of waiting for periodic health check (30min)
+                await RefreshChatAdminsAsync(botClient, chat.Id, cancellationToken);
             }
 
             if (isActive)
