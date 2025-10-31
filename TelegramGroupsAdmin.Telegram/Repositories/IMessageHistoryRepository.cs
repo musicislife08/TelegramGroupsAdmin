@@ -11,7 +11,6 @@ public interface IMessageHistoryRepository
     // Core CRUD
     Task InsertMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default);
     Task<UiModels.MessageRecord?> GetMessageAsync(long messageId, CancellationToken cancellationToken = default);
-    Task<UiModels.MessageRecord?> GetByIdAsync(long messageId, CancellationToken cancellationToken = default); // Alias for GetMessageAsync
     Task UpdateMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default);
     Task UpdateMediaLocalPathAsync(long messageId, string localPath, CancellationToken cancellationToken = default);
     Task MarkMessageAsDeletedAsync(long messageId, string deletionSource, CancellationToken cancellationToken = default);

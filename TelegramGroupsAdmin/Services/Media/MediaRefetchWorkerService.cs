@@ -101,7 +101,7 @@ public class MediaRefetchWorkerService : BackgroundService
             workerId, request.MessageId, request.MediaType);
 
         // Get message data from database
-        var message = await messageRepo.GetByIdAsync(request.MessageId);
+        var message = await messageRepo.GetMessageAsync(request.MessageId);
         if (message == null)
         {
             _logger.LogWarning("Message {MessageId} not found in database", request.MessageId);

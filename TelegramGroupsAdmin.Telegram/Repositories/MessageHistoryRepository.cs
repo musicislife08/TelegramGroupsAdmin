@@ -161,11 +161,6 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         return ValidateMediaPath(messageModel);
     }
 
-    public Task<UiModels.MessageRecord?> GetByIdAsync(long messageId, CancellationToken cancellationToken = default)
-    {
-        return GetMessageAsync(messageId, cancellationToken);
-    }
-
     public async Task UpdateMediaLocalPathAsync(long messageId, string localPath, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

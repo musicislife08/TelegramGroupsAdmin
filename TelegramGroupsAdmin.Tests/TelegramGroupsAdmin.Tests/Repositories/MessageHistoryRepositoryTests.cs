@@ -565,23 +565,6 @@ public class MessageHistoryRepositoryTests
     }
 
     [Test]
-    public async Task GetByIdAsync_ShouldBehaveAsGetMessageAsync()
-    {
-        // Arrange
-        var messageId = GoldenDataset.Messages.Msg1_Id;
-
-        // Act
-        var message1 = await _repository!.GetMessageAsync(messageId);
-        var message2 = await _repository.GetByIdAsync(messageId);
-
-        // Assert - Both methods should return same result
-        Assert.That(message1, Is.Not.Null);
-        Assert.That(message2, Is.Not.Null);
-        Assert.That(message1!.MessageId, Is.EqualTo(message2!.MessageId));
-        Assert.That(message1.MessageText, Is.EqualTo(message2.MessageText));
-    }
-
-    [Test]
     public async Task UpdateMessageAsync_ShouldUpdate()
     {
         // Arrange - Insert a message first

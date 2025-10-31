@@ -403,7 +403,7 @@
                 Logger.LogInformation("🔔 SignalR notification received for message {MessageId} type {MediaType}", messageId, mediaType);
 
                 // Reload the message from database to get updated media_local_path
-                var updatedMessage = await MessageRepository.GetByIdAsync(messageId);
+                var updatedMessage = await MessageRepository.GetMessageAsync(messageId);
                 if (updatedMessage == null)
                 {
                     Logger.LogWarning("Updated message {MessageId} not found in database", messageId);
