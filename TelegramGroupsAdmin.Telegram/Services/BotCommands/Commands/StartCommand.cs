@@ -123,7 +123,10 @@ public class StartCommand : IBotCommand
 
         // Send main welcome message in DM
         var chatName = chat.Title ?? "the chat";
-        var username = message.From.Username != null ? $"@{message.From.Username}" : message.From.FirstName;
+        // Use HTML mention format to create clickable user tag
+        var username = message.From.Username != null
+            ? $"<a href=\"tg://user?id={message.From.Id}\">@{message.From.Username}</a>"
+            : $"<a href=\"tg://user?id={message.From.Id}\">{message.From.FirstName}</a>";
 
         var messageText = config.MainWelcomeMessage
             .Replace("{username}", username)
@@ -133,6 +136,7 @@ public class StartCommand : IBotCommand
         await botClient.SendMessage(
             chatId: message.Chat.Id,
             text: messageText,
+            parseMode: ParseMode.Html,
             cancellationToken: cancellationToken);
 
         // Send Accept button in separate message (will be deleted after click)
