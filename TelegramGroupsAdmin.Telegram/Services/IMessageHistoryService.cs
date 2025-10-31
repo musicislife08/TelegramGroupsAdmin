@@ -22,4 +22,10 @@ public interface IMessageHistoryService
     /// Event raised when media is downloaded and ready for display.
     /// </summary>
     event Action<long, TelegramGroupsAdmin.Telegram.Models.MediaType>? OnMediaUpdated;
+
+    /// <summary>
+    /// Notify the bot service that configuration has changed and bot state should be refreshed immediately.
+    /// Used for dynamic bot enable/disable without requiring application restart.
+    /// </summary>
+    void NotifyConfigChange();
 }

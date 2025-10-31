@@ -192,11 +192,22 @@ public class DmDeliveryService : IDmDeliveryService
         }
         catch (Exception ex)
         {
-            _logger.LogError(
-                ex,
-                "Failed to send DM to user {UserId} (notification type: {NotificationType})",
-                telegramUserId,
-                notificationType);
+            // Log network errors cleanly without stack traces
+            if (IsNetworkError(ex))
+            {
+                _logger.LogWarning(
+                    "Failed to send DM to user {UserId} - network unavailable (notification type: {NotificationType})",
+                    telegramUserId,
+                    notificationType);
+            }
+            else
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to send DM to user {UserId} (notification type: {NotificationType})",
+                    telegramUserId,
+                    notificationType);
+            }
 
             return new DmDeliveryResult
             {
@@ -259,10 +270,20 @@ public class DmDeliveryService : IDmDeliveryService
         }
         catch (Exception ex)
         {
-            _logger.LogError(
-                ex,
-                "Failed to send fallback message in chat {ChatId}",
-                chatId);
+            // Log network errors cleanly without stack traces
+            if (IsNetworkError(ex))
+            {
+                _logger.LogWarning(
+                    "Failed to send fallback message in chat {ChatId} - network unavailable",
+                    chatId);
+            }
+            else
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to send fallback message in chat {ChatId}",
+                    chatId);
+            }
 
             return new DmDeliveryResult
             {
@@ -272,5 +293,17 @@ public class DmDeliveryService : IDmDeliveryService
                 ErrorMessage = $"Fallback failed: {ex.Message}"
             };
         }
+    }
+
+    /// <summary>
+    /// Check if exception is a network error (DNS, connection timeout, etc.)
+    /// </summary>
+    private static bool IsNetworkError(Exception ex)
+    {
+        // Check for HttpRequestException or SocketException (network errors)
+        return ex is HttpRequestException
+               || ex.InnerException is HttpRequestException
+               || ex.InnerException?.InnerException is System.Net.Sockets.SocketException
+               || ex is System.Net.Sockets.SocketException;
     }
 }

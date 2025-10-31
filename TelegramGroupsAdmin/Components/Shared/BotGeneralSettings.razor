@@ -2,8 +2,10 @@
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Services
 @using TelegramGroupsAdmin.Configuration.Repositories
+@using TelegramGroupsAdmin.Telegram.Services
 @inject IConfigService ConfigService
 @inject IConfigRepository ConfigRepository
+@inject IMessageHistoryService MessageHistoryService
 @inject ISnackbar Snackbar
 
 <!-- Bot Service Control (Global Only) -->
@@ -47,10 +49,9 @@
             </MudItem>
         </MudGrid>
 
-        <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-4">
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-4">
             <MudText Typo="Typo.body2">
-                <strong>Note:</strong> Changing this setting requires an application restart for now.
-                Dynamic start/stop will be added in a future update.
+                <strong>Note:</strong> Changes take effect immediately. The bot will start or stop automatically without requiring an application restart.
             </MudText>
         </MudAlert>
     }
@@ -252,7 +253,11 @@
         {
             // Save as global config only (chat_id = null)
             await ConfigService.SaveAsync(ConfigType.TelegramBot, null, _botConfig);
-            Snackbar.Add("Bot service configuration saved. Restart the application to apply changes.", Severity.Success);
+
+            // Notify bot service to check config and start/stop immediately
+            MessageHistoryService.NotifyConfigChange();
+
+            Snackbar.Add("Bot service configuration saved. Changes will take effect immediately.", Severity.Success);
         }
         catch (Exception ex)
         {

@@ -25,6 +25,7 @@ public class NotificationService : INotificationService
     private readonly IChatAdminsRepository _chatAdminsRepo;
     private readonly IUserRepository _userRepo;
     private readonly ILogger<NotificationService> _logger;
+    private DateTime _lastDeliveryFailureLog = DateTime.MinValue;
 
     public NotificationService(
         INotificationPreferencesRepository preferencesRepo,
@@ -181,9 +182,15 @@ public class NotificationService : INotificationService
 
             if (!deliverySuccess)
             {
-                _logger.LogWarning(
-                    "Failed to deliver notification to user {UserId} via any enabled channel (TelegramDM={TelegramEnabled}, Email={EmailEnabled})",
-                    userId, preferences.TelegramDmEnabled, preferences.EmailEnabled);
+                // Throttle logging to once per minute to avoid spam during network outages
+                var now = DateTime.UtcNow;
+                if ((now - _lastDeliveryFailureLog).TotalSeconds >= 60)
+                {
+                    _logger.LogWarning(
+                        "Failed to deliver notification to user {UserId} via any enabled channel (TelegramDM={TelegramEnabled}, Email={EmailEnabled})",
+                        userId, preferences.TelegramDmEnabled, preferences.EmailEnabled);
+                    _lastDeliveryFailureLog = now;
+                }
             }
 
             return deliverySuccess;

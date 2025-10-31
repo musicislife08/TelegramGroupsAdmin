@@ -31,6 +31,9 @@ public class TelegramAdminBotService(
     private readonly TelegramOptions _options = options.Value;
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private ITelegramBotClient? _botClient;
+    private CancellationTokenSource? _botCancellationTokenSource;
+    private Task? _botTask;
+    private readonly SemaphoreSlim _configChangeSignal = new(0, 1);
 
     // Events for real-time UI updates (forwarded from child services)
     public event Action<MessageRecord>? OnNewMessage
@@ -68,9 +71,56 @@ public class TelegramAdminBotService(
     public ChatHealthStatus? GetCachedHealth(long chatId)
         => chatManagementService.GetCachedHealth(chatId);
 
+    /// <summary>
+    /// Notify the bot service that configuration has changed - triggers immediate config check and bot state refresh
+    /// </summary>
+    public void NotifyConfigChange()
+    {
+        // Release the semaphore to wake up the monitoring loop
+        // CurrentCount check prevents multiple releases (semaphore has maxCount=1)
+        if (_configChangeSignal.CurrentCount == 0)
+        {
+            _configChangeSignal.Release();
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Check if Telegram bot service is enabled (database-driven config)
+        // Initial config check on startup
+        await CheckAndApplyBotConfigAsync(stoppingToken);
+
+        // Wait for config change notifications (event-driven, no polling)
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                // Block until NotifyConfigChange() is called or cancellation requested
+                await _configChangeSignal.WaitAsync(stoppingToken);
+
+                // Config changed - check and apply new state
+                await CheckAndApplyBotConfigAsync(stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+
+        // Cleanup on shutdown
+        if (_botCancellationTokenSource != null)
+        {
+            _botCancellationTokenSource.Cancel();
+            if (_botTask != null)
+            {
+                await _botTask;
+            }
+            _botCancellationTokenSource.Dispose();
+        }
+    }
+
+    private async Task CheckAndApplyBotConfigAsync(CancellationToken stoppingToken)
+    {
+        // Check if bot should be running
         TelegramBotConfig botConfig;
         using (var scope = _scopeFactory.CreateScope())
         {
@@ -79,12 +129,35 @@ public class TelegramAdminBotService(
                        ?? TelegramBotConfig.Default;
         }
 
-        if (!botConfig.BotEnabled)
-        {
-            logger.LogInformation("Telegram bot service is disabled (BotEnabled=false in database config). Service will not start.");
-            return;
-        }
+        var shouldBeRunning = botConfig.BotEnabled;
+        var isCurrentlyRunning = _botTask != null && !_botTask.IsCompleted;
 
+        if (shouldBeRunning && !isCurrentlyRunning)
+        {
+            // Start the bot
+            logger.LogInformation("Starting Telegram bot service (BotEnabled=true)");
+            _botCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+            _botTask = RunBotAsync(_botCancellationTokenSource.Token);
+        }
+        else if (!shouldBeRunning && isCurrentlyRunning)
+        {
+            // Stop the bot
+            logger.LogInformation("Stopping Telegram bot service (BotEnabled=false)");
+            _botCancellationTokenSource?.Cancel();
+            if (_botTask != null)
+            {
+                await _botTask;
+            }
+            _botCancellationTokenSource?.Dispose();
+            _botCancellationTokenSource = null;
+            _botTask = null;
+            _botClient = null;
+            logger.LogInformation("Telegram bot service stopped successfully");
+        }
+    }
+
+    private async Task RunBotAsync(CancellationToken stoppingToken)
+    {
         _botClient = botFactory.GetOrCreate(_options.BotToken);
         var botClient = _botClient;
 
@@ -114,68 +187,33 @@ public class TelegramAdminBotService(
             DropPendingUpdates = true
         };
 
-        // Reconnection loop with exponential backoff - retries indefinitely during outages
-        const int maxRetryDelay = 60; // Cap at 60 seconds
-
-        while (!stoppingToken.IsCancellationRequested)
+        // Start long polling (runs until cancellation or catastrophic error)
+        // Network errors during polling are handled by HandleErrorAsync with exponential backoff
+        try
         {
-            try
-            {
-                // If reconnecting after failure, log reconnection attempt
-                if (!_isConnected)
-                {
-                    logger.LogInformation("Attempting to reconnect to Telegram (retry delay: {Delay}s)", _retryDelay.TotalSeconds);
-                }
+            await botClient.ReceiveAsync(
+                updateHandler: HandleUpdateAsync,
+                errorHandler: HandleErrorAsync,
+                receiverOptions: receiverOptions,
+                cancellationToken: stoppingToken);
 
-                await botClient.ReceiveAsync(
-                    updateHandler: HandleUpdateAsync,
-                    errorHandler: HandleErrorAsync,
-                    receiverOptions: receiverOptions,
-                    cancellationToken: stoppingToken);
-
-                // If we reach here, ReceiveAsync ended gracefully (shouldn't happen unless cancelled)
-                logger.LogInformation("Telegram bot polling ended gracefully");
-                break;
-            }
-            catch (OperationCanceledException)
-            {
-                logger.LogInformation("Telegram bot stopped (cancellation requested)");
-                break;
-            }
-            catch (Exception ex)
-            {
-                // Connection lost - log and retry with exponential backoff
-                if (_isConnected)
-                {
-                    logger.LogError(ex, "Telegram bot connection lost - will retry automatically");
-                    _isConnected = false;
-                    _wasRecentlyDisconnected = true;
-                }
-                else
-                {
-                    logger.LogWarning(ex, "Telegram bot reconnection failed - retrying in {Delay}s", _retryDelay.TotalSeconds);
-                }
-
-                // Wait before retrying (exponential backoff, capped at 60s)
-                try
-                {
-                    await Task.Delay(_retryDelay, stoppingToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    logger.LogInformation("Telegram bot stopped during reconnection delay");
-                    break;
-                }
-
-                // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 60s (capped)
-                _retryDelay = TimeSpan.FromSeconds(Math.Min(_retryDelay.TotalSeconds * 2, maxRetryDelay));
-            }
+            // If we reach here, ReceiveAsync ended gracefully (shouldn't happen unless cancelled)
+            logger.LogInformation("Telegram bot polling ended gracefully");
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogInformation("Telegram bot stopped (cancellation requested)");
+        }
+        catch (Exception ex)
+        {
+            // Catastrophic error (ReceiveAsync itself threw, not a polling error)
+            logger.LogCritical(ex, "Telegram bot encountered catastrophic error and cannot continue");
         }
     }
 
     private bool _wasRecentlyDisconnected = false;
-    private TimeSpan _retryDelay = TimeSpan.FromSeconds(1);
     private bool _isConnected = true;
+    private int _consecutiveErrors = 0;
 
     private async Task HandleUpdateAsync(
         ITelegramBotClient botClient,
@@ -185,10 +223,10 @@ public class TelegramAdminBotService(
         // Log successful reconnection on first update after disconnect
         if (_wasRecentlyDisconnected)
         {
-            logger.LogInformation("Telegram bot reconnected successfully - receiving updates");
+            logger.LogInformation("Telegram bot reconnected successfully");
             _wasRecentlyDisconnected = false;
             _isConnected = true;
-            _retryDelay = TimeSpan.FromSeconds(1);
+            _consecutiveErrors = 0;
         }
 
         // Handle bot's chat member status changes (added/removed from chats)
@@ -234,13 +272,37 @@ public class TelegramAdminBotService(
         }
     }
 
-    private Task HandleErrorAsync(
+    private async Task HandleErrorAsync(
         ITelegramBotClient botClient,
         Exception exception,
         CancellationToken cancellationToken)
     {
-        logger.LogError(exception, "HistoryBot polling error");
-        return Task.CompletedTask;
+        // Track connection state
+        if (_isConnected)
+        {
+            logger.LogWarning("Telegram bot connection lost - will retry automatically");
+            _isConnected = false;
+            _wasRecentlyDisconnected = true;
+        }
+
+        _consecutiveErrors++;
+
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 60s (capped)
+        const int maxRetryDelay = 60;
+        var delaySeconds = Math.Min(Math.Pow(2, _consecutiveErrors - 1), maxRetryDelay);
+
+        // Log retry attempt (clean message, no exception details)
+        logger.LogInformation("Telegram bot retrying connection in {Delay}s (attempt {Attempt})", (int)delaySeconds, _consecutiveErrors);
+
+        // Wait before next retry attempt (exponential backoff)
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Service stopping, that's fine
+        }
     }
 
     private async Task RegisterBotCommandsAsync(ITelegramBotClient botClient, CancellationToken cancellationToken)
