@@ -218,7 +218,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await Task.WhenAll(LoadConfig(), LoadBotConfig());
+        // Load sequentially to avoid DbContext threading issues
+        await LoadBotConfig();
+        await LoadConfig();
     }
 
     private async Task LoadBotConfig()

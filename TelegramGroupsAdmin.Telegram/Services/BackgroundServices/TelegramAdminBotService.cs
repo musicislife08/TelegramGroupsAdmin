@@ -71,17 +71,18 @@ public class TelegramAdminBotService(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Check if Telegram bot service is enabled (database-driven config)
+        TelegramBotConfig botConfig;
         using (var scope = _scopeFactory.CreateScope())
         {
             var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-            var botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
-                           ?? TelegramBotConfig.Default;
+            botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
+                       ?? TelegramBotConfig.Default;
+        }
 
-            if (!botConfig.BotEnabled)
-            {
-                logger.LogInformation("Telegram bot service is disabled (BotEnabled=false in database config). Service will not start.");
-                return;
-            }
+        if (!botConfig.BotEnabled)
+        {
+            logger.LogInformation("Telegram bot service is disabled (BotEnabled=false in database config). Service will not start.");
+            return;
         }
 
         _botClient = botFactory.GetOrCreate(_options.BotToken);
