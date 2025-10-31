@@ -2,7 +2,7 @@
 @using TelegramGroupsAdmin.Data
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @inject IStopWordsRepository StopWordsRepository
-@inject IMessageHistoryRepository MessageHistoryRepository
+@inject IMessageStatsService MessageStatsService
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject IDbContextFactory<AppDbContext> DbContextFactory
 @inject ISnackbar Snackbar
@@ -447,7 +447,7 @@
         try
         {
             // Query detection_results table instead of obsolete spam_checks table
-            var recentDetections = await MessageHistoryRepository.GetRecentDetectionsAsync();
+            var recentDetections = await MessageStatsService.GetRecentDetectionsAsync();
             _recentSpamChecks = recentDetections.Take(20).Select(d => new SpamCheckRecord(
                 Id: d.Id,
                 CheckTimestamp: d.DetectedAt,
@@ -460,7 +460,7 @@
                 MatchedMessageId: d.MessageId
             )).ToList();
 
-            var stats = await MessageHistoryRepository.GetDetectionStatsAsync();
+            var stats = await MessageStatsService.GetDetectionStatsAsync();
             _totalSpamChecks = stats.TotalDetections;
             _spamDetected = stats.SpamDetected;
             _spamPercentage = stats.SpamPercentage;

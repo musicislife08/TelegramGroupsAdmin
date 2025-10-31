@@ -1,7 +1,8 @@
 @using DiffPlex
 @using DiffPlex.DiffBuilder
 @using DiffPlex.DiffBuilder.Model
-@inject IMessageHistoryRepository MessageRepository
+@inject IMessageEditService MessageEditService
+@inject IMessageTranslationService MessageTranslationService
 @inject ILogger<EditHistoryDialog> Logger
 
 <MudDialog>
@@ -126,12 +127,12 @@
     {
         try
         {
-            _edits = await MessageRepository.GetEditsForMessageAsync(Message.MessageId);
+            _edits = await MessageEditService.GetEditsForMessageAsync(Message.MessageId);
 
             // Phase 4.20: Load translations for each edit
             foreach (var edit in _edits)
             {
-                var translation = await MessageRepository.GetTranslationForEditAsync(edit.Id);
+                var translation = await MessageTranslationService.GetTranslationForEditAsync(edit.Id);
                 if (translation != null)
                 {
                     _editTranslations[edit.Id] = translation;

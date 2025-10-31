@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Tests.TestData;
 using TelegramGroupsAdmin.Tests.TestHelpers;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
@@ -38,6 +39,10 @@ public class MessageHistoryRepositoryTests
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
     private IMessageHistoryRepository? _repository;
+    private IMessageQueryService? _queryService;
+    private IMessageStatsService? _statsService;
+    private IMessageTranslationService? _translationService;
+    private IMessageEditService? _editService;
     private IDataProtectionProvider? _dataProtectionProvider;
     private string? _imageStoragePath;
 
@@ -78,8 +83,12 @@ public class MessageHistoryRepositoryTests
             options.ImageStoragePath = _imageStoragePath;
         });
 
-        // Register MessageHistoryRepository
+        // Register MessageHistoryRepository and extracted services (REFACTOR-3)
         services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
+        services.AddScoped<IMessageQueryService, MessageQueryService>();
+        services.AddScoped<IMessageStatsService, MessageStatsService>();
+        services.AddScoped<IMessageTranslationService, MessageTranslationService>();
+        services.AddScoped<IMessageEditService, MessageEditService>();
 
         _serviceProvider = services.BuildServiceProvider();
         _dataProtectionProvider = _serviceProvider.GetRequiredService<IDataProtectionProvider>();
@@ -91,9 +100,13 @@ public class MessageHistoryRepositoryTests
             await GoldenDataset.SeedDatabaseAsync(context, _dataProtectionProvider);
         }
 
-        // Create repository instance
+        // Create service instances
         var scope = _serviceProvider.CreateScope();
         _repository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+        _queryService = scope.ServiceProvider.GetRequiredService<IMessageQueryService>();
+        _statsService = scope.ServiceProvider.GetRequiredService<IMessageStatsService>();
+        _translationService = scope.ServiceProvider.GetRequiredService<IMessageTranslationService>();
+        _editService = scope.ServiceProvider.GetRequiredService<IMessageEditService>();
     }
 
     [TearDown]
@@ -158,7 +171,7 @@ public class MessageHistoryRepositoryTests
     public async Task GetRecentMessagesAsync_WithDefaultLimit_ShouldReturnMessages()
     {
         // Act
-        var messages = await _repository!.GetRecentMessagesAsync(limit: 100);
+        var messages = await _queryService!.GetRecentMessagesAsync(limit: 100);
 
         // Assert
         Assert.That(messages, Is.Not.Null);
@@ -180,7 +193,7 @@ public class MessageHistoryRepositoryTests
     public async Task GetRecentMessagesAsync_WithSmallLimit_ShouldRespectLimit()
     {
         // Act
-        var messages = await _repository!.GetRecentMessagesAsync(limit: 5);
+        var messages = await _queryService!.GetRecentMessagesAsync(limit: 5);
 
         // Assert
         Assert.That(messages.Count, Is.LessThanOrEqualTo(5), "Should respect limit of 5");
@@ -190,7 +203,7 @@ public class MessageHistoryRepositoryTests
     public async Task GetMessagesBeforeAsync_WithNoTimestamp_ShouldReturnRecentMessages()
     {
         // Act
-        var messages = await _repository!.GetMessagesBeforeAsync(beforeTimestamp: null, limit: 50);
+        var messages = await _queryService!.GetMessagesBeforeAsync(beforeTimestamp: null, limit: 50);
 
         // Assert
         Assert.That(messages, Is.Not.Null);
@@ -202,13 +215,13 @@ public class MessageHistoryRepositoryTests
     public async Task GetMessagesBeforeAsync_WithTimestamp_ShouldReturnMessagesBeforeCursor()
     {
         // Arrange - Get a message to use as cursor
-        var allMessages = await _repository!.GetRecentMessagesAsync(limit: 100);
+        var allMessages = await _queryService!.GetRecentMessagesAsync(limit: 100);
         Assert.That(allMessages.Count, Is.GreaterThan(10), "Need enough messages for pagination test");
 
         var cursorMessage = allMessages[5]; // Use 6th message as cursor
 
         // Act - Get messages before cursor
-        var messagesBefore = await _repository.GetMessagesBeforeAsync(
+        var messagesBefore = await _queryService.GetMessagesBeforeAsync(
             beforeTimestamp: cursorMessage.Timestamp,
             limit: 50);
 
@@ -231,7 +244,7 @@ public class MessageHistoryRepositoryTests
         var targetChatId = GoldenDataset.ManagedChats.MainChat_Id;
 
         // Act
-        var messages = await _repository!.GetMessagesByChatIdAsync(targetChatId, limit: 100);
+        var messages = await _queryService!.GetMessagesByChatIdAsync(targetChatId, limit: 100);
 
         // Assert
         Assert.That(messages, Is.Not.Null);
@@ -250,13 +263,13 @@ public class MessageHistoryRepositoryTests
     {
         // Arrange
         var chatId = GoldenDataset.ManagedChats.MainChat_Id;
-        var firstPage = await _repository!.GetMessagesByChatIdAsync(chatId, limit: 5);
+        var firstPage = await _queryService!.GetMessagesByChatIdAsync(chatId, limit: 5);
         Assert.That(firstPage.Count, Is.GreaterThan(0));
 
         var cursor = firstPage.Last().Timestamp;
 
         // Act - Get second page
-        var secondPage = await _repository.GetMessagesByChatIdAsync(chatId, limit: 5, beforeTimestamp: cursor);
+        var secondPage = await _queryService.GetMessagesByChatIdAsync(chatId, limit: 5, beforeTimestamp: cursor);
 
         // Assert
         if (secondPage.Count > 0)
@@ -282,7 +295,7 @@ public class MessageHistoryRepositoryTests
         var chatId = GoldenDataset.ManagedChats.MainChat_Id;
 
         // Act
-        var messages = await _repository!.GetMessagesWithDetectionHistoryAsync(chatId, limit: 50);
+        var messages = await _queryService!.GetMessagesWithDetectionHistoryAsync(chatId, limit: 50);
 
         // Assert
         Assert.That(messages, Is.Not.Null);
@@ -307,14 +320,14 @@ public class MessageHistoryRepositoryTests
     public async Task GetMessagesByDateRangeAsync_ShouldFilterByDateRange()
     {
         // Arrange - Get timestamp range from existing messages
-        var allMessages = await _repository!.GetRecentMessagesAsync(limit: 100);
+        var allMessages = await _queryService!.GetRecentMessagesAsync(limit: 100);
         Assert.That(allMessages.Count, Is.GreaterThan(5));
 
         var startDate = allMessages.Last().Timestamp; // Oldest in dataset
         var endDate = allMessages[allMessages.Count / 2].Timestamp; // Middle timestamp
 
         // Act
-        var filteredMessages = await _repository.GetMessagesByDateRangeAsync(startDate, endDate, limit: 1000);
+        var filteredMessages = await _queryService.GetMessagesByDateRangeAsync(startDate, endDate, limit: 1000);
 
         // Assert
         Assert.That(filteredMessages, Is.Not.Null);
@@ -336,7 +349,7 @@ public class MessageHistoryRepositoryTests
     public async Task InsertTranslationAsync_ForMessage_ShouldInsert()
     {
         // Arrange - Get a message without translation
-        var messages = await _repository!.GetRecentMessagesAsync(limit: 10);
+        var messages = await _queryService!.GetRecentMessagesAsync(limit: 10);
         var messageId = messages.First().MessageId;
 
         var translation = new UiModels.MessageTranslation(
@@ -350,10 +363,10 @@ public class MessageHistoryRepositoryTests
         );
 
         // Act
-        await _repository.InsertTranslationAsync(translation, CancellationToken.None);
+        await _translationService.InsertTranslationAsync(translation, CancellationToken.None);
 
         // Assert - Verify translation inserted
-        var retrieved = await _repository.GetTranslationForMessageAsync(messageId);
+        var retrieved = await _translationService.GetTranslationForMessageAsync(messageId);
         Assert.That(retrieved, Is.Not.Null);
         Assert.That(retrieved!.MessageId, Is.EqualTo(messageId));
         Assert.That(retrieved.EditId, Is.Null, "Should be message translation");
@@ -365,11 +378,11 @@ public class MessageHistoryRepositoryTests
     public async Task GetTranslationForMessageAsync_NotExists_ShouldReturnNull()
     {
         // Arrange - Use message ID that has no translation
-        var messages = await _repository!.GetRecentMessagesAsync(limit: 10);
+        var messages = await _queryService!.GetRecentMessagesAsync(limit: 10);
         var messageId = messages.Last().MessageId; // Last message likely has no translation
 
         // Act
-        var translation = await _repository.GetTranslationForMessageAsync(messageId);
+        var translation = await _translationService.GetTranslationForMessageAsync(messageId);
 
         // Assert - May or may not have translation depending on golden dataset
         // Just verify it doesn't throw
@@ -384,7 +397,7 @@ public class MessageHistoryRepositoryTests
     public async Task InsertMessageEditAsync_ShouldInsert()
     {
         // Arrange
-        var messages = await _repository!.GetRecentMessagesAsync(limit: 10);
+        var messages = await _queryService!.GetRecentMessagesAsync(limit: 10);
         var messageId = messages.First().MessageId;
 
         var edit = new UiModels.MessageEditRecord(
@@ -398,10 +411,10 @@ public class MessageHistoryRepositoryTests
         );
 
         // Act
-        await _repository.InsertMessageEditAsync(edit);
+        await _editService.InsertMessageEditAsync(edit);
 
         // Assert
-        var edits = await _repository.GetEditsForMessageAsync(messageId);
+        var edits = await _editService.GetEditsForMessageAsync(messageId);
         Assert.That(edits, Is.Not.Null);
         Assert.That(edits.Count, Is.GreaterThan(0));
 
@@ -414,7 +427,7 @@ public class MessageHistoryRepositoryTests
     public async Task GetEditsForMessageAsync_MultipleEdits_ShouldReturnOrdered()
     {
         // Arrange - Insert multiple edits
-        var messages = await _repository!.GetRecentMessagesAsync(limit: 10);
+        var messages = await _queryService!.GetRecentMessagesAsync(limit: 10);
         var messageId = messages.First().MessageId;
 
         var edit1 = new UiModels.MessageEditRecord(
@@ -436,11 +449,11 @@ public class MessageHistoryRepositoryTests
             NewContentHash: "hash3"
         );
 
-        await _repository.InsertMessageEditAsync(edit1);
-        await _repository.InsertMessageEditAsync(edit2);
+        await _editService.InsertMessageEditAsync(edit1);
+        await _editService.InsertMessageEditAsync(edit2);
 
         // Act
-        var edits = await _repository.GetEditsForMessageAsync(messageId);
+        var edits = await _editService.GetEditsForMessageAsync(messageId);
 
         // Assert
         Assert.That(edits.Count, Is.GreaterThanOrEqualTo(2));
@@ -454,12 +467,12 @@ public class MessageHistoryRepositoryTests
     public async Task GetEditCountsForMessagesAsync_ShouldReturnCounts()
     {
         // Arrange - Insert edits for multiple messages
-        var messages = await _repository!.GetRecentMessagesAsync(limit: 3);
+        var messages = await _queryService!.GetRecentMessagesAsync(limit: 3);
         var msg1Id = messages[0].MessageId;
         var msg2Id = messages[1].MessageId;
 
         // Add 2 edits to msg1
-        await _repository.InsertMessageEditAsync(new UiModels.MessageEditRecord(
+        await _editService.InsertMessageEditAsync(new UiModels.MessageEditRecord(
             Id: 0,
             MessageId: msg1Id,
             OldText: "Original",
@@ -468,7 +481,7 @@ public class MessageHistoryRepositoryTests
             OldContentHash: "h1",
             NewContentHash: "h2"
         ));
-        await _repository.InsertMessageEditAsync(new UiModels.MessageEditRecord(
+        await _editService.InsertMessageEditAsync(new UiModels.MessageEditRecord(
             Id: 0,
             MessageId: msg1Id,
             OldText: "Edit 1",
@@ -479,7 +492,7 @@ public class MessageHistoryRepositoryTests
         ));
 
         // Add 1 edit to msg2
-        await _repository.InsertMessageEditAsync(new UiModels.MessageEditRecord(
+        await _editService.InsertMessageEditAsync(new UiModels.MessageEditRecord(
             Id: 0,
             MessageId: msg2Id,
             OldText: "Original",
@@ -490,7 +503,7 @@ public class MessageHistoryRepositoryTests
         ));
 
         // Act
-        var counts = await _repository.GetEditCountsForMessagesAsync(new[] { msg1Id, msg2Id });
+        var counts = await _editService.GetEditCountsForMessagesAsync(new[] { msg1Id, msg2Id });
 
         // Assert
         Assert.That(counts, Is.Not.Null);
@@ -651,7 +664,7 @@ public class MessageHistoryRepositoryTests
     public async Task CleanupExpiredAsync_ShouldNotDeleteRecentMessages()
     {
         // Arrange - Get current message count
-        var statsBefore = await _repository!.GetStatsAsync();
+        var statsBefore = await _statsService!.GetStatsAsync();
 
         // Act
         var (deletedCount, imagePaths, mediaPaths) = await _repository.CleanupExpiredAsync();
@@ -662,7 +675,7 @@ public class MessageHistoryRepositoryTests
         Assert.That(mediaPaths.Count, Is.EqualTo(0));
 
         // Verify message count unchanged
-        var statsAfter = await _repository.GetStatsAsync();
+        var statsAfter = await _statsService.GetStatsAsync();
         Assert.That(statsAfter.TotalMessages, Is.EqualTo(statsBefore.TotalMessages));
     }
 
@@ -674,7 +687,7 @@ public class MessageHistoryRepositoryTests
     public async Task GetStatsAsync_ShouldReturnStats()
     {
         // Act
-        var stats = await _repository!.GetStatsAsync();
+        var stats = await _statsService!.GetStatsAsync();
 
         // Assert
         Assert.That(stats, Is.Not.Null);
@@ -714,7 +727,7 @@ public class MessageHistoryRepositoryTests
     public async Task GetDetectionStatsAsync_ShouldReturnStats()
     {
         // Act
-        var stats = await _repository!.GetDetectionStatsAsync();
+        var stats = await _statsService!.GetDetectionStatsAsync();
 
         // Assert
         Assert.That(stats, Is.Not.Null);
@@ -728,7 +741,7 @@ public class MessageHistoryRepositoryTests
     public async Task GetRecentDetectionsAsync_ShouldReturnDetections()
     {
         // Act
-        var detections = await _repository!.GetRecentDetectionsAsync(limit: 100);
+        var detections = await _statsService!.GetRecentDetectionsAsync(limit: 100);
 
         // Assert
         Assert.That(detections, Is.Not.Null);
@@ -754,7 +767,7 @@ public class MessageHistoryRepositoryTests
         var timeZoneId = "America/Los_Angeles";
 
         // Act
-        var trends = await _repository!.GetMessageTrendsAsync(chatIds, startDate, endDate, timeZoneId);
+        var trends = await _statsService!.GetMessageTrendsAsync(chatIds, startDate, endDate, timeZoneId);
 
         // Assert
         Assert.That(trends, Is.Not.Null);
@@ -773,11 +786,11 @@ public class MessageHistoryRepositoryTests
     public async Task GetSpamChecksForMessagesAsync_ShouldReturnChecks()
     {
         // Arrange - Get some message IDs with detection results
-        var messages = await _repository!.GetRecentMessagesAsync(limit: 20);
+        var messages = await _queryService!.GetRecentMessagesAsync(limit: 20);
         var messageIds = messages.Select(m => m.MessageId).ToList();
 
         // Act
-        var spamChecks = await _repository.GetSpamChecksForMessagesAsync(messageIds);
+        var spamChecks = await _queryService.GetSpamChecksForMessagesAsync(messageIds);
 
         // Assert
         Assert.That(spamChecks, Is.Not.Null);
@@ -797,7 +810,7 @@ public class MessageHistoryRepositoryTests
     public async Task GetDistinctUserNamesAsync_ShouldReturnUserNames()
     {
         // Act
-        var userNames = await _repository!.GetDistinctUserNamesAsync();
+        var userNames = await _queryService!.GetDistinctUserNamesAsync();
 
         // Assert
         Assert.That(userNames, Is.Not.Null);
@@ -812,7 +825,7 @@ public class MessageHistoryRepositoryTests
     public async Task GetDistinctChatNamesAsync_ShouldReturnChatNames()
     {
         // Act
-        var chatNames = await _repository!.GetDistinctChatNamesAsync();
+        var chatNames = await _queryService!.GetDistinctChatNamesAsync();
 
         // Assert
         Assert.That(chatNames, Is.Not.Null);
@@ -831,7 +844,7 @@ public class MessageHistoryRepositoryTests
         var chatId = GoldenDataset.ManagedChats.MainChat_Id;
 
         // Act
-        var photo = await _repository!.GetUserRecentPhotoAsync(userId, chatId);
+        var photo = await _queryService!.GetUserRecentPhotoAsync(userId, chatId);
 
         // Assert
         Assert.That(photo, Is.Null);

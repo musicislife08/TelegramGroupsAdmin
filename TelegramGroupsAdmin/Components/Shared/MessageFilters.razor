@@ -1,5 +1,5 @@
 @using Microsoft.Extensions.Logging
-@inject IMessageHistoryRepository MessageRepository
+@inject IMessageQueryService MessageQueryService
 @inject ILogger<MessageFilters> Logger
 
 <MudPaper Class="pa-3 mb-4" Elevation="2">
@@ -204,8 +204,8 @@
         // Load distinct usernames and chat names for autocomplete
         try
         {
-            _userNames = await MessageRepository.GetDistinctUserNamesAsync();
-            _chatNames = await MessageRepository.GetDistinctChatNamesAsync();
+            _userNames = await MessageQueryService.GetDistinctUserNamesAsync();
+            _chatNames = await MessageQueryService.GetDistinctChatNamesAsync();
         }
         catch (Exception ex)
         {

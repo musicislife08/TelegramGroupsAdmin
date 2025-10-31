@@ -1,6 +1,6 @@
 @using TelegramGroupsAdmin.Services
 @using ApexCharts
-@inject IMessageHistoryRepository MessageHistoryRepository
+@inject IMessageStatsService MessageStatsService
 @inject IManagedChatsRepository ChatsRepository
 @inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
@@ -291,7 +291,7 @@
 
         try
         {
-            _trendsData = await MessageHistoryRepository.GetMessageTrendsAsync(
+            _trendsData = await MessageStatsService.GetMessageTrendsAsync(
                 GetSelectedChatIds(),
                 _startDate.Value,
                 _endDate.Value,

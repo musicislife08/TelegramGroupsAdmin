@@ -1,7 +1,7 @@
 ﻿@page "/"
 @using TelegramGroupsAdmin.Services
 @inject IAuthService AuthService
-@inject IMessageHistoryRepository MessageRepository
+@inject IMessageStatsService MessageStatsService
 @inject NavigationManager Navigation
 @inject ILogger<Home> Logger
 @attribute [Authorize]
@@ -105,7 +105,7 @@
 
         try
         {
-            _stats = await MessageRepository.GetStatsAsync();
+            _stats = await MessageStatsService.GetStatsAsync();
         }
         catch (Exception ex)
         {

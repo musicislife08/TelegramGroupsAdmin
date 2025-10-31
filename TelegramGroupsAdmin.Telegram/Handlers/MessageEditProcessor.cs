@@ -6,6 +6,7 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -37,6 +38,8 @@ public class MessageEditProcessor
         CancellationToken cancellationToken = default)
     {
         var repository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+        var editService = scope.ServiceProvider.GetRequiredService<IMessageEditService>();
+        var translationService = scope.ServiceProvider.GetRequiredService<IMessageTranslationService>();
 
         // Get the old message from the database
         var oldMessage = await repository.GetMessageAsync(editedMessage.MessageId, cancellationToken);
@@ -82,10 +85,10 @@ public class MessageEditProcessor
             NewContentHash: newContentHash
         );
 
-        await repository.InsertMessageEditAsync(editRecord, cancellationToken);
+        await editService.InsertMessageEditAsync(editRecord, cancellationToken);
 
         // Phase 4.20: Translate edited message if non-English (before spam detection)
-        await TranslateEditIfNeededAsync(repository, scope, editedMessage, newText, cancellationToken);
+        await TranslateEditIfNeededAsync(editService, translationService, scope, editedMessage, newText, cancellationToken);
 
         // Update the message in the messages table with new text and edit date
         var updatedMessage = oldMessage with
@@ -112,7 +115,8 @@ public class MessageEditProcessor
     /// Translate edited message if it's non-English and meets config requirements.
     /// </summary>
     private async Task TranslateEditIfNeededAsync(
-        IMessageHistoryRepository repository,
+        IMessageEditService editService,
+        IMessageTranslationService translationService,
         IServiceScope scope,
         Message editedMessage,
         string? newText,
@@ -122,7 +126,7 @@ public class MessageEditProcessor
             return;
 
         // Re-fetch edit to get generated ID
-        var editsForMessage = await repository.GetEditsForMessageAsync(editedMessage.MessageId, cancellationToken);
+        var editsForMessage = await editService.GetEditsForMessageAsync(editedMessage.MessageId, cancellationToken);
         var savedEdit = editsForMessage.OrderByDescending(e => e.EditDate).FirstOrDefault();
 
         if (savedEdit == null)
@@ -140,8 +144,8 @@ public class MessageEditProcessor
         if (latinRatio >= spamConfig.Translation.LatinScriptThreshold)
             return;
 
-        var translationService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService>();
-        var translationResult = await translationService.TranslateToEnglishAsync(newText, cancellationToken);
+        var openAITranslationService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService>();
+        var translationResult = await openAITranslationService.TranslateToEnglishAsync(newText, cancellationToken);
 
         if (translationResult != null && translationResult.WasTranslated)
         {
@@ -155,7 +159,7 @@ public class MessageEditProcessor
                 TranslatedAt: DateTimeOffset.UtcNow
             );
 
-            await repository.InsertTranslationAsync(translation, cancellationToken);
+            await translationService.InsertTranslationAsync(translation, cancellationToken);
 
             _logger.LogInformation(
                 "Translated edit #{EditId} for message {MessageId} from {Language} to English",

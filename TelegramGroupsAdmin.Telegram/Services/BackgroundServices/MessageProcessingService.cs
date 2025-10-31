@@ -438,7 +438,8 @@ public partial class MessageProcessingService(
             // Save translation to database if present
             if (translation != null)
             {
-                await repository.InsertTranslationAsync(translation, cancellationToken);
+                var translationService = messageScope.ServiceProvider.GetRequiredService<IMessageTranslationService>();
+                await translationService.InsertTranslationAsync(translation, cancellationToken);
                 logger.LogDebug(
                     "Saved translation for message {MessageId} ({Language})",
                     message.MessageId,

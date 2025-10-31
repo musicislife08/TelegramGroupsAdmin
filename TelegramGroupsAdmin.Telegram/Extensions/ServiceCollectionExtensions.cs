@@ -38,6 +38,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
+        // REFACTOR-3: Extracted services from MessageHistoryRepository
+        services.AddScoped<IMessageQueryService, MessageQueryService>();
+        services.AddScoped<IMessageStatsService, MessageStatsService>();
+        services.AddScoped<IMessageTranslationService, MessageTranslationService>();
+        services.AddScoped<IMessageEditService, MessageEditService>();
         services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
         services.AddScoped<IPromptVersionRepository, PromptVersionRepository>(); // Phase 4.X: AI-powered prompt builder
         services.AddScoped<IThresholdRecommendationsRepository, ThresholdRecommendationsRepository>(); // ML.NET threshold optimization

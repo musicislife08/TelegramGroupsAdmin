@@ -37,8 +37,8 @@ public class LanguageWarningHandler
         try
         {
             // Get message translation to check if it was non-English
-            var messageRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
-            var translation = await messageRepo.GetTranslationForMessageAsync(message.MessageId, cancellationToken);
+            var translationService = scope.ServiceProvider.GetRequiredService<IMessageTranslationService>();
+            var translation = await translationService.GetTranslationForMessageAsync(message.MessageId, cancellationToken);
 
             // Skip if no translation (message was in English)
             if (translation == null)

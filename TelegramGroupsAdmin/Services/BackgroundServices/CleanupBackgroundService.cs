@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Services.BackgroundServices;
 
@@ -84,7 +85,8 @@ public class CleanupBackgroundService : BackgroundService
                     }
                 }
 
-                var stats = await repository.GetStatsAsync();
+                var statsService = scope.ServiceProvider.GetRequiredService<IMessageStatsService>();
+                var stats = await statsService.GetStatsAsync();
 
                 _logger.LogInformation(
                     "Cleanup complete: {Deleted} expired messages removed, {ImagesDeleted} images deleted, {MediaDeleted} media files deleted. Stats: {Messages} messages, {Users} users, {Photos} photos, oldest: {Oldest}",

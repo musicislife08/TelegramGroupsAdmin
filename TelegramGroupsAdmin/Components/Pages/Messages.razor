@@ -2,6 +2,9 @@
 @using TelegramGroupsAdmin.Services
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
 @inject IMessageHistoryRepository MessageRepository
+@inject IMessageQueryService MessageQueryService
+@inject IMessageEditService MessageEditService
+@inject IMessageTranslationService MessageTranslationService
 @inject IManagedChatsRepository ChatsRepository
 @inject IJSRuntime Js
 @inject IDialogService DialogService
@@ -296,8 +299,8 @@
 
                         // Load metadata for this message
                         var messageIds = new[] { targetMessageId };
-                        var spamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
-                        var editCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+                        var spamChecks = await MessageQueryService.GetSpamChecksForMessagesAsync(messageIds);
+                        var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
 
                         foreach (var kvp in spamChecks)
                             _spamChecks[kvp.Key] = kvp.Value;
@@ -359,14 +362,14 @@
 
                 // Load spam check for this new message if it exists
                 var messageIds = new[] { message.MessageId };
-                var newSpamChecks = await MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
+                var newSpamChecks = await MessageQueryService.GetSpamChecksForMessagesAsync(messageIds);
                 foreach (var kvp in newSpamChecks)
                 {
                     _spamChecks[kvp.Key] = kvp.Value;
                 }
 
                 // Load edit count for this message
-                var newEditCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+                var newEditCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
                 foreach (var kvp in newEditCounts)
                 {
                     _editCounts[kvp.Key] = kvp.Value;
@@ -502,7 +505,7 @@
                 // Get last message preview (only fetch 1 message for preview)
                 if (totalCount > 0)
                 {
-                    var lastMessages = await MessageRepository.GetMessagesByChatIdAsync(chat.ChatId, limit: 1);
+                    var lastMessages = await MessageQueryService.GetMessagesByChatIdAsync(chat.ChatId, limit: 1);
                     if (lastMessages.Any())
                     {
                         var lastMessage = lastMessages.First();
@@ -549,8 +552,8 @@
         {
             // PERF-APP-1: Load first page with detection history included (single JOIN query)
             var firstPage = _userPermissionLevel >= PermissionLevel.GlobalAdmin
-                ? await MessageRepository.GetMessagesWithDetectionHistoryAsync(chatId, limit: PageSize)
-                : (await MessageRepository.GetMessagesByChatIdAsync(chatId, limit: PageSize))
+                ? await MessageQueryService.GetMessagesWithDetectionHistoryAsync(chatId, limit: PageSize)
+                : (await MessageQueryService.GetMessagesByChatIdAsync(chatId, limit: PageSize))
                     .Select(m => new MessageWithDetectionHistory { Message = m }).ToList();
 
             _allMessages = firstPage;
@@ -564,13 +567,13 @@
                 if (_userPermissionLevel >= PermissionLevel.GlobalAdmin)
                 {
                     // Admin: Only load edit counts (detection history already in wrapper)
-                    _editCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+                    _editCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
                 }
                 else
                 {
                     // Non-admin: Load both edit counts and spam checks in parallel
-                    var editCountsTask = MessageRepository.GetEditCountsForMessagesAsync(messageIds);
-                    var spamChecksTask = MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
+                    var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(messageIds);
+                    var spamChecksTask = MessageQueryService.GetSpamChecksForMessagesAsync(messageIds);
 
                     await Task.WhenAll(editCountsTask, spamChecksTask);
 
@@ -630,11 +633,11 @@
 
             // PERF-APP-1: Load older messages with detection history included
             var olderMessages = _userPermissionLevel >= PermissionLevel.GlobalAdmin
-                ? await MessageRepository.GetMessagesWithDetectionHistoryAsync(
+                ? await MessageQueryService.GetMessagesWithDetectionHistoryAsync(
                     _selectedChatId.Value,
                     limit: PageSize,
                     beforeTimestamp: oldestMessage.Message.Timestamp)
-                : (await MessageRepository.GetMessagesByChatIdAsync(
+                : (await MessageQueryService.GetMessagesByChatIdAsync(
                     _selectedChatId.Value,
                     limit: PageSize,
                     beforeTimestamp: oldestMessage.Message.Timestamp))
@@ -651,15 +654,15 @@
                 if (_userPermissionLevel >= PermissionLevel.GlobalAdmin)
                 {
                     // Admin: Only load edit counts (detection history already in wrapper)
-                    var newEditCounts = await MessageRepository.GetEditCountsForMessagesAsync(messageIds);
+                    var newEditCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
                     foreach (var kvp in newEditCounts)
                         _editCounts[kvp.Key] = kvp.Value;
                 }
                 else
                 {
                     // Non-admin: Load both edit counts and spam checks in parallel
-                    var editCountsTask = MessageRepository.GetEditCountsForMessagesAsync(messageIds);
-                    var spamChecksTask = MessageRepository.GetSpamChecksForMessagesAsync(messageIds);
+                    var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(messageIds);
+                    var spamChecksTask = MessageQueryService.GetSpamChecksForMessagesAsync(messageIds);
 
                     await Task.WhenAll(editCountsTask, spamChecksTask);
 
@@ -1343,7 +1346,7 @@
                 TranslatedAt: DateTimeOffset.UtcNow
             );
 
-            await MessageRepository.InsertTranslationAsync(translation);
+            await MessageTranslationService.InsertTranslationAsync(translation);
 
             // Update the message in memory to include the new translation
             var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == message.MessageId);

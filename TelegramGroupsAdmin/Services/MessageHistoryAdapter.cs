@@ -1,22 +1,23 @@
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 using ContentDetectionServices = TelegramGroupsAdmin.ContentDetection.Services;
 
 namespace TelegramGroupsAdmin.Services;
 
 /// <summary>
-/// Adapter to convert from main app's MessageHistoryRepository
+/// Adapter to convert from main app's MessageQueryService
 /// to spam library's IMessageHistoryService interface
 /// </summary>
 public class MessageHistoryAdapter : ContentDetectionServices.IMessageHistoryService
 {
-    private readonly IMessageHistoryRepository _repository;
+    private readonly IMessageQueryService _queryService;
     private readonly ILogger<MessageHistoryAdapter> _logger;
 
     public MessageHistoryAdapter(
-        IMessageHistoryRepository repository,
+        IMessageQueryService queryService,
         ILogger<MessageHistoryAdapter> logger)
     {
-        _repository = repository;
+        _queryService = queryService;
         _logger = logger;
     }
 
@@ -27,8 +28,8 @@ public class MessageHistoryAdapter : ContentDetectionServices.IMessageHistorySer
     {
         try
         {
-            // Get recent messages from repository (filtered by chat_id in query)
-            var messages = await _repository.GetMessagesByChatIdAsync(chatId, count);
+            // Get recent messages from query service (filtered by chat_id in query)
+            var messages = await _queryService.GetMessagesByChatIdAsync(chatId, count);
 
             // Convert to spam library's HistoryMessage format
             return messages.Select(m => new ContentDetectionServices.HistoryMessage
