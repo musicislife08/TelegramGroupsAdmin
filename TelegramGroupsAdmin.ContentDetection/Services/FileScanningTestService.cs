@@ -42,8 +42,8 @@ public class FileScanningTestService : IFileScanningTestService
             IsInfected = tier1Result.ThreatDetected,
             IsClean = tier1Result.IsClean,
             PrimaryThreatName = tier1Result.ThreatNames?.FirstOrDefault(),
-            ThreatNames = tier1Result.ThreatNames ?? new List<string>(),
-            DetectedBy = tier1Result.DetectedBy ?? new List<string>(),
+            ThreatNames = tier1Result.ThreatNames ?? [],
+            DetectedBy = tier1Result.DetectedBy ?? [],
             ScannerResults = tier1Result.ScannerResults
                 .Select(sr => new ScannerResultDetail
                 {

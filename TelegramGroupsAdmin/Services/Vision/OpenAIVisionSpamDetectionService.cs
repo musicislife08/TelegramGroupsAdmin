@@ -6,16 +6,16 @@ using TelegramGroupsAdmin.Configuration;
 
 namespace TelegramGroupsAdmin.Services.Vision;
 
-public class OpenAIVisionSpamDetectionService : IVisionSpamDetectionService
+public class OpenAiVisionSpamDetectionService : IVisionSpamDetectionService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly OpenAIOptions _options;
-    private readonly ILogger<OpenAIVisionSpamDetectionService> _logger;
+    private readonly ILogger<OpenAiVisionSpamDetectionService> _logger;
 
-    public OpenAIVisionSpamDetectionService(
+    public OpenAiVisionSpamDetectionService(
         IHttpClientFactory httpClientFactory,
         IOptions<OpenAIOptions> options,
-        ILogger<OpenAIVisionSpamDetectionService> logger)
+        ILogger<OpenAiVisionSpamDetectionService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _options = options.Value;
@@ -92,7 +92,7 @@ public class OpenAIVisionSpamDetectionService : IVisionSpamDetectionService
                 return new CheckResult(false, "Image analysis unavailable", 0);
             }
 
-            var result = await response.Content.ReadFromJsonAsync<OpenAIResponse>(cancellationToken: ct);
+            var result = await response.Content.ReadFromJsonAsync<OpenAiResponse>(cancellationToken: ct);
             var content = result?.Choices?[0]?.Message?.Content;
 
             if (string.IsNullOrWhiteSpace(content))
@@ -144,7 +144,7 @@ public class OpenAIVisionSpamDetectionService : IVisionSpamDetectionService
                 content = string.Join('\n', lines.Skip(1).SkipLast(1));
             }
 
-            var response = JsonSerializer.Deserialize<OpenAIVisionResponse>(
+            var response = JsonSerializer.Deserialize<OpenAiVisionResponse>(
                 content,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
@@ -172,7 +172,7 @@ public class OpenAIVisionSpamDetectionService : IVisionSpamDetectionService
         }
     }
 
-    private record OpenAIResponse(
+    private record OpenAiResponse(
         [property: JsonPropertyName("choices")] Choice[]? Choices
     );
 
@@ -184,7 +184,7 @@ public class OpenAIVisionSpamDetectionService : IVisionSpamDetectionService
         [property: JsonPropertyName("content")] string? Content
     );
 
-    private record OpenAIVisionResponse(
+    private record OpenAiVisionResponse(
         [property: JsonPropertyName("spam")] bool Spam,
         [property: JsonPropertyName("confidence")] int Confidence,
         [property: JsonPropertyName("reason")] string? Reason,

@@ -88,7 +88,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
 
         if (expiredData.Count == 0)
         {
-            return (0, new List<string>(), new List<string>());
+            return (0, [], []);
         }
 
         // Collect image paths (photo thumbnails)
@@ -304,7 +304,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             .ToListAsync(cancellationToken);
 
         if (!messagesWithDetections.Any())
-            return new List<UiModels.MessageWithDetectionHistory>();
+            return [];
 
         // Step 2: Load joined data (chat, user, reply info, translations) in single query
         var messageIds = messagesWithDetections.Select(m => m.MessageId).ToArray();
@@ -676,7 +676,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     public async Task UpdateMediaLocalPathAsync(long messageId, string localPath, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Messages.FindAsync(new object[] { messageId }, cancellationToken);
+        var entity = await context.Messages.FindAsync([messageId], cancellationToken);
 
         if (entity != null)
         {
@@ -688,7 +688,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     public async Task UpdateMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Messages.FindAsync(new object[] { message.MessageId }, cancellationToken);
+        var entity = await context.Messages.FindAsync([message.MessageId], cancellationToken);
 
         if (entity != null)
         {
@@ -823,7 +823,7 @@ public class MessageHistoryRepository : IMessageHistoryRepository
     public async Task MarkMessageAsDeletedAsync(long messageId, string deletionSource, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.Messages.FindAsync(new object[] { messageId }, cancellationToken);
+        var entity = await context.Messages.FindAsync([messageId], cancellationToken);
 
         if (entity != null)
         {

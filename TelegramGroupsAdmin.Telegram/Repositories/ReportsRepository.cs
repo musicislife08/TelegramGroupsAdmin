@@ -94,7 +94,7 @@ public class ReportsRepository : IReportsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entity = await context.Reports.FindAsync(new object[] { reportId }, cancellationToken);
+        var entity = await context.Reports.FindAsync([reportId], cancellationToken);
 
         if (entity != null)
         {

@@ -1,8 +1,6 @@
-@using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Services
 @using TelegramGroupsAdmin.Configuration.Repositories
-@using TelegramGroupsAdmin.Telegram.Services
 @inject IConfigService ConfigService
 @inject IConfigRepository ConfigRepository
 @inject IMessageHistoryService MessageHistoryService
@@ -207,14 +205,14 @@
     private MudForm? _form;
     private bool _isValid = true;
     private bool _loading = true;
-    private bool _saving = false;
-    private bool _clearingLinks = false;
+    private bool _saving;
+    private bool _clearingLinks;
     private BotProtectionConfig? _config;
     private string _whitelistText = "";
 
     // Bot service control
     private bool _loadingBotConfig = true;
-    private bool _savingBotConfig = false;
+    private bool _savingBotConfig;
     private TelegramBotConfig? _botConfig;
 
     protected override async Task OnInitializedAsync()
@@ -299,7 +297,7 @@
         {
             // Parse whitelist text into list (split by newlines, trim, remove empties)
             _config.WhitelistedBots = _whitelistText
-                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => s.Trim())
                 .Where(s => !string.IsNullOrWhiteSpace(s))
                 .ToList();

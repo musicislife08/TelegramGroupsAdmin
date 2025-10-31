@@ -15,5 +15,5 @@ public class ChatHealthStatus
     public bool CanInviteUsers { get; set; }
     public int AdminCount { get; set; }
     public string Status { get; set; } = "Unknown";
-    public List<string> Warnings { get; set; } = new();
+    public List<string> Warnings { get; set; } = [];
 }

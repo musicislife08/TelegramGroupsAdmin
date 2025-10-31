@@ -1,5 +1,4 @@
 @using System.Text.Json
-@using MudBlazor
 
 <MudDialog>
     <DialogContent>
@@ -122,16 +121,16 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Close">Close</MudButton>
+        <MudButton OnClick="@Close">Close</MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
     [CascadingParameter]
-    IMudDialogInstance MudDialog { get; set; } = default!;
+    IMudDialogInstance MudDialog { get; set; } = null!;
 
     [Parameter, EditorRequired]
-    public MessageRecord Message { get; set; } = default!;
+    public MessageRecord Message { get; set; } = null!;
 
     [Parameter]
     public List<DetectionResultRecord>? DetectionResults { get; set; }

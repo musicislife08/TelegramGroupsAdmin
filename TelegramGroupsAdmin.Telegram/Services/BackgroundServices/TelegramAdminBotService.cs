@@ -211,9 +211,9 @@ public class TelegramAdminBotService(
         }
     }
 
-    private bool _wasRecentlyDisconnected = false;
+    private bool _wasRecentlyDisconnected;
     private bool _isConnected = true;
-    private int _consecutiveErrors = 0;
+    private int _consecutiveErrors;
 
     private async Task HandleUpdateAsync(
         ITelegramBotClient botClient,

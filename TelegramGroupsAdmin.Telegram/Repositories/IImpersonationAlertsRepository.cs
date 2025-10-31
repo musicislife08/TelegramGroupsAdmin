@@ -1,5 +1,4 @@
 using TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;

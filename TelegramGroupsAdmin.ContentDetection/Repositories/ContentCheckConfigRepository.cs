@@ -50,7 +50,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve critical checks for chat {ChatId}", chatId);
-            return Enumerable.Empty<ContentCheckConfig>();
+            return [];
         }
     }
 
@@ -112,7 +112,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve all check configs for chat {ChatId}", chatId);
-            return Enumerable.Empty<ContentCheckConfig>();
+            return [];
         }
     }
 
@@ -223,7 +223,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve global check configs");
-            return Enumerable.Empty<ContentCheckConfig>();
+            return [];
         }
     }
 }

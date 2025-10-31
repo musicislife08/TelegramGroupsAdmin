@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -49,7 +48,7 @@ public partial class TokenizerService : ITokenizerService
     public string[] Tokenize(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
-            return Array.Empty<string>();
+            return [];
 
         // Remove emojis first
         text = RemoveEmojis(text);

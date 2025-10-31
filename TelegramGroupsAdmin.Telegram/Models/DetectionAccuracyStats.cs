@@ -9,7 +9,7 @@ public class DetectionAccuracyStats
     /// <summary>
     /// Daily breakdown of accuracy metrics
     /// </summary>
-    public List<DailyAccuracy> DailyBreakdown { get; set; } = new();
+    public List<DailyAccuracy> DailyBreakdown { get; set; } = [];
 
     /// <summary>
     /// Total false positives in the period (system said spam, was actually ham)

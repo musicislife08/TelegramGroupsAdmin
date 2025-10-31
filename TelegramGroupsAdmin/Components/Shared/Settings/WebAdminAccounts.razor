@@ -1,6 +1,4 @@
-@using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.Components.Shared
 @inject IUserManagementService UserManagementService
 @inject IInviteService InviteService
 @inject IAuthService AuthService
@@ -19,13 +17,13 @@
                 <MudButton Variant="Variant.Outlined"
                           Color="Color.Primary"
                           StartIcon="@Icons.Material.Filled.List"
-                          OnClick="ManageInvites">
+                          OnClick="@ManageInvites">
                     Manage Invites
                 </MudButton>
                 <MudButton Variant="Variant.Filled"
                           Color="Color.Primary"
                           StartIcon="@Icons.Material.Filled.PersonAdd"
-                          OnClick="CreateUser">
+                          OnClick="@CreateUser">
                     Create User
                 </MudButton>
             </MudStack>
@@ -117,7 +115,7 @@
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.LockReset"
                                             IconColor="Color.Warning"
-                                            OnClick="@(() => Reset2FA(context))">
+                                            OnClick="@(() => Reset2Fa(context))">
                                     Reset 2FA
                                 </MudMenuItem>
                             }
@@ -171,10 +169,10 @@
 </div>
 
 @code {
-    private List<UserRecord> _users = new();
-    private List<UserRecord> _filteredUsers = new();
+    private List<UserRecord> _users = [];
+    private List<UserRecord> _filteredUsers = [];
     private bool _loading = true;
-    private IEnumerable<UserStatus> _selectedStatuses = new[] { UserStatus.Active, UserStatus.Pending, UserStatus.Disabled };
+    private IEnumerable<UserStatus>? _selectedStatuses = [UserStatus.Active, UserStatus.Pending, UserStatus.Disabled];
     private string? _currentUserId;
     private PermissionLevel _currentUserPermissionLevel = PermissionLevel.Admin;
 
@@ -187,7 +185,7 @@
         await LoadUsersAsync();
     }
 
-    private void OnStatusFilterChanged(IEnumerable<UserStatus> selectedValues)
+    private void OnStatusFilterChanged(IEnumerable<UserStatus>? selectedValues)
     {
         _selectedStatuses = selectedValues;
         FilterUsers();
@@ -218,7 +216,7 @@
     {
         if (_selectedStatuses == null || !_selectedStatuses.Any())
         {
-            _filteredUsers = new List<UserRecord>();
+            _filteredUsers = [];
         }
         else
         {
@@ -231,15 +229,17 @@
 
     private async Task EditUserPermission(UserRecord user)
     {
-        var parameters = new DialogParameters<PermissionDialog>();
-        parameters.Add(p => p.CurrentPermissionLevel, (PermissionLevel)user.PermissionLevelInt);
-        parameters.Add(p => p.UserEmail, user.Email);
-        parameters.Add(p => p.MaxPermissionLevel, _currentUserPermissionLevel);
+        var parameters = new DialogParameters<PermissionDialog>
+        {
+            { p => p.CurrentPermissionLevel, (PermissionLevel)user.PermissionLevelInt },
+            { p => p.UserEmail, user.Email },
+            { p => p.MaxPermissionLevel, _currentUserPermissionLevel }
+        };
 
         var dialog = await DialogService.ShowAsync<PermissionDialog>("Edit Permission Level", parameters);
         var result = await dialog.Result;
 
-        if (result is not null && !result.Canceled && result.Data is PermissionLevel newLevel)
+        if (result is { Canceled: false, Data: PermissionLevel newLevel })
         {
             // Validate that user isn't trying to escalate beyond their own permission level
             if (newLevel > _currentUserPermissionLevel)
@@ -305,13 +305,12 @@
             return;
         }
 
-        var parameters = new DialogParameters<CreateInviteDialog>();
-        parameters.Add(p => p.MaxPermissionLevel, _currentUserPermissionLevel);
+        var parameters = new DialogParameters<CreateInviteDialog> { { p => p.MaxPermissionLevel, _currentUserPermissionLevel } };
 
         var dialog = await DialogService.ShowAsync<CreateInviteDialog>("Create User", parameters);
         var result = await dialog.Result;
 
-        if (result is not null && !result.Canceled && result.Data != null)
+        if (result is { Canceled: false, Data: not null })
         {
             try
             {
@@ -330,9 +329,11 @@
                 var expiresAt = DateTimeOffset.UtcNow.AddDays(validDays);
 
                 // Show the invite link in a new dialog
-                var linkParameters = new DialogParameters<CreateInviteDialog>();
-                linkParameters.Add(p => p.InviteLink, inviteLink);
-                linkParameters.Add(p => p.ExpiresAt, expiresAt);
+                var linkParameters = new DialogParameters<CreateInviteDialog>
+                {
+                    { p => p.InviteLink, inviteLink },
+                    { p => p.ExpiresAt, expiresAt }
+                };
 
                 await DialogService.ShowAsync<CreateInviteDialog>("Invite Link Created", linkParameters);
                 Snackbar.Add("Invite created successfully", Severity.Success);
@@ -391,7 +392,7 @@
         }
     }
 
-    private async Task Reset2FA(UserRecord user)
+    private async Task Reset2Fa(UserRecord user)
     {
         var confirmed = await DialogService.ShowMessageBox(
             "Reset 2FA",
@@ -406,7 +407,7 @@
         {
             try
             {
-                await UserManagementService.Reset2FAAsync(user.Id, _currentUserId!);
+                await UserManagementService.Reset2FaAsync(user.Id, _currentUserId!);
                 Snackbar.Add($"Reset 2FA for {user.Email}", Severity.Success);
                 await LoadUsersAsync();
             }

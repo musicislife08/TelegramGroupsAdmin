@@ -49,7 +49,7 @@ public class MessageHistoryService : IMessageHistoryService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve message history for chat {ChatId}", chatId);
-            return Enumerable.Empty<HistoryMessage>();
+            return [];
         }
     }
 

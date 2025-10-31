@@ -16,9 +16,9 @@
             <MudTextField @bind-Value="_passphrase"
                           Label="Passphrase"
                           Variant="Variant.Outlined"
-                          InputType="@_passphraseInputType"
+                          InputType="@PassphraseInputType"
                           Adornment="Adornment.End"
-                          AdornmentIcon="@_passphraseVisibilityIcon"
+                          AdornmentIcon="@PassphraseVisibilityIcon"
                           OnAdornmentClick="TogglePassphraseVisibility"
                           Immediate="true"
                           FullWidth="true"
@@ -27,10 +27,10 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="OnCancel">Cancel</MudButton>
+        <MudButton OnClick="@OnCancel">Cancel</MudButton>
         <MudButton Color="Color.Primary"
                    Variant="Variant.Filled"
-                   OnClick="OnSubmit"
+                   OnClick="@OnSubmit"
                    Disabled="@string.IsNullOrWhiteSpace(_passphrase)">
             Decrypt & Restore
         </MudButton>
@@ -41,10 +41,10 @@
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
 
     private string _passphrase = string.Empty;
-    private bool _showPassphrase = false;
+    private bool _showPassphrase;
 
-    private InputType _passphraseInputType => _showPassphrase ? InputType.Text : InputType.Password;
-    private string _passphraseVisibilityIcon => _showPassphrase ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility;
+    private InputType PassphraseInputType => _showPassphrase ? InputType.Text : InputType.Password;
+    private string PassphraseVisibilityIcon => _showPassphrase ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility;
 
     private void TogglePassphraseVisibility() => _showPassphrase = !_showPassphrase;
 

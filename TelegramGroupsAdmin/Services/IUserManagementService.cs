@@ -9,5 +9,5 @@ public interface IUserManagementService
     Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, int modifierPermissionLevel, CancellationToken ct = default);
     Task UpdateStatusAsync(string userId, UserStatus newStatus, string modifiedBy, CancellationToken ct = default);
     Task SetUserActiveAsync(string userId, bool isActive, CancellationToken ct = default); // Deprecated
-    Task Reset2FAAsync(string userId, string modifiedBy, CancellationToken ct = default);
+    Task Reset2FaAsync(string userId, string modifiedBy, CancellationToken ct = default);
 }

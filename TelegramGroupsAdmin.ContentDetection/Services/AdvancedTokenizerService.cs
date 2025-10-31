@@ -23,7 +23,7 @@ public partial class AdvancedTokenizerService : ITokenizerService
     public string[] Tokenize(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
-            return Array.Empty<string>();
+            return [];
 
         // Apply preprocessing based on options
         if (_options.RemoveEmojis)

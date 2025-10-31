@@ -17,7 +17,7 @@
             <MudStack Spacing="3">
                 <MudText Typo="Typo.h6" Color="Color.Primary">URL Blocklist</MudText>
 
-                @if (!_isGlobalView)
+                @if (!IsGlobalView)
                 {
                     <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
                         <MudSwitch T="bool" Value="_config.UrlBlocklist.UseGlobal"
@@ -28,8 +28,8 @@
                 }
 
                 @{
-                    var urlConfig = (_isGlobalView || !_config.UrlBlocklist.UseGlobal) ? _config.UrlBlocklist : _globalConfig.UrlBlocklist;
-                    var urlReadOnly = !_isGlobalView && _config.UrlBlocklist.UseGlobal;
+                    var urlConfig = (IsGlobalView || !_config.UrlBlocklist.UseGlobal) ? _config.UrlBlocklist : _globalConfig.UrlBlocklist;
+                    var urlReadOnly = !IsGlobalView && _config.UrlBlocklist.UseGlobal;
                     var urlCacheHours = (int)urlConfig.CacheDuration.TotalHours;
                 }
 
@@ -57,7 +57,7 @@
             <MudStack Spacing="3">
                 <MudText Typo="Typo.h6" Color="Color.Primary">Threat Intelligence</MudText>
 
-                @if (!_isGlobalView)
+                @if (!IsGlobalView)
                 {
                     <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
                         <MudSwitch T="bool" Value="_config.ThreatIntel.UseGlobal"
@@ -68,8 +68,8 @@
                 }
 
                 @{
-                    var threatConfig = (_isGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
-                    var threatReadOnly = !_isGlobalView && _config.ThreatIntel.UseGlobal;
+                    var threatConfig = (IsGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
+                    var threatReadOnly = !IsGlobalView && _config.ThreatIntel.UseGlobal;
                     var threatTimeoutSeconds = (int)threatConfig.Timeout.TotalSeconds;
                 }
 
@@ -103,7 +103,7 @@
             <MudStack Spacing="3">
                 <MudText Typo="Typo.h6" Color="Color.Primary">SEO Scraping</MudText>
 
-                @if (!_isGlobalView)
+                @if (!IsGlobalView)
                 {
                     <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
                         <MudSwitch T="bool" Value="_config.SeoScraping.UseGlobal"
@@ -114,8 +114,8 @@
                 }
 
                 @{
-                    var seoConfig = (_isGlobalView || !_config.SeoScraping.UseGlobal) ? _config.SeoScraping : _globalConfig.SeoScraping;
-                    var seoReadOnly = !_isGlobalView && _config.SeoScraping.UseGlobal;
+                    var seoConfig = (IsGlobalView || !_config.SeoScraping.UseGlobal) ? _config.SeoScraping : _globalConfig.SeoScraping;
+                    var seoReadOnly = !IsGlobalView && _config.SeoScraping.UseGlobal;
                     var seoTimeoutSeconds = (int)seoConfig.Timeout.TotalSeconds;
                 }
 
@@ -143,7 +143,7 @@
             <MudStack Spacing="3">
                 <MudText Typo="Typo.h6" Color="Color.Primary">Image Content Detection</MudText>
 
-                @if (!_isGlobalView)
+                @if (!IsGlobalView)
                 {
                     <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
                         <MudSwitch T="bool" Value="_config.ImageSpam.UseGlobal"
@@ -154,8 +154,8 @@
                 }
 
                 @{
-                    var imageConfig = (_isGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
-                    var imageReadOnly = !_isGlobalView && _config.ImageSpam.UseGlobal;
+                    var imageConfig = (IsGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
+                    var imageReadOnly = !IsGlobalView && _config.ImageSpam.UseGlobal;
                     var imageTimeoutSeconds = (int)imageConfig.Timeout.TotalSeconds;
                 }
 
@@ -189,7 +189,7 @@
             <MudStack Spacing="3">
                 <MudText Typo="Typo.h6" Color="Color.Primary">Video Content Detection</MudText>
 
-                @if (!_isGlobalView)
+                @if (!IsGlobalView)
                 {
                     <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
                         <MudSwitch T="bool" Value="_config.VideoSpam.UseGlobal"
@@ -200,8 +200,8 @@
                 }
 
                 @{
-                    var videoConfig = (_isGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
-                    var videoReadOnly = !_isGlobalView && _config.VideoSpam.UseGlobal;
+                    var videoConfig = (IsGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
+                    var videoReadOnly = !IsGlobalView && _config.VideoSpam.UseGlobal;
                     var videoTimeoutSeconds = (int)videoConfig.Timeout.TotalSeconds;
                 }
 
@@ -237,7 +237,7 @@
 
     private SpamDetectionConfig _config = new();
     private SpamDetectionConfig _globalConfig = new();
-    private bool _isGlobalView => !ChatId.HasValue || ChatId.Value == 0;
+    private bool IsGlobalView => ChatId is null or 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -251,7 +251,7 @@
             // Always load global config for comparison/fallback
             _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
 
-            if (_isGlobalView)
+            if (IsGlobalView)
             {
                 // Editing global config directly
                 _config = _globalConfig;
@@ -274,7 +274,7 @@
     public SpamDetectionConfig GetConfig()
     {
         // Ensure global configs always have UseGlobal=true
-        if (_isGlobalView)
+        if (IsGlobalView)
         {
             _config.UrlBlocklist.UseGlobal = true;
             _config.ThreatIntel.UseGlobal = true;
@@ -286,7 +286,7 @@
         return _config;
     }
 
-    private bool _isSaving = false;
+    private bool _isSaving;
 
     private async Task SaveConfiguration()
     {
@@ -296,7 +296,7 @@
         try
         {
             // Ensure global configs have UseGlobal=true
-            if (_isGlobalView)
+            if (IsGlobalView)
             {
                 _config.UrlBlocklist.UseGlobal = true;
                 _config.ThreatIntel.UseGlobal = true;
@@ -305,7 +305,7 @@
                 _config.VideoSpam.UseGlobal = true;
             }
 
-            if (_isGlobalView)
+            if (IsGlobalView)
             {
                 await ConfigRepository.UpdateGlobalConfigAsync(_config);
                 Snackbar.Add("Global settings saved", Severity.Success);
@@ -335,14 +335,14 @@
 
     private async Task OnUrlEnabledChanged(bool value)
     {
-        var config = (_isGlobalView || !_config.UrlBlocklist.UseGlobal) ? _config.UrlBlocklist : _globalConfig.UrlBlocklist;
+        var config = (IsGlobalView || !_config.UrlBlocklist.UseGlobal) ? _config.UrlBlocklist : _globalConfig.UrlBlocklist;
         config.Enabled = value;
         await SaveConfiguration();
     }
 
     private async Task OnUrlCacheHoursChanged(int hours)
     {
-        var config = (_isGlobalView || !_config.UrlBlocklist.UseGlobal) ? _config.UrlBlocklist : _globalConfig.UrlBlocklist;
+        var config = (IsGlobalView || !_config.UrlBlocklist.UseGlobal) ? _config.UrlBlocklist : _globalConfig.UrlBlocklist;
         config.CacheDuration = TimeSpan.FromHours(hours);
         await SaveConfiguration();
     }
@@ -356,21 +356,21 @@
 
     private async Task OnThreatEnabledChanged(bool value)
     {
-        var config = (_isGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
+        var config = (IsGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
         config.Enabled = value;
         await SaveConfiguration();
     }
 
     private async Task OnThreatUseVirusTotalChanged(bool value)
     {
-        var config = (_isGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
+        var config = (IsGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
         config.UseVirusTotal = value;
         await SaveConfiguration();
     }
 
     private async Task OnThreatTimeoutChanged(int seconds)
     {
-        var config = (_isGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
+        var config = (IsGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
         config.Timeout = TimeSpan.FromSeconds(seconds);
         await SaveConfiguration();
     }
@@ -384,14 +384,14 @@
 
     private async Task OnSeoEnabledChanged(bool value)
     {
-        var config = (_isGlobalView || !_config.SeoScraping.UseGlobal) ? _config.SeoScraping : _globalConfig.SeoScraping;
+        var config = (IsGlobalView || !_config.SeoScraping.UseGlobal) ? _config.SeoScraping : _globalConfig.SeoScraping;
         config.Enabled = value;
         await SaveConfiguration();
     }
 
     private async Task OnSeoTimeoutChanged(int seconds)
     {
-        var config = (_isGlobalView || !_config.SeoScraping.UseGlobal) ? _config.SeoScraping : _globalConfig.SeoScraping;
+        var config = (IsGlobalView || !_config.SeoScraping.UseGlobal) ? _config.SeoScraping : _globalConfig.SeoScraping;
         config.Timeout = TimeSpan.FromSeconds(seconds);
         await SaveConfiguration();
     }
@@ -405,21 +405,21 @@
 
     private async Task OnImageEnabledChanged(bool value)
     {
-        var config = (_isGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
+        var config = (IsGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
         config.Enabled = value;
         await SaveConfiguration();
     }
 
     private async Task OnImageUseOpenAIVisionChanged(bool value)
     {
-        var config = (_isGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
+        var config = (IsGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
         config.UseOpenAIVision = value;
         await SaveConfiguration();
     }
 
     private async Task OnImageTimeoutChanged(int seconds)
     {
-        var config = (_isGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
+        var config = (IsGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
         config.Timeout = TimeSpan.FromSeconds(seconds);
         await SaveConfiguration();
     }
@@ -433,21 +433,21 @@
 
     private async Task OnVideoEnabledChanged(bool value)
     {
-        var config = (_isGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
+        var config = (IsGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
         config.Enabled = value;
         await SaveConfiguration();
     }
 
     private async Task OnVideoUseOpenAIVisionChanged(bool value)
     {
-        var config = (_isGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
+        var config = (IsGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
         config.UseOpenAIVision = value;
         await SaveConfiguration();
     }
 
     private async Task OnVideoTimeoutChanged(int seconds)
     {
-        var config = (_isGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
+        var config = (IsGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
         config.Timeout = TimeSpan.FromSeconds(seconds);
         await SaveConfiguration();
     }

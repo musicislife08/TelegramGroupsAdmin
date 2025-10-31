@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
 using TickerQ.Utilities.Base;

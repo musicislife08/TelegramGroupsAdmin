@@ -13,8 +13,8 @@ public class HelpCommand : IBotCommand
 
     // Static metadata for all commands (avoids reflection complexity with DI)
     // Note: /start is excluded - it's only for deep links and DMs
-    private static readonly List<CommandMetadata> _commandMetadata = new()
-    {
+    private static readonly List<CommandMetadata> _commandMetadata =
+    [
         new("report", "Report message for admin review", 0),
         new("invite", "Get invite link for this chat", -1),
         new("link", "Link your Telegram account to web app", 1),
@@ -25,7 +25,7 @@ public class HelpCommand : IBotCommand
         new("unban", "Remove ban from user", 1),
         new("warn", "Issue warning to user", 1),
         new("delete", "[TEST] Delete a message", 1)
-    };
+    ];
 
     private record CommandMetadata(string Name, string Description, int MinPermissionLevel);
 

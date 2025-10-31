@@ -1,12 +1,9 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Services.Media
-@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.BackgroundJobs
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Abstractions
 @using TelegramGroupsAdmin.Telegram.Abstractions.Jobs
-@using TickerQ.Utilities.Interfaces.Managers
-@using TickerQ.Utilities.Models.Ticker
 @using System.Text.Json
 @inject IBackgroundJobConfigService JobConfigService
 @inject IMediaRefetchQueueService QueueService
@@ -258,18 +255,18 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="CloseConfigDialog">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveConfigAsync">Save</MudButton>
+        <MudButton OnClick="@CloseConfigDialog">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@SaveConfigAsync">Save</MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
     private Dictionary<string, BackgroundJobConfig>? _jobs;
-    private int _queueDepth = 0;
+    private int _queueDepth;
     private Timer? _refreshTimer;
 
     // Dialog state
-    private bool _showConfigDialog = false;
+    private bool _showConfigDialog;
     private BackgroundJobConfig? _editingJob;
     private string _editScheduleType = "interval";
     private string? _editIntervalDuration = "1h";
@@ -338,12 +335,12 @@
         try
         {
             // Build payload based on job type
-            object? payload = jobName switch
+            object payload = jobName switch
             {
                 BackgroundJobNames.ScheduledBackup => BuildBackupPayload(job),
                 BackgroundJobNames.DatabaseMaintenance => BuildMaintenancePayload(job),
                 BackgroundJobNames.UserPhotoRefresh => BuildUserPhotoRefreshPayload(job),
-                BackgroundJobNames.BlocklistSync => BuildBlocklistSyncPayload(job),
+                BackgroundJobNames.BlocklistSync => BuildBlocklistSyncPayload(),
                 _ => new { } // Empty object for jobs without payloads
             };
 
@@ -558,7 +555,7 @@
         };
     }
 
-    private object BuildBlocklistSyncPayload(BackgroundJobConfig job)
+    private object BuildBlocklistSyncPayload()
     {
         return new BlocklistSyncJobPayload(
             SubscriptionId: null, // Sync all

@@ -24,12 +24,12 @@
         <MudSpacer />
         <MudDivider Class="my-2" />
         <MudNavLink Href="/profile" Icon="@Icons.Material.Filled.AccountCircle">Profile</MudNavLink>
-        <MudNavLink OnClick="LogoutAsync" Icon="@Icons.Material.Filled.Logout">Logout</MudNavLink>
+        <MudNavLink OnClick="@LogoutAsync" Icon="@Icons.Material.Filled.Logout">Logout</MudNavLink>
     }
 </MudNavMenu>
 
 @code {
-    [Inject] private NavigationManager Navigation { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = null!;
 
     private bool _isAuthenticated;
     private bool _isAdminOrOwner;

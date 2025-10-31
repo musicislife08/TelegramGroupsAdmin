@@ -1,5 +1,3 @@
-@using TelegramGroupsAdmin.Telegram.Models
-@using TelegramGroupsAdmin.Telegram.Repositories
 @inject IMessageHistoryRepository MessageRepository
 
 <MudCard Elevation="2" Class="mb-3">
@@ -63,29 +61,29 @@
             <MudButton Variant="Variant.Filled"
                        Color="Color.Error"
                        StartIcon="@Icons.Material.Filled.Block"
-                       OnClick="OnMarkSpam"
-                       Disabled="@ActionInProgress">
+                       OnClick="@OnMarkSpam"
+                       Disabled="@_actionInProgress">
                 Delete as Spam
             </MudButton>
             <MudButton Variant="Variant.Filled"
                        Color="Color.Warning"
                        StartIcon="@Icons.Material.Filled.Gavel"
-                       OnClick="OnBan"
-                       Disabled="@ActionInProgress">
+                       OnClick="@OnBan"
+                       Disabled="@_actionInProgress">
                 Ban User
             </MudButton>
             <MudButton Variant="Variant.Filled"
                        Color="Color.Warning"
                        StartIcon="@Icons.Material.Filled.Warning"
-                       OnClick="OnWarn"
-                       Disabled="@ActionInProgress">
+                       OnClick="@OnWarn"
+                       Disabled="@_actionInProgress">
                 Warn
             </MudButton>
             <MudButton Variant="Variant.Outlined"
                        Color="Color.Default"
                        StartIcon="@Icons.Material.Filled.Close"
-                       OnClick="OnDismiss"
-                       Disabled="@ActionInProgress">
+                       OnClick="@OnDismiss"
+                       Disabled="@_actionInProgress">
                 Dismiss
             </MudButton>
         }
@@ -133,7 +131,7 @@
 
     private MessageRecord? _message;
     private string? _telegramLink;
-    private bool ActionInProgress = false;
+    private bool _actionInProgress;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -147,7 +145,6 @@
         {
             DataModels.ReportStatus.Pending => Color.Warning,
             DataModels.ReportStatus.Reviewed => Color.Success,
-            DataModels.ReportStatus.Dismissed => Color.Default,
             _ => Color.Default
         };
     }
@@ -173,29 +170,29 @@
 
     private async Task OnMarkSpam()
     {
-        ActionInProgress = true;
+        _actionInProgress = true;
         await OnAction.InvokeAsync((Report, "spam"));
-        ActionInProgress = false;
+        _actionInProgress = false;
     }
 
     private async Task OnBan()
     {
-        ActionInProgress = true;
+        _actionInProgress = true;
         await OnAction.InvokeAsync((Report, "ban"));
-        ActionInProgress = false;
+        _actionInProgress = false;
     }
 
     private async Task OnWarn()
     {
-        ActionInProgress = true;
+        _actionInProgress = true;
         await OnAction.InvokeAsync((Report, "warn"));
-        ActionInProgress = false;
+        _actionInProgress = false;
     }
 
     private async Task OnDismiss()
     {
-        ActionInProgress = true;
+        _actionInProgress = true;
         await OnAction.InvokeAsync((Report, "dismiss"));
-        ActionInProgress = false;
+        _actionInProgress = false;
     }
 }

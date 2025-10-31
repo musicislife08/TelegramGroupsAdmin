@@ -28,17 +28,17 @@ public class FileScanTestResult
     /// <summary>
     /// All detected threat names
     /// </summary>
-    public List<string> ThreatNames { get; init; } = new();
+    public List<string> ThreatNames { get; init; } = [];
 
     /// <summary>
     /// Scanners that detected threats
     /// </summary>
-    public List<string> DetectedBy { get; init; } = new();
+    public List<string> DetectedBy { get; init; } = [];
 
     /// <summary>
     /// Individual scanner results
     /// </summary>
-    public List<ScannerResultDetail> ScannerResults { get; init; } = new();
+    public List<ScannerResultDetail> ScannerResults { get; init; } = [];
 
     /// <summary>
     /// Total scan duration in milliseconds

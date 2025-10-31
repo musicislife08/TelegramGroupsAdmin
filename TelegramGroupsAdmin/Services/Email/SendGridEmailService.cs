@@ -32,7 +32,7 @@ public class SendGridEmailService : IEmailService
 
     public async Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, CancellationToken ct = default)
     {
-        await SendEmailAsync(new[] { to }, subject, body, isHtml, ct);
+        await SendEmailAsync([to], subject, body, isHtml, ct);
     }
 
     public async Task SendEmailAsync(IEnumerable<string> to, string subject, string body, bool isHtml = true, CancellationToken ct = default)

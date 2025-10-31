@@ -1,9 +1,7 @@
 @page "/settings"
 @page "/settings/{Section?}/{SubSection?}"
 @attribute [Authorize(Policy = "GlobalAdminOrOwner")]
-@using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Components.Shared.ContentDetection
-@using TelegramGroupsAdmin.Components.Shared
 @using TelegramGroupsAdmin.Components.Shared.Settings
 @using TelegramGroupsAdmin.Services
 @inject NavigationManager Navigation
@@ -233,19 +231,19 @@
     [Parameter]
     public string? SubSection { get; set; }
 
-    private bool _systemExpanded = false;
-    private bool _telegramExpanded = false;
-    private bool _contentDetectionExpanded = false;
-    private bool _trainingDataExpanded = false;
+    private bool _systemExpanded;
+    private bool _telegramExpanded;
+    private bool _contentDetectionExpanded;
+    private bool _trainingDataExpanded;
 
     private string _currentSection = "";
     private string _currentSubSection = "";
     private string _pageTitle = "";
 
     // Permission flags
-    private bool _canManageAdminAccounts = false;
-    private bool _canEditInfrastructure = false;
-    private bool _canEditContent = false;
+    private bool _canManageAdminAccounts;
+    private bool _canEditInfrastructure;
+    private bool _canEditContent;
 
     protected override async Task OnInitializedAsync()
     {
@@ -305,7 +303,7 @@
         };
     }
 
-    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         StateHasChanged();
     }

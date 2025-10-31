@@ -1,17 +1,9 @@
 @page "/messages"
-@using Microsoft.AspNetCore.Authorization
-@using Microsoft.JSInterop
-@using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.Components.Shared
-@using TelegramGroupsAdmin.Telegram.Repositories
-@using TelegramGroupsAdmin.Telegram.Models
-@using TelegramGroupsAdmin.Core.Models
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
 @inject IMessageHistoryRepository MessageRepository
 @inject IManagedChatsRepository ChatsRepository
-@inject IMessageExportService ExportService
-@inject IJSRuntime JS
+@inject IJSRuntime Js
 @inject IDialogService DialogService
 @inject IMessageHistoryService MessageHistoryService
 @inject BlazorAuthHelper AuthHelper
@@ -21,8 +13,7 @@
 @inject NavigationManager NavigationManager
 @inject ILogger<Messages> Logger
 @inject ISnackbar Snackbar
-@inject TelegramGroupsAdmin.Services.Media.IMediaRefetchQueueService MediaRefetchQueue
-@inject Microsoft.Extensions.Options.IOptions<TelegramGroupsAdmin.Configuration.MessageHistoryOptions> MessageHistoryOptions
+@inject Services.Media.IMediaRefetchQueueService MediaRefetchQueue
 @inject TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService TranslationService
 @attribute [Authorize]
 @implements IDisposable
@@ -147,33 +138,33 @@
 
 @code {
     // Chat state
-    private List<ManagedChatRecord> _managedChats = new();
-    private List<ManagedChatRecord> _filteredChats = new();
+    private List<ManagedChatRecord> _managedChats = [];
+    private List<ManagedChatRecord> _filteredChats = [];
     private string _chatSearchText = "";
-    private long? _selectedChatId = null;
-    private Dictionary<long, int> _chatMessageCounts = new();
-    private Dictionary<long, int> _chatUnreadCounts = new();
-    private Dictionary<long, string> _lastMessagePreviews = new();
+    private long? _selectedChatId;
+    private readonly Dictionary<long, int> _chatMessageCounts = new();
+    private readonly Dictionary<long, int> _chatUnreadCounts = new();
+    private readonly Dictionary<long, string> _lastMessagePreviews = new();
 
     // Message state (per-chat) - PERF-APP-1: Use composite model with detection history included
-    private List<MessageWithDetectionHistory> _allMessages = new();
-    private List<MessageWithDetectionHistory> _filteredMessages = new();
+    private List<MessageWithDetectionHistory> _allMessages = [];
+    private List<MessageWithDetectionHistory> _filteredMessages = [];
     private Dictionary<long, SpamCheckRecord> _spamChecks = new();
     private Dictionary<long, int> _editCounts = new();
-    private bool _loading = false;
-    private bool _loadingMore = false;
+    private bool _loading;
+    private bool _loadingMore;
     private bool _hasMore = true;
-    private bool _needsObserverInit = false;
+    private bool _needsObserverInit;
     private DateTime _lastUpdate = DateTime.Now;
 
     // User state
     private PermissionLevel _userPermissionLevel = PermissionLevel.Admin; // Default to Admin
-    private HashSet<long> _userTelegramIds = new(); // Current user's linked Telegram IDs
+    private HashSet<long> _userTelegramIds = []; // Current user's linked Telegram IDs
 
-    private MessageFilterState _filterState = new();
-    private long? _highlightMessageId = null; // Message to scroll to and highlight
-    private bool _firstRenderComplete = false; // Track if we've done the initial auto-scroll
-    private long? _filterByUserId = null; // Track userId from query string for name lookup after load
+    private readonly MessageFilterState _filterState = new();
+    private long? _highlightMessageId; // Message to scroll to and highlight
+    private bool _firstRenderComplete; // Track if we've done the initial auto-scroll
+    private long? _filterByUserId; // Track userId from query string for name lookup after load
     private const int PageSize = 50;
 
     // Infinite scroll state
@@ -236,7 +227,7 @@
         {
             try
             {
-                _infiniteScrollModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/infinite-scroll.js");
+                _infiniteScrollModule = await Js.InvokeAsync<IJSObjectReference>("import", "./js/infinite-scroll.js");
             }
             catch (Exception ex)
             {
@@ -245,7 +236,7 @@
         }
 
         // (Re)initialize observer when needed (chat loaded with _hasMore = true)
-        if (_needsObserverInit && _infiniteScrollModule != null && _selectedChatId.HasValue && _hasMore && _scrollSentinel.Id != null)
+        if (_needsObserverInit && _infiniteScrollModule != null && _selectedChatId.HasValue && _hasMore)
         {
             try
             {
@@ -288,7 +279,7 @@
                     }
 
                     // Add to the list if not already there (wrapped in MessageWithDetectionHistory)
-                    if (!_allMessages.Any(mw => mw.Message.MessageId == targetMessageId))
+                    if (_allMessages.All(mw => mw.Message.MessageId != targetMessageId))
                     {
                         var messageWrapper = new MessageWithDetectionHistory { Message = message };
 
@@ -314,7 +305,7 @@
                             _editCounts[kvp.Key] = kvp.Value;
 
                         // Load detection history for Admin+ users (now included in wrapper)
-                        if (_userPermissionLevel >= PermissionLevel.GlobalAdmin && messageWrapper != null)
+                        if (_userPermissionLevel >= PermissionLevel.GlobalAdmin)
                         {
                             var history = await DetectionResultsRepository.GetByMessageIdAsync(targetMessageId);
                             messageWrapper.DetectionResults.AddRange(history);
@@ -326,7 +317,7 @@
                 }
 
                 // Use JavaScript to scroll to and highlight the message
-                await JS.InvokeVoidAsync("scrollToMessage", targetMessageId);
+                await Js.InvokeVoidAsync("scrollToMessage", targetMessageId);
 
                 Logger.LogInformation("Successfully scrolled to highlighted message: {MessageId}", targetMessageId);
             }
@@ -344,6 +335,7 @@
         await base.OnAfterRenderAsync(firstRender);
     }
 
+    // ReSharper disable once AsyncVoidMethod
     private async void HandleNewMessage(MessageRecord message)
     {
         // CRITICAL: Must use InvokeAsync because HistoryBot runs on background thread
@@ -360,7 +352,7 @@
                 }
 
                 // Capture scroll state before adding message
-                var scrollState = await JS.InvokeAsync<ScrollState>("captureScrollState", _messagesContainer);
+                var scrollState = await Js.InvokeAsync<ScrollState>("captureScrollState", _messagesContainer);
 
                 // Add to our list at the beginning (most recent first) wrapped in MessageWithDetectionHistory
                 _allMessages.Insert(0, new MessageWithDetectionHistory { Message = message });
@@ -385,7 +377,7 @@
                 StateHasChanged();
 
                 // Wait for browser to complete render cycle, then restore scroll
-                await JS.InvokeVoidAsync("restoreScrollStateAfterRender", _messagesContainer, scrollState);
+                await Js.InvokeVoidAsync("restoreScrollStateAfterRender", _messagesContainer, scrollState);
 
                 Logger.LogDebug("Added new real-time message {MessageId} to chat {ChatId} view",
                     message.MessageId, message.ChatId);
@@ -397,7 +389,8 @@
         });
     }
 
-    private async void HandleMediaUpdated(long messageId, TelegramGroupsAdmin.Telegram.Models.MediaType mediaType)
+    // ReSharper disable once AsyncVoidMethod
+    private async void HandleMediaUpdated(long messageId, MediaType mediaType)
     {
         // CRITICAL: Must use InvokeAsync because worker runs on background thread
         await InvokeAsync(async () =>
@@ -462,14 +455,14 @@
             if (string.IsNullOrEmpty(userId))
             {
                 Logger.LogWarning("Unable to identify current user for chat filtering");
-                _managedChats = new List<ManagedChatRecord>();
+                _managedChats = [];
                 return;
             }
 
             // Load chats accessible to this user (filtered by permission level)
             _managedChats = await ChatsRepository.GetUserAccessibleChatsAsync(
                 userId,
-                (PermissionLevel)permissionLevel);
+                permissionLevel);
             ApplyChatFilter();
 
             // Calculate message counts for each chat
@@ -794,19 +787,6 @@
         };
 
         await DialogService.ShowAsync<EditHistoryDialog>("Edit History", parameters, options);
-    }
-
-    private bool HasActiveFilters()
-    {
-        return !string.IsNullOrEmpty(_filterState.SearchText)
-               || !string.IsNullOrEmpty(_filterState.UserName)
-               || !string.IsNullOrEmpty(_filterState.ChatName)
-               || _filterState.SpamFilter != SpamFilterOption.All
-               || _filterState.StartDate.HasValue
-               || _filterState.EndDate.HasValue
-               || _filterState.HasImages.HasValue
-               || _filterState.HasLinks.HasValue
-               || _filterState.HasEdits.HasValue;
     }
 
     // Phase 2.7: Spam/Ham action handlers (uses ModerationActionService)
@@ -1266,7 +1246,7 @@
                 }
 
                 // Add to the list if not already there (wrapped in MessageWithDetectionHistory)
-                if (!_allMessages.Any(mw => mw.Message.MessageId == targetMessageId))
+                if (_allMessages.All(mw => mw.Message.MessageId != targetMessageId))
                 {
                     _allMessages.Add(new MessageWithDetectionHistory { Message = message });
                     ApplyFilters();
@@ -1275,7 +1255,7 @@
             }
 
             // Use JavaScript to scroll to and highlight the message
-            await JS.InvokeVoidAsync("scrollToMessage", targetMessageId);
+            await Js.InvokeVoidAsync("scrollToMessage", targetMessageId);
         }
         catch (Exception ex)
         {

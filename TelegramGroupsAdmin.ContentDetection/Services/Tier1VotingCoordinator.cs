@@ -48,7 +48,7 @@ public class Tier1VotingCoordinator
             {
                 IsClean = true,  // Fail-open for oversized files
                 ThreatDetected = false,
-                ScannerResults = new List<FileScanResult>(),
+                ScannerResults = [],
                 TotalDurationMs = 0,
                 SkippedReason = $"File size {fileBytes.Length} exceeds limit {_config.General.MaxFileSizeBytes}"
             };
@@ -75,7 +75,7 @@ public class Tier1VotingCoordinator
             {
                 IsClean = true,  // Fail-open when no scanners
                 ThreatDetected = false,
-                ScannerResults = new List<FileScanResult>(),
+                ScannerResults = [],
                 TotalDurationMs = 0,
                 SkippedReason = "No scanners enabled"
             };

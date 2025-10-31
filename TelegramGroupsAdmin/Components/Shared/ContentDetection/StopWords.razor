@@ -1,6 +1,4 @@
-@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
-@using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @inject IStopWordsRepository StopWordsRepository
 @inject AuthenticationStateProvider AuthStateProvider
@@ -13,7 +11,7 @@
         <MudButton Variant="Variant.Filled"
                   Color="Color.Primary"
                   StartIcon="@Icons.Material.Filled.Add"
-                  OnClick="AddStopWord">
+                  OnClick="@AddStopWord">
             Add Stop Word
         </MudButton>
     </MudStack>
@@ -31,7 +29,7 @@
                              Adornment="Adornment.Start"
                              AdornmentIcon="@Icons.Material.Filled.Search"
                              Immediate="true"
-                             OnKeyUp="OnSearchChanged"
+                             OnKeyUp="@OnSearchChanged"
                              Style="max-width: 300px;" />
 
                 <MudText Typo="Typo.body2" Class="ml-auto">
@@ -81,12 +79,12 @@
                             <MudIconButton Icon="@(context.Enabled ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
                                          Color="@(context.Enabled ? Color.Warning : Color.Success)"
                                          Size="Size.Small"
-                                         OnClick="() => ToggleStopWordStatus(context)"
+                                         OnClick="@(() => ToggleStopWordStatus(context))"
                                          title="@(context.Enabled ? "Disable" : "Enable")" />
                             <MudIconButton Icon="@Icons.Material.Filled.Edit"
                                          Color="Color.Primary"
                                          Size="Size.Small"
-                                         OnClick="() => EditStopWord(context)"
+                                         OnClick="@(() => EditStopWord(context))"
                                          title="Edit" />
                         </MudStack>
                     </MudTd>
@@ -109,7 +107,7 @@
 </MudContainer>
 
 @code {
-    private List<StopWordItem> _allStopWords = new();
+    private List<StopWordItem> _allStopWords = [];
     private IEnumerable<StopWordItem> _filteredStopWords = new List<StopWordItem>();
     private bool _loading = true;
     private string _searchText = string.Empty;
@@ -118,7 +116,7 @@
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        _currentUserId = authState.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _currentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         await LoadStopWords();
     }
 
@@ -159,7 +157,7 @@
         var dialog = await DialogService.ShowAsync<AddStopWordDialog>("Add Stop Word");
         var result = await dialog.Result;
 
-        if (result is not null && !result.Canceled && result.Data is AddStopWordData data)
+        if (result is not null && result is { Canceled: false, Data: AddStopWordData data })
         {
             try
             {
@@ -192,7 +190,7 @@
         var dialog = await DialogService.ShowAsync<EditStopWordDialog>("Edit Stop Word", parameters);
         var result = await dialog.Result;
 
-        if (result is not null && !result.Canceled && result.Data is EditStopWordData data)
+        if (result is not null && result is { Canceled: false, Data: EditStopWordData data })
         {
             try
             {

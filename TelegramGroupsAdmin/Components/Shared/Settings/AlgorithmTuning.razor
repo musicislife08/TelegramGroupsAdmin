@@ -1,16 +1,12 @@
-@using TelegramGroupsAdmin.Auth
-@using TelegramGroupsAdmin.Telegram.Repositories
-@using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.ContentDetection.ML
 @using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.Core.Models
 @inject IThresholdRecommendationsRepository RecommendationsRepository
 @inject IThresholdRecommendationService RecommendationService
 @inject IAuditService AuditService
 @inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
-@inject IJSRuntime JSRuntime
+@inject IJSRuntime JsRuntime
 
 <MudGrid>
     <!-- Info Alert -->
@@ -46,7 +42,7 @@
 
                     <MudButton Variant="Variant.Filled"
                                Color="Color.Primary"
-                               OnClick="GenerateRecommendationsAsync"
+                               OnClick="@GenerateRecommendationsAsync"
                                Disabled="@_isGenerating"
                                StartIcon="@Icons.Material.Filled.Psychology">
                         @if (_isGenerating)
@@ -221,18 +217,18 @@
 </MudGrid>
 
 @code {
-    private List<ThresholdRecommendation> _recommendations = new();
-    private List<ThresholdRecommendation> _filteredRecommendations = new();
-    private IEnumerable<string> _selectedStatuses = new List<string>
+    private List<ThresholdRecommendation> _recommendations = [];
+    private List<ThresholdRecommendation> _filteredRecommendations = [];
+    private IEnumerable<string?> _selectedStatuses = new List<string>
     {
         "pending" // Only show pending by default - applied and rejected can be toggled on
     };
 
     private DateTime? _analysisPeriodStart = DateTime.Now.AddDays(-30);
-    private bool _isLoading = false;
-    private bool _isGenerating = false;
-    private bool _isApplying = false;
-    private bool _isRejecting = false;
+    private bool _isLoading;
+    private bool _isGenerating;
+    private bool _isApplying;
+    private bool _isRejecting;
     private string _generationMessage = "";
     private Severity _generationMessageSeverity = Severity.Info;
     private string _userTimeZone = "UTC";
@@ -242,7 +238,7 @@
         // Get user's timezone from browser
         try
         {
-            _userTimeZone = await JSRuntime.InvokeAsync<string>("getUserTimeZone");
+            _userTimeZone = await JsRuntime.InvokeAsync<string>("getUserTimeZone");
         }
         catch (Exception ex)
         {
@@ -279,9 +275,9 @@
             .ToList();
     }
 
-    private void OnFilterChanged(IEnumerable<string> newValues)
+    private void OnFilterChanged(IEnumerable<string?>? newValues)
     {
-        _selectedStatuses = newValues.ToList();
+        _selectedStatuses = newValues?.Where(s => s != null)! ?? [];
         FilterRecommendations();
     }
 

@@ -1,7 +1,6 @@
 using Telegram.Bot.Types;
 using TelegramBotDocument = Telegram.Bot.Types.Document;
 using TelegramGroupsAdmin.Telegram.Models;
-using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Handlers;
 
 namespace TelegramGroupsAdmin.Tests.Telegram;
@@ -753,7 +752,7 @@ public class MessageProcessingServiceTests
         // Arrange: Message with new members (join event)
         var message = new Message
         {
-            NewChatMembers = new[] { new User { Id = 123, FirstName = "John" } }
+            NewChatMembers = [new User { Id = 123, FirstName = "John" }]
         };
 
         // Act: Check service message flags (mimics lines 109-117)
@@ -793,7 +792,7 @@ public class MessageProcessingServiceTests
         // Arrange: Chat icon changed
         var message = new Message
         {
-            NewChatPhoto = new[] { new PhotoSize { FileId = "photo_id" } }
+            NewChatPhoto = [new PhotoSize { FileId = "photo_id" }]
         };
 
         // Act

@@ -66,14 +66,14 @@
             <MudButton Variant="Variant.Outlined"
                        Color="Color.Secondary"
                        StartIcon="@Icons.Material.Filled.Refresh"
-                       OnClick="LoadStatsAsync"
+                       OnClick="@LoadStatsAsync"
                        Disabled="_loading">
                 Refresh Stats
             </MudButton>
         </MudStack>
     </MudPaper>
 
-    @if (_stats != null && _stats.TotalMessages == 0)
+    @if (_stats is { TotalMessages: 0 })
     {
         <MudAlert Severity="Severity.Info" Class="mt-4">
             HistoryBot hasn't cached any messages yet. Make sure the bot is running and connected to your Telegram chat.

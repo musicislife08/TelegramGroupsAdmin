@@ -1,7 +1,5 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Configuration.Models
-@using TelegramGroupsAdmin.Core.Models
-@using TelegramGroupsAdmin.Telegram.Models
 @using Microsoft.Extensions.Logging
 @inject IRuntimeLoggingService RuntimeLoggingService
 @inject IAuditService AuditService
@@ -24,7 +22,7 @@
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" />
                     <MudText Typo="Typo.caption" Color="Color.Secondary">Saving...</MudText>
                 }
-                <MudButton Color="Color.Secondary" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" OnClick="ResetToDefaults" Disabled="_loading">
+                <MudButton Color="Color.Secondary" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" OnClick="@ResetToDefaults" Disabled="_loading">
                     Reset to Defaults
                 </MudButton>
             </MudStack>
@@ -64,7 +62,6 @@
                 @foreach (var kvp in _config.Overrides.OrderBy(x => x.Key))
                 {
                     var ns = kvp.Key;
-                    var level = kvp.Value;
                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
                         <MudText Style="flex: 1;">@ns</MudText>
                         <MudSelect T="LogLevel"
@@ -121,7 +118,7 @@
                     <MudButton Variant="Variant.Filled"
                               Color="Color.Primary"
                               StartIcon="@Icons.Material.Filled.Add"
-                              OnClick="AddOverride"
+                              OnClick="@AddOverride"
                               Disabled="string.IsNullOrWhiteSpace(_newNamespace)">
                         Add
                     </MudButton>
@@ -201,7 +198,7 @@
 @code {
     private LogConfig? _config;
     private bool _loading = true;
-    private bool _isSaving = false;
+    private bool _isSaving;
     private string _newNamespace = string.Empty;
     private LogLevel _newLogLevel = LogLevel.Information;
 
@@ -277,13 +274,12 @@
     {
         if (_config == null || string.IsNullOrWhiteSpace(_newNamespace)) return;
 
-        if (_config.Overrides.ContainsKey(_newNamespace))
+        if (!_config.Overrides.TryAdd(_newNamespace, _newLogLevel))
         {
             Snackbar.Add($"Override for '{_newNamespace}' already exists", Severity.Warning);
             return;
         }
 
-        _config.Overrides[_newNamespace] = _newLogLevel;
         _newNamespace = string.Empty;
         _newLogLevel = LogLevel.Information;
         await SaveConfiguration();

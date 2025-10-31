@@ -1,4 +1,3 @@
-@using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Helpers
 @* Telegram-authentic message bubble design *@
 
@@ -53,7 +52,7 @@
                                    Size="Size.Small"
                                    Class="tg-notes-icon"
                                    title="@($"{UserNotes.Count} note(s)")"
-                                   OnClick="ShowNotesDialog" />
+                                   OnClick="@ShowNotesDialog" />
                 }
 
                 @if (Message.DeletedAt.HasValue)
@@ -82,7 +81,7 @@
                                    Size="Size.Small"
                                    Class="tg-translate-toggle"
                                    title="@(_showTranslation ? "Show original" : "Show translation")"
-                                   OnClick="ToggleTranslation" />
+                                   OnClick="@ToggleTranslation" />
                 }
             </div>
 
@@ -106,13 +105,13 @@
 
                 @* Media Attachments (Phase 4.X: GIF, Video, Audio, Voice, Sticker, VideoNote) *@
                 @if (Message.MediaType.HasValue &&
-                     Message.MediaType.Value != TelegramGroupsAdmin.Telegram.Models.MediaType.Document)
+                     Message.MediaType.Value != MediaType.Document)
                 {
                     @if (!string.IsNullOrEmpty(Message.MediaLocalPath))
                     {
                         @switch (Message.MediaType.Value)
                     {
-                        case TelegramGroupsAdmin.Telegram.Models.MediaType.Animation:
+                        case MediaType.Animation:
                             <video src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
                                    class="tg-media tg-animation"
                                    autoplay loop muted playsinline
@@ -120,7 +119,7 @@
                             </video>
                             break;
 
-                        case TelegramGroupsAdmin.Telegram.Models.MediaType.Video:
+                        case MediaType.Video:
                             <video src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
                                    class="tg-media tg-video"
                                    controls preload="metadata"
@@ -128,7 +127,7 @@
                             </video>
                             break;
 
-                        case TelegramGroupsAdmin.Telegram.Models.MediaType.Audio:
+                        case MediaType.Audio:
                             <div class="tg-audio-container">
                                 <div class="tg-audio-icon">🎵</div>
                                 <audio src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
@@ -139,7 +138,7 @@
                             </div>
                             break;
 
-                        case TelegramGroupsAdmin.Telegram.Models.MediaType.Voice:
+                        case MediaType.Voice:
                             <div class="tg-voice-container">
                                 <div class="tg-voice-icon">🎤</div>
                                 <audio src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
@@ -154,14 +153,14 @@
                             </div>
                             break;
 
-                        case TelegramGroupsAdmin.Telegram.Models.MediaType.Sticker:
+                        case MediaType.Sticker:
                             <img src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
                                  alt="Sticker"
                                  class="tg-media tg-sticker"
                                  loading="lazy" />
                             break;
 
-                        case TelegramGroupsAdmin.Telegram.Models.MediaType.VideoNote:
+                        case MediaType.VideoNote:
                             <video src="@GetMediaPath(Message.MediaLocalPath, Message.MediaType.Value)"
                                    class="tg-media tg-videonote"
                                    controls preload="metadata"
@@ -177,16 +176,16 @@
                             <div class="tg-media-placeholder-icon">
                                 @switch (Message.MediaType.Value)
                                 {
-                                    case TelegramGroupsAdmin.Telegram.Models.MediaType.Animation:
-                                    case TelegramGroupsAdmin.Telegram.Models.MediaType.Video:
-                                    case TelegramGroupsAdmin.Telegram.Models.MediaType.VideoNote:
+                                    case MediaType.Animation:
+                                    case MediaType.Video:
+                                    case MediaType.VideoNote:
                                         <span>🎬</span>
                                         break;
-                                    case TelegramGroupsAdmin.Telegram.Models.MediaType.Audio:
-                                    case TelegramGroupsAdmin.Telegram.Models.MediaType.Voice:
+                                    case MediaType.Audio:
+                                    case MediaType.Voice:
                                         <span>🎵</span>
                                         break;
-                                    case TelegramGroupsAdmin.Telegram.Models.MediaType.Sticker:
+                                    case MediaType.Sticker:
                                         <span>🎭</span>
                                         break;
                                 }
@@ -197,7 +196,7 @@
                         </div>
                     }
                 }
-                else if (Message.MediaType == TelegramGroupsAdmin.Telegram.Models.MediaType.Document)
+                else if (Message.MediaType == MediaType.Document)
                 {
                     @* Document: Show icon + filename (no download, file scanner handles security) *@
                     <div class="tg-document-container">
@@ -243,8 +242,8 @@
             @if (ShowSpamActions)
             {
                 <div class="tg-actions-menu"
-                     @onmouseenter="() => _popoverOpen = true"
-                     @onmouseleave="() => _popoverOpen = false">
+                     @onmouseenter="@(() => _popoverOpen = true)"
+                     @onmouseleave="@(() => _popoverOpen = false)">
                     <MudIconButton Icon="@Icons.Material.Filled.MoreVert"
                                    Size="Size.Small"
                                    Class="tg-menu-btn" />
@@ -253,12 +252,12 @@
                                 AnchorOrigin="Origin.BottomRight"
                                 TransformOrigin="Origin.TopRight"
                                 Class="tg-actions-popover"
-                                @onmouseenter="() => _popoverOpen = true"
-                                @onmouseleave="() => _popoverOpen = false">
+                                @onmouseenter="@(() => _popoverOpen = true)"
+                                @onmouseleave="@(() => _popoverOpen = false)">
                         <div class="tg-actions-list">
                             @if (EditCount > 0)
                             {
-                                <MudMenuItem OnClick="() => OnViewEdits.InvokeAsync(Message)">
+                                <MudMenuItem OnClick="@(() => OnViewEdits.InvokeAsync(Message))">
                                     <div class="tg-menu-item">
                                         <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" />
                                         <span>View Edits (@EditCount)</span>
@@ -268,7 +267,7 @@
 
                             @if (DetectionHistory?.Count > 0)
                             {
-                                <MudMenuItem OnClick="() => OnViewDetections.InvokeAsync(Message)">
+                                <MudMenuItem OnClick="@(() => OnViewDetections.InvokeAsync(Message))">
                                     <div class="tg-menu-item">
                                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
                                         <span>Detection History</span>
@@ -278,7 +277,7 @@
 
                             @if (SpamCheck?.IsSpam != true && !IsCurrentUser)
                             {
-                                <MudMenuItem OnClick="async () => { _popoverOpen = false; await OnMarkAsSpam.InvokeAsync(Message); }" Disabled="@_actionInProgress">
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnMarkAsSpam.InvokeAsync(Message); })" Disabled="@_actionInProgress">
                                     <div class="tg-menu-item tg-menu-item-danger">
                                         <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" />
                                         <span>Mark as Spam</span>
@@ -288,7 +287,7 @@
 
                             @if (!IsManuallyMarkedAsHam())
                             {
-                                <MudMenuItem OnClick="async () => { _popoverOpen = false; await OnMarkAsHam.InvokeAsync(Message); }" Disabled="@_actionInProgress">
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnMarkAsHam.InvokeAsync(Message); })" Disabled="@_actionInProgress">
                                     <div class="tg-menu-item tg-menu-item-success">
                                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
                                         <span>Mark as Ham</span>
@@ -296,14 +295,14 @@
                                 </MudMenuItem>
                             }
 
-                            <MudMenuItem OnClick="async () => { _popoverOpen = false; await OnDeleteMessage.InvokeAsync(Message); }" Disabled="@_actionInProgress">
+                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnDeleteMessage.InvokeAsync(Message); })" Disabled="@_actionInProgress">
                                 <div class="tg-menu-item tg-menu-item-danger">
                                     <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" />
                                     <span>Delete Message</span>
                                 </div>
                             </MudMenuItem>
 
-                            <MudMenuItem OnClick="async () => { _popoverOpen = false; await OnTempBan.InvokeAsync(Message); }" Disabled="@_actionInProgress">
+                            <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnTempBan.InvokeAsync(Message); })" Disabled="@_actionInProgress">
                                 <div class="tg-menu-item tg-menu-item-warning">
                                     <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" />
                                     <span>Temp Ban User</span>
@@ -313,7 +312,7 @@
                             @* Phase 4.20: Manual translation button (for messages that didn't auto-translate) *@
                             @if (Message.Translation == null && !string.IsNullOrWhiteSpace(Message.MessageText))
                             {
-                                <MudMenuItem OnClick="async () => { _popoverOpen = false; await OnTranslateMessage.InvokeAsync(Message); }" Disabled="@_actionInProgress">
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnTranslateMessage.InvokeAsync(Message); })" Disabled="@_actionInProgress">
                                     <div class="tg-menu-item">
                                         <MudIcon Icon="@Icons.Material.Filled.Translate" Size="Size.Small" />
                                         <span>Translate Message</span>
@@ -335,7 +334,7 @@
 
 @code {
     [Parameter, EditorRequired]
-    public MessageRecord Message { get; set; } = default!;
+    public MessageRecord Message { get; set; } = null!;
 
     [Parameter]
     public SpamCheckRecord? SpamCheck { get; set; }
@@ -401,10 +400,10 @@
     public List<AdminNote>? UserNotes { get; set; }
 
     [Inject]
-    private IDialogService DialogService { get; set; } = default!;
+    private IDialogService DialogService { get; set; } = null!;
 
-    private bool _actionInProgress = false;
-    private bool _popoverOpen = false;
+    private readonly bool _actionInProgress = false;
+    private bool _popoverOpen;
     private bool _showTranslation = true; // Phase 4.20: Show translation by default when available
 
     /// <summary>
@@ -455,7 +454,7 @@
     private string[] GetUrls()
     {
         if (string.IsNullOrEmpty(Message.Urls))
-            return Array.Empty<string>();
+            return [];
         return Message.Urls.Split(',', StringSplitOptions.RemoveEmptyEntries);
     }
 
@@ -480,13 +479,13 @@
         return $"/media/{relativePath}";
     }
 
-    private string GetMediaPath(string? filename, TelegramGroupsAdmin.Telegram.Models.MediaType mediaType)
+    private string GetMediaPath(string? filename, MediaType mediaType)
     {
         if (string.IsNullOrEmpty(filename))
             return string.Empty;
 
         // Use centralized utility to construct media path
-        return TelegramGroupsAdmin.Core.Utilities.MediaPathUtilities.GetMediaWebPath(filename, (int)mediaType);
+        return Core.Utilities.MediaPathUtilities.GetMediaWebPath(filename, (int)mediaType);
     }
 
     private bool IsManuallyMarkedAsHam()
@@ -495,7 +494,7 @@
             return false;
 
         var latest = DetectionHistory.OrderByDescending(d => d.DetectedAt).First();
-        return latest.DetectionSource == "manual" && !latest.IsSpam;
+        return latest is { DetectionSource: "manual", IsSpam: false };
     }
 
     /// <summary>
@@ -504,7 +503,7 @@
     /// </summary>
     private string FormatDuration(int? seconds)
     {
-        if (!seconds.HasValue || seconds.Value < 0)
+        if (seconds is null or < 0)
             return "0:00";
 
         var duration = TimeSpan.FromSeconds(seconds.Value);
@@ -519,7 +518,7 @@
     /// </summary>
     private string FormatFileSize(long bytes)
     {
-        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        string[] sizes = ["B", "KB", "MB", "GB", "TB"];
         double len = bytes;
         int order = 0;
 
@@ -536,17 +535,17 @@
     /// Get friendly name for media type
     /// Phase 4.X: Used for media placeholder display
     /// </summary>
-    private string GetMediaTypeName(TelegramGroupsAdmin.Telegram.Models.MediaType mediaType)
+    private string GetMediaTypeName(MediaType mediaType)
     {
         return mediaType switch
         {
-            TelegramGroupsAdmin.Telegram.Models.MediaType.Animation => "GIF",
-            TelegramGroupsAdmin.Telegram.Models.MediaType.Video => "Video",
-            TelegramGroupsAdmin.Telegram.Models.MediaType.Audio => "Audio",
-            TelegramGroupsAdmin.Telegram.Models.MediaType.Voice => "Voice message",
-            TelegramGroupsAdmin.Telegram.Models.MediaType.Sticker => "Sticker",
-            TelegramGroupsAdmin.Telegram.Models.MediaType.VideoNote => "Video message",
-            TelegramGroupsAdmin.Telegram.Models.MediaType.Document => "Document",
+            MediaType.Animation => "GIF",
+            MediaType.Video => "Video",
+            MediaType.Audio => "Audio",
+            MediaType.Voice => "Voice message",
+            MediaType.Sticker => "Sticker",
+            MediaType.VideoNote => "Video message",
+            MediaType.Document => "Document",
             _ => "Media"
         };
     }

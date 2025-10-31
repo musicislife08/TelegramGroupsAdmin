@@ -1,10 +1,8 @@
 @using TelegramGroupsAdmin.Configuration
-@using TelegramGroupsAdmin.Services.Email
 @using Microsoft.Extensions.Options
-@inject IOptions<OpenAIOptions> OpenAIOptionsAccessor
+@inject IOptions<OpenAIOptions> OpenAiOptionsAccessor
 @inject IOptions<SendGridOptions> SendGridOptionsAccessor
 @inject IOptions<SpamDetectionOptions> SpamDetectionOptionsAccessor
-@inject ISnackbar Snackbar
 
 <MudStack Spacing="4">
     <!-- OpenAI Integration -->
@@ -16,13 +14,13 @@
                     GPT-4 for spam detection and content translation
                 </MudText>
             </div>
-            <MudChip Color="_openAIConfigured ? Color.Success : Color.Error" Size="Size.Small" T="string">
-                @(_openAIConfigured ? "Configured" : "Not Configured")
+            <MudChip Color="_openAiConfigured ? Color.Success : Color.Error" Size="Size.Small" T="string">
+                @(_openAiConfigured ? "Configured" : "Not Configured")
             </MudChip>
         </MudStack>
 
         <MudStack Spacing="3">
-            <MudTextField Value="@MaskApiKey(_openAISettings.ApiKey)"
+            <MudTextField Value="@MaskApiKey(_openAiSettings.ApiKey)"
                          Label="API Key"
                          Variant="Variant.Outlined"
                          HelperText="OpenAI API key (from platform.openai.com)"
@@ -30,13 +28,13 @@
                          Adornment="Adornment.Start"
                          AdornmentIcon="@Icons.Material.Filled.Key" />
 
-            <MudTextField Value="_openAISettings.Model"
+            <MudTextField Value="_openAiSettings.Model"
                          Label="Model"
                          Variant="Variant.Outlined"
                          HelperText="GPT model to use (default: gpt-4o-mini)"
                          Disabled="true" />
 
-            <MudNumericField Value="_openAISettings.MaxTokens"
+            <MudNumericField Value="_openAiSettings.MaxTokens"
                            Label="Max Tokens"
                            Variant="Variant.Outlined"
                            Min="100"
@@ -169,12 +167,12 @@
 </MudStack>
 
 @code {
-    private OpenAIOptions _openAISettings = new() { ApiKey = "" };
+    private OpenAIOptions _openAiSettings = new() { ApiKey = "" };
     private SendGridOptions _sendGridSettings = new();
     private string _virusTotalApiKey = string.Empty;
     private string _telegramBotToken = string.Empty;
 
-    private bool _openAIConfigured;
+    private bool _openAiConfigured;
     private bool _sendGridConfigured;
     private bool _virusTotalConfigured;
     private bool _telegramConfigured;
@@ -183,13 +181,13 @@
     protected override void OnInitialized()
     {
         // Load OpenAI settings
-        _openAISettings = new OpenAIOptions
+        _openAiSettings = new OpenAIOptions
         {
-            ApiKey = OpenAIOptionsAccessor.Value.ApiKey,
-            Model = OpenAIOptionsAccessor.Value.Model,
-            MaxTokens = OpenAIOptionsAccessor.Value.MaxTokens
+            ApiKey = OpenAiOptionsAccessor.Value.ApiKey,
+            Model = OpenAiOptionsAccessor.Value.Model,
+            MaxTokens = OpenAiOptionsAccessor.Value.MaxTokens
         };
-        _openAIConfigured = !string.IsNullOrWhiteSpace(_openAISettings.ApiKey);
+        _openAiConfigured = !string.IsNullOrWhiteSpace(_openAiSettings.ApiKey);
 
         // Load SendGrid settings
         _sendGridSettings = new SendGridOptions

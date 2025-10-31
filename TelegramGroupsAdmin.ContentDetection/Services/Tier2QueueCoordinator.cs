@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -91,8 +90,8 @@ public class Tier2QueueCoordinator
                             CloudScanResults = scanResults,
                             HashLookupResults = hashLookupResults,
                             TotalDurationMs = totalDuration,
-                            ThreatNames = new List<string> { hashLookup.ThreatName ?? "Unknown" },
-                            DetectedBy = new List<string> { serviceName },
+                            ThreatNames = [hashLookup.ThreatName ?? "Unknown"],
+                            DetectedBy = [serviceName],
                             DecisionSource = $"{serviceName} (hash lookup)"
                         };
 
@@ -147,8 +146,8 @@ public class Tier2QueueCoordinator
                         CloudScanResults = scanResults,
                         HashLookupResults = hashLookupResults,
                         TotalDurationMs = infectedDuration,
-                        ThreatNames = new List<string> { scanResult.ThreatName ?? "Unknown" },
-                        DetectedBy = new List<string> { serviceName },
+                        ThreatNames = [scanResult.ThreatName ?? "Unknown"],
+                        DetectedBy = [serviceName],
                         DecisionSource = $"{serviceName} (file scan)"
                     };
 
@@ -208,7 +207,7 @@ public class Tier2QueueCoordinator
                 HashLookupResults = hashLookupResults,
                 TotalDurationMs = failOpenDuration,
                 AllServicesExhausted = true,
-                ThreatNames = new List<string> { "All cloud services unavailable" },
+                ThreatNames = ["All cloud services unavailable"],
                 DecisionSource = "fail-close (all services exhausted)"
             };
         }

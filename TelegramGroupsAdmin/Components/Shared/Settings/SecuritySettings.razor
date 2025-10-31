@@ -1,5 +1,3 @@
-@inject ISnackbar Snackbar
-
 <MudStack Spacing="4">
     <!-- Authentication & Session Management -->
     <MudPaper Class="pa-4">
@@ -221,21 +219,21 @@
     // Session settings (future)
     private int _sessionTimeoutMinutes = 480; // 8 hours
     private bool _requireReauthForSensitive = true;
-    private bool _forceTotpForOwners = false;
+    private bool _forceTotpForOwners;
 
     // Password policy (future)
     private int _minPasswordLength = 12;
     private bool _requireSpecialChars = true;
     private bool _requireNumbers = true;
     private bool _requireUppercase = true;
-    private int _passwordExpiryDays = 0; // Never expire
+    private int _passwordExpiryDays; // Never expire
 
     // Audit log retention (future)
     private int _auditLogRetentionDays = 365;
-    private bool _archiveOldAuditLogs = false;
+    private bool _archiveOldAuditLogs;
 
     // API security (future)
-    private bool _enableApiKeys = false;
+    private bool _enableApiKeys;
     private bool _enableRateLimiting = true;
     private int _apiRateLimit = 100;
 

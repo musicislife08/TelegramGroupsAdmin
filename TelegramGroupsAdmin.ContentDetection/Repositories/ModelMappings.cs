@@ -1,4 +1,3 @@
-using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using DomainModels = TelegramGroupsAdmin.ContentDetection.Models;
 

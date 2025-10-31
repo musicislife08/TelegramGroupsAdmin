@@ -71,7 +71,7 @@ public static class AuthEndpoints
                 // Auto-login after successful registration
                 var loginResult = await authService.LoginAsync(request.Email, request.Password);
 
-                if (loginResult.Success && !loginResult.RequiresTotp)
+                if (loginResult is { Success: true, RequiresTotp: false })
                 {
                     // Sign in the user with cookie authentication
                     await SignInUserAsync(httpContext, loginResult.UserId!, loginResult.Email!, loginResult.PermissionLevel!.Value);

@@ -22,7 +22,7 @@ public partial class HostsFileParser : IBlocklistParser
     {
         if (string.IsNullOrWhiteSpace(content))
         {
-            return new List<string>();
+            return [];
         }
 
         return content

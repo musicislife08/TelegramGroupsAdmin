@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -901,8 +900,8 @@ public class OpenAIContentCheckTests
         // Create the full OpenAI API response structure using actual types
         var response = new OpenAIResponse
         {
-            Choices = new[]
-            {
+            Choices =
+            [
                 new OpenAIChoice
                 {
                     Message = new OpenAIMessage
@@ -912,7 +911,7 @@ public class OpenAIContentCheckTests
                     },
                     FinishReason = "stop"
                 }
-            },
+            ],
             Usage = new OpenAIUsage
             {
                 PromptTokens = 100,

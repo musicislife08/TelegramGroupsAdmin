@@ -9,8 +9,8 @@ public record MessageTrendsData
     public double DailyAverage { get; init; }
     public int UniqueUsers { get; init; }
     public double SpamPercentage { get; init; }
-    public List<DailyVolumeData> DailyVolume { get; init; } = new();
-    public List<DailyVolumeData> DailySpam { get; init; } = new();
-    public List<DailyVolumeData> DailyHam { get; init; } = new();
-    public List<ChatVolumeData> PerChatVolume { get; init; } = new();
+    public List<DailyVolumeData> DailyVolume { get; init; } = [];
+    public List<DailyVolumeData> DailySpam { get; init; } = [];
+    public List<DailyVolumeData> DailyHam { get; init; } = [];
+    public List<ChatVolumeData> PerChatVolume { get; init; } = [];
 }

@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TickerQ.DependencyInjection;
-using TickerQ.Dashboard.DependencyInjection;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;

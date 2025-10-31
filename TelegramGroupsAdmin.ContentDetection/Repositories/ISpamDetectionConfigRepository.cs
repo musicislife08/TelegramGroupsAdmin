@@ -1,4 +1,3 @@
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.ContentDetection.Configuration;
 
 namespace TelegramGroupsAdmin.ContentDetection.Repositories;

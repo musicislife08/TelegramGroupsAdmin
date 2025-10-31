@@ -1,8 +1,6 @@
 @using Microsoft.EntityFrameworkCore
 @using TelegramGroupsAdmin.Data
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@using TelegramGroupsAdmin.Telegram.Repositories
-@using TelegramGroupsAdmin.Telegram.Models
 @inject IStopWordsRepository StopWordsRepository
 @inject IMessageHistoryRepository MessageHistoryRepository
 @inject IDetectionResultsRepository DetectionResultsRepository
@@ -17,7 +15,7 @@
             <MudButton Variant="Variant.Outlined"
                       Color="Color.Primary"
                       StartIcon="@Icons.Material.Filled.Refresh"
-                      OnClick="RefreshData"
+                      OnClick="@RefreshData"
                       Disabled="@_loading">
                 Refresh Data
             </MudButton>
@@ -354,19 +352,19 @@
 </MudContainer>
 
 @code {
-    [Parameter] public List<long> SelectedChatIds { get; set; } = new();
+    [Parameter] public List<long> SelectedChatIds { get; set; } = [];
 
     private bool _loading = true;
 
     // Overview statistics
-    private int _totalSpamChecks = 0;
-    private int _spamDetected = 0;
-    private double _spamPercentage = 0;
-    private int _totalStopWords = 0;
-    private int _enabledStopWords = 0;
-    private int _totalTrainingSamples = 0;
-    private int _totalSpamSamples = 0;
-    private double _spamDetectionRate = 0;
+    private int _totalSpamChecks;
+    private int _spamDetected;
+    private double _spamPercentage;
+    private int _totalStopWords;
+    private int _enabledStopWords;
+    private int _totalTrainingSamples;
+    private int _totalSpamSamples;
+    private double _spamDetectionRate;
 
     // Detailed data
     private List<SpamCheckRecord>? _recentSpamChecks;
@@ -449,7 +447,7 @@
         try
         {
             // Query detection_results table instead of obsolete spam_checks table
-            var recentDetections = await MessageHistoryRepository.GetRecentDetectionsAsync(100);
+            var recentDetections = await MessageHistoryRepository.GetRecentDetectionsAsync();
             _recentSpamChecks = recentDetections.Take(20).Select(d => new SpamCheckRecord(
                 Id: d.Id,
                 CheckTimestamp: d.DetectedAt,
@@ -516,7 +514,7 @@
             // Get veto analytics for last 30 days
             var since = DateTimeOffset.UtcNow.AddDays(-30);
             _vetoAnalytics = await DetectionResultsRepository.GetOpenAIVetoAnalyticsAsync(since);
-            _vetoedMessages = await DetectionResultsRepository.GetRecentVetoedMessagesAsync(50);
+            _vetoedMessages = await DetectionResultsRepository.GetRecentVetoedMessagesAsync();
         }
         catch (Exception ex)
         {

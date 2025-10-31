@@ -129,7 +129,7 @@ public class SpacingSpamCheck(ILogger<SpacingSpamCheck> logger) : IContentCheck
         cleanMessage = Regex.Replace(cleanMessage, @"@\w+", "", RegexOptions.IgnoreCase);
 
         // Split by spaces but preserve word structure
-        return cleanMessage.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+        return cleanMessage.Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
             .Where(w => w.Length >= 1)
             .Where(w => !IsOnlyPunctuation(w))
             .ToArray();

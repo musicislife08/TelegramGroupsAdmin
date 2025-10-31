@@ -1,11 +1,5 @@
-@using TelegramGroupsAdmin.Telegram.Services
-@using TelegramGroupsAdmin.Telegram.Models
-@using TelegramGroupsAdmin.Telegram.Repositories
-@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Services
-@using DataModels = TelegramGroupsAdmin.Data.Models
 @using TelegramGroupsAdmin.Helpers
-@using MudBlazor
 @inject TelegramUserManagementService UserManagementService
 @inject ModerationActionService ModerationService
 @inject IAdminNotesRepository AdminNotesRepository
@@ -128,7 +122,7 @@
                         <MudButton Variant="Variant.Outlined"
                                    Color="@(_userDetail.IsTrusted ? Color.Default : Color.Success)"
                                    StartIcon="@(_userDetail.IsTrusted ? Icons.Material.Filled.PersonOff : Icons.Material.Filled.VerifiedUser)"
-                                   OnClick="ToggleTrust"
+                                   OnClick="@ToggleTrust"
                                    Size="Size.Small">
                             @(_userDetail.IsTrusted ? "Remove Trust" : "Trust User")
                         </MudButton>
@@ -138,7 +132,7 @@
                             <MudButton Variant="Variant.Outlined"
                                        Color="Color.Error"
                                        StartIcon="@Icons.Material.Filled.Block"
-                                       OnClick="BanUser"
+                                       OnClick="@BanUser"
                                        Size="Size.Small">
                                 Ban
                             </MudButton>
@@ -146,7 +140,7 @@
                             <MudButton Variant="Variant.Outlined"
                                        Color="Color.Warning"
                                        StartIcon="@Icons.Material.Filled.AccessTime"
-                                       OnClick="TempBanUser"
+                                       OnClick="@TempBanUser"
                                        Size="Size.Small">
                                 Temp Ban
                             </MudButton>
@@ -156,7 +150,7 @@
                             <MudButton Variant="Variant.Outlined"
                                        Color="Color.Success"
                                        StartIcon="@Icons.Material.Filled.CheckCircle"
-                                       OnClick="UnbanUser"
+                                       OnClick="@UnbanUser"
                                        Size="Size.Small">
                                 Unban
                             </MudButton>
@@ -165,7 +159,7 @@
                         <MudButton Variant="Variant.Outlined"
                                    Color="Color.Primary"
                                    StartIcon="@Icons.Material.Filled.Message"
-                                   OnClick="ViewMessages"
+                                   OnClick="@ViewMessages"
                                    Size="Size.Small">
                             View Messages
                         </MudButton>
@@ -219,11 +213,11 @@
                     <MudPaper Elevation="1" Class="pa-3 mb-4">
                         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
                             <MudText Typo="Typo.subtitle2">Action History (@GetActiveActionsCount())</MudText>
-                            @if (GetActiveActionsCount() > _timelineShowCount)
+                            @if (GetActiveActionsCount() > TimelineShowCount)
                             {
                                 <MudButton Variant="Variant.Text"
                                            Size="Size.Small"
-                                           OnClick="ToggleTimelineExpanded">
+                                           OnClick="@ToggleTimelineExpanded">
                                     @(_timelineExpanded ? "Show Less" : $"Show All ({GetActiveActionsCount()})")
                                 </MudButton>
                             }
@@ -296,7 +290,7 @@
                                    Color="Color.Primary"
                                    StartIcon="@Icons.Material.Filled.Add"
                                    Size="Size.Small"
-                                   OnClick="AddNote">
+                                   OnClick="@AddNote">
                             Add Note
                         </MudButton>
                     </MudStack>
@@ -351,7 +345,7 @@
                                    Color="Color.Primary"
                                    StartIcon="@Icons.Material.Filled.Add"
                                    Size="Size.Small"
-                                   OnClick="AddTag">
+                                   OnClick="@AddTag">
                             Add Tag
                         </MudButton>
                     </MudStack>
@@ -409,7 +403,7 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Close">Close</MudButton>
+        <MudButton OnClick="@Close">Close</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -422,8 +416,8 @@
     private Dictionary<string, TagColor> _tagColorMap = new();
 
     // Timeline state
-    private bool _timelineExpanded = false;
-    private const int _timelineShowCount = 5;
+    private bool _timelineExpanded;
+    private const int TimelineShowCount = 5;
 
     protected override async Task OnInitializedAsync()
     {
@@ -729,7 +723,7 @@
     private IEnumerable<ActionGroup> GetGroupedActions()
     {
         if (_userDetail == null || !_userDetail.Actions.Any())
-            return Enumerable.Empty<ActionGroup>();
+            return [];
 
         var nowUtc = DateTimeOffset.UtcNow;
 
@@ -737,7 +731,7 @@
         var activeActions = _userDetail.Actions
             .Where(a => a.ExpiresAt == null || a.ExpiresAt > nowUtc)
             .OrderByDescending(a => a.IssuedAt)
-            .Take(_timelineExpanded ? int.MaxValue : _timelineShowCount)
+            .Take(_timelineExpanded ? int.MaxValue : TimelineShowCount)
             .ToList();
 
         var nowLocal = DateTimeOffset.Now.ToLocalTime();
@@ -755,7 +749,7 @@
                 groups.Add(new ActionGroup
                 {
                     DateLabel = dateLabel,
-                    Actions = new List<UserActionRecord> { action }
+                    Actions = [action]
                 });
                 currentDateLabel = dateLabel;
             }
@@ -798,8 +792,8 @@
     // Helper class for grouping actions by date
     private class ActionGroup
     {
-        public string DateLabel { get; set; } = string.Empty;
-        public List<UserActionRecord> Actions { get; set; } = new();
+        public string DateLabel { get; init; } = string.Empty;
+        public List<UserActionRecord> Actions { get; init; } = [];
     }
 
     // ============================================================================
@@ -825,7 +819,7 @@
         var dialog = await DialogService.ShowAsync<TextInputDialog>("Add Note", parameters, options);
         var result = await dialog.Result;
 
-        if (result != null && !result.Canceled && result.Data is string noteText && !string.IsNullOrWhiteSpace(noteText))
+        if (result is { Canceled: false, Data: string noteText } && !string.IsNullOrWhiteSpace(noteText))
         {
             // Get Actor for audit trail
             Actor? actor = await AuthHelper.TryGetCurrentActorAsync();
@@ -876,7 +870,7 @@
         var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Note", parameters);
         var result = await dialog.Result;
 
-        if (result != null && !result.Canceled)
+        if (result is { Canceled: false })
         {
             // Get Actor for audit trail
             Actor actor;
@@ -915,7 +909,7 @@
         var dialog = await DialogService.ShowAsync<TagSelectionDialog>("Add Tags", parameters);
         var result = await dialog.Result;
 
-        if (result != null && !result.Canceled && result.Data is TagSelectionDialog.TagSelectionResult tagResult)
+        if (result is { Canceled: false, Data: TagSelectionDialog.TagSelectionResult tagResult })
         {
             // Get Actor for audit trail
             var actor = await AuthHelper.TryGetCurrentActorAsync() ?? Actor.FromSystem("unknown");
@@ -993,7 +987,7 @@
         var dialog = await DialogService.ShowAsync<ConfirmDialog>("Remove Warning", parameters);
         var result = await dialog.Result;
 
-        if (result != null && !result.Canceled)
+        if (result is { Canceled: false })
         {
             try
             {

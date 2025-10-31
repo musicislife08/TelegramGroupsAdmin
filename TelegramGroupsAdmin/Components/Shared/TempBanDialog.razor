@@ -44,7 +44,7 @@
                                 Style="flex: 1;" />
                 <MudButton Variant="Variant.Outlined"
                           Color="Color.Primary"
-                          OnClick="ApplyCustomDuration"
+                          OnClick="@ApplyCustomDuration"
                           Disabled="_customMinutes < 1">
                     Apply
                 </MudButton>
@@ -72,10 +72,10 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
         <MudButton Color="Color.Warning"
                   Variant="Variant.Filled"
-                  OnClick="Submit"
+                  OnClick="@Submit"
                   Disabled="_selectedDuration == TimeSpan.Zero">
             Temp Ban @FormatDuration(_selectedDuration)
         </MudButton>

@@ -7,7 +7,7 @@
     <MudStack Spacing="3">
         <MudText Typo="Typo.h6" Color="Color.Primary">Stop Words Detection</MudText>
 
-        @if (!_isGlobalView)
+        @if (!IsGlobalView)
         {
             <!-- Override Toggle (only for chat-specific configs) -->
             <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
@@ -24,8 +24,8 @@
         }
 
         @{
-            var activeConfig = (_isGlobalView || !_config.StopWords.UseGlobal) ? _config.StopWords : _globalConfig.StopWords;
-            var isReadOnly = !_isGlobalView && _config.StopWords.UseGlobal;
+            var activeConfig = (IsGlobalView || !_config.StopWords.UseGlobal) ? _config.StopWords : _globalConfig.StopWords;
+            var isReadOnly = !IsGlobalView && _config.StopWords.UseGlobal;
         }
 
         <MudSwitch T="bool" @bind-Value="activeConfig.Enabled"
@@ -42,7 +42,7 @@
                             HelperText="@(isReadOnly ? $"Using global value: {activeConfig.ConfidenceThreshold}" : "Confidence level when stop words are detected (0-100%)")" />
         }
 
-        @if (!_isGlobalView && !_config.StopWords.UseGlobal && _globalConfig.StopWords.Enabled != _config.StopWords.Enabled)
+        @if (!IsGlobalView && !_config.StopWords.UseGlobal && _globalConfig.StopWords.Enabled != _config.StopWords.Enabled)
         {
             <MudAlert Severity="Severity.Info" Dense="true">
                 Global setting: @(_globalConfig.StopWords.Enabled ? "Enabled" : "Disabled")
@@ -57,7 +57,7 @@
 
     private SpamDetectionConfig _config = new();
     private SpamDetectionConfig _globalConfig = new();
-    private bool _isGlobalView => !ChatId.HasValue || ChatId.Value == 0;
+    private bool IsGlobalView => ChatId is null or 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -71,7 +71,7 @@
             // Always load global config for comparison/fallback
             _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
 
-            if (_isGlobalView)
+            if (IsGlobalView)
             {
                 // Editing global config directly
                 _config = _globalConfig;
@@ -95,7 +95,7 @@
     public SpamDetectionConfig GetConfig()
     {
         // Ensure global configs always have UseGlobal=true
-        if (_isGlobalView)
+        if (IsGlobalView)
         {
             _config.StopWords.UseGlobal = true;
         }

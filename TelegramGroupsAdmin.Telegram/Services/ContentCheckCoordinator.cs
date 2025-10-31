@@ -86,7 +86,7 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
                 IsUserAdmin = isUserAdmin,
                 SpamCheckSkipped = true,
                 SkipReason = skipReason,
-                CriticalCheckViolations = new List<string>(),
+                CriticalCheckViolations = [],
                 SpamResult = null
             };
         }

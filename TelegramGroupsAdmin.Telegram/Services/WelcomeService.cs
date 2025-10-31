@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -6,12 +5,8 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
-using TickerQ.Utilities;
-using TickerQ.Utilities.Interfaces.Managers;
-using TickerQ.Utilities.Models.Ticker;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -111,8 +106,8 @@ public class WelcomeService : IWelcomeService
         var user = chatMemberUpdate.NewChatMember.User;
 
         // Handle user leaving (Member/Restricted → Left)
-        if ((oldStatus == ChatMemberStatus.Member || oldStatus == ChatMemberStatus.Restricted) &&
-            (newStatus == ChatMemberStatus.Left || newStatus == ChatMemberStatus.Kicked))
+        if (oldStatus is ChatMemberStatus.Member or ChatMemberStatus.Restricted &&
+            newStatus is ChatMemberStatus.Left or ChatMemberStatus.Kicked)
         {
             await HandleUserLeftAsync(chatMemberUpdate.Chat.Id, user.Id, cancellationToken);
             return;
@@ -173,7 +168,7 @@ public class WelcomeService : IWelcomeService
         {
             // Check if user is an admin/owner - skip welcome for admins
             var chatMember = await botClient.GetChatMember(chatMemberUpdate.Chat.Id, user.Id, cancellationToken);
-            if (chatMember.Status == ChatMemberStatus.Administrator || chatMember.Status == ChatMemberStatus.Creator)
+            if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
             {
                 _logger.LogInformation(
                     "Skipping welcome for admin/owner: User {UserId} (@{Username}) in chat {ChatId}",
@@ -498,13 +493,11 @@ public class WelcomeService : IWelcomeService
             var botInfo = await botClient.GetMe(cancellationToken);
             var deepLink = $"https://t.me/{botInfo.Username}?start=welcome_{chatId}_{user.Id}";
 
-            keyboard = new InlineKeyboardMarkup(new[]
-            {
-                new[]
-                {
+            keyboard = new InlineKeyboardMarkup([
+                [
                     InlineKeyboardButton.WithUrl(config.DmButtonText, deepLink)
-                }
-            });
+                ]
+            ]);
 
             _logger.LogInformation(
                 "Sent DM welcome message {MessageId} to user {UserId} in chat {ChatId} with deep link: {DeepLink}",
@@ -516,14 +509,12 @@ public class WelcomeService : IWelcomeService
         else // ChatAcceptDeny
         {
             // Chat Accept/Deny mode: Single row with Accept/Deny buttons
-            keyboard = new InlineKeyboardMarkup(new[]
-            {
-                new[]
-                {
+            keyboard = new InlineKeyboardMarkup([
+                [
                     InlineKeyboardButton.WithCallbackData(config.AcceptButtonText, $"welcome_accept:{user.Id}"),
                     InlineKeyboardButton.WithCallbackData(config.DenyButtonText, $"welcome_deny:{user.Id}")
-                }
-            });
+                ]
+            ]);
 
             _logger.LogInformation(
                 "Sent chat accept/deny welcome message to user {UserId} in chat {ChatId}",
@@ -580,7 +571,7 @@ public class WelcomeService : IWelcomeService
         {
             // Check if user is admin/owner - can't modify their permissions
             var chatMember = await botClient.GetChatMember(chatId, userId, cancellationToken);
-            if (chatMember.Status == ChatMemberStatus.Administrator || chatMember.Status == ChatMemberStatus.Creator)
+            if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
             {
                 _logger.LogDebug(
                     "Skipping permission restore for admin/owner: User {UserId} in chat {ChatId}",
@@ -934,13 +925,11 @@ public class WelcomeService : IWelcomeService
             InlineKeyboardMarkup? keyboard = null;
             if (chatDeepLink != null)
             {
-                keyboard = new InlineKeyboardMarkup(new[]
-                {
-                    new[]
-                    {
+                keyboard = new InlineKeyboardMarkup([
+                    [
                         InlineKeyboardButton.WithUrl($"💬 Return to {chatName}", chatDeepLink)
-                    }
-                });
+                    ]
+                ]);
 
                 _logger.LogInformation(
                     "Sent confirmation with chat deep link to user {UserId}: {DeepLink}",

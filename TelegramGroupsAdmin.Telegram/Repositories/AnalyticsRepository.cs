@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
 
@@ -161,7 +160,7 @@ public class AnalyticsRepository : IAnalyticsRepository
         {
             return new ResponseTimeStats
             {
-                DailyAverages = new(),
+                DailyAverages = [],
                 AverageMs = 0,
                 MedianMs = 0,
                 P95Ms = 0,
@@ -310,7 +309,7 @@ public class AnalyticsRepository : IAnalyticsRepository
     private List<CheckResult> ParseCheckResults(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
-            return new List<CheckResult>();
+            return [];
 
         try
         {
@@ -318,7 +317,7 @@ public class AnalyticsRepository : IAnalyticsRepository
             var root = doc.RootElement;
 
             if (!root.TryGetProperty("checks", out var checksArray))
-                return new List<CheckResult>();
+                return [];
 
             var results = new List<CheckResult>();
 
@@ -340,7 +339,7 @@ public class AnalyticsRepository : IAnalyticsRepository
         }
         catch
         {
-            return new List<CheckResult>();
+            return [];
         }
     }
 
@@ -355,7 +354,7 @@ public class AnalyticsRepository : IAnalyticsRepository
     {
         public int TotalChecks { get; set; }
         public int SpamVotes { get; set; }
-        public List<double> SpamConfidences { get; set; } = new();
+        public List<double> SpamConfidences { get; set; } = [];
         public int ContributedToFPs { get; set; }
         public int ContributedToFNs { get; set; }
     }

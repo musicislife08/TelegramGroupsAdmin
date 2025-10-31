@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Services.Backup;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 using TickerQ.Utilities.Base;
@@ -46,7 +44,7 @@ public class ScheduledBackupJob
 
             // Generate backup
             var backupBytes = await backupService.ExportAsync();
-            var backupSizeMB = backupBytes.Length / 1024.0 / 1024.0;
+            var backupSizeMb = backupBytes.Length / 1024.0 / 1024.0;
 
             // Determine backup directory
             var backupDir = payload.BackupDirectory ?? Path.Combine("data", "backups");
@@ -58,7 +56,7 @@ public class ScheduledBackupJob
             var filepath = Path.Combine(backupDir, filename);
 
             await File.WriteAllBytesAsync(filepath, backupBytes, cancellationToken);
-            _logger.LogInformation("Backup saved to {Filepath} ({SizeMB:F2} MB)", filepath, backupSizeMB);
+            _logger.LogInformation("Backup saved to {Filepath} ({SizeMB:F2} MB)", filepath, backupSizeMb);
 
             // Clean up old backups using granular retention strategy
             var backupFiles = Directory.GetFiles(backupDir, "backup_*.tar.gz")

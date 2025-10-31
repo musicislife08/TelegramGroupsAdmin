@@ -19,7 +19,7 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
     public async Task UpdatePermissionLevelAsync(string userId, int permissionLevel, string modifiedBy, int modifierPermissionLevel, CancellationToken ct = default)
     {
         // Validate permission level (0=Admin, 1=GlobalAdmin, 2=Owner)
-        if (permissionLevel < 0 || permissionLevel > 2)
+        if (permissionLevel is < 0 or > 2)
         {
             throw new ArgumentException("Permission level must be 0 (Admin), 1 (GlobalAdmin), or 2 (Owner)", nameof(permissionLevel));
         }
@@ -88,7 +88,7 @@ public class UserManagementService(IUserRepository userRepository, IAuditService
         await userRepository.SetActiveAsync(userId, isActive, ct);
     }
 
-    public async Task Reset2FAAsync(string userId, string modifiedBy, CancellationToken ct = default)
+    public async Task Reset2FaAsync(string userId, string modifiedBy, CancellationToken ct = default)
     {
         // Reset TOTP (clears secret, disables TOTP, clears setup timestamp)
         await userRepository.ResetTotpAsync(userId, ct);

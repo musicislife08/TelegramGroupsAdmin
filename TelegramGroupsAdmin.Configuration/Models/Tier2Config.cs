@@ -9,7 +9,7 @@ public class Tier2Config
     /// User-configurable priority order for cloud services
     /// Services are tried in this order until one succeeds
     /// </summary>
-    public List<string> CloudQueuePriority { get; set; } = new() { "VirusTotal" };
+    public List<string> CloudQueuePriority { get; set; } = ["VirusTotal"];
 
     /// <summary>
     /// VirusTotal configuration

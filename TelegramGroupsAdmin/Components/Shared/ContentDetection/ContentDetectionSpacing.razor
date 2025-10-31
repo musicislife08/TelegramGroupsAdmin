@@ -7,7 +7,7 @@
     <MudStack Spacing="3">
         <MudText Typo="Typo.h6" Color="Color.Primary">Spacing Detection</MudText>
 
-        @if (!_isGlobalView)
+        @if (!IsGlobalView)
         {
             <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
                 <MudSwitch T="bool" @bind-Value="_config.Spacing.UseGlobal"
@@ -17,8 +17,8 @@
         }
 
         @{
-            var spacingConfig = (_isGlobalView || !_config.Spacing.UseGlobal) ? _config.Spacing : _globalConfig.Spacing;
-            var spacingReadOnly = !_isGlobalView && _config.Spacing.UseGlobal;
+            var spacingConfig = (IsGlobalView || !_config.Spacing.UseGlobal) ? _config.Spacing : _globalConfig.Spacing;
+            var spacingReadOnly = !IsGlobalView && _config.Spacing.UseGlobal;
         }
 
         <MudSwitch T="bool" @bind-Value="spacingConfig.Enabled"
@@ -67,7 +67,7 @@
 
     private SpamDetectionConfig _config = new();
     private SpamDetectionConfig _globalConfig = new();
-    private bool _isGlobalView => !ChatId.HasValue || ChatId.Value == 0;
+    private bool IsGlobalView => ChatId is null or 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -81,7 +81,7 @@
             // Always load global config for comparison/fallback
             _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
 
-            if (_isGlobalView)
+            if (IsGlobalView)
             {
                 // Editing global config directly
                 _config = _globalConfig;
@@ -104,7 +104,7 @@
     public SpamDetectionConfig GetConfig()
     {
         // Ensure global configs always have UseGlobal=true
-        if (_isGlobalView)
+        if (IsGlobalView)
         {
             _config.Spacing.UseGlobal = true;
         }

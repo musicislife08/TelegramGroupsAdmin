@@ -7,7 +7,7 @@
     <MudStack Spacing="3">
         <MudText Typo="Typo.h6" Color="Color.Primary">CAS (Combot Anti-Spam)</MudText>
 
-        @if (!_isGlobalView)
+        @if (!IsGlobalView)
         {
             <!-- Override Toggle (only for chat-specific configs) -->
             <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
@@ -24,8 +24,8 @@
         }
 
         @{
-            var activeConfig = (_isGlobalView || !_config.Cas.UseGlobal) ? _config.Cas : _globalConfig.Cas;
-            var isReadOnly = !_isGlobalView && _config.Cas.UseGlobal;
+            var activeConfig = (IsGlobalView || !_config.Cas.UseGlobal) ? _config.Cas : _globalConfig.Cas;
+            var isReadOnly = !IsGlobalView && _config.Cas.UseGlobal;
             var activeTimeoutSeconds = (int)activeConfig.Timeout.TotalSeconds;
         }
 
@@ -53,7 +53,7 @@
                          HelperText="@(isReadOnly ? "Using global value" : "Custom User-Agent header for requests")" />
         }
 
-        @if (!_isGlobalView && !_config.Cas.UseGlobal && _globalConfig.Cas.Enabled != _config.Cas.Enabled)
+        @if (!IsGlobalView && !_config.Cas.UseGlobal && _globalConfig.Cas.Enabled != _config.Cas.Enabled)
         {
             <MudAlert Severity="Severity.Info" Dense="true">
                 Global setting: @(_globalConfig.Cas.Enabled ? "Enabled" : "Disabled")
@@ -68,7 +68,7 @@
 
     private SpamDetectionConfig _config = new();
     private SpamDetectionConfig _globalConfig = new();
-    private bool _isGlobalView => !ChatId.HasValue || ChatId.Value == 0;
+    private bool IsGlobalView => ChatId is null or 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -82,7 +82,7 @@
             // Always load global config for comparison/fallback
             _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
 
-            if (_isGlobalView)
+            if (IsGlobalView)
             {
                 // Editing global config directly
                 _config = _globalConfig;
@@ -105,7 +105,7 @@
     public SpamDetectionConfig GetConfig()
     {
         // Ensure global configs always have UseGlobal=true
-        if (_isGlobalView)
+        if (IsGlobalView)
         {
             _config.Cas.UseGlobal = true;
         }

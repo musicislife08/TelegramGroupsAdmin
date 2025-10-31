@@ -1,13 +1,8 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@using TelegramGroupsAdmin.ContentDetection.Configuration
 @using TelegramGroupsAdmin.Components.Shared.ContentDetection
-@using TelegramGroupsAdmin.Components.Shared
 @using TelegramGroupsAdmin.Configuration
-@using global::Telegram.Bot
-@inject TelegramAdminBotService BotService
 @inject ISnackbar Snackbar
-@inject IDialogService DialogService
 @inject ISpamDetectionConfigRepository SpamConfigRepository
 @inject IChatAdminsRepository ChatAdminsRepository
 @inject ITelegramUserMappingRepository TelegramMappingsRepository
@@ -103,7 +98,7 @@
                                     <MudButton Variant="Variant.Outlined"
                                                Color="Color.Warning"
                                                StartIcon="@Icons.Material.Filled.Refresh"
-                                               OnClick="ClearCachedInviteLink"
+                                               OnClick="@ClearCachedInviteLink"
                                                Disabled="_clearingLink">
                                         @if (_clearingLink)
                                         {
@@ -196,7 +191,7 @@
 
                         <!-- Save Button -->
                         <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                                  OnClick="SaveWelcomeConfigAsync" Disabled="@_savingWelcomeConfig" FullWidth="true">
+                                  OnClick="@SaveWelcomeConfigAsync" Disabled="@_savingWelcomeConfig" FullWidth="true">
                             @if (_savingWelcomeConfig)
                             {
                                 <MudProgressCircular Size="Size.Small" Indeterminate="true" />
@@ -299,7 +294,7 @@
         </MudTabs>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Close">Close</MudButton>
+        <MudButton OnClick="@Close">Close</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -320,7 +315,7 @@
     // Admins Tab
     private bool _loadingAdmins = true;
     private List<ChatAdmin>? _admins;
-    private Dictionary<long, string> _adminLinkages = new();
+    private readonly Dictionary<long, string> _adminLinkages = new();
 
     // Invite Link
     private string? _cachedInviteLink;

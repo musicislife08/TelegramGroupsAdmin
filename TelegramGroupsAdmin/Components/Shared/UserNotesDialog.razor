@@ -1,5 +1,3 @@
-@using TelegramGroupsAdmin.Telegram.Models
-
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
@@ -7,7 +5,7 @@
                 Admin notes for @UserName
             </MudText>
 
-            @if (Notes != null && Notes.Any())
+            @if (Notes is not null && Notes.Any())
             {
                 <MudStack Spacing="2">
                     @foreach (var note in Notes.OrderByDescending(n => n.IsPinned).ThenByDescending(n => n.CreatedAt))
@@ -59,10 +57,10 @@
 
 @code {
     [CascadingParameter]
-    private IMudDialogInstance MudDialog { get; set; } = default!;
+    private IMudDialogInstance MudDialog { get; set; } = null!;
 
     [Parameter]
-    public List<AdminNote> Notes { get; set; } = new();
+    public List<AdminNote> Notes { get; set; } = [];
 
     [Parameter]
     public string UserName { get; set; } = string.Empty;

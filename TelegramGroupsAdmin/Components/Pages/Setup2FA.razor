@@ -3,7 +3,6 @@
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Authentication.Cookies
-@using Microsoft.AspNetCore.Components.Forms
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Services.Auth
@@ -79,7 +78,7 @@
 
             <div class="step">
                 <h3>Step 3: Verify Your Code</h3>
-                <EditForm Model="@_model" FormName="verify-form" OnValidSubmit="HandleVerifyAsync" method="post">
+                <EditForm Model="@Model" FormName="verify-form" OnValidSubmit="HandleVerifyAsync" method="post">
                     <DataAnnotationsValidator />
                     <div class="form-group">
                         <label class="form-label" for="code">Enter the 6-digit code from your app:</label>
@@ -87,14 +86,14 @@
                                id="code"
                                name="_model.Code"
                                class="form-input code-input"
-                               value="@_model!.Code"
+                               value="@Model!.Code"
                                placeholder="000000"
                                maxlength="6"
                                pattern="[0-9]*"
                                inputmode="numeric"
                                required
                                autofocus />
-                        <ValidationMessage For="@(() => _model!.Code)" />
+                        <ValidationMessage For="@(() => Model!.Code)" />
                     </div>
                     <button type="submit" class="btn-primary">Verify and Continue</button>
                 </EditForm>
@@ -105,7 +104,7 @@
 
 @code {
     [SupplyParameterFromForm]
-    private VerifyModel? _model { get; set; }
+    private VerifyModel? Model { get; set; }
 
     [SupplyParameterFromQuery(Name = "userId")]
     private string? UserId { get; set; }
@@ -121,7 +120,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _model ??= new VerifyModel();
+        Model ??= new VerifyModel();
 
         // SECURITY: Validate that user has a valid intermediate authentication token
         // This prevents attackers from accessing /login/setup-2fa?userId=VICTIM_ID
@@ -157,7 +156,7 @@
     {
         _errorMessage = null;
 
-        if (_model == null || string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(IntermediateToken))
+        if (Model == null || string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(IntermediateToken))
         {
             _errorMessage = "Form data is missing.";
             return;
@@ -174,12 +173,12 @@
 
         try
         {
-            var success = await AuthService.VerifyAndEnableTotpAsync(UserId, _model.Code);
+            var success = await AuthService.VerifyAndEnableTotpAsync(UserId, Model.Code);
 
             if (!success)
             {
                 _errorMessage = "Invalid verification code. Please try again.";
-                _model = new VerifyModel();
+                Model = new VerifyModel();
                 return;
             }
 

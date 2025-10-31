@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Configuration;
 using Npgsql;
 
 namespace TelegramGroupsAdmin.Infrastructure;

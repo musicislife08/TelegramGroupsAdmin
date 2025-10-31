@@ -1,8 +1,6 @@
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Services.Blocklists
-@using TelegramGroupsAdmin.Core.Models
-@using TelegramGroupsAdmin.Auth
 @using Microsoft.AspNetCore.Components.Authorization
 @inject IBlocklistSubscriptionsRepository BlocklistRepo
 @inject IDomainFiltersRepository DomainFiltersRepo
@@ -112,7 +110,7 @@
                     <MudButton Variant="Variant.Filled"
                               Color="Color.Success"
                               StartIcon="@Icons.Material.Filled.Save"
-                              OnClick="SaveWhitelist"
+                              OnClick="@SaveWhitelist"
                               Disabled="@_saving"
                               FullWidth="true">
                         Save Whitelist
@@ -198,7 +196,7 @@
         <MudButton Variant="Variant.Outlined"
                   Color="Color.Primary"
                   StartIcon="@Icons.Material.Filled.Sync"
-                  OnClick="SyncAllBlocklists"
+                  OnClick="@SyncAllBlocklists"
                   Disabled="@_syncing">
             @if (_syncing)
             {
@@ -215,15 +213,15 @@
 
 @code {
     [Parameter]
-    public long ChatId { get; set; } = 0;  // 0 = global, non-zero = chat-specific
+    public long ChatId { get; set; } // 0 = global, non-zero = chat-specific
 
-    private List<BlocklistSubscription> _builtInBlocklists = new();
-    private List<BlocklistSubscription> _customSubscriptions = new();
-    private List<DomainFilter> _manualFilters = new();
+    private List<BlocklistSubscription> _builtInBlocklists = [];
+    private List<BlocklistSubscription> _customSubscriptions = [];
+    private List<DomainFilter> _manualFilters = [];
 
     private bool _loading = true;
-    private bool _saving = false;
-    private bool _syncing = false;
+    private bool _saving;
+    private bool _syncing;
     private CancellationTokenSource? _reloadCts;
 
     // Hard Block state
@@ -259,13 +257,13 @@
 
             // Load Hard Block manual domains
             var hardManualDomains = _manualFilters
-                .Where(f => f.FilterType == DomainFilterType.Blacklist && f.BlockMode == BlockMode.Hard && f.Enabled)
+                .Where(f => f is { FilterType: DomainFilterType.Blacklist, BlockMode: BlockMode.Hard, Enabled: true })
                 .Select(f => f.Domain);
             _hardBlockManualDomains = string.Join(Environment.NewLine, hardManualDomains);
 
             // Load Whitelist domains
             var whitelistDomains = _manualFilters
-                .Where(f => f.FilterType == DomainFilterType.Whitelist && f.Enabled)
+                .Where(f => f is { FilterType: DomainFilterType.Whitelist, Enabled: true })
                 .Select(f => f.Domain);
             _whitelistDomains = string.Join(Environment.NewLine, whitelistDomains);
 
@@ -275,7 +273,7 @@
 
             // Load Soft Block manual domains
             var softManualDomains = _manualFilters
-                .Where(f => f.FilterType == DomainFilterType.Blacklist && f.BlockMode == BlockMode.Soft && f.Enabled)
+                .Where(f => f is { FilterType: DomainFilterType.Blacklist, BlockMode: BlockMode.Soft, Enabled: true })
                 .Select(f => f.Domain);
             _softBlockManualDomains = string.Join(Environment.NewLine, softManualDomains);
         }
@@ -297,7 +295,10 @@
     private async Task ToggleBlocklist(BlocklistSubscription blocklist, BlockMode newMode, bool enabled)
     {
         // Cancel any pending reload
-        _reloadCts?.Cancel();
+        if (_reloadCts != null)
+        {
+            await _reloadCts.CancelAsync();
+        }
         _reloadCts = new CancellationTokenSource();
         var currentCts = _reloadCts;
 
@@ -309,7 +310,7 @@
                 Enabled = enabled
             };
 
-            await BlocklistRepo.UpdateAsync(updated);
+            await BlocklistRepo.UpdateAsync(updated, currentCts.Token);
 
             // Debounce reload - wait 500ms before reloading to batch multiple changes
             await Task.Delay(500, currentCts.Token);
@@ -324,7 +325,7 @@
         }
         catch (OperationCanceledException)
         {
-            // Debounce was cancelled by a newer change, this is expected
+            // Debounce was canceled by a newer change, this is expected
         }
         catch (Exception ex)
         {
@@ -341,8 +342,8 @@
             var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             var userEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
             var actor = !string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out _)
-                ? Core.Models.Actor.FromWebUser(userId, userEmail)
-                : Core.Models.Actor.FromSystem("unknown");
+                ? Actor.FromWebUser(userId, userEmail)
+                : Actor.FromSystem("unknown");
 
             if (mode == BlockMode.Hard)
             {
@@ -368,11 +369,11 @@
         }
     }
 
-    private async Task SaveHardBlockConfigurationAsync(Core.Models.Actor actor)
+    private async Task SaveHardBlockConfigurationAsync(Actor actor)
     {
         // Save custom URLs
         var urls = _hardBlockCustomUrls
-            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Select(u => u.Trim())
             .Where(u => !string.IsNullOrWhiteSpace(u))
             .ToList();
@@ -410,11 +411,11 @@
         await SaveManualDomainsAsync(_hardBlockManualDomains, DomainFilterType.Blacklist, BlockMode.Hard, actor);
     }
 
-    private async Task SaveSoftBlockConfigurationAsync(Core.Models.Actor actor)
+    private async Task SaveSoftBlockConfigurationAsync(Actor actor)
     {
         // Save custom URLs
         var urls = _softBlockCustomUrls
-            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Select(u => u.Trim())
             .Where(u => !string.IsNullOrWhiteSpace(u))
             .ToList();
@@ -461,8 +462,8 @@
             var userId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             var userEmail = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
             var actor = !string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out _)
-                ? Core.Models.Actor.FromWebUser(userId, userEmail)
-                : Core.Models.Actor.FromSystem("unknown");
+                ? Actor.FromWebUser(userId, userEmail)
+                : Actor.FromSystem("unknown");
 
             await SaveManualDomainsAsync(_whitelistDomains, DomainFilterType.Whitelist, BlockMode.Disabled, actor);
             await BlocklistSync.RebuildCacheAsync(ChatId);
@@ -480,10 +481,10 @@
         }
     }
 
-    private async Task SaveManualDomainsAsync(string domainsText, DomainFilterType filterType, BlockMode blockMode, Core.Models.Actor actor)
+    private async Task SaveManualDomainsAsync(string domainsText, DomainFilterType filterType, BlockMode blockMode, Actor actor)
     {
         var domains = domainsText
-            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Select(d => d.Trim().ToLowerInvariant())
             .Where(d => !string.IsNullOrWhiteSpace(d))
             .ToHashSet();

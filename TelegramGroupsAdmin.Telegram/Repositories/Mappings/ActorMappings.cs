@@ -1,7 +1,4 @@
-using System.Text.Json;
 using TelegramGroupsAdmin.Core.Models;
-using DataModels = TelegramGroupsAdmin.Data.Models;
-using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 

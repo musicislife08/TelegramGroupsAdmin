@@ -29,14 +29,14 @@
                              HelperText="You can edit the generated prompt before saving" />
 
                 <MudStack Row="true" Spacing="2">
-                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SavePrompt" Class="flex-grow-1">
+                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@SavePrompt" Class="flex-grow-1">
                         Save as New Version
                     </MudButton>
-                    <MudButton Color="Color.Secondary" Variant="Variant.Outlined" OnClick="ShowImproveDialog" StartIcon="@Icons.Material.Filled.AutoFixHigh">
+                    <MudButton Color="Color.Secondary" Variant="Variant.Outlined" OnClick="@ShowImproveDialog" StartIcon="@Icons.Material.Filled.AutoFixHigh">
                         Improve With AI
                     </MudButton>
                 </MudStack>
-                <MudButton Color="Color.Default" Variant="Variant.Text" OnClick="StartOver" FullWidth="true">
+                <MudButton Color="Color.Default" Variant="Variant.Text" OnClick="@StartOver" FullWidth="true">
                     Start Over
                 </MudButton>
             }
@@ -114,10 +114,10 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel" Disabled="@_isGenerating">Cancel</MudButton>
+        <MudButton OnClick="@Cancel" Disabled="@_isGenerating">Cancel</MudButton>
         @if (_generatedPrompt == null && !_isGenerating)
         {
-            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="GeneratePrompt" Disabled="@(!IsValid())">
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@GeneratePrompt" Disabled="@(!IsValid())">
                 Generate Prompt
             </MudButton>
         }
@@ -220,7 +220,7 @@
 
         var result = await dialog.Result;
 
-        if (result != null && !result.Canceled && result.Data is string improvedPrompt)
+        if (result is { Canceled: false, Data: string improvedPrompt })
         {
             _generatedPrompt = improvedPrompt;
             Snackbar.Add("Prompt improved! Review and save when ready.", Severity.Success);

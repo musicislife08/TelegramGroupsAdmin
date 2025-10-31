@@ -8,7 +8,6 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
-using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -535,7 +534,7 @@ public class ChatManagementService(
             }
 
             // Send notification if health warnings detected (Phase 5.1)
-            if (health.Status == "Warning" || health.Status == "Error")
+            if (health.Status is "Warning" or "Error")
             {
                 var warningsText = string.Join("\n- ", health.Warnings);
 

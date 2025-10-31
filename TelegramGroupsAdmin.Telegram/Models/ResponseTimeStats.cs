@@ -9,7 +9,7 @@ public class ResponseTimeStats
     /// <summary>
     /// Daily average response times
     /// </summary>
-    public List<DailyResponseTime> DailyAverages { get; set; } = new();
+    public List<DailyResponseTime> DailyAverages { get; set; } = [];
 
     /// <summary>
     /// Overall average response time in milliseconds

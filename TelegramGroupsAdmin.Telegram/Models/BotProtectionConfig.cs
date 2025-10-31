@@ -27,7 +27,7 @@ public class BotProtectionConfig
     /// List of whitelisted bot usernames (e.g., @RoseBot, @GroupButlerBot)
     /// These bots are always allowed regardless of who invited them
     /// </summary>
-    public List<string> WhitelistedBots { get; set; } = new();
+    public List<string> WhitelistedBots { get; set; } = [];
 
     /// <summary>
     /// Log bot join/ban events to audit log
@@ -42,7 +42,7 @@ public class BotProtectionConfig
         Enabled = true,
         AutoBanBots = true,
         AllowAdminInvitedBots = true,
-        WhitelistedBots = new List<string>(),
+        WhitelistedBots = [],
         LogBotEvents = true
     };
 }

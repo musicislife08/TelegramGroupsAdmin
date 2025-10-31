@@ -1,15 +1,9 @@
 @page "/audit"
-@using Microsoft.AspNetCore.Authorization
-@using Microsoft.AspNetCore.Components.Authorization
-@using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.Telegram.Repositories
-@using TelegramGroupsAdmin.Telegram.Models
 @inject IAuditService AuditService
 @inject IUserRepository UserRepository
 @inject IUserActionsRepository UserActionsRepository
 @inject ITelegramUserRepository TelegramUserRepository
-@inject AuthenticationStateProvider AuthStateProvider
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @attribute [Authorize(Roles = "GlobalAdmin,Owner")]
@@ -180,7 +174,7 @@
                 </MudTd>
             </RowTemplate>
             <PagerContent>
-                <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+                <MudTablePager PageSizeOptions="new[] { 25, 50, 100 }" />
             </PagerContent>
         </MudTable>
     </MudPaper>
@@ -241,7 +235,7 @@
 
     <!-- Moderation Log Table -->
     <MudPaper Class="pa-4" Elevation="2">
-        <MudTable T="TelegramGroupsAdmin.Telegram.Models.UserActionRecord"
+        <MudTable T="UserActionRecord"
                  @ref="_moderationTable"
                  ServerData="@LoadModerationServerDataAsync"
                  Hover="true"
@@ -364,7 +358,7 @@
                 </MudTd>
             </RowTemplate>
             <PagerContent>
-                <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+                <MudTablePager PageSizeOptions="new [] { 25, 50, 100 }" />
             </PagerContent>
         </MudTable>
     </MudPaper>
@@ -374,12 +368,12 @@
 
 @code {
     // Tab navigation
-    private int _activeTabIndex = 0;
+    private int _activeTabIndex;
 
     // Web Admin Log
     private MudTable<AuditLogRecord> _webAdminTable = null!;
-    private List<UserRecord> _users = new();
-    private bool _loading = false;
+    private List<UserRecord> _users = [];
+    private bool _loading;
 
     // Web Admin Filters
     private AuditEventType? _filterEventType;
@@ -387,8 +381,8 @@
     private string? _filterTargetUserId;
 
     // Telegram Moderation Log
-    private MudTable<TelegramGroupsAdmin.Telegram.Models.UserActionRecord> _moderationTable = null!;
-    private bool _loadingModerationActions = false;
+    private MudTable<UserActionRecord> _moderationTable = null!;
+    private bool _loadingModerationActions;
 
     // Moderation Filters
     private UserActionType? _filterActionType;
@@ -399,7 +393,7 @@
     private Dictionary<string, string> _userEmailCache = new();
 
     // Telegram users cache (for display names and photos)
-    private Dictionary<long, TelegramGroupsAdmin.Telegram.Models.TelegramUser> _telegramUsersCache = new();
+    private readonly Dictionary<long, TelegramUser> _telegramUsersCache = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -428,7 +422,7 @@
         // Tables will load data automatically via ServerData
     }
 
-    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         var fragment = new Uri(e.Location).Fragment.TrimStart('#');
         var newIndex = fragment switch
@@ -489,7 +483,7 @@
         }
     }
 
-    private async Task<TableData<TelegramGroupsAdmin.Telegram.Models.UserActionRecord>> LoadModerationServerDataAsync(TableState state, CancellationToken cancellationToken)
+    private async Task<TableData<UserActionRecord>> LoadModerationServerDataAsync(TableState state, CancellationToken cancellationToken)
     {
         _loadingModerationActions = true;
         StateHasChanged();
@@ -525,12 +519,12 @@
                 }
             }
 
-            return new TableData<TelegramGroupsAdmin.Telegram.Models.UserActionRecord> { Items = actions, TotalItems = totalCount };
+            return new TableData<UserActionRecord> { Items = actions, TotalItems = totalCount };
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading moderation log: {ex.Message}", Severity.Error);
-            return new TableData<TelegramGroupsAdmin.Telegram.Models.UserActionRecord> { Items = new List<TelegramGroupsAdmin.Telegram.Models.UserActionRecord>(), TotalItems = 0 };
+            return new TableData<UserActionRecord> { Items = new List<UserActionRecord>(), TotalItems = 0 };
         }
         finally
         {
@@ -683,7 +677,7 @@
     };
 
     // Telegram User Display Helper
-    private static string GetTelegramUserDisplayName(TelegramGroupsAdmin.Telegram.Models.TelegramUser user)
+    private static string GetTelegramUserDisplayName(TelegramUser user)
     {
         if (!string.IsNullOrEmpty(user.Username))
             return $"@{user.Username}";

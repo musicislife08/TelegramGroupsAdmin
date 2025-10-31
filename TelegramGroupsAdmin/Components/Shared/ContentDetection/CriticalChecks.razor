@@ -1,7 +1,5 @@
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.Auth
-@using TelegramGroupsAdmin.Telegram.Models
 @using Microsoft.AspNetCore.Components.Authorization
 @using System.Security.Claims
 @inject IContentCheckConfigRepository CheckConfigRepository
@@ -52,7 +50,7 @@
                         </MudStack>
                         <MudText Typo="Typo.caption" Class="ml-10">@check.Description</MudText>
 
-                        @if (!check.Enabled && check.AlwaysRun)
+                        @if (check is { Enabled: false, AlwaysRun: true })
                         {
                             <MudAlert Severity="Severity.Warning" Dense="true" Class="ml-10">
                                 This check is marked as critical but is <strong>disabled</strong>. It will not run.
@@ -87,7 +85,7 @@
                         </MudStack>
                         <MudText Typo="Typo.caption" Class="ml-10">@check.Description</MudText>
 
-                        @if (!check.Enabled && check.AlwaysRun)
+                        @if (check is { Enabled: false, AlwaysRun: true })
                         {
                             <MudAlert Severity="Severity.Warning" Dense="true" Class="ml-10">
                                 This check is marked as critical but is <strong>disabled</strong>. It will not run.
@@ -128,7 +126,7 @@
                                 </MudStack>
                                 <MudText Typo="Typo.caption" Class="ml-10">@check.Description</MudText>
 
-                                @if (!check.Enabled && check.AlwaysRun)
+                                @if (check is { Enabled: false, AlwaysRun: true })
                                 {
                                     <MudAlert Severity="Severity.Warning" Dense="true" Class="ml-10">
                                         This check is marked as critical but is <strong>disabled</strong>. It will not run.
@@ -146,7 +144,7 @@
             <MudStack Row="true" Spacing="2">
                 <MudButton Variant="Variant.Filled"
                           Color="Color.Primary"
-                          OnClick="SaveChanges"
+                          OnClick="@SaveChanges"
                           Disabled="@(!_canEdit || _saving)">
                     @if (_saving)
                     {
@@ -159,14 +157,14 @@
                     }
                 </MudButton>
                 <MudButton Variant="Variant.Outlined"
-                          OnClick="LoadConfiguration"
+                          OnClick="@LoadConfiguration"
                           Disabled="@_saving">
                     Reset
                 </MudButton>
             </MudStack>
         </MudItem>
 
-        @if (_hasDisabledCriticalChecks)
+        @if (HasDisabledCriticalChecks)
         {
             <MudItem xs="12">
                 <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
@@ -181,12 +179,12 @@
 
 @code {
     private bool _loading = true;
-    private bool _saving = false;
-    private bool _canEdit = false;
-    private List<CheckViewModel> _securityChecks = new();
-    private List<CheckViewModel> _malwareChecks = new();
-    private List<CheckViewModel> _spamChecks = new();
-    private bool _hasDisabledCriticalChecks => _securityChecks.Any(c => !c.AlwaysRun) || _malwareChecks.Any(c => !c.AlwaysRun);
+    private bool _saving;
+    private bool _canEdit;
+    private List<CheckViewModel> _securityChecks = [];
+    private List<CheckViewModel> _malwareChecks = [];
+    private List<CheckViewModel> _spamChecks = [];
+    private bool HasDisabledCriticalChecks => _securityChecks.Any(c => !c.AlwaysRun) || _malwareChecks.Any(c => !c.AlwaysRun);
 
     protected override async Task OnInitializedAsync()
     {
@@ -196,7 +194,7 @@
         var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
         var permissionLevel = permissionClaim != null && int.TryParse(permissionClaim.Value, out var level)
             ? (PermissionLevel)level
-            : PermissionLevel.Admin; // Default to lowest permission level
+            : PermissionLevel.Admin; // Default to the lowest permission level
         _canEdit = permissionLevel >= PermissionLevel.GlobalAdmin; // Only GlobalAdmin and Owner can edit
 
         await LoadConfiguration();
@@ -209,7 +207,7 @@
             _loading = true;
             StateHasChanged();
 
-            var configs = await CheckConfigRepository.GetGlobalConfigsAsync();
+            var configs = (await CheckConfigRepository.GetGlobalConfigsAsync()).ToList();
 
             // Define ALL available checks with display info
             var knownChecks = new Dictionary<string, (string DisplayName, string Description, string Category)>
@@ -311,11 +309,11 @@
 
     private class CheckViewModel
     {
-        public string CheckName { get; set; } = string.Empty;
-        public string DisplayName { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
-        public string Category { get; set; } = string.Empty;
-        public bool Enabled { get; set; }
+        public string CheckName { get; init; } = string.Empty;
+        public string DisplayName { get; init; } = string.Empty;
+        public string Description { get; init; } = string.Empty;
+        public string Category { get; init; } = string.Empty;
+        public bool Enabled { get; init; }
         public bool AlwaysRun { get; set; }
     }
 }

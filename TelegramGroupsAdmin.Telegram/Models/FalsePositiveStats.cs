@@ -9,7 +9,7 @@ public class FalsePositiveStats
     /// <summary>
     /// Daily breakdown of false positives
     /// </summary>
-    public List<DailyFalsePositive> DailyBreakdown { get; set; } = new();
+    public List<DailyFalsePositive> DailyBreakdown { get; set; } = [];
 
     /// <summary>
     /// Overall false positive rate as percentage (0-100)

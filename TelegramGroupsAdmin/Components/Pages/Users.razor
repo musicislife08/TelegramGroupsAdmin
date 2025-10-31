@@ -1,13 +1,10 @@
 @page "/users"
 @attribute [Authorize(Roles = "GlobalAdmin,Owner")]
 @using Microsoft.AspNetCore.Components.Authorization
-@using TelegramGroupsAdmin.Telegram.Services
-@using TelegramGroupsAdmin.Telegram.Models
-@using TelegramGroupsAdmin.Components.Shared
 @using TelegramGroupsAdmin.Components.Shared.Settings
 @inject TelegramUserManagementService UserManagementService
-@inject TelegramGroupsAdmin.Services.BlazorAuthHelper AuthHelper
-@inject TelegramGroupsAdmin.Telegram.Repositories.IManagedChatsRepository ManagedChatsRepository
+@inject Services.BlazorAuthHelper AuthHelper
+@inject IManagedChatsRepository ManagedChatsRepository
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject AuthenticationStateProvider AuthStateProvider
@@ -28,7 +25,7 @@
                           Adornment="Adornment.Start"
                           AdornmentIcon="@Icons.Material.Filled.Search"
                           Immediate="true"
-                          OnKeyUp="@((e) => ApplyFilters())"
+                          OnKeyUp="@((_) => ApplyFilters())"
                           Clearable="true"
                           OnClearButtonClick="@(() => { _searchText = string.Empty; ApplyFilters(); })" />
 
@@ -116,7 +113,7 @@
                     </MudTd>
                 </RowTemplate>
                 <PagerContent>
-                    <MudTablePager PageSizeOptions="new int[] { 25, 50, 100 }" />
+                    <MudTablePager PageSizeOptions="new[] { 25, 50, 100 }" />
                 </PagerContent>
             </MudTable>
         </MudTabPanel>
@@ -317,16 +314,16 @@
 </MudContainer>
 
 @code {
-    private List<TelegramUserListItem> _allUsers = new();
-    private List<TelegramUserListItem> _taggedUsers = new();
-    private List<TelegramUserListItem> _trustedUsers = new();
-    private List<TelegramUserListItem> _bannedUsers = new();
-    private List<BannedUserListItem> _bannedUsersWithDetails = new();
+    private List<TelegramUserListItem> _allUsers = [];
+    private List<TelegramUserListItem> _taggedUsers = [];
+    private List<TelegramUserListItem> _trustedUsers = [];
+    private List<TelegramUserListItem> _bannedUsers = [];
+    private List<BannedUserListItem> _bannedUsersWithDetails = [];
     private bool _loading = true;
 
     // Search and filter state
     private string _searchText = string.Empty;
-    private int _filteredCount = 0;
+    private int _filteredCount;
 
     // Filtered lists (computed)
     private List<TelegramUserListItem> FilteredAllUsers => FilterUsers(_allUsers);
@@ -399,7 +396,7 @@
             // Get accessible chat IDs for filtering
             var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
                 userId,
-                (PermissionLevel)permissionLevel);
+                permissionLevel);
             var chatIds = accessibleChats.Select(c => c.ChatId).ToList();
 
             // Load all user lists in parallel (filtered by accessible chats for Admin users)
@@ -441,7 +438,7 @@
                 Snackbar.Add("Authentication error: User ID not found", Severity.Error);
                 return;
             }
-            var executor = Core.Models.Actor.FromWebUser(executorId);
+            var executor = Actor.FromWebUser(executorId);
 
             var action = user.IsTrusted ? "remove trust from" : "trust";
             var success = await UserManagementService.ToggleTrustAsync(user.TelegramUserId, executor);
@@ -484,7 +481,7 @@
                 Snackbar.Add("Authentication error: User ID not found", Severity.Error);
                 return;
             }
-            var executor = Core.Models.Actor.FromWebUser(executorId);
+            var executor = Actor.FromWebUser(executorId);
 
             // Unban the user
             var success = await UserManagementService.UnbanAsync(user.TelegramUserId, executor, reason: "Unbanned from web interface");
@@ -524,7 +521,7 @@
         var result = await dialog.Result;
 
         // Reload users if dialog made changes
-        if (result != null && !result.Canceled)
+        if (result is { Canceled: false })
         {
             await LoadUsersAsync();
         }

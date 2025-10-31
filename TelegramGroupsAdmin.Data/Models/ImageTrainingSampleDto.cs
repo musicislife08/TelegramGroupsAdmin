@@ -35,7 +35,7 @@ public class ImageTrainingSampleDto
     /// </summary>
     [Column("photo_hash")]
     [Required]
-    public byte[] PhotoHash { get; set; } = Array.Empty<byte>();
+    public byte[] PhotoHash { get; set; } = [];
 
     /// <summary>
     /// File size in bytes (metadata feature)

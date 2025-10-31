@@ -68,7 +68,7 @@ public class InviteService : IInviteService
             CreatedAt: i.CreatedAt,
             ExpiresAt: i.ExpiresAt,
             UsedBy: i.UsedBy,
-            UsedAt: i.ModifiedAt.HasValue && i.Status == InviteStatus.Used
+            UsedAt: i is { ModifiedAt: not null, Status: InviteStatus.Used }
                 ? i.ModifiedAt.Value
                 : null,
             IsExpired: i.ExpiresAt < now && i.Status == InviteStatus.Pending,

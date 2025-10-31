@@ -1,13 +1,9 @@
-@using TelegramGroupsAdmin.Telegram.Repositories
-@using TelegramGroupsAdmin.Telegram.Models
 @using ApexCharts
-@using Microsoft.JSInterop
 @using MudColor = MudBlazor.Color
 @using MudSize = MudBlazor.Size
-@using MudAlign = MudBlazor.Align
 @inject IAnalyticsRepository AnalyticsRepository
 @inject ISnackbar Snackbar
-@inject IJSRuntime JSRuntime
+@inject IJSRuntime JsRuntime
 
 <MudStack Spacing="4">
     @* Date Range Selector *@
@@ -16,14 +12,14 @@
             <MudText Typo="Typo.h6">Performance Metrics</MudText>
             <MudStack Row="true" Spacing="2">
                 <MudButtonGroup Variant="Variant.Outlined" Color="MudColor.Primary">
-                    <MudButton OnClick="() => LoadLast7Days()">Last 7 Days</MudButton>
-                    <MudButton OnClick="() => LoadLast30Days()">Last 30 Days</MudButton>
-                    <MudButton OnClick="() => LoadAllTime()">All Time</MudButton>
+                    <MudButton OnClick="@LoadLast7Days">Last 7 Days</MudButton>
+                    <MudButton OnClick="@LoadLast30Days">Last 30 Days</MudButton>
+                    <MudButton OnClick="@LoadAllTime">All Time</MudButton>
                 </MudButtonGroup>
                 <MudButton Variant="Variant.Filled"
                           Color="MudColor.Primary"
                           StartIcon="@Icons.Material.Filled.Refresh"
-                          OnClick="LoadData"
+                          OnClick="@LoadData"
                           Disabled="@_loading">
                     Refresh
                 </MudButton>
@@ -136,7 +132,7 @@
                         <MudTh>Algorithm</MudTh>
                         <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.TotalChecks">Total Checks</MudTableSortLabel></MudTh>
                         <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.SpamPercentage">Hit Rate</MudTableSortLabel></MudTh>
-                        <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.AverageSpamConfidence">Avg Spam Conf</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.AverageSpamConfidence ?? 101">Avg Spam Conf</MudTableSortLabel></MudTh>
                         <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.ContributedToFalsePositives">Contrib. to FPs</MudTableSortLabel></MudTh>
                         <MudTh><MudTableSortLabel T="DetectionMethodStats" SortBy="x => x.ContributedToFalseNegatives">Contrib. to FNs</MudTableSortLabel></MudTh>
                     </HeaderContent>
@@ -222,7 +218,7 @@
         }
 
         @* Response Time Chart *@
-        @if (_responseTimeStats?.DailyAverages?.Any() == true && _responseTimeChart != null)
+        @if (_responseTimeStats?.DailyAverages.Any() == true && _responseTimeChart != null)
         {
             <MudPaper Class="pa-4" Elevation="2">
                 <MudText Typo="Typo.h6" GutterBottom="true" Color="MudColor.Primary">Response Time Trends</MudText>
@@ -253,10 +249,10 @@
 </MudStack>
 
 @code {
-    [Parameter] public List<long> SelectedChatIds { get; set; } = new();
+    [Parameter] public List<long> SelectedChatIds { get; set; } = [];
 
     private bool _loading = true;
-    private bool _dataLoaded = false;
+    private bool _dataLoaded;
     private DateTimeOffset? _startDate;
     private DateTimeOffset? _endDate;
     private string _userTimeZone = "UTC"; // Default to UTC until detected
@@ -280,7 +276,7 @@
         // Detect user's timezone from browser
         try
         {
-            _userTimeZone = await JSRuntime.InvokeAsync<string>("getUserTimeZone");
+            _userTimeZone = await JsRuntime.InvokeAsync<string>("getUserTimeZone");
         }
         catch (Exception ex)
         {
@@ -360,18 +356,18 @@
                 Zoom = new Zoom { Enabled = false }
             },
             Stroke = new Stroke { Curve = Curve.Smooth, Width = 3 },
-            Colors = new List<string> { "#F44336", "#4CAF50" }, // Red for spam, green for ham
+            Colors = ["#F44336", "#4CAF50"], // Red for spam, green for ham
             Xaxis = new XAxis
             {
                 Type = XAxisType.Datetime,
                 Labels = new XAxisLabels { Format = "MMM dd" }
             },
-            Yaxis = new List<YAxis> { new YAxis { Title = new AxisTitle { Text = "Number of Detections" } } },
+            Yaxis = [new YAxis { Title = new AxisTitle { Text = "Number of Detections" } }],
             Legend = new Legend { Position = LegendPosition.Top }
         };
 
         // Response time chart
-        if (_responseTimeStats?.DailyAverages?.Any() == true)
+        if (_responseTimeStats?.DailyAverages.Any() == true)
         {
             _responseTimeChart = new ApexChartOptions<DailyResponseTime>
             {
@@ -379,20 +375,20 @@
                 {
                     Toolbar = new Toolbar { Show = false }
                 },
-                Colors = new List<string> { "#2196F3" }, // Blue
+                Colors = ["#2196F3"], // Blue
                 Xaxis = new XAxis
                 {
                     Type = XAxisType.Datetime,
                     Labels = new XAxisLabels { Format = "MMM dd" }
                 },
-                Yaxis = new List<YAxis>
-                {
+                Yaxis =
+                [
                     new YAxis
                     {
                         Title = new AxisTitle { Text = "Response Time (seconds)" },
                         DecimalsInFloat = 2
                     }
-                },
+                ],
                 PlotOptions = new PlotOptions
                 {
                     Bar = new PlotOptionsBar

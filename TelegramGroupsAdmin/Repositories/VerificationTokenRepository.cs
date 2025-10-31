@@ -1,10 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
-using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
-using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Repositories;
 

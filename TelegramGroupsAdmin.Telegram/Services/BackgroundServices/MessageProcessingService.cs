@@ -2,16 +2,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Telegram.Bot;
-using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Telegram.Models;
-using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
@@ -165,7 +161,7 @@ public partial class MessageProcessingService(
             await managedChatsRepository.UpdateLastSeenAsync(message.Chat.Id, now, cancellationToken);
 
             // Check if we need to refresh admin cache (only for groups/supergroups, not private DMs)
-            if (message.Chat.Type == ChatType.Group || message.Chat.Type == ChatType.Supergroup)
+            if (message.Chat.Type is ChatType.Group or ChatType.Supergroup)
             {
                 bool shouldRefreshAdmins = false;
                 string refreshReason = "";

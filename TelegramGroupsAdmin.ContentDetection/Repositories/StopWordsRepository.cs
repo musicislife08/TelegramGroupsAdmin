@@ -1,8 +1,6 @@
-using TelegramGroupsAdmin.Core.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 
@@ -39,7 +37,7 @@ public class StopWordsRepository : IStopWordsRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve enabled stop words");
-            return Enumerable.Empty<string>();
+            return [];
         }
     }
 
@@ -153,7 +151,7 @@ public class StopWordsRepository : IStopWordsRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve all stop words");
-            return Enumerable.Empty<Models.StopWord>();
+            return [];
         }
     }
 

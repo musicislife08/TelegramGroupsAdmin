@@ -20,7 +20,7 @@ public class MediaNotificationService : IMediaNotificationService
         {
             if (!_subscriptions.TryGetValue(key, out var callbacks))
             {
-                callbacks = new List<Action>();
+                callbacks = [];
                 _subscriptions[key] = callbacks;
             }
             callbacks.Add(callback);
@@ -34,7 +34,7 @@ public class MediaNotificationService : IMediaNotificationService
         {
             if (!_subscriptions.TryGetValue(key, out var callbacks))
             {
-                callbacks = new List<Action>();
+                callbacks = [];
                 _subscriptions[key] = callbacks;
             }
             callbacks.Add(callback);

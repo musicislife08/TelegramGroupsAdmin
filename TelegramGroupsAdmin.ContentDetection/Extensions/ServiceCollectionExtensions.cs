@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
-using TelegramGroupsAdmin.ContentDetection.Configuration;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;

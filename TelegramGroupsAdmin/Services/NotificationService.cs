@@ -1,13 +1,9 @@
-using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Email;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Core.Services;
 using CoreModels = TelegramGroupsAdmin.Core.Models;
-using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Services;
 

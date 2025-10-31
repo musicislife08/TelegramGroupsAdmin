@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TickerQ.Utilities.Base;
 using TickerQ.Utilities.Models;

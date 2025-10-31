@@ -24,7 +24,7 @@ public class BackupRetentionService
         RetentionConfig retentionConfig)
     {
         if (backupFiles == null || backupFiles.Count == 0)
-            return new List<BackupFileInfo>();
+            return [];
 
         // Sort by creation time (oldest first)
         var sortedBackups = backupFiles.OrderBy(b => b.CreatedAt).ToList();
@@ -100,11 +100,11 @@ public class BackupRetentionService
     {
         var classified = new Dictionary<BackupTier, List<BackupFileInfo>>
         {
-            [BackupTier.Hourly] = new List<BackupFileInfo>(),
-            [BackupTier.Daily] = new List<BackupFileInfo>(),
-            [BackupTier.Weekly] = new List<BackupFileInfo>(),
-            [BackupTier.Monthly] = new List<BackupFileInfo>(),
-            [BackupTier.Yearly] = new List<BackupFileInfo>()
+            [BackupTier.Hourly] = [],
+            [BackupTier.Daily] = [],
+            [BackupTier.Weekly] = [],
+            [BackupTier.Monthly] = [],
+            [BackupTier.Yearly] = []
         };
 
         // Track "first backup of period" for each tier

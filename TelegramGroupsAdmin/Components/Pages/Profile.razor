@@ -1,8 +1,5 @@
 @page "/profile"
-@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
-@using Microsoft.JSInterop
-@using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
 @using QRCoder
 @inject AuthenticationStateProvider AuthStateProvider
@@ -11,7 +8,7 @@
 @inject ITelegramUserMappingRepository TelegramMappingRepository
 @inject ITelegramLinkTokenRepository TelegramLinkTokenRepository
 @inject ISnackbar Snackbar
-@inject IJSRuntime JSRuntime
+@inject IJSRuntime JsRuntime
 @attribute [Authorize]
 
 <PageTitle>Profile - TelegramGroupsAdmin</PageTitle>
@@ -63,7 +60,7 @@
                             <MudButton Variant="Variant.Filled"
                                       Color="Color.Primary"
                                       FullWidth="true"
-                                      OnClick="ChangePassword"
+                                      OnClick="@ChangePassword"
                                       Disabled="@_changingPassword">
                                 @if (_changingPassword)
                                 {
@@ -97,7 +94,7 @@
                             <MudButton Variant="Variant.Filled"
                                       Color="Color.Warning"
                                       FullWidth="true"
-                                      OnClick="ResetTotp"
+                                      OnClick="@ResetTotp"
                                       Disabled="@_togglingTotp">
                                 @if (_togglingTotp)
                                 {
@@ -117,7 +114,7 @@
                         <MudButton Variant="Variant.Filled"
                                   Color="Color.Success"
                                   FullWidth="true"
-                                  OnClick="EnableTotp"
+                                  OnClick="@EnableTotp"
                                   Disabled="@_togglingTotp">
                             @if (_togglingTotp)
                             {
@@ -193,7 +190,7 @@
 
                     <MudButton Variant="Variant.Filled"
                               Color="Color.Primary"
-                              OnClick="GenerateLinkToken"
+                              OnClick="@GenerateLinkToken"
                               Disabled="@_generatingToken">
                         @if (_generatingToken)
                         {
@@ -242,8 +239,8 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="CancelTotpSetup">Cancel</MudButton>
-        <MudButton Color="Color.Primary" OnClick="VerifyAndEnableTotp" Disabled="@_verifyingTotp">
+        <MudButton OnClick="@CancelTotpSetup">Cancel</MudButton>
+        <MudButton Color="Color.Primary" OnClick="@VerifyAndEnableTotp" Disabled="@_verifyingTotp">
             @if (_verifyingTotp)
             {
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
@@ -268,21 +265,21 @@
     private string _currentPassword = "";
     private string _newPassword = "";
     private string _confirmPassword = "";
-    private bool _changingPassword = false;
+    private bool _changingPassword;
 
     // TOTP
-    private bool _togglingTotp = false;
+    private bool _togglingTotp;
     private string _resetTotpPassword = "";
-    private bool _showTotpSetup = false;
+    private bool _showTotpSetup;
     private TotpSetupResult? _totpSetupResult;
     private string _totpVerificationCode = "";
-    private bool _verifyingTotp = false;
+    private bool _verifyingTotp;
 
     // Telegram Linking
     private List<TelegramUserMappingRecord>? _linkedAccounts;
-    private bool _generatingToken = false;
-    private bool _unlinkingAccount = false;
-    private bool _showLinkToken = false;
+    private bool _generatingToken;
+    private bool _unlinkingAccount;
+    private bool _showLinkToken;
     private TelegramLinkTokenRecord? _currentLinkToken;
 
 
@@ -527,7 +524,7 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading linked accounts: {ex.Message}", Severity.Error);
-            _linkedAccounts = new List<TelegramUserMappingRecord>();
+            _linkedAccounts = [];
         }
     }
 
@@ -616,7 +613,7 @@
     {
         try
         {
-            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
             Snackbar.Add("Token copied to clipboard!", Severity.Success);
         }
         catch

@@ -1,13 +1,8 @@
-@using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.ContentDetection.Models
-@using TelegramGroupsAdmin.ContentDetection.Services
-@using Microsoft.JSInterop
-@using TelegramGroupsAdmin.Telegram.Services
-@using TelegramGroupsAdmin.Telegram.Repositories
 @inject IContentCheckCoordinator ContentCheckCoordinator
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject ISnackbar Snackbar
-@inject IJSRuntime JSRuntime
+@inject IJSRuntime JsRuntime
 @implements IDisposable
 
 <MudPaper Class="pa-4" Elevation="0">
@@ -88,13 +83,13 @@
             </MudFileUpload>
             @if (_selectedMedia != null)
             {
-                <MudChip T="string" Color="Color.Success" Icon="@GetMediaIcon(_selectedMedia.ContentType)" OnClose="ClearMedia" Class="mt-2">
+                <MudChip T="string" Color="Color.Success" Icon="@GetMediaIcon(_selectedMedia.ContentType)" OnClose="@ClearMedia" Class="mt-2">
                     @_selectedMedia.Name (@FormatFileSize(_selectedMedia.Size)) • @GetMediaType(_selectedMedia.ContentType)
                 </MudChip>
             }
             @if (_pastedImageData?.Length > 0)
             {
-                <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.ContentPaste" OnClose="ClearPastedImage" Class="mt-2">
+                <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.ContentPaste" OnClose="@ClearPastedImage" Class="mt-2">
                     Pasted image (@FormatFileSize(_pastedImageData.Length))
                 </MudChip>
             }
@@ -125,7 +120,7 @@
                             <MudText Typo="Typo.body1"><strong>@_selectedFile.Name</strong></MudText>
                             <MudText Typo="Typo.caption">@FormatFileSize(_selectedFile.Size) • @_selectedFile.ContentType</MudText>
                         </MudStack>
-                        <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="ClearFile" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="@ClearFile" />
                     </MudStack>
                 </MudPaper>
             }
@@ -142,7 +137,7 @@
                 Color="Color.Primary"
                 Size="Size.Large"
                 StartIcon="@Icons.Material.Filled.PlayArrow"
-                OnClick="RunContentCheck"
+                OnClick="@RunContentCheck"
                 Disabled="@_isRunning">
                 @(_isRunning ? "Checking..." : "Run Content Check")
             </MudButton>
@@ -357,8 +352,8 @@
 
 @code {
     // State
-    private long? _selectedChatId = null;
-    private List<TelegramGroupsAdmin.Telegram.Models.ManagedChatRecord> _managedChats = new();
+    private long? _selectedChatId;
+    private List<ManagedChatRecord> _managedChats = [];
     private string _messageText = string.Empty;
     private string? _userId;
     private string? _userName;
@@ -370,7 +365,7 @@
 
     // JS interop for paste listener
     private DotNetObjectReference<ContentTester>? _dotNetHelper;
-    private bool _pasteListenerSetup = false;
+    private bool _pasteListenerSetup;
 
     protected override async Task OnInitializedAsync()
     {
@@ -385,7 +380,7 @@
             try
             {
                 _dotNetHelper = DotNetObjectReference.Create(this);
-                await JSRuntime.InvokeVoidAsync("setupPasteListener", _dotNetHelper);
+                await JsRuntime.InvokeVoidAsync("setupPasteListener", _dotNetHelper);
                 _pasteListenerSetup = true;
             }
             catch (Exception ex)
@@ -480,16 +475,14 @@
                     // ML-6: Save video to temp file for frame extraction
                     var extension = Path.GetExtension(imageFileName) ?? ".mp4";
                     tempVideoPath = Path.Combine(Path.GetTempPath(), $"tester_{Guid.NewGuid()}{extension}");
-                    using (var fileStream = File.Create(tempVideoPath))
-                    {
-                        await imageStream.CopyToAsync(fileStream);
-                    }
+                    await using var fileStream = File.Create(tempVideoPath);
+                    await imageStream.CopyToAsync(fileStream);
                 }
                 else
                 {
                     // ML-5: Save image to temp file for OCR + hash similarity
                     tempImagePath = Path.Combine(Path.GetTempPath(), $"tester_{Guid.NewGuid()}.png");
-                    using (var fileStream = File.Create(tempImagePath))
+                    await using (var fileStream = File.Create(tempImagePath))
                     {
                         await imageStream.CopyToAsync(fileStream);
                     }
@@ -507,7 +500,7 @@
             // Build request - same structure as MessageProcessingService uses
             var request = new ContentCheckRequest
             {
-                Message = _messageText ?? string.Empty, // Empty string for media-only tests
+                Message = _messageText, // Empty string for media-only tests
                 UserId = string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId),
                 UserName = _userName,
                 ChatId = _selectedChatId ?? 0, // 0 = global config
@@ -697,9 +690,12 @@
         {
             try
             {
-                JSRuntime.InvokeVoidAsync("window.pasteListenerCleanup");
+                JsRuntime.InvokeVoidAsync("window.pasteListenerCleanup");
             }
-            catch { }
+            catch
+            {
+                // ignored
+            }
         }
         _dotNetHelper?.Dispose();
     }

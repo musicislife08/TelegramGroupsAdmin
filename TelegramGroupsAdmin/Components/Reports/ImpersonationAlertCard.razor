@@ -1,4 +1,3 @@
-@using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Data.Models
 
 <MudCard Elevation="2" Class="mb-3" Style="@GetCardStyle()">
@@ -133,8 +132,8 @@
             <MudButton Variant="Variant.Filled"
                        Color="Color.Error"
                        StartIcon="@Icons.Material.Filled.Block"
-                       OnClick="OnConfirmBan"
-                       Disabled="@ActionInProgress">
+                       OnClick="@OnConfirmBan"
+                       Disabled="@_actionInProgress">
                 Confirm Ban
             </MudButton>
 
@@ -143,8 +142,8 @@
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Success"
                            StartIcon="@Icons.Material.Filled.CheckCircle"
-                           OnClick="OnUnban"
-                           Disabled="@ActionInProgress">
+                           OnClick="@OnUnban"
+                           Disabled="@_actionInProgress">
                     Unban (False Positive)
                 </MudButton>
             }
@@ -152,8 +151,8 @@
             <MudButton Variant="Variant.Outlined"
                        Color="Color.Default"
                        StartIcon="@Icons.Material.Filled.Close"
-                       OnClick="OnDismiss"
-                       Disabled="@ActionInProgress">
+                       OnClick="@OnDismiss"
+                       Disabled="@_actionInProgress">
                 Dismiss
             </MudButton>
         }
@@ -173,7 +172,7 @@
     [Parameter]
     public EventCallback<(ImpersonationAlertRecord Alert, string Action)> OnAction { get; set; }
 
-    private bool ActionInProgress = false;
+    private bool _actionInProgress;
 
     private string GetCardStyle()
     {
@@ -225,22 +224,22 @@
 
     private async Task OnConfirmBan()
     {
-        ActionInProgress = true;
+        _actionInProgress = true;
         await OnAction.InvokeAsync((Alert, "confirm"));
-        ActionInProgress = false;
+        _actionInProgress = false;
     }
 
     private async Task OnUnban()
     {
-        ActionInProgress = true;
+        _actionInProgress = true;
         await OnAction.InvokeAsync((Alert, "unban"));
-        ActionInProgress = false;
+        _actionInProgress = false;
     }
 
     private async Task OnDismiss()
     {
-        ActionInProgress = true;
+        _actionInProgress = true;
         await OnAction.InvokeAsync((Alert, "dismiss"));
-        ActionInProgress = false;
+        _actionInProgress = false;
     }
 }

@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
-using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -70,7 +69,7 @@ public class ReportActionsService : IReportActionsService
             chatId: report.ChatId,
             executor: executor,
             reason: $"Report #{reportId} - spam/abuse",
-            cancellationToken: default);
+            cancellationToken: CancellationToken.None);
 
         if (!result.Success)
         {
@@ -125,7 +124,7 @@ public class ReportActionsService : IReportActionsService
             messageId: report.MessageId,
             executor: executor,
             reason: $"Report #{reportId} - spam/abuse",
-            cancellationToken: default);
+            cancellationToken: CancellationToken.None);
 
         if (!result.Success)
         {

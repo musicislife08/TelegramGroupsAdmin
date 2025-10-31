@@ -1,6 +1,5 @@
 @using TelegramGroupsAdmin.ContentDetection.Configuration
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@using Microsoft.AspNetCore.Components
 @inject ISpamDetectionConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
 
@@ -9,8 +8,8 @@
         <DynamicComponent Type="@ComponentType" Parameters="@_parameters" @ref="_dynamicComponentRef" />
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAndClose" Disabled="@_isSaving">
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@SaveAndClose" Disabled="@_isSaving">
             @if (_isSaving)
             {
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" />
@@ -26,24 +25,24 @@
 
 @code {
     [CascadingParameter]
-    IMudDialogInstance MudDialog { get; set; } = default!;
+    IMudDialogInstance MudDialog { get; set; } = null!;
 
     [Parameter]
     public long? ChatId { get; set; }
 
     [Parameter]
-    public Type ComponentType { get; set; } = default!;
+    public Type ComponentType { get; set; } = null!;
 
     private DynamicComponent? _dynamicComponentRef;
     private Dictionary<string, object> _parameters = new();
-    private bool _isSaving = false;
+    private bool _isSaving;
 
     protected override void OnInitialized()
     {
         // Set up parameters to pass to the child component
         _parameters = new Dictionary<string, object>
         {
-            { "ChatId", (object?)ChatId ?? (object)0L }
+            { "ChatId", ChatId ?? 0L }
         };
     }
 

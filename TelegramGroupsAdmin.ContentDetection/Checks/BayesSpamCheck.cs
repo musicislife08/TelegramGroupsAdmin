@@ -187,9 +187,9 @@ internal class BayesClassifier
     private readonly Dictionary<string, int> _spamWordCounts = new();
     private readonly Dictionary<string, int> _hamWordCounts = new();
     private readonly ITokenizerService _tokenizerService;
-    private int _spamMessageCount = 0;
-    private int _hamMessageCount = 0;
-    private int _totalWordCount = 0;
+    private int _spamMessageCount;
+    private int _hamMessageCount;
+    private int _totalWordCount;
 
     public BayesClassifier(ITokenizerService tokenizerService)
     {

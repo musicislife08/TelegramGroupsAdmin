@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 using TickerQ.Utilities.Base;
 using TickerQ.Utilities.Models;

@@ -1,4 +1,3 @@
-using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -32,7 +31,7 @@ public record ContentCheckCoordinatorResult
     /// Critical check violations (URL filtering, file scanning, etc.) that always run
     /// These violations should delete message + DM user, but NOT ban/warn for trusted/admin users
     /// </summary>
-    public List<string> CriticalCheckViolations { get; init; } = new();
+    public List<string> CriticalCheckViolations { get; init; } = [];
 
     /// <summary>
     /// Spam detection result (null if skipped)

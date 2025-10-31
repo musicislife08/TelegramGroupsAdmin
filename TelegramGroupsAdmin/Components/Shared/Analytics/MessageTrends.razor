@@ -1,14 +1,10 @@
-@using TelegramGroupsAdmin.Telegram.Repositories
-@using TelegramGroupsAdmin.Telegram.Models
-@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Services
 @using ApexCharts
-@using Microsoft.JSInterop
 @inject IMessageHistoryRepository MessageHistoryRepository
 @inject IManagedChatsRepository ChatsRepository
 @inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
-@inject IJSRuntime JSRuntime
+@inject IJSRuntime JsRuntime
 
 <MudStack Spacing="4">
     @* Chat Filter *@
@@ -34,15 +30,15 @@
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
             <MudText Typo="Typo.h6">Message Trends</MudText>
             <MudStack Row="true" Spacing="2">
-                <MudButtonGroup Variant="MudBlazor.Variant.Outlined" Color="MudBlazor.Color.Primary">
-                    <MudButton OnClick="() => LoadLast7Days()">Last 7 Days</MudButton>
-                    <MudButton OnClick="() => LoadLast30Days()">Last 30 Days</MudButton>
-                    <MudButton OnClick="() => LoadAllTime()">All Time</MudButton>
+                <MudButtonGroup Variant="Variant.Outlined" Color="MudBlazor.Color.Primary">
+                    <MudButton OnClick="@LoadLast7Days">Last 7 Days</MudButton>
+                    <MudButton OnClick="@LoadLast30Days">Last 30 Days</MudButton>
+                    <MudButton OnClick="@LoadAllTime">All Time</MudButton>
                 </MudButtonGroup>
-                <MudButton Variant="MudBlazor.Variant.Filled"
+                <MudButton Variant="Variant.Filled"
                           Color="MudBlazor.Color.Primary"
                           StartIcon="@Icons.Material.Filled.Refresh"
-                          OnClick="LoadData"
+                          OnClick="@LoadData"
                           Disabled="@_loading">
                     Refresh
                 </MudButton>
@@ -195,13 +191,13 @@
 
 @code {
     private bool _loading = true;
-    private bool _dataLoaded = false;
+    private bool _dataLoaded;
     private DateTimeOffset? _startDate;
     private DateTimeOffset? _endDate;
     private string _userTimeZone = "UTC"; // Default to UTC until detected
 
-    private List<ManagedChatRecord> _accessibleChats = new();
-    private long _selectedChatId = 0L;
+    private List<ManagedChatRecord> _accessibleChats = [];
+    private long _selectedChatId;
 
     private MessageTrendsData? _trendsData;
     private ApexChartOptions<DailyVolumeData>? _dailyVolumeChart;
@@ -223,11 +219,11 @@
         // If "All" chip is selected (Value = 0 = global), return empty list (all accessible chats)
         if (_selectedChatId == 0L)
         {
-            return new List<long>();
+            return [];
         }
 
         // Otherwise return the single selected chat ID as a list
-        return new List<long> { _selectedChatId };
+        return [_selectedChatId];
     }
 
     protected override async Task OnInitializedAsync()
@@ -235,7 +231,7 @@
         // Detect user's timezone from browser
         try
         {
-            _userTimeZone = await JSRuntime.InvokeAsync<string>("getUserTimeZone");
+            _userTimeZone = await JsRuntime.InvokeAsync<string>("getUserTimeZone");
         }
         catch (Exception ex)
         {
@@ -328,13 +324,13 @@
                 Zoom = new Zoom { Enabled = false }
             },
             Stroke = new Stroke { Curve = Curve.Smooth, Width = 3 },
-            Colors = new List<string> { "#2196F3" },
+            Colors = ["#2196F3"],
             Xaxis = new XAxis
             {
                 Type = XAxisType.Datetime,
                 Labels = new XAxisLabels { Format = "MMM dd" }
             },
-            Yaxis = new List<YAxis> { new YAxis { Title = new AxisTitle { Text = "Messages" } } }
+            Yaxis = [new YAxis { Title = new AxisTitle { Text = "Messages" } }]
         };
 
         // Spam vs ham chart
@@ -347,13 +343,13 @@
                 Stacked = false
             },
             Stroke = new Stroke { Curve = Curve.Smooth, Width = 2 },
-            Colors = new List<string> { "#F44336", "#4CAF50" },
+            Colors = ["#F44336", "#4CAF50"],
             Xaxis = new XAxis
             {
                 Type = XAxisType.Datetime,
                 Labels = new XAxisLabels { Format = "MMM dd" }
             },
-            Yaxis = new List<YAxis> { new YAxis { Title = new AxisTitle { Text = "Messages" } } },
+            Yaxis = [new YAxis { Title = new AxisTitle { Text = "Messages" } }],
             Fill = new Fill { Type = new List<FillType> { FillType.Gradient } }
         };
 
@@ -364,7 +360,7 @@
             {
                 Toolbar = new Toolbar { Show = false }
             },
-            Colors = new List<string> { "#2196F3" },
+            Colors = ["#2196F3"],
             PlotOptions = new PlotOptions
             {
                 Bar = new PlotOptionsBar
@@ -373,7 +369,7 @@
                 }
             },
             Xaxis = new XAxis { Title = new AxisTitle { Text = "Messages" } },
-            Yaxis = new List<YAxis> { new YAxis { Title = new AxisTitle { Text = "Chat" } } }
+            Yaxis = [new YAxis { Title = new AxisTitle { Text = "Chat" } }]
         };
     }
 

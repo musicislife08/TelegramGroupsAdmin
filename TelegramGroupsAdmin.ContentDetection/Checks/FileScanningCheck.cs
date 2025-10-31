@@ -139,8 +139,8 @@ public class FileScanningCheck : IContentCheck
             // Tier 1 detected threat - return immediately (no need for Tier 2)
             if (tier1Result.ThreatDetected)
             {
-                var threats = tier1Result.ThreatNames ?? new List<string>();
-                var detectedBy = tier1Result.DetectedBy ?? new List<string>();
+                var threats = tier1Result.ThreatNames ?? [];
+                var detectedBy = tier1Result.DetectedBy ?? [];
 
                 _logger.LogWarning("File scanning THREAT for user {UserId}: {Threats} detected by {Scanners} (Tier 1)",
                     req.UserId,
@@ -207,8 +207,8 @@ public class FileScanningCheck : IContentCheck
             // Return final result based on Tier 2 outcome
             if (tier2Result.ThreatDetected)
             {
-                var threats = tier2Result.ThreatNames ?? new List<string>();
-                var detectedBy = tier2Result.DetectedBy ?? new List<string>();
+                var threats = tier2Result.ThreatNames ?? [];
+                var detectedBy = tier2Result.DetectedBy ?? [];
 
                 _logger.LogWarning("File scanning THREAT for user {UserId}: {Threats} detected by {Scanners} (Tier 2)",
                     req.UserId,

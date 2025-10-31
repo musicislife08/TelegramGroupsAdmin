@@ -1,7 +1,6 @@
 @using DiffPlex
 @using DiffPlex.DiffBuilder
 @using DiffPlex.DiffBuilder.Model
-@using MudBlazor
 @inject IMessageHistoryRepository MessageRepository
 @inject ILogger<EditHistoryDialog> Logger
 
@@ -47,9 +46,8 @@
                                 </MudText>
                                 <MudStack Row="true" Spacing="1">
                                     @* Phase 4.20: Translation badge *@
-                                    @if (_editTranslations.ContainsKey(edit.Id))
+                                    @if (_editTranslations.TryGetValue(edit.Id, out var translation))
                                     {
-                                        var translation = _editTranslations[edit.Id];
                                         <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Translate">
                                             @translation.DetectedLanguage.ToUpper()→EN
                                         </MudChip>
@@ -61,15 +59,14 @@
                             </MudStack>
 
                             @* Phase 4.20: Translation display *@
-                            @if (_editTranslations.ContainsKey(edit.Id))
+                            @if (_editTranslations.TryGetValue(edit.Id, out var translation1))
                             {
-                                var translation = _editTranslations[edit.Id];
                                 <MudPaper Class="pa-2" Elevation="0" Style="background-color: rgba(33, 150, 243, 0.1); border-left: 3px solid #42a5f5;">
                                     <MudText Typo="Typo.caption" Color="Color.Info" Style="font-weight: 600; margin-bottom: 4px;">
                                         <MudIcon Icon="@Icons.Material.Filled.Translate" Size="Size.Small" /> English Translation:
                                     </MudText>
                                     <MudText Typo="Typo.body2" Style="font-style: italic;">
-                                        @translation.TranslatedText
+                                        @translation1.TranslatedText
                                     </MudText>
                                 </MudPaper>
                             }
@@ -110,19 +107,19 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton Color="Color.Primary" OnClick="Close">Close</MudButton>
+        <MudButton Color="Color.Primary" OnClick="@Close">Close</MudButton>
     </DialogActions>
 </MudDialog>
 
 @code {
     [CascadingParameter]
-    IMudDialogInstance MudDialog { get; set; } = default!;
+    IMudDialogInstance MudDialog { get; set; } = null!;
 
     [Parameter, EditorRequired]
-    public MessageRecord Message { get; set; } = default!;
+    public MessageRecord Message { get; set; } = null!;
 
-    private List<MessageEditRecord> _edits = new();
-    private Dictionary<long, MessageTranslation> _editTranslations = new(); // Phase 4.20: Translations for each edit
+    private List<MessageEditRecord> _edits = [];
+    private readonly Dictionary<long, MessageTranslation> _editTranslations = new(); // Phase 4.20: Translations for each edit
     private bool _loading = true;
 
     protected override async Task OnInitializedAsync()

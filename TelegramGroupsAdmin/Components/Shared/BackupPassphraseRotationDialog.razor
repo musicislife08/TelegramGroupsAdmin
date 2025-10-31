@@ -1,12 +1,8 @@
 @using TelegramGroupsAdmin.Services.Backup
-@using Microsoft.EntityFrameworkCore
-@using TelegramGroupsAdmin.Data
 @using Microsoft.AspNetCore.Components.Authorization
-@inject IBackupService BackupService
 @inject IPassphraseManagementService PassphraseService
-@inject IDbContextFactory<AppDbContext> ContextFactory
 @inject ISnackbar Snackbar
-@inject IJSRuntime JS
+@inject IJSRuntime JsRuntime
 @inject AuthenticationStateProvider AuthStateProvider
 
 <MudDialog>
@@ -93,7 +89,7 @@
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.ContentCopy"
-                           OnClick="CopyPassphraseToClipboard"
+                           OnClick="@CopyPassphraseToClipboard"
                            FullWidth="true">
                     Copy to Clipboard
                 </MudButton>
@@ -112,10 +108,10 @@
     <DialogActions>
         @if (_step == RotationStep.Confirmation)
         {
-            <MudButton OnClick="OnCancel">Cancel</MudButton>
+            <MudButton OnClick="@OnCancel">Cancel</MudButton>
             <MudButton Color="Color.Primary"
                        Variant="Variant.Filled"
-                       OnClick="StartRotation"
+                       OnClick="@StartRotation"
                        Disabled="@(!_understood || _isProcessing || (_useCustomPassphrase && string.IsNullOrWhiteSpace(_customPassphrase)))">
                 @if (_isProcessing)
                 {
@@ -136,7 +132,7 @@
         {
             <MudButton Color="Color.Primary"
                        Variant="Variant.Filled"
-                       OnClick="OnComplete"
+                       OnClick="@OnComplete"
                        Disabled="@(!_confirmSaved || _isProcessing)">
                 @if (_isProcessing)
                 {
@@ -164,14 +160,14 @@
     }
 
     private RotationStep _step = RotationStep.Confirmation;
-    private bool _understood = false;
-    private bool _confirmSaved = false;
-    private bool _isProcessing = false;
+    private bool _understood;
+    private bool _confirmSaved;
+    private bool _isProcessing;
     private string _newPassphrase = string.Empty;
     private string _userId = string.Empty;
-    private bool _useCustomPassphrase = false;
+    private bool _useCustomPassphrase;
     private string _customPassphrase = string.Empty;
-    private bool _showCustomPassphrase = false;
+    private bool _showCustomPassphrase;
 
     private InputType PassphraseInputType => _showCustomPassphrase ? InputType.Text : InputType.Password;
     private string PassphraseVisibilityIcon => _showCustomPassphrase ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility;
@@ -215,7 +211,7 @@
             }
             else
             {
-                _newPassphrase = TelegramGroupsAdmin.Core.Security.PassphraseGenerator.Generate();
+                _newPassphrase = Core.Security.PassphraseGenerator.Generate();
             }
 
             // Move to display step - user MUST save passphrase before job starts
@@ -238,7 +234,7 @@
     {
         try
         {
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _newPassphrase);
+            await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _newPassphrase);
             Snackbar.Add("Passphrase copied to clipboard!", Severity.Success);
         }
         catch (Exception ex)

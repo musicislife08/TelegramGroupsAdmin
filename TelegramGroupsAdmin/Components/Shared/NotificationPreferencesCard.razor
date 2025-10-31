@@ -1,6 +1,4 @@
 @using TelegramGroupsAdmin.Repositories
-@using TelegramGroupsAdmin.Telegram.Models
-@using TelegramGroupsAdmin.Data.Models
 @inject INotificationPreferencesRepository PreferencesRepo
 @inject ISnackbar Snackbar
 
@@ -96,7 +94,7 @@
             <MudButton Variant="Variant.Filled"
                       Color="Color.Primary"
                       FullWidth="true"
-                      OnClick="SavePreferences"
+                      OnClick="@SavePreferences"
                       Disabled="@_saving">
                 @if (_saving)
                 {
@@ -128,7 +126,7 @@
     private string? _emailAddress;
     private int _digestMinutes;
     private bool _loading = true;
-    private bool _saving = false;
+    private bool _saving;
 
     protected override async Task OnInitializedAsync()
     {
@@ -168,10 +166,7 @@
             _saving = true;
 
             // Update channel configs
-            if (_preferences.ChannelConfigs.Email == null)
-            {
-                _preferences.ChannelConfigs.Email = new EmailChannelConfig();
-            }
+            _preferences.ChannelConfigs.Email ??= new EmailChannelConfig();
 
             _preferences.ChannelConfigs.Email.Address = _emailAddress;
             _preferences.ChannelConfigs.Email.DigestMinutes = _digestMinutes;

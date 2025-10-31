@@ -239,7 +239,7 @@ public class ImageTextExtractionService : IImageTextExtractionService
 
             // Priority 4: Check common install locations (fallback if not in PATH)
             var commonPaths = OperatingSystem.IsMacOS()
-                ? new[] { "/opt/homebrew/bin/tesseract", "/usr/local/bin/tesseract" }
+                ? ["/opt/homebrew/bin/tesseract", "/usr/local/bin/tesseract"]
                 : OperatingSystem.IsLinux()
                     ? new[] { "/usr/bin/tesseract", "/usr/local/bin/tesseract" }
                     : new[] { @"C:\Program Files\Tesseract-OCR\tesseract.exe" };

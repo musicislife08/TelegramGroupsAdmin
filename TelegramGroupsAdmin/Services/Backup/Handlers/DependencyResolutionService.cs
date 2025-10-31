@@ -1,5 +1,4 @@
 using Dapper;
-using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace TelegramGroupsAdmin.Services.Backup.Handlers;
@@ -53,7 +52,7 @@ public class DependencyResolutionService
         // Initialize graph
         foreach (var table in tables)
         {
-            graph[table] = new List<string>();
+            graph[table] = [];
             inDegree[table] = 0;
         }
 

@@ -3,7 +3,6 @@
 @using System.Security.Claims
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Authentication.Cookies
-@using Microsoft.AspNetCore.Components.Forms
 @using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Helpers
 @using TelegramGroupsAdmin.Services
@@ -31,7 +30,7 @@
         <div class="alert-error">@_errorMessage</div>
     }
 
-    <EditForm Model="@_model" FormName="verify-form" OnValidSubmit="HandleVerifyAsync" method="post">
+    <EditForm Model="@Model" FormName="verify-form" OnValidSubmit="HandleVerifyAsync" method="post">
         <DataAnnotationsValidator />
 
         <div class="form-group">
@@ -40,13 +39,13 @@
                    id="code"
                    name="_model.Code"
                    class="form-input"
-                   value="@_model!.Code"
+                   value="@Model!.Code"
                    placeholder="000000"
                    maxlength="6"
                    pattern="[0-9]*"
                    inputmode="numeric"
                    required />
-            <ValidationMessage For="@(() => _model!.Code)" />
+            <ValidationMessage For="@(() => Model!.Code)" />
         </div>
 
         <button type="submit" class="btn-primary">Verify</button>
@@ -62,7 +61,7 @@
 
 @code {
     [SupplyParameterFromForm]
-    private VerifyModel? _model { get; set; }
+    private VerifyModel? Model { get; set; }
 
     [SupplyParameterFromQuery(Name = "userId")]
     private string? UserId { get; set; }
@@ -78,19 +77,16 @@
 
     protected override void OnInitialized()
     {
-        _model ??= new VerifyModel();
+        Model ??= new VerifyModel();
 
         var httpContext = HttpContextAccessor.HttpContext;
 
         // SECURITY: Validate that user has a valid intermediate authentication token
         // This prevents attackers from directly accessing /login/verify?userId=VICTIM_ID
         // and brute-forcing TOTP codes without knowing the password
-        if (string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(IntermediateToken))
-        {
-            _errorMessage = "Invalid authentication session. Please log in again.";
-            httpContext?.Response.Redirect("/login");
-            return;
-        }
+        if (!string.IsNullOrEmpty(UserId) && !string.IsNullOrEmpty(IntermediateToken)) return;
+        _errorMessage = "Invalid authentication session. Please log in again.";
+        httpContext?.Response.Redirect("/login");
 
         // Validate token without consuming it yet (we'll consume it when they submit the form)
         // We can't consume here because OnInitialized runs on every page load
@@ -101,7 +97,7 @@
         _errorMessage = null;
         _successMessage = null;
 
-        if (_model == null || string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(IntermediateToken))
+        if (Model == null || string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(IntermediateToken))
         {
             _errorMessage = "Form data is missing.";
             return;
@@ -119,12 +115,12 @@
             }
 
             // Verify TOTP code
-            var result = await AuthService.VerifyTotpAsync(UserId, _model.Code);
+            var result = await AuthService.VerifyTotpAsync(UserId, Model.Code);
 
             if (!result.Success)
             {
                 _errorMessage = result.ErrorMessage;
-                _model = new VerifyModel();
+                Model = new VerifyModel();
                 return;
             }
 

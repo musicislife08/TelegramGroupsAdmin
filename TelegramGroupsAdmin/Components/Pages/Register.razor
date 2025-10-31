@@ -1,8 +1,6 @@
 @page "/register"
-@using System.Net.Http.Json
 @using System.Text.Json
 @using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.Components.Shared
 @inject HttpClient HttpClient
 @inject IAuthService AuthService
 @inject NavigationManager Navigation
@@ -34,7 +32,7 @@
                 <MudButton Variant="Variant.Text"
                            Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.SettingsBackupRestore"
-                           OnClick="OpenRestoreModal">
+                           OnClick="@OpenRestoreModal">
                     Restore from Backup
                 </MudButton>
             </MudAlert>
@@ -164,9 +162,6 @@
                 StateHasChanged();
                 return;
             }
-
-            // Check if first run for UI display
-            var isFirstRun = await AuthService.IsFirstRunAsync();
 
             var apiUrl = new Uri(Navigation.BaseUri).GetLeftPart(UriPartial.Authority) + "/api/auth/register";
             var response = await HttpClient.PostAsJsonAsync(apiUrl, new

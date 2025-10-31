@@ -1,8 +1,6 @@
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TickerQ.Utilities.Base;
 using TickerQ.Utilities.Models;
-using Telegram.Bot;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;

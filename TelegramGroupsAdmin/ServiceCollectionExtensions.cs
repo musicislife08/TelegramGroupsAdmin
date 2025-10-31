@@ -1,11 +1,8 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
@@ -14,9 +11,7 @@ using TickerQ.EntityFrameworkCore.DependencyInjection;
 using TickerQ.Dashboard.DependencyInjection;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data.Services;
-using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Vision;
 using TelegramGroupsAdmin.Core.Services;
@@ -266,7 +261,7 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient();
 
         // Vision spam detection service (uses named "OpenAI" HttpClient)
-        services.AddScoped<IVisionSpamDetectionService, OpenAIVisionSpamDetectionService>();
+        services.AddScoped<IVisionSpamDetectionService, OpenAiVisionSpamDetectionService>();
 
         return services;
     }

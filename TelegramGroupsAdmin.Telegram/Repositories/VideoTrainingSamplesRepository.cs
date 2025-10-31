@@ -338,7 +338,7 @@ public class VideoTrainingSamplesRepository : IVideoTrainingSamplesRepository
 
             // Check common locations
             var commonPaths = OperatingSystem.IsMacOS()
-                ? new[] { $"/opt/homebrew/bin/{name}", $"/usr/local/bin/{name}" }
+                ? [$"/opt/homebrew/bin/{name}", $"/usr/local/bin/{name}"]
                 : OperatingSystem.IsLinux()
                     ? new[] { $"/usr/local/bin/{name}", $"/usr/bin/{name}" }
                     : new[] { @$"C:\Program Files\ffmpeg\bin\{name}" };

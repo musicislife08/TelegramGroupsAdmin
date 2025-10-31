@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TickerQ.Utilities;
 using TickerQ.Utilities.Interfaces.Managers;
 using TickerQ.Utilities.Models.Ticker;
 
@@ -48,7 +47,8 @@ public static class TickerQUtilities
         var concreteMethod = genericMethod.MakeGenericMethod(payloadType);
 
         // Invoke it
-        var task = concreteMethod.Invoke(null, new object?[] { serviceProvider, logger, functionName, payload, delaySeconds, retries, retryIntervals });
+        var task = concreteMethod.Invoke(null, [serviceProvider, logger, functionName, payload, delaySeconds, retries, retryIntervals
+        ]);
         return (Task<Guid?>)(task ?? Task.FromResult<Guid?>(null));
     }
 

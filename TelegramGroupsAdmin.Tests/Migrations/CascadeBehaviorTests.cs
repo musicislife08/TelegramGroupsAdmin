@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Tests.TestHelpers;
 

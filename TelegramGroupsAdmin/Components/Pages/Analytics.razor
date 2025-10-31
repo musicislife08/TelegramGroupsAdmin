@@ -33,7 +33,7 @@
 </MudContainer>
 
 @code {
-    private int _activeTabIndex = 0;
+    private int _activeTabIndex;
 
     protected override void OnInitialized()
     {
@@ -51,7 +51,7 @@
         Navigation.LocationChanged += OnLocationChanged;
     }
 
-    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         var fragment = new Uri(e.Location).Fragment.TrimStart('#');
         var newIndex = fragment switch

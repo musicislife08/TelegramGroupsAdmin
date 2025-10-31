@@ -88,9 +88,6 @@
             Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
             _config = new SpamDetectionConfig();
         }
-        finally
-        {
-        }
     }
 
     public SpamDetectionConfig GetConfig() => _config;

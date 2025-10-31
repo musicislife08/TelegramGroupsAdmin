@@ -18,11 +18,11 @@ public class TelegramUserDetail
     public DateTimeOffset LastSeenAt { get; set; }
 
     // Related data
-    public List<UserChatMembership> ChatMemberships { get; set; } = new();
-    public List<UserActionRecord> Actions { get; set; } = new();  // Warnings, bans, trusts
-    public List<DetectionResultRecord> DetectionHistory { get; set; } = new();
-    public List<AdminNote> Notes { get; set; } = new();  // Phase 4.12
-    public List<UserTag> Tags { get; set; } = new();  // Phase 4.12
+    public List<UserChatMembership> ChatMemberships { get; set; } = [];
+    public List<UserActionRecord> Actions { get; set; } = [];  // Warnings, bans, trusts
+    public List<DetectionResultRecord> DetectionHistory { get; set; } = [];
+    public List<AdminNote> Notes { get; set; } = [];  // Phase 4.12
+    public List<UserTag> Tags { get; set; } = [];  // Phase 4.12
 
     // Display helpers
     public string DisplayName => !string.IsNullOrEmpty(Username) ? $"@{Username}" : FirstName ?? $"User {TelegramUserId}";

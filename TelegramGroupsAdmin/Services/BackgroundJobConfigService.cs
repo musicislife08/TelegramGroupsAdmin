@@ -14,7 +14,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<BackgroundJobConfigService> _logger;
-    private static readonly JsonSerializerOptions _jsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never,
@@ -53,7 +53,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 
         try
         {
-            var jobsConfig = JsonSerializer.Deserialize<BackgroundJobsConfig>(config.BackgroundJobsConfig, _jsonOptions);
+            var jobsConfig = JsonSerializer.Deserialize<BackgroundJobsConfig>(config.BackgroundJobsConfig, JsonOptions);
             return jobsConfig?.Jobs ?? new Dictionary<string, BackgroundJobConfig>();
         }
         catch (JsonException ex)
@@ -85,7 +85,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         // Parse existing jobs config or create new
         var jobsConfig = string.IsNullOrEmpty(configRecord.BackgroundJobsConfig)
             ? new BackgroundJobsConfig()
-            : JsonSerializer.Deserialize<BackgroundJobsConfig>(configRecord.BackgroundJobsConfig, _jsonOptions) ?? new BackgroundJobsConfig();
+            : JsonSerializer.Deserialize<BackgroundJobsConfig>(configRecord.BackgroundJobsConfig, JsonOptions) ?? new BackgroundJobsConfig();
 
         // Check if schedule changed (interval or cron) - if so, clear NextRunAt to reschedule immediately
         if (jobsConfig.Jobs.TryGetValue(jobName, out var existingJob))

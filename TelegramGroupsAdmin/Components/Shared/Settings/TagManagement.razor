@@ -1,5 +1,3 @@
-@using TelegramGroupsAdmin.Telegram.Models
-@using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Helpers
 @using Microsoft.AspNetCore.Components.Authorization
 @inject ITagDefinitionsRepository TagDefinitionsRepository
@@ -18,7 +16,7 @@
             </div>
             @if (_canEdit)
             {
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateTag">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@CreateTag">
                     Create Tag
                 </MudButton>
             }
@@ -94,9 +92,9 @@
 </MudStack>
 
 @code {
-    private List<TagDefinition> _tags = new();
+    private List<TagDefinition> _tags = [];
     private bool _loading = true;
-    private bool _canEdit = false;
+    private bool _canEdit;
 
     protected override async Task OnInitializedAsync()
     {
@@ -139,7 +137,7 @@
         });
 
         var result = await dialog.Result;
-        if (result != null && !result.Canceled && result.Data is TagEditDialog.TagEditResult editResult)
+        if (result is { Canceled: false, Data: TagEditDialog.TagEditResult editResult })
         {
             try
             {
@@ -170,7 +168,7 @@
         });
 
         var result = await dialog.Result;
-        if (result != null && !result.Canceled && result.Data is TagEditDialog.TagEditResult editResult)
+        if (result is { Canceled: false, Data: TagEditDialog.TagEditResult editResult })
         {
             try
             {
@@ -201,7 +199,7 @@
         var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Deletion", parameters);
         var result = await dialog.Result;
 
-        if (result != null && !result.Canceled)
+        if (result is { Canceled: false })
         {
             try
             {

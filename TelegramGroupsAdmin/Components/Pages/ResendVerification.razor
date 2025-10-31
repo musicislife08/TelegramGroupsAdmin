@@ -1,7 +1,5 @@
 @page "/resend-verification"
 @using System.ComponentModel.DataAnnotations
-@using System.Net.Http.Json
-@using Microsoft.AspNetCore.Components.Forms
 @inject HttpClient HttpClient
 @inject ILogger<ResendVerification> Logger
 @attribute [AllowAnonymous]
@@ -23,7 +21,7 @@
         <div class="alert-error">@_errorMessage</div>
     }
 
-    <EditForm Model="@_model" FormName="resend-form" OnValidSubmit="HandleResendAsync" method="post">
+    <EditForm Model="@Model" FormName="resend-form" OnValidSubmit="HandleResendAsync" method="post">
         <DataAnnotationsValidator />
 
         <div class="form-group">
@@ -32,10 +30,10 @@
                    id="email"
                    name="_model.Email"
                    class="form-input"
-                   value="@_model!.Email"
+                   value="@Model!.Email"
                    placeholder="your.email@example.com"
                    required />
-            <ValidationMessage For="@(() => _model!.Email)" />
+            <ValidationMessage For="@(() => Model!.Email)" />
         </div>
 
         <button type="submit" class="btn-primary">Send Verification Email</button>
@@ -50,14 +48,14 @@
 
 @code {
     [SupplyParameterFromForm]
-    private ResendModel? _model { get; set; }
+    private ResendModel? Model { get; set; }
 
     private string? _errorMessage;
     private string? _successMessage;
 
     protected override void OnInitialized()
     {
-        _model ??= new ResendModel();
+        Model ??= new ResendModel();
     }
 
     private async Task HandleResendAsync()
@@ -65,7 +63,7 @@
         _errorMessage = null;
         _successMessage = null;
 
-        if (_model == null)
+        if (Model == null)
         {
             _errorMessage = "Form data is missing.";
             return;
@@ -73,24 +71,24 @@
 
         try
         {
-            var response = await HttpClient.PostAsJsonAsync("/resend-verification", new { _model.Email });
+            var response = await HttpClient.PostAsJsonAsync("/resend-verification", new { Model.Email });
 
             if (response.IsSuccessStatusCode)
             {
                 _successMessage = "Verification email sent! Please check your inbox.";
-                _model = new ResendModel();
+                Model = new ResendModel();
             }
             else
             {
                 var content = await response.Content.ReadAsStringAsync();
-                Logger.LogWarning("Resend verification failed for email {Email}: {Response}", _model.Email, content);
+                Logger.LogWarning("Resend verification failed for email {Email}: {Response}", Model.Email, content);
                 _errorMessage = "Unable to send verification email. Email may already be verified or invalid.";
             }
         }
         catch (Exception ex)
         {
             _errorMessage = "An error occurred. Please try again.";
-            Logger.LogError(ex, "Unexpected error during resend verification for email {Email}", _model.Email);
+            Logger.LogError(ex, "Unexpected error during resend verification for email {Email}", Model.Email);
         }
     }
 

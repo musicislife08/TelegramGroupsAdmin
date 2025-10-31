@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using NCrontab;
 using System.Text.Json;
 using TelegramGroupsAdmin.Core.BackgroundJobs;

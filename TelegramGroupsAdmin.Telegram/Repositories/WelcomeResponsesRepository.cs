@@ -58,7 +58,7 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entity = await context.WelcomeResponses.FindAsync(new object[] { id }, cancellationToken);
+        var entity = await context.WelcomeResponses.FindAsync([id], cancellationToken);
         if (entity == null)
         {
             _logger.LogWarning("Attempted to update non-existent welcome response ID {Id}", id);
@@ -84,7 +84,7 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var entity = await context.WelcomeResponses.FindAsync(new object[] { id }, cancellationToken);
+        var entity = await context.WelcomeResponses.FindAsync([id], cancellationToken);
         if (entity == null)
         {
             _logger.LogWarning("Attempted to set timeout job ID for non-existent welcome response ID {Id}", id);

@@ -24,10 +24,10 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
         <MudButton Color="Color.Primary"
                   Variant="Variant.Filled"
-                  OnClick="Submit"
+                  OnClick="@Submit"
                   Disabled="@_isSubmitting">
             @if (_isSubmitting)
             {
@@ -43,11 +43,11 @@
 </MudDialog>
 
 @code {
-    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
-    [Parameter] public StopWordItem StopWord { get; set; } = default!;
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public StopWordItem StopWord { get; set; } = null!;
 
     private string _notes = string.Empty;
-    private bool _isSubmitting = false;
+    private bool _isSubmitting;
 
     protected override void OnInitialized()
     {

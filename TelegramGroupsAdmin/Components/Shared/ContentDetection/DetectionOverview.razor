@@ -9,10 +9,10 @@
     <!-- Action Buttons -->
     <MudPaper Class="pa-4" Elevation="1">
         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveConfiguration">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="@SaveConfiguration">
                 Save All Changes
             </MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadConfiguration">
+            <MudButton Variant="Variant.Outlined" Color="Color.Default" StartIcon="@Icons.Material.Filled.Refresh" OnClick="@LoadConfiguration">
                 Reload
             </MudButton>
             @if (_config.TrainingMode)
@@ -443,7 +443,7 @@
 
     <!-- Save Button (Bottom) -->
     <MudPaper Class="pa-4" Elevation="1">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SaveConfiguration" FullWidth="true">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="@SaveConfiguration" FullWidth="true">
             Save All Changes
         </MudButton>
     </MudPaper>
@@ -454,7 +454,7 @@
     public long? ChatId { get; set; }
 
     private SpamDetectionConfig _config = new();
-    private bool _isSaving = false;
+    private bool _isSaving;
 
     protected override async Task OnInitializedAsync()
     {
@@ -523,7 +523,7 @@
         var dialog = await DialogService.ShowAsync<ConfigDialogWrapper>(title, parameters, options);
         var result = await dialog.Result;
 
-        if (result != null && !result.Canceled)
+        if (result is { Canceled: false })
         {
             // Reload configuration after dialog closes
             await LoadConfiguration();

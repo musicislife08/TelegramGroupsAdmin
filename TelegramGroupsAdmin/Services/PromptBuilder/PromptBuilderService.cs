@@ -14,18 +14,18 @@ public class PromptBuilderService : IPromptBuilderService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IDetectionResultsRepository _detectionResultsRepository;
-    private readonly OpenAIOptions _openAIOptions;
+    private readonly OpenAIOptions _openAiOptions;
     private readonly ILogger<PromptBuilderService> _logger;
 
     public PromptBuilderService(
         IHttpClientFactory httpClientFactory,
         IDetectionResultsRepository detectionResultsRepository,
-        IOptions<OpenAIOptions> openAIOptions,
+        IOptions<OpenAIOptions> openAiOptions,
         ILogger<PromptBuilderService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _detectionResultsRepository = detectionResultsRepository;
-        _openAIOptions = openAIOptions.Value;
+        _openAiOptions = openAiOptions.Value;
         _logger = logger;
     }
 
@@ -36,7 +36,7 @@ public class PromptBuilderService : IPromptBuilderService
         try
         {
             // Validate API key
-            if (string.IsNullOrEmpty(_openAIOptions.ApiKey))
+            if (string.IsNullOrEmpty(_openAiOptions.ApiKey))
             {
                 return new PromptBuilderResponse
                 {
@@ -52,7 +52,7 @@ public class PromptBuilderService : IPromptBuilderService
             var metaPrompt = BuildMetaPrompt(request, trainingSamples);
 
             // Call OpenAI API
-            var generatedPrompt = await CallOpenAIAsync(metaPrompt, cancellationToken);
+            var generatedPrompt = await CallOpenAiAsync(metaPrompt, cancellationToken);
 
             if (string.IsNullOrWhiteSpace(generatedPrompt))
             {
@@ -102,7 +102,7 @@ public class PromptBuilderService : IPromptBuilderService
         try
         {
             // Validate API key
-            if (string.IsNullOrEmpty(_openAIOptions.ApiKey))
+            if (string.IsNullOrEmpty(_openAiOptions.ApiKey))
             {
                 return new PromptBuilderResponse
                 {
@@ -115,7 +115,7 @@ public class PromptBuilderService : IPromptBuilderService
             var metaPrompt = BuildImprovementMetaPrompt(currentPrompt, improvementFeedback);
 
             // Call OpenAI API
-            var improvedPrompt = await CallOpenAIAsync(metaPrompt, cancellationToken);
+            var improvedPrompt = await CallOpenAiAsync(metaPrompt, cancellationToken);
 
             if (string.IsNullOrWhiteSpace(improvedPrompt))
             {
@@ -281,13 +281,13 @@ public class PromptBuilderService : IPromptBuilderService
     /// <summary>
     /// Call OpenAI API with the meta-prompt to generate custom rules
     /// </summary>
-    private async Task<string> CallOpenAIAsync(string metaPrompt, CancellationToken cancellationToken)
+    private async Task<string> CallOpenAiAsync(string metaPrompt, CancellationToken cancellationToken)
     {
         var httpClient = _httpClientFactory.CreateClient("OpenAI");
 
         var request = new
         {
-            model = _openAIOptions.Model,
+            model = _openAiOptions.Model,
             messages = new[]
             {
                 new { role = "system", content = "You are an expert at creating spam detection rules for online communities." },
@@ -313,18 +313,18 @@ public class PromptBuilderService : IPromptBuilderService
 
         _logger.LogDebug("OpenAI API response: {Response}", responseJson);
 
-        var openAIResponse = JsonSerializer.Deserialize<OpenAIResponse>(responseJson, new JsonSerializerOptions
+        var openAiResponse = JsonSerializer.Deserialize<OpenAiResponse>(responseJson, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         });
 
-        if (openAIResponse?.Choices == null || openAIResponse.Choices.Length == 0)
+        if (openAiResponse?.Choices == null || openAiResponse.Choices.Length == 0)
         {
             _logger.LogWarning("OpenAI returned no choices. Response: {Response}", responseJson);
             throw new InvalidOperationException("OpenAI returned no response choices");
         }
 
-        var content = openAIResponse.Choices[0]?.Message?.Content?.Trim();
+        var content = openAiResponse.Choices[0]?.Message?.Content?.Trim();
 
         if (string.IsNullOrWhiteSpace(content))
         {
@@ -336,7 +336,7 @@ public class PromptBuilderService : IPromptBuilderService
     }
 
     // OpenAI API response models
-    private record OpenAIResponse(Choice[]? Choices);
+    private record OpenAiResponse(Choice[]? Choices);
     private record Choice(Message? Message);
     private record Message(string? Content);
 }

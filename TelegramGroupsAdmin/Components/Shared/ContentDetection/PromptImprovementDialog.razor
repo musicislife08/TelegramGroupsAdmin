@@ -40,12 +40,12 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel" Disabled="@_isGenerating">Cancel</MudButton>
+        <MudButton OnClick="@Cancel" Disabled="@_isGenerating">Cancel</MudButton>
         @if (!_isGenerating)
         {
             <MudButton Color="Color.Secondary"
                       Variant="Variant.Filled"
-                      OnClick="ImprovePrompt"
+                      OnClick="@ImprovePrompt"
                       Disabled="@(string.IsNullOrWhiteSpace(_improvementFeedback))">
                 Generate Improvement
             </MudButton>

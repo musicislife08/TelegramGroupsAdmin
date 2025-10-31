@@ -61,7 +61,7 @@ public class LanguageWarningHandler
 
             // Check if user is admin in this chat
             var chatMember = await botClient.GetChatMember(message.Chat.Id, message.From.Id, cancellationToken);
-            if (chatMember.Status == ChatMemberStatus.Administrator || chatMember.Status == ChatMemberStatus.Creator)
+            if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
                 return;
 
             // Get warning system config for auto-ban threshold

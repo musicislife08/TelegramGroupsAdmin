@@ -11,7 +11,6 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TickerQ.Utilities;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 

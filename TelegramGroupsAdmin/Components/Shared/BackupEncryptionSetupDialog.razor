@@ -1,9 +1,8 @@
 @using TelegramGroupsAdmin.Services.Backup
 @using TelegramGroupsAdmin.Core.Security
-@inject IBackupService BackupService
 @inject IPassphraseManagementService PassphraseService
 @inject ISnackbar Snackbar
-@inject IJSRuntime JS
+@inject IJSRuntime JsRuntime
 
 <MudDialog>
     <TitleContent>
@@ -79,7 +78,7 @@
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.ContentCopy"
-                           OnClick="CopyPassphraseToClipboard"
+                           OnClick="@CopyPassphraseToClipboard"
                            FullWidth="true">
                     Copy to Clipboard
                 </MudButton>
@@ -98,10 +97,10 @@
     <DialogActions>
         @if (_step == SetupStep.Confirmation)
         {
-            <MudButton OnClick="OnCancel">Cancel</MudButton>
+            <MudButton OnClick="@OnCancel">Cancel</MudButton>
             <MudButton Color="Color.Primary"
                        Variant="Variant.Filled"
-                       OnClick="GenerateAndEnable"
+                       OnClick="@GenerateAndEnable"
                        Disabled="@(!_understood || _isProcessing || (_useCustomPassphrase && string.IsNullOrWhiteSpace(_customPassphrase)))">
                 @if (_isProcessing)
                 {
@@ -118,7 +117,7 @@
         {
             <MudButton Color="Color.Primary"
                        Variant="Variant.Filled"
-                       OnClick="OnComplete"
+                       OnClick="@OnComplete"
                        Disabled="@(!_confirmSaved)">
                 I've Saved It - Close Dialog
             </MudButton>
@@ -137,13 +136,13 @@
     }
 
     private SetupStep _step = SetupStep.Confirmation;
-    private bool _understood = false;
-    private bool _confirmSaved = false;
-    private bool _isProcessing = false;
+    private bool _understood;
+    private bool _confirmSaved;
+    private bool _isProcessing;
     private string _generatedPassphrase = string.Empty;
-    private bool _useCustomPassphrase = false;
+    private bool _useCustomPassphrase;
     private string _customPassphrase = string.Empty;
-    private bool _showCustomPassphrase = false;
+    private bool _showCustomPassphrase;
 
     private InputType PassphraseInputType => _showCustomPassphrase ? InputType.Text : InputType.Password;
     private string PassphraseVisibilityIcon => _showCustomPassphrase ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility;
@@ -196,7 +195,7 @@
         try
         {
             // Use Clipboard API via JS interop
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _generatedPassphrase);
+            await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _generatedPassphrase);
             Snackbar.Add("Passphrase copied to clipboard!", Severity.Success);
         }
         catch (Exception ex)

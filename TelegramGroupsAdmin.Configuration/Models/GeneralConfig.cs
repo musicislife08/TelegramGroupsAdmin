@@ -19,12 +19,12 @@ public class GeneralConfig
     /// File types to scan (by extension)
     /// Empty list = scan all files
     /// </summary>
-    public List<string> ScanFileTypes { get; set; } = new()
-    {
+    public List<string> ScanFileTypes { get; set; } =
+    [
         ".exe", ".dll", ".zip", ".rar", ".7z", ".pdf",
         ".doc", ".docx", ".xls", ".xlsx", ".apk", ".dmg",
         ".pkg", ".bat", ".ps1", ".sh"
-    };
+    ];
 
     /// <summary>
     /// Maximum file size to scan in bytes

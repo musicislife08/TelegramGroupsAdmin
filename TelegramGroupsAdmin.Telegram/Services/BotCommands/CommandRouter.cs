@@ -73,7 +73,7 @@ public partial class CommandRouter
         var commandName = match.Groups[1].Value.ToLowerInvariant();
         var args = match.Groups[2].Success
             ? match.Groups[2].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            : Array.Empty<string>();
+            : [];
 
         if (!_commandTypes.TryGetValue(commandName, out var commandType))
         {

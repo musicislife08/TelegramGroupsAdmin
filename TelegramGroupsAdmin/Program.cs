@@ -64,7 +64,7 @@ builder.Services.AddHealthChecks()
     .AddNpgSql(
         connectionString,
         name: "postgresql",
-        tags: new[] { "ready", "db" });
+        tags: ["ready", "db"]);
 
 var app = builder.Build();
 

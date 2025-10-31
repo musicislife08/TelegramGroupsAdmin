@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
@@ -284,8 +283,8 @@ public class ContentDetectionEngine : IContentDetectionEngine
                     PrimaryReason = hardBlock.Reason ?? "Hard block policy violation",
                     RecommendedAction = SpamAction.AutoBan,
                     ShouldVeto = false,
-                    CheckResults = new List<ContentCheckResponse>
-                    {
+                    CheckResults =
+                    [
                         new()
                         {
                             CheckName = CheckName.UrlBlocklist,
@@ -293,7 +292,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                             Details = hardBlock.Reason ?? "Domain on hard block list",
                             Confidence = 100
                         }
-                    }
+                    ]
                 };
             }
         }

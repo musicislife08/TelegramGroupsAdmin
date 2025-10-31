@@ -1,10 +1,8 @@
-@using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Configuration
 @using TelegramGroupsAdmin.Configuration.Services
-@using Microsoft.JSInterop
 @inject IConfigService ConfigService
 @inject ISnackbar Snackbar
-@inject IJSRuntime JSRuntime
+@inject IJSRuntime JsRuntime
 @implements IAsyncDisposable
 
 <MudPaper Class="pa-4" Elevation="@(ChatId.HasValue ? 0 : 1)">
@@ -243,10 +241,8 @@
     private MudForm? _form;
     private bool _isValid = true;
     private bool _loading = true;
-    private bool _saving = false;
+    private bool _saving;
     private string? _lastFocusedInputId;
-    private const string _previewBotName = "tgadmin_test_bot";
-    private const string _previewChatName = "TSP Spam Bot Test Group";
 
     protected override async Task OnInitializedAsync()
     {
@@ -385,7 +381,7 @@
             }
 
             // Call JavaScript to insert variable at cursor position in the last focused input
-            await JSRuntime.InvokeVoidAsync("insertTextAtCursor", variable, _lastFocusedInputId);
+            await JsRuntime.InvokeVoidAsync("insertTextAtCursor", variable, _lastFocusedInputId);
 
             Snackbar.Add($"Inserted {variable}", Severity.Info);
         }
@@ -401,26 +397,26 @@
     /// - Chat mode: Buttons appear in chat below the message
     /// - DM mode: Buttons appear in DM below the message (user accepts there)
     /// </summary>
-    private string[][]? GetMainWelcomeButtons()
+    private string[][] GetMainWelcomeButtons()
     {
         // Both modes show Accept/Decline buttons on the main welcome message
-        return new[]
-        {
-            new[] { _config?.AcceptButtonText ?? "✅ I Accept", _config?.DenyButtonText ?? "❌ Decline" }
-        };
+        return
+        [
+            [_config?.AcceptButtonText ?? "✅ I Accept", _config?.DenyButtonText ?? "❌ Decline"]
+        ];
     }
 
     /// <summary>
     /// Get button configuration for DM Chat Teaser preview.
     /// Shows the deep link button that opens the DM.
     /// </summary>
-    private string[][]? GetDmTeaserButtons()
+    private string[][] GetDmTeaserButtons()
     {
         // Single button in one row
-        return new[]
-        {
-            new[] { _config?.DmButtonText ?? "📋 Read Guidelines" }
-        };
+        return
+        [
+            [_config?.DmButtonText ?? "📋 Read Guidelines"]
+        ];
     }
 
     public ValueTask DisposeAsync()

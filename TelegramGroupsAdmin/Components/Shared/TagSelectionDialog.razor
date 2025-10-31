@@ -1,5 +1,3 @@
-@using TelegramGroupsAdmin.Telegram.Models
-@using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Helpers
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -14,7 +12,7 @@
                           Color="Color.Primary"
                           StartIcon="@Icons.Material.Filled.Add"
                           Size="Size.Small"
-                          OnClick="CreateNewTag">
+                          OnClick="@CreateNewTag">
                     Create New Tag
                 </MudButton>
             </MudStack>
@@ -72,8 +70,8 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@(_selectedTags.Count == 0)">
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@Submit" Disabled="@(_selectedTags.Count == 0)">
             Add @(_selectedTags.Count == 1 ? "Tag" : $"{_selectedTags.Count} Tags")
         </MudButton>
     </DialogActions>
@@ -82,10 +80,10 @@
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
 
-    [Parameter] public List<string> UserAssignedTags { get; set; } = new();
+    [Parameter] public List<string> UserAssignedTags { get; set; } = [];
 
-    private List<TagDefinition> _availableTags = new();
-    private HashSet<string> _selectedTags = new();
+    private List<TagDefinition> _availableTags = [];
+    private readonly HashSet<string> _selectedTags = [];
     private bool _loading = true;
 
     protected override async Task OnInitializedAsync()
@@ -117,13 +115,9 @@
 
     private void ToggleTag(string tagName)
     {
-        if (_selectedTags.Contains(tagName))
+        if (!_selectedTags.Add(tagName))
         {
             _selectedTags.Remove(tagName);
-        }
-        else
-        {
-            _selectedTags.Add(tagName);
         }
     }
 
@@ -143,7 +137,7 @@
         });
 
         var result = await dialog.Result;
-        if (result != null && !result.Canceled && result.Data is TagEditDialog.TagEditResult tagEditResult)
+        if (result is { Canceled: false, Data: TagEditDialog.TagEditResult tagEditResult })
         {
             try
             {
@@ -177,6 +171,6 @@
 
     public class TagSelectionResult
     {
-        public List<string> SelectedTags { get; set; } = new();
+        public List<string> SelectedTags { get; set; } = [];
     }
 }

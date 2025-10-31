@@ -43,7 +43,7 @@ public class MessageHistoryAdapter : ContentDetectionServices.IMessageHistorySer
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get message history for chat {ChatId}", chatId);
-            return Enumerable.Empty<ContentDetectionServices.HistoryMessage>();
+            return [];
         }
     }
 }

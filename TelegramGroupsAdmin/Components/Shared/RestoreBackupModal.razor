@@ -1,9 +1,7 @@
 @using TelegramGroupsAdmin.Services.Backup
-@using Microsoft.AspNetCore.Components.Forms
 @inject IBackupService BackupService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
-@inject IDialogService DialogService
 
 <MudDialog>
     <DialogContent>
@@ -26,7 +24,7 @@
             </MudPaper>
         }
 
-        <MudFileUpload T="IBrowserFile" FilesChanged="OnFileSelected" Accept=".tar.gz,.gz">
+        <MudFileUpload T="IBrowserFile" FilesChanged="@OnFileSelected" Accept=".tar.gz,.gz">
             <ActivatorContent>
                 <MudButton Variant="Variant.Outlined"
                            Color="Color.Primary"
@@ -54,10 +52,10 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel" Disabled="@_isRestoring">Cancel</MudButton>
+        <MudButton OnClick="@Cancel" Disabled="@_isRestoring">Cancel</MudButton>
         <MudButton Color="Color.Primary"
                    Variant="Variant.Filled"
-                   OnClick="RestoreBackup"
+                   OnClick="@RestoreBackup"
                    Disabled="@(_metadata == null || _isRestoring)">
             Restore
         </MudButton>
@@ -65,23 +63,28 @@
 </MudDialog>
 
 @code {
-    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
 
     private IBrowserFile? _selectedFile;
     private BackupMetadata? _metadata;
-    private bool _isRestoring = false;
+    private bool _isRestoring;
     private byte[]? _backupBytes;
 
-    private async Task OnFileSelected(IBrowserFile file)
+    private async Task OnFileSelected(IBrowserFile? file)
     {
         _selectedFile = file;
         _metadata = null;
         StateHasChanged();
 
+        if (file == null)
+        {
+            return;
+        }
+
         try
         {
             // Read file (500MB max)
-            using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024 * 500);
+            await using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024 * 500);
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms);
             _backupBytes = ms.ToArray();
@@ -133,9 +136,9 @@
 
     private static string FormatBytes(long bytes)
     {
-        string[] sizes = { "B", "KB", "MB", "GB" };
+        string[] sizes = ["B", "KB", "MB", "GB"];
         double len = bytes;
-        int order = 0;
+        var order = 0;
         while (len >= 1024 && order < sizes.Length - 1)
         {
             order++;

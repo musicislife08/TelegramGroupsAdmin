@@ -1,10 +1,6 @@
 @page "/reports"
-@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
-@using TelegramGroupsAdmin.Auth
 @using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.Telegram.Models
-@using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Components.Reports
 @inject IReportsRepository ReportsRepository
 @inject IImpersonationAlertsRepository ImpersonationAlertsRepository
@@ -46,7 +42,7 @@
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.Refresh"
-                       OnClick="LoadReportsAsync"
+                       OnClick="@LoadReportsAsync"
                        Disabled="_loading">
                 Refresh
             </MudButton>
@@ -120,13 +116,13 @@
     private enum ReportTypeFilter { All, Spam, Impersonation }
     private enum StatusFilter { Pending, All }
 
-    private List<ReportQueueItem> _allReports = new();
-    private List<ReportQueueItem> _filteredReports = new();
+    private List<ReportQueueItem> _allReports = [];
+    private List<ReportQueueItem> _filteredReports = [];
     private ReportTypeFilter _selectedTypeFilter = ReportTypeFilter.All;
     private StatusFilter _selectedStatusFilter = StatusFilter.Pending;
     private bool _loading = true;
-    private int _pendingSpamCount = 0;
-    private int _pendingImpersonationCount = 0;
+    private int _pendingSpamCount;
+    private int _pendingImpersonationCount;
     private string _currentUserId = string.Empty;
 
     protected override async Task OnInitializedAsync()
@@ -186,7 +182,7 @@
             // Load impersonation alerts
             var impersonationAlerts = await ImpersonationAlertsRepository.GetPendingAlertsAsync(
                 chatId: null,
-                cancellationToken: default);
+                cancellationToken: CancellationToken.None);
 
             foreach (var alert in impersonationAlerts)
             {

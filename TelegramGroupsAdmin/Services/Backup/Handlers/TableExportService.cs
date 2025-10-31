@@ -3,7 +3,6 @@ using System.Data;
 using System.Reflection;
 using Dapper;
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.Extensions.Logging;
 using Npgsql;
 using TelegramGroupsAdmin.Data.Attributes;
 
@@ -63,9 +62,10 @@ public class TableExportService
 
         // Use Dapper with reflection to query and deserialize to DTO type
         var queryAsync = typeof(SqlMapper).GetMethod("QueryAsync", 1,
-            new[] { typeof(IDbConnection), typeof(string), typeof(object), typeof(IDbTransaction), typeof(int?), typeof(CommandType?) });
+            [typeof(IDbConnection), typeof(string), typeof(object), typeof(IDbTransaction), typeof(int?), typeof(CommandType?)
+            ]);
         var genericMethod = queryAsync!.MakeGenericMethod(dtoType);
-        var task = (Task)genericMethod.Invoke(null, new object?[] { connection, sql, null, null, null, null })!;
+        var task = (Task)genericMethod.Invoke(null, [connection, sql, null, null, null, null])!;
         await task;
 
         var resultProperty = task.GetType().GetProperty("Result");

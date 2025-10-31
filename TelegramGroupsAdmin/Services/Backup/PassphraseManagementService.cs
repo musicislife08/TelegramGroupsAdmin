@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Dapper;
-using Microsoft.Extensions.Logging;
 using Npgsql;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Core.Security;

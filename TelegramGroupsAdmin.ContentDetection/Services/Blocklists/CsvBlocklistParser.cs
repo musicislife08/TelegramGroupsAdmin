@@ -17,7 +17,7 @@ public class CsvBlocklistParser : IBlocklistParser
     {
         if (string.IsNullOrWhiteSpace(content))
         {
-            return new List<string>();
+            return [];
         }
 
         var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -25,7 +25,7 @@ public class CsvBlocklistParser : IBlocklistParser
         // Skip if no data
         if (lines.Length == 0)
         {
-            return new List<string>();
+            return [];
         }
 
         return lines

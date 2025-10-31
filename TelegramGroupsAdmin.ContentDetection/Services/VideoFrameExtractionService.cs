@@ -76,7 +76,7 @@ public class VideoFrameExtractionService : IVideoFrameExtractionService
         {
             _logger.LogDebug("Skipping frame extraction for {VideoPath} - ffmpeg binary not available",
                 Path.GetFileName(videoPath));
-            return new List<ExtractedFrame>();
+            return [];
         }
 
         try
@@ -84,7 +84,7 @@ public class VideoFrameExtractionService : IVideoFrameExtractionService
             if (!File.Exists(videoPath))
             {
                 _logger.LogWarning("Video file not found: {VideoPath}", videoPath);
-                return new List<ExtractedFrame>();
+                return [];
             }
 
             var frames = new List<ExtractedFrame>();
@@ -94,7 +94,7 @@ public class VideoFrameExtractionService : IVideoFrameExtractionService
             if (duration <= 0)
             {
                 _logger.LogWarning("Could not determine video duration for {VideoPath}", videoPath);
-                return new List<ExtractedFrame>();
+                return [];
             }
 
             // Special handling for very short videos (<1 second)
@@ -188,7 +188,7 @@ public class VideoFrameExtractionService : IVideoFrameExtractionService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Frame extraction failed for video: {VideoPath}", videoPath);
-            return new List<ExtractedFrame>();
+            return [];
         }
     }
 
@@ -466,7 +466,7 @@ public class VideoFrameExtractionService : IVideoFrameExtractionService
 
             // Priority 3: Check common install locations (fallback if not in PATH)
             var commonPaths = OperatingSystem.IsMacOS()
-                ? new[] { $"/opt/homebrew/bin/{name}", $"/usr/local/bin/{name}" }
+                ? [$"/opt/homebrew/bin/{name}", $"/usr/local/bin/{name}"]
                 : OperatingSystem.IsLinux()
                     ? new[] { $"/usr/local/bin/{name}", $"/usr/bin/{name}" }
                     : new[] { @$"C:\Program Files\ffmpeg\bin\{name}" };

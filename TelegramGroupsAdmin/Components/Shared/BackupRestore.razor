@@ -1,10 +1,8 @@
 @using TelegramGroupsAdmin.Services.Backup
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Configuration.Models
-@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Core.BackgroundJobs
-@using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.EntityFrameworkCore
 @using TelegramGroupsAdmin.Data
 @using System.Text.Json
@@ -12,7 +10,7 @@
 @inject IBackgroundJobConfigService JobConfigService
 @inject IDbContextFactory<AppDbContext> ContextFactory
 @inject ISnackbar Snackbar
-@inject IJSRuntime JS
+@inject IJSRuntime JsRuntime
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 
@@ -27,7 +25,7 @@
         <MudButton Variant="Variant.Filled"
                    Color="Color.Warning"
                    StartIcon="@Icons.Material.Filled.Lock"
-                   OnClick="OpenEncryptionSetupDialog"
+                   OnClick="@OpenEncryptionSetupDialog"
                    Class="mt-2">
             Set Up Encryption Now
         </MudButton>
@@ -50,7 +48,7 @@ else
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.Download"
-                           OnClick="ExportBackup"
+                           OnClick="@ExportBackup"
                            Disabled="@_isExporting"
                            FullWidth="true">
                     @if (_isExporting)
@@ -88,7 +86,7 @@ else
                 <MudButton Variant="Variant.Outlined"
                            Color="Color.Secondary"
                            StartIcon="@Icons.Material.Filled.Autorenew"
-                           OnClick="OpenRotatePassphraseDialog"
+                           OnClick="@OpenRotatePassphraseDialog"
                            FullWidth="true">
                     Rotate Encryption Passphrase
                 </MudButton>
@@ -120,7 +118,7 @@ else
                     </MudPaper>
                 }
 
-                <MudFileUpload T="IBrowserFile" FilesChanged="OnFileSelected" Accept=".tar.gz,.gz">
+                <MudFileUpload T="IBrowserFile" FilesChanged="@OnFileSelected" Accept=".tar.gz,.gz">
                     <ActivatorContent>
                         <MudButton Variant="Variant.Outlined"
                                    Color="Color.Primary"
@@ -148,7 +146,7 @@ else
                     <MudButton Variant="Variant.Filled"
                                Color="Color.Error"
                                StartIcon="@Icons.Material.Filled.RestoreFromTrash"
-                               OnClick="RestoreFromUpload"
+                               OnClick="@RestoreFromUpload"
                                Disabled="@(!_confirmWipe)"
                                FullWidth="true"
                                Class="mt-2">
@@ -302,7 +300,7 @@ else
                             <MudButton Variant="Variant.Filled"
                                       Color="Color.Primary"
                                       StartIcon="@Icons.Material.Filled.Save"
-                                      OnClick="SaveBackupConfigAsync"
+                                      OnClick="@SaveBackupConfigAsync"
                                       Disabled="@_isSavingConfig">
                                 @if (_isSavingConfig)
                                 {
@@ -323,16 +321,16 @@ else
 }
 
 @code {
-    private bool _encryptionConfigured = false;
-    private bool _isExporting = false;
-    private long _lastBackupSize = 0;
+    private bool _encryptionConfigured;
+    private bool _isExporting;
+    private long _lastBackupSize;
 
     // Upload restore state
     private IBrowserFile? _selectedFile;
     private BackupMetadata? _uploadMetadata;
-    private bool _uploadIsEncrypted = false;
-    private bool _confirmWipe = false;
-    private bool _isRestoring = false;
+    private bool _uploadIsEncrypted;
+    private bool _confirmWipe;
+    private bool _isRestoring;
     private byte[]? _backupBytes;
 
     // Backup browser reference
@@ -340,7 +338,7 @@ else
 
     // Backup configuration state
     private BackgroundJobConfig? _backupConfig;
-    private bool _isSavingConfig = false;
+    private bool _isSavingConfig;
     private string _editScheduleType = "interval";
     private string? _editIntervalDuration = "24h";
     private string? _editCronExpression;
@@ -498,7 +496,7 @@ else
         var dialog = await DialogService.ShowAsync<BackupEncryptionSetupDialog>("Enable Backup Encryption");
         var result = await dialog.Result;
 
-        if (result != null && !result.Canceled)
+        if (result is { Canceled: false })
         {
             _encryptionConfigured = true;
             Snackbar.Add("Backup encryption enabled! You can now create backups.", Severity.Success);
@@ -516,7 +514,7 @@ else
         var dialog = await DialogService.ShowAsync<BackupPassphraseRotationDialog>("Rotate Backup Passphrase", parameters);
         var result = await dialog.Result;
 
-        if (result != null && !result.Canceled)
+        if (result is { Canceled: false })
         {
             Snackbar.Add("Passphrase rotation in progress! Check logs for status.", Severity.Info);
         }
@@ -534,7 +532,7 @@ else
             _lastBackupSize = backupBytes.Length;
 
             var fileName = $"telegram_groups_admin_backup_{DateTimeOffset.UtcNow:yyyyMMdd_HHmmss}.tar.gz";
-            await JS.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(backupBytes));
+            await JsRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(backupBytes));
 
             Snackbar.Add($"Encrypted backup created successfully! ({FormatBytes(backupBytes.Length)})", Severity.Success);
 
@@ -555,7 +553,7 @@ else
         }
     }
 
-    private async Task OnFileSelected(IBrowserFile file)
+    private async Task OnFileSelected(IBrowserFile? file)
     {
         _selectedFile = file;
         _uploadMetadata = null;
@@ -563,9 +561,14 @@ else
         _confirmWipe = false;
         StateHasChanged();
 
+        if (file == null)
+        {
+            return;
+        }
+
         try
         {
-            using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024 * 500); // 500MB max
+            await using var stream = file.OpenReadStream(maxAllowedSize: 1024 * 1024 * 500); // 500MB max
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms);
             _backupBytes = ms.ToArray();
@@ -721,7 +724,7 @@ else
 
     private static string FormatBytes(long bytes)
     {
-        string[] sizes = { "B", "KB", "MB", "GB" };
+        string[] sizes = ["B", "KB", "MB", "GB"];
         double len = bytes;
         int order = 0;
         while (len >= 1024 && order < sizes.Length - 1)

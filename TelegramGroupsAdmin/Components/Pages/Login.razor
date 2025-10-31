@@ -31,7 +31,7 @@
         <div class="alert-error">@_errorMessage</div>
     }
 
-    <EditForm Model="@_model" FormName="login-form" OnValidSubmit="HandleLoginAsync" method="post">
+    <EditForm Model="@Model" FormName="login-form" OnValidSubmit="HandleLoginAsync" method="post">
         <DataAnnotationsValidator />
 
         <div class="form-group">
@@ -40,10 +40,10 @@
                    id="email"
                    name="_model.Email"
                    class="form-input"
-                   value="@_model!.Email"
+                   value="@Model!.Email"
                    placeholder="your.email@example.com"
                    required />
-            <ValidationMessage For="@(() => _model!.Email)" />
+            <ValidationMessage For="@(() => Model!.Email)" />
         </div>
 
         <div class="form-group">
@@ -52,9 +52,9 @@
                    id="password"
                    name="_model.Password"
                    class="form-input"
-                   value="@_model!.Password"
+                   value="@Model!.Password"
                    required />
-            <ValidationMessage For="@(() => _model!.Password)" />
+            <ValidationMessage For="@(() => Model!.Password)" />
         </div>
 
         <button type="submit" class="btn-primary">Sign In</button>
@@ -71,7 +71,7 @@
 
 @code {
     [SupplyParameterFromForm]
-    private LoginModel? _model { get; set; }
+    private LoginModel? Model { get; set; }
 
     [SupplyParameterFromQuery(Name = "returnUrl")]
     private string? ReturnUrl { get; set; }
@@ -84,7 +84,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _model ??= new LoginModel();
+        Model ??= new LoginModel();
 
         // Redirect to registration if no users exist (first run)
         if (await AuthService.IsFirstRunAsync())
@@ -109,7 +109,7 @@
     {
         _errorMessage = null;
 
-        if (_model == null)
+        if (Model == null)
         {
             _errorMessage = "Form data is missing.";
             return;
@@ -121,7 +121,7 @@
             var safeReturnUrl = UrlHelpers.GetSafeRedirectUrl(ReturnUrl);
 
             // Validate credentials server-side
-            var result = await AuthService.LoginAsync(_model.Email, _model.Password);
+            var result = await AuthService.LoginAsync(Model.Email, Model.Password);
 
             if (!result.Success)
             {
@@ -189,7 +189,7 @@
         catch (Exception ex)
         {
             _errorMessage = "An error occurred during login. Please try again.";
-            Logger.LogError(ex, "Unexpected error during login for email {Email}", _model.Email);
+            Logger.LogError(ex, "Unexpected error during login for email {Email}", Model.Email);
         }
     }
 

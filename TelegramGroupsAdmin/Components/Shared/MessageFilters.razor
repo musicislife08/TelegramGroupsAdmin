@@ -26,15 +26,19 @@
         @* Spam Status Buttons *@
         <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
             <MudButton Color="@(Filters.SpamFilter == SpamFilterOption.All ? Color.Primary : Color.Default)"
-                       OnClick="async () => { Filters.SpamFilter = SpamFilterOption.All; await OnFiltersChanged.InvokeAsync(); }">
+                       OnClick="@(async () =>
+                                {
+                                    Filters.SpamFilter = SpamFilterOption.All;
+                                    await OnFiltersChanged.InvokeAsync();
+                                })">
                 All
             </MudButton>
             <MudButton Color="@(Filters.SpamFilter == SpamFilterOption.SpamOnly ? Color.Error : Color.Default)"
-                       OnClick="async () => { Filters.SpamFilter = SpamFilterOption.SpamOnly; await OnFiltersChanged.InvokeAsync(); }">
+                       OnClick="@(async () => { Filters.SpamFilter = SpamFilterOption.SpamOnly; await OnFiltersChanged.InvokeAsync(); })">
                 Spam
             </MudButton>
             <MudButton Color="@(Filters.SpamFilter == SpamFilterOption.CleanOnly ? Color.Success : Color.Default)"
-                       OnClick="async () => { Filters.SpamFilter = SpamFilterOption.CleanOnly; await OnFiltersChanged.InvokeAsync(); }">
+                       OnClick="@(async () => { Filters.SpamFilter = SpamFilterOption.CleanOnly; await OnFiltersChanged.InvokeAsync(); })">
                 Clean
             </MudButton>
         </MudButtonGroup>
@@ -45,7 +49,7 @@
                  Variant="@(Filters.HasImages == true ? Variant.Filled : Variant.Outlined)"
                  Color="@(Filters.HasImages == true ? Color.Primary : Color.Default)"
                  Icon="@Icons.Material.Filled.Image"
-                 OnClick="async () => { Filters.HasImages = Filters.HasImages == true ? null : true; await OnFiltersChanged.InvokeAsync(); }">
+                 OnClick="@(async () => { Filters.HasImages = Filters.HasImages == true ? null : true; await OnFiltersChanged.InvokeAsync(); })">
             Images
         </MudChip>
         <MudChip T="string"
@@ -53,7 +57,7 @@
                  Variant="@(Filters.HasLinks == true ? Variant.Filled : Variant.Outlined)"
                  Color="@(Filters.HasLinks == true ? Color.Primary : Color.Default)"
                  Icon="@Icons.Material.Filled.Link"
-                 OnClick="async () => { Filters.HasLinks = Filters.HasLinks == true ? null : true; await OnFiltersChanged.InvokeAsync(); }">
+                 OnClick="@(async () => { Filters.HasLinks = Filters.HasLinks == true ? null : true; await OnFiltersChanged.InvokeAsync(); })">
             Links
         </MudChip>
         <MudChip T="string"
@@ -61,7 +65,7 @@
                  Variant="@(Filters.HasEdits == true ? Variant.Filled : Variant.Outlined)"
                  Color="@(Filters.HasEdits == true ? Color.Primary : Color.Default)"
                  Icon="@Icons.Material.Filled.Edit"
-                 OnClick="async () => { Filters.HasEdits = Filters.HasEdits == true ? null : true; await OnFiltersChanged.InvokeAsync(); }">
+                 OnClick="@(async () => { Filters.HasEdits = Filters.HasEdits == true ? null : true; await OnFiltersChanged.InvokeAsync(); })">
             Edited
         </MudChip>
 
@@ -71,7 +75,7 @@
         <MudButton Variant="Variant.Text"
                    Size="Size.Small"
                    StartIcon="@(_showAdvanced ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
-                   OnClick="() => _showAdvanced = !_showAdvanced">
+                   OnClick="@(() => _showAdvanced = !_showAdvanced)">
             Advanced
         </MudButton>
 
@@ -80,7 +84,7 @@
                    Color="Color.Secondary"
                    Size="Size.Small"
                    StartIcon="@Icons.Material.Filled.Clear"
-                   OnClick="ClearFilters"
+                   OnClick="@ClearFilters"
                    Disabled="!HasActiveFilters()">
             Clear
         </MudButton>
@@ -93,31 +97,31 @@
         <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
             @if (!string.IsNullOrEmpty(Filters.SearchText))
             {
-                <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.SearchText = null; await OnFiltersChanged.InvokeAsync(); }">
+                <MudChip T="string" Size="Size.Small" OnClose="@(async () => { Filters.SearchText = null; await OnFiltersChanged.InvokeAsync(); })">
                     Text: @Filters.SearchText
                 </MudChip>
             }
             @if (!string.IsNullOrEmpty(Filters.UserName))
             {
-                <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.UserName = null; await OnFiltersChanged.InvokeAsync(); }">
+                <MudChip T="string" Size="Size.Small" OnClose="@(async () => { Filters.UserName = null; await OnFiltersChanged.InvokeAsync(); })">
                     User: @Filters.UserName
                 </MudChip>
             }
             @if (!string.IsNullOrEmpty(Filters.ChatName))
             {
-                <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.ChatName = null; await OnFiltersChanged.InvokeAsync(); }">
+                <MudChip T="string" Size="Size.Small" OnClose="@(async () => { Filters.ChatName = null; await OnFiltersChanged.InvokeAsync(); })">
                     Chat: @Filters.ChatName
                 </MudChip>
             }
             @if (Filters.StartDate.HasValue)
             {
-                <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.StartDate = null; await OnFiltersChanged.InvokeAsync(); }">
+                <MudChip T="string" Size="Size.Small" OnClose="@(async () => { Filters.StartDate = null; await OnFiltersChanged.InvokeAsync(); })">
                     From: @Filters.StartDate.Value.ToString("yyyy-MM-dd")
                 </MudChip>
             }
             @if (Filters.EndDate.HasValue)
             {
-                <MudChip T="string" Size="Size.Small" OnClose="async () => { Filters.EndDate = null; await OnFiltersChanged.InvokeAsync(); }">
+                <MudChip T="string" Size="Size.Small" OnClose="@(async () => { Filters.EndDate = null; await OnFiltersChanged.InvokeAsync(); })">
                     To: @Filters.EndDate.Value.ToString("yyyy-MM-dd")
                 </MudChip>
             }
@@ -186,18 +190,18 @@
 
 @code {
     [Parameter, EditorRequired]
-    public MessageFilterState Filters { get; set; } = default!;
+    public MessageFilterState Filters { get; set; } = null!;
 
     [Parameter]
     public EventCallback OnFiltersChanged { get; set; }
 
-    private List<string> _userNames = new();
-    private List<string> _chatNames = new();
-    private bool _showAdvanced = false;
+    private List<string> _userNames = [];
+    private List<string> _chatNames = [];
+    private bool _showAdvanced;
 
     protected override async Task OnInitializedAsync()
     {
-        // Load distinct user names and chat names for autocomplete
+        // Load distinct usernames and chat names for autocomplete
         try
         {
             _userNames = await MessageRepository.GetDistinctUserNamesAsync();
@@ -206,8 +210,8 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to load autocomplete data for message filters");
-            _userNames = new List<string>();
-            _chatNames = new List<string>();
+            _userNames = [];
+            _chatNames = [];
         }
     }
 

@@ -1,13 +1,9 @@
-@using TelegramGroupsAdmin.Telegram.Repositories
-@using TelegramGroupsAdmin.Telegram.Models
 @using ApexCharts
-@using Microsoft.JSInterop
 @using MudColor = MudBlazor.Color
 @using MudSize = MudBlazor.Size
-@using MudAlign = MudBlazor.Align
 @inject IAnalyticsRepository AnalyticsRepository
 @inject ISnackbar Snackbar
-@inject IJSRuntime JSRuntime
+@inject IJSRuntime JsRuntime
 
 <MudStack Spacing="4">
     @* Date Range Selector *@
@@ -16,14 +12,14 @@
             <MudText Typo="Typo.h6">Welcome System Analytics</MudText>
             <MudStack Row="true" Spacing="2">
                 <MudButtonGroup Variant="Variant.Outlined" Color="MudColor.Primary">
-                    <MudButton OnClick="() => LoadLast7Days()">Last 7 Days</MudButton>
-                    <MudButton OnClick="() => LoadLast30Days()">Last 30 Days</MudButton>
-                    <MudButton OnClick="() => LoadLast90Days()">Last 90 Days</MudButton>
+                    <MudButton OnClick="@LoadLast7Days">Last 7 Days</MudButton>
+                    <MudButton OnClick="@LoadLast30Days">Last 30 Days</MudButton>
+                    <MudButton OnClick="@LoadLast90Days">Last 90 Days</MudButton>
                 </MudButtonGroup>
                 <MudButton Variant="Variant.Filled"
                           Color="MudColor.Primary"
                           StartIcon="@Icons.Material.Filled.Refresh"
-                          OnClick="LoadData"
+                          OnClick="@LoadData"
                           Disabled="@_loading">
                     Refresh
                 </MudButton>
@@ -133,7 +129,7 @@
     }
 
     @* Response Distribution Pie Chart *@
-    @if (_distribution != null && _distribution.TotalResponses > 0)
+    @if (_distribution is { TotalResponses: > 0 })
     {
         <MudPaper Class="pa-4" Elevation="2">
             <MudText Typo="Typo.h6" Class="mb-4">Response Distribution</MudText>
@@ -230,7 +226,7 @@
 </MudStack>
 
 @code {
-    private bool _loading = false;
+    private bool _loading;
     private DateTimeOffset? _startDate;
     private DateTimeOffset? _endDate;
     private string _timeZoneId = "America/New_York"; // Default timezone
@@ -243,7 +239,7 @@
     protected override async Task OnInitializedAsync()
     {
         // Detect user's timezone from browser
-        _timeZoneId = await JSRuntime.InvokeAsync<string>("eval", "Intl.DateTimeFormat().resolvedOptions().timeZone");
+        _timeZoneId = await JsRuntime.InvokeAsync<string>("eval", "Intl.DateTimeFormat().resolvedOptions().timeZone");
         await LoadLast30Days();
     }
 
@@ -351,20 +347,20 @@
 
     private List<ResponseDistributionItem> GetDistributionItems()
     {
-        if (_distribution == null) return new();
+        if (_distribution == null) return [];
 
-        return new List<ResponseDistributionItem>
-        {
+        return
+        [
             new() { Label = "Accepted", Count = _distribution.AcceptedCount },
             new() { Label = "Denied", Count = _distribution.DeniedCount },
             new() { Label = "Timeout", Count = _distribution.TimeoutCount },
             new() { Label = "Left", Count = _distribution.LeftCount }
-        };
+        ];
     }
 
     private class ResponseDistributionItem
     {
-        public string Label { get; set; } = string.Empty;
-        public int Count { get; set; }
+        public string Label { get; init; } = string.Empty;
+        public int Count { get; init; }
     }
 }

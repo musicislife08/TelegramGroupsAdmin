@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -6,7 +5,6 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.Notifications;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -139,15 +137,13 @@ public class StartCommand : IBotCommand
 
         // Send Accept button in separate message (will be deleted after click)
         // Format: dm_accept:chatId:userId
-        var keyboard = new InlineKeyboardMarkup(new[]
-        {
-            new[]
-            {
+        var keyboard = new InlineKeyboardMarkup([
+            [
                 InlineKeyboardButton.WithCallbackData(
                     "✅ I Accept These Rules",
                     $"dm_accept:{chatId}:{targetUserId}")
-            }
-        });
+            ]
+        ]);
 
         await botClient.SendMessage(
             chatId: message.Chat.Id,

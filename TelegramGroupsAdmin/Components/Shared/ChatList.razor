@@ -64,7 +64,7 @@
 
 @code {
     [Parameter, EditorRequired]
-    public List<ManagedChatRecord> Chats { get; set; } = new();
+    public List<ManagedChatRecord> Chats { get; set; } = [];
 
     [Parameter]
     public long? SelectedChatId { get; set; }

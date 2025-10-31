@@ -2,7 +2,7 @@
 @inject IBackupService BackupService
 @inject BackupRetentionService RetentionService
 @inject ISnackbar Snackbar
-@inject IJSRuntime JS
+@inject IJSRuntime Js
 
 <MudPaper Class="pa-4" Elevation="0" Outlined="true">
     <MudStack Spacing="3">
@@ -129,7 +129,7 @@
 
         <MudButton Variant="Variant.Text"
                    StartIcon="@Icons.Material.Filled.Refresh"
-                   OnClick="LoadBackupsAsync"
+                   OnClick="@LoadBackupsAsync"
                    Size="Size.Small">
             Refresh List
         </MudButton>
@@ -218,14 +218,14 @@
     [Parameter] public string BackupDirectory { get; set; } = "/data/backups";
     [Parameter] public EventCallback<BackupFileInfo> OnRestoreRequested { get; set; }
 
-    private List<BackupFileInfo> _backups = new();
-    private List<TierGroup> _tierGroups = new();
-    private Dictionary<string, (BackupTier PrimaryTier, bool WillBeKept)> _backupRetentionInfo = new();
-    private bool _isLoading = false;
-    private RetentionConfig _retentionConfig = new(); // Default retention policy
+    private List<BackupFileInfo> _backups = [];
+    private List<TierGroup> _tierGroups = [];
+    private readonly Dictionary<string, (BackupTier PrimaryTier, bool WillBeKept)> _backupRetentionInfo = new();
+    private bool _isLoading;
+    private readonly RetentionConfig _retentionConfig = new(); // Default retention policy
 
     // Metadata dialog
-    private bool _showMetadataDialog = false;
+    private bool _showMetadataDialog;
     private BackupFileInfo? _viewingBackup;
     private BackupMetadata? _viewingMetadata;
 
@@ -237,8 +237,8 @@
 
     private class TierGroup
     {
-        public BackupTier Tier { get; set; }
-        public List<BackupFileInfo> Backups { get; set; } = new();
+        public BackupTier Tier { get; init; }
+        public List<BackupFileInfo> Backups { get; init; } = [];
     }
 
     protected override async Task OnInitializedAsync()
@@ -257,7 +257,7 @@
             if (!Directory.Exists(BackupDirectory))
             {
                 Directory.CreateDirectory(BackupDirectory);
-                _backups = new List<BackupFileInfo>();
+                _backups = [];
                 return;
             }
 
@@ -304,7 +304,7 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to load backups: {ex.Message}", Severity.Error);
-            _backups = new List<BackupFileInfo>();
+            _backups = [];
         }
         finally
         {
@@ -335,7 +335,7 @@
         try
         {
             var bytes = await File.ReadAllBytesAsync(backup.FilePath);
-            await JS.InvokeVoidAsync("downloadFile", backup.FileName, Convert.ToBase64String(bytes));
+            await Js.InvokeVoidAsync("downloadFile", backup.FileName, Convert.ToBase64String(bytes));
             Snackbar.Add($"Downloading {backup.FileName}", Severity.Success);
         }
         catch (Exception ex)
@@ -360,7 +360,7 @@
 
     private static string FormatBytes(long bytes)
     {
-        string[] sizes = { "B", "KB", "MB", "GB" };
+        string[] sizes = ["B", "KB", "MB", "GB"];
         double len = bytes;
         int order = 0;
         while (len >= 1024 && order < sizes.Length - 1)

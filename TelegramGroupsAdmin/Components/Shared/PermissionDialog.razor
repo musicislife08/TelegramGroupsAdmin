@@ -1,6 +1,3 @@
-@using Microsoft.AspNetCore.Components
-@using TelegramGroupsAdmin.Core.Models
-
 <MudDialog>
     <DialogContent>
         <MudText Class="mb-4">Change permission level for @UserEmail</MudText>
@@ -37,8 +34,8 @@
         }
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@Submit">Save</MudButton>
     </DialogActions>
 </MudDialog>
 

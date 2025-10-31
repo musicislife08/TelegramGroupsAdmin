@@ -1,8 +1,4 @@
-@using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
-@using TelegramGroupsAdmin.Auth
-@using TelegramGroupsAdmin.Telegram.Repositories
-@using TelegramGroupsAdmin.Telegram.Models
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IDialogService DialogService
@@ -16,7 +12,7 @@
             <MudButton Variant="Variant.Filled"
                       Color="Color.Primary"
                       StartIcon="@Icons.Material.Filled.Add"
-                      OnClick="AddTrainingSample">
+                      OnClick="@AddTrainingSample">
                 Add Training Sample
             </MudButton>
         </MudStack>
@@ -78,7 +74,7 @@
                                  Adornment="Adornment.Start"
                                  AdornmentIcon="@Icons.Material.Filled.Search"
                                  Immediate="true"
-                                 OnKeyUp="OnSearchChanged"
+                                 OnKeyUp="@OnSearchChanged"
                                  Style="max-width: 300px;" />
 
                     <MudSelect T="string" @bind-Value="_typeFilter" Label="Type Filter" Style="max-width: 150px;">
@@ -89,7 +85,7 @@
 
                     <MudSelect T="string" @bind-Value="_sourceFilter" Label="Source Filter" Style="max-width: 150px;">
                         <MudSelectItem Value="@("all")">All Sources</MudSelectItem>
-                        @foreach (var source in _stats?.SamplesBySource?.Keys ?? Enumerable.Empty<string>())
+                        @foreach (var source in _stats?.SamplesBySource.Keys ?? Enumerable.Empty<string>())
                         {
                             <MudSelectItem Value="@source">@source</MudSelectItem>
                         }
@@ -147,12 +143,12 @@
                                 <MudIconButton Icon="@Icons.Material.Filled.Edit"
                                              Color="Color.Primary"
                                              Size="Size.Small"
-                                             OnClick="() => EditTrainingSample(context)"
+                                             OnClick="@(() => EditTrainingSample(context))"
                                              title="Edit" />
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete"
                                              Color="Color.Error"
                                              Size="Size.Small"
-                                             OnClick="() => DeleteTrainingSample(context)"
+                                             OnClick="@(() => DeleteTrainingSample(context))"
                                              title="Delete" />
                             </MudStack>
                         </MudTd>
@@ -176,7 +172,7 @@
 </MudContainer>
 
 @code {
-    private List<DetectionResultRecord> _allSamples = new();
+    private List<DetectionResultRecord> _allSamples = [];
     private IEnumerable<DetectionResultRecord> _filteredSamples = new List<DetectionResultRecord>();
     private TrainingDataStats? _stats;
     private bool _loading = true;
@@ -188,7 +184,7 @@
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        _currentUserId = authState.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        _currentUserId = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         await LoadData();
     }
 
@@ -256,7 +252,7 @@
         var dialog = await DialogService.ShowAsync<AddTrainingSampleDialog>("Add Training Sample");
         var result = await dialog.Result;
 
-        if (result is not null && !result.Canceled && result.Data is AddTrainingSampleData data)
+        if (result is not null && result is { Canceled: false, Data: AddTrainingSampleData data })
         {
             try
             {
@@ -287,7 +283,7 @@
         var dialog = await DialogService.ShowAsync<EditTrainingSampleDialog>("Edit Training Sample", parameters);
         var result = await dialog.Result;
 
-        if (result is not null && !result.Canceled && result.Data is EditTrainingSampleData data)
+        if (result is not null && result is { Canceled: false, Data: EditTrainingSampleData data })
         {
             try
             {

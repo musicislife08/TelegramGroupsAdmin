@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Tests.TestData;
 

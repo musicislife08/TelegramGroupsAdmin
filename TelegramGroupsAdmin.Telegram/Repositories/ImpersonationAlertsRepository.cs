@@ -132,7 +132,7 @@ public class ImpersonationAlertsRepository : IImpersonationAlertsRepository
         CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.ImpersonationAlerts.FindAsync(new object[] { id }, cancellationToken);
+        var entity = await context.ImpersonationAlerts.FindAsync([id], cancellationToken);
 
         if (entity != null)
         {

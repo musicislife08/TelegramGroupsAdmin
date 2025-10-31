@@ -1,6 +1,5 @@
 @using TelegramGroupsAdmin.Services
 @using Microsoft.AspNetCore.Components.Authorization
-@using TelegramGroupsAdmin.Auth
 @inject IInviteService InviteService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
@@ -99,7 +98,7 @@
         </MudContainer>
     </DialogContent>
     <DialogActions>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Close">Close</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="@Close">Close</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -107,7 +106,7 @@
     [CascadingParameter]
     IMudDialogInstance? MudDialog { get; set; }
 
-    private List<InviteRecord> _invites = new();
+    private List<InviteRecord> _invites = [];
     private Dictionary<string, string> _userEmails = new();
     private bool _loading = true;
     private string _filter = "pending";

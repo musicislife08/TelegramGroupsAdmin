@@ -119,14 +119,14 @@
                 </MudTd>
             </RowTemplate>
             <PagerContent>
-                <MudTablePager PageSizeOptions="new int[] { 10, 25, 50, 100 }" />
+                <MudTablePager PageSizeOptions="new[] { 10, 25, 50, 100 }" />
             </PagerContent>
         </MudTable>
     }
 </MudContainer>
 
 @code {
-    private List<ManagedChatInfo> _chats = new();
+    private List<ManagedChatInfo> _chats = [];
     private bool _loading = true;
     private string _searchString = "";
 
@@ -156,7 +156,7 @@
             // Load chats accessible to this user (filtered by permission level)
             var chats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
                 userId,
-                (PermissionLevel)permissionLevel);
+                permissionLevel);
 
             // Check which chats have custom spam configs
             var allConfigs = await SpamConfigRepository.GetAllChatConfigsAsync();
@@ -165,7 +165,7 @@
                 .Select(c => c.ChatId)
                 .ToHashSet();
 
-            _chats = new List<ManagedChatInfo>();
+            _chats = [];
             foreach (var chat in chats)
             {
                 // Get cached health status from bot service
@@ -291,7 +291,7 @@
         var dialog = await DialogService.ShowAsync<ChatConfigModal>($"Configure: {chatInfo.Chat.ChatName}", parameters, options);
         var result = await dialog.Result;
 
-        if (result != null && !result.Canceled)
+        if (result is { Canceled: false })
         {
             // Reload chats after modal closes
             await LoadChatsAsync();

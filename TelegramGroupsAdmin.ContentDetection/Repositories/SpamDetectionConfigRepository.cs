@@ -1,4 +1,3 @@
-using TelegramGroupsAdmin.Core.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -286,7 +285,7 @@ public class SpamDetectionConfigRepository : ISpamDetectionConfigRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve chat configurations");
-            return Enumerable.Empty<ChatConfigInfo>();
+            return [];
         }
     }
 

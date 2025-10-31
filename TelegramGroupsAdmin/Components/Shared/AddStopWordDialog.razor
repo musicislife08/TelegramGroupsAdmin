@@ -11,7 +11,7 @@
                          Placeholder="Enter word or phrase"
                          Variant="Variant.Outlined"
                          HelperText="Words are case-insensitive and will be checked against message text, username, and user ID"
-                         OnKeyUp="OnWordChanged" />
+                         OnKeyUp="@OnWordChanged" />
 
             @if (_wordExists)
             {
@@ -33,10 +33,10 @@
         </MudStack>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
         <MudButton Color="Color.Primary"
                   Variant="Variant.Filled"
-                  OnClick="Submit"
+                  OnClick="@Submit"
                   Disabled="@(_isSubmitting || string.IsNullOrWhiteSpace(_word) || _wordExists)">
             @if (_isSubmitting)
             {
@@ -52,13 +52,13 @@
 </MudDialog>
 
 @code {
-    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
 
     private string _word = string.Empty;
     private string _notes = string.Empty;
-    private bool _wordExists = false;
-    private bool _isSubmitting = false;
-    private bool _checkingWord = false;
+    private bool _wordExists;
+    private bool _isSubmitting;
+    private bool _checkingWord;
 
     private async Task OnWordChanged()
     {
