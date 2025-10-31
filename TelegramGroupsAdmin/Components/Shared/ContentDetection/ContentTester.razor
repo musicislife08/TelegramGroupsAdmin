@@ -140,7 +140,7 @@
                 Size="Size.Large"
                 StartIcon="@Icons.Material.Filled.PlayArrow"
                 OnClick="RunContentCheck"
-                Disabled="@(_isRunning || string.IsNullOrWhiteSpace(_messageText))">
+                Disabled="@_isRunning">
                 @(_isRunning ? "Checking..." : "Run Content Check")
             </MudButton>
         </MudItem>
@@ -423,16 +423,27 @@
         }
     }
 
+    private bool HasContent()
+    {
+        return !string.IsNullOrWhiteSpace(_messageText) ||
+               _selectedImage != null ||
+               _pastedImageData != null ||
+               _selectedFile != null;
+    }
+
     private async Task RunContentCheck()
     {
-        if (string.IsNullOrWhiteSpace(_messageText))
+        if (!HasContent())
         {
-            Snackbar.Add("Please enter message text to test", Severity.Warning);
+            Snackbar.Add("Please enter message text or upload an image to test", Severity.Warning);
             return;
         }
 
         _isRunning = true;
         _result = null;
+
+        // Track temp file for cleanup
+        string? tempImagePath = null;
 
         try
         {
@@ -451,18 +462,34 @@
                 imageFileName = "pasted-image.png";
             }
 
+            // ML-5: Save image to temp file for OCR + hash similarity
+            if (imageStream != null)
+            {
+                tempImagePath = Path.Combine(Path.GetTempPath(), $"tester_{Guid.NewGuid()}.png");
+                using (var fileStream = File.Create(tempImagePath))
+                {
+                    await imageStream.CopyToAsync(fileStream);
+                }
+                // Reset stream position for potential ImageData usage
+                if (imageStream.CanSeek)
+                {
+                    imageStream.Seek(0, SeekOrigin.Begin);
+                }
+            }
+
             // Extract URLs from text (simple regex)
             var urls = ExtractUrls(_messageText);
 
             // Build request - same structure as MessageProcessingService uses
             var request = new ContentCheckRequest
             {
-                Message = _messageText,
+                Message = _messageText ?? string.Empty, // Empty string for image-only tests
                 UserId = string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId),
                 UserName = _userName,
                 ChatId = _selectedChatId ?? 0, // 0 = global config
                 ImageData = imageStream,
                 ImageFileName = imageFileName,
+                PhotoLocalPath = tempImagePath, // ML-5: Enable OCR + hash similarity layers
                 Urls = urls
             };
 
@@ -494,6 +521,19 @@
         finally
         {
             _isRunning = false;
+
+            // Cleanup temp image file
+            if (!string.IsNullOrEmpty(tempImagePath) && File.Exists(tempImagePath))
+            {
+                try
+                {
+                    File.Delete(tempImagePath);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to delete temp image: {ex.Message}");
+                }
+            }
         }
     }
 

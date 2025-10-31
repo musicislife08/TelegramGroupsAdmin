@@ -117,7 +117,7 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
             // Check if any critical checks flagged violations
             foreach (var checkResult in fullResult.CheckResults)
             {
-                if (criticalCheckNames.Contains(checkResult.CheckName) &&
+                if (criticalCheckNames.Contains(checkResult.CheckName.ToString()) &&
                     checkResult.Result == CheckResultType.Spam)
                 {
                     criticalViolations.Add($"{checkResult.CheckName}: {checkResult.Details}");

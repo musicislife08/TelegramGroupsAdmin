@@ -5,6 +5,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using TelegramGroupsAdmin.ContentDetection.Checks;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using WireMock.RequestBuilders;
@@ -134,7 +135,7 @@ public class OpenAIContentCheckTests
         var response = await _sut.CheckAsync(request);
 
         // Assert
-        Assert.That(response.CheckName, Is.EqualTo("OpenAI"));
+        Assert.That(response.CheckName, Is.EqualTo(CheckName.OpenAI));
         Assert.That(response.Result, Is.EqualTo(CheckResultType.Spam));
         Assert.That(response.Confidence, Is.EqualTo(95));
         Assert.That(response.Details, Does.Contain("OpenAI detected spam"));
@@ -153,7 +154,7 @@ public class OpenAIContentCheckTests
         var response = await _sut.CheckAsync(request);
 
         // Assert
-        Assert.That(response.CheckName, Is.EqualTo("OpenAI"));
+        Assert.That(response.CheckName, Is.EqualTo(CheckName.OpenAI));
         Assert.That(response.Result, Is.EqualTo(CheckResultType.Clean));
         Assert.That(response.Confidence, Is.EqualTo(85));
         Assert.That(response.Details, Does.Contain("OpenAI found no spam"));
@@ -172,7 +173,7 @@ public class OpenAIContentCheckTests
         var response = await _sut.CheckAsync(request);
 
         // Assert
-        Assert.That(response.CheckName, Is.EqualTo("OpenAI"));
+        Assert.That(response.CheckName, Is.EqualTo(CheckName.OpenAI));
         Assert.That(response.Result, Is.EqualTo(CheckResultType.Review));
         Assert.That(response.Confidence, Is.EqualTo(50));
         Assert.That(response.Details, Does.Contain("OpenAI flagged for review"));

@@ -27,7 +27,8 @@
     "spamcheck",
     "stopwords",
     "CSRF",
-    "HMACSHA256"
+    "HMACSHA256",
+    "tessdata"
   ],
   "flagWords": [],
   "ignorePaths": [

@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
@@ -13,7 +14,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// </summary>
 public class SpacingSpamCheck(ILogger<SpacingSpamCheck> logger) : IContentCheck
 {
-    public string CheckName => "Spacing";
+    public CheckName CheckName => CheckName.Spacing;
 
     /// <summary>
     /// Check if spacing check should be executed

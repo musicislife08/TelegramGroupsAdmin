@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Abstractions;
@@ -13,7 +14,7 @@ public interface IContentCheck
     /// <summary>
     /// Name of this content check for identification
     /// </summary>
-    string CheckName { get; }
+    CheckName CheckName { get; }
 
     /// <summary>
     /// Execute the content check with a strongly-typed request

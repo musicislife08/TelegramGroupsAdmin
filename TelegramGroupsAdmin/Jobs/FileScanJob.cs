@@ -6,6 +6,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
@@ -35,7 +36,7 @@ public class FileScanJob(
 {
     private readonly ILogger<FileScanJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly IContentCheck _fileScanningCheck = contentChecks.First(c => c.CheckName == "FileScanning");
+    private readonly IContentCheck _fileScanningCheck = contentChecks.First(c => c.CheckName == CheckName.FileScanning);
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
     private readonly IDetectionResultsRepository _detectionResultsRepository = detectionResultsRepository;

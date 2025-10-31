@@ -48,6 +48,7 @@ public class AppDbContext : DbContext
     public DbSet<SpamCheckConfigRecordDto> SpamCheckConfigs => Set<SpamCheckConfigRecordDto>();
     public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
     public DbSet<ThresholdRecommendationDto> ThresholdRecommendations => Set<ThresholdRecommendationDto>();
+    public DbSet<ImageTrainingSampleDto> ImageTrainingSamples => Set<ImageTrainingSampleDto>();
 
     // URL filtering tables (Phase 4.13)
     public DbSet<BlocklistSubscriptionDto> BlocklistSubscriptions => Set<BlocklistSubscriptionDto>();
@@ -374,6 +375,12 @@ public class AppDbContext : DbContext
                 "(target_web_user_id IS NULL AND target_telegram_user_id IS NULL AND target_system_identifier IS NULL) OR " +
                 "((target_web_user_id IS NOT NULL)::int + (target_telegram_user_id IS NOT NULL)::int + (target_system_identifier IS NOT NULL)::int = 1)"));
 
+        // ImageTrainingSamples: Exactly one actor must be non-null
+        modelBuilder.Entity<ImageTrainingSampleDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_image_training_exclusive_actor",
+                "(marked_by_web_user_id IS NOT NULL)::int + (marked_by_telegram_user_id IS NOT NULL)::int + (marked_by_system_identifier IS NOT NULL)::int = 1"));
+
         // MessageTranslations: Exactly one of (message_id, edit_id) must be non-null
         modelBuilder.Entity<MessageTranslationDto>()
             .ToTable(t => t.HasCheckConstraint(
@@ -392,6 +399,26 @@ public class AppDbContext : DbContext
             .WithMany()
             .HasForeignKey(mt => mt.EditId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // ImageTrainingSamples relationships
+        modelBuilder.Entity<ImageTrainingSampleDto>()
+            .HasOne(its => its.Message)
+            .WithMany()
+            .HasForeignKey(its => its.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Actor System Foreign Keys (web user, telegram user, system identifier)
+        modelBuilder.Entity<ImageTrainingSampleDto>()
+            .HasOne<UserRecordDto>()
+            .WithMany()
+            .HasForeignKey(its => its.MarkedByWebUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<ImageTrainingSampleDto>()
+            .HasOne<TelegramUserDto>()
+            .WithMany()
+            .HasForeignKey(its => its.MarkedByTelegramUserId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
@@ -571,6 +598,15 @@ public class AppDbContext : DbContext
             .HasIndex(tr => tr.CreatedAt);  // Sort by date
         modelBuilder.Entity<ThresholdRecommendationDto>()
             .HasIndex(tr => new { tr.AlgorithmName, tr.Status });  // Filter by algorithm + status
+
+        // ImageTrainingSamples indexes
+        modelBuilder.Entity<ImageTrainingSampleDto>()
+            .HasIndex(its => its.MessageId)
+            .IsUnique();  // One training sample per message
+        modelBuilder.Entity<ImageTrainingSampleDto>()
+            .HasIndex(its => new { its.IsSpam, its.MarkedAt });  // Filter spam/ham + sort by date
+        // Note: No index on photo_hash - Hamming distance similarity requires full table scan anyway
+        // Note: No simple is_spam index - low cardinality boolean, sequential scan is faster
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)
@@ -653,5 +689,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ConfigRecordDto>()
             .HasIndex(c => c.ChatId)
             .IsUnique();
+
+        // Configure image_training_samples table
+        modelBuilder.Entity<ImageTrainingSampleDto>()
+            .ToTable("image_training_samples");
     }
 }

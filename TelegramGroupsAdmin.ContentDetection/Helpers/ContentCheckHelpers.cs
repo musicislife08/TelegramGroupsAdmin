@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Helpers;
@@ -18,7 +19,7 @@ public static class ContentCheckHelpers
     /// <param name="userId">Optional user ID for context</param>
     /// <returns>Clean response with error details</returns>
     public static ContentCheckResponse CreateFailureResponse(
-        string checkName,
+        CheckName checkName,
         Exception ex,
         ILogger logger,
         long? userId = null)

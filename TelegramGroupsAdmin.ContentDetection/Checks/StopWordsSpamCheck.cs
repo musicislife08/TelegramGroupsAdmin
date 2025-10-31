@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
@@ -20,7 +21,7 @@ public class StopWordsSpamCheck(
 {
     private const int MAX_STOP_WORDS = 10_000; // Guardrail: cap stop words query
 
-    public string CheckName => "StopWords";
+    public CheckName CheckName => CheckName.StopWords;
 
     /// <summary>
     /// Check if stop words check should be executed
@@ -52,6 +53,7 @@ public class StopWordsSpamCheck(
             var stopWords = await dbContext.StopWords
                 .AsNoTracking()
                 .Where(w => w.Enabled)
+                .OrderBy(w => w.Id) // Deterministic ordering for Take() guardrail
                 .Take(MAX_STOP_WORDS) // ← Guardrail
                 .Select(w => w.Word)
                 .ToListAsync(req.CancellationToken);

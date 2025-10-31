@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -47,7 +48,7 @@ public partial class SeoScrapingSpamCheck(
         "blockchainassn"
     ];
 
-    public string CheckName => "SeoScraping";
+    public CheckName CheckName => CheckName.SeoScraping;
 
     /// <summary>
     /// Check if SEO scraping check should be executed

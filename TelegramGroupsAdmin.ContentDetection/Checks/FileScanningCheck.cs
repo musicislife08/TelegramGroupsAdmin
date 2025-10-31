@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
@@ -23,7 +24,7 @@ public class FileScanningCheck : IContentCheck
     private readonly Tier2QueueCoordinator _tier2Coordinator;
     private readonly IFileScanResultRepository _scanResultRepository;
 
-    public string CheckName => "FileScanning";
+    public CheckName CheckName => CheckName.FileScanning;
 
     public FileScanningCheck(
         ILogger<FileScanningCheck> logger,

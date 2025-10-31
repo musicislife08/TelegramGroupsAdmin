@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
@@ -23,7 +24,7 @@ public class BayesSpamCheck(
     private DateTime _lastTrainingUpdate = DateTime.MinValue;
     private readonly TimeSpan _retrainingInterval = TimeSpan.FromHours(1);
 
-    public string CheckName => "Bayes";
+    public CheckName CheckName => CheckName.Bayes;
 
     /// <summary>
     /// Check if Bayes check should be executed

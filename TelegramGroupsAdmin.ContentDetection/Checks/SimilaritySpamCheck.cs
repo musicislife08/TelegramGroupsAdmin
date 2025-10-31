@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
@@ -21,7 +22,7 @@ public class SimilaritySpamCheck(
 {
     private const int MAX_SIMILARITY_SAMPLES = 5_000; // Guardrail: cap similarity query
 
-    public string CheckName => "Similarity";
+    public CheckName CheckName => CheckName.Similarity;
 
     // Internal training sample record (used only by this check, loaded from detection_results)
     private record TrainingSample(

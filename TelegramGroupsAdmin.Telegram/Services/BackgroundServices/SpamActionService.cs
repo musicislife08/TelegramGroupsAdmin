@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
@@ -44,7 +45,7 @@ public class SpamActionService(
         // For auto-detections, only confident results are training-worthy
 
         // Check if OpenAI was involved and was confident (85%+ confidence)
-        var openAIResult = result.CheckResults.FirstOrDefault(c => c.CheckName == "OpenAI");
+        var openAIResult = result.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
         if (openAIResult != null)
         {
             // OpenAI confident (85%+) = training-worthy
@@ -84,7 +85,7 @@ public class SpamActionService(
             var moderationActionService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
 
             // Phase 4.13: Check for hard block or malware (different handling than spam)
-            var hardBlockResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == "HardBlock");
+            var hardBlockResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.UrlBlocklist);
             var malwareResult = spamResult.CheckResults.FirstOrDefault(c => c.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Malware);
 
             if (hardBlockResult != null)
@@ -159,7 +160,7 @@ public class SpamActionService(
 
             // Standard spam detection handling below...
             // Check if OpenAI was involved and how confident it was
-            var openAIResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == "OpenAI");
+            var openAIResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
             var openAIConfident = openAIResult != null && openAIResult.Confidence >= OpenAIConfidentThreshold;
 
             // Decision logic based on net confidence and OpenAI involvement

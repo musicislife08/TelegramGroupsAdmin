@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -75,7 +76,7 @@ public static class OpenAIResponseParser
 
             return new ContentCheckResponse
             {
-                CheckName = "OpenAI",
+                CheckName = CheckName.OpenAI,
                 Result = result,
                 Details = details,
                 Confidence = confidence
@@ -101,7 +102,7 @@ public static class OpenAIResponseParser
 
         return new ContentCheckResponse
         {
-            CheckName = "OpenAI",
+            CheckName = CheckName.OpenAI,
             Result = CheckResultType.Clean, // Fail open
             Details = details,
             Confidence = 0

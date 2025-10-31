@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
@@ -11,7 +12,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// </summary>
 public class InvisibleCharsSpamCheck(ILogger<InvisibleCharsSpamCheck> logger) : IContentCheck
 {
-    public string CheckName => "InvisibleChars";
+    public CheckName CheckName => CheckName.InvisibleChars;
 
     public bool ShouldExecute(ContentCheckRequest request)
     {

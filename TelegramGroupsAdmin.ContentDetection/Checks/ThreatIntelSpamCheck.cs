@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
@@ -19,7 +20,7 @@ public partial class ThreatIntelSpamCheck(
 {
     private static readonly Regex UrlRegex = CompiledUrlRegex();
 
-    public string CheckName => "ThreatIntel";
+    public CheckName CheckName => CheckName.ThreatIntel;
 
     /// <summary>
     /// Check if threat intel check should be executed

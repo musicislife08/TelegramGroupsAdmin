@@ -29,6 +29,7 @@ public class ModerationActionService
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IManagedChatsRepository _managedChatsRepository;
     private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
+    private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository;
     private readonly TelegramBotClientFactory _botClientFactory;
     private readonly TelegramOptions _telegramOptions;
     private readonly IConfigService _configService;
@@ -44,6 +45,7 @@ public class ModerationActionService
         IMessageHistoryRepository messageHistoryRepository,
         IManagedChatsRepository managedChatsRepository,
         ITelegramUserMappingRepository telegramUserMappingRepository,
+        IImageTrainingSamplesRepository imageTrainingSamplesRepository,
         TelegramBotClientFactory botClientFactory,
         IOptions<TelegramOptions> telegramOptions,
         IConfigService configService,
@@ -58,6 +60,7 @@ public class ModerationActionService
         _messageHistoryRepository = messageHistoryRepository;
         _managedChatsRepository = managedChatsRepository;
         _telegramUserMappingRepository = telegramUserMappingRepository;
+        _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
         _botClientFactory = botClientFactory;
         _telegramOptions = telegramOptions.Value;
         _configService = configService;
@@ -121,6 +124,13 @@ public class ModerationActionService
                 EditVersion = 0
             };
             await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
+
+            // 4b. ML-5: Save image training sample if message has a photo
+            await _imageTrainingSamplesRepository.SaveTrainingSampleAsync(
+                messageId,
+                isSpam: true,
+                executor,
+                cancellationToken);
 
             // 5. Remove any existing trust actions (compromised account protection)
             await _userActionsRepository.ExpireTrustsForUserAsync(userId, chatId: null, cancellationToken);

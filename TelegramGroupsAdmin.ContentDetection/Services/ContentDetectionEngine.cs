@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 
@@ -67,7 +68,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
     {
         return check.CheckName switch
         {
-            "StopWords" => new StopWordsCheckRequest
+            CheckName.StopWords => new StopWordsCheckRequest
             {
                 Message = originalRequest.Message ?? "",
                 UserId = originalRequest.UserId,
@@ -77,7 +78,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
-            "Bayes" => new BayesCheckRequest
+            CheckName.Bayes => new BayesCheckRequest
             {
                 Message = originalRequest.Message ?? "",
                 UserId = originalRequest.UserId,
@@ -88,7 +89,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
-            "CAS" => new CasCheckRequest
+            CheckName.CAS => new CasCheckRequest
             {
                 Message = originalRequest.Message ?? "",
                 UserId = originalRequest.UserId,
@@ -100,7 +101,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
-            "Similarity" => new SimilarityCheckRequest
+            CheckName.Similarity => new SimilarityCheckRequest
             {
                 Message = originalRequest.Message ?? "",
                 UserId = originalRequest.UserId,
@@ -112,7 +113,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
-            "Spacing" => new SpacingCheckRequest
+            CheckName.Spacing => new SpacingCheckRequest
             {
                 Message = originalRequest.Message ?? "",
                 UserId = originalRequest.UserId,
@@ -123,7 +124,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
-            "InvisibleChars" => new InvisibleCharsCheckRequest
+            CheckName.InvisibleChars => new InvisibleCharsCheckRequest
             {
                 Message = originalRequest.Message ?? "",
                 UserId = originalRequest.UserId,
@@ -133,7 +134,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
-            "OpenAI" => new OpenAICheckRequest
+            CheckName.OpenAI => new OpenAICheckRequest
             {
                 Message = originalRequest.Message ?? "",
                 UserId = originalRequest.UserId,
@@ -150,7 +151,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
-            "ThreatIntel" => new ThreatIntelCheckRequest
+            CheckName.ThreatIntel => new ThreatIntelCheckRequest
             {
                 Message = originalRequest.Message ?? "",
                 UserId = originalRequest.UserId,
@@ -162,7 +163,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
-            "UrlBlocklist" => new UrlBlocklistCheckRequest
+            CheckName.UrlBlocklist => new UrlBlocklistCheckRequest
             {
                 Message = originalRequest.Message ?? "",
                 UserId = originalRequest.UserId,
@@ -173,7 +174,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
-            "SeoScraping" => new SeoScrapingCheckRequest
+            CheckName.SeoScraping => new SeoScrapingCheckRequest
             {
                 Message = originalRequest.Message ?? "",
                 UserId = originalRequest.UserId,
@@ -183,7 +184,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
-            "Image" => new ImageCheckRequest
+            CheckName.ImageSpam => new ImageCheckRequest
             {
                 Message = originalRequest.Message ?? "",
                 UserId = originalRequest.UserId,
@@ -191,6 +192,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 ChatId = originalRequest.ChatId,
                 PhotoFileId = originalRequest.PhotoFileId ?? "",
                 PhotoUrl = originalRequest.PhotoUrl,
+                PhotoLocalPath = originalRequest.PhotoLocalPath, // ML-5: For OCR + hash similarity
                 CustomPrompt = null, // No config property
                 ConfidenceThreshold = 80, // No config property, using default
                 ApiKey = _openAIOptions.ApiKey,
@@ -210,17 +212,18 @@ public class ContentDetectionEngine : IContentDetectionEngine
         // First check if enabled in config
         var enabled = check.CheckName switch
         {
-            "StopWords" => config.StopWords.Enabled,
-            "Bayes" => config.Bayes.Enabled,
-            "CAS" => config.Cas.Enabled,
-            "Similarity" => config.Similarity.Enabled,
-            "Spacing" => config.Spacing.Enabled,
-            "InvisibleChars" => config.InvisibleChars.Enabled,
-            "OpenAI" => config.OpenAI.Enabled && (!config.OpenAI.VetoMode || request.HasSpamFlags),
-            "ThreatIntel" => config.ThreatIntel.Enabled && request.Urls.Any(),
-            "UrlBlocklist" => config.UrlBlocklist.Enabled && request.Urls.Any(),
-            "SeoScraping" => config.SeoScraping.Enabled,
-            "Image" => config.ImageSpam.Enabled && !string.IsNullOrEmpty(request.PhotoFileId),
+            CheckName.StopWords => config.StopWords.Enabled,
+            CheckName.Bayes => config.Bayes.Enabled,
+            CheckName.CAS => config.Cas.Enabled,
+            CheckName.Similarity => config.Similarity.Enabled,
+            CheckName.Spacing => config.Spacing.Enabled,
+            CheckName.InvisibleChars => config.InvisibleChars.Enabled,
+            CheckName.OpenAI => config.OpenAI.Enabled && (!config.OpenAI.VetoMode || request.HasSpamFlags),
+            CheckName.ThreatIntel => config.ThreatIntel.Enabled && request.Urls.Any(),
+            CheckName.UrlBlocklist => config.UrlBlocklist.Enabled && request.Urls.Any(),
+            CheckName.SeoScraping => config.SeoScraping.Enabled,
+            CheckName.ImageSpam => config.ImageSpam.Enabled && (request.ImageData != null || !string.IsNullOrEmpty(request.PhotoFileId) || !string.IsNullOrEmpty(request.PhotoLocalPath)),
+            CheckName.FileScanning => true, // Always run file scanning if check exists
             _ => false
         };
 
@@ -271,7 +274,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                     {
                         new()
                         {
-                            CheckName = "HardBlock",
+                            CheckName = CheckName.UrlBlocklist,
                             Result = CheckResultType.HardBlock,
                             Details = hardBlock.Reason ?? "Domain on hard block list",
                             Confidence = 100
@@ -290,7 +293,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
 
         if (shouldRunOpenAI)
         {
-            var openAICheck = _spamChecks.FirstOrDefault(check => check.CheckName == "OpenAI");
+            var openAICheck = _spamChecks.FirstOrDefault(check => check.CheckName == CheckName.OpenAI);
             if (openAICheck != null)
             {
                 _logger.LogDebug("Running OpenAI veto check for user {UserId}", request.UserId);
@@ -339,7 +342,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
         // Phase 1: Run InvisibleChars check on ORIGINAL message (before translation)
         // Phase 2: Translate, then run all other checks on translated message
 
-        var invisibleCharsCheck = _spamChecks.FirstOrDefault(check => check.CheckName == "InvisibleChars");
+        var invisibleCharsCheck = _spamChecks.FirstOrDefault(check => check.CheckName == CheckName.InvisibleChars);
         if (invisibleCharsCheck != null && ShouldRunCheck(invisibleCharsCheck, request, config))
         {
             try
@@ -358,7 +361,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
         var processedRequest = await PreprocessMessageAsync(request, config, cancellationToken);
 
         // Run all other checks on potentially translated message
-        var checks = _spamChecks.Where(check => check.CheckName != "OpenAI" && check.CheckName != "InvisibleChars").ToList();
+        var checks = _spamChecks.Where(check => check.CheckName != CheckName.OpenAI && check.CheckName != CheckName.InvisibleChars).ToList();
 
         foreach (var check in checks)
         {

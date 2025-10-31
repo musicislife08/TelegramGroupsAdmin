@@ -11,8 +11,14 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
-# Install wget for health checks (smaller than curl, fewer dependencies)
-RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
+# Install build dependencies
+# wget: for health checks (smaller than curl, fewer dependencies)
+# tesseract-ocr, libleptonica-dev: for OCR-based image spam detection (ML-5)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    tesseract-ocr \
+    libleptonica-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy solution and project files (for better layer caching)
 # Excludes TelegramGroupsAdmin.Tests - not needed for production runtime
@@ -30,6 +36,12 @@ RUN dotnet restore "TelegramGroupsAdmin/TelegramGroupsAdmin.csproj"
 
 # Copy all source code
 COPY . .
+
+# Download Tesseract English language data (tessdata_best for accuracy)
+# ML-5: OCR-based image spam detection
+RUN wget -q https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata \
+    -O /tmp/eng.traineddata && \
+    echo "Downloaded eng.traineddata: $(du -h /tmp/eng.traineddata | cut -f1)"
 
 # Publish
 WORKDIR /src/TelegramGroupsAdmin
@@ -55,6 +67,26 @@ ARG PGID=1654
 COPY --from=build /usr/bin/wget /usr/bin/wget
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
+# Copy Tesseract OCR binaries and libraries from build stage (ML-5: OCR spam detection)
+# Tesseract binary
+COPY --from=build /usr/bin/tesseract /usr/bin/tesseract
+# Leptonica and Tesseract libraries (multi-arch support: aarch64, x86_64)
+COPY --from=build /usr/lib/*/liblept* /usr/lib/
+COPY --from=build /usr/lib/*/libtesseract* /usr/lib/
+# Additional dependencies (image format libraries)
+COPY --from=build /usr/lib/*/libpng* /usr/lib/
+COPY --from=build /usr/lib/*/libjpeg* /usr/lib/
+COPY --from=build /usr/lib/*/libtiff* /usr/lib/
+COPY --from=build /usr/lib/*/libwebp* /usr/lib/
+COPY --from=build /usr/lib/*/libgif* /usr/lib/
+COPY --from=build /usr/lib/*/libopenjp2* /usr/lib/
+# Copy all runtime dependencies to /usr/lib (flattened structure)
+COPY --from=build /usr/lib/*/lib*.so.* /usr/lib/
+
+# Copy Tesseract language data from build stage (ML-5: OCR spam detection)
+# 14.7MB - tessdata_best for better accuracy on compressed spam images
+COPY --from=build --chown=$PUID:$PGID /tmp/eng.traineddata /tessdata/eng.traineddata
+
 # Create non-root user with customizable UID/GID
 # Chiseled images use UID 1654 by default (APP_UID)
 # Override via build args: --build-arg PUID=1000 --build-arg PGID=1000
@@ -69,6 +101,8 @@ COPY --from=build /app/publish .
 # Create volume mount points for persistent data
 # These will be mounted from host at runtime
 # Note: Using /data instead of /app/data to avoid conflicts with published files
+# /data - user data (media, keys, etc.)
+# /tessdata - baked into image (NOT a volume), contains eng.traineddata for OCR
 VOLUME ["/data"]
 
 # .NET needs writable temp directories even in read-only containers

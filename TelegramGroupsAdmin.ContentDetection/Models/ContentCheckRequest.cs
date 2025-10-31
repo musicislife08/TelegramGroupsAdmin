@@ -74,4 +74,9 @@ public record ContentCheckRequest
     /// Photo URL (for image spam detection)
     /// </summary>
     public string? PhotoUrl { get; init; }
+
+    /// <summary>
+    /// Local file path to downloaded photo (for OCR-based spam detection, ML-5)
+    /// </summary>
+    public string? PhotoLocalPath { get; init; }
 }

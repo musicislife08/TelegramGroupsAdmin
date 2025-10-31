@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.ContentDetection.Constants;
+
 namespace TelegramGroupsAdmin.ContentDetection.Models;
 
 /// <summary>
@@ -8,7 +10,7 @@ public record ContentCheckResponse
     /// <summary>
     /// Name of the check that produced this response
     /// </summary>
-    public required string CheckName { get; init; }
+    public required CheckName CheckName { get; init; }
 
     /// <summary>
     /// Classification result (Clean, Spam, or Review)

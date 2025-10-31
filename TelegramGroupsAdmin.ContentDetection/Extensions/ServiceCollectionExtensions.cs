@@ -26,6 +26,7 @@ public static class ServiceCollectionExtensions
         // Register core services
         services.AddScoped<ITokenizerService, TokenizerService>();
         services.AddScoped<IOpenAITranslationService, OpenAITranslationService>();
+        services.AddScoped<IImageTextExtractionService, ImageTextExtractionService>(); // ML-5: OCR service
         // NOTE: IMessageHistoryService is registered by the main app (TelegramAdminBotService implements it)
 
         // Register repositories (needed by engine for config)
@@ -40,6 +41,9 @@ public static class ServiceCollectionExtensions
         // Register file scanning repositories (Phase 4.17)
         services.AddScoped<IFileScanResultRepository, FileScanResultRepository>();
         services.AddScoped<IFileScanQuotaRepository, FileScanQuotaRepository>();  // Phase 2: Cloud quota tracking
+
+        // Register image training samples repository (ML-5: Layer 2 hash similarity)
+        services.AddScoped<IImageTrainingSamplesRepository, ImageTrainingSamplesRepository>();
 
         // Register URL filtering services (Phase 4.13)
         services.AddScoped<IBlocklistSyncService, BlocklistSyncService>();

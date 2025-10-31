@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 
@@ -18,7 +19,7 @@ public class CasSpamCheck(
 {
     private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
 
-    public string CheckName => "CAS";
+    public CheckName CheckName => CheckName.CAS;
 
     /// <summary>
     /// Check if CAS check should be executed

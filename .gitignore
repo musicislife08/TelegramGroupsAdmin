@@ -8,6 +8,9 @@ compose/*
 !compose/compose.yml
 *.DotSettings.user
 
+# Tesseract language data (large binary files - baked into Docker image instead)
+tessdata/
+
 # === SECURITY: Dotnet Secret Files ===
 # Never commit these - they contain API keys, tokens, connection strings
 

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
@@ -20,7 +21,7 @@ public class OpenAIContentCheck(
 {
     private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
 
-    public string CheckName => "OpenAI";
+    public CheckName CheckName => CheckName.OpenAI;
 
     /// <summary>
     /// Check if OpenAI check should be executed

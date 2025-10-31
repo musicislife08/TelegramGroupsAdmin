@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -21,7 +22,7 @@ public partial class UrlBlocklistSpamCheck(
 {
     private static readonly Regex DomainRegex = CompiledDomainRegex();
 
-    public string CheckName => "UrlFilters";
+    public CheckName CheckName => CheckName.UrlBlocklist;
 
     /// <summary>
     /// Check if URL blocklist check should be executed
