@@ -105,24 +105,18 @@ public class BanCommand : IBotCommand
                 replyToMessageId: null, // Don't reply to trigger message for bans
                 cancellationToken);
 
-            // Build admin confirmation response
-            var deliveryNote = messageResult.DeliveryMethod == MessageDeliveryMethod.PrivateDm
-                ? " (notified via DM)"
-                : " (notified in chat)";
-
-            var response = $"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} banned from {result.ChatsAffected} chat(s){deliveryNote}\n" +
-                          $"Reason: {reason}";
-
-            if (result.TrustRemoved)
-            {
-                response += "\n⚠️ User trust revoked";
-            }
+            var deliveryMethod = messageResult.DeliveryMethod == MessageDeliveryMethod.PrivateDm
+                ? "DM"
+                : "chat mention";
 
             _logger.LogInformation(
-                "User {TargetId} ({TargetUsername}) banned by {ExecutorId} from {ChatsAffected} chats. Reason: {Reason}",
-                targetUser.Id, targetUser.Username, message.From?.Id, result.ChatsAffected, reason);
+                "User {TargetId} ({TargetUsername}) banned by {ExecutorId} from {ChatsAffected} chats. " +
+                "Reason: {Reason}. User notified via {DeliveryMethod}. Trust removed: {TrustRemoved}",
+                targetUser.Id, targetUser.Username, message.From?.Id, result.ChatsAffected, reason, deliveryMethod, result.TrustRemoved);
 
-            return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
+            // Silent mode: No chat feedback, command message simply disappears
+            // Admins see action through DM notifications if enabled
+            return new CommandResult(null, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {

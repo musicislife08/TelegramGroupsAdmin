@@ -95,18 +95,12 @@ public class SpamCommand : IBotCommand
         }
 
         _logger.LogInformation(
-            "Spam command executed by {AdminId} on message {MessageId} from user {SpamUserId} ({SpamUserName}) in chat {ChatId}",
-            message.From?.Id, spamMessage.MessageId, spamUserId, spamUserName, message.Chat.Id);
+            "Spam command executed by {AdminId} on message {MessageId} from user {SpamUserId} ({SpamUserName}) in chat {ChatId}. " +
+            "Banned from {ChatsAffected} chat(s). Trust removed: {TrustRemoved}",
+            message.From?.Id, spamMessage.MessageId, spamUserId, spamUserName, message.Chat.Id, result.ChatsAffected, result.TrustRemoved);
 
-        var response = $"✅ Message deleted and marked as spam\n" +
-                       $"User: @{spamUserName} ({spamUserId})\n" +
-                       $"🚫 Banned from {result.ChatsAffected} chat(s)";
-
-        if (result.TrustRemoved)
-        {
-            response += "\n⚠️ User trust revoked (compromised account protection)";
-        }
-
-        return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
+        // Silent mode: No chat feedback, message and command simply disappear
+        // Admins see action through DM notifications if enabled
+        return new CommandResult(null, DeleteCommandMessage, DeleteResponseAfterSeconds);
     }
 }
