@@ -125,21 +125,26 @@ public class BayesSpamCheck(
             await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
             // Query detection_results + JOIN messages to get message text
+            // Phase 4.20+: Use translated text when available (matches spam detection behavior)
             // Separate manual vs auto based on detection_source
             var manualSamples = await (
                 from dr in dbContext.DetectionResults
                 join m in dbContext.Messages on dr.MessageId equals m.MessageId
+                join mt in dbContext.MessageTranslations on m.MessageId equals mt.MessageId into translations
+                from mt in translations.DefaultIfEmpty()
                 where dr.UsedForTraining && (dr.DetectionSource == "manual" || dr.DetectionSource == "Manual")
                 orderby dr.DetectedAt descending
-                select new { m.MessageText, dr.IsSpam, dr.DetectionSource }
+                select new { MessageText = mt != null ? mt.TranslatedText : m.MessageText, dr.IsSpam, dr.DetectionSource }
             ).AsNoTracking().ToListAsync(cancellationToken);
 
             var autoSamples = await (
                 from dr in dbContext.DetectionResults
                 join m in dbContext.Messages on dr.MessageId equals m.MessageId
+                join mt in dbContext.MessageTranslations on m.MessageId equals mt.MessageId into translations
+                from mt in translations.DefaultIfEmpty()
                 where dr.UsedForTraining && dr.DetectionSource != "manual" && dr.DetectionSource != "Manual"
                 orderby dr.DetectedAt descending
-                select new { m.MessageText, dr.IsSpam, dr.DetectionSource }
+                select new { MessageText = mt != null ? mt.TranslatedText : m.MessageText, dr.IsSpam, dr.DetectionSource }
             ).AsNoTracking().Take(MAX_TRAINING_SAMPLES).ToListAsync(cancellationToken);
 
             // Combine: all manual + recent MAX_TRAINING_SAMPLES auto

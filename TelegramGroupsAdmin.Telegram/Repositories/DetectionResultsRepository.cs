@@ -46,7 +46,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
     /// <summary>
     /// Helper to add actor JOINs to detection results query (Phase 4.19)
-    /// Returns queryable with full actor information for display names
+    /// Phase 4.20+: Also includes translation LEFT JOIN for UI display
+    /// Returns queryable with full actor information and translation data
     /// </summary>
     private static IQueryable<DetectionResultRecord> WithActorJoins(
         IQueryable<DataModels.DetectionResultRecordDto> detectionResults,
@@ -57,13 +58,16 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             .GroupJoin(context.Users, x => x.dr.WebUserId, u => u.Id, (x, users) => new { x.dr, x.m, users })
             .SelectMany(x => x.users.DefaultIfEmpty(), (x, user) => new { x.dr, x.m, user })
             .GroupJoin(context.TelegramUsers, x => x.dr.TelegramUserId, tu => tu.TelegramUserId, (x, tgUsers) => new { x.dr, x.m, x.user, tgUsers })
-            .SelectMany(x => x.tgUsers.DefaultIfEmpty(), (x, tgUser) => new
+            .SelectMany(x => x.tgUsers.DefaultIfEmpty(), (x, tgUser) => new { x.dr, x.m, x.user, tgUser })
+            .GroupJoin(context.MessageTranslations, x => x.m.MessageId, mt => mt.MessageId, (x, translations) => new { x.dr, x.m, x.user, x.tgUser, translations })
+            .SelectMany(x => x.translations.DefaultIfEmpty(), (x, translation) => new
             {
                 x.dr,
                 x.m,
                 ActorWebEmail = x.user != null ? x.user.Email : null,
-                ActorTelegramUsername = tgUser != null ? tgUser.Username : null,
-                ActorTelegramFirstName = tgUser != null ? tgUser.FirstName : null
+                ActorTelegramUsername = x.tgUser != null ? x.tgUser.Username : null,
+                ActorTelegramFirstName = x.tgUser != null ? x.tgUser.FirstName : null,
+                translation
             })
             .Select(x => new DetectionResultRecord
             {
@@ -81,7 +85,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 CheckResultsJson = x.dr.CheckResultsJson,
                 EditVersion = x.dr.EditVersion,
                 UserId = x.m.UserId,
-                MessageText = x.m.MessageText
+                MessageText = x.m.MessageText,
+                Translation = x.translation != null ? MessageTranslationMappings.ToModel(x.translation) : null
             });
     }
 
@@ -165,14 +170,20 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // - Manual admin decisions (always training-worthy)
         // - Confident OpenAI results (85%+, marked as used_for_training = true)
         // This prevents low-quality auto-detections from polluting training data
+        //
+        // Phase 4.20+: Use translated text when available (matches spam detection behavior)
+        // - Spam detection runs on translated text for non-English messages
+        // - Training samples should match what was analyzed (COALESCE: translated > original)
         var results = await (
             from dr in context.DetectionResults.AsNoTracking()
             join m in context.Messages on dr.MessageId equals m.MessageId
+            join mt in context.MessageTranslations on m.MessageId equals mt.MessageId into translations
+            from mt in translations.DefaultIfEmpty()
             where dr.UsedForTraining == true
                 && m.MessageText != null
                 && m.MessageText != ""
             orderby dr.IsSpam descending
-            select new { m.MessageText, dr.IsSpam }
+            select new { MessageText = mt != null ? mt.TranslatedText : m.MessageText, dr.IsSpam }
         ).ToListAsync(cancellationToken);
 
         _logger.LogDebug(
@@ -398,7 +409,15 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         _logger.LogWarning("Deleted detection result {Id}", id);
     }
 
-    public async Task<long> AddManualTrainingSampleAsync(string messageText, bool isSpam, string source, int? confidence, string? addedBy, CancellationToken cancellationToken = default)
+    public async Task<long> AddManualTrainingSampleAsync(
+        string messageText,
+        bool isSpam,
+        string source,
+        int? confidence,
+        string? addedBy,
+        string? translatedText = null,
+        string? detectedLanguage = null,
+        CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -427,6 +446,28 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         context.Messages.Add(message);
         await context.SaveChangesAsync(cancellationToken);
 
+        // Phase 4.20+: Create translation record if provided
+        if (!string.IsNullOrWhiteSpace(translatedText) && !string.IsNullOrWhiteSpace(detectedLanguage))
+        {
+            var translation = new DataModels.MessageTranslationDto
+            {
+                MessageId = message.MessageId,
+                EditId = null, // Exclusive arc: message translation (not edit translation)
+                TranslatedText = translatedText,
+                DetectedLanguage = detectedLanguage,
+                Confidence = null, // Manual entry, no confidence score
+                TranslatedAt = DateTimeOffset.UtcNow
+            };
+
+            context.MessageTranslations.Add(translation);
+            await context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Added translation for manual training sample: message_id={MessageId}, language={Language}",
+                message.MessageId,
+                detectedLanguage);
+        }
+
         // Create detection_result record linked to the message
         // Phase 4.19: Actor system - manual samples use SystemIdentifier
         var detectionResult = new DataModels.DetectionResultRecordDto
@@ -449,12 +490,13 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Added manual training sample: message_id={MessageId}, detection_result_id={Id}, is_spam={IsSpam}, source={Source}, added_by={AddedBy}",
+            "Added manual training sample: message_id={MessageId}, detection_result_id={Id}, is_spam={IsSpam}, source={Source}, added_by={AddedBy}, has_translation={HasTranslation}",
             message.MessageId,
             detectionResult.Id,
             isSpam,
             source,
-            addedBy ?? "System");
+            addedBy ?? "System",
+            translatedText != null);
 
         return detectionResult.Id;
     }

@@ -553,39 +553,14 @@ public class ContentDetectionEngine : IContentDetectionEngine
         SpamDetectionConfig config,
         CancellationToken cancellationToken)
     {
-        // Translate foreign language to English if enabled
-        if (config.Translation.Enabled && !string.IsNullOrWhiteSpace(request.Message)
-            && request.Message.Length >= config.Translation.MinMessageLength)
-        {
-            // Quick check: if message is mostly Latin script, likely English - skip expensive OpenAI translation
-            if (IsLikelyLatinScript(request.Message, config.Translation.LatinScriptThreshold))
-            {
-                _logger.LogDebug("Message is primarily Latin script for user {UserId} - skipping translation", request.UserId);
-            }
-            else
-            {
-                try
-                {
-                    var translationResult = await _translationService.TranslateToEnglishAsync(request.Message, cancellationToken);
+        // NOTE: Translation now happens in MessageProcessingService before spam detection
+        // This method previously translated messages, but was refactored to eliminate double translation
+        // The request.Message field already contains translated text if translation was needed
 
-                    if (translationResult?.WasTranslated == true)
-                    {
-                        _logger.LogInformation("Translated {Language} message to English for user {UserId}",
-                            translationResult.DetectedLanguage, request.UserId);
+        // Future optimization: Could add Latin script quick-check here to skip checks on non-Latin text
+        // that somehow bypassed upstream translation (edge cases)
 
-                        // Return request with translated text - all subsequent checks will use this
-                        return request with { Message = translationResult.TranslatedText };
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Translation failed for user {UserId} - continuing with original text", request.UserId);
-                    // Continue with original text on translation failure
-                }
-            }
-        }
-
-        // No translation needed or failed - return original request
+        await Task.CompletedTask; // Preserve async signature for future preprocessing logic
         return request;
     }
 

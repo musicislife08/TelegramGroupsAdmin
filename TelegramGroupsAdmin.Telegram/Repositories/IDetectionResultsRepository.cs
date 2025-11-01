@@ -97,9 +97,18 @@ public interface IDetectionResultsRepository
 
     /// <summary>
     /// Add a manual training sample (creates message with chat_id=0, user_id=0 + detection_result)
+    /// Phase 4.20+: Supports optional translation data for non-English samples
     /// Returns the ID of the created detection_result
     /// </summary>
-    Task<long> AddManualTrainingSampleAsync(string messageText, bool isSpam, string source, int? confidence, string? addedBy, CancellationToken cancellationToken = default);
+    Task<long> AddManualTrainingSampleAsync(
+        string messageText,
+        bool isSpam,
+        string source,
+        int? confidence,
+        string? addedBy,
+        string? translatedText = null,
+        string? detectedLanguage = null,
+        CancellationToken cancellationToken = default);
 
     // ====================================================================================
     // File Scanning UI Methods (Phase 4.22)

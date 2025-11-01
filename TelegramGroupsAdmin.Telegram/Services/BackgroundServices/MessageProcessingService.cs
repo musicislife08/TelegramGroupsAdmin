@@ -575,10 +575,14 @@ public partial class MessageProcessingService(
                 {
                     using var detectionScope = serviceProvider.CreateScope();
                     var contentOrchestrator = detectionScope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.ContentDetectionOrchestrator>();
+
+                    // Use translated text if available (avoids double translation in ContentDetectionEngine)
+                    var textForDetection = translation?.TranslatedText ?? text;
+
                     await contentOrchestrator.RunDetectionAsync(
                         botClient,
                         message,
-                        text,
+                        textForDetection,
                         photoLocalPath,
                         editVersion: 0,
                         CancellationToken.None);

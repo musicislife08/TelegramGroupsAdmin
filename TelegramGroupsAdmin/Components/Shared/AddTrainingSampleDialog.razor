@@ -1,14 +1,51 @@
+@using TelegramGroupsAdmin.ContentDetection.Services
+
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
-            <MudTextField @bind-Value="_messageText"
-                         Label="Message Text"
-                         Required="true"
-                         RequiredError="Message text is required"
-                         Placeholder="Enter message text for training"
+            <div style="position: relative;">
+                <MudTextField @bind-Value="_messageText"
+                             Label="Message Text (Original)"
+                             Required="true"
+                             RequiredError="Message text is required"
+                             Placeholder="Enter message text for training"
+                             Variant="Variant.Outlined"
+                             Lines="4"
+                             HelperText="The original message text (any language)" />
+                <div style="position: absolute; top: 8px; right: 8px;">
+                    <MudIconButton Icon="@Icons.Material.Filled.Translate"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   title="Auto-translate to English"
+                                   OnClick="@AutoTranslate"
+                                   Disabled="@(_isTranslating || string.IsNullOrWhiteSpace(_messageText))" />
+                </div>
+            </div>
+
+            @if (_isTranslating)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    Translating...
+                </MudAlert>
+            }
+
+            <MudTextField @bind-Value="_translatedText"
+                         Label="Translated Text (English)"
+                         Placeholder="English translation (optional - will be auto-filled if you click translate button)"
                          Variant="Variant.Outlined"
                          Lines="4"
-                         HelperText="The message text that will be used for training the Bayes classifier" />
+                         HelperText="Leave empty if message is already in English. Algorithms compare against this text." />
+
+            @if (!string.IsNullOrWhiteSpace(_translatedText))
+            {
+                <MudTextField @bind-Value="_detectedLanguage"
+                             Label="Detected Language Code"
+                             Placeholder="2-letter ISO code (e.g., es, ru, fr, zh)"
+                             Variant="Variant.Outlined"
+                             MaxLength="2"
+                             HelperText="Required if translation is provided. Examples: es (Spanish), ru (Russian), fr (French)" />
+            }
 
             <MudText Typo="Typo.body1" Class="mb-2">Classification:</MudText>
             <MudRadioGroup T="bool" @bind-Value="_isSpam" Required="true" Class="ml-4">
@@ -60,18 +97,64 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Inject] private IOpenAITranslationService TranslationService { get; set; } = null!;
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
 
     private string _messageText = string.Empty;
+    private string _translatedText = string.Empty;
+    private string _detectedLanguage = string.Empty;
     private bool _isSpam = true; // Default to spam for safety
     private string _source = "manual";
     private bool _isSubmitting;
+    private bool _isTranslating;
 
     private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>
+    /// Auto-translate the message text using OpenAI (Phase 4.20+)
+    /// </summary>
+    private async Task AutoTranslate()
+    {
+        if (string.IsNullOrWhiteSpace(_messageText))
+            return;
+
+        _isTranslating = true;
+        try
+        {
+            var result = await TranslationService.TranslateToEnglishAsync(_messageText.Trim(), CancellationToken.None);
+
+            if (result?.WasTranslated == true)
+            {
+                _translatedText = result.TranslatedText;
+                _detectedLanguage = result.DetectedLanguage;
+                Snackbar.Add($"Translated from {result.DetectedLanguage.ToUpper()} to English", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Message is already in English, no translation needed", Severity.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Translation failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isTranslating = false;
+        }
+    }
 
     private Task Submit()
     {
         if (string.IsNullOrWhiteSpace(_messageText) || string.IsNullOrWhiteSpace(_source))
             return Task.CompletedTask;
+
+        // Validate: if translation provided, language code is required
+        if (!string.IsNullOrWhiteSpace(_translatedText) && string.IsNullOrWhiteSpace(_detectedLanguage))
+        {
+            Snackbar.Add("Please provide a language code if you provide a translation", Severity.Warning);
+            return Task.CompletedTask;
+        }
 
         _isSubmitting = true;
         try
@@ -81,7 +164,9 @@
                 MessageText = _messageText.Trim(),
                 IsSpam = _isSpam,
                 Source = _source,
-                Confidence = 100 // Always 100 for manual samples (will be converted to ±100 net_confidence)
+                Confidence = 100, // Always 100 for manual samples (will be converted to ±100 net_confidence)
+                TranslatedText = string.IsNullOrWhiteSpace(_translatedText) ? null : _translatedText.Trim(),
+                DetectedLanguage = string.IsNullOrWhiteSpace(_detectedLanguage) ? null : _detectedLanguage.Trim().ToLower()
             };
 
             MudDialog.Close(DialogResult.Ok(data));

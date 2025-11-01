@@ -27,4 +27,9 @@ public class DetectionResultRecord
     public int NetConfidence { get; set; }  // Required: computed column is_spam derives from this
     public string? CheckResultsJson { get; set; }  // Phase 2.6: JSON string with all check results
     public int EditVersion { get; set; }            // Phase 2.6: Message version (0 = original, 1+ = edits)
+
+    /// <summary>
+    /// Translation of the message (Phase 4.20+: Translation display support)
+    /// </summary>
+    public MessageTranslation? Translation { get; set; }
 }

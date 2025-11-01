@@ -182,28 +182,43 @@ public class SimilaritySpamCheck(
                 logger.LogInformation("Refreshing similarity cache for chat {ChatId}...", chatId);
 
                 // Load spam samples from database with guardrail
+                // Phase 4.20+: Use translated text when available (matches spam detection behavior)
                 await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
-                var samples = await dbContext.DetectionResults
-                    .AsNoTracking()
-                    .Include(dr => dr.Message)
-                    .Where(dr => dr.IsSpam && dr.UsedForTraining)
-                    .OrderByDescending(dr => dr.DetectedAt)
-                    .Take(MAX_SIMILARITY_SAMPLES) // Guardrail
-                    .Select(dr => new TrainingSample(
+                var samples = await (
+                    from dr in dbContext.DetectionResults
+                    join m in dbContext.Messages on dr.MessageId equals m.MessageId
+                    join mt in dbContext.MessageTranslations on m.MessageId equals mt.MessageId into translations
+                    from mt in translations.DefaultIfEmpty()
+                    where dr.IsSpam && dr.UsedForTraining
+                    orderby dr.DetectedAt descending
+                    select new
+                    {
                         dr.Id,
-                        dr.Message!.MessageText!,
+                        MessageText = mt != null ? mt.TranslatedText : m.MessageText,
                         dr.IsSpam,
                         dr.DetectedAt,
                         dr.DetectionSource,
                         dr.Confidence,
-                        new long[] { dr.Message!.ChatId },
-                        dr.SystemIdentifier ?? "unknown", // Phase 4.19: Actor system (simplified for internal use)
-                        0, // DetectionCount removed in normalized schema
-                        null // LastDetectedDate removed in normalized schema
-                    ))
-                    .ToListAsync(cancellationToken);
+                        m.ChatId,
+                        dr.SystemIdentifier
+                    }
+                )
+                .AsNoTracking()
+                .Take(MAX_SIMILARITY_SAMPLES) // Guardrail
+                .ToListAsync(cancellationToken);
 
-                _cachedSamples = samples;
+                _cachedSamples = samples.Select(s => new TrainingSample(
+                    s.Id,
+                    s.MessageText!,
+                    s.IsSpam,
+                    s.DetectedAt,
+                    s.DetectionSource,
+                    s.Confidence,
+                    new long[] { s.ChatId },
+                    s.SystemIdentifier ?? "unknown", // Phase 4.19: Actor system (simplified for internal use)
+                    0, // DetectionCount removed in normalized schema
+                    null // LastDetectedDate removed in normalized schema
+                )).ToList();
 
                 logger.LogInformation("Loaded {Count} spam samples from database", _cachedSamples.Count);
 
