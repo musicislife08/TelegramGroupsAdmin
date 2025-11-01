@@ -178,6 +178,183 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ---
 
+### ML-5: Algorithm Performance Tracking
+
+**Priority:** MEDIUM
+**Impact:** Identify slow checks, trigger performance-based recommendations
+
+**Phase 1: Data Collection**
+- Ensure all `IContentCheck` implementations populate `ProcessingTimeMs` in `ContentCheckResponse`
+- Use `Stopwatch.GetTimestamp()` for high-precision, low-overhead timing (not `Stopwatch.StartNew()`)
+- Data already stored in `check_results_json.Checks[].ProcessingTimeMs` (no new table needed)
+
+**Phase 2: Analytics UI**
+- Add "Algorithm Performance Breakdown" section to `/analytics` → Performance Metrics
+- Parse `check_results_json` from `detection_results` table
+- Extract `ProcessingTimeMs` for each algorithm (by `CheckName` enum)
+- Calculate per-algorithm metrics:
+  - Average execution time
+  - P95 execution time
+  - Total time contribution (avg × frequency)
+  - Slowest checks (identify outliers)
+- Display in table with color-coded thresholds:
+  - Green: <100ms average
+  - Yellow: 100-500ms average
+  - Red: >500ms average (⚠️ warning)
+
+**Phase 3: Performance Recommendations**
+- Track when total check time exceeds threshold (e.g., >200ms average)
+- Identify contributing algorithms (e.g., "StopWords: 245ms, 73% of total time")
+- Trigger recommendations:
+  - "StopWords check is slow → Run ML-6 recommendations to reduce word count"
+  - "OpenAI Vision P95: 3.4s → Consider disabling for low-risk chats"
+
+**Example UI:**
+```
+Algorithm Performance (Last 30 Days)
+┌────────────────────────────────────────────────┐
+│ StopWords      Avg: 45ms   P95: 120ms    ✓    │
+│ CAS            Avg: 12ms   P95: 35ms     ✓    │
+│ Similarity     Avg: 87ms   P95: 215ms    ✓    │
+│ OpenAI         Avg: 1.2s   P95: 3.4s     ⚠️   │
+│ ImageSpam      Avg: 890ms  P95: 2.1s     ⚠️   │
+└────────────────────────────────────────────────┘
+```
+
+**Technical Notes:**
+- Reuse existing `AnalyticsRepository` with new query method
+- Parse JSON using `CheckResultsSerializer.Deserialize()` (already handles both formats)
+- Group by `CheckName` enum for aggregation
+- Filter to successful checks only (exclude errors)
+
+---
+
+### ML-6: Stop Words ML Recommendations
+
+**Priority:** MEDIUM
+**Impact:** Automated stop word maintenance, reduce false positives, improve performance
+
+**Algorithm:**
+
+**Words to ADD (Spam-Only Candidates):**
+1. Extract all words from spam training samples (`detection_results` WHERE `is_spam=true` AND `used_for_training=true`)
+2. Count frequency across spam corpus
+3. Count same words across ALL legitimate messages (`messages` WHERE `is_spam=false`)
+4. Calculate spam-to-legit ratio: `spamFreq / (legitFreq + 1)`
+5. Filter candidates:
+   - Spam frequency ≥ 5% (appears in at least 5% of spam messages)
+   - Legit frequency < 1% (rare in legitimate messages)
+   - Not already in `stop_words` table
+   - Minimum spam sample size: 50 messages (fail-fast if insufficient)
+6. Rank by ratio (highest = best candidates)
+
+**Words to REMOVE (Low Precision / Dead Weight):**
+1. For each existing stop word, parse `check_results_json` to find when StopWords check triggered
+2. Cross-reference against message outcomes:
+   - **Correct**: Stop word triggered → message was spam (`is_spam=true`)
+   - **False Positive**: Stop word triggered → message was ham (`is_spam=false` OR vetoed by OpenAI)
+3. Calculate precision: `correctTriggers / (correctTriggers + falsePositives)`
+4. Recommend removal if:
+   - Precision < 70% (causes too many false positives)
+   - Never triggered in last 30 days (dead weight)
+   - Total triggers < 5 (insufficient data)
+
+**Performance-Based Cleanup (Triggered by ML-5):**
+- When `StopWords` check average time exceeds threshold (e.g., >200ms)
+- Calculate inefficiency score: `(falsePositiveRate × executionCost) / (precision + 0.01)`
+- Rank all stop words by inefficiency (worst performers first)
+- Recommend removing bottom N words to bring execution time back to target (<150ms)
+- Estimate time savings per word removed
+
+**UI Design (Single Dialog):**
+```
+┌────────────────────────────────────────────────┐
+│ Stop Word Recommendations                      │
+│                                                │
+│ [Refresh Analysis]  Last updated: 2 hours ago │
+│                                                │
+│ ⚠️ Performance Warning: StopWords check        │
+│    averaging 245ms (threshold: 200ms).         │
+│    Consider removing low-precision words.      │
+│                                                │
+│ ┌─ Suggested Additions (12) ────────────────┐ │
+│ │ crypto (89% spam / 2% legit, ratio: 44x)  │ │
+│ │ investment (76% spam / 5% legit, 15x)     │ │
+│ │ earn (71% spam / 8% legit, 9x)            │ │
+│ │ ... [+9 more]                             │ │
+│ └──────────────── [Add All 12 Words] ───────┘ │
+│                                                │
+│ ┌─ Suggested Removals (3) ───────────────────┐│
+│ │ free (12% precision, 34 false positives)  │ │
+│ │ join (45% precision, 18 false positives)  │ │
+│ │ welcome (never triggered, 0 spam caught)  │ │
+│ └──────────────── [Remove All 3 Words] ─────┘ │
+│                                                │
+│ ⚠️ Performance Batch: Removing 8 least        │
+│    effective words will reduce time by ~50ms  │
+│ ┌─ Performance Cleanup (8) ──────────────────┐│
+│ │ and (2% precision, 89 false positives)    │ │
+│ │ the (5% precision, 67 false positives)    │ │
+│ │ ... [+6 more]                             │ │
+│ └────────────── [Remove Performance Batch] ─┘ │
+│                                                │
+│                              [Close]           │
+└────────────────────────────────────────────────┘
+```
+
+**Confirmation Dialog (All Actions):**
+```
+Confirm Stop Word Changes
+
+Add 12 words:
+  crypto, investment, earn, ... (+9)
+
+Remove 3 words:
+  free, join, welcome
+
+✓ Changes will apply to new messages
+✓ Estimated performance: -15ms/check
+
+[Confirm] [Cancel]
+```
+
+**Data Volume Validation:**
+```csharp
+// Before analysis, fail-fast if insufficient data
+var spamSampleCount = await _db.DetectionResults
+    .Where(d => d.IsSpam && d.UsedForTraining)
+    .CountAsync();
+
+var legitMessageCount = await _db.Messages
+    .Where(m => !m.IsSpam)
+    .CountAsync();
+
+if (spamSampleCount < 50 || legitMessageCount < 100)
+{
+    return Error("Insufficient data: Need ≥50 spam samples and ≥100 legitimate messages");
+}
+```
+
+**Implementation:**
+- New service: `StopWordRecommendationService` (follows `ThresholdRecommendationService` pattern)
+- Reuse `ITokenizerService` for word extraction
+- Store recommendations in `threshold_recommendations` table (reuse existing schema)
+- Settings → Stop Words → [View Recommendations] button opens dialog
+- Single [Confirm] for all changes (bulk add + bulk remove)
+
+**Edge Cases:**
+- Common words ("the", "and") have high legit frequency → ratio low → won't be recommended ✓
+- Rare spam-only words ("c0in", "crypt0") have high ratio → good candidates ✓
+- Overly broad stop words ("free") show low precision → recommend removal ✓
+- Performance batch only appears when StopWords check is slow (>200ms avg)
+
+**Testing:**
+- Unit tests for word extraction, frequency calculation, ratio scoring
+- Integration tests with known spam/ham corpus
+- Performance tests to validate timing estimates
+
+---
+
 ### FEATURE-5.3: Migrate API Keys to Database with UI Management
 
 **Priority:** HIGH - Better architecture, removes env var dependency
