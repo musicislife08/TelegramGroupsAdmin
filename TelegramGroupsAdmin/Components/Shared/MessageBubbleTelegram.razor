@@ -257,7 +257,7 @@
                         <div class="tg-actions-list">
                             @if (EditCount > 0)
                             {
-                                <MudMenuItem OnClick="@(() => OnViewEdits.InvokeAsync(Message))">
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnViewEdits.InvokeAsync(Message); })">
                                     <div class="tg-menu-item">
                                         <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Small" />
                                         <span>View Edits (@EditCount)</span>
@@ -267,7 +267,7 @@
 
                             @if (DetectionHistory?.Count > 0)
                             {
-                                <MudMenuItem OnClick="@(() => OnViewDetections.InvokeAsync(Message))">
+                                <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnViewDetections.InvokeAsync(Message); })">
                                     <div class="tg-menu-item">
                                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" />
                                         <span>Detection History</span>
