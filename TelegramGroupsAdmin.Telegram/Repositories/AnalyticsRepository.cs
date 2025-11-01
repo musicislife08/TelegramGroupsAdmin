@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.ContentDetection.Utilities;
+using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -262,15 +264,17 @@ public class AnalyticsRepository : IAnalyticsRepository
 
             foreach (var check in checks)
             {
-                if (!algorithmStats.ContainsKey(check.Name))
+                var checkName = check.CheckName.ToString();
+
+                if (!algorithmStats.ContainsKey(checkName))
                 {
-                    algorithmStats[check.Name] = new AlgorithmStatsAccumulator();
+                    algorithmStats[checkName] = new AlgorithmStatsAccumulator();
                 }
 
-                var stats = algorithmStats[check.Name];
+                var stats = algorithmStats[checkName];
                 stats.TotalChecks++;
 
-                if (check.Result == "spam")
+                if (check.Result == CheckResultType.Spam)
                 {
                     stats.SpamVotes++;
                     stats.SpamConfidences.Add(check.Confidence);
@@ -280,7 +284,7 @@ public class AnalyticsRepository : IAnalyticsRepository
                         stats.ContributedToFPs++;
                     }
                 }
-                else if (check.Result == "clean" && isFalseNegative)
+                else if (check.Result == CheckResultType.Clean && isFalseNegative)
                 {
                     stats.ContributedToFNs++;
                 }
@@ -306,48 +310,9 @@ public class AnalyticsRepository : IAnalyticsRepository
         return result;
     }
 
-    private List<CheckResult> ParseCheckResults(string? json)
+    private List<ContentDetection.Models.CheckResult> ParseCheckResults(string? json)
     {
-        if (string.IsNullOrWhiteSpace(json))
-            return [];
-
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            if (!root.TryGetProperty("checks", out var checksArray))
-                return [];
-
-            var results = new List<CheckResult>();
-
-            foreach (var check in checksArray.EnumerateArray())
-            {
-                var name = check.GetProperty("name").GetString() ?? "unknown";
-                var result = check.GetProperty("result").GetString() ?? "clean";
-                var conf = check.GetProperty("conf").GetDouble();
-
-                results.Add(new CheckResult
-                {
-                    Name = name,
-                    Result = result,
-                    Confidence = conf
-                });
-            }
-
-            return results;
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
-    private class CheckResult
-    {
-        public string Name { get; set; } = string.Empty;
-        public string Result { get; set; } = string.Empty;
-        public double Confidence { get; set; }
+        return CheckResultsSerializer.Deserialize(json ?? string.Empty);
     }
 
     private class AlgorithmStatsAccumulator

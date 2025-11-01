@@ -1,5 +1,8 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Utilities;
+using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.ML;
 
@@ -34,17 +37,24 @@ public class FeatureExtractionService
 
         try
         {
-            var json = JsonDocument.Parse(checkResultsJson);
-            var checks = json.RootElement.GetProperty("checks");
+            var checks = CheckResultsSerializer.Deserialize(checkResultsJson);
 
-            // Parse all algorithm results
+            // Parse all algorithm results (convert enum-based model to string-based for ML features)
             var algorithmScores = new Dictionary<string, (string result, float confidence)>();
 
-            foreach (var check in checks.EnumerateArray())
+            foreach (var check in checks)
             {
-                var name = check.GetProperty("name").GetString() ?? "";
-                var result = check.GetProperty("result").GetString() ?? "";
-                var confidence = check.TryGetProperty("conf", out var confProp) ? confProp.GetSingle() : 0f;
+                var name = check.CheckName.ToString();
+                var result = check.Result switch
+                {
+                    CheckResultType.Clean => "clean",
+                    CheckResultType.Spam => "spam",
+                    CheckResultType.Review => "review",
+                    CheckResultType.Malware => "malware",
+                    CheckResultType.HardBlock => "hardblock",
+                    _ => "clean"
+                };
+                var confidence = (float)check.Confidence;
 
                 algorithmScores[name] = (result, confidence);
             }

@@ -4,29 +4,56 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 namespace TelegramGroupsAdmin.ContentDetection.Utilities;
 
 /// <summary>
-/// Static utility for serializing spam check results to compact JSON format
-/// Extracted from ContentDetectionEngine to avoid reflection usage
-/// Phase 4.5: Updated to use Result enum instead of IsSpam boolean
+/// Static utility for serializing/deserializing spam check results to/from JSON
+/// Uses concrete CheckResult/CheckResults models for type safety
 /// </summary>
 public static class CheckResultsSerializer
 {
     /// <summary>
-    /// Serialize check results to compact JSON with minimal field names to save database space
-    /// Returns JSON like: {"checks":[{"name":"StopWords","result":"spam","conf":95.0,"reason":"..."},...]}
+    /// Serialize check results to JSON with proper field names and enum values
+    /// Returns JSON like: {"Checks":[{"CheckName":0,"Result":1,"Confidence":95,"Reason":"..."},...]}
+    /// Enums are serialized as integers for database efficiency
     /// </summary>
     public static string Serialize(List<ContentCheckResponse> checkResults)
     {
-        var checks = checkResults.Select(c => new
+        var results = new CheckResults
         {
-            name = c.CheckName,
-            result = c.Result.ToString().ToLowerInvariant(), // "spam", "clean", or "review"
-            conf = c.Confidence,
-            reason = c.Details
-        });
+            Checks = checkResults.Select(c => new CheckResult
+            {
+                CheckName = c.CheckName,
+                Result = c.Result,
+                Confidence = c.Confidence,
+                Reason = c.Details
+            }).ToList()
+        };
 
-        return JsonSerializer.Serialize(new { checks }, new JsonSerializerOptions
+        return JsonSerializer.Serialize(results, new JsonSerializerOptions
         {
             WriteIndented = false
         });
+    }
+
+    /// <summary>
+    /// Deserialize check results JSON back to CheckResult list
+    /// Handles enum deserialization automatically (integers to enum values)
+    /// </summary>
+    public static List<CheckResult> Deserialize(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        try
+        {
+            var results = JsonSerializer.Deserialize<CheckResults>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            return results?.Checks ?? [];
+        }
+        catch
+        {
+            return [];
+        }
     }
 }

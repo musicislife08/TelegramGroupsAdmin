@@ -13,7 +13,6 @@ using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Services;
-using TelegramGroupsAdmin.Services.Vision;
 using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin;
@@ -253,9 +252,6 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddHttpClient();
-
-        // Vision spam detection service (uses named "OpenAI" HttpClient)
-        services.AddScoped<IVisionSpamDetectionService, OpenAiVisionSpamDetectionService>();
 
         return services;
     }

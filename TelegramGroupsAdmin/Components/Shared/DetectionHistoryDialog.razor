@@ -1,4 +1,6 @@
 @using System.Text.Json
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Utilities
 
 <MudDialog>
     <DialogContent>
@@ -84,11 +86,11 @@
                                                                 @foreach (var check in checkResults)
                                                                 {
                                                                     <tr>
-                                                                        <td><strong>@check.Name</strong></td>
+                                                                        <td><strong>@check.CheckName.ToString()</strong></td>
                                                                         <td>
                                                                             <MudChip T="string" Size="Size.Small"
-                                                                                     Color="@(check.IsSpam ? Color.Error : Color.Success)">
-                                                                                @(check.IsSpam ? "Spam" : "Ham")
+                                                                                     Color="@(check.Result == CheckResultType.Spam ? Color.Error : Color.Success)">
+                                                                                @check.Result.ToString()
                                                                             </MudChip>
                                                                         </td>
                                                                         <td>@check.Confidence%</td>
@@ -139,49 +141,6 @@
 
     private List<CheckResult>? ParseCheckResults(string json)
     {
-        try
-        {
-            var doc = JsonDocument.Parse(json);
-            var checksArray = doc.RootElement.GetProperty("checks");
-
-            var results = new List<CheckResult>();
-            foreach (var check in checksArray.EnumerateArray())
-            {
-                // Phase 4.5: Handle both old format (spam: boolean) and new format (result: string)
-                bool isSpam;
-                if (check.TryGetProperty("result", out var resultProp))
-                {
-                    // New format: "spam", "clean", or "review"
-                    var resultStr = resultProp.GetString() ?? "clean";
-                    isSpam = resultStr.Equals("spam", StringComparison.OrdinalIgnoreCase);
-                }
-                else
-                {
-                    // Old format: boolean spam property (backwards compatibility)
-                    isSpam = check.GetProperty("spam").GetBoolean();
-                }
-
-                results.Add(new CheckResult
-                {
-                    Name = check.GetProperty("name").GetString() ?? "Unknown",
-                    IsSpam = isSpam,
-                    Confidence = check.GetProperty("conf").GetInt32(),
-                    Reason = check.GetProperty("reason").GetString() ?? ""
-                });
-            }
-            return results;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private record CheckResult
-    {
-        public required string Name { get; init; }
-        public required bool IsSpam { get; init; }
-        public required int Confidence { get; init; }
-        public required string Reason { get; init; }
+        return CheckResultsSerializer.Deserialize(json);
     }
 }

@@ -442,10 +442,10 @@ public class MessageHistoryRepositoryTests
         );
 
         // Act
-        await _translationService.InsertTranslationAsync(translation, CancellationToken.None);
+        await _translationService!.InsertTranslationAsync(translation, CancellationToken.None);
 
         // Assert - Verify translation inserted
-        var retrieved = await _translationService.GetTranslationForMessageAsync(messageId);
+        var retrieved = await _translationService!.GetTranslationForMessageAsync(messageId);
         Assert.That(retrieved, Is.Not.Null);
         Assert.That(retrieved!.MessageId, Is.EqualTo(messageId));
         Assert.That(retrieved.EditId, Is.Null, "Should be message translation");
@@ -461,7 +461,7 @@ public class MessageHistoryRepositoryTests
         const long nonExistentMessageId = 999999;
 
         // Act
-        var translation = await _translationService.GetTranslationForMessageAsync(nonExistentMessageId);
+        var translation = await _translationService!.GetTranslationForMessageAsync(nonExistentMessageId);
 
         // Assert - Should return null for non-existent message
         Assert.That(translation, Is.Null);
@@ -547,10 +547,10 @@ public class MessageHistoryRepositoryTests
         );
 
         // Act
-        await _editService.InsertMessageEditAsync(edit);
+        await _editService!.InsertMessageEditAsync(edit);
 
         // Assert
-        var edits = await _editService.GetEditsForMessageAsync(messageId);
+        var edits = await _editService!.GetEditsForMessageAsync(messageId);
         Assert.That(edits, Is.Not.Null);
         Assert.That(edits.Count, Is.GreaterThan(0));
 
@@ -585,11 +585,11 @@ public class MessageHistoryRepositoryTests
             NewContentHash: "hash3"
         );
 
-        await _editService.InsertMessageEditAsync(edit1);
-        await _editService.InsertMessageEditAsync(edit2);
+        await _editService!.InsertMessageEditAsync(edit1);
+        await _editService!.InsertMessageEditAsync(edit2);
 
         // Act
-        var edits = await _editService.GetEditsForMessageAsync(messageId);
+        var edits = await _editService!.GetEditsForMessageAsync(messageId);
 
         // Assert
         Assert.That(edits.Count, Is.GreaterThanOrEqualTo(2));
@@ -608,7 +608,7 @@ public class MessageHistoryRepositoryTests
         var msg2Id = messages[1].MessageId;
 
         // Add 2 edits to msg1
-        await _editService.InsertMessageEditAsync(new UiModels.MessageEditRecord(
+        await _editService!.InsertMessageEditAsync(new UiModels.MessageEditRecord(
             Id: 0,
             MessageId: msg1Id,
             OldText: "Original",
@@ -617,7 +617,7 @@ public class MessageHistoryRepositoryTests
             OldContentHash: "h1",
             NewContentHash: "h2"
         ));
-        await _editService.InsertMessageEditAsync(new UiModels.MessageEditRecord(
+        await _editService!.InsertMessageEditAsync(new UiModels.MessageEditRecord(
             Id: 0,
             MessageId: msg1Id,
             OldText: "Edit 1",
@@ -628,7 +628,7 @@ public class MessageHistoryRepositoryTests
         ));
 
         // Add 1 edit to msg2
-        await _editService.InsertMessageEditAsync(new UiModels.MessageEditRecord(
+        await _editService!.InsertMessageEditAsync(new UiModels.MessageEditRecord(
             Id: 0,
             MessageId: msg2Id,
             OldText: "Original",
@@ -639,7 +639,7 @@ public class MessageHistoryRepositoryTests
         ));
 
         // Act
-        var counts = await _editService.GetEditCountsForMessagesAsync(new[] { msg1Id, msg2Id });
+        var counts = await _editService!.GetEditCountsForMessagesAsync(new[] { msg1Id, msg2Id });
 
         // Assert
         Assert.That(counts, Is.Not.Null);
@@ -836,7 +836,7 @@ public class MessageHistoryRepositoryTests
         var statsBefore = await _statsService!.GetStatsAsync();
 
         // Act
-        var (deletedCount, imagePaths, mediaPaths) = await _repository.CleanupExpiredAsync();
+        var (deletedCount, imagePaths, mediaPaths) = await _repository!.CleanupExpiredAsync();
 
         // Assert - Should not delete anything (golden dataset is recent)
         Assert.That(deletedCount, Is.EqualTo(0), "Should not delete recent messages from golden dataset");
@@ -844,7 +844,7 @@ public class MessageHistoryRepositoryTests
         Assert.That(mediaPaths.Count, Is.EqualTo(0));
 
         // Verify message count unchanged
-        var statsAfter = await _statsService.GetStatsAsync();
+        var statsAfter = await _statsService!.GetStatsAsync();
         Assert.That(statsAfter.TotalMessages, Is.EqualTo(statsBefore.TotalMessages));
     }
 
