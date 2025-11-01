@@ -53,6 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<TelegramBotClientFactory>();
         services.AddScoped<ITelegramImageService, TelegramImageService>();
         services.AddSingleton<TelegramPhotoService>();
+        services.AddSingleton<TelegramMediaService>();
 
         // Message processing handlers (REFACTOR-1: extracted from MessageProcessingService)
         services.AddScoped<TelegramGroupsAdmin.Telegram.Handlers.MediaProcessingHandler>();

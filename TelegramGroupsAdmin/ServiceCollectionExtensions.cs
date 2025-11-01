@@ -149,12 +149,6 @@ public static class ServiceCollectionExtensions
         // Message history adapter for spam detection library
         services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
 
-        // Telegram photo service (chat icons, user profile photos)
-        services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.TelegramPhotoService>();
-
-        // Telegram media service (Phase 4.X: GIF, Video, Audio, Voice, Sticker, VideoNote, Document downloads)
-        services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.TelegramMediaService>();
-
         // Media refetch services (Phase 4.X: Re-download missing media after restore)
         services.AddSingleton<TelegramGroupsAdmin.Services.Media.IMediaNotificationService, TelegramGroupsAdmin.Services.Media.MediaNotificationService>();
         services.AddSingleton<TelegramGroupsAdmin.Services.Media.IMediaRefetchQueueService, TelegramGroupsAdmin.Services.Media.MediaRefetchQueueService>();
