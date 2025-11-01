@@ -32,8 +32,24 @@ BEGIN
         SELECT jsonb_build_object(
             'Checks', jsonb_agg(
                 jsonb_build_object(
-                    'CheckName', (check_name_map->>(elem->>'name'))::int,
-                    'Result', (result_map->>(elem->>'result'))::int,
+                    'CheckName', COALESCE(
+                        -- If name is already an integer, use it directly
+                        CASE WHEN jsonb_typeof(elem->'name') = 'number'
+                             THEN (elem->>'name')::int
+                             ELSE NULL
+                        END,
+                        -- Otherwise look up string name in map
+                        (check_name_map->>(elem->>'name'))::int
+                    ),
+                    'Result', COALESCE(
+                        -- If result is already an integer, use it directly
+                        CASE WHEN jsonb_typeof(elem->'result') = 'number'
+                             THEN (elem->>'result')::int
+                             ELSE NULL
+                        END,
+                        -- Otherwise look up string result in map
+                        (result_map->>(elem->>'result'))::int
+                    ),
                     'Confidence', (elem->>'conf')::int,
                     'Reason', elem->>'reason'
                 )
