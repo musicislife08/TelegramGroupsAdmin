@@ -3,7 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.ML;
 using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.Data;
 
 namespace TelegramGroupsAdmin.ContentDetection.ML;
@@ -224,37 +227,34 @@ public class ThresholdRecommendationService : IThresholdRecommendationService
                 if (string.IsNullOrEmpty(detection.CheckResultsJson))
                     continue;
 
-                var json = JsonDocument.Parse(detection.CheckResultsJson);
-                var checks = json.RootElement.GetProperty("checks");
-
-                var checkResults = new List<(string name, string result)>();
-
-                foreach (var check in checks.EnumerateArray())
-                {
-                    var name = check.GetProperty("name").GetString() ?? "";
-                    var result = check.GetProperty("result").GetString() ?? "";
-                    checkResults.Add((name, result));
-                }
+                // Use CheckResultsSerializer to handle both old and new formats
+                var checkResults = CheckResultsSerializer.Deserialize(detection.CheckResultsJson);
+                if (checkResults == null || !checkResults.Any())
+                    continue;
 
                 // Identify if this was vetoed by OpenAI
-                var hasOpenAIClean = checkResults.Any(c => c.name == "OpenAI" && c.result == "clean");
-                var otherSpamChecks = checkResults.Where(c => c.name != "OpenAI" && c.result == "spam").ToList();
+                var hasOpenAIClean = checkResults.Any(c =>
+                    c.CheckName == CheckName.OpenAI && c.Result == CheckResultType.Clean);
+                var otherSpamChecks = checkResults.Where(c =>
+                    c.CheckName != CheckName.OpenAI && c.Result == CheckResultType.Spam).ToList();
                 bool wasVetoed = hasOpenAIClean && otherSpamChecks.Any();
 
                 // Update statistics for each algorithm that flagged spam
-                foreach (var check in checkResults.Where(c => c.result == "spam" && c.name != "OpenAI"))
+                foreach (var check in checkResults.Where(c =>
+                    c.Result == CheckResultType.Spam && c.CheckName != CheckName.OpenAI))
                 {
-                    if (!stats.ContainsKey(check.name))
+                    var checkName = check.CheckName.ToString();
+                    if (!stats.ContainsKey(checkName))
                     {
-                        stats[check.name] = new AlgorithmVetoStats();
+                        stats[checkName] = new AlgorithmVetoStats();
                     }
 
-                    stats[check.name].TotalFlags++;
+                    stats[checkName].TotalFlags++;
 
                     if (wasVetoed)
                     {
-                        stats[check.name].VetoedCount++;
-                        stats[check.name].VetoedMessageIds.Add(detection.DetectionId);
+                        stats[checkName].VetoedCount++;
+                        stats[checkName].VetoedMessageIds.Add(detection.DetectionId);
                     }
                 }
             }
