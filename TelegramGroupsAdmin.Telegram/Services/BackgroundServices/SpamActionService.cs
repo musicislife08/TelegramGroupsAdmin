@@ -82,6 +82,12 @@ public class SpamActionService(
             using var scope = serviceProvider.CreateScope();
             var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
             var moderationActionService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
+            var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
+            var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
+            var botFactory = scope.ServiceProvider.GetRequiredService<TelegramBotClientFactory>();
+            var telegramOptions = scope.ServiceProvider.GetRequiredService<IOptions<TelegramOptions>>().Value;
+            var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+            var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
 
             // Phase 4.13: Check for hard block or malware (different handling than spam)
             var hardBlockResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.UrlBlocklist);
@@ -96,7 +102,10 @@ public class SpamActionService(
 
                 // Execute instant ban across all chats
                 await ExecuteAutoBanAsync(
-                    scope.ServiceProvider,
+                    userActionsRepo,
+                    managedChatsRepo,
+                    botFactory,
+                    telegramOptions,
                     message,
                     spamResult,
                     hardBlockResult,
@@ -136,6 +145,10 @@ public class SpamActionService(
                 // Create critical alert for admin review
                 await CreateBorderlineReportAsync(
                     reportsRepo,
+                    chatAdminsRepository,
+                    messagingService,
+                    botFactory,
+                    telegramOptions,
                     message,
                     spamResult,
                     detectionResult,
@@ -169,6 +182,10 @@ public class SpamActionService(
                 // OpenAI uncertain - send to admin review instead of auto-ban
                 await CreateBorderlineReportAsync(
                     reportsRepo,
+                    chatAdminsRepository,
+                    messagingService,
+                    botFactory,
+                    telegramOptions,
                     message,
                     spamResult,
                     detectionResult,
@@ -204,7 +221,10 @@ public class SpamActionService(
                     cancellationToken);
 
                 await ExecuteAutoBanAsync(
-                    scope.ServiceProvider,
+                    userActionsRepo,
+                    managedChatsRepo,
+                    botFactory,
+                    telegramOptions,
                     message,
                     spamResult,
                     openAIResult,
@@ -242,6 +262,10 @@ public class SpamActionService(
 
                 await CreateBorderlineReportAsync(
                     reportsRepo,
+                    chatAdminsRepository,
+                    messagingService,
+                    botFactory,
+                    telegramOptions,
                     message,
                     spamResult,
                     detectionResult,
@@ -265,9 +289,14 @@ public class SpamActionService(
 
     /// <summary>
     /// Create a report for borderline spam detections
+    /// Phase 5.1: Sends DM notifications to admins
     /// </summary>
-    private static async Task CreateBorderlineReportAsync(
+    private async Task CreateBorderlineReportAsync(
         IReportsRepository reportsRepo,
+        IChatAdminsRepository chatAdminsRepository,
+        IUserMessagingService messagingService,
+        TelegramBotClientFactory botFactory,
+        TelegramOptions telegramOptions,
         Message message,
         TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
         DetectionResultRecord detectionResult,
@@ -298,14 +327,55 @@ public class SpamActionService(
             WebUserId: null // System-generated
         );
 
-        await reportsRepo.InsertAsync(report, cancellationToken);
+        var reportId = await reportsRepo.InsertAsync(report, cancellationToken);
+
+        // Send DM notifications to admins (same pattern as ReportCommand)
+        var admins = await chatAdminsRepository.GetChatAdminsAsync(message.Chat.Id, cancellationToken);
+        var adminUserIds = admins.Select(a => a.TelegramId).ToList();
+
+        if (adminUserIds.Any())
+        {
+            var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
+            var reportedUser = message.From;
+            var messagePreview = message.Text?.Length > 100
+                ? message.Text.Substring(0, 100) + "..."
+                : message.Text ?? "[Media message]";
+
+            var reportNotification = $"🚨 **New Auto-Detected Report #{reportId}**\n\n" +
+                                    $"**Chat:** {chatName}\n" +
+                                    $"**Reported by:** Auto-Detection System\n" +
+                                    $"**Reported user:** @{reportedUser?.Username ?? reportedUser?.FirstName ?? reportedUser?.Id.ToString() ?? "Unknown"}\n" +
+                                    $"**Message:** {messagePreview}\n" +
+                                    $"**Confidence:** Net {spamResult.NetConfidence}% / Max {spamResult.MaxConfidence}%\n\n" +
+                                    $"[Jump to message](https://t.me/c/{Math.Abs(message.Chat.Id).ToString().TrimStart('-')}/{message.MessageId})\n\n" +
+                                    $"Review in the Reports tab or use moderation commands.";
+
+            var botClient = botFactory.GetOrCreate(telegramOptions.BotToken);
+            var results = await messagingService.SendToMultipleUsersAsync(
+                botClient,
+                userIds: adminUserIds,
+                chatId: message.Chat.Id,
+                messageText: reportNotification,
+                replyToMessageId: message.MessageId,
+                cancellationToken);
+
+            var dmCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.PrivateDm);
+            var mentionCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.ChatMention);
+
+            logger.LogInformation(
+                "Auto-detection report {ReportId} notification sent to {TotalAdmins} admins ({DmCount} via DM, {MentionCount} via chat mention)",
+                reportId, results.Count, dmCount, mentionCount);
+        }
     }
 
     /// <summary>
     /// Execute auto-ban for confident spam across all managed chats
     /// </summary>
     private async Task ExecuteAutoBanAsync(
-        IServiceProvider scopedServiceProvider,
+        IUserActionsRepository userActionsRepo,
+        IManagedChatsRepository managedChatsRepo,
+        TelegramBotClientFactory botFactory,
+        TelegramOptions telegramOptions,
         Message message,
         TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
         TelegramGroupsAdmin.ContentDetection.Models.ContentCheckResponse openAIResult,
@@ -313,11 +383,6 @@ public class SpamActionService(
     {
         try
         {
-            var userActionsRepo = scopedServiceProvider.GetRequiredService<IUserActionsRepository>();
-            var managedChatsRepo = scopedServiceProvider.GetRequiredService<IManagedChatsRepository>();
-            var botFactory = scopedServiceProvider.GetRequiredService<TelegramBotClientFactory>();
-            var telegramOptions = scopedServiceProvider.GetRequiredService<IOptions<TelegramOptions>>().Value;
-
             var botClient = botFactory.GetOrCreate(telegramOptions.BotToken);
 
             // Store ban action in database

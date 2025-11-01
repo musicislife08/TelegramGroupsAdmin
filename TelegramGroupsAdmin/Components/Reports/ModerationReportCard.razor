@@ -1,4 +1,9 @@
+@using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Telegram.Models
+@using DataModels = TelegramGroupsAdmin.Data.Models
+
 @inject IMessageHistoryRepository MessageRepository
+@inject ITelegramUserRepository TelegramUserRepository
 
 <MudCard Elevation="2" Class="mb-3">
     <MudCardHeader>
@@ -21,8 +26,11 @@
         {
             <MudStack Spacing="2">
                 <MudStack Row="true" Spacing="2">
-                    <MudText Typo="Typo.body2"><b>User:</b> @(_message.UserName ?? "Unknown")</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @_message.UserId</MudText>
+                    <MudText Typo="Typo.body2"><b>User:</b> @GetReportedUserDisplay()</MudText>
+                    @if (_reportedUser?.Username != null || !string.IsNullOrEmpty(_message.UserName) || _reportedUser?.FirstName != null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @_message.UserId</MudText>
+                    }
                 </MudStack>
 
                 <MudDivider />
@@ -46,7 +54,7 @@
                 }
 
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    <b>Reported by:</b> @(Report.ReportedByUserName ?? "Unknown") (@Report.ReportedByUserId)
+                    <b>Reported by:</b> @GetReporterDisplay()
                 </MudText>
             </MudStack>
         }
@@ -130,12 +138,20 @@
     public EventCallback<(Report Report, string Action)> OnAction { get; set; }
 
     private MessageRecord? _message;
+    private TelegramUser? _reportedUser;
     private string? _telegramLink;
     private bool _actionInProgress;
 
     protected override async Task OnParametersSetAsync()
     {
         _message = await MessageRepository.GetMessageAsync(Report.MessageId);
+
+        // Fetch user details if message exists
+        if (_message != null)
+        {
+            _reportedUser = await TelegramUserRepository.GetByTelegramIdAsync(_message.UserId);
+        }
+
         _telegramLink = GetTelegramLink();
     }
 
@@ -194,5 +210,49 @@
         _actionInProgress = true;
         await OnAction.InvokeAsync((Report, "dismiss"));
         _actionInProgress = false;
+    }
+
+    private string GetReportedUserDisplay()
+    {
+        if (_message == null)
+            return "Unknown";
+
+        // Priority 1: Username (check both telegram_users table and message cache)
+        if (_reportedUser?.Username != null)
+            return $"@{_reportedUser.Username}";
+        if (!string.IsNullOrEmpty(_message.UserName))
+            return _message.UserName;
+
+        // Priority 2: First name from telegram_users table
+        if (_reportedUser?.FirstName != null)
+            return _reportedUser.FirstName;
+
+        // Priority 3: Last resort - show user ID
+        return $"User {_message.UserId}";
+    }
+
+    private string GetReporterDisplay()
+    {
+        // System-generated report (auto-detection)
+        if (Report.ReportedByUserId == null && Report.WebUserId == null)
+        {
+            // Return the system identifier without showing "()"
+            return Report.ReportedByUserName ?? "System";
+        }
+
+        // Telegram user report
+        if (Report.ReportedByUserId != null)
+        {
+            var username = Report.ReportedByUserName ?? "Unknown";
+            return $"{username} (ID: {Report.ReportedByUserId})";
+        }
+
+        // Web user report
+        if (Report.WebUserId != null)
+        {
+            return $"{Report.ReportedByUserName ?? "Web Admin"} (Web User)";
+        }
+
+        return "Unknown";
     }
 }
