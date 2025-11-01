@@ -165,14 +165,15 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         // - Manual admin decisions (always training-worthy)
         // - Confident OpenAI results (85%+, marked as used_for_training = true)
         // This prevents low-quality auto-detections from polluting training data
-        var results = await WithMessageJoin(
-                context.DetectionResults.AsNoTracking()
-                    .Where(dr => dr.UsedForTraining == true), // Filter BEFORE join
-                context)
-            .Where(x => x.Message.MessageText != null && x.Message.MessageText != "")
-            .OrderByDescending(x => x.DetectionResult.IsSpam)
-            .Select(x => new { x.Message.MessageText, x.DetectionResult.IsSpam })
-            .ToListAsync(cancellationToken);
+        var results = await (
+            from dr in context.DetectionResults.AsNoTracking()
+            join m in context.Messages on dr.MessageId equals m.MessageId
+            where dr.UsedForTraining == true
+                && m.MessageText != null
+                && m.MessageText != ""
+            orderby dr.IsSpam descending
+            select new { m.MessageText, dr.IsSpam }
+        ).ToListAsync(cancellationToken);
 
         _logger.LogDebug(
             "Retrieved {Count} training samples for Bayes classifier (used_for_training = true)",
