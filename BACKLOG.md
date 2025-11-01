@@ -638,6 +638,45 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ---
 
+### REFACTOR-18: Extract Interfaces for Integration Testing
+
+**Priority:** MEDIUM
+**Impact:** Testability, dependency injection design
+
+**Motivation:** Integration test attempt (2025-10-31) revealed MessageProcessingService is too coupled to infrastructure for proper testing. Need interface extraction to enable mocking/stubbing during tests.
+
+**Required Changes:**
+
+**REFACTOR-18-1: Extract Job Scheduling Interface**
+- Extract `IJobScheduler` interface from direct TickerQ calls
+- Methods: `ScheduleAsync<TPayload>(functionName, payload, delaySeconds, retries)`
+- Implementation: `TickerQJobScheduler` (wraps TickerQUtilities.ScheduleJobAsync)
+- Test implementation: `InMemoryJobScheduler` (tracks scheduled jobs without executing)
+- **Impact:** Enables testing services that schedule jobs (file scanning, welcome timeouts, etc.)
+
+**REFACTOR-18-2: Extract Bot Admin Cache Interface**
+- Extract `IBotAdminCache` interface from ChatManagementService
+- Methods: `GetAdminsAsync(chatId)`, `RefreshAdminsAsync(chatId)`, `IsChatHealthy(chatId)`
+- Implementation: `TelegramBotAdminCache` (wraps existing ChatManagementService logic)
+- Test implementation: `InMemoryBotAdminCache` (simple dictionary-based)
+- **Impact:** Eliminates NullReferenceException when MessageProcessingService tries to refresh admins
+
+**REFACTOR-18-3: Wrap ITelegramBotClient for Better Testing**
+- Create `ITelegramBotService` interface with commonly-mocked methods
+- Methods: `GetChatAdministratorsAsync`, `SendTextMessageAsync`, `DeleteMessageAsync`, etc.
+- Implementation: `TelegramBotService` (thin wrapper over ITelegramBotClient)
+- **Impact:** Easier to mock Telegram API calls without complex NSubstitute configurations
+
+**Testing Prerequisite:** These refactors unblock integration tests for:
+- MessageProcessingService (complete vertical slices: message → handlers → DB → events)
+- SpamActionService (auto-ban, training QC, borderline reports)
+- Background services orchestration
+
+**Blocked By:** None
+**Blocks:** Integration test suite for REFACTOR-1 through REFACTOR-4
+
+---
+
 ### ARCH-3: Consolidate Audit System to Core
 
 **Priority:** MEDIUM
