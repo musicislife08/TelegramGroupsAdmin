@@ -22,6 +22,7 @@ public class ReportActionsService : IReportActionsService
     private readonly TelegramBotClientFactory _botFactory;
     private readonly TelegramOptions _telegramOptions;
     private readonly IAuditService _auditService;
+    private readonly BotMessageService _botMessageService;
     private readonly ILogger<ReportActionsService> _logger;
 
     public ReportActionsService(
@@ -31,6 +32,7 @@ public class ReportActionsService : IReportActionsService
         TelegramBotClientFactory botFactory,
         IOptions<TelegramOptions> telegramOptions,
         IAuditService auditService,
+        BotMessageService botMessageService,
         ILogger<ReportActionsService> logger)
     {
         _reportsRepository = reportsRepository;
@@ -39,6 +41,7 @@ public class ReportActionsService : IReportActionsService
         _botFactory = botFactory;
         _telegramOptions = telegramOptions.Value;
         _auditService = auditService;
+        _botMessageService = botMessageService;
         _logger = logger;
     }
 
@@ -132,16 +135,14 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Failed to execute ban action: {result.ErrorMessage}");
         }
 
-        // Delete the message
+        // Delete the message with tracked deletion
         try
         {
-            await botClient.DeleteMessage(
-                chatId: report.ChatId,
-                messageId: report.MessageId);
-
-            await _messageRepository.MarkMessageAsDeletedAsync(
+            await _botMessageService.DeleteAndMarkMessageAsync(
+                botClient,
+                report.ChatId,
                 report.MessageId,
-                "ban_action");
+                deletionSource: "ban_action");
         }
         catch (Exception ex)
         {
@@ -267,9 +268,11 @@ public class ReportActionsService : IReportActionsService
             // This ensures all reports get visible feedback in the chat
             var replyToMessageId = report.ReportCommandMessageId ?? report.MessageId;
 
-            await botClient.SendMessage(
-                chatId: report.ChatId,
-                text: message,
+            // Use BotMessageService to save bot response to database
+            await _botMessageService.SendAndSaveMessageAsync(
+                botClient,
+                report.ChatId,
+                message,
                 parseMode: ParseMode.Markdown,
                 replyParameters: new global::Telegram.Bot.Types.ReplyParameters
                 {

@@ -161,6 +161,11 @@ public class TelegramAdminBotService(
         _botClient = botFactory.GetOrCreate(_options.BotToken);
         var botClient = _botClient;
 
+        // Fetch and cache bot's user ID for message filtering
+        var me = await botClient.GetMe(stoppingToken);
+        _options.BotUserId = me.Id;
+        logger.LogInformation("Bot user ID cached: {BotUserId} (@{BotUsername})", me.Id, me.Username);
+
         // Register bot commands in Telegram UI
         await RegisterBotCommandsAsync(botClient, stoppingToken);
 

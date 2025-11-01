@@ -69,9 +69,13 @@ public partial class MessageProcessingService(
                     var commandResult = await commandRouter.RouteCommandAsync(botClient, message, cancellationToken);
                     if (commandResult?.Response != null && !string.IsNullOrWhiteSpace(commandResult.Response))
                     {
-                        await botClient.SendMessage(
-                            chatId: message.Chat.Id,
-                            text: commandResult.Response,
+                        // Use BotMessageService to save bot response to database
+                        using var scope = _scopeFactory.CreateScope();
+                        var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
+                        await botMessageService.SendAndSaveMessageAsync(
+                            botClient,
+                            message.Chat.Id,
+                            commandResult.Response,
                             parseMode: ParseMode.Markdown,
                             cancellationToken: cancellationToken);
                     }
@@ -125,10 +129,15 @@ public partial class MessageProcessingService(
 
             try
             {
-                await botClient.DeleteMessage(
-                    chatId: message.Chat.Id,
-                    messageId: message.MessageId,
-                    cancellationToken: cancellationToken);
+                // Use BotMessageService for tracked deletion
+                using var scope = _scopeFactory.CreateScope();
+                var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
+                await botMessageService.DeleteAndMarkMessageAsync(
+                    botClient,
+                    message.Chat.Id,
+                    message.MessageId,
+                    deletionSource: "service_message",
+                    cancellationToken);
 
                 logger.LogInformation(
                     "Deleted service message (type: {Type}) in chat {ChatId}",
@@ -222,9 +231,12 @@ public partial class MessageProcessingService(
                         // Send response if there is one (and it's not empty)
                         if (commandResult.Response != null && !string.IsNullOrWhiteSpace(commandResult.Response))
                         {
-                            var responseMessage = await botClient.SendMessage(
-                                chatId: message.Chat.Id,
-                                text: commandResult.Response,
+                            // Use BotMessageService to save bot response to database
+                            var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
+                            var responseMessage = await botMessageService.SendAndSaveMessageAsync(
+                                botClient,
+                                message.Chat.Id,
+                                commandResult.Response,
                                 parseMode: ParseMode.Markdown,
                                 replyParameters: new ReplyParameters { MessageId = message.MessageId },
                                 cancellationToken: cancellationToken);
@@ -456,6 +468,7 @@ public partial class MessageProcessingService(
                 UserPhotoPath: null, // Will be populated by FetchUserPhotoJob
                 PhotoHash: null,
                 PhotoFileUniqueId: null, // Will be populated by FetchUserPhotoJob
+                IsBot: message.From.IsBot, // Track bot status from Telegram API
                 IsTrusted: false,
                 BotDmEnabled: false, // Will be set to true when user sends /start in private chat
                 FirstSeenAt: now,
@@ -529,10 +542,14 @@ public partial class MessageProcessingService(
             {
                 try
                 {
-                    await botClient.DeleteMessage(
-                        chatId: message.Chat.Id,
-                        messageId: message.MessageId,
-                        cancellationToken: cancellationToken);
+                    // Use BotMessageService for tracked deletion
+                    var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
+                    await botMessageService.DeleteAndMarkMessageAsync(
+                        botClient,
+                        message.Chat.Id,
+                        message.MessageId,
+                        deletionSource: "command_cleanup",
+                        cancellationToken);
 
                     logger.LogDebug("Deleted command message {MessageId} in chat {ChatId}", message.MessageId, message.Chat.Id);
                 }

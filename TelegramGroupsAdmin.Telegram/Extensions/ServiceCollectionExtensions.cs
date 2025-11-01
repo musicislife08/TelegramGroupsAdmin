@@ -87,6 +87,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IChatInviteLinkService, ChatInviteLinkService>(); // Phase 4.6: Invite link retrieval
         services.AddSingleton<IWelcomeService, WelcomeService>();
         services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
+        services.AddScoped<BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
 
         // Phase 4.10: Anti-Impersonation Detection
         services.AddSingleton<IPhotoHashService, PhotoHashService>();

@@ -566,10 +566,17 @@ public class SpamActionService(
                 chatId,
                 string.Join("; ", violations));
 
-            // Step 1: Delete the violating message
+            // Step 1: Delete the violating message with tracked deletion
             try
             {
-                await botClient.DeleteMessage(chatId, message.MessageId, cancellationToken);
+                using var deleteScope = serviceProvider.CreateScope();
+                var botMessageService = deleteScope.ServiceProvider.GetRequiredService<BotMessageService>();
+                await botMessageService.DeleteAndMarkMessageAsync(
+                    botClient,
+                    chatId,
+                    message.MessageId,
+                    deletionSource: "critical_violation",
+                    cancellationToken);
                 logger.LogInformation(
                     "Deleted message {MessageId} from chat {ChatId} due to critical check violations",
                     message.MessageId,

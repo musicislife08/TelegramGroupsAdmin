@@ -66,6 +66,13 @@ public class TelegramUserDto
     public string? PhotoFileUniqueId { get; set; }
 
     /// <summary>
+    /// Whether this user is a bot (from Telegram API User.IsBot flag)
+    /// Phase 1: Bot message tracking - used to filter bots from user statistics
+    /// </summary>
+    [Column("is_bot")]
+    public bool IsBot { get; set; } = false;
+
+    /// <summary>
     /// Whether user is trusted/whitelisted (bypasses spam checks)
     /// Phase 5.5: Auto-trust feature (7 days + 50 clean messages + 0 warnings)
     /// </summary>

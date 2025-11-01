@@ -46,15 +46,15 @@ public class DeleteCommand : IBotCommand
 
         try
         {
-            await botClient.DeleteMessage(
-                chatId: message.Chat.Id,
-                messageId: targetMessage.MessageId,
-                cancellationToken: cancellationToken);
-
-            // Mark message as deleted in database
+            // Use BotMessageService for tracked deletion
             using var scope = _serviceProvider.CreateScope();
-            var messageRepository = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
-            await messageRepository.MarkMessageAsDeletedAsync(targetMessage.MessageId, "delete_command", cancellationToken);
+            var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
+            await botMessageService.DeleteAndMarkMessageAsync(
+                botClient,
+                message.Chat.Id,
+                targetMessage.MessageId,
+                deletionSource: "delete_command",
+                cancellationToken);
 
             _logger.LogInformation(
                 "DELETE TEST: Admin {AdminId} deleted message {MessageId} in chat {ChatId}",

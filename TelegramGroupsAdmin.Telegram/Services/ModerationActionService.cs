@@ -34,6 +34,7 @@ public class ModerationActionService
     private readonly IUserMessagingService _messagingService;
     private readonly IChatInviteLinkService _inviteLinkService;
     private readonly INotificationOrchestrator _notificationOrchestrator;
+    private readonly BotMessageService _botMessageService;
     private readonly ILogger<ModerationActionService> _logger;
 
     public ModerationActionService(
@@ -50,6 +51,7 @@ public class ModerationActionService
         IUserMessagingService messagingService,
         IChatInviteLinkService inviteLinkService,
         INotificationOrchestrator notificationOrchestrator,
+        BotMessageService botMessageService,
         ILogger<ModerationActionService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;
@@ -65,6 +67,7 @@ public class ModerationActionService
         _messagingService = messagingService;
         _inviteLinkService = inviteLinkService;
         _notificationOrchestrator = notificationOrchestrator;
+        _botMessageService = botMessageService;
         _logger = logger;
     }
 
@@ -85,19 +88,21 @@ public class ModerationActionService
         {
             var result = new ModerationResult();
 
-            // 1. Delete the message from Telegram
+            // 1. Delete the message from Telegram and mark as deleted in database
             try
             {
-                await botClient.DeleteMessage(chatId, (int)messageId, cancellationToken);
+                await _botMessageService.DeleteAndMarkMessageAsync(
+                    botClient,
+                    chatId,
+                    (int)messageId,
+                    deletionSource: "spam_action",
+                    cancellationToken);
                 result.MessageDeleted = true;
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to delete message {MessageId} in chat {ChatId} (may already be deleted)", messageId, chatId);
             }
-
-            // 2. Mark message as deleted in database
-            await _messageHistoryRepository.MarkMessageAsDeletedAsync(messageId, "spam_action");
 
             // 3. Check if message has text (skip training for image-only spam)
             var message = await _messageHistoryRepository.GetMessageAsync(messageId, cancellationToken);
@@ -518,19 +523,21 @@ public class ModerationActionService
             // Get bot client from factory (singleton instance)
             var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
 
-            // 1. Delete the message from Telegram
+            // 1. Delete the message from Telegram and mark as deleted in database
             try
             {
-                await botClient.DeleteMessage(chatId, (int)messageId, cancellationToken);
+                await _botMessageService.DeleteAndMarkMessageAsync(
+                    botClient,
+                    chatId,
+                    (int)messageId,
+                    deletionSource: "manual_ui_delete",
+                    cancellationToken);
                 result.MessageDeleted = true;
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to delete message {MessageId} in chat {ChatId} (may already be deleted)", messageId, chatId);
             }
-
-            // 2. Mark message as deleted in database
-            await _messageHistoryRepository.MarkMessageAsDeletedAsync(messageId, "manual_ui_delete");
 
             // 3. Record delete action for audit trail
             var deleteAction = new UserActionRecord(

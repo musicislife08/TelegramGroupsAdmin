@@ -224,11 +224,14 @@ public class TelegramUserRepository : ITelegramUserRepository
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
         // PERF-DATA-1: Pre-compute all stats in separate queries (7000+ queries → 8 queries)
-        // Query 1: Chat counts per user
-        var chatCounts = await context.Messages
-            .GroupBy(m => m.UserId)
-            .Select(g => new { UserId = g.Key, Count = g.Select(m => m.ChatId).Distinct().Count() })
-            .ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
+        // Query 1: Chat counts per user (exclude bots via JOIN to telegram_users)
+        var chatCounts = await (
+            from m in context.Messages
+            join u in context.TelegramUsers on m.UserId equals u.TelegramUserId
+            where !u.IsBot
+            group m by m.UserId into g
+            select new { UserId = g.Key, Count = g.Select(m => m.ChatId).Distinct().Count() }
+        ).ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
 
         // Query 2: Warning counts per user (active only)
         var now = DateTimeOffset.UtcNow;
@@ -317,20 +320,23 @@ public class TelegramUserRepository : ITelegramUserRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
-        // Get users who have posted in the specified chats
-        var userIdsInChats = await context.Messages
-            .Where(m => chatIds.Contains(m.ChatId))
-            .Select(m => m.UserId)
-            .Distinct()
-            .ToHashSetAsync(ct);
+        // Get users who have posted in the specified chats (exclude bots)
+        var userIdsInChats = await (
+            from m in context.Messages
+            join u in context.TelegramUsers on m.UserId equals u.TelegramUserId
+            where chatIds.Contains(m.ChatId) && !u.IsBot
+            select m.UserId
+        ).Distinct().ToHashSetAsync(ct);
 
         // PERF-DATA-1: Pre-compute all stats in separate queries (filtered by chat IDs)
-        // Query 1: Chat counts per user (only count chats in accessible list)
-        var chatCounts = await context.Messages
-            .Where(m => chatIds.Contains(m.ChatId) && userIdsInChats.Contains(m.UserId))
-            .GroupBy(m => m.UserId)
-            .Select(g => new { UserId = g.Key, Count = g.Select(m => m.ChatId).Distinct().Count() })
-            .ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
+        // Query 1: Chat counts per user (only count chats in accessible list, exclude bots)
+        var chatCounts = await (
+            from m in context.Messages
+            join u in context.TelegramUsers on m.UserId equals u.TelegramUserId
+            where chatIds.Contains(m.ChatId) && userIdsInChats.Contains(m.UserId) && !u.IsBot
+            group m by m.UserId into g
+            select new { UserId = g.Key, Count = g.Select(m => m.ChatId).Distinct().Count() }
+        ).ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
 
         // Query 2: Warning counts per user (all warnings, not filtered by chat)
         var now = DateTimeOffset.UtcNow;
@@ -523,7 +529,7 @@ public class TelegramUserRepository : ITelegramUserRepository
         var topUsers = await (
             from u in context.TelegramUsers
             join m in context.Messages on u.TelegramUserId equals m.UserId
-            where m.Timestamp >= since
+            where m.Timestamp >= since && !u.IsBot
             group m by new { u.TelegramUserId, u.Username, u.FirstName, u.UserPhotoPath } into g
             orderby g.Count() descending
             select new UiModels.TopActiveUser
