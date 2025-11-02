@@ -20,10 +20,17 @@ public static class WebApplicationExtensions
         // Configure forwarded headers for reverse proxy support (SWAG, nginx, etc.)
         // This allows the app to understand the original HTTPS request from clients
         // even though it's running on HTTP inside the container
-        app.UseForwardedHeaders(new ForwardedHeadersOptions
+        var forwardedHeadersOptions = new ForwardedHeadersOptions
         {
             ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-        });
+        };
+
+        // Trust all proxies (Docker internal network)
+        // In production behind a reverse proxy, the proxy is the only source of requests
+        forwardedHeadersOptions.KnownNetworks.Clear();
+        forwardedHeadersOptions.KnownProxies.Clear();
+
+        app.UseForwardedHeaders(forwardedHeadersOptions);
 
         if (!app.Environment.IsDevelopment())
         {
