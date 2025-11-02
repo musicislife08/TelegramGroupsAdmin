@@ -86,7 +86,7 @@ public class SimilaritySpamCheck(
 
             if (_cachedSamples == null || !_cachedSamples.Any() || _cachedVectors == null || _cachedVocabulary == null)
             {
-                logger.LogWarning("Similarity check has no spam samples: Samples={HasSamples}, Count={Count}, Vectors={HasVectors}, Vocab={HasVocab}",
+                logger.LogDebug("Similarity check has no spam samples: Samples={HasSamples}, Count={Count}, Vectors={HasVectors}, Vocab={HasVocab}",
                     _cachedSamples != null, _cachedSamples?.Count ?? 0, _cachedVectors != null, _cachedVocabulary != null);
                 return new ContentCheckResponse
                 {
@@ -179,7 +179,7 @@ public class SimilaritySpamCheck(
         {
             try
             {
-                logger.LogInformation("Refreshing similarity cache for chat {ChatId}...", chatId);
+                logger.LogDebug("Refreshing similarity cache for chat {ChatId}...", chatId);
 
                 // Load spam samples from database with guardrail
                 // Phase 4.20+: Use translated text when available (matches spam detection behavior)
@@ -220,11 +220,11 @@ public class SimilaritySpamCheck(
                     null // LastDetectedDate removed in normalized schema
                 )).ToList();
 
-                logger.LogInformation("Loaded {Count} spam samples from database", _cachedSamples.Count);
+                logger.LogDebug("Loaded {Count} spam samples from database", _cachedSamples.Count);
 
                 // Build vocabulary from all samples
                 _cachedVocabulary = BuildVocabulary(_cachedSamples.Select(s => s.MessageText).ToArray());
-                logger.LogInformation("Built vocabulary with {VocabSize} unique words", _cachedVocabulary.Count);
+                logger.LogDebug("Built vocabulary with {VocabSize} unique words", _cachedVocabulary.Count);
 
                 // Pre-compute TF-IDF vectors for all samples
                 _cachedVectors = new Dictionary<long, double[]>();
@@ -234,7 +234,7 @@ public class SimilaritySpamCheck(
                 }
 
                 _lastCacheUpdate = DateTime.UtcNow;
-                logger.LogInformation("Refreshed similarity cache with {Count} samples, {VocabSize} vocab, {VectorCount} vectors for chat {ChatId}",
+                logger.LogDebug("Refreshed similarity cache with {Count} samples, {VocabSize} vocab, {VectorCount} vectors for chat {ChatId}",
                     _cachedSamples.Count, _cachedVocabulary.Count, _cachedVectors.Count, chatId);
             }
             catch (Exception ex)

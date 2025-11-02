@@ -61,7 +61,7 @@ public class VirusTotalScannerService : ICloudScannerService
             bool quotaAvailable = await IsQuotaAvailableAsync(cancellationToken);
             if (!quotaAvailable)
             {
-                _logger.LogWarning("VirusTotal daily quota exhausted, skipping hash lookup");
+                _logger.LogInformation("VirusTotal daily quota exhausted, skipping hash lookup");
                 return new CloudHashLookupResult
                 {
                     Status = HashLookupStatus.Error,
@@ -83,7 +83,7 @@ public class VirusTotalScannerService : ICloudScannerService
             // Handle rate limiting (429)
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                _logger.LogWarning("VirusTotal rate limit hit (429), marking service as unavailable");
+                _logger.LogInformation("VirusTotal rate limit hit (429), marking service as unavailable");
                 return new CloudHashLookupResult
                 {
                     Status = HashLookupStatus.Error,
@@ -243,7 +243,7 @@ public class VirusTotalScannerService : ICloudScannerService
             bool quotaAvailable = await IsQuotaAvailableAsync(cancellationToken);
             if (!quotaAvailable)
             {
-                _logger.LogWarning("VirusTotal daily quota exhausted, cannot upload file");
+                _logger.LogInformation("VirusTotal daily quota exhausted, cannot upload file");
                 return new CloudScanResult
                 {
                     ServiceName = ServiceName,
@@ -271,7 +271,7 @@ public class VirusTotalScannerService : ICloudScannerService
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 stopwatch.Stop();
-                _logger.LogWarning("VirusTotal rate limit hit during file upload");
+                _logger.LogInformation("VirusTotal rate limit hit during file upload");
 
                 return new CloudScanResult
                 {

@@ -18,14 +18,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - False-positive critical health check notifications for transient HTTP/network errors to Telegram API
 - "Failed to determine the https port for redirect" warning when running behind reverse proxy (added forwarded headers middleware)
 - Runtime log level reconfiguration now functional (replaced non-functional IOptionsMonitor<LoggerFilterOptions> with Serilog)
+- 3 empty catch blocks in DetectionResultsRepository now log warnings before failing open (JSON parsing errors)
+- Log level misuse: transient errors (connection loss, quota exhausted) changed from Warning → Information
+- Log level misuse: critical security events (hard block deletion, malware deletion) changed from Information → Warning
 
 ### Changed
 
 - Replaced Microsoft.Extensions.Logging runtime reconfiguration with Serilog 9.0.0
+- **Massive log volume reduction**: 85-90% reduction in hot paths (~65,000 logs/day eliminated on 5k messages/day)
+  - Spam detection: Changed 10 routine operation logs from Information → Debug (one final result log per message)
+  - Chat health checks: Changed 4 success confirmation logs from Information → Debug (280 logs/day → event-driven only)
+  - SimilaritySpamCheck: Cache operations moved to Debug level (eliminates 2,880 logs/day at 5k messages)
+  - Removed TestJob (TickerQ health check) that logged every 5 minutes (288 logs/day eliminated)
 - Chat health checks now differentiate between transient network errors (logged as warnings) and real issues (bot kicked/permission loss)
 - Added reverse proxy support with `UseForwardedHeaders` middleware for proper HTTPS detection
 - SendGrid configuration log moved to Debug level to reduce console noise
 - Default log levels: Warning for infrastructure (EF Core, Npgsql, Microsoft), Information for application code
+- OpenAITranslationService error logs now include text length for debugging
 
 ### Documentation
 

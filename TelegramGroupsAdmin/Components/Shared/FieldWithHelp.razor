@@ -1,0 +1,25 @@
+@* Wrapper component that adds a help tooltip to any form field *@
+
+<div class="field-with-help d-flex align-center gap-2">
+    <div class="flex-grow-1">
+        @ChildContent
+    </div>
+    @if (!string.IsNullOrWhiteSpace(HelpText))
+    {
+        <HelpTooltip Text="@HelpText" Style="margin-bottom: 20px;" />
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The form field content (MudTextField, MudSwitch, etc.)
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// The help text to display in the tooltip
+    /// </summary>
+    [Parameter]
+    public string? HelpText { get; set; }
+}

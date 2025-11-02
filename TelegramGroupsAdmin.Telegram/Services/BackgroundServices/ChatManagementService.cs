@@ -400,7 +400,7 @@ public class ChatManagementService(
                 }
             }
 
-            logger.LogInformation(
+            logger.LogDebug(
                 "✅ Synced {Count} admins for chat {ChatId}: {Admins}",
                 admins.Length,
                 chatId,
@@ -609,7 +609,7 @@ public class ChatManagementService(
                 await RefreshHealthForChatAsync(botClient, chat.ChatId, cancellationToken);
             }
 
-            logger.LogInformation("Completed health check for {Count} chats", chats.Count(c => c.IsActive));
+            logger.LogDebug("Completed health check for {Count} chats", chats.Count(c => c.IsActive));
         }
         catch (Exception ex)
         {
@@ -629,7 +629,7 @@ public class ChatManagementService(
     {
         try
         {
-            logger.LogInformation("Refreshing single chat {ChatId}", chatId);
+            logger.LogDebug("Refreshing single chat {ChatId}", chatId);
 
             // Refresh admin list and health
             await RefreshChatAdminsAsync(botClient, chatId, cancellationToken);
@@ -641,7 +641,7 @@ public class ChatManagementService(
                 await FetchChatIconAsync(botClient, chatId, cancellationToken);
             }
 
-            logger.LogInformation("✅ Single chat refresh completed for {ChatId}", chatId);
+            logger.LogDebug("✅ Single chat refresh completed for {ChatId}", chatId);
         }
         catch (Exception ex)
         {

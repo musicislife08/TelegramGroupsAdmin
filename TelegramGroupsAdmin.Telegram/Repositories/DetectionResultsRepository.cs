@@ -585,9 +585,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                         return new { d.Id, Checks = checkList };
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Skip malformed JSON
+                    _logger.LogWarning(ex, "Failed to parse veto checks JSON for detection result {Id}", d.Id);
+                    // Skip malformed JSON - fail open
                 }
 
                 return null;
@@ -633,9 +634,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Skip malformed JSON
+                _logger.LogWarning(ex, "Failed to parse veto checks JSON during analytics aggregation");
+                // Skip malformed JSON - fail open
             }
         }
 
@@ -715,9 +717,10 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 if (vetoedMessages.Count >= limit)
                     break;
             }
-            catch
+            catch (Exception ex)
             {
-                // Skip malformed JSON
+                _logger.LogWarning(ex, "Failed to parse veto checks JSON for detection result in recent vetoed messages");
+                // Skip malformed JSON - fail open
             }
         }
 

@@ -120,7 +120,7 @@ public class SpamActionService(
                     reason: "Hard block policy violation (automated spam filter)",
                     cancellationToken: cancellationToken);
 
-                logger.LogInformation(
+                logger.LogWarning(
                     "Deleted hard block message {MessageId} and banned user {UserId} (policy violation)",
                     message.MessageId, message.From?.Id);
                 return;

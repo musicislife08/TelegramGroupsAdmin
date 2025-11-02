@@ -285,7 +285,7 @@ public class TelegramAdminBotService(
         // Track connection state
         if (_isConnected)
         {
-            logger.LogWarning("Telegram bot connection lost - will retry automatically");
+            logger.LogInformation("Telegram bot connection lost - will retry automatically");
             _isConnected = false;
             _wasRecentlyDisconnected = true;
         }

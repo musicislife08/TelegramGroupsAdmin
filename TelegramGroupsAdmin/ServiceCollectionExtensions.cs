@@ -341,7 +341,6 @@ public static class ServiceCollectionExtensions
         });
 
         // Register job classes (TickerQ discovers [TickerFunction] methods via source generators)
-        services.AddScoped<Jobs.TestJob>();
         services.AddScoped<Jobs.WelcomeTimeoutJob>();
         services.AddScoped<Jobs.DeleteMessageJob>();
         services.AddScoped<Jobs.TempbanExpiryJob>();

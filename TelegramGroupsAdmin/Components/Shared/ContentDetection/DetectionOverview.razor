@@ -25,16 +25,22 @@
     <!-- Global Settings Card -->
     <MudPaper Class="pa-4" Elevation="1">
         <MudStack Spacing="3">
-            <MudText Typo="Typo.h5" Color="Color.Primary">
-                <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-2" />
-                Global Detection Settings
-            </MudText>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudText Typo="Typo.h5" Color="Color.Primary">
+                    <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-2" />
+                    Global Detection Settings
+                </MudText>
+                <HelpTooltip Text="Configure how spam detection behaves globally. These settings apply to all enabled algorithms." />
+            </MudStack>
 
             <MudGrid>
                 <MudItem xs="12" md="6">
-                    <MudSwitch T="bool" @bind-Value="_config.TrainingMode"
-                              Label="Training Mode"
-                              Color="Color.Warning" />
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudSwitch T="bool" @bind-Value="_config.TrainingMode"
+                                  Label="Training Mode"
+                                  Color="Color.Warning" />
+                        <HelpTooltip Text="Training Mode sends ALL detections to the review queue instead of auto-banning. Use this when first setting up spam detection or testing new algorithms to avoid false positives." />
+                    </MudStack>
                     <MudText Typo="Typo.caption" Class="ml-8 mud-text-secondary">
                         @if (_config.TrainingMode)
                         {
@@ -48,9 +54,12 @@
                 </MudItem>
 
                 <MudItem xs="12" md="6">
-                    <MudSwitch T="bool" @bind-Value="_config.FirstMessageOnly"
-                              Label="Check First Messages Only"
-                              Color="Color.Primary" />
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudSwitch T="bool" @bind-Value="_config.FirstMessageOnly"
+                                  Label="Check First Messages Only"
+                                  Color="Color.Primary" />
+                        <HelpTooltip Text="Only run spam checks on the first N messages from each user, then trust them. Reduces processing for established users. Recommended for active communities." />
+                    </MudStack>
                     @if (_config.FirstMessageOnly)
                     {
                         <MudNumericField @bind-Value="_config.FirstMessagesCount"
@@ -62,25 +71,31 @@
                 </MudItem>
 
                 <MudItem xs="12" md="6">
-                    <MudNumericField @bind-Value="_config.AutoBanThreshold"
-                                    Label="Auto-Ban Threshold"
-                                    Min="50" Max="100"
-                                    Disabled="@_config.TrainingMode"
-                                    HelperText="@(_config.TrainingMode ? "Disabled in training mode" : "Confidence >= this value triggers automatic ban")" />
+                    <FieldWithHelp HelpText="Messages with confidence ≥ this value (0-100) will be automatically deleted and the user banned. Default: 85. Set higher (90-95) for strict false-positive prevention.">
+                        <MudNumericField @bind-Value="_config.AutoBanThreshold"
+                                        Label="Auto-Ban Threshold"
+                                        Min="50" Max="100"
+                                        Disabled="@_config.TrainingMode"
+                                        HelperText="@(_config.TrainingMode ? "Disabled in training mode" : "Confidence >= this value triggers automatic ban")" />
+                    </FieldWithHelp>
                 </MudItem>
 
                 <MudItem xs="12" md="6">
-                    <MudNumericField @bind-Value="_config.ReviewQueueThreshold"
-                                    Label="Review Queue Threshold"
-                                    Min="20" Max="80"
-                                    HelperText="Confidence >= this value goes to review queue" />
+                    <FieldWithHelp HelpText="Messages with confidence ≥ this value but below auto-ban threshold go to the review queue for manual moderation. Default: 70.">
+                        <MudNumericField @bind-Value="_config.ReviewQueueThreshold"
+                                        Label="Review Queue Threshold"
+                                        Min="20" Max="80"
+                                        HelperText="Confidence >= this value goes to review queue" />
+                    </FieldWithHelp>
                 </MudItem>
 
                 <MudItem xs="12" md="6">
-                    <MudNumericField @bind-Value="_config.MinMessageLength"
-                                    Label="Minimum Message Length"
-                                    Min="10" Max="1000"
-                                    helperText="Skip expensive checks for messages shorter than this" />
+                    <FieldWithHelp HelpText="Skip expensive checks (OpenAI, similarity analysis) for very short messages. Most spam is longer than 10 characters. Improves performance.">
+                        <MudNumericField @bind-Value="_config.MinMessageLength"
+                                        Label="Minimum Message Length"
+                                        Min="10" Max="1000"
+                                        helperText="Skip expensive checks for messages shorter than this" />
+                    </FieldWithHelp>
                 </MudItem>
             </MudGrid>
         </MudStack>
@@ -95,6 +110,18 @@
         Configure text-based content detection algorithms. These checks analyze message text for spam patterns.
     </MudText>
 
+    <ConceptualAlert Title="How Algorithm Orchestration Works" Severity="Severity.Info" Class="mb-3">
+        All enabled algorithms run in parallel and each returns a confidence score (0-100). Scores are aggregated to produce a final confidence level:
+        <ul class="mt-2 mb-0">
+            <li><strong>≥ @_config.AutoBanThreshold%</strong> (Auto-Ban): Message deleted, user banned across all chats</li>
+            <li><strong>@_config.ReviewQueueThreshold%-@(_config.AutoBanThreshold-1)%</strong> (Review Queue): Message sent to moderator review</li>
+            <li><strong>&lt; @_config.ReviewQueueThreshold%</strong> (Pass): Message allowed</li>
+        </ul>
+        <div class="mt-2">
+            OpenAI in <strong>Veto Mode</strong> can override high-confidence detections to reduce false positives. Enable algorithms incrementally and use Training Mode when testing new configurations.
+        </div>
+    </ConceptualAlert>
+
     <!-- Stop Words Detection -->
     <MudCard Elevation="1">
         <MudCardHeader>
@@ -102,9 +129,11 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudSwitch T="bool" @bind-Value="_config.StopWords.Enabled" Color="Color.Primary" />
                     <MudText Typo="Typo.h6">Stop Words Detection</MudText>
+                    <HelpTooltip Text="Matches messages against a customizable list of spam keywords (e.g., 'crypto', 'earn money', 'investment'). Fast algorithm (~45ms average). Best for common spam patterns in your community. Configure stop words in the settings." />
                     <MudChip T="string" Size="Size.Small" Color="@(_config.StopWords.Enabled ? Color.Success : Color.Default)">
                         @(_config.StopWords.Enabled ? "Enabled" : "Disabled")
                     </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Speed">Fast</MudChip>
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
@@ -132,9 +161,11 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudSwitch T="bool" @bind-Value="_config.Cas.Enabled" Color="Color.Primary" />
                     <MudText Typo="Typo.h6">CAS (Combot Anti-Spam)</MudText>
+                    <HelpTooltip Text="Checks users against the CAS public database of known Telegram spammers. External API lookup (~12ms average). High precision for serial spammers. No configuration needed - automatically detects banned users." />
                     <MudChip T="string" Size="Size.Small" Color="@(_config.Cas.Enabled ? Color.Success : Color.Default)">
                         @(_config.Cas.Enabled ? "Enabled" : "Disabled")
                     </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Speed">Fast</MudChip>
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
@@ -160,9 +191,11 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudSwitch T="bool" @bind-Value="_config.Similarity.Enabled" Color="Color.Primary" />
                     <MudText Typo="Typo.h6">Similarity Detection (TF-IDF)</MudText>
+                    <HelpTooltip Text="Compares new messages to known spam using TF-IDF cosine similarity. Catches copycat spam and slight variations of known spam. Medium performance (~87ms). Requires training samples to be effective. Set threshold 0.7-0.9 for best results." />
                     <MudChip T="string" Size="Size.Small" Color="@(_config.Similarity.Enabled ? Color.Success : Color.Default)">
                         @(_config.Similarity.Enabled ? "Enabled" : "Disabled")
                     </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Speed">Medium</MudChip>
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
@@ -188,9 +221,11 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudSwitch T="bool" @bind-Value="_config.Bayes.Enabled" Color="Color.Primary" />
                     <MudText Typo="Typo.h6">Naive Bayes Classifier</MudText>
+                    <HelpTooltip Text="Machine learning classifier that learns spam patterns from word frequency in training samples. Adapts to your community's spam patterns over time. Fast algorithm. Requires at least 50 spam and 50 ham samples to train effectively." />
                     <MudChip T="string" Size="Size.Small" Color="@(_config.Bayes.Enabled ? Color.Success : Color.Default)">
                         @(_config.Bayes.Enabled ? "Enabled" : "Disabled")
                     </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Speed">Fast</MudChip>
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
@@ -218,9 +253,11 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudSwitch T="bool" @bind-Value="_config.Spacing.Enabled" Color="Color.Primary" />
                     <MudText Typo="Typo.h6">Abnormal Spacing Detection</MudText>
+                    <HelpTooltip Text="Detects deliberate spacing patterns used to evade filters (e.g., 'F R E E  M O N E Y'). Analyzes space-to-character ratio and sequential spacing. Fast algorithm. Catches creative filter evasion attempts." />
                     <MudChip T="string" Size="Size.Small" Color="@(_config.Spacing.Enabled ? Color.Success : Color.Default)">
                         @(_config.Spacing.Enabled ? "Enabled" : "Disabled")
                     </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Speed">Fast</MudChip>
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
@@ -246,9 +283,11 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudSwitch T="bool" @bind-Value="_config.InvisibleChars.Enabled" Color="Color.Primary" />
                     <MudText Typo="Typo.h6">Invisible Character Detection</MudText>
+                    <HelpTooltip Text="Detects zero-width Unicode characters used by spammers to hide text or evade filters. Excludes legitimate emoji sequences. Very fast algorithm with virtually no false positives. Recommended to keep enabled." />
                     <MudChip T="string" Size="Size.Small" Color="@(_config.InvisibleChars.Enabled ? Color.Success : Color.Default)">
                         @(_config.InvisibleChars.Enabled ? "Enabled" : "Disabled")
                     </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Speed">Fast</MudChip>
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
@@ -274,9 +313,11 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudSwitch T="bool" @bind-Value="_config.Translation.Enabled" Color="Color.Primary" />
                     <MudText Typo="Typo.h6">Foreign Language Translation</MudText>
+                    <HelpTooltip Text="Automatically translates non-English messages to English before running spam checks. Enables detection of foreign-language spam using English-trained algorithms. Uses OpenAI API (costs apply). Useful for international communities." />
                     <MudChip T="string" Size="Size.Small" Color="@(_config.Translation.Enabled ? Color.Success : Color.Default)">
                         @(_config.Translation.Enabled ? "Enabled" : "Disabled")
                     </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Speed">Medium</MudChip>
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>
@@ -305,9 +346,11 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudSwitch T="bool" @bind-Value="_config.OpenAI.Enabled" Color="Color.Primary" />
                     <MudText Typo="Typo.h6">OpenAI Verification</MudText>
+                    <HelpTooltip Text="Uses GPT-4 to analyze message context and intent. Best accuracy for nuanced spam detection. In Veto Mode: confirms other algorithms' spam verdicts (reduces false positives). In Detection Mode: actively searches for spam. Slow (~1.2s average) but high quality. Costs apply per API call." />
                     <MudChip T="string" Size="Size.Small" Color="@(_config.OpenAI.Enabled ? Color.Success : Color.Default)">
                         @(_config.OpenAI.Enabled ? "Enabled" : "Disabled")
                     </MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Schedule">Slow</MudChip>
                 </MudStack>
             </CardHeaderContent>
             <CardHeaderActions>

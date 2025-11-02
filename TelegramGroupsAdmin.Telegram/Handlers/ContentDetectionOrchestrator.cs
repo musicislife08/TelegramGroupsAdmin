@@ -187,7 +187,7 @@ public class ContentDetectionOrchestrator
         await detectionResultsRepo.InsertAsync(detectionResult, cancellationToken);
 
         var editInfo = editVersion > 0 ? $" (edit #{editVersion})" : "";
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Stored detection result for message {MessageId}{EditInfo}: {IsSpam} (net: {NetConfidence}, training: {UsedForTraining})",
             message.MessageId,
             editInfo,

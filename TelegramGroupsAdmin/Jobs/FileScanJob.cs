@@ -213,7 +213,7 @@ public class FileScanJob(
             // Delete the message containing infected file
             await botClient.DeleteMessage(payload.ChatId, (int)payload.MessageId, cancellationToken);
 
-            _logger.LogInformation(
+            _logger.LogWarning(
                 "Deleted infected file message {MessageId} from chat {ChatId}",
                 payload.MessageId,
                 payload.ChatId);

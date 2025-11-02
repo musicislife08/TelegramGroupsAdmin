@@ -183,8 +183,12 @@
                                 </MudButton>
 
                                 <MudStack Row="true" Spacing="2">
-                                    <MudNumericField T="int" Label="Daily Limit" Value="@_config.Tier2.VirusTotal.DailyLimit" ValueChanged="OnDailyLimitChanged" Variant="Variant.Outlined" HelperText="Free tier: 500 requests/day" />
-                                    <MudNumericField T="int" Label="Rate Limit (/min)" Value="@_config.Tier2.VirusTotal.PerMinuteLimit" ValueChanged="OnPerMinuteLimitChanged" Variant="Variant.Outlined" HelperText="Free tier: 4 requests/minute" />
+                                    <FieldWithHelp HelpText="Daily quota limit (Free tier: 500/day). When exceeded, VirusTotal is skipped for remaining files. System uses fail-open design - files are allowed when quota exhausted (logged as warning). Resets daily at midnight UTC.">
+                                        <MudNumericField T="int" Label="Daily Limit" Value="@_config.Tier2.VirusTotal.DailyLimit" ValueChanged="OnDailyLimitChanged" Variant="Variant.Outlined" HelperText="Free tier: 500 requests/day" />
+                                    </FieldWithHelp>
+                                    <FieldWithHelp HelpText="Rate limit per minute (Free tier: 4/min). Enforced via Polly rate limiter. Requests exceeding limit are queued briefly, then skipped if still at limit. Monitor quota usage below to track consumption.">
+                                        <MudNumericField T="int" Label="Rate Limit (/min)" Value="@_config.Tier2.VirusTotal.PerMinuteLimit" ValueChanged="OnPerMinuteLimitChanged" Variant="Variant.Outlined" HelperText="Free tier: 4 requests/minute" />
+                                    </FieldWithHelp>
                                 </MudStack>
 
                                 <MudAlert Severity="_virusTotalConfigured ? Severity.Success : Severity.Info" Dense="true">
@@ -260,7 +264,10 @@
                 <!-- Cache Settings -->
                 <MudStack Spacing="2">
                     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                        <MudText Typo="Typo.subtitle2">Result Caching</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudText Typo="Typo.subtitle2">Result Caching</MudText>
+                            <HelpTooltip Text="Scan results are cached by file hash (SHA-256). Identical files shared multiple times are not re-scanned, saving API quota and improving performance. Cache invalidates after 24 hours to catch new malware signatures." />
+                        </MudStack>
                         <MudButton Variant="Variant.Outlined"
                                   Color="Color.Warning"
                                   Size="Size.Small"
@@ -272,7 +279,9 @@
                     </MudStack>
 
                     <MudSwitch T="bool" Value="@_config.General.CacheEnabled" Disabled="true" Color="Color.Success" Label="Enable result caching (24hr TTL)" />
-                    <MudNumericField T="int" Label="Cache TTL (hours)" Value="@_config.General.CacheTtlHours" Disabled="true" Variant="Variant.Outlined" HelperText="How long to cache scan results" />
+                    <FieldWithHelp HelpText="24 hours balances performance (cache hits are <10ms) with security (daily updates catch new threats). Longer TTL = faster, but older signatures. Shorter = more API calls.">
+                        <MudNumericField T="int" Label="Cache TTL (hours)" Value="@_config.General.CacheTtlHours" Disabled="true" Variant="Variant.Outlined" HelperText="How long to cache scan results" />
+                    </FieldWithHelp>
 
                     <MudAlert Severity="Severity.Success" Dense="true">
                         Hash-based caching prevents re-scanning identical files. Cache hits take &lt;10ms vs ~55ms for fresh scans.
@@ -316,13 +325,17 @@
 
                 <!-- Critical Check Integration -->
                 <MudStack Spacing="2">
-                    <MudText Typo="Typo.subtitle2">Critical Check Integration (Phase 4.14)</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudText Typo="Typo.subtitle2">Critical Check Integration (Phase 4.14)</MudText>
+                        <HelpTooltip Text="Critical checks bypass trust/admin exemptions because malware threats apply to everyone. Even admins can accidentally share infected files. This setting ensures comprehensive security without false trust assumptions." />
+                    </MudStack>
                     <MudSwitch T="bool" Value="@_config.General.AlwaysRunForAllUsers" Disabled="true" Color="Color.Success" Label="Always run for all users (bypass trust/admin status)" />
 
-                    <MudAlert Severity="Severity.Info" Dense="true">
+                    <ConceptualAlert Title="Security Policy" Severity="Severity.Warning" Dense="true">
                         When enabled, file scanning runs for <strong>ALL users</strong> including trusted users and admins.
-                        Infected files are deleted and user notified, but NO ban/warn applied to trusted/admin users.
-                    </MudAlert>
+                        Infected files are <strong>always deleted</strong> and user notified via DM, but NO ban/warn applied to trusted/admin users.
+                        This prevents accidental malware spread while respecting trust levels.
+                    </ConceptualAlert>
                 </MudStack>
             </MudStack>
         </MudPaper>

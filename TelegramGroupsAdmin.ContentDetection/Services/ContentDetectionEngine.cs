@@ -258,8 +258,6 @@ public class ContentDetectionEngine : IContentDetectionEngine
 
         var checkResults = new List<ContentCheckResponse>();
 
-        _logger.LogDebug("Starting content detection for user {UserId} in chat {ChatId}", request.UserId, request.ChatId);
-
         // Phase 4.13: URL Pre-Filter - Check for hard-blocked domains FIRST (instant policy violation)
         if (!string.IsNullOrWhiteSpace(request.Message))
         {

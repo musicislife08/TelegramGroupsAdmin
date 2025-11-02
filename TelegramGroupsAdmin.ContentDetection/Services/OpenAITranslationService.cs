@@ -121,7 +121,7 @@ IMPORTANT: Respond with ONLY the raw JSON object. Do NOT wrap it in markdown cod
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to translate text using OpenAI");
+            _logger.LogError(ex, "Failed to translate text using OpenAI (text length: {Length} chars)", text.Length);
             return null;
         }
     }

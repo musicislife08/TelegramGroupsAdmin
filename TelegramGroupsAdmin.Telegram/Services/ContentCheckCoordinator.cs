@@ -141,7 +141,7 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
                 ? "User is trusted - regular spam detection bypassed (critical checks passed)"
                 : "User is a chat admin - regular spam detection bypassed (critical checks passed)";
 
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Skipping regular spam detection for user {UserId} in chat {ChatId}: {Reason}",
                 request.UserId,
                 request.ChatId,

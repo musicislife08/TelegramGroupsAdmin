@@ -1,0 +1,69 @@
+@* Pre-styled alert component for explaining concepts and workflows *@
+
+<MudAlert
+    Severity="@Severity"
+    Icon="@Icon"
+    Dense="@Dense"
+    Elevation="@Elevation"
+    Class="@($"conceptual-alert {Class}")"
+    Style="@Style">
+    @if (!string.IsNullOrWhiteSpace(Title))
+    {
+        <MudText Typo="Typo.subtitle2" Class="mb-2">
+            <strong>@Title</strong>
+        </MudText>
+    }
+    <MudText Typo="Typo.body2">
+        @ChildContent
+    </MudText>
+</MudAlert>
+
+@code {
+    /// <summary>
+    /// Optional title for the alert
+    /// </summary>
+    [Parameter]
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// The content to display in the alert
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Alert severity (Info, Success, Warning, Error)
+    /// </summary>
+    [Parameter]
+    public Severity Severity { get; set; } = Severity.Info;
+
+    /// <summary>
+    /// Custom icon (defaults based on Severity)
+    /// </summary>
+    [Parameter]
+    public string? Icon { get; set; }
+
+    /// <summary>
+    /// Whether to use dense spacing
+    /// </summary>
+    [Parameter]
+    public bool Dense { get; set; } = false;
+
+    /// <summary>
+    /// Elevation level (0-24)
+    /// </summary>
+    [Parameter]
+    public int Elevation { get; set; } = 0;
+
+    /// <summary>
+    /// Additional CSS classes
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary>
+    /// Additional inline styles
+    /// </summary>
+    [Parameter]
+    public string? Style { get; set; }
+}
