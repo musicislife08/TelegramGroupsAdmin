@@ -23,7 +23,7 @@ public class SendGridEmailService : IEmailService
         _client = new SendGridClient(_options.ApiKey);
 
         // Debug log configuration at startup
-        _logger.LogInformation("SendGrid configured: Enabled={Enabled}, FromAddress={FromAddress}, FromName={FromName}, ApiKeySet={ApiKeySet}",
+        _logger.LogDebug("SendGrid configured: Enabled={Enabled}, FromAddress={FromAddress}, FromName={FromName}, ApiKeySet={ApiKeySet}",
             _options.Enabled,
             _options.FromAddress,
             _options.FromName,

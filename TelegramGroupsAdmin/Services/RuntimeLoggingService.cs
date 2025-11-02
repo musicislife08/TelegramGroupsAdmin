@@ -6,12 +6,12 @@ namespace TelegramGroupsAdmin.Services;
 
 /// <summary>
 /// Implementation of runtime logging configuration service
-/// Integrates with ILoggerFactory to apply log level changes immediately
+/// Integrates with Serilog LoggingLevelSwitch for true runtime log level changes
 /// </summary>
 public class RuntimeLoggingService : IRuntimeLoggingService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILoggerFactory _loggerFactory;
+    private readonly SerilogDynamicConfiguration _serilogConfig;
     private readonly ILogger<RuntimeLoggingService> _logger;
 
     // Common namespaces for quick selection in UI
@@ -38,39 +38,30 @@ public class RuntimeLoggingService : IRuntimeLoggingService
 
     public RuntimeLoggingService(
         IServiceScopeFactory scopeFactory,
-        ILoggerFactory loggerFactory,
+        SerilogDynamicConfiguration serilogConfig,
         ILogger<RuntimeLoggingService> logger)
     {
         _scopeFactory = scopeFactory;
-        _loggerFactory = loggerFactory;
+        _serilogConfig = serilogConfig;
         _logger = logger;
     }
 
     public async Task<LogConfig> GetCurrentConfigAsync()
     {
+        // Get current configuration from Serilog switches (reflects actual runtime state)
+        var config = _serilogConfig.GetCurrentConfig();
+
+        // Also check database for LastModified timestamp
         using var scope = _scopeFactory.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var dbConfig = await configService.GetAsync<LogConfig>(ConfigType.Log, chatId: null);
 
-        // Try to get config from database
-        var config = await configService.GetAsync<LogConfig>(ConfigType.Log, chatId: null);
-
-        if (config != null)
+        if (dbConfig != null)
         {
-            return config;
+            config.LastModified = dbConfig.LastModified;
         }
 
-        // Return default config if not in database
-        return new LogConfig
-        {
-            DefaultLevel = LogLevel.Information,
-            Overrides = new Dictionary<string, LogLevel>
-            {
-                { "Microsoft", LogLevel.Warning },
-                { "Microsoft.Hosting.Lifetime", LogLevel.Information },
-                { "TelegramGroupsAdmin", LogLevel.Information }
-            },
-            LastModified = DateTimeOffset.UtcNow
-        };
+        return config;
     }
 
     public async Task UpdateConfigAsync(LogConfig config)
@@ -123,20 +114,25 @@ public class RuntimeLoggingService : IRuntimeLoggingService
     public IReadOnlyList<string> GetCommonNamespaces() => CommonNamespaces;
 
     /// <summary>
-    /// Apply log level configuration to ILoggerFactory
-    /// This makes changes take effect immediately without restart
+    /// Apply log level configuration to Serilog switches at runtime
+    /// Changes take effect immediately for all loggers (no restart needed)
     /// </summary>
     private void ApplyLogLevels(LogConfig config)
     {
-        // Note: ILoggerFactory doesn't have a direct API to modify filters at runtime
-        // In .NET 6+, we need to use IOptionsMonitor<LoggerFilterOptions> or recreate loggers
-        // For now, we'll log a warning that this requires additional infrastructure
+        try
+        {
+            // Update Serilog LoggingLevelSwitch instances
+            _serilogConfig.ApplyConfig(config);
 
-        // TODO: Implement runtime filter updates using IOptionsMonitor<LoggerFilterOptions>
-        // or by using a custom ILoggerProvider that respects our config
-
-        _logger.LogWarning(
-            "Log level configuration saved to database. Full runtime updates require additional infrastructure setup. " +
-            "Changes will take effect on next application restart.");
+            _logger.LogInformation(
+                "Log configuration applied at runtime: DefaultLevel={DefaultLevel}, Overrides={OverrideCount}",
+                config.DefaultLevel,
+                config.Overrides.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to apply log level configuration at runtime");
+            throw;
+        }
     }
 }

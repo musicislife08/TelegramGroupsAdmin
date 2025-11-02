@@ -51,6 +51,9 @@ TelegramGroupsAdmin is built on the shoulders of many excellent open-source proj
 ### Background Jobs
 - **TickerQ** - Dual License (MIT or Apache 2.0) - https://github.com/Salgat/TickerQ
 
+### Logging
+- **Serilog.AspNetCore** - Apache License 2.0 - https://github.com/serilog/serilog-aspnetcore
+
 ### Machine Learning & AI
 - **Microsoft.ML** - MIT License - https://github.com/dotnet/machinelearning
 - **OpenAI API** (external service) - https://platform.openai.com/

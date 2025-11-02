@@ -1,22 +1,16 @@
+using Serilog;
 using TelegramGroupsAdmin;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data.Extensions;
 using TelegramGroupsAdmin.ContentDetection.Extensions;
 using TelegramGroupsAdmin.Telegram.Extensions;
+using TelegramGroupsAdmin.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure logging - suppress most Microsoft logs in development
-builder.Logging.ClearProviders();
-builder.Logging.AddSimpleConsole(options =>
-{
-    options.TimestampFormat = "[yyyy-MM-dd HH:mm:ss.fff] ";
-});
-builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
-builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Information);
-builder.Logging.AddFilter("TelegramGroupsAdmin.ContentDetection", LogLevel.Debug);
-builder.Logging.AddFilter("TelegramGroupsAdmin", LogLevel.Information);
-builder.Logging.AddFilter("Npgsql", LogLevel.Warning);
+// Configure Serilog for runtime log level switching
+// Note: Serilog configuration happens AFTER services are registered to access database
+builder.Logging.ClearProviders(); // Remove default logging providers
 
 // Blazor and UI services
 builder.Services.AddBlazorServices();
@@ -44,6 +38,31 @@ builder.Services.AddHttpClients(builder.Configuration);
 var connectionString = builder.Configuration.GetConnectionString("PostgreSQL")
     ?? throw new InvalidOperationException("PostgreSQL connection string not configured");
 builder.Services.AddDataServices(connectionString);
+
+// Register Serilog configuration service (will be configured after app.Build())
+SerilogDynamicConfiguration? serilogConfig = null;
+builder.Services.AddSingleton<SerilogDynamicConfiguration>(sp =>
+{
+    serilogConfig = new SerilogDynamicConfiguration(sp.GetRequiredService<IServiceScopeFactory>());
+    return serilogConfig;
+});
+
+// Configure Serilog with dynamic log level switching (starts with defaults, loads from DB after app starts)
+builder.Host.UseSerilog((context, services, configuration) =>
+{
+    var config = services.GetRequiredService<SerilogDynamicConfiguration>();
+
+    configuration
+        .MinimumLevel.ControlledBy(config.DefaultSwitch)
+        .MinimumLevel.Override("Microsoft", config.GetSwitch("Microsoft"))
+        .MinimumLevel.Override("Microsoft.Hosting.Lifetime", config.GetSwitch("Microsoft.Hosting.Lifetime"))
+        .MinimumLevel.Override("Microsoft.EntityFrameworkCore", config.GetSwitch("Microsoft.EntityFrameworkCore"))
+        .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", config.GetSwitch("Microsoft.EntityFrameworkCore.Database.Command"))
+        .MinimumLevel.Override("Npgsql", config.GetSwitch("Npgsql"))
+        .MinimumLevel.Override("System", config.GetSwitch("System"))
+        .MinimumLevel.Override("TelegramGroupsAdmin", config.GetSwitch("TelegramGroupsAdmin"))
+        .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] {Message:lj}{NewLine}{Exception}");
+});
 
 // Background job system (TickerQ with PostgreSQL backend)
 builder.Services.AddTickerQBackgroundJobs(builder.Environment);
@@ -74,6 +93,13 @@ TelegramGroupsAdmin.TickerQInstanceFactory.Initialize();
 
 // Run database migrations
 await app.RunDatabaseMigrationsAsync(connectionString);
+
+// Initialize Serilog configuration from database (now that migrations have run)
+if (serilogConfig != null)
+{
+    await serilogConfig.InitializeAsync();
+    app.Logger.LogInformation("Loaded log configuration from database");
+}
 
 // Ensure default background job configurations exist
 using (var scope = app.Services.CreateScope())

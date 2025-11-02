@@ -7,16 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Runtime Log Level Configuration** - True runtime log level reconfiguration using Serilog LoggingLevelSwitch (no restart required)
+- Settings UI for dynamic log level changes persisted to database
+
 ### Fixed
 
 - `ObjectDisposedException` in MessageEditProcessor when spam re-scanning edited messages in background tasks (changed from `IServiceProvider` to `IServiceScopeFactory`)
 - False-positive critical health check notifications for transient HTTP/network errors to Telegram API
 - "Failed to determine the https port for redirect" warning when running behind reverse proxy (added forwarded headers middleware)
+- Runtime log level reconfiguration now functional (replaced non-functional IOptionsMonitor<LoggerFilterOptions> with Serilog)
 
 ### Changed
 
+- Replaced Microsoft.Extensions.Logging runtime reconfiguration with Serilog 9.0.0
 - Chat health checks now differentiate between transient network errors (logged as warnings) and real issues (bot kicked/permission loss)
 - Added reverse proxy support with `UseForwardedHeaders` middleware for proper HTTPS detection
+- SendGrid configuration log moved to Debug level to reduce console noise
+- Default log levels: Warning for infrastructure (EF Core, Npgsql, Microsoft), Information for application code
 
 ### Documentation
 
