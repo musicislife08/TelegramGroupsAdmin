@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `ObjectDisposedException` in MessageEditProcessor when spam re-scanning edited messages in background tasks (changed from `IServiceProvider` to `IServiceScopeFactory`)
+- False-positive critical health check notifications for transient HTTP/network errors to Telegram API
+- "Failed to determine the https port for redirect" warning when running behind reverse proxy (added forwarded headers middleware)
+
+### Changed
+
+- Chat health checks now differentiate between transient network errors (logged as warnings) and real issues (bot kicked/permission loss)
+- Added reverse proxy support with `UseForwardedHeaders` middleware for proper HTTPS detection
+
+### Documentation
+
+- Added comprehensive `THIRD-PARTY-LICENSES.md` with all bundled components (FFmpeg, Tesseract, EFF Wordlist) and 40+ NuGet packages
+- Verified all package licenses via nuget.org (MIT, Apache 2.0, LGPL, PostgreSQL License)
+- Added commercial licensing notice for SixLabors.ImageSharp (split licensing: free <$1M revenue, commercial license ≥$1M)
+- Updated README.md to reference third-party licenses documentation
+
 ### Pending Features
 
 - Notification preferences UI
