@@ -8,6 +8,7 @@
     "MESSAGEHISTORY",
     "Blocklist",
     "blocklist",
+    "Blocklists",
     "TGAENC",
     "ciphertext",
     "HMAC",
@@ -28,7 +29,13 @@
     "stopwords",
     "CSRF",
     "HMACSHA256",
-    "tessdata"
+    "tessdata",
+    "Blazor",
+    "homelab",
+    "umputun",
+    "WTELEGRAM",
+    "Tesseract",
+    "LINQ"
   ],
   "flagWords": [],
   "ignorePaths": [
