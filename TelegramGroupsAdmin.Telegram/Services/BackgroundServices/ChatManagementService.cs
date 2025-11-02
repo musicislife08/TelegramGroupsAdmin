@@ -553,6 +553,15 @@ public class ChatManagementService(
                     ct: cancellationToken);
             }
         }
+        catch (HttpRequestException httpEx)
+        {
+            // Transient network error - log warning but don't send notification
+            // These are usually temporary API connectivity issues that resolve on their own
+            logger.LogWarning(httpEx, "Transient network error during health check for chat {ChatId} - will retry on next cycle", chatId);
+            health.IsReachable = false;
+            health.Status = "Error";
+            health.Warnings.Add($"Temporary network issue: {httpEx.Message}");
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Health check failed for chat {ChatId}", chatId);
@@ -561,6 +570,7 @@ public class ChatManagementService(
             health.Warnings.Add($"Cannot reach chat: {ex.Message}");
 
             // Notify about critical health failure (Phase 5.1)
+            // Only send notifications for non-transient errors (e.g., bot kicked, permission issues)
             // Create scope to resolve scoped INotificationService from singleton
             using var scope = serviceProvider.CreateScope();
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
