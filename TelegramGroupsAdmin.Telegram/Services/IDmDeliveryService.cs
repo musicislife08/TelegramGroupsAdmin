@@ -37,4 +37,25 @@ public interface IDmDeliveryService
         string notificationType,
         string messageText,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attempt to send a DM with optional media (photo or video) to a user.
+    /// If DM fails (403), queues notification for later delivery.
+    /// Updates bot_dm_enabled flag automatically.
+    /// Phase 5.2: Enhanced spam notifications with media support
+    /// </summary>
+    /// <param name="telegramUserId">Telegram user ID to send DM to</param>
+    /// <param name="notificationType">Type of notification (e.g., "spam_banned")</param>
+    /// <param name="messageText">Message text to send (or caption if media present)</param>
+    /// <param name="photoPath">Optional local path to photo file</param>
+    /// <param name="videoPath">Optional local path to video file</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result indicating success or failure (queued notifications are considered failures)</returns>
+    Task<DmDeliveryResult> SendDmWithMediaAsync(
+        long telegramUserId,
+        string notificationType,
+        string messageText,
+        string? photoPath = null,
+        string? videoPath = null,
+        CancellationToken cancellationToken = default);
 }

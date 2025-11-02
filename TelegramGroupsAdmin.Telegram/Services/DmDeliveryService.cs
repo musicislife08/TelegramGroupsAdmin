@@ -292,6 +292,125 @@ public class DmDeliveryService : IDmDeliveryService
         }
     }
 
+    public async Task<DmDeliveryResult> SendDmWithMediaAsync(
+        long telegramUserId,
+        string notificationType,
+        string messageText,
+        string? photoPath = null,
+        string? videoPath = null,
+        CancellationToken cancellationToken = default)
+    {
+        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+
+        try
+        {
+            // Determine if we're sending with media
+            var hasMedia = !string.IsNullOrWhiteSpace(photoPath) || !string.IsNullOrWhiteSpace(videoPath);
+
+            if (hasMedia)
+            {
+                // Send with media (photo or video)
+                if (!string.IsNullOrWhiteSpace(photoPath) && File.Exists(photoPath))
+                {
+                    // Send photo with caption
+                    await using var photoStream = File.OpenRead(photoPath);
+                    await botClient.SendPhoto(
+                        chatId: telegramUserId,
+                        photo: global::Telegram.Bot.Types.InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
+                        caption: messageText,
+                        parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                        cancellationToken: cancellationToken);
+
+                    _logger.LogInformation("DM with photo sent successfully to user {UserId}", telegramUserId);
+                }
+                else if (!string.IsNullOrWhiteSpace(videoPath) && File.Exists(videoPath))
+                {
+                    // Send video with caption
+                    await using var videoStream = File.OpenRead(videoPath);
+                    await botClient.SendVideo(
+                        chatId: telegramUserId,
+                        video: global::Telegram.Bot.Types.InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
+                        caption: messageText,
+                        parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                        cancellationToken: cancellationToken);
+
+                    _logger.LogInformation("DM with video sent successfully to user {UserId}", telegramUserId);
+                }
+                else
+                {
+                    // Media path provided but file doesn't exist - fallback to text only
+                    _logger.LogWarning("Media file not found (photo: {PhotoPath}, video: {VideoPath}), sending text-only DM to user {UserId}",
+                        photoPath, videoPath, telegramUserId);
+
+                    await botClient.SendMessage(
+                        chatId: telegramUserId,
+                        text: messageText,
+                        parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                        cancellationToken: cancellationToken);
+                }
+            }
+            else
+            {
+                // No media - send text only
+                await botClient.SendMessage(
+                    chatId: telegramUserId,
+                    text: messageText,
+                    parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                    cancellationToken: cancellationToken);
+
+                _logger.LogInformation("DM sent successfully to user {UserId}", telegramUserId);
+            }
+
+            // Update bot_dm_enabled flag to true
+            using (var updateScope = _serviceProvider.CreateScope())
+            {
+                var telegramUserRepo = updateScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+                await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, true, cancellationToken);
+            }
+
+            return new DmDeliveryResult
+            {
+                DmSent = true,
+                FallbackUsed = false,
+                Failed = false
+            };
+        }
+        catch (ApiRequestException ex) when (ex.ErrorCode == 403)
+        {
+            // User has blocked the bot - update flag and queue notification
+            _logger.LogInformation("User {UserId} has blocked bot DMs (403), queuing notification", telegramUserId);
+
+            using (var updateScope = _serviceProvider.CreateScope())
+            {
+                var telegramUserRepo = updateScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+                await telegramUserRepo.SetBotDmEnabledAsync(telegramUserId, false, cancellationToken);
+
+                // Queue notification for later delivery
+                var notificationRepo = updateScope.ServiceProvider.GetRequiredService<IPendingNotificationsRepository>();
+                await notificationRepo.AddPendingNotificationAsync(telegramUserId, notificationType, messageText, cancellationToken: cancellationToken);
+            }
+
+            return new DmDeliveryResult
+            {
+                DmSent = false,
+                FallbackUsed = false,
+                Failed = true,
+                ErrorMessage = "User has blocked bot DMs - notification queued for later delivery"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send DM with media to user {UserId}", telegramUserId);
+            return new DmDeliveryResult
+            {
+                DmSent = false,
+                FallbackUsed = false,
+                Failed = true,
+                ErrorMessage = ex.Message
+            };
+        }
+    }
+
     /// <summary>
     /// Check if exception is a network error (DNS, connection timeout, etc.)
     /// </summary>

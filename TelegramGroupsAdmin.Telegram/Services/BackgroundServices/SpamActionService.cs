@@ -210,17 +210,8 @@ public class SpamActionService(
                     spamResult.NetConfidence,
                     openAIResult.Confidence);
 
-                // Notify chat admins about spam detection (Phase 5.1)
-                SendNotificationAsync(message.Chat.Id, NotificationEventType.SpamDetected,
-                    "Spam Detected - Auto-Ban Triggered",
-                    $"High-confidence spam detected in chat '{message.Chat.Title ?? message.Chat.Id.ToString()}'.\n\n" +
-                    $"User: {message.From?.Username ?? message.From?.FirstName ?? message.From?.Id.ToString()}\n" +
-                    $"Confidence: {spamResult.NetConfidence}% (OpenAI: {openAIResult.Confidence}%)\n" +
-                    $"Action: User auto-banned across all managed chats and message deleted.\n\n" +
-                    $"Reason: {spamResult.CheckResults.FirstOrDefault()?.Details ?? "Multiple spam indicators detected"}",
-                    cancellationToken);
-
-                await ExecuteAutoBanAsync(
+                // Execute auto-ban and collect results
+                var banResult = await ExecuteAutoBanAsync(
                     userActionsRepo,
                     managedChatsRepo,
                     botFactory,
@@ -231,27 +222,38 @@ public class SpamActionService(
                     cancellationToken);
 
                 // Delete the spam message from the chat
-                await moderationActionService.DeleteMessageAsync(
-                    messageId: message.MessageId,
-                    chatId: message.Chat.Id,
-                    userId: message.From!.Id,
-                    deletedBy: Actor.AutoDetection,
-                    reason: $"Auto-ban triggered (net confidence: {spamResult.NetConfidence}%, OpenAI confirmed)",
-                    cancellationToken: cancellationToken);
+                bool messageDeleted = false;
+                try
+                {
+                    await moderationActionService.DeleteMessageAsync(
+                        messageId: message.MessageId,
+                        chatId: message.Chat.Id,
+                        userId: message.From!.Id,
+                        deletedBy: Actor.AutoDetection,
+                        reason: $"Auto-ban triggered (net confidence: {spamResult.NetConfidence}%, OpenAI confirmed)",
+                        cancellationToken: cancellationToken);
 
-                // Notify chat admins about message deletion (Phase 5.1)
-                SendNotificationAsync(message.Chat.Id, NotificationEventType.SpamAutoDeleted,
-                    "Spam Message Auto-Deleted",
-                    $"Spam message automatically deleted from chat '{message.Chat.Title ?? message.Chat.Id.ToString()}'.\n\n" +
-                    $"User: {message.From?.Username ?? message.From?.FirstName ?? message.From?.Id.ToString()}\n" +
-                    $"Message ID: {message.MessageId}\n" +
-                    $"User has been banned across all managed chats.",
+                    messageDeleted = true;
+
+                    logger.LogInformation(
+                        "Deleted spam message {MessageId} from chat {ChatId} (auto-ban)",
+                        message.MessageId,
+                        message.Chat.Id);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to delete spam message {MessageId} from chat {ChatId}",
+                        message.MessageId, message.Chat.Id);
+                }
+
+                // Send consolidated notification (Phase 5.2: replaces 3 separate notifications)
+                SendConsolidatedSpamNotificationAsync(
+                    message,
+                    spamResult,
+                    openAIResult,
+                    banResult,
+                    messageDeleted,
                     cancellationToken);
-
-                logger.LogInformation(
-                    "Deleted spam message {MessageId} from chat {ChatId} (auto-ban)",
-                    message.MessageId,
-                    message.Chat.Id);
             }
             else if (spamResult.NetConfidence > BorderlineNetConfidenceThreshold)
             {
@@ -371,7 +373,7 @@ public class SpamActionService(
     /// <summary>
     /// Execute auto-ban for confident spam across all managed chats
     /// </summary>
-    private async Task ExecuteAutoBanAsync(
+    private async Task<AutoBanResult?> ExecuteAutoBanAsync(
         IUserActionsRepository userActionsRepo,
         IManagedChatsRepository managedChatsRepo,
         TelegramBotClientFactory botFactory,
@@ -512,20 +514,15 @@ public class SpamActionService(
                     message.From.Id);
             }
 
-            // Notify chat admins about the ban (Phase 5.1)
-            SendNotificationAsync(message.Chat.Id, NotificationEventType.UserBanned,
-                "User Auto-Banned",
-                $"User automatically banned from chat '{message.Chat.Title ?? message.Chat.Id.ToString()}' and {activeChats.Count - 1} other managed chats.\n\n" +
-                $"User: {message.From.Username ?? message.From.FirstName ?? message.From.Id.ToString()}\n" +
-                $"Ban Status: {successCount}/{activeChats.Count} chats\n" +
-                $"Reason: {banAction.Reason}",
-                cancellationToken);
+            // Return ban results for consolidated notification (Phase 5.2)
+            return new AutoBanResult(successCount, activeChats.Count, banAction.Reason ?? "Auto-ban triggered");
         }
         catch (Exception ex)
         {
             logger.LogError(ex,
                 "Failed to execute auto-ban for user {UserId}",
                 message.From?.Id);
+            return null; // Ban failed
         }
     }
 
@@ -636,6 +633,155 @@ public class SpamActionService(
     }
 
     /// <summary>
+    /// Send consolidated spam notification with media support (Phase 5.2)
+    /// Replaces 3 separate notifications with 1 comprehensive message
+    /// </summary>
+    private void SendConsolidatedSpamNotificationAsync(
+        Message message,
+        TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
+        TelegramGroupsAdmin.ContentDetection.Models.ContentCheckResponse openAIResult,
+        AutoBanResult? banResult,
+        bool messageDeleted,
+        CancellationToken ct)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // Extract user info
+                var userName = message.From?.Username != null
+                    ? $"@{message.From.Username}"
+                    : message.From?.FirstName ?? message.From?.Id.ToString() ?? "Unknown";
+
+                var userDisplay = message.From?.Username != null
+                    ? $"@{message.From.Username} ({message.From.FirstName ?? ""})"
+                    : message.From?.FirstName ?? message.From?.Id.ToString() ?? "Unknown";
+
+                // Build message text preview (truncate if >200 chars for caption limit)
+                var messageTextPreview = message.Text != null && message.Text.Length > 200
+                    ? message.Text[..197] + "..."
+                    : message.Text ?? "[No text]";
+
+                // Escape MarkdownV2 special characters
+                messageTextPreview = EscapeMarkdownV2(messageTextPreview);
+                var chatTitle = EscapeMarkdownV2(message.Chat.Title ?? message.Chat.Id.ToString());
+                userDisplay = EscapeMarkdownV2(userDisplay);
+
+                // Build detection details
+                var detectionDetails = new System.Text.StringBuilder();
+                detectionDetails.AppendLine($"• Net Confidence: {spamResult.NetConfidence}%");
+                detectionDetails.AppendLine($"• OpenAI: {openAIResult.Confidence}% \\({EscapeMarkdownV2(openAIResult.Details ?? "Spam detected")}\\)");
+
+                // Add triggered checks (top 3 by confidence)
+                var topChecks = spamResult.CheckResults
+                    .Where(c => c.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Spam)
+                    .OrderByDescending(c => c.Confidence)
+                    .Take(3);
+
+                foreach (var check in topChecks)
+                {
+                    var checkDetails = EscapeMarkdownV2(check.Details ?? "");
+                    detectionDetails.AppendLine($"• {EscapeMarkdownV2(check.CheckName.ToString())}: {checkDetails}");
+                }
+
+                // Build action summary
+                var actionSummary = new System.Text.StringBuilder();
+                if (banResult != null)
+                {
+                    actionSummary.AppendLine($"✅ Banned from {banResult.SuccessCount}/{banResult.TotalChats} managed chats");
+                }
+                if (messageDeleted)
+                {
+                    actionSummary.AppendLine($"✅ Message deleted \\(ID: {message.MessageId}\\)");
+                }
+
+                // Build consolidated message
+                var consolidatedMessage =
+                    $"🚫 *Spam Auto\\-Banned*\n\n" +
+                    $"*User:* {userDisplay}\n" +
+                    $"*Chat:* {chatTitle}\n\n" +
+                    $"📝 *Message:*\n{messageTextPreview}\n\n" +
+                    $"🔍 *Detection:*\n{detectionDetails}\n" +
+                    $"⛔ *Action Taken:*\n{actionSummary}";
+
+                // Query database for media local path (if media exists)
+                string? photoPath = null;
+                string? videoPath = null;
+
+                using var scope = serviceProvider.CreateScope();
+                var messagesRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+
+                // Look up the message to get local file paths if media was downloaded
+                var messageRecord = await messagesRepo.GetMessageAsync(message.MessageId, ct);
+                if (messageRecord != null)
+                {
+                    // Photos are stored in PhotoLocalPath
+                    if (!string.IsNullOrEmpty(messageRecord.PhotoLocalPath))
+                    {
+                        photoPath = messageRecord.PhotoLocalPath;
+                        logger.LogDebug("Found photo path for spam notification: {PhotoPath}", photoPath);
+                    }
+                    // Videos/Animations are stored in MediaLocalPath
+                    else if (messageRecord.MediaType is TelegramGroupsAdmin.Telegram.Models.MediaType.Video
+                        or TelegramGroupsAdmin.Telegram.Models.MediaType.Animation
+                        && !string.IsNullOrEmpty(messageRecord.MediaLocalPath))
+                    {
+                        videoPath = messageRecord.MediaLocalPath;
+                        logger.LogDebug("Found video/animation path for spam notification: {VideoPath}", videoPath);
+                    }
+                }
+
+                // Send DM notification with media support (Phase 5.2)
+                // Note: Bypasses NotificationService to enable media support
+                // TODO: Extend INotificationService with media support in future
+                var chatAdminsRepo = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
+                var telegramMappingRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
+                var dmDeliveryService = scope.ServiceProvider.GetRequiredService<IDmDeliveryService>();
+
+                // Get all active admins for this chat
+                var chatAdmins = await chatAdminsRepo.GetChatAdminsAsync(message.Chat.Id, ct);
+
+                foreach (var admin in chatAdmins)
+                {
+                    // Map telegram ID to web user ID to verify they're linked
+                    var mapping = await telegramMappingRepo.GetByTelegramIdAsync(admin.TelegramId, ct);
+                    if (mapping == null)
+                        continue;
+
+                    // Send DM with media support (preferences will be checked by NotificationService in future)
+                    await dmDeliveryService.SendDmWithMediaAsync(
+                        admin.TelegramId,
+                        "spam_banned",
+                        consolidatedMessage,
+                        photoPath,
+                        videoPath,
+                        ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to send consolidated spam notification for message {MessageId} in chat {ChatId}",
+                    message.MessageId, message.Chat.Id);
+            }
+        }, ct);
+    }
+
+    /// <summary>
+    /// Escape special characters for MarkdownV2 format
+    /// </summary>
+    private static string EscapeMarkdownV2(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+
+        var specialChars = new[] { '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' };
+        foreach (var c in specialChars)
+        {
+            text = text.Replace(c.ToString(), "\\" + c);
+        }
+        return text;
+    }
+
+    /// <summary>
     /// Helper method to send notifications with proper scope management (Phase 5.1)
     /// Creates scope to resolve scoped INotificationService from singleton background service
     /// Fire-and-forget pattern - does not await the notification task
@@ -657,3 +803,8 @@ public class SpamActionService(
         }, ct);
     }
 }
+
+/// <summary>
+/// Result of auto-ban execution across managed chats (Phase 5.2)
+/// </summary>
+internal record AutoBanResult(int SuccessCount, int TotalChats, string BanReason);

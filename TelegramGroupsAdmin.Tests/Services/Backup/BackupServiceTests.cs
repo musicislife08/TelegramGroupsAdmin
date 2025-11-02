@@ -588,6 +588,23 @@ public class BackupServiceTests
                 Failed = false
             });
         }
+
+        public Task<DmDeliveryResult> SendDmWithMediaAsync(
+            long telegramUserId,
+            string notificationType,
+            string messageText,
+            string? photoPath = null,
+            string? videoPath = null,
+            CancellationToken cancellationToken = default)
+        {
+            // No-op for tests - return success
+            return Task.FromResult(new DmDeliveryResult
+            {
+                DmSent = true,
+                FallbackUsed = false,
+                Failed = false
+            });
+        }
     }
 
     /// <summary>
