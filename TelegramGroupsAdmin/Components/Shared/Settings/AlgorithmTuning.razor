@@ -11,13 +11,16 @@
 <MudGrid>
     <!-- Info Alert -->
     <MudItem xs="12">
-        <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
-            <MudText Typo="Typo.subtitle2"><strong>ML-Powered Threshold Optimization</strong></MudText>
-            <MudText Typo="Typo.body2">
+        <ConceptualAlert Title="How ML Threshold Optimization Works" Severity="Severity.Info">
+            <div>
                 Analyzes <strong>OpenAI veto patterns</strong> to identify algorithms that are flagging too many false positives.
-                Uses <strong>ML.NET binary classification</strong> to predict optimal thresholds that minimize veto rates while maintaining spam detection effectiveness.
-            </MudText>
-        </MudAlert>
+                When OpenAI vetoes a detection (marks as ham when algorithm said spam), it's a signal that the algorithm's threshold might be too aggressive.
+            </div>
+            <div class="mt-2">
+                Uses <strong>ML.NET binary classification</strong> to predict optimal thresholds that minimize veto rates (false positives)
+                while maintaining spam detection effectiveness. Recommendations include confidence scores and estimated improvement metrics.
+            </div>
+        </ConceptualAlert>
     </MudItem>
 
     <!-- Generate New Recommendations -->
@@ -27,6 +30,7 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudIcon Icon="@Icons.Material.Filled.AutoFixHigh" Color="Color.Primary" />
                     <MudText Typo="Typo.h6">Generate Recommendations</MudText>
+                    <HelpTooltip Text="Analysis requires at least 50 detection samples (messages flagged by algorithms). The ML model trains on OpenAI veto patterns to find thresholds that reduce false positives. Longer analysis periods (30+ days) provide better recommendations." />
                 </MudStack>
 
                 <MudText Typo="Typo.body2" Color="Color.Secondary">
@@ -128,25 +132,34 @@
                                     </MudStack>
                                 </MudStack>
 
-                                <MudStack Row="true" Spacing="4">
+                                <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center">
                                     <MudStack Spacing="0">
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">Veto Rate Before</MudText>
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Veto Rate Before</MudText>
+                                            <HelpTooltip Text="Percentage of this algorithm's detections that OpenAI vetoed (marked as false positives). High veto rate = algorithm is too aggressive and needs threshold adjustment." />
+                                        </MudStack>
                                         <MudText Typo="Typo.body2">@recommendation.VetoRateBefore.ToString("F1")%</MudText>
                                     </MudStack>
                                     @if (recommendation.EstimatedVetoRateAfter.HasValue)
                                     {
                                         <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Color="Color.Secondary" Size="Size.Small" />
                                         <MudStack Spacing="0">
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Estimated After</MudText>
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">Estimated After</MudText>
+                                                <HelpTooltip Text="ML model's prediction of veto rate after applying recommended threshold. Lower is better (fewer false positives). Based on historical veto patterns." />
+                                            </MudStack>
                                             <MudText Typo="Typo.body2" Color="Color.Success">@recommendation.EstimatedVetoRateAfter.Value.ToString("F1")%</MudText>
                                         </MudStack>
                                     }
                                 </MudStack>
 
-                                <MudStack Row="true" Spacing="4">
-                                    <MudText Typo="Typo.caption">
-                                        <strong>Confidence:</strong> @recommendation.ConfidenceScore.ToString("F0")%
-                                    </MudText>
+                                <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudText Typo="Typo.caption">
+                                            <strong>Confidence:</strong> @recommendation.ConfidenceScore.ToString("F0")%
+                                        </MudText>
+                                        <HelpTooltip Text="ML model's confidence in this recommendation (0-100%). Higher confidence = more reliable prediction based on training data quality and sample size. Trust recommendations >70%." />
+                                    </MudStack>
                                     <MudText Typo="Typo.caption">
                                         <strong>Samples:</strong> @recommendation.VetoedCount vetoed / @recommendation.SpamFlagsCount flags
                                     </MudText>

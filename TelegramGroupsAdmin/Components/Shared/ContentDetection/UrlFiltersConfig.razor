@@ -15,16 +15,19 @@
         <MudPaper Class="pa-4" Elevation="2" Style="height: 100%">
             <MudStack Spacing="3">
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                    <MudText Typo="Typo.h6" Color="Color.Error">
-                        <MudIcon Icon="@Icons.Material.Filled.Block" Class="mr-2" />
-                        Hard Block
-                    </MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudText Typo="Typo.h6" Color="Color.Error">
+                            <MudIcon Icon="@Icons.Material.Filled.Block" Class="mr-2" />
+                            Hard Block
+                        </MudText>
+                        <HelpTooltip Text="Hard Block = Instant ban with no appeal. Message deleted, user banned immediately, no OpenAI verification. Use for known malicious domains (malware, phishing, scams). Runs BEFORE spam detection pipeline." />
+                    </MudStack>
                     <MudChip T="string" Size="Size.Small" Color="Color.Error">Instant Ban</MudChip>
                 </MudStack>
 
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    Pre-detection instant ban, no OpenAI veto. Runs before spam detection.
-                </MudText>
+                <ConceptualAlert Severity="Severity.Error" Dense="true" Class="mb-2">
+                    Hard Block domains trigger <strong>immediate ban</strong> without confidence voting or OpenAI veto. Use only for confirmed malicious domains where false positives are impossible (e.g., known phishing sites).
+                </ConceptualAlert>
 
                 @if (_loading)
                 {
@@ -50,7 +53,10 @@
                     }
 
                     <!-- Custom URLs -->
-                    <MudText Typo="Typo.subtitle2" Class="mt-4">Custom Blocklist URLs (one per line)</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-4">
+                        <MudText Typo="Typo.subtitle2">Custom Blocklist URLs (one per line)</MudText>
+                        <HelpTooltip Text="URLs to external blocklists (one domain per line format). Synced hourly. Example: abuse.ch URLhaus, PhishTank. Must be publicly accessible HTTP(S) endpoints returning newline-separated domains." />
+                    </MudStack>
                     <MudTextField @bind-Value="_hardBlockCustomUrls"
                                  Lines="6"
                                  Variant="Variant.Outlined"
@@ -58,7 +64,10 @@
                                  HelperText="External blocklists (newline format)" />
 
                     <!-- Manual Domains -->
-                    <MudText Typo="Typo.subtitle2" Class="mt-4">Manual Domains (one per line)</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-4">
+                        <MudText Typo="Typo.subtitle2">Manual Domains (one per line)</MudText>
+                        <HelpTooltip Text="Wildcard syntax: Use *.example.com to match all subdomains (test.example.com, api.example.com). Use example.com to match exact domain only. One domain per line." />
+                    </MudStack>
                     <MudTextField @bind-Value="_hardBlockManualDomains"
                                  Lines="6"
                                  Variant="Variant.Outlined"
@@ -83,16 +92,19 @@
         <MudPaper Class="pa-4" Elevation="2" Style="height: 100%">
             <MudStack Spacing="3">
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                    <MudText Typo="Typo.h6" Color="Color.Success">
-                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="mr-2" />
-                        Whitelist
-                    </MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudText Typo="Typo.h6" Color="Color.Success">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="mr-2" />
+                            Whitelist
+                        </MudText>
+                        <HelpTooltip Text="Whitelist = Complete bypass of all URL filtering (both hard and soft blocks). Whitelisted domains are always allowed, even if they appear in blocklists. Use for legitimate domains that trigger false positives (e.g., URL shorteners, your own sites)." />
+                    </MudStack>
                     <MudChip T="string" Size="Size.Small" Color="Color.Success">Bypass All</MudChip>
                 </MudStack>
 
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    Domains that bypass all blocking checks (hard and soft).
-                </MudText>
+                <ConceptualAlert Severity="Severity.Success" Dense="true" Class="mb-2">
+                    Whitelisted domains <strong>bypass all blocking</strong> (hard and soft). Takes highest priority. Use for false positive prevention (e.g., bit.ly, yourdomain.com).
+                </ConceptualAlert>
 
                 @if (_loading)
                 {
@@ -125,16 +137,19 @@
         <MudPaper Class="pa-4" Elevation="2" Style="height: 100%">
             <MudStack Spacing="3">
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                    <MudText Typo="Typo.h6" Color="Color.Warning">
-                        <MudIcon Icon="@Icons.Material.Filled.Warning" Class="mr-2" />
-                        Soft Block
-                    </MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudText Typo="Typo.h6" Color="Color.Warning">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Class="mr-2" />
+                            Soft Block
+                        </MudText>
+                        <HelpTooltip Text="Soft Block = Contributes to spam confidence voting (adds ~70-85 confidence). Message may be deleted if total confidence exceeds threshold, but OpenAI can veto false positives. Use for suspicious domains (URL shorteners, newly registered domains, SEO spam). Runs DURING spam detection pipeline." />
+                    </MudStack>
                     <MudChip T="string" Size="Size.Small" Color="Color.Warning">OpenAI Veto</MudChip>
                 </MudStack>
 
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    Contributes to confidence voting, subject to OpenAI veto. Runs during spam detection.
-                </MudText>
+                <ConceptualAlert Severity="Severity.Warning" Dense="true" Class="mb-2">
+                    Soft Block domains add confidence to spam score but <strong>can be vetoed by OpenAI</strong>. Message deleted only if combined confidence ≥ threshold. Safer for questionable domains that might have legitimate uses.
+                </ConceptualAlert>
 
                 @if (_loading)
                 {
