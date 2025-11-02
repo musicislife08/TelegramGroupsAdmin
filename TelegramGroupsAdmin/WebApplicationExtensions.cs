@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TickerQ.DependencyInjection;
@@ -16,6 +17,14 @@ public static class WebApplicationExtensions
     /// </summary>
     public static WebApplication ConfigurePipeline(this WebApplication app)
     {
+        // Configure forwarded headers for reverse proxy support (SWAG, nginx, etc.)
+        // This allows the app to understand the original HTTPS request from clients
+        // even though it's running on HTTP inside the container
+        app.UseForwardedHeaders(new ForwardedHeadersOptions
+        {
+            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+        });
+
         if (!app.Environment.IsDevelopment())
         {
             app.UseExceptionHandler("/Error", createScopeForErrors: true);
