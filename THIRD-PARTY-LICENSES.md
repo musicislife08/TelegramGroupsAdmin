@@ -49,7 +49,7 @@ TelegramGroupsAdmin is built on the shoulders of many excellent open-source proj
 - **Dapper** - Apache License 2.0 - https://github.com/DapperLib/Dapper
 
 ### Background Jobs
-- **TickerQ** - MIT License - https://github.com/Salgat/TickerQ
+- **TickerQ** - Dual License (MIT or Apache 2.0) - https://github.com/Salgat/TickerQ
 
 ### Machine Learning & AI
 - **Microsoft.ML** - MIT License - https://github.com/dotnet/machinelearning
@@ -62,9 +62,11 @@ TelegramGroupsAdmin is built on the shoulders of many excellent open-source proj
 
 ### Utilities & Parsing
 - **AngleSharp** - MIT License - https://github.com/AngleSharp/AngleSharp
-- **CsvHelper** - MS-PL / Apache 2.0 - https://github.com/JoshClose/CsvHelper
+- **CsvHelper** - Dual License (MS-PL or Apache 2.0) - https://github.com/JoshClose/CsvHelper
 - **DiffPlex** - Apache License 2.0 - https://github.com/mmanela/diffplex
-- **SixLabors.ImageSharp** - Apache License 2.0 (v2+) - https://github.com/SixLabors/ImageSharp
+- **SixLabors.ImageSharp** - Split License (Apache 2.0 or Commercial) - https://github.com/SixLabors/ImageSharp
+  - **Important:** Apache 2.0 applies for open source, non-profit, and companies <$1M annual revenue
+  - **Commercial license required** for companies ≥$1M revenue - see https://sixlabors.com/pricing/
 
 ### Virus Scanning
 - **nClam** - Apache License 2.0 - https://github.com/tekmaven/nClam
@@ -139,4 +141,13 @@ https://github.com/weekenders/TelegramGroupsAdmin/issues
 
 ---
 
+## Commercial Licensing Notes
+
+**SixLabors.ImageSharp** has split licensing that may require a commercial license depending on your organization's revenue. This applies if you're using TelegramGroupsAdmin in a for-profit company with ≥$1M annual revenue. See https://sixlabors.com/pricing/ for details.
+
+All other dependencies use permissive licenses (MIT, Apache 2.0, BSD, PostgreSQL License) with no commercial restrictions.
+
+---
+
 **Last Updated:** 2025-11-02
+**License Information Verified:** 2025-11-02 via NuGet.org
