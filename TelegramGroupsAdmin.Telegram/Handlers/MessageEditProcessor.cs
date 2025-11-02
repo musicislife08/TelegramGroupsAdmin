@@ -16,14 +16,14 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class MessageEditProcessor
 {
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly ILogger<MessageEditProcessor> _logger;
 
     public MessageEditProcessor(
-        IServiceProvider serviceProvider,
+        IServiceScopeFactory serviceScopeFactory,
         ILogger<MessageEditProcessor> logger)
     {
-        _serviceProvider = serviceProvider;
+        _serviceScopeFactory = serviceScopeFactory;
         _logger = logger;
     }
 
@@ -185,7 +185,7 @@ public class MessageEditProcessor
         {
             try
             {
-                using var scope = _serviceProvider.CreateScope();
+                using var scope = _serviceScopeFactory.CreateScope();
                 var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
 
                 // Get the latest edit_version for this message
