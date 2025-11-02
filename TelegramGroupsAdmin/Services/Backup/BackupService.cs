@@ -420,6 +420,10 @@ public class BackupService : IBackupService
             await transaction.CommitAsync();
             _logger.LogInformation("✅ System restore complete: {Tables} tables, {Records} total records restored",
                 tablesRestored, totalRecordsRestored);
+
+            // Disable bot to prevent dual instances (Phase 5: Backup/Restore Safety)
+            // After restoring, the bot should be manually re-enabled by the user
+            await DisableTelegramBotAsync(connection);
         }
         catch (Exception ex)
         {
@@ -581,7 +585,18 @@ public class BackupService : IBackupService
 
     public async Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes)
     {
-        return await GetMetadataAsync(backupBytes, passphrase: null);
+        return await GetMetadataInternalAsync(backupBytes, passphrase: null);
+    }
+
+    /// <summary>
+    /// Get backup metadata with explicit passphrase (for encrypted backups during first-run)
+    /// </summary>
+    public async Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes, string passphrase)
+    {
+        if (string.IsNullOrWhiteSpace(passphrase))
+            throw new ArgumentException("Passphrase cannot be empty", nameof(passphrase));
+
+        return await GetMetadataInternalAsync(backupBytes, passphrase);
     }
 
     /// <summary>
@@ -592,7 +607,7 @@ public class BackupService : IBackupService
         return await Task.FromResult(_encryptionService.IsEncrypted(backupBytes));
     }
 
-    private async Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes, string? passphrase)
+    private async Task<BackupMetadata> GetMetadataInternalAsync(byte[] backupBytes, string? passphrase)
     {
         try
         {
@@ -656,7 +671,7 @@ public class BackupService : IBackupService
         try
         {
             // Try to read metadata
-            var metadata = await GetMetadataAsync(backupBytes, passphrase);
+            var metadata = await GetMetadataInternalAsync(backupBytes, passphrase);
 
             // Basic validation checks
             if (metadata == null)
@@ -704,6 +719,47 @@ public class BackupService : IBackupService
         }
 
         return result.ToString();
+    }
+
+    /// <summary>
+    /// Disables the Telegram bot after restore to prevent dual instances
+    /// Updates the telegram_bot_config JSONB column to set bot_enabled = false
+    /// </summary>
+    private async Task DisableTelegramBotAsync(NpgsqlConnection connection)
+    {
+        try
+        {
+            // Update the telegram_bot_config JSONB column to disable the bot
+            const string updateSql = """
+                UPDATE configs
+                SET telegram_bot_config = '{"bot_enabled": false}'::jsonb
+                WHERE chat_id IS NULL
+                """;
+
+            var rowsAffected = await connection.ExecuteAsync(updateSql);
+
+            if (rowsAffected > 0)
+            {
+                _logger.LogWarning("🚫 Telegram bot disabled after restore to prevent dual instances. " +
+                                  "Manually re-enable the bot if this is the only active instance.");
+            }
+            else
+            {
+                // If no global config exists, insert one with bot disabled
+                const string insertSql = """
+                    INSERT INTO configs (chat_id, telegram_bot_config)
+                    VALUES (NULL, '{"bot_enabled": false}'::jsonb)
+                    """;
+
+                await connection.ExecuteAsync(insertSql);
+                _logger.LogWarning("🚫 Created Telegram bot config (disabled) after restore to prevent dual instances.");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't fail the restore - this is a safety feature
+            _logger.LogError(ex, "Failed to disable Telegram bot after restore - you may need to disable it manually");
+        }
     }
 
 }

@@ -2,6 +2,7 @@
 @inject IBackupService BackupService
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject IDialogService DialogService
 
 <MudDialog>
     <DialogContent>
@@ -69,11 +70,13 @@
     private BackupMetadata? _metadata;
     private bool _isRestoring;
     private byte[]? _backupBytes;
+    private string? _passphrase; // Store passphrase for encrypted backups
 
     private async Task OnFileSelected(IBrowserFile? file)
     {
         _selectedFile = file;
         _metadata = null;
+        _passphrase = null; // Reset passphrase for new file
         StateHasChanged();
 
         if (file == null)
@@ -89,15 +92,67 @@
             await stream.CopyToAsync(ms);
             _backupBytes = ms.ToArray();
 
-            // Get metadata
-            _metadata = await BackupService.GetMetadataAsync(_backupBytes);
-            Snackbar.Add("Backup file loaded successfully", Severity.Success);
+            // Check if backup is encrypted
+            var isEncrypted = await BackupService.IsEncryptedAsync(_backupBytes);
+
+            if (isEncrypted)
+            {
+                // Prompt user for passphrase
+                var passphraseDialog = await DialogService.ShowAsync<PassphrasePromptDialog>(
+                    "Enter Backup Passphrase",
+                    new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true });
+
+                var result = await passphraseDialog.Result;
+
+                if (result is null || result.Canceled)
+                {
+                    Snackbar.Add("Passphrase required to read encrypted backup", Severity.Warning);
+                    _selectedFile = null;
+                    _backupBytes = null;
+                    StateHasChanged();
+                    return;
+                }
+
+                _passphrase = result.Data as string;
+
+                if (string.IsNullOrWhiteSpace(_passphrase))
+                {
+                    Snackbar.Add("Invalid passphrase", Severity.Error);
+                    _selectedFile = null;
+                    _backupBytes = null;
+                    StateHasChanged();
+                    return;
+                }
+            }
+
+            // Get metadata (use passphrase if backup is encrypted)
+            try
+            {
+                if (isEncrypted && !string.IsNullOrWhiteSpace(_passphrase))
+                {
+                    _metadata = await BackupService.GetMetadataAsync(_backupBytes, _passphrase);
+                    Snackbar.Add("Encrypted backup file loaded successfully", Severity.Success);
+                }
+                else
+                {
+                    _metadata = await BackupService.GetMetadataAsync(_backupBytes);
+                    Snackbar.Add("Backup file loaded successfully", Severity.Success);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to read backup metadata: {ex.Message}", Severity.Error);
+                _selectedFile = null;
+                _backupBytes = null;
+                _passphrase = null;
+            }
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to read backup file: {ex.Message}", Severity.Error);
             _selectedFile = null;
             _backupBytes = null;
+            _passphrase = null;
         }
 
         StateHasChanged();
@@ -113,12 +168,27 @@
 
         try
         {
-            await BackupService.RestoreAsync(_backupBytes);
-            Snackbar.Add("System restored successfully! Redirecting to login...", Severity.Success);
+            // Use passphrase if available (for encrypted backups)
+            if (!string.IsNullOrWhiteSpace(_passphrase))
+            {
+                await BackupService.RestoreAsync(_backupBytes, _passphrase);
+            }
+            else
+            {
+                await BackupService.RestoreAsync(_backupBytes);
+            }
+
+            Snackbar.Add("System restored successfully! The Telegram bot has been disabled to prevent dual instances. " +
+                        "You'll need to re-enable it if this is the only active instance. Redirecting to login...",
+                        Severity.Success,
+                        config =>
+                        {
+                            config.VisibleStateDuration = 5000; // Show for 5 seconds
+                        });
 
             // Close dialog and redirect
             MudDialog.Close(DialogResult.Ok(true));
-            await Task.Delay(1000);
+            await Task.Delay(5000); // Give user time to read the message (5 seconds)
             Navigation.NavigateTo("/login", forceLoad: true);
         }
         catch (Exception ex)

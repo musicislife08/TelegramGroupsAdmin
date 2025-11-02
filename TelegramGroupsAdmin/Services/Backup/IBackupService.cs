@@ -40,6 +40,13 @@ public interface IBackupService
     Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes);
 
     /// <summary>
+    /// Get backup metadata with explicit passphrase (for encrypted backups during first-run)
+    /// </summary>
+    /// <param name="backupBytes">Backup file bytes</param>
+    /// <param name="passphrase">Passphrase to decrypt (if encrypted)</param>
+    Task<BackupMetadata> GetMetadataAsync(byte[] backupBytes, string passphrase);
+
+    /// <summary>
     /// Check if backup file is encrypted (checks for TGAENC magic header)
     /// </summary>
     /// <param name="backupBytes">Backup file bytes</param>
