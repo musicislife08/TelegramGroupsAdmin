@@ -281,6 +281,14 @@ See [BACKLOG.md](BACKLOG.md) for complete list of planned features including:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+### Third-Party Components
+
+TelegramGroupsAdmin includes and depends on various open-source libraries and tools. See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for complete licensing information and attributions for:
+
+- **Bundled Components:** FFmpeg (LGPL 2.1+), Tesseract OCR (Apache 2.0), EFF Wordlist (CC/Public Domain)
+- **Major Dependencies:** Telegram.Bot, MudBlazor, Entity Framework Core, TickerQ, and more
+- **External Services:** OpenAI, VirusTotal, CAS.chat, SendGrid
+
 ---
 
 ## Acknowledgments
