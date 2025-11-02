@@ -5,7 +5,10 @@
 
 <MudPaper Class="pa-4" Elevation="1">
     <MudStack Spacing="3">
-        <MudText Typo="Typo.h6" Color="Color.Primary">Spam Similarity Detection</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudText Typo="Typo.h6" Color="Color.Primary">Spam Similarity Detection</MudText>
+            <HelpTooltip Text="Uses TF-IDF (Term Frequency-Inverse Document Frequency) cosine similarity to compare new messages against known spam samples. Detects copycat spam and slight variations of trained spam patterns. Requires training samples to be effective." />
+        </MudStack>
 
         @if (!IsGlobalView)
         {
@@ -35,23 +38,30 @@
 
         @if (activeConfig.Enabled)
         {
-            <MudSlider @bind-Value="activeConfig.Threshold"
-                      Min="0.1" Max="1.0" Step="0.05"
-                      TickMarks="true" TickMarkLabels="@_similarityLabels"
-                      Disabled="@isReadOnly">
-                <MudText>Similarity Threshold: @activeConfig.Threshold.ToString("F2")</MudText>
-            </MudSlider>
+            <MudStack Spacing="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudText>Similarity Threshold: @activeConfig.Threshold.ToString("F2")</MudText>
+                    <HelpTooltip Text="Cosine similarity score from 0.0 (completely different) to 1.0 (identical). Recommended: 0.7-0.8 for balanced detection. Lower = more sensitive (catches variations but more false positives). Higher = stricter (only near-exact matches)." />
+                </MudStack>
+                <MudSlider @bind-Value="activeConfig.Threshold"
+                          Min="0.1" Max="1.0" Step="0.05"
+                          TickMarks="true" TickMarkLabels="@_similarityLabels"
+                          Disabled="@isReadOnly" />
+            </MudStack>
 
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+            <ConceptualAlert Severity="Severity.Info" Dense="true">
                 @if (isReadOnly)
                 {
                     <text>Using global value: @activeConfig.Threshold.ToString("F2")</text>
                 }
                 else
                 {
-                    <text>Messages with similarity >= this threshold to known spam samples will be flagged</text>
+                    <text>
+                        <strong>How it works:</strong> Compares word patterns between new messages and your training samples.
+                        Score of 0.70 = 70% similarity. Requires diverse spam training samples for best accuracy.
+                    </text>
                 }
-            </MudText>
+            </ConceptualAlert>
         }
 
         @if (!IsGlobalView && !_config.Similarity.UseGlobal && _globalConfig.Similarity.Enabled != _config.Similarity.Enabled)

@@ -9,7 +9,10 @@
 
 <MudPaper Class="pa-4" Elevation="1">
     <MudStack Spacing="3">
-        <MudText Typo="Typo.h6" Color="Color.Primary">OpenAI Integration</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudText Typo="Typo.h6" Color="Color.Primary">OpenAI Integration</MudText>
+            <HelpTooltip Text="Uses GPT-4 to analyze message context and intent. Best accuracy for nuanced spam detection. Two modes: Veto Mode (confirms other algorithms' detections) or Detection Mode (actively searches for spam). Slow (~1.2s avg) but high quality." />
+        </MudStack>
 
         @if (!IsGlobalView)
         {
@@ -32,21 +35,40 @@
 
         @if (openAiConfig.Enabled)
         {
-            <MudSwitch T="bool" @bind-Value="openAiConfig.VetoMode"
-                      Label="Veto Mode (Confirm Spam)"
-                      Color="Color.Primary"
-                      Disabled="@openAiReadOnly" />
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                If enabled, OpenAI confirms spam. If disabled, OpenAI finds spam.
-            </MudText>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudSwitch T="bool" @bind-Value="openAiConfig.VetoMode"
+                          Label="Veto Mode (Confirm Spam)"
+                          Color="Color.Primary"
+                          Disabled="@openAiReadOnly" />
+                <HelpTooltip Text="Veto Mode ON: OpenAI reviews other algorithms' detections and can override false positives (reduces false positives, recommended). Veto Mode OFF: OpenAI actively searches for spam and contributes to confidence voting (more aggressive, higher costs)." />
+            </MudStack>
+
+            <ConceptualAlert Severity="@(openAiConfig.VetoMode ? Severity.Success : Severity.Warning)" Dense="true">
+                @if (openAiConfig.VetoMode)
+                {
+                    <text>
+                        <strong>Veto Mode Enabled:</strong> OpenAI acts as quality control. Other algorithms flag spam, OpenAI confirms or vetoes.
+                        Reduces false positives while keeping costs lower (only runs on suspicious messages).
+                    </text>
+                }
+                else
+                {
+                    <text>
+                        <strong>Detection Mode:</strong> OpenAI actively searches for spam on every message.
+                        Higher accuracy but significantly higher API costs. Consider enabling only for high-risk communities.
+                    </text>
+                }
+            </ConceptualAlert>
 
             @if (openAiConfig.VetoMode)
             {
-                <MudNumericField @bind-Value="openAiConfig.VetoThreshold"
-                                Label="Veto Threshold"
-                                Min="50" Max="100"
-                                Disabled="@openAiReadOnly"
-                                HelperText="@(openAiReadOnly ? $"Using global value: {openAiConfig.VetoThreshold}" : "OpenAI veto runs only if spam confidence is below this (higher = more vetos)")" />
+                <FieldWithHelp HelpText="OpenAI veto check runs only when other algorithms' combined confidence is BELOW this threshold. Set to 100 to always run veto checks. Set to 85 to skip veto on high-confidence detections (saves API calls).">
+                    <MudNumericField @bind-Value="openAiConfig.VetoThreshold"
+                                    Label="Veto Threshold"
+                                    Min="50" Max="100"
+                                    Disabled="@openAiReadOnly"
+                                    HelperText="@(openAiReadOnly ? $"Using global value: {openAiConfig.VetoThreshold}" : "OpenAI veto runs only if spam confidence is below this (higher = more vetos)")" />
+                </FieldWithHelp>
             }
 
             <MudSwitch T="bool" @bind-Value="openAiConfig.CheckShortMessages"

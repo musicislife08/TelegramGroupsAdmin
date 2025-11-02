@@ -5,7 +5,10 @@
 
 <MudPaper Class="pa-4" Elevation="1">
     <MudStack Spacing="3">
-        <MudText Typo="Typo.h6" Color="Color.Primary">Naive Bayes Classifier</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudText Typo="Typo.h6" Color="Color.Primary">Naive Bayes Classifier</MudText>
+            <HelpTooltip Text="Statistical machine learning classifier that calculates spam probability based on word frequency patterns in training samples. Learns your community's unique spam patterns over time. Requires at least 50 spam and 50 ham samples for effective training." />
+        </MudStack>
 
         @if (!IsGlobalView)
         {
@@ -36,11 +39,18 @@
 
         @if (activeConfig.Enabled)
         {
-            <MudNumericField @bind-Value="activeConfig.MinSpamProbability"
-                            Label="Minimum Spam Probability"
-                            Min="1.0" Max="99.0" Step="0.1"
-                            Disabled="@isReadOnly"
-                            HelperText="@(isReadOnly ? $"Using global value: {activeConfig.MinSpamProbability:F1}%" : "Minimum probability (%) to classify as spam")" />
+            <FieldWithHelp HelpText="Probability threshold from 1-99%. The classifier calculates spam probability for each message. Recommended: 70-80% for balanced detection. Lower = more aggressive (catches more but risks false positives). Higher = conservative (only confident spam).">
+                <MudNumericField @bind-Value="activeConfig.MinSpamProbability"
+                                Label="Minimum Spam Probability (%)"
+                                Min="1.0" Max="99.0" Step="0.1"
+                                Disabled="@isReadOnly"
+                                HelperText="@(isReadOnly ? $"Using global value: {activeConfig.MinSpamProbability:F1}%" : "Minimum probability (%) to classify as spam")" />
+            </FieldWithHelp>
+
+            <ConceptualAlert Severity="Severity.Info" Dense="true">
+                <strong>How it works:</strong> Analyzes word frequency differences between spam and ham training samples.
+                Words that appear more often in spam increase probability. Adapts automatically as you add more training samples.
+            </ConceptualAlert>
         }
 
         @if (!IsGlobalView && !_config.Bayes.UseGlobal && _globalConfig.Bayes.Enabled != _config.Bayes.Enabled)
