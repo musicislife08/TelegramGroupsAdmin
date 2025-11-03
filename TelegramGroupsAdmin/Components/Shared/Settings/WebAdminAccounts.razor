@@ -105,14 +105,17 @@
                 <MudTd DataLabel="Created">@FormatDate(context.CreatedAt)</MudTd>
                 <MudTd DataLabel="Last Login">@FormatDate(context.LastLoginAt)</MudTd>
                 <MudTd DataLabel="Actions">
-                    @if (_currentUserPermissionLevel >= PermissionLevel.Owner && context.Id != _currentUserId)
+                    @if (_currentUserPermissionLevel >= PermissionLevel.GlobalAdmin && context.Id != _currentUserId)
                     {
                         <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AnchorOrigin="Origin.BottomRight">
-                            <MudMenuItem Icon="@Icons.Material.Filled.Edit"
-                                        IconColor="Color.Primary"
-                                        OnClick="@(() => EditUserPermission(context))">
-                                Edit Permission
-                            </MudMenuItem>
+                            @if (_currentUserPermissionLevel >= PermissionLevel.Owner)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Edit"
+                                            IconColor="Color.Primary"
+                                            OnClick="@(() => EditUserPermission(context))">
+                                    Edit Permission
+                                </MudMenuItem>
+                            }
                             @if (!context.EmailVerified)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Email"
@@ -121,7 +124,7 @@
                                     Resend Verification Email
                                 </MudMenuItem>
                             }
-                            @if (context.TotpEnabled)
+                            @if (context.TotpEnabled && _currentUserPermissionLevel >= PermissionLevel.Owner)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.LockReset"
                                             IconColor="Color.Warning"
@@ -137,7 +140,7 @@
                                     Unlock Account
                                 </MudMenuItem>
                             }
-                            @if (context.Status == UserStatus.Active)
+                            @if (context.Status == UserStatus.Active && _currentUserPermissionLevel >= PermissionLevel.Owner)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.Block"
                                             IconColor="Color.Error"
@@ -145,7 +148,7 @@
                                     Disable User
                                 </MudMenuItem>
                             }
-                            else if (context.Status == UserStatus.Disabled)
+                            else if (context.Status == UserStatus.Disabled && _currentUserPermissionLevel >= PermissionLevel.Owner)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.CheckCircle"
                                             IconColor="Color.Success"
@@ -153,7 +156,7 @@
                                     Enable User
                                 </MudMenuItem>
                             }
-                            @if (context.Status == UserStatus.Deleted)
+                            @if (context.Status == UserStatus.Deleted && _currentUserPermissionLevel >= PermissionLevel.Owner)
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.RestoreFromTrash"
                                             IconColor="Color.Success"
@@ -161,7 +164,7 @@
                                     Restore User
                                 </MudMenuItem>
                             }
-                            else
+                            else if (_currentUserPermissionLevel >= PermissionLevel.Owner)
                             {
                                 <MudDivider />
                                 <MudMenuItem Icon="@Icons.Material.Filled.DeleteForever"

@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **SECURITY-5: Rate Limiting** - Added in-memory rate limiting to authentication endpoints (login, register, TOTP verification, recovery codes, resend verification) with configurable limits (5/15min for login, 5/5min for TOTP, 3/hour for registration) and fail-open error handling
-- **SECURITY-6: Account Lockout** - Implemented progressive account lockout after failed login attempts with exponential backoff (15min → 30min → 60min → 120min) after 5 failed attempts, automated email notifications, and admin unlock UI
+- **SECURITY-6: Account Lockout** - Implemented progressive account lockout after failed login attempts with exponential backoff (1min → 10min → 30min → 120min) after 5 failed attempts, automated email notifications, and admin unlock UI (GlobalAdmin+ can unlock accounts)
 - **SECURITY-7: 2FA Brute Force Monitoring** - Added audit logging for TOTP and recovery code verification failures to enable tracking brute force attempts on 2FA in security dashboards
 
 - **Documentation files not being deployed to Docker containers** - Fixed by adding `CopyToPublishDirectory="PreserveNewest"` to .csproj (CopyToOutputDirectory only affects `dotnet build`, not `dotnet publish`)

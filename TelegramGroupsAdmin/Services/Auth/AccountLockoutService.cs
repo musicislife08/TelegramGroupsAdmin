@@ -7,7 +7,7 @@ namespace TelegramGroupsAdmin.Services.Auth;
 
 /// <summary>
 /// Service for managing account lockout after failed login attempts (SECURITY-6)
-/// Implements exponential backoff: 15min → 30min → 60min → 120min
+/// Implements exponential backoff: 1min → 10min → 30min → 120min
 /// </summary>
 public class AccountLockoutService : IAccountLockoutService
 {
@@ -20,9 +20,9 @@ public class AccountLockoutService : IAccountLockoutService
     private const int MaxFailedAttempts = 5;
     private static readonly TimeSpan[] LockoutDurations = new[]
     {
-        TimeSpan.FromMinutes(15),  // 1st lockout
-        TimeSpan.FromMinutes(30),  // 2nd lockout
-        TimeSpan.FromMinutes(60),  // 3rd lockout
+        TimeSpan.FromMinutes(1),   // 1st lockout
+        TimeSpan.FromMinutes(10),  // 2nd lockout
+        TimeSpan.FromMinutes(30),  // 3rd lockout
         TimeSpan.FromMinutes(120)  // 4th+ lockouts
     };
 
