@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -15,13 +16,19 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class BotMessageService
 {
     private readonly IMessageHistoryRepository _messageRepo;
+    private readonly ITelegramUserRepository _userRepo;
+    private readonly TelegramAdminBotService _botService;
     private readonly ILogger<BotMessageService> _logger;
 
     public BotMessageService(
         IMessageHistoryRepository messageRepo,
+        ITelegramUserRepository userRepo,
+        TelegramAdminBotService botService,
         ILogger<BotMessageService> logger)
     {
         _messageRepo = messageRepo;
+        _userRepo = userRepo;
+        _botService = botService;
         _logger = logger;
     }
 
@@ -51,12 +58,40 @@ public class BotMessageService
                 replyParameters: replyParameters,
                 cancellationToken: cancellationToken);
 
-        // Save to messages table
+        // Get bot user info (cached from startup)
+        var botInfo = _botService.BotUserInfo;
+        if (botInfo == null)
+        {
+            _logger.LogWarning("Bot user info not cached yet, fetching from API");
+            botInfo = await botClient.GetMe(cancellationToken);
+        }
+
+        // Upsert bot to telegram_users table (ensures bot name is available for UI display)
+        var now = DateTimeOffset.UtcNow;
+        var botUser = new TelegramUser(
+            TelegramUserId: botInfo.Id,
+            Username: botInfo.Username,
+            FirstName: botInfo.FirstName,
+            LastName: botInfo.LastName,
+            UserPhotoPath: null,
+            PhotoHash: null,
+            PhotoFileUniqueId: null,
+            IsBot: true,
+            IsTrusted: false,
+            BotDmEnabled: false,
+            FirstSeenAt: now,
+            LastSeenAt: now,
+            CreatedAt: now,
+            UpdatedAt: now
+        );
+        await _userRepo.UpsertAsync(botUser, cancellationToken);
+
+        // Save to messages table (use bot info from cache, not sentMessage.From which may be null)
         var messageRecord = new MessageRecord(
             MessageId: sentMessage.MessageId,
-            UserId: sentMessage.From!.Id, // Bot's user ID
-            UserName: sentMessage.From.Username,
-            FirstName: sentMessage.From.FirstName,
+            UserId: botInfo.Id,
+            UserName: botInfo.Username,
+            FirstName: botInfo.FirstName,
             ChatId: chatId,
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: text,

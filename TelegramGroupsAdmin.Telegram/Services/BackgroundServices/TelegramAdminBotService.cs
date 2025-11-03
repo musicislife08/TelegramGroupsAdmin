@@ -34,6 +34,7 @@ public class TelegramAdminBotService(
     private CancellationTokenSource? _botCancellationTokenSource;
     private Task? _botTask;
     private readonly SemaphoreSlim _configChangeSignal = new(0, 1);
+    private User? _botUserInfo; // Cached bot user info from GetMe()
 
     // Events for real-time UI updates (forwarded from child services)
     public event Action<MessageRecord>? OnNewMessage
@@ -64,6 +65,11 @@ public class TelegramAdminBotService(
     /// Get the bot client instance (available after service starts)
     /// </summary>
     public ITelegramBotClient? BotClient => _botClient;
+
+    /// <summary>
+    /// Get cached bot user info from GetMe() (available after service starts)
+    /// </summary>
+    public User? BotUserInfo => _botUserInfo;
 
     /// <summary>
     /// Get cached health status for a chat (null if not yet checked)
@@ -164,6 +170,7 @@ public class TelegramAdminBotService(
         // Fetch and cache bot's user ID for message filtering
         var me = await botClient.GetMe(stoppingToken);
         _options.BotUserId = me.Id;
+        _botUserInfo = me; // Cache full bot info for BotMessageService
         logger.LogInformation("Bot user ID cached: {BotUserId} (@{BotUsername})", me.Id, me.Username);
 
         // Register bot commands in Telegram UI

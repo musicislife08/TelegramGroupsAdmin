@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Bot display name in Messages UI** - Bot now shows proper name instead of "User {userId}" by caching bot info from `GetMe()` and upserting to `telegram_users` table when sending messages
 - **`/report` command notification spam** - Batched chat mentions into single message instead of N separate messages for admins without DMs (10 messages → 1 message for 10 admins)
 - `ObjectDisposedException` in MessageEditProcessor when spam re-scanning edited messages in background tasks (changed from `IServiceProvider` to `IServiceScopeFactory`)
 - False-positive critical health check notifications for transient HTTP/network errors to Telegram API
