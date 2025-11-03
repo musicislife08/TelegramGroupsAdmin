@@ -29,39 +29,12 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ---
 
-### DOCS-1: README.md (Pre-Open Source)
-
-**Priority:** HIGH - Blocking for GitHub migration
-**Impact:** First impression, adoption rate
-
-**Needs:** Project description, screenshots, quick start, comparison to alternatives, community links
-
----
-
-### DOCS-2: Setup Guide (Pre-Open Source)
-
-**Priority:** HIGH - Blocking for GitHub migration
-**Impact:** User onboarding success
-
-**Needs:** Docker Compose walkthrough, .env.example explanation, first user setup, health check verification
-
----
-
 ### DOCS-3: Configuration Guide
 
 **Priority:** MEDIUM
 **Impact:** Optimal spam detection tuning
 
 **Needs:** Explain 9 algorithms, when to enable/disable, example configs (Strict/Moderate/Permissive), threshold tuning, file scanning config, auto-trust settings
-
----
-
-### DOCS-4: LICENSE File (Pre-Open Source)
-
-**Priority:** HIGH - Blocking for GitHub migration
-**Impact:** Usage clarity, contribution safety
-
-**Decision:** MIT vs AGPL
 
 ---
 
