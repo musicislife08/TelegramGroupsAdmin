@@ -20,6 +20,8 @@
         <PackageReference Include="CsvHelper" Version="33.1.0" />
         <PackageReference Include="Dapper" Version="2.1.66" />
         <PackageReference Include="DiffPlex" Version="1.9.0" />
+        <PackageReference Include="Markdig" Version="0.43.0" />
+        <PackageReference Include="Markdown.ColorCode" Version="3.0.1" />
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.10" />
         <PackageReference Include="Microsoft.Build.Tasks.Core" Version="17.14.28" />
         <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.14.28" />
@@ -38,12 +40,13 @@
         <PackageReference Include="QRCoder" Version="1.7.0" />
         <PackageReference Include="SendGrid" Version="9.29.3" />
         <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
-        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
-        <PackageReference Include="Telegram.Bot" Version="22.7.3-dev.4" />
+        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+        <PackageReference Include="Telegram.Bot" Version="22.7.4" />
         <PackageReference Include="TickerQ" Version="2.5.3" />
         <PackageReference Include="TickerQ.Dashboard" Version="2.5.3" />
         <PackageReference Include="TickerQ.EntityFrameworkCore" Version="2.5.3" />
         <PackageReference Include="TickerQ.Utilities" Version="2.5.3" />
+        <PackageReference Include="YamlDotNet" Version="16.3.0" />
     </ItemGroup>
 
     <!-- Explicitly register TickerQ source generator for .NET 10 RC2 -->

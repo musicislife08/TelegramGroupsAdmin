@@ -1,0 +1,494 @@
+@page "/docs/{*Path}"
+@using Microsoft.AspNetCore.Authorization
+@using TelegramGroupsAdmin.Services.Docs
+@using TelegramGroupsAdmin.Models.Docs
+@inject IDocumentationService DocsService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@attribute [Authorize]
+
+<PageTitle>@(_document?.Title ?? "Documentation") - TelegramGroupsAdmin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4 mb-8">
+    <MudGrid>
+        <!-- Side Navigation (Desktop: 3 cols, Mobile: hidden, toggle with button) -->
+        <MudItem xs="12" md="3" Class="@(_showNav ? "" : "d-none d-md-block")">
+            <MudPaper Class="pa-4" Elevation="2" Style="position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto;">
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudText Typo="Typo.h6" Color="Color.Primary">
+                            <MudIcon Icon="@Icons.Material.Filled.MenuBook" Class="mr-2" />
+                            Docs
+                        </MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                      Size="Size.Small"
+                                      Class="d-md-none"
+                                      OnClick="@(() => _showNav = false)" />
+                    </MudStack>
+                    <MudDivider />
+                    <MudNavMenu>
+                        @foreach (var navItem in _navTree)
+                        {
+                            @RenderNavItem(navItem)
+                        }
+                    </MudNavMenu>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Main Content Area -->
+        <MudItem xs="12" md="9">
+            <!-- Mobile: Show menu button -->
+            <MudButton Class="d-md-none mb-4"
+                      Variant="Variant.Outlined"
+                      StartIcon="@Icons.Material.Filled.Menu"
+                      OnClick="@(() => _showNav = true)">
+                Show Navigation
+            </MudButton>
+
+            <MudStack Spacing="4">
+            @if (_document != null)
+            {
+                <!-- Breadcrumbs -->
+                <MudBreadcrumbs Items="@_mudBreadcrumbs" Class="mb-4"></MudBreadcrumbs>
+
+                <!-- Document Header -->
+                <MudPaper Class="pa-6 mb-4" Elevation="2">
+                    <MudText Typo="Typo.h3" Color="Color.Primary">
+                        @_document.Title
+                    </MudText>
+                </MudPaper>
+
+                <!-- Markdown Content -->
+                <MudPaper Class="pa-6" Elevation="1">
+                    <div class="markdown-content">
+                        @((MarkupString)_document.HtmlContent)
+                    </div>
+                </MudPaper>
+            }
+            else if (_notFound)
+            {
+                <!-- 404 Not Found -->
+                <MudPaper Class="pa-8" Elevation="1">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                        <MudIcon Icon="@Icons.Material.Filled.HelpOutline" Size="Size.Large" Color="Color.Secondary" />
+                        <MudText Typo="Typo.h4" Color="Color.Secondary">Documentation Page Not Found</MudText>
+                        <MudText Typo="Typo.body1" Color="Color.Secondary">
+                            The documentation page "@Path" could not be found.
+                        </MudText>
+                        <MudButton Variant="Variant.Filled"
+                                  Color="Color.Primary"
+                                  StartIcon="@Icons.Material.Filled.Home"
+                                  Href="/docs">
+                            Return to Documentation
+                        </MudButton>
+                    </MudStack>
+                </MudPaper>
+            }
+            else if (!DocsService.IsInitialized)
+            {
+                <!-- No Documents Loaded -->
+                <MudPaper Class="pa-8" Elevation="1">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                        <MudIcon Icon="@Icons.Material.Filled.FolderOff" Size="Size.Large" Color="Color.Warning" />
+                        <MudText Typo="Typo.h4" Color="Color.Warning">No Documentation Available</MudText>
+                        <MudText Typo="Typo.body1" Color="Color.Secondary">
+                            No documentation files were found in the /Docs directory.
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            }
+            else
+            {
+                <!-- Loading -->
+                <MudPaper Class="pa-8" Elevation="1">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                        <MudText Typo="Typo.body1">Loading documentation...</MudText>
+                    </MudStack>
+                </MudPaper>
+            }
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    [Parameter]
+    public string? Path { get; set; }
+
+    private DocDocument? _document;
+    private bool _notFound;
+    private bool _showNav = false;
+    private List<DocNavItem> _navTree = new();
+    private List<MudBlazor.BreadcrumbItem> _mudBreadcrumbs = new();
+
+    protected override void OnParametersSet()
+    {
+        // Load navigation tree once
+        if (_navTree.Count == 0)
+        {
+            _navTree = DocsService.GetNavigationTree();
+        }
+
+        // Load document when route parameter changes
+        LoadDocument();
+    }
+
+    private void LoadDocument()
+    {
+        _document = null;
+        _notFound = false;
+
+        if (string.IsNullOrWhiteSpace(Path))
+        {
+            // No path specified - show first document if available
+            var firstDoc = FindFirstDocument(_navTree);
+            if (firstDoc != null)
+            {
+                Navigation.NavigateTo(firstDoc.Href!, replace: true);
+                return;
+            }
+            else
+            {
+                _notFound = true;
+                return;
+            }
+        }
+
+        _document = DocsService.GetDocument(Path);
+
+        if (_document == null)
+        {
+            _notFound = true;
+        }
+        else
+        {
+            // Convert breadcrumbs to MudBlazor format
+            _mudBreadcrumbs = _document.Breadcrumbs
+                .Select(b => new MudBlazor.BreadcrumbItem(b.Text, b.Href, b.Disabled))
+                .ToList();
+        }
+    }
+
+    private DocNavItem? FindFirstDocument(List<DocNavItem> items)
+    {
+        foreach (var item in items)
+        {
+            if (!item.IsFolder && item.Href != null)
+            {
+                return item;
+            }
+
+            if (item.Children.Count > 0)
+            {
+                var childDoc = FindFirstDocument(item.Children);
+                if (childDoc != null)
+                {
+                    return childDoc;
+                }
+            }
+        }
+
+        return null;
+    }
+}
+
+@code {
+    private RenderFragment RenderNavItem(DocNavItem item) => __builder =>
+    {
+        if (item.IsFolder)
+        {
+            // Folder (expandable group)
+            <MudNavGroup Title="@item.Title"
+                         Icon="@Icons.Material.Filled.Folder"
+                         Expanded="@item.IsExpanded">
+                @foreach (var child in item.Children)
+                {
+                    @RenderNavItem(child)
+                }
+            </MudNavGroup>
+        }
+        else
+        {
+            // Document (clickable link)
+            <MudNavLink Href="@item.Href"
+                        Icon="@Icons.Material.Filled.Description"
+                        Match="NavLinkMatch.All">
+                @item.Title
+            </MudNavLink>
+        }
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Re-render mermaid diagrams whenever the document changes
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("initializeMermaid");
+        }
+        catch (Exception)
+        {
+            // Ignore errors if mermaid fails to render
+        }
+    }
+}
+
+<style>
+    /* Inline styles to override MudBlazor's CSS reset */
+    .markdown-content {
+        line-height: 1.75 !important;
+        font-size: 1rem !important;
+        color: rgba(255, 255, 255, 0.87) !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    }
+
+    /* Hide duplicate H1 */
+    .markdown-content > h1:first-child {
+        display: none !important;
+    }
+
+    /* Headings */
+    .markdown-content h2 {
+        font-size: 1.75rem !important;
+        font-weight: 600 !important;
+        margin-top: 2.5rem !important;
+        margin-bottom: 1rem !important;
+        padding-bottom: 0.5rem !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+        color: rgba(255, 255, 255, 0.92) !important;
+    }
+
+    .markdown-content h3 {
+        font-size: 1.5rem !important;
+        font-weight: 600 !important;
+        margin-top: 2rem !important;
+        margin-bottom: 0.875rem !important;
+        color: rgba(255, 255, 255, 0.87) !important;
+    }
+
+    .markdown-content h4 {
+        font-size: 1.25rem !important;
+        font-weight: 600 !important;
+        margin-top: 1.75rem !important;
+        margin-bottom: 0.75rem !important;
+        color: rgba(255, 255, 255, 0.87) !important;
+    }
+
+    /* Paragraphs */
+    .markdown-content p {
+        margin-bottom: 1.25rem !important;
+        margin-top: 0 !important;
+        line-height: 1.75 !important;
+        color: rgba(255, 255, 255, 0.7) !important;
+    }
+
+    /* Strong emphasis */
+    .markdown-content strong,
+    .markdown-content b {
+        font-weight: 700 !important;
+        color: rgba(255, 255, 255, 0.95) !important;
+    }
+
+    /* Lists - FORCE THE INDENTATION */
+    .markdown-content ul,
+    .markdown-content ol {
+        margin-bottom: 1.5rem !important;
+        margin-top: 0.75rem !important;
+        padding-left: 2rem !important;
+        list-style-position: outside !important;
+    }
+
+    .markdown-content li {
+        margin-bottom: 0.75rem !important;
+        margin-top: 0.75rem !important;
+        margin-left: 0 !important;
+        padding-left: 0.5rem !important;
+        line-height: 1.75 !important;
+        color: rgba(255, 255, 255, 0.7) !important;
+    }
+
+    .markdown-content ul > li {
+        display: list-item !important;
+        list-style-type: disc !important;
+    }
+
+    .markdown-content ol > li {
+        display: list-item !important;
+        list-style-type: decimal !important;
+    }
+
+    .markdown-content ul > li::marker {
+        color: rgba(255, 255, 255, 0.6) !important;
+        font-size: 1.2em !important;
+    }
+
+    .markdown-content ol > li::marker {
+        color: rgba(255, 255, 255, 0.6) !important;
+        font-weight: 700 !important;
+    }
+
+    /* Nested lists */
+    .markdown-content ul ul,
+    .markdown-content ol ol,
+    .markdown-content ul ol,
+    .markdown-content ol ul {
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.5rem !important;
+        padding-left: 2rem !important;
+    }
+
+    /* Links */
+    .markdown-content a {
+        color: #569cd6 !important;
+        text-decoration: none !important;
+    }
+
+    .markdown-content a:hover {
+        color: #4ec9b0 !important;
+        text-decoration: underline !important;
+    }
+
+    /* Inline code */
+    .markdown-content code {
+        background-color: rgba(110, 118, 129, 0.2) !important;
+        color: #ce9178 !important;
+        padding: 0.2rem 0.5rem !important;
+        border-radius: 4px !important;
+        font-family: 'Consolas', 'Courier New', monospace !important;
+        font-size: 0.9em !important;
+    }
+
+    /* Code blocks */
+    .markdown-content pre {
+        background-color: #1e1e1e !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 6px !important;
+        padding: 1.25rem !important;
+        overflow-x: auto !important;
+        margin: 1.5rem 0 !important;
+    }
+
+    .markdown-content pre code {
+        background-color: transparent !important;
+        padding: 0 !important;
+        color: #d4d4d4 !important;
+    }
+
+    /* Blockquotes */
+    .markdown-content blockquote {
+        border-left: 4px solid rgba(255, 255, 255, 0.3) !important;
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        padding: 1rem 1.25rem !important;
+        margin: 1.5rem 0 !important;
+        color: rgba(255, 255, 255, 0.65) !important;
+    }
+
+    /* Tables */
+    .markdown-content table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        margin: 2rem 0 !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-radius: 6px !important;
+    }
+
+    .markdown-content thead {
+        background-color: rgba(255, 255, 255, 0.08) !important;
+    }
+
+    .markdown-content th {
+        font-weight: 700 !important;
+        text-align: left !important;
+        padding: 1rem 1.25rem !important;
+        border-bottom: 2px solid rgba(255, 255, 255, 0.15) !important;
+        color: rgba(255, 255, 255, 0.95) !important;
+        text-transform: uppercase !important;
+    }
+
+    .markdown-content td {
+        padding: 1rem 1.25rem !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+        color: rgba(255, 255, 255, 0.7) !important;
+    }
+
+    .markdown-content tbody tr:nth-child(even) {
+        background-color: rgba(255, 255, 255, 0.02) !important;
+    }
+
+    .markdown-content tbody tr:hover {
+        background-color: rgba(255, 255, 255, 0.05) !important;
+    }
+
+    /* Mermaid diagrams */
+    .markdown-content .mermaid {
+        background-color: rgba(255, 255, 255, 0.03) !important;
+        padding: 2rem !important;
+        border-radius: 6px !important;
+        margin: 2rem 0 !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        display: block !important;
+        text-align: center !important;
+    }
+
+    /* Ensure mermaid code blocks don't show as code */
+    .markdown-content pre.mermaid {
+        background-color: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+    }
+</style>
+
+<script>
+    window.mermaidRendering = false;
+
+    window.initializeMermaid = async function() {
+        // Prevent multiple simultaneous renderings
+        if (window.mermaidRendering) {
+            return;
+        }
+
+        if (typeof mermaid === 'undefined') {
+            return;
+        }
+
+        try {
+            window.mermaidRendering = true;
+
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: 'dark',
+                themeVariables: {
+                    darkMode: true,
+                    background: '#2b2b2b',
+                    primaryColor: '#569cd6',
+                    primaryTextColor: '#fff',
+                    primaryBorderColor: '#569cd6',
+                    lineColor: '#d4d4d4',
+                    secondaryColor: '#4ec9b0',
+                    tertiaryColor: '#1e1e1e'
+                }
+            });
+
+            // Convert mermaid code blocks to mermaid divs
+            const codeBlocks = document.querySelectorAll('pre code.language-mermaid');
+            codeBlocks.forEach(block => {
+                const pre = block.parentElement;
+                const mermaidDiv = document.createElement('div');
+                mermaidDiv.className = 'mermaid';
+                mermaidDiv.textContent = block.textContent;
+                pre.parentNode.replaceChild(mermaidDiv, pre);
+            });
+
+            // Render all mermaid diagrams
+            const allMermaid = document.querySelectorAll('.mermaid');
+            if (allMermaid.length > 0) {
+                await mermaid.run({ nodes: allMermaid });
+            }
+        } catch (error) {
+            console.error('Mermaid rendering error:', error);
+        } finally {
+            window.mermaidRendering = false;
+        }
+    };
+</script>

@@ -605,6 +605,34 @@ if (spamSampleCount < 50 || legitMessageCount < 100)
 
 ---
 
+### TOOLS-1: Complete File Scanning Integration in Content Tester
+
+**Priority:** LOW
+**Impact:** Testing/debugging convenience (file scanning works in production, just not in test tool)
+
+**Current State:**
+- Content Tester UI has file upload field but doesn't actually pass files to scanner
+- `_selectedFile` field exists but is never sent to `ContentCheckCoordinator`
+- File scanning works fine in production (real Telegram messages)
+- UI shows alert: "File scanning integration is not yet complete (Phase 4.14)"
+
+**Action:**
+1. Add `DocumentData: Stream?` property to `ContentCheckRequest.cs`
+2. Add `DocumentFileName: string?` property to `ContentCheckRequest.cs`
+3. Update `ContentTester.razor` to save `_selectedFile` to temp path and pass to coordinator
+4. Update `ContentCheckCoordinator` to handle document scanning if `DocumentData` provided
+5. Remove the "not yet complete" alert from UI after implementation
+6. Test with eicar.com test malware file
+
+**Files:**
+- `/TelegramGroupsAdmin.ContentDetection/Models/ContentCheckRequest.cs`
+- `/TelegramGroupsAdmin/Components/Shared/ContentDetection/ContentTester.razor`
+- `/TelegramGroupsAdmin.ContentDetection/ContentCheckCoordinator.cs`
+
+**Testing:** Upload eicar.com to Content Tester, verify malware detection appears in results
+
+---
+
 ## Bugs
 
 (No open bugs)
