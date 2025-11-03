@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **SECURITY-7: 2FA Brute Force Monitoring** - Added audit logging for TOTP and recovery code verification failures to enable tracking brute force attempts on 2FA in security dashboards
+
 - **Documentation files not being deployed to Docker containers** - Fixed by adding `CopyToPublishDirectory="PreserveNewest"` to .csproj (CopyToOutputDirectory only affects `dotnet build`, not `dotnet publish`)
 - **Bot display name in Messages UI** - Bot now shows proper name instead of "User {userId}" by caching bot info from `GetMe()` and upserting to `telegram_users` table when sending messages
 - **App startup hang** - Removed circular dependency between BotMessageService and TelegramAdminBotService by using in-memory cache for bot info

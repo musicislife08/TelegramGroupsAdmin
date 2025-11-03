@@ -129,6 +129,15 @@ public class TotpService(
         if (!totp.VerifyTotp(code, out _, new VerificationWindow(5, 5)))
         {
             logger.LogWarning("Invalid TOTP code for user: {UserId}", userId);
+
+            // Audit log for security monitoring (track brute force attempts)
+            await auditLog.LogEventAsync(
+                AuditEventType.UserTotpVerificationFailed,
+                actor: Actor.FromWebUser(userId),
+                target: Actor.FromWebUser(userId),
+                value: "Invalid TOTP code entered",
+                ct: ct);
+
             return false;
         }
 
@@ -192,6 +201,15 @@ public class TotpService(
         if (!isValid)
         {
             logger.LogWarning("Invalid recovery code attempt for user: {UserId}", userId);
+
+            // Audit log for security monitoring (track brute force attempts)
+            await auditLog.LogEventAsync(
+                AuditEventType.UserRecoveryCodeVerificationFailed,
+                actor: Actor.FromWebUser(userId),
+                target: Actor.FromWebUser(userId),
+                value: "Invalid recovery code entered",
+                ct: ct);
+
             return false;
         }
 

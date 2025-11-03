@@ -100,5 +100,11 @@ public enum AuditEventType
     ReportReviewed = 27,
 
     /// <summary>Backup encryption passphrase rotated</summary>
-    BackupPassphraseRotated = 29
+    BackupPassphraseRotated = 29,
+
+    // Security Events
+    /// <summary>User TOTP verification failed</summary>
+    UserTotpVerificationFailed = 30,
+    /// <summary>User recovery code verification failed</summary>
+    UserRecoveryCodeVerificationFailed = 31
 }

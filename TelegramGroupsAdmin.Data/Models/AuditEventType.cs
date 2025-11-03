@@ -77,5 +77,11 @@ public enum AuditEventType
     /// <summary>System configuration changed (spam detection, file scanning, logging, etc.)</summary>
     ConfigurationChanged = 28,
     /// <summary>Backup encryption passphrase rotated</summary>
-    BackupPassphraseRotated = 29
+    BackupPassphraseRotated = 29,
+
+    // Security Events
+    /// <summary>User TOTP verification failed</summary>
+    UserTotpVerificationFailed = 30,
+    /// <summary>User recovery code verification failed</summary>
+    UserRecoveryCodeVerificationFailed = 31
 }
