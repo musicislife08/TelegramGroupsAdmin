@@ -31,4 +31,10 @@ public interface IUserRepository
     Task SetActiveAsync(string userId, bool isActive, CancellationToken ct = default);
     Task UpdateStatusAsync(string userId, UiModels.UserStatus newStatus, string modifiedBy, CancellationToken ct = default);
     Task UpdateAsync(UiModels.UserRecord user, CancellationToken ct = default);
+
+    // Account Lockout Methods (SECURITY-5, SECURITY-6)
+    Task IncrementFailedLoginAttemptsAsync(string userId, CancellationToken ct = default);
+    Task ResetFailedLoginAttemptsAsync(string userId, CancellationToken ct = default);
+    Task LockAccountAsync(string userId, DateTimeOffset lockedUntil, CancellationToken ct = default);
+    Task UnlockAccountAsync(string userId, CancellationToken ct = default);
 }

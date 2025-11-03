@@ -83,6 +83,12 @@ public class UserRecordDto
     [Column("password_reset_token_expires_at")]
     public DateTimeOffset? PasswordResetTokenExpiresAt { get; set; }
 
+    [Column("locked_until")]
+    public DateTimeOffset? LockedUntil { get; set; }
+
+    [Column("failed_login_attempts")]
+    public int FailedLoginAttempts { get; set; }
+
     // Navigation properties
     [ForeignKey(nameof(InvitedBy))]
     public virtual UserRecordDto? InvitedByUser { get; set; }
@@ -101,9 +107,13 @@ public class UserRecordDto
 
     [NotMapped]
     [JsonIgnore]
-    public bool CanLogin => Status == UserStatus.Active && EmailVerified;
+    public bool CanLogin => Status == UserStatus.Active && EmailVerified && !IsLocked;
 
     [NotMapped]
     [JsonIgnore]
     public bool IsPending => Status == UserStatus.Pending;
+
+    [NotMapped]
+    [JsonIgnore]
+    public bool IsLocked => LockedUntil.HasValue && LockedUntil.Value > DateTimeOffset.UtcNow;
 }

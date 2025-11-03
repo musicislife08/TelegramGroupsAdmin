@@ -19,6 +19,7 @@ public class AuthService(
     ITotpService totpService,
     IPasswordHasher passwordHasher,
     IEmailService emailService,
+    IAccountLockoutService accountLockoutService,
     IOptions<AppOptions> appOptions,
     ILogger<AuthService> logger)
     : IAuthService
@@ -41,6 +42,24 @@ public class AuthService(
                 ct: ct);
 
             return new AuthResult(false, null, null, null, false, false, "Invalid email or password");
+        }
+
+        // SECURITY-6: Check if account is locked
+        if (user.IsLocked)
+        {
+            var timeRemaining = user.LockedUntil!.Value - DateTimeOffset.UtcNow;
+            logger.LogWarning("Login attempt for locked account: {UserId}, locked until {LockedUntil}", user.Id, user.LockedUntil);
+
+            // Audit log - failed login (account locked)
+            await auditLog.LogEventAsync(
+                AuditEventType.UserLoginFailed,
+                actor: Actor.FromWebUser(user.Id),
+                target: Actor.FromWebUser(user.Id),
+                value: $"Account locked until {user.LockedUntil:yyyy-MM-dd HH:mm:ss UTC}",
+                ct: ct);
+
+            return new AuthResult(false, null, null, null, false, false,
+                $"Account is temporarily locked due to multiple failed login attempts. Please try again in {Math.Ceiling(timeRemaining.TotalMinutes)} minutes.");
         }
 
         // Check user status (Disabled = 2, Deleted = 3)
@@ -86,6 +105,9 @@ public class AuthService(
                 value: "Invalid password",
                 ct: ct);
 
+            // SECURITY-6: Handle failed login attempt (may lock account)
+            await accountLockoutService.HandleFailedLoginAsync(user.Id, ct);
+
             return new AuthResult(false, null, null, null, false, false, "Invalid email or password");
         }
 
@@ -104,6 +126,9 @@ public class AuthService(
 
             return new AuthResult(false, null, null, null, false, false, "Please verify your email before logging in. Check your inbox for the verification link.");
         }
+
+        // SECURITY-6: Reset lockout state on successful password verification
+        await accountLockoutService.ResetLockoutAsync(user.Id, ct);
 
         // Update last login timestamp
         await userRepository.UpdateLastLoginAsync(user.Id, ct);
@@ -426,7 +451,9 @@ public class AuthService(
             EmailVerificationToken: null,
             EmailVerificationTokenExpiresAt: null,
             PasswordResetToken: null,
-            PasswordResetTokenExpiresAt: null
+            PasswordResetTokenExpiresAt: null,
+            FailedLoginAttempts: 0,
+            LockedUntil: null
         );
 
         await userRepository.CreateAsync(user, ct);

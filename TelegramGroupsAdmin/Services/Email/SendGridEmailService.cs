@@ -125,6 +125,8 @@ public class SendGridEmailService : IEmailService
             EmailTemplate.WelcomeEmail => GetWelcomeEmailTemplate(parameters),
             EmailTemplate.InviteCreated => GetInviteCreatedTemplate(parameters),
             EmailTemplate.AccountDisabled => GetAccountDisabledTemplate(parameters),
+            EmailTemplate.AccountLocked => GetAccountLockedTemplate(parameters),
+            EmailTemplate.AccountUnlocked => GetAccountUnlockedTemplate(parameters),
             _ => throw new ArgumentException($"Unknown email template: {template}")
         };
     }
@@ -249,6 +251,62 @@ public class SendGridEmailService : IEmailService
                 <h2>Account Disabled</h2>
                 <p>Your account ({email}) has been disabled due to: {reason}</p>
                 <p>If you believe this is an error, please contact your administrator.</p>
+                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+                <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin Security Team</p>
+            </body>
+            </html>
+            """;
+
+        return (subject, body);
+    }
+
+    private (string Subject, string Body) GetAccountLockedTemplate(Dictionary<string, string> parameters)
+    {
+        var email = parameters.GetValueOrDefault("email", "");
+        var lockedUntil = parameters.GetValueOrDefault("lockedUntil", "");
+        var attempts = parameters.GetValueOrDefault("attempts", "");
+
+        var subject = "Account Locked - Security Alert";
+        var body = $"""
+            <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                <h2 style="color: #dc3545;">Account Locked - Security Alert</h2>
+                <p>Your account ({email}) has been temporarily locked due to {attempts} failed login attempts.</p>
+                <p><strong>Locked Until:</strong> {lockedUntil}</p>
+                <p>This is an automated security measure to protect your account from unauthorized access.</p>
+                <h3>What you can do:</h3>
+                <ul>
+                    <li>Wait until the lockout period expires and try logging in again</li>
+                    <li>Contact an administrator if you need immediate access</li>
+                    <li>If you didn't attempt to log in, change your password immediately after the lockout expires</li>
+                </ul>
+                <p style="color: #dc3545;"><strong>If these login attempts were not from you, your account may be compromised. Please contact your administrator immediately.</strong></p>
+                <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
+                <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin Security Team</p>
+            </body>
+            </html>
+            """;
+
+        return (subject, body);
+    }
+
+    private (string Subject, string Body) GetAccountUnlockedTemplate(Dictionary<string, string> parameters)
+    {
+        var email = parameters.GetValueOrDefault("email", "");
+
+        var subject = "Account Unlocked";
+        var body = $"""
+            <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                <h2 style="color: #28a745;">Account Unlocked</h2>
+                <p>Your account ({email}) has been unlocked by an administrator.</p>
+                <p>You can now log in normally.</p>
+                <p>For your security, we recommend:</p>
+                <ul>
+                    <li>Changing your password if you suspect it may be compromised</li>
+                    <li>Enabling Two-Factor Authentication (2FA) for enhanced security</li>
+                    <li>Reviewing recent account activity</li>
+                </ul>
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
                 <p style="color: #666; font-size: 12px;">TelegramGroupsAdmin Security Team</p>
             </body>

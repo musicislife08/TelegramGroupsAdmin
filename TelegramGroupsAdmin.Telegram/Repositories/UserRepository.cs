@@ -335,4 +335,57 @@ public class UserRepository : IUserRepository
         _logger.LogInformation("Updated user {UserId}", user.Id);
     }
 
+    // Account Lockout Methods (SECURITY-5, SECURITY-6)
+
+    public async Task IncrementFailedLoginAttemptsAsync(string userId, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
+
+        entity.FailedLoginAttempts++;
+        await context.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Incremented failed login attempts for user {UserId} to {Attempts}",
+            userId, entity.FailedLoginAttempts);
+    }
+
+    public async Task ResetFailedLoginAttemptsAsync(string userId, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
+
+        entity.FailedLoginAttempts = 0;
+        await context.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Reset failed login attempts for user {UserId}", userId);
+    }
+
+    public async Task LockAccountAsync(string userId, DateTimeOffset lockedUntil, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
+
+        entity.LockedUntil = lockedUntil;
+        await context.SaveChangesAsync(ct);
+
+        _logger.LogWarning("Locked account for user {UserId} until {LockedUntil}",
+            userId, lockedUntil);
+    }
+
+    public async Task UnlockAccountAsync(string userId, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (entity == null) return;
+
+        entity.LockedUntil = null;
+        entity.FailedLoginAttempts = 0;
+        await context.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Unlocked account for user {UserId}", userId);
+    }
+
 }

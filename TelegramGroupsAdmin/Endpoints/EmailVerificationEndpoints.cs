@@ -2,6 +2,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services;
+using TelegramGroupsAdmin.Services.Auth;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Endpoints;
@@ -80,6 +81,7 @@ public static class EmailVerificationEndpoints
     private static async Task<IResult> ResendVerification(
         ResendVerificationRequest request,
         IAuthService authService,
+        IRateLimitService rateLimitService,
         ILogger<Program> logger,
         CancellationToken ct)
     {
@@ -87,6 +89,16 @@ public static class EmailVerificationEndpoints
         {
             return Results.BadRequest("Email is required");
         }
+
+        // Rate limiting (SECURITY-5)
+        var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(request.Email, "resend_verification", ct);
+        if (!rateLimitCheck.IsAllowed)
+        {
+            return Results.BadRequest($"Too many verification email requests. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes.");
+        }
+
+        // Record attempt for rate limiting
+        await rateLimitService.RecordAttemptAsync(request.Email, "resend_verification", ct);
 
         var success = await authService.ResendVerificationEmailAsync(request.Email, ct);
 

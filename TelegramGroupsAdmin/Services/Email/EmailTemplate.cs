@@ -18,5 +18,11 @@ public enum EmailTemplate
     InviteCreated,
 
     /// <summary>Notification that account has been disabled by admin</summary>
-    AccountDisabled
+    AccountDisabled,
+
+    /// <summary>Notification that account has been locked due to failed login attempts</summary>
+    AccountLocked,
+
+    /// <summary>Notification that account has been unlocked by an administrator</summary>
+    AccountUnlocked
 }

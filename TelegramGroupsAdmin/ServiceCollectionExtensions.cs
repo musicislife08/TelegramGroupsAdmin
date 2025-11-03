@@ -124,6 +124,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TelegramGroupsAdmin.Services.Auth.IPasswordHasher, TelegramGroupsAdmin.Services.Auth.PasswordHasher>();
         services.AddScoped<TelegramGroupsAdmin.Services.Auth.ITotpService, TelegramGroupsAdmin.Services.Auth.TotpService>();
         services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IIntermediateAuthService, TelegramGroupsAdmin.Services.Auth.IntermediateAuthService>();
+        services.AddSingleton<TelegramGroupsAdmin.Services.Auth.IRateLimitService, TelegramGroupsAdmin.Services.Auth.RateLimitService>(); // SECURITY-5
+        services.AddScoped<TelegramGroupsAdmin.Services.Auth.IAccountLockoutService, TelegramGroupsAdmin.Services.Auth.AccountLockoutService>(); // SECURITY-6
 
         // Core services
         services.AddScoped<IAuthService, AuthService>();

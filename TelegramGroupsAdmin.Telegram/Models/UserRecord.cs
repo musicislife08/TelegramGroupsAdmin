@@ -25,10 +25,13 @@ public record UserRecord(
     string? EmailVerificationToken,
     DateTimeOffset? EmailVerificationTokenExpiresAt,
     string? PasswordResetToken,
-    DateTimeOffset? PasswordResetTokenExpiresAt
+    DateTimeOffset? PasswordResetTokenExpiresAt,
+    int FailedLoginAttempts,
+    DateTimeOffset? LockedUntil
 )
 {
-    public bool CanLogin => Status == UserStatus.Active && EmailVerified;
+    public bool CanLogin => Status == UserStatus.Active && EmailVerified && !IsLocked;
     public bool IsPending => Status == UserStatus.Pending;
     public int PermissionLevelInt => (int)PermissionLevel;
+    public bool IsLocked => LockedUntil.HasValue && LockedUntil.Value > DateTimeOffset.UtcNow;
 }

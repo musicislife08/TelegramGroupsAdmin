@@ -30,7 +30,9 @@ public static class UserMappings
         EmailVerificationToken: data.EmailVerificationToken,
         EmailVerificationTokenExpiresAt: data.EmailVerificationTokenExpiresAt,
         PasswordResetToken: data.PasswordResetToken,
-        PasswordResetTokenExpiresAt: data.PasswordResetTokenExpiresAt
+        PasswordResetTokenExpiresAt: data.PasswordResetTokenExpiresAt,
+        FailedLoginAttempts: data.FailedLoginAttempts,
+        LockedUntil: data.LockedUntil
     );
 
     public static DataModels.UserRecordDto ToDto(this UiModels.UserRecord ui) => new()
@@ -55,6 +57,8 @@ public static class UserMappings
         EmailVerificationToken = ui.EmailVerificationToken,
         EmailVerificationTokenExpiresAt = ui.EmailVerificationTokenExpiresAt,
         PasswordResetToken = ui.PasswordResetToken,
-        PasswordResetTokenExpiresAt = ui.PasswordResetTokenExpiresAt
+        PasswordResetTokenExpiresAt = ui.PasswordResetTokenExpiresAt,
+        FailedLoginAttempts = ui.FailedLoginAttempts,
+        LockedUntil = ui.LockedUntil
     };
 }

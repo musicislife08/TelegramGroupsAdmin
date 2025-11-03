@@ -1,7 +1,9 @@
 @using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Services.Auth
 @inject IUserManagementService UserManagementService
 @inject IInviteService InviteService
 @inject IAuthService AuthService
+@inject IAccountLockoutService AccountLockoutService
 @inject BlazorAuthHelper AuthHelper
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -78,9 +80,17 @@
                     </MudChip>
                 </MudTd>
                 <MudTd DataLabel="Status">
-                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
-                        @context.Status.ToString()
-                    </MudChip>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                            @context.Status.ToString()
+                        </MudChip>
+                        @if (context.IsLocked)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Lock">
+                                Locked
+                            </MudChip>
+                        }
+                    </MudStack>
                 </MudTd>
                 <MudTd DataLabel="TOTP">
                     @if (context.TotpEnabled)
@@ -117,6 +127,14 @@
                                             IconColor="Color.Warning"
                                             OnClick="@(() => Reset2Fa(context))">
                                     Reset 2FA
+                                </MudMenuItem>
+                            }
+                            @if (context.IsLocked)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.LockOpen"
+                                            IconColor="Color.Warning"
+                                            OnClick="@(() => UnlockAccount(context))">
+                                    Unlock Account
                                 </MudMenuItem>
                             }
                             @if (context.Status == UserStatus.Active)
@@ -414,6 +432,39 @@
             catch (Exception ex)
             {
                 Snackbar.Add($"Error resetting 2FA: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task UnlockAccount(UserRecord user)
+    {
+        var timeRemaining = user.LockedUntil.HasValue
+            ? (user.LockedUntil.Value - DateTimeOffset.UtcNow).TotalMinutes
+            : 0;
+
+        var confirmed = await DialogService.ShowMessageBox(
+            "Unlock Account",
+            $"Are you sure you want to manually unlock {user.Email}?\n\n" +
+            $"This account is currently locked until {user.LockedUntil:yyyy-MM-dd HH:mm:ss UTC} " +
+            $"({Math.Ceiling(timeRemaining)} minutes remaining) due to failed login attempts.\n\n" +
+            "Unlocking will:\n" +
+            "• Clear the account lockout\n" +
+            "• Reset failed login attempt counter\n" +
+            "• Send an unlock notification email\n" +
+            "• Allow the user to log in immediately",
+            yesText: "Unlock Account", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await AccountLockoutService.UnlockAccountAsync(user.Id, _currentUserId!);
+                Snackbar.Add($"Unlocked account for {user.Email}", Severity.Success);
+                await LoadUsersAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error unlocking account: {ex.Message}", Severity.Error);
             }
         }
     }

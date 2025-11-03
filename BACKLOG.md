@@ -29,73 +29,61 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ---
 
-### SECURITY-5: Rate Limiting on Authentication Endpoints
+### ~~SECURITY-5: Rate Limiting on Authentication Endpoints~~ ✅ COMPLETED
 
-**Priority:** CRITICAL
-**Impact:** Brute force attack prevention (HIGH risk - no current protection)
+**Status:** ✅ Implemented (2025-11-03)
 
-**Current State:** NO rate limiting on login, TOTP verification, recovery code verification, or password reset endpoints.
+**Implementation:**
+- Added in-memory rate limiting using `ConcurrentDictionary` with thread-safe operations
+- Fail-open error handling ensures availability over security
+- Rate limits: login (5/15min), register (3/hour), TOTP (5/5min), recovery codes (5/5min), resend verification (5/hour)
+- Applied to 5 endpoints: `/api/auth/login`, `/api/auth/register`, `/api/auth/verify-totp`, `/api/auth/verify-recovery-code`, `/resend-verification`
 
-**Action:**
-- Implement rate limiting on `/api/auth/login` (5 attempts per IP per minute)
-- Implement rate limiting on `/api/auth/verify-totp` (10 attempts per user per minute)
-- Implement rate limiting on `/api/auth/verify-recovery-code` (5 attempts per user per hour)
-- Implement rate limiting on `/api/auth/forgot-password` (3 attempts per email per hour)
-- Use `Microsoft.AspNetCore.RateLimiting` (built-in .NET 9)
-- Consider Redis-backed rate limiter for distributed deployment (future)
-
-**Files:**
+**Files Modified:**
+- `/TelegramGroupsAdmin/Services/Auth/IRateLimitService.cs` (new)
+- `/TelegramGroupsAdmin/Services/Auth/RateLimitService.cs` (new)
 - `/TelegramGroupsAdmin/Endpoints/AuthEndpoints.cs`
-- `/TelegramGroupsAdmin/Program.cs` (rate limiter registration)
+- `/TelegramGroupsAdmin/Endpoints/EmailVerificationEndpoints.cs`
+- `/TelegramGroupsAdmin/ServiceCollectionExtensions.cs`
 
 ---
 
-### SECURITY-6: Account Lockout After Failed Login Attempts
+### ~~SECURITY-6: Account Lockout After Failed Login Attempts~~ ✅ COMPLETED
 
-**Priority:** CRITICAL
-**Impact:** Defense-in-depth against credential stuffing attacks
+**Status:** ✅ Implemented (2025-11-03)
 
-**Current State:** Users can attempt unlimited login attempts with no account suspension.
+**Implementation:**
+- Progressive lockout with exponential backoff: 15min → 30min → 60min → 120min after 5 failed attempts
+- Automated email notifications for lockout/unlock events
+- Admin UI with "Unlock Account" button and locked status badge
+- Auto-expiry via `IsLocked` computed property (no background job needed)
+- Audit logging for lockout events (`UserAccountLocked`, `UserAccountUnlocked`)
 
-**Action:**
-- Implement account lockout after 10 failed login attempts within 15 minutes
-- Lock account for 1 hour (configurable)
-- Send email notification to user when account locked
-- Add `locked_until` column to `users` table
-- Add `UserAccountLocked` and `UserAccountUnlocked` audit events
-- Create admin UI to manually unlock accounts
-- Background job to auto-unlock after timeout
-
-**Files:**
-- `/TelegramGroupsAdmin.Data/Models/User.cs` (add `LockedUntil` property)
-- `/TelegramGroupsAdmin/Services/Auth/AuthService.cs` (lockout logic)
-- `/TelegramGroupsAdmin.Data/Models/AuditEventType.cs` (new events)
-- New migration for `locked_until` column
+**Files Modified:**
+- `/TelegramGroupsAdmin.Data/Models/UserRecordDto.cs` (added `LockedUntil`, `FailedLoginAttempts`, `IsLocked`)
+- `/TelegramGroupsAdmin/Services/Auth/IAccountLockoutService.cs` (new)
+- `/TelegramGroupsAdmin/Services/Auth/AccountLockoutService.cs` (new)
+- `/TelegramGroupsAdmin/Services/AuthService.cs` (lockout checks + failure tracking)
+- `/TelegramGroupsAdmin/Services/Email/SendGridEmailService.cs` (lockout/unlock email templates)
+- `/TelegramGroupsAdmin/Components/Shared/Settings/WebAdminAccounts.razor` (unlock UI)
+- `/TelegramGroupsAdmin.Telegram/Repositories/UserRepository.cs` (lockout methods)
+- New migration: `AddAccountLockoutFields`
 
 ---
 
-### SECURITY-7: Audit Logging for TOTP/Recovery Code Verification Failures
+### ~~SECURITY-7: Audit Logging for TOTP/Recovery Code Verification Failures~~ ✅ COMPLETED
 
-**Priority:** HIGH
-**Impact:** Security monitoring and attack detection
+**Status:** ✅ Implemented (2025-11-03)
 
-**Current State:**
-- TOTP verification failures logged to ILogger (WARNING) but NOT to audit_log
-- Recovery code failures logged to ILogger but NOT to audit_log
-- Cannot track brute force attempts on 2FA in security dashboards
+**Implementation:**
+- Added `UserTotpVerificationFailed` and `UserRecoveryCodeVerificationFailed` audit events
+- Audit logging in `TotpService.cs` for TOTP and recovery code verification failures
+- Enables tracking brute force attempts in security dashboards
 
-**Action:**
-- Add `AuditEventType.UserTotpVerificationFailed` enum value
-- Add `AuditEventType.UserRecoveryCodeVerificationFailed` enum value
-- Update `TotpService.cs:131` to call audit logging
-- Update `TotpService.cs:194` to call audit logging
-- Update `AuthService.cs:128-143` to audit log TOTP failures
-- Update `AuthService.cs:257-275` to audit log recovery code failures
-
-**Files:**
+**Files Modified:**
 - `/TelegramGroupsAdmin.Data/Models/AuditEventType.cs`
+- `/TelegramGroupsAdmin.Telegram/Models/AuditEventType.cs`
 - `/TelegramGroupsAdmin/Services/Auth/TotpService.cs`
-- `/TelegramGroupsAdmin/Services/Auth/AuthService.cs`
 
 ---
 

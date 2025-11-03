@@ -16,8 +16,23 @@ public static class AuthEndpoints
             [FromBody] LoginRequest request,
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
+            [FromServices] IRateLimitService rateLimitService,
             HttpContext httpContext) =>
         {
+            // Rate limiting (SECURITY-5)
+            var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(request.Email, "login");
+            if (!rateLimitCheck.IsAllowed)
+            {
+                return Results.Json(new
+                {
+                    success = false,
+                    error = $"Too many login attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."
+                });
+            }
+
+            // Record attempt for rate limiting
+            await rateLimitService.RecordAttemptAsync(request.Email, "login");
+
             var result = await authService.LoginAsync(request.Email, request.Password);
 
             if (!result.Success)
@@ -56,9 +71,24 @@ public static class AuthEndpoints
         endpoints.MapPost("/api/auth/register", async (
             [FromBody] RegisterRequest request,
             [FromServices] IAuthService authService,
+            [FromServices] IRateLimitService rateLimitService,
             [FromServices] ILogger<Program> logger,
             HttpContext httpContext) =>
         {
+            // Rate limiting (SECURITY-5)
+            var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(request.Email, "register");
+            if (!rateLimitCheck.IsAllowed)
+            {
+                return Results.Json(new
+                {
+                    success = false,
+                    error = $"Too many registration attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."
+                });
+            }
+
+            // Record attempt for rate limiting
+            await rateLimitService.RecordAttemptAsync(request.Email, "register");
+
             try
             {
                 var result = await authService.RegisterAsync(request.Email, request.Password, request.InviteToken);
@@ -108,6 +138,7 @@ public static class AuthEndpoints
             [FromBody] VerifyTotpRequest request,
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
+            [FromServices] IRateLimitService rateLimitService,
             HttpContext httpContext) =>
         {
             // SECURITY: Validate intermediate auth token to ensure password was verified first
@@ -115,6 +146,20 @@ public static class AuthEndpoints
             {
                 return Results.Json(new { success = false, error = "Invalid or expired authentication session" });
             }
+
+            // Rate limiting (SECURITY-5) - use userId as identifier for TOTP verification
+            var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(request.UserId, "totp_verify");
+            if (!rateLimitCheck.IsAllowed)
+            {
+                return Results.Json(new
+                {
+                    success = false,
+                    error = $"Too many TOTP verification attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."
+                });
+            }
+
+            // Record attempt for rate limiting
+            await rateLimitService.RecordAttemptAsync(request.UserId, "totp_verify");
 
             var result = await authService.VerifyTotpAsync(request.UserId, request.Code);
 
@@ -141,6 +186,7 @@ public static class AuthEndpoints
             [FromBody] VerifyRecoveryCodeRequest request,
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
+            [FromServices] IRateLimitService rateLimitService,
             HttpContext httpContext) =>
         {
             // SECURITY: Validate intermediate auth token to ensure password was verified first
@@ -148,6 +194,20 @@ public static class AuthEndpoints
             {
                 return Results.Json(new { success = false, error = "Invalid or expired authentication session" });
             }
+
+            // Rate limiting (SECURITY-5) - use userId as identifier for recovery code verification
+            var rateLimitCheck = await rateLimitService.CheckRateLimitAsync(request.UserId, "recovery_code");
+            if (!rateLimitCheck.IsAllowed)
+            {
+                return Results.Json(new
+                {
+                    success = false,
+                    error = $"Too many recovery code attempts. Please try again in {rateLimitCheck.RetryAfter?.TotalMinutes:F0} minutes."
+                });
+            }
+
+            // Record attempt for rate limiting
+            await rateLimitService.RecordAttemptAsync(request.UserId, "recovery_code");
 
             var result = await authService.UseRecoveryCodeAsync(request.UserId, request.RecoveryCode);
 

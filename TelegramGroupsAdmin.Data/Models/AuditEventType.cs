@@ -83,5 +83,9 @@ public enum AuditEventType
     /// <summary>User TOTP verification failed</summary>
     UserTotpVerificationFailed = 30,
     /// <summary>User recovery code verification failed</summary>
-    UserRecoveryCodeVerificationFailed = 31
+    UserRecoveryCodeVerificationFailed = 31,
+    /// <summary>User account locked due to failed login attempts</summary>
+    UserAccountLocked = 32,
+    /// <summary>User account unlocked by administrator</summary>
+    UserAccountUnlocked = 33
 }
