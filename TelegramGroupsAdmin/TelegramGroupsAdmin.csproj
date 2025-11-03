@@ -59,6 +59,11 @@
       </Content>
     </ItemGroup>
 
+    <!-- Copy Docs directory to output for documentation system -->
+    <ItemGroup>
+      <Content Include="Docs\**\*.md" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
     <ItemGroup>
       <ProjectReference Include="..\TelegramGroupsAdmin.Data\TelegramGroupsAdmin.Data.csproj" />
       <ProjectReference Include="..\TelegramGroupsAdmin.ContentDetection\TelegramGroupsAdmin.ContentDetection.csproj" />
