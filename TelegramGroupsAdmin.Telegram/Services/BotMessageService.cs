@@ -4,7 +4,6 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -17,18 +16,16 @@ public class BotMessageService
 {
     private readonly IMessageHistoryRepository _messageRepo;
     private readonly ITelegramUserRepository _userRepo;
-    private readonly TelegramAdminBotService _botService;
     private readonly ILogger<BotMessageService> _logger;
+    private User? _cachedBotInfo; // In-memory cache to avoid repeated GetMe() calls
 
     public BotMessageService(
         IMessageHistoryRepository messageRepo,
         ITelegramUserRepository userRepo,
-        TelegramAdminBotService botService,
         ILogger<BotMessageService> logger)
     {
         _messageRepo = messageRepo;
         _userRepo = userRepo;
-        _botService = botService;
         _logger = logger;
     }
 
@@ -58,13 +55,13 @@ public class BotMessageService
                 replyParameters: replyParameters,
                 cancellationToken: cancellationToken);
 
-        // Get bot user info (cached from startup)
-        var botInfo = _botService.BotUserInfo;
-        if (botInfo == null)
+        // Get bot user info (fetch once and cache in memory)
+        if (_cachedBotInfo == null)
         {
-            _logger.LogWarning("Bot user info not cached yet, fetching from API");
-            botInfo = await botClient.GetMe(cancellationToken);
+            _cachedBotInfo = await botClient.GetMe(cancellationToken);
+            _logger.LogDebug("Fetched and cached bot info: {BotId} (@{BotUsername})", _cachedBotInfo.Id, _cachedBotInfo.Username);
         }
+        var botInfo = _cachedBotInfo;
 
         // Upsert bot to telegram_users table (ensures bot name is available for UI display)
         var now = DateTimeOffset.UtcNow;
