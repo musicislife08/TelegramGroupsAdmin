@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Documentation files not being deployed** - Added `Docs/**/*.md` to .csproj with `CopyToOutputDirectory="PreserveNewest"` to ensure docs are included in published output
+- **Documentation files not being deployed to Docker containers** - Fixed by adding `CopyToPublishDirectory="PreserveNewest"` to .csproj (CopyToOutputDirectory only affects `dotnet build`, not `dotnet publish`)
 - **Bot display name in Messages UI** - Bot now shows proper name instead of "User {userId}" by caching bot info from `GetMe()` and upserting to `telegram_users` table when sending messages
 - **App startup hang** - Removed circular dependency between BotMessageService and TelegramAdminBotService by using in-memory cache for bot info
 - **`/report` command notification spam** - Batched chat mentions into single message instead of N separate messages for admins without DMs (10 messages → 1 message for 10 admins)

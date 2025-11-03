@@ -59,9 +59,9 @@
       </Content>
     </ItemGroup>
 
-    <!-- Copy Docs directory to output for documentation system -->
+    <!-- Copy Docs directory to output AND publish for documentation system -->
     <ItemGroup>
-      <Content Include="Docs\**\*.md" CopyToOutputDirectory="PreserveNewest" />
+      <Content Include="Docs\**\*.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
 
     <ItemGroup>
