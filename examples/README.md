@@ -146,7 +146,8 @@ docker compose up -d app
 
 # Check health
 docker compose ps
-curl http://localhost:8080/health
+curl http://localhost:8080/healthz/live   # Liveness check
+curl http://localhost:8080/healthz/ready  # Readiness check (includes DB)
 
 # Update to latest image (production mode)
 docker compose pull app

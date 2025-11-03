@@ -138,7 +138,13 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
    docker compose logs -f app
    ```
 
-6. **Access web UI**
+6. **Verify health**
+   ```bash
+   curl http://localhost:8080/healthz/live   # Liveness check
+   curl http://localhost:8080/healthz/ready  # Readiness check (includes DB)
+   ```
+
+7. **Access web UI**
    - Navigate to: <http://localhost:8080>
    - Create first user (automatically becomes Owner)
    - Add bot to Telegram groups
