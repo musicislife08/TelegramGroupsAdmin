@@ -4,6 +4,9 @@ using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Utilities;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
@@ -565,24 +568,15 @@ public class DetectionResultsRepository : IDetectionResultsRepository
             {
                 try
                 {
-                    var json = JsonDocument.Parse(d.CheckResultsJson!);
-                    var checks = json.RootElement.GetProperty("checks");
-                    var checkList = new List<(string name, string result)>();
-
-                    foreach (var check in checks.EnumerateArray())
-                    {
-                        var name = check.GetProperty("name").GetString() ?? "";
-                        var result = check.GetProperty("result").GetString() ?? "";
-                        checkList.Add((name, result));
-                    }
+                    var checks = CheckResultsSerializer.Deserialize(d.CheckResultsJson!);
 
                     // Check if OpenAI returned "clean" and at least one other check returned "spam"
-                    var hasOpenAIClean = checkList.Any(c => c.name == "OpenAI" && c.result == "clean");
-                    var hasOtherSpam = checkList.Any(c => c.name != "OpenAI" && c.result == "spam");
+                    var hasOpenAIClean = checks.Any(c => c.CheckName == CheckName.OpenAI && c.Result == CheckResultType.Clean);
+                    var hasOtherSpam = checks.Any(c => c.CheckName != CheckName.OpenAI && c.Result == CheckResultType.Spam);
 
                     if (hasOpenAIClean && hasOtherSpam)
                     {
-                        return new { d.Id, Checks = checkList };
+                        return new { d.Id, Checks = checks };
                     }
                 }
                 catch (Exception ex)
@@ -598,7 +592,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
         // Calculate per-algorithm statistics
         var algorithmStats = actualVetoes
-            .SelectMany(v => v!.Checks.Where(c => c.name != "OpenAI" && c.result == "spam").Select(c => c.name))
+            .SelectMany(v => v!.Checks.Where(c => c.CheckName != CheckName.OpenAI && c.Result == CheckResultType.Spam).Select(c => c.CheckName.ToString()))
             .GroupBy(name => name)
             .Select(g => new AlgorithmVetoStats
             {
@@ -620,18 +614,12 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         {
             try
             {
-                var doc = JsonDocument.Parse(json!);
-                var checks = doc.RootElement.GetProperty("checks");
+                var checks = CheckResultsSerializer.Deserialize(json!);
 
-                foreach (var check in checks.EnumerateArray())
+                foreach (var check in checks.Where(c => c.CheckName != CheckName.OpenAI && c.Result == CheckResultType.Spam))
                 {
-                    var name = check.GetProperty("name").GetString();
-                    var result = check.GetProperty("result").GetString();
-
-                    if (name != "OpenAI" && result == "spam")
-                    {
-                        totalSpamFlagsByAlgorithm[name!] = totalSpamFlagsByAlgorithm.GetValueOrDefault(name!, 0) + 1;
-                    }
+                    var name = check.CheckName.ToString();
+                    totalSpamFlagsByAlgorithm[name] = totalSpamFlagsByAlgorithm.GetValueOrDefault(name, 0) + 1;
                 }
             }
             catch (Exception ex)
@@ -684,21 +672,18 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         {
             try
             {
-                var json = JsonDocument.Parse(detection.CheckResultsJson!);
-                var checks = json.RootElement.GetProperty("checks");
+                var checks = CheckResultsSerializer.Deserialize(detection.CheckResultsJson!);
 
-                var openAICheck = checks.EnumerateArray()
-                    .FirstOrDefault(c => c.GetProperty("name").GetString() == "OpenAI");
+                var openAICheck = checks.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
 
-                var spamChecks = checks.EnumerateArray()
-                    .Where(c => c.GetProperty("name").GetString() != "OpenAI" &&
-                               c.GetProperty("result").GetString() == "spam")
-                    .Select(c => c.GetProperty("name").GetString() ?? "")
+                var spamChecks = checks
+                    .Where(c => c.CheckName != CheckName.OpenAI && c.Result == CheckResultType.Spam)
+                    .Select(c => c.CheckName.ToString())
                     .ToList();
 
                 // Only include if OpenAI vetoed (clean) and other checks flagged spam
-                if (openAICheck.ValueKind != JsonValueKind.Undefined &&
-                    openAICheck.GetProperty("result").GetString() == "clean" &&
+                if (openAICheck != null &&
+                    openAICheck.Result == CheckResultType.Clean &&
                     spamChecks.Any())
                 {
                     vetoedMessages.Add(new VetoedMessage
@@ -709,8 +694,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                             ? detection.MessageText.Substring(0, 100) + "..."
                             : detection.MessageText,
                         SpamCheckNames = spamChecks,
-                        OpenAIConfidence = (int)openAICheck.GetProperty("conf").GetDouble(),
-                        OpenAIReason = openAICheck.GetProperty("reason").GetString()
+                        OpenAIConfidence = openAICheck.Confidence,
+                        OpenAIReason = openAICheck.Reason
                     });
                 }
 
