@@ -48,6 +48,7 @@ TelegramGroupsAdmin.Tests/
 # Documentation (not needed in runtime image)
 **/*.md
 !README.md
+!TelegramGroupsAdmin/Docs/**/*.md
 LICENSE
 CLAUDE.md
 BACKLOG.md
