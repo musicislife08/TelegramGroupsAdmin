@@ -321,7 +321,7 @@ public static class GoldenDataset
         const string testPasswordHash = "AQAAAAIAAYagAAAAEDummyHashForTestingOnly1234567890";
         const string testSecurityStamp = "TEST_SECURITY_STAMP";
 
-        #pragma warning disable EF1002 // SQL injection risk suppressed: all values are static test constants
+#pragma warning disable EF1002 // SQL injection risk suppressed: all values are static test constants
         await context.Database.ExecuteSqlRawAsync(
             $"""
             INSERT INTO users (id, email, normalized_email, password_hash, security_stamp, permission_level, invited_by, is_active, totp_secret, totp_enabled, totp_setup_started_at, created_at, last_login_at, status, email_verified, "InvitedByUserId")
@@ -332,7 +332,7 @@ public static class GoldenDataset
             ('{Users.User4_Id}', '{Users.User4_Email}', '{Users.User4_Email.ToUpperInvariant()}', '{testPasswordHash}', '{testSecurityStamp}', {Users.User4_PermissionLevel}, '{Users.User2_Id}', FALSE, NULL, {Users.User4_TotpEnabled}, NULL, NOW() - INTERVAL '11 days', NULL, {Users.User4_Status}, {Users.User4_EmailVerified}, '{Users.User2_Id}')
             """
         );
-        #pragma warning restore EF1002
+#pragma warning restore EF1002
 
         // 3. Seed managed_chats
         await context.Database.ExecuteSqlRawAsync(

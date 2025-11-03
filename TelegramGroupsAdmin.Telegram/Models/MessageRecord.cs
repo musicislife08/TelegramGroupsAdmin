@@ -35,8 +35,8 @@ public record MessageRecord(
     string? MediaMimeType,      // MIME type (e.g., "video/mp4", "audio/ogg")
     string? MediaLocalPath,     // Local storage path (e.g., "/data/media/...")
     int? MediaDuration,         // Duration in seconds (for audio/video)
-    // Translation fields (Phase 4.20)
+                                // Translation fields (Phase 4.20)
     MessageTranslation? Translation, // Translation of message text (if foreign language detected)
-    // Spam check tracking
+                                     // Spam check tracking
     SpamCheckSkipReason SpamCheckSkipReason // Reason spam check was skipped (NotSkipped, UserTrusted, UserAdmin)
 );

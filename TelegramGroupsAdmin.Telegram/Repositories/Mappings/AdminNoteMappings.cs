@@ -13,15 +13,15 @@ public static class AdminNoteMappings
         string? webUserEmail = null,
         string? telegramUsername = null,
         string? telegramFirstName = null) => new()
-    {
-        Id = data.Id,
-        TelegramUserId = data.TelegramUserId,
-        NoteText = data.NoteText,
-        CreatedBy = ActorMappings.ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
-        CreatedAt = data.CreatedAt,
-        UpdatedAt = data.UpdatedAt,
-        IsPinned = data.IsPinned
-    };
+        {
+            Id = data.Id,
+            TelegramUserId = data.TelegramUserId,
+            NoteText = data.NoteText,
+            CreatedBy = ActorMappings.ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
+            CreatedAt = data.CreatedAt,
+            UpdatedAt = data.UpdatedAt,
+            IsPinned = data.IsPinned
+        };
 
     public static DataModels.AdminNoteDto ToDto(this UiModels.AdminNote ui)
     {

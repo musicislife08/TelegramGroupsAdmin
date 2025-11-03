@@ -16,17 +16,17 @@ public static class UserTagMappings
         string? removedByWebUserEmail = null,
         string? removedByTelegramUsername = null,
         string? removedByTelegramFirstName = null) => new()
-    {
-        Id = data.Id,
-        TelegramUserId = data.TelegramUserId,
-        TagName = data.TagName,
-        AddedBy = ActorMappings.ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
-        AddedAt = data.AddedAt,
-        RemovedAt = data.RemovedAt,
-        RemovedBy = data.RemovedAt.HasValue
+        {
+            Id = data.Id,
+            TelegramUserId = data.TelegramUserId,
+            TagName = data.TagName,
+            AddedBy = ActorMappings.ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
+            AddedAt = data.AddedAt,
+            RemovedAt = data.RemovedAt,
+            RemovedBy = data.RemovedAt.HasValue
             ? ActorMappings.ToActor(data.RemovedByWebUserId, data.RemovedByTelegramUserId, data.RemovedBySystemIdentifier, removedByWebUserEmail, removedByTelegramUsername, removedByTelegramFirstName)
             : null
-    };
+        };
 
     public static DataModels.UserTagDto ToDto(this UiModels.UserTag ui)
     {

@@ -428,7 +428,7 @@ public partial class MessageProcessingService(
                 ReplyToMessageId: message.ReplyToMessage?.MessageId,
                 ReplyToUser: null, // Populated by repository queries via JOIN
                 ReplyToText: null, // Populated by repository queries via JOIN
-                // Media attachment fields (Phase 4.X)
+                                   // Media attachment fields (Phase 4.X)
                 MediaType: mediaType,
                 MediaFileId: mediaFileId,
                 MediaFileSize: mediaFileSize,

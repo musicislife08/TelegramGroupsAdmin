@@ -169,7 +169,8 @@ public class MessageStatsService : IMessageStatsService
 
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         var dailyVolume = volumeData
-            .GroupBy(m => {
+            .GroupBy(m =>
+            {
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })
@@ -191,7 +192,8 @@ public class MessageStatsService : IMessageStatsService
             .ToListAsync(cancellationToken);
 
         var dailySpam = spamData
-            .GroupBy(m => {
+            .GroupBy(m =>
+            {
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })
@@ -211,7 +213,8 @@ public class MessageStatsService : IMessageStatsService
             .ToListAsync(cancellationToken);
 
         var dailyHam = hamData
-            .GroupBy(m => {
+            .GroupBy(m =>
+            {
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })

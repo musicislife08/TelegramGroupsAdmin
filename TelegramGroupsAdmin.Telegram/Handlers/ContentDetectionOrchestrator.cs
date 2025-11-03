@@ -81,63 +81,63 @@ public class ContentDetectionOrchestrator
 
                 var result = await coordinator.CheckAsync(request, cancellationToken);
 
-            // Phase 4.14: Handle critical check violations FIRST (before regular spam)
-            // Critical violations apply to ALL users (trusted/admin included)
-            if (result.HasCriticalViolations)
-            {
-                _logger.LogWarning(
-                    "Critical check violations detected for message {MessageId} from user {UserId}: {Violations}",
-                    message.MessageId,
-                    message.From?.Id,
-                    string.Join("; ", result.CriticalCheckViolations));
-
-                // Use SpamActionService to handle critical violations
-                // Policy: Delete + DM notice, NO ban/warn for trusted/admin users
-                await _spamActionService.HandleCriticalCheckViolationAsync(
-                    botClient,
-                    message,
-                    result.CriticalCheckViolations,
-                    cancellationToken);
-
-                // If critical violations found, don't process regular spam (already handled)
-                return;
-            }
-
-            // Store detection result (spam or ham) for analytics and training
-            // Only store if spam detection actually ran (not skipped for trusted/admin users)
-            if (!result.SpamCheckSkipped && result.SpamResult != null)
-            {
-                var detectionResult = await StoreDetectionResultAsync(
-                    detectionResultsRepo,
-                    message,
-                    result.SpamResult,
-                    editVersion,
-                    cancellationToken);
-
-                // Check for auto-trust after storing non-spam detection result
-                if (!result.SpamResult.IsSpam && message.From?.Id != null)
+                // Phase 4.14: Handle critical check violations FIRST (before regular spam)
+                // Critical violations apply to ALL users (trusted/admin included)
+                if (result.HasCriticalViolations)
                 {
-                    var autoTrustService = scope.ServiceProvider.GetRequiredService<UserAutoTrustService>();
-                    await autoTrustService.CheckAndApplyAutoTrustAsync(message.From.Id, message.Chat.Id, cancellationToken);
+                    _logger.LogWarning(
+                        "Critical check violations detected for message {MessageId} from user {UserId}: {Violations}",
+                        message.MessageId,
+                        message.From?.Id,
+                        string.Join("; ", result.CriticalCheckViolations));
+
+                    // Use SpamActionService to handle critical violations
+                    // Policy: Delete + DM notice, NO ban/warn for trusted/admin users
+                    await _spamActionService.HandleCriticalCheckViolationAsync(
+                        botClient,
+                        message,
+                        result.CriticalCheckViolations,
+                        cancellationToken);
+
+                    // If critical violations found, don't process regular spam (already handled)
+                    return;
                 }
 
-                // Phase 4.21: Language warning for non-English non-spam messages from untrusted users
-                // Note: Language detection happens earlier in ProcessNewMessageAsync, check translation there
-                if (!result.SpamResult.IsSpam && message.From?.Id != null)
+                // Store detection result (spam or ham) for analytics and training
+                // Only store if spam detection actually ran (not skipped for trusted/admin users)
+                if (!result.SpamCheckSkipped && result.SpamResult != null)
                 {
-                    // Language warning is handled by LanguageWarningHandler (REFACTOR-2 Phase 2.2)
-                    // This will be extracted to handler in next phase
-                    var languageWarningHandler = scope.ServiceProvider.GetRequiredService<LanguageWarningHandler>();
-                    await languageWarningHandler.HandleWarningAsync(botClient, message, scope, cancellationToken);
-                }
+                    var detectionResult = await StoreDetectionResultAsync(
+                        detectionResultsRepo,
+                        message,
+                        result.SpamResult,
+                        editVersion,
+                        cancellationToken);
 
-                // Phase 2.7: Handle spam actions based on net confidence
-                await _spamActionService.HandleSpamDetectionActionsAsync(
-                    message,
-                    result.SpamResult,
-                    detectionResult,
-                    cancellationToken);
-            }
+                    // Check for auto-trust after storing non-spam detection result
+                    if (!result.SpamResult.IsSpam && message.From?.Id != null)
+                    {
+                        var autoTrustService = scope.ServiceProvider.GetRequiredService<UserAutoTrustService>();
+                        await autoTrustService.CheckAndApplyAutoTrustAsync(message.From.Id, message.Chat.Id, cancellationToken);
+                    }
+
+                    // Phase 4.21: Language warning for non-English non-spam messages from untrusted users
+                    // Note: Language detection happens earlier in ProcessNewMessageAsync, check translation there
+                    if (!result.SpamResult.IsSpam && message.From?.Id != null)
+                    {
+                        // Language warning is handled by LanguageWarningHandler (REFACTOR-2 Phase 2.2)
+                        // This will be extracted to handler in next phase
+                        var languageWarningHandler = scope.ServiceProvider.GetRequiredService<LanguageWarningHandler>();
+                        await languageWarningHandler.HandleWarningAsync(botClient, message, scope, cancellationToken);
+                    }
+
+                    // Phase 2.7: Handle spam actions based on net confidence
+                    await _spamActionService.HandleSpamDetectionActionsAsync(
+                        message,
+                        result.SpamResult,
+                        detectionResult,
+                        cancellationToken);
+                }
             }
             finally
             {

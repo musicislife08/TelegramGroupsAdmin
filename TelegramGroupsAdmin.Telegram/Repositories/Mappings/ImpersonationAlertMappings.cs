@@ -22,30 +22,30 @@ public static class ImpersonationAlertMappings
         string? targetPhotoPath = null,
         string? chatName = null,
         string? reviewedByEmail = null) => new()
-    {
-        Id = data.Id,
-        SuspectedUserId = data.SuspectedUserId,
-        TargetUserId = data.TargetUserId,
-        ChatId = data.ChatId,
-        TotalScore = data.TotalScore,
-        RiskLevel = data.RiskLevel,
-        NameMatch = data.NameMatch,
-        PhotoMatch = data.PhotoMatch,
-        PhotoSimilarityScore = data.PhotoSimilarityScore,
-        DetectedAt = data.DetectedAt,
-        AutoBanned = data.AutoBanned,
-        ReviewedByUserId = data.ReviewedByUserId,
-        ReviewedAt = data.ReviewedAt,
-        Verdict = data.Verdict,
-        SuspectedUserName = suspectedUserName,
-        SuspectedFirstName = suspectedFirstName,
-        SuspectedPhotoPath = suspectedPhotoPath,
-        TargetUserName = targetUserName,
-        TargetFirstName = targetFirstName,
-        TargetPhotoPath = targetPhotoPath,
-        ChatName = chatName,
-        ReviewedByEmail = reviewedByEmail
-    };
+        {
+            Id = data.Id,
+            SuspectedUserId = data.SuspectedUserId,
+            TargetUserId = data.TargetUserId,
+            ChatId = data.ChatId,
+            TotalScore = data.TotalScore,
+            RiskLevel = data.RiskLevel,
+            NameMatch = data.NameMatch,
+            PhotoMatch = data.PhotoMatch,
+            PhotoSimilarityScore = data.PhotoSimilarityScore,
+            DetectedAt = data.DetectedAt,
+            AutoBanned = data.AutoBanned,
+            ReviewedByUserId = data.ReviewedByUserId,
+            ReviewedAt = data.ReviewedAt,
+            Verdict = data.Verdict,
+            SuspectedUserName = suspectedUserName,
+            SuspectedFirstName = suspectedFirstName,
+            SuspectedPhotoPath = suspectedPhotoPath,
+            TargetUserName = targetUserName,
+            TargetFirstName = targetFirstName,
+            TargetPhotoPath = targetPhotoPath,
+            ChatName = chatName,
+            ReviewedByEmail = reviewedByEmail
+        };
 
     public static DataModels.ImpersonationAlertRecordDto ToDto(this UiModels.ImpersonationAlertRecord ui) => new()
     {

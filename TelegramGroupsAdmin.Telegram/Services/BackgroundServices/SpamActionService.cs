@@ -505,7 +505,7 @@ public class SpamActionService(
                     "Scheduled cross-chat message cleanup job for user {UserId} (will execute in 15s)",
                     userId);
 
-                skipCleanupJob: ; // Label for early exit from deduplication check
+            skipCleanupJob:; // Label for early exit from deduplication check
             }
             catch (Exception jobEx)
             {

@@ -85,7 +85,8 @@ public class AnalyticsRepository : IAnalyticsRepository
         // Group by user's local date (C# server-side grouping)
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         var dailyBreakdownMapped = detections
-            .GroupBy(dr => {
+            .GroupBy(dr =>
+            {
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(dr.DetectedAt.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })
@@ -173,7 +174,8 @@ public class AnalyticsRepository : IAnalyticsRepository
         // Calculate daily averages (group by user's local date)
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         var dailyAverages = responseTimes
-            .GroupBy(rt => {
+            .GroupBy(rt =>
+            {
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(rt.DetectedAt.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })
@@ -342,7 +344,8 @@ public class AnalyticsRepository : IAnalyticsRepository
         // Group by user's local date (C# server-side grouping)
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         var dailyTrends = detections
-            .GroupBy(dr => {
+            .GroupBy(dr =>
+            {
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(dr.DetectedAt.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })
@@ -432,7 +435,8 @@ public class AnalyticsRepository : IAnalyticsRepository
         // Group by user's local date (C# side conversion)
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         var dailyTrends = responses
-            .GroupBy(wr => {
+            .GroupBy(wr =>
+            {
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(wr.CreatedAt.UtcDateTime, timeZone);
                 return DateOnly.FromDateTime(localTime);
             })

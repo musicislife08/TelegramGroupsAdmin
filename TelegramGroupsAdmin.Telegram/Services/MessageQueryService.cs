@@ -123,26 +123,26 @@ public class MessageQueryService : IMessageQueryService
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var query = from m in context.Messages
-            where m.ChatId == chatId
-            join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
-            from chat in chatGroup.DefaultIfEmpty()
-            join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
-            from user in userGroup.DefaultIfEmpty()
-            join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
-            from parentMsg in parentGroup.DefaultIfEmpty()
-            join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
-            from parentUserInfo in parentUserGroup.DefaultIfEmpty()
-            select new
-            {
-                Message = m,
-                ChatName = chat != null ? chat.ChatName : null,
-                ChatIconPath = chat != null ? chat.ChatIconPath : null,
-                UserName = user != null ? user.Username : null,
-                FirstName = user != null ? user.FirstName : null,
-                UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
-                ReplyToText = parentMsg != null ? parentMsg.MessageText : null
-            };
+                    where m.ChatId == chatId
+                    join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
+                    from chat in chatGroup.DefaultIfEmpty()
+                    join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
+                    from user in userGroup.DefaultIfEmpty()
+                    join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
+                    from parentMsg in parentGroup.DefaultIfEmpty()
+                    join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
+                    from parentUserInfo in parentUserGroup.DefaultIfEmpty()
+                    select new
+                    {
+                        Message = m,
+                        ChatName = chat != null ? chat.ChatName : null,
+                        ChatIconPath = chat != null ? chat.ChatIconPath : null,
+                        UserName = user != null ? user.Username : null,
+                        FirstName = user != null ? user.FirstName : null,
+                        UserPhotoPath = user != null ? user.UserPhotoPath : null,
+                        ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                        ReplyToText = parentMsg != null ? parentMsg.MessageText : null
+                    };
 
         // Apply timestamp filter for pagination (get messages older than the specified timestamp)
         if (beforeTimestamp.HasValue)
@@ -194,30 +194,30 @@ public class MessageQueryService : IMessageQueryService
         var userIds = messagesWithDetections.Select(m => m.UserId).Distinct().ToArray();
 
         var joinedData = await (from m in context.Messages
-            where messageIds.Contains(m.MessageId)
-            join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
-            from chat in chatGroup.DefaultIfEmpty()
-            join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
-            from user in userGroup.DefaultIfEmpty()
-            join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
-            from parentMsg in parentGroup.DefaultIfEmpty()
-            join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
-            from parentUserInfo in parentUserGroup.DefaultIfEmpty()
-            join translation in context.MessageTranslations on m.MessageId equals translation.MessageId into translationGroup
-            from trans in translationGroup.DefaultIfEmpty()
-            select new
-            {
-                m.MessageId,
-                m.UserId,
-                ChatName = chat != null ? chat.ChatName : null,
-                ChatIconPath = chat != null ? chat.ChatIconPath : null,
-                UserName = user != null ? user.Username : null,
-                FirstName = user != null ? user.FirstName : null,
-                UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
-                ReplyToText = parentMsg != null ? parentMsg.MessageText : null,
-                Translation = trans
-            })
+                                where messageIds.Contains(m.MessageId)
+                                join c in context.ManagedChats on m.ChatId equals c.ChatId into chatGroup
+                                from chat in chatGroup.DefaultIfEmpty()
+                                join u in context.TelegramUsers on m.UserId equals u.TelegramUserId into userGroup
+                                from user in userGroup.DefaultIfEmpty()
+                                join parent in context.Messages on m.ReplyToMessageId equals parent.MessageId into parentGroup
+                                from parentMsg in parentGroup.DefaultIfEmpty()
+                                join parentUser in context.TelegramUsers on parentMsg.UserId equals parentUser.TelegramUserId into parentUserGroup
+                                from parentUserInfo in parentUserGroup.DefaultIfEmpty()
+                                join translation in context.MessageTranslations on m.MessageId equals translation.MessageId into translationGroup
+                                from trans in translationGroup.DefaultIfEmpty()
+                                select new
+                                {
+                                    m.MessageId,
+                                    m.UserId,
+                                    ChatName = chat != null ? chat.ChatName : null,
+                                    ChatIconPath = chat != null ? chat.ChatIconPath : null,
+                                    UserName = user != null ? user.Username : null,
+                                    FirstName = user != null ? user.FirstName : null,
+                                    UserPhotoPath = user != null ? user.UserPhotoPath : null,
+                                    ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                                    ReplyToText = parentMsg != null ? parentMsg.MessageText : null,
+                                    Translation = trans
+                                })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
@@ -225,42 +225,42 @@ public class MessageQueryService : IMessageQueryService
 
         // Step 3: Load user tags and notes separately (Phase 4.12: avoid cartesian product)
         var userTags = await (from ut in context.UserTags
-            where userIds.Contains(ut.TelegramUserId) && ut.RemovedAt == null
-            join td in context.TagDefinitions on ut.TagName equals td.TagName into tagGroup
-            from tag in tagGroup.DefaultIfEmpty()
-            select new
-            {
-                ut.TelegramUserId,
-                ut.TagName,
-                TagColor = tag != null ? tag.Color : Data.Models.TagColor.Primary, // Default to Primary if no definition
-                ut.AddedAt,
-                ut.RemovedAt,
-                // Actor arc pattern columns
-                ActorWebUserId = ut.ActorWebUserId,
-                ActorTelegramUserId = ut.ActorTelegramUserId,
-                ActorSystemIdentifier = ut.ActorSystemIdentifier,
-                RemovedByWebUserId = ut.RemovedByWebUserId,
-                RemovedByTelegramUserId = ut.RemovedByTelegramUserId,
-                RemovedBySystemIdentifier = ut.RemovedBySystemIdentifier
-            })
+                              where userIds.Contains(ut.TelegramUserId) && ut.RemovedAt == null
+                              join td in context.TagDefinitions on ut.TagName equals td.TagName into tagGroup
+                              from tag in tagGroup.DefaultIfEmpty()
+                              select new
+                              {
+                                  ut.TelegramUserId,
+                                  ut.TagName,
+                                  TagColor = tag != null ? tag.Color : Data.Models.TagColor.Primary, // Default to Primary if no definition
+                                  ut.AddedAt,
+                                  ut.RemovedAt,
+                                  // Actor arc pattern columns
+                                  ActorWebUserId = ut.ActorWebUserId,
+                                  ActorTelegramUserId = ut.ActorTelegramUserId,
+                                  ActorSystemIdentifier = ut.ActorSystemIdentifier,
+                                  RemovedByWebUserId = ut.RemovedByWebUserId,
+                                  RemovedByTelegramUserId = ut.RemovedByTelegramUserId,
+                                  RemovedBySystemIdentifier = ut.RemovedBySystemIdentifier
+                              })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
         var userNotes = await (from an in context.AdminNotes
-            where userIds.Contains(an.TelegramUserId)
-            select new
-            {
-                an.TelegramUserId,
-                an.Id,
-                an.NoteText,
-                an.CreatedAt,
-                an.UpdatedAt,
-                an.IsPinned,
-                // Actor arc pattern columns
-                ActorWebUserId = an.ActorWebUserId,
-                ActorTelegramUserId = an.ActorTelegramUserId,
-                ActorSystemIdentifier = an.ActorSystemIdentifier
-            })
+                               where userIds.Contains(an.TelegramUserId)
+                               select new
+                               {
+                                   an.TelegramUserId,
+                                   an.Id,
+                                   an.NoteText,
+                                   an.CreatedAt,
+                                   an.UpdatedAt,
+                                   an.IsPinned,
+                                   // Actor arc pattern columns
+                                   ActorWebUserId = an.ActorWebUserId,
+                                   ActorTelegramUserId = an.ActorTelegramUserId,
+                                   ActorSystemIdentifier = an.ActorSystemIdentifier
+                               })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
