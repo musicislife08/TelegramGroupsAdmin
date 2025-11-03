@@ -46,7 +46,6 @@
         <PackageReference Include="TickerQ.Dashboard" Version="2.5.3" />
         <PackageReference Include="TickerQ.EntityFrameworkCore" Version="2.5.3" />
         <PackageReference Include="TickerQ.Utilities" Version="2.5.3" />
-        <PackageReference Include="YamlDotNet" Version="16.3.0" />
     </ItemGroup>
 
     <!-- Explicitly register TickerQ source generator for .NET 10 RC2 -->

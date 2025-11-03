@@ -165,9 +165,6 @@ public static class ServiceCollectionExtensions
         // API key migration service (one-time migration from env vars to encrypted database storage)
         services.AddScoped<ApiKeyMigrationService>();
 
-        // Help documentation service (Phase 4.X: Markdown-based help system with YAML metadata)
-        services.AddSingleton<Services.Help.IHelpDocumentService, Services.Help.HelpDocumentService>();
-        services.AddHostedService<Services.Help.HelpDocumentStartupService>();
 
         // Documentation service (Phase 4.X: Folder-based portable markdown documentation)
         services.AddSingleton<Services.Docs.IDocumentationService, Services.Docs.DocumentationService>();
