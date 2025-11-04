@@ -119,6 +119,17 @@ public class ConfigRecordDto
     public string? InviteLink { get; set; }
 
     /// <summary>
+    /// Telegram bot token (encrypted TEXT, not JSONB)
+    /// Encrypted at rest with Data Protection, automatically decrypted during backup export and re-encrypted during restore
+    /// Only used for global config (chat_id = 0)
+    /// Migrated from TELEGRAM__BOTTOKEN env var to database for UI-based configuration
+    /// Note: Uses TEXT not JSONB because encrypted data is base64, not valid JSON
+    /// </summary>
+    [Column("telegram_bot_token_encrypted")]
+    [ProtectedData(Purpose = DataProtectionPurposes.TelegramBotToken)]
+    public string? TelegramBotTokenEncrypted { get; set; }
+
+    /// <summary>
     /// When this config was created (UTC timestamp)
     /// </summary>
     [Column("created_at")]
