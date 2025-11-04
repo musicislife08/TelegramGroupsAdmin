@@ -54,7 +54,7 @@ public partial class UrlContentScrapingService(
 
             successfulScrapes++;
 
-            // Format preview for this URL
+            // Format preview for this URL - single line with URL
             previewBuilder.AppendLine(url);
 
             // Deduplicate content - collect unique non-empty values
@@ -72,9 +72,10 @@ public partial class UrlContentScrapingService(
             {
                 if (!string.IsNullOrWhiteSpace(content) && seenContent.Add(content))
                 {
-                    // Preserve newlines within content for proper formatting
-                    // The blank line between URLs (from AppendLine() below) provides visual separation
-                    previewBuilder.AppendLine(content);
+                    // Replace newlines with spaces to keep content in a single visual block
+                    // Internal newlines cause the UI to render separate blocks
+                    var normalizedContent = content.Replace("\r\n", " ").Replace("\n", " ");
+                    previewBuilder.AppendLine(normalizedContent);
                 }
             }
 
