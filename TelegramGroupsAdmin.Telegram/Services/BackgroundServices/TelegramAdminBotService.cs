@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
@@ -19,7 +18,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public class TelegramAdminBotService(
     TelegramBotClientFactory botFactory,
-    IOptions<TelegramOptions> options,
+    TelegramConfigLoader configLoader,
     IServiceScopeFactory scopeFactory,
     CommandRouter commandRouter,
     MessageProcessingService messageProcessingService,
@@ -28,13 +27,18 @@ public class TelegramAdminBotService(
     ILogger<TelegramAdminBotService> logger)
     : BackgroundService, IMessageHistoryService
 {
-    private readonly TelegramOptions _options = options.Value;
+    private readonly TelegramConfigLoader _configLoader = configLoader;
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private ITelegramBotClient? _botClient;
     private CancellationTokenSource? _botCancellationTokenSource;
     private Task? _botTask;
     private readonly SemaphoreSlim _configChangeSignal = new(0, 1);
     private User? _botUserInfo; // Cached bot user info from GetMe()
+
+    // Cached configuration loaded once at startup
+    private string? _botToken;
+    private long? _chatId;
+    private string? _apiServerUrl;
 
     // Events for real-time UI updates (forwarded from child services)
     public event Action<MessageRecord>? OnNewMessage
@@ -164,12 +168,21 @@ public class TelegramAdminBotService(
 
     private async Task RunBotAsync(CancellationToken stoppingToken)
     {
-        _botClient = botFactory.GetOrCreate(_options.BotToken);
+        // Load configuration from database (if not already loaded)
+        if (_botToken == null)
+        {
+            (_botToken, _chatId, _apiServerUrl) = await _configLoader.LoadConfigAsync();
+            logger.LogInformation(
+                "Loaded Telegram bot configuration: ChatId={ChatId}, ApiMode={ApiMode}",
+                _chatId,
+                string.IsNullOrWhiteSpace(_apiServerUrl) ? "Standard (api.telegram.org, 20MB limit)" : $"Self-hosted ({_apiServerUrl}, unlimited)");
+        }
+
+        _botClient = botFactory.GetOrCreate(_botToken, _apiServerUrl);
         var botClient = _botClient;
 
-        // Fetch and cache bot's user ID for message filtering
+        // Fetch and cache bot info
         var me = await botClient.GetMe(stoppingToken);
-        _options.BotUserId = me.Id;
         _botUserInfo = me; // Cache full bot info for BotMessageService
         logger.LogInformation("Bot user ID cached: {BotUserId} (@{BotUsername})", me.Id, me.Username);
 
