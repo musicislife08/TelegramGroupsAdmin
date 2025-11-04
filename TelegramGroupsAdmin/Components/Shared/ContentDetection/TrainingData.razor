@@ -119,29 +119,29 @@
                             </MudChip>
                         </MudTd>
                         <MudTd DataLabel="Message Text">
-                            <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="display: flex; flex-direction: column; gap: 4px;">
                                 @if (context.Translation != null)
                                 {
-                                    <span class="tg-badge tg-badge-translation" title="Detected language: @context.Translation.DetectedLanguage" style="font-size: 0.75rem; padding: 2px 6px;">
-                                        🌐 @context.Translation.DetectedLanguage.ToUpper()→EN
-                                    </span>
-                                    <MudIconButton Icon="@(GetShowTranslation(context.Id) ? Icons.Material.Filled.Translate : Icons.Material.Outlined.Translate)"
-                                                   Size="Size.Small"
-                                                   title="@(GetShowTranslation(context.Id) ? "Show original" : "Show translation")"
-                                                   OnClick="@(() => ToggleTranslation(context.Id))" />
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span class="tg-badge tg-badge-translation" title="Detected language: @context.Translation.DetectedLanguage" style="font-size: 0.75rem; padding: 2px 6px;">
+                                            🌐 @context.Translation.DetectedLanguage.ToUpper()→EN
+                                        </span>
+                                        <MudIconButton Icon="@(GetShowTranslation(context.Id) ? Icons.Material.Filled.Translate : Icons.Material.Outlined.Translate)"
+                                                       Size="Size.Small"
+                                                       title="@(GetShowTranslation(context.Id) ? "Show original" : "Show translation")"
+                                                       OnClick="@(() => ToggleTranslation(context.Id))" />
+                                    </div>
                                 }
-                                <MudTooltip Text="@(GetShowTranslation(context.Id) && context.Translation != null ? context.Translation.TranslatedText : context.MessageText)">
-                                    <MudText Typo="Typo.body2" Style="max-width: 350px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                        @if (GetShowTranslation(context.Id) && context.Translation != null)
-                                        {
-                                            @context.Translation.TranslatedText
-                                        }
-                                        else
-                                        {
-                                            @context.MessageText
-                                        }
-                                    </MudText>
-                                </MudTooltip>
+                                <MudText Typo="Typo.body2" Style="max-width: 500px; word-wrap: break-word; white-space: pre-wrap;">
+                                    @if (GetShowTranslation(context.Id) && context.Translation != null)
+                                    {
+                                        @context.Translation.TranslatedText
+                                    }
+                                    else
+                                    {
+                                        @context.MessageText
+                                    }
+                                </MudText>
                             </div>
                         </MudTd>
                         <MudTd DataLabel="Source">
