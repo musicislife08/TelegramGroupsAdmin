@@ -30,17 +30,6 @@
                 </MudText>
             </MudItem>
 
-            <MudItem xs="12" md="6">
-                <MudTextField @bind-Value="_chatIdInput"
-                              Label="Chat ID"
-                              Variant="Variant.Outlined"
-                              Placeholder="-1001234567890"
-                              HelperText="Telegram chat ID where the bot operates (negative for groups)"
-                              Required="true"
-                              Error="@_chatIdError"
-                              ErrorText="@_chatIdErrorMessage" />
-            </MudItem>
-
             <MudItem xs="12">
                 <MudTextField @bind-Value="_botConfig.ApiServerUrl"
                               Label="Bot API Server URL (Optional)"
@@ -283,9 +272,6 @@ volumes:
     private bool _loadingBotConfig = true;
     private bool _savingBotConfig;
     private TelegramBotConfig? _botConfig;
-    private string _chatIdInput = "";
-    private bool _chatIdError = false;
-    private string _chatIdErrorMessage = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -299,18 +285,14 @@ volumes:
         _loadingBotConfig = true;
         try
         {
-            // Load global bot config (chat_id = null)
-            _botConfig = await ConfigService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
+            // Load global bot config (chat_id = 0 for global config)
+            _botConfig = await ConfigService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
                          ?? TelegramBotConfig.Default;
-
-            // Populate ChatId input field
-            _chatIdInput = _botConfig.ChatId?.ToString() ?? "";
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to load bot service configuration: {ex.Message}", Severity.Error);
             _botConfig = TelegramBotConfig.Default;
-            _chatIdInput = "";
         }
         finally
         {
@@ -322,32 +304,11 @@ volumes:
     {
         if (_botConfig == null) return;
 
-        // Validate ChatId input
-        _chatIdError = false;
-        _chatIdErrorMessage = "";
-
-        if (string.IsNullOrWhiteSpace(_chatIdInput))
-        {
-            _chatIdError = true;
-            _chatIdErrorMessage = "Chat ID is required";
-            return;
-        }
-
-        if (!long.TryParse(_chatIdInput.Trim(), out long chatId))
-        {
-            _chatIdError = true;
-            _chatIdErrorMessage = "Chat ID must be a valid number (e.g., -1001234567890)";
-            return;
-        }
-
-        // Update config with parsed ChatId
-        _botConfig.ChatId = chatId;
-
         _savingBotConfig = true;
         try
         {
-            // Save as global config only (chat_id = null)
-            await ConfigService.SaveAsync(ConfigType.TelegramBot, null, _botConfig);
+            // Save as global config (chat_id = 0)
+            await ConfigService.SaveAsync(ConfigType.TelegramBot, 0, _botConfig);
 
             // Notify bot service to check config and start/stop immediately
             MessageHistoryService.NotifyConfigChange();

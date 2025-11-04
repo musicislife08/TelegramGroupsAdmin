@@ -40,7 +40,7 @@ public class DmDeliveryService : IDmDeliveryService
         int? autoDeleteSeconds = null,
         CancellationToken cancellationToken = default)
     {
-        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
         var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
         try
@@ -126,7 +126,7 @@ public class DmDeliveryService : IDmDeliveryService
         string messageText,
         CancellationToken cancellationToken = default)
     {
-        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
         var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
         try
@@ -301,7 +301,7 @@ public class DmDeliveryService : IDmDeliveryService
         string? videoPath = null,
         CancellationToken cancellationToken = default)
     {
-        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
         var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
         try

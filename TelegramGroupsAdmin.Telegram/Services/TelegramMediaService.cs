@@ -40,7 +40,7 @@ public class TelegramMediaService(
         try
         {
             // Load bot config from database
-            var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+            var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
             var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
             // Get file info from Telegram

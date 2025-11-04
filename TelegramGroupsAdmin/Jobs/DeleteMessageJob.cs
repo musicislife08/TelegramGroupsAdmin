@@ -42,7 +42,7 @@ public class DeleteMessageJob(
             payload.Reason);
 
         // Load bot config from database
-        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
 
         // Get bot client from factory
         var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);

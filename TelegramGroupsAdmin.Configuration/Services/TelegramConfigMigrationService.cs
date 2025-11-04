@@ -9,7 +9,8 @@ namespace TelegramGroupsAdmin.Configuration.Services;
 /// <summary>
 /// One-time migration service to populate Telegram bot configuration from environment variables
 /// Called during application startup after migrations run, before bot services start
-/// Migrates TELEGRAM__BOTTOKEN, TELEGRAM__CHATID, TELEGRAM__APISERVERURL from env vars to database
+/// Migrates TELEGRAM__BOTTOKEN, TELEGRAM__APISERVERURL from env vars to database
+/// NOTE: ChatId is NOT migrated - the bot is multi-group and discovers chats dynamically
 /// </summary>
 public class TelegramConfigMigrationService : IHostedService
 {
@@ -66,24 +67,16 @@ public class TelegramConfigMigrationService : IHostedService
 
         // Read configuration from environment variables
         var botToken = _configuration["Telegram:BotToken"];
-        var chatIdStr = _configuration["Telegram:ChatId"];
         var apiServerUrl = _configuration["Telegram:ApiServerUrl"];
 
         // If no env vars found, skip migration
-        if (string.IsNullOrWhiteSpace(botToken) && string.IsNullOrWhiteSpace(chatIdStr))
+        if (string.IsNullOrWhiteSpace(botToken) && string.IsNullOrWhiteSpace(apiServerUrl))
         {
             _logger.LogInformation("No Telegram configuration found in environment variables, skipping migration");
             return;
         }
 
         _logger.LogInformation("Migrating Telegram bot configuration from environment variables to database...");
-
-        // Parse ChatId (must be negative for groups)
-        long? chatId = null;
-        if (!string.IsNullOrWhiteSpace(chatIdStr) && long.TryParse(chatIdStr, out var parsedChatId))
-        {
-            chatId = parsedChatId;
-        }
 
         // Save bot token (encrypted) if provided
         if (!string.IsNullOrWhiteSpace(botToken))
@@ -92,26 +85,25 @@ public class TelegramConfigMigrationService : IHostedService
             _logger.LogInformation("Migrated Telegram bot token to encrypted database storage");
         }
 
-        // Save config (JSONB) if ChatId or ApiServerUrl provided
-        if (chatId.HasValue || !string.IsNullOrWhiteSpace(apiServerUrl))
+        // Save config (JSONB) if ApiServerUrl provided
+        // NOTE: ChatId is NOT saved here - bot discovers chats dynamically when added to groups
+        if (!string.IsNullOrWhiteSpace(apiServerUrl))
         {
             var config = new TelegramBotConfig
             {
                 BotEnabled = false, // Users must explicitly enable after verifying config
-                ChatId = chatId,
                 ApiServerUrl = string.IsNullOrWhiteSpace(apiServerUrl) ? null : apiServerUrl
             };
 
             await configService.SaveAsync(ConfigType.TelegramBot, 0, config);
             _logger.LogInformation(
-                "Migrated Telegram bot configuration to database: ChatId={ChatId}, ApiServerUrl={ApiServerUrl}",
-                chatId,
+                "Migrated Telegram bot configuration to database: ApiServerUrl={ApiServerUrl}",
                 apiServerUrl ?? "(standard api.telegram.org)");
         }
 
         _logger.LogWarning(
             "Telegram bot configuration migrated from environment variables to database (chat_id=0). " +
-            "IMPORTANT: Remove TELEGRAM__BOTTOKEN, TELEGRAM__CHATID, and TELEGRAM__APISERVERURL from your environment " +
+            "IMPORTANT: Remove TELEGRAM__BOTTOKEN and TELEGRAM__APISERVERURL from your environment " +
             "configuration. Future changes should be made via Settings → Telegram Bot UI.");
     }
 }

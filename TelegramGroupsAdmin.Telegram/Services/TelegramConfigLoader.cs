@@ -27,9 +27,14 @@ public class TelegramConfigLoader
     /// <summary>
     /// Load Telegram bot configuration from database (global config, chat_id=0)
     /// </summary>
-    /// <returns>Tuple of (BotToken, ChatId, ApiServerUrl)</returns>
-    /// <exception cref="InvalidOperationException">Thrown if bot token or chat ID not configured</exception>
-    public async Task<(string BotToken, long ChatId, string? ApiServerUrl)> LoadConfigAsync()
+    /// <returns>Tuple of (BotToken, ApiServerUrl)</returns>
+    /// <exception cref="InvalidOperationException">Thrown if bot token not configured</exception>
+    /// <remarks>
+    /// IMPORTANT: ChatId is NOT part of global config - the bot is multi-group and discovers
+    /// chats dynamically when added to groups. Never add ChatId to this method's return value
+    /// or require it in configuration validation.
+    /// </remarks>
+    public async Task<(string BotToken, string? ApiServerUrl)> LoadConfigAsync()
     {
         // Create scope to resolve scoped ConfigService
         using var scope = _scopeFactory.CreateScope();
@@ -44,20 +49,14 @@ public class TelegramConfigLoader
                 "Telegram bot token not configured. Please configure via Settings → Telegram Bot or set TELEGRAM__BOTTOKEN environment variable and restart.");
         }
 
-        // Load config (JSONB column)
+        // Load optional API server URL (JSONB column, stored at chat_id=0 for global config)
         var config = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0);
-        if (config?.ChatId == null)
-        {
-            _logger.LogError("Telegram chat ID not configured in database");
-            throw new InvalidOperationException(
-                "Telegram chat ID not configured. Please configure via Settings → Telegram Bot or set TELEGRAM__CHATID environment variable and restart.");
-        }
+        var apiServerUrl = config?.ApiServerUrl;
 
         _logger.LogDebug(
-            "Loaded Telegram bot configuration: ChatId={ChatId}, ApiServerUrl={ApiServerUrl}",
-            config.ChatId.Value,
-            config.ApiServerUrl ?? "(standard api.telegram.org)");
+            "Loaded Telegram bot configuration: ApiServerUrl={ApiServerUrl}",
+            apiServerUrl ?? "(standard api.telegram.org)");
 
-        return (botToken, config.ChatId.Value, config.ApiServerUrl);
+        return (botToken, apiServerUrl);
     }
 }

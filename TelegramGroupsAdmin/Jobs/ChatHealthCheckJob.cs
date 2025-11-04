@@ -46,7 +46,7 @@ public class ChatHealthCheckJob
             }
 
             // Load bot config from database
-            var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+            var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
             var botClient = _botFactory.GetOrCreate(botToken, apiServerUrl);
 
             if (payload.ChatId.HasValue)

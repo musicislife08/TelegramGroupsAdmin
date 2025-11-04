@@ -85,7 +85,7 @@ public class SpamActionService(
             var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
             var botFactory = scope.ServiceProvider.GetRequiredService<TelegramBotClientFactory>();
             var configLoader = scope.ServiceProvider.GetRequiredService<TelegramConfigLoader>();
-            var (botToken, _, apiServerUrl) = await configLoader.LoadConfigAsync();
+            var (botToken, apiServerUrl) = await configLoader.LoadConfigAsync();
             var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
             var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
 
