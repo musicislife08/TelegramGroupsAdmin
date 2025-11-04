@@ -194,6 +194,19 @@ public partial class UrlContentScrapingService(
             return true; // Too short to be useful content
         }
 
+        // Check if content is purely numeric (likely an ID like "2231777543")
+        if (Regex.IsMatch(content, @"^\d+$"))
+        {
+            return true;
+        }
+
+        // Check if content is mostly numeric with minimal other characters (e.g., "123-456-789")
+        var digitCount = content.Count(char.IsDigit);
+        if (digitCount > 0 && (float)digitCount / content.Length > 0.8)
+        {
+            return true; // More than 80% digits = likely an ID or technical value
+        }
+
         // Common technical meta patterns to exclude
         var technicalPatterns = new[]
         {
