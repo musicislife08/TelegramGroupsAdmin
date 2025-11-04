@@ -17,6 +17,19 @@ public partial class UrlContentScrapingService(
     private const string Delimiter = "\n\n━━━ URL Previews ━━━\n\n";
 
     /// <summary>
+    /// Source-generated regex for collapsing multiple consecutive newlines into single newlines
+    /// Matches 2 or more consecutive newlines (with optional \r for Windows)
+    /// </summary>
+    [GeneratedRegex(@"(\r?\n){2,}", RegexOptions.Compiled)]
+    private static partial Regex MultipleNewlinesRegex();
+
+    /// <summary>
+    /// Source-generated regex for matching pure numeric content (likely technical IDs)
+    /// </summary>
+    [GeneratedRegex(@"^\d+$", RegexOptions.Compiled)]
+    private static partial Regex PureNumericRegex();
+
+    /// <summary>
     /// Enriches message text by scraping all URLs and appending preview metadata.
     /// </summary>
     public async Task<string> EnrichMessageWithUrlPreviewsAsync(string messageText, CancellationToken cancellationToken = default)
@@ -75,7 +88,7 @@ public partial class UrlContentScrapingService(
                     // Normalize newlines: collapse multiple consecutive newlines into single newlines
                     // This preserves line breaks (readability) while preventing blank lines that
                     // would cause the UI to render separate blocks
-                    var normalizedContent = Regex.Replace(content, @"(\r?\n){2,}", "\n");
+                    var normalizedContent = MultipleNewlinesRegex().Replace(content, "\n");
                     previewBuilder.AppendLine(normalizedContent);
                 }
             }
@@ -198,7 +211,7 @@ public partial class UrlContentScrapingService(
         }
 
         // Check if content is purely numeric (likely an ID like "2231777543")
-        if (Regex.IsMatch(content, @"^\d+$"))
+        if (PureNumericRegex().IsMatch(content))
         {
             return true;
         }
