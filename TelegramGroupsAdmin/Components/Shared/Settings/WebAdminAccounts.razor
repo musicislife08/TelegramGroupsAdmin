@@ -126,10 +126,18 @@
                             }
                             @if (_currentUserPermissionLevel >= PermissionLevel.Owner && (context.TotpEnabled || context.TotpSetupStartedAt.HasValue))
                             {
+                                @if (context.TotpSetupStartedAt.HasValue)
+                                {
+                                    <MudMenuItem Icon="@Icons.Material.Filled.RestartAlt"
+                                                IconColor="Color.Warning"
+                                                OnClick="@(() => ClearTotpSetup(context))">
+                                        Clear TOTP Setup
+                                    </MudMenuItem>
+                                }
                                 <MudMenuItem Icon="@Icons.Material.Filled.LockOpen"
                                             IconColor="Color.Warning"
                                             OnClick="@(() => DisableTotp(context))">
-                                    @(context.TotpEnabled ? "Disable TOTP" : "Clear TOTP Setup")
+                                    Disable TOTP
                                 </MudMenuItem>
                                 @if (context.TotpEnabled)
                                 {
@@ -423,19 +431,11 @@
 
     private async Task DisableTotp(UserRecord user)
     {
-        var isSetupInProgress = !user.TotpEnabled && user.TotpSetupStartedAt.HasValue;
-        var title = isSetupInProgress ? "Clear TOTP Setup" : "Disable TOTP";
-        var message = isSetupInProgress
-            ? $"Are you sure you want to clear the incomplete TOTP setup for {user.Email}?\n\n" +
-              "This will remove their TOTP secret and allow them to log in normally. " +
-              "They can start TOTP setup again later if needed."
-            : $"Are you sure you want to disable TOTP for {user.Email}?\n\n" +
-              "This will allow them to log in without 2FA. The user can re-enable TOTP later from their profile settings.";
-
         var confirmed = await DialogService.ShowMessageBox(
-            title,
-            message,
-            yesText: title,
+            "Disable TOTP",
+            $"Are you sure you want to disable TOTP for {user.Email}?\n\n" +
+            "This will allow them to log in without 2FA. The TOTP secret will be preserved so they can re-enable it later.",
+            yesText: "Disable TOTP",
             cancelText: "Cancel");
 
         if (confirmed == true)
@@ -445,8 +445,7 @@
                 var success = await AuthService.AdminDisableTotpAsync(user.Id, _currentUserId!);
                 if (success)
                 {
-                    var action = isSetupInProgress ? "Cleared incomplete TOTP setup" : "Disabled TOTP";
-                    Snackbar.Add($"{action} for {user.Email}", Severity.Success);
+                    Snackbar.Add($"Disabled TOTP for {user.Email}", Severity.Success);
                     await LoadUsersAsync();
                 }
                 else
@@ -457,6 +456,38 @@
             catch (Exception ex)
             {
                 Snackbar.Add($"Error disabling TOTP: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task ClearTotpSetup(UserRecord user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Clear TOTP Setup",
+            $"Are you sure you want to clear the TOTP setup for {user.Email}?\n\n" +
+            "This will completely wipe their TOTP secret, setup timestamp, and enabled flag. " +
+            "They will need to set up TOTP from scratch if they want to use it again.",
+            yesText: "Clear Setup",
+            cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                var success = await AuthService.AdminClearTotpSetupAsync(user.Id, _currentUserId!);
+                if (success)
+                {
+                    Snackbar.Add($"Cleared TOTP setup for {user.Email}", Severity.Success);
+                    await LoadUsersAsync();
+                }
+                else
+                {
+                    Snackbar.Add($"Failed to clear TOTP setup for {user.Email}. You may not have permission.", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error clearing TOTP setup: {ex.Message}", Severity.Error);
             }
         }
     }

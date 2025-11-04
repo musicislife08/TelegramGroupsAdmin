@@ -214,7 +214,7 @@ public class TotpService(
             return false;
         }
 
-        // Disable TOTP without password check
+        // Disable TOTP without password check (keeps secret for re-enable)
         await userRepository.DisableTotpAsync(targetUserId, ct);
         await userRepository.UpdateSecurityStampAsync(targetUserId, ct);
 
@@ -226,6 +226,41 @@ public class TotpService(
             actor: Actor.FromWebUser(adminUserId),
             target: Actor.FromWebUser(targetUserId),
             value: $"TOTP 2FA disabled by Owner admin override (admin: {admin.Email})",
+            ct: ct);
+
+        return true;
+    }
+
+    public async Task<bool> AdminClearTotpSetupAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
+    {
+        // Verify admin is Owner
+        var admin = await userRepository.GetByIdAsync(adminUserId, ct);
+        if (admin is null || admin.PermissionLevelInt != (int)Core.Models.PermissionLevel.Owner)
+        {
+            logger.LogWarning("Non-Owner user {AdminUserId} attempted to clear TOTP setup for user {TargetUserId}", adminUserId, targetUserId);
+            return false;
+        }
+
+        // Verify target user exists
+        var targetUser = await userRepository.GetByIdAsync(targetUserId, ct);
+        if (targetUser is null)
+        {
+            logger.LogWarning("Admin {AdminUserId} attempted to clear TOTP setup for non-existent user {TargetUserId}", adminUserId, targetUserId);
+            return false;
+        }
+
+        // Clear TOTP completely (wipes secret, enabled flag, timestamp)
+        await userRepository.ResetTotpAsync(targetUserId, ct);
+        await userRepository.UpdateSecurityStampAsync(targetUserId, ct);
+
+        logger.LogWarning("TOTP setup cleared for user {TargetUserId} by Owner {AdminUserId}", targetUserId, adminUserId);
+
+        // Audit log
+        await auditLog.LogEventAsync(
+            AuditEventType.UserTotpReset,
+            actor: Actor.FromWebUser(adminUserId),
+            target: Actor.FromWebUser(targetUserId),
+            value: $"TOTP setup cleared by Owner admin (admin: {admin.Email})",
             ct: ct);
 
         return true;

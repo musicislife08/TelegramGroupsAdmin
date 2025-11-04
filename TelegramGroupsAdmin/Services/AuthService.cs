@@ -279,6 +279,11 @@ public class AuthService(
         return await totpService.AdminDisableTotpAsync(targetUserId, adminUserId, ct);
     }
 
+    public async Task<bool> AdminClearTotpSetupAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
+    {
+        return await totpService.AdminClearTotpSetupAsync(targetUserId, adminUserId, ct);
+    }
+
     public async Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(string userId, CancellationToken ct = default)
     {
         return await totpService.GenerateRecoveryCodesAsync(userId, ct);

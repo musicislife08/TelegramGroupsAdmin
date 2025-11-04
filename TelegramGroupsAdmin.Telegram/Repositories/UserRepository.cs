@@ -124,12 +124,12 @@ public class UserRepository : IUserRepository
         var entity = await context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
         if (entity == null) return;
 
-        entity.TotpSecret = null;
+        // IMPORTANT: Only set TotpEnabled=false, KEEP the secret and timestamp
+        // This allows user to re-enable TOTP later without re-scanning QR code
         entity.TotpEnabled = false;
-        entity.TotpSetupStartedAt = null;
         await context.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Disabled TOTP for user {UserId}", userId);
+        _logger.LogInformation("Disabled TOTP for user {UserId} (secret preserved)", userId);
     }
 
     public async Task ResetTotpAsync(string userId, CancellationToken ct = default)
