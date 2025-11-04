@@ -73,12 +73,22 @@ public class TotpService(
         return new TotpSetupResult(secret, qrCodeUri, FormatSecretForManualEntry(secret));
     }
 
-    public async Task<bool> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken ct = default)
+    public async Task<TotpVerificationResult> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken ct = default)
     {
         var user = await userRepository.GetByIdAsync(userId, ct);
         if (user is null || string.IsNullOrEmpty(user.TotpSecret))
         {
-            return false;
+            return new TotpVerificationResult(false, false, "User not found or TOTP not configured");
+        }
+
+        // Check if setup has expired (user may be using code from old secret)
+        const int setupExpiryMinutes = 15;
+        bool setupExpired = false;
+        if (user.TotpSetupStartedAt.HasValue)
+        {
+            var setupStartedAt = user.TotpSetupStartedAt.Value;
+            var expiryTime = setupStartedAt.AddMinutes(setupExpiryMinutes);
+            setupExpired = DateTimeOffset.UtcNow > expiryTime;
         }
 
         // Decrypt TOTP secret for verification
@@ -89,8 +99,19 @@ public class TotpService(
         // Testing showed 1-2 minute drift is common on mobile devices between NTP syncs
         if (!totp.VerifyTotp(code, out _, new VerificationWindow(5, 5)))
         {
-            logger.LogWarning("Invalid TOTP verification code during setup for user: {UserId}", userId);
-            return false;
+            if (setupExpired)
+            {
+                logger.LogWarning("Invalid TOTP verification code during setup for user {UserId} (setup expired - user may need to re-scan QR code)", userId);
+                return new TotpVerificationResult(
+                    false,
+                    true,
+                    "Your TOTP setup expired. Please scan the QR code again with your authenticator app.");
+            }
+            else
+            {
+                logger.LogWarning("Invalid TOTP verification code during setup for user: {UserId}", userId);
+                return new TotpVerificationResult(false, false, "Invalid verification code. Please try again.");
+            }
         }
 
         // Enable TOTP
@@ -109,7 +130,7 @@ public class TotpService(
             value: "TOTP 2FA enabled",
             ct: ct);
 
-        return true;
+        return new TotpVerificationResult(true, false, null);
     }
 
     public async Task<bool> VerifyTotpCodeAsync(string userId, string code, CancellationToken ct = default)

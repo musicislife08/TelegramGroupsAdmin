@@ -264,7 +264,7 @@ public class AuthService(
         return await totpService.SetupTotpAsync(userId, user.Email, ct);
     }
 
-    public async Task<bool> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken ct = default)
+    public async Task<TotpVerificationResult> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken ct = default)
     {
         return await totpService.VerifyAndEnableTotpAsync(userId, code, ct);
     }

@@ -7,7 +7,7 @@ public interface IAuthService
     Task<RegisterResult> RegisterAsync(string email, string password, string? inviteToken, CancellationToken ct = default);
     Task<bool> IsFirstRunAsync(CancellationToken ct = default);
     Task<TotpSetupResult> EnableTotpAsync(string userId, CancellationToken ct = default);
-    Task<bool> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken ct = default);
+    Task<TotpVerificationResult> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken ct = default);
     Task<bool> DisableTotpAsync(string userId, string password, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(string userId, CancellationToken ct = default);
     Task<AuthResult> UseRecoveryCodeAsync(string userId, string code, CancellationToken ct = default);

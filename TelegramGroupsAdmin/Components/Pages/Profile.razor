@@ -408,9 +408,9 @@
 
         try
         {
-            var success = await AuthService.VerifyAndEnableTotpAsync(_currentUserId, _totpVerificationCode);
+            var result = await AuthService.VerifyAndEnableTotpAsync(_currentUserId, _totpVerificationCode);
 
-            if (success)
+            if (result.Success)
             {
                 _showTotpSetup = false;
                 _totpVerificationCode = "";
@@ -420,7 +420,7 @@
             }
             else
             {
-                Snackbar.Add("Invalid verification code", Severity.Error);
+                Snackbar.Add(result.ErrorMessage ?? "Invalid verification code", Severity.Error);
             }
         }
         catch (Exception ex)

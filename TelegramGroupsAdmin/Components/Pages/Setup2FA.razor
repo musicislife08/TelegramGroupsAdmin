@@ -173,11 +173,11 @@
 
         try
         {
-            var success = await AuthService.VerifyAndEnableTotpAsync(UserId, Model.Code);
+            var result = await AuthService.VerifyAndEnableTotpAsync(UserId, Model.Code);
 
-            if (!success)
+            if (!result.Success)
             {
-                _errorMessage = "Invalid verification code. Please try again.";
+                _errorMessage = result.ErrorMessage ?? "Invalid verification code. Please try again.";
                 Model = new VerifyModel();
                 return;
             }
