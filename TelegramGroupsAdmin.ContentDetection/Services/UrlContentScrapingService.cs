@@ -72,9 +72,10 @@ public partial class UrlContentScrapingService(
             {
                 if (!string.IsNullOrWhiteSpace(content) && seenContent.Add(content))
                 {
-                    // Replace newlines with spaces to keep content in a single visual block
-                    // Internal newlines cause the UI to render separate blocks
-                    var normalizedContent = content.Replace("\r\n", " ").Replace("\n", " ");
+                    // Normalize newlines: collapse multiple consecutive newlines into single newlines
+                    // This preserves line breaks (readability) while preventing blank lines that
+                    // would cause the UI to render separate blocks
+                    var normalizedContent = Regex.Replace(content, @"(\r?\n){2,}", "\n");
                     previewBuilder.AppendLine(normalizedContent);
                 }
             }
