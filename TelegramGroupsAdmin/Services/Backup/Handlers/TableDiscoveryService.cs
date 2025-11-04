@@ -64,7 +64,8 @@ public class TableDiscoveryService
             }
             else
             {
-                _logger.LogWarning("No DTO found for table '{TableName}', skipping", tableName);
+                // Expected: Some tables don't have DTOs (e.g., __EFMigrationsHistory, internal/system tables)
+                _logger.LogDebug("No DTO found for table '{TableName}', skipping", tableName);
             }
         }
 
