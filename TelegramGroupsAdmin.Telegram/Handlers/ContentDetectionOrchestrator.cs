@@ -47,6 +47,16 @@ public class ContentDetectionOrchestrator
     {
         try
         {
+            _logger.LogInformation(
+                "Starting content detection for message {MessageId} from user {UserId} (@{Username}) in chat {ChatId} (hasText: {HasText}, hasPhoto: {HasPhoto}, edit: {EditVersion})",
+                message.MessageId,
+                message.From?.Id,
+                message.From?.Username ?? "none",
+                message.Chat.Id,
+                !string.IsNullOrWhiteSpace(text),
+                !string.IsNullOrEmpty(photoLocalPath),
+                editVersion);
+
             using var scope = _serviceProvider.CreateScope();
             var coordinator = scope.ServiceProvider.GetRequiredService<IContentCheckCoordinator>();
             var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();

@@ -51,6 +51,13 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
         // Check if user is a chat admin
         isUserAdmin = await chatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, cancellationToken);
 
+        _logger.LogInformation(
+            "User {UserId} status in chat {ChatId}: Trusted={Trusted}, Admin={Admin}",
+            request.UserId,
+            request.ChatId,
+            isUserTrusted,
+            isUserAdmin);
+
         // Phase 4.14: 2-Phase Detection
         // Phase 1: Get list of critical checks (always_run=true) for this chat
         var criticalChecks = await contentCheckConfigRepo.GetCriticalChecksAsync(request.ChatId, cancellationToken);
@@ -59,11 +66,11 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
             .Select(c => c.CheckName)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        _logger.LogDebug(
-            "Chat {ChatId} has {Count} critical checks: {Checks}",
+        _logger.LogInformation(
+            "Chat {ChatId} has {Count} critical (always_run) checks configured: {Checks}",
             request.ChatId,
             criticalCheckNames.Count,
-            string.Join(", ", criticalCheckNames));
+            criticalCheckNames.Count > 0 ? string.Join(", ", criticalCheckNames) : "none");
 
         // PERF-3 Option A: Early exit if no critical checks and user is trusted/admin
         // Avoids expensive spam detection operations (DB queries, Bayes training, TF-IDF vectorization)
@@ -92,12 +99,17 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
         }
 
         // Phase 2: Run all content checks
-        _logger.LogDebug(
-            "Running content detection for user {UserId} in chat {ChatId} (Trusted: {Trusted}, Admin: {Admin})",
+        var detectionReason = criticalCheckNames.Count > 0
+            ? $"{criticalCheckNames.Count} critical checks require scanning"
+            : isUserTrusted || isUserAdmin
+                ? "untrusted/non-admin user"
+                : "standard user";
+
+        _logger.LogInformation(
+            "Running full spam detection pipeline for user {UserId} in chat {ChatId}: {Reason}",
             request.UserId,
             request.ChatId,
-            isUserTrusted,
-            isUserAdmin);
+            detectionReason);
 
         // PERF-3 Option B: Pass trust context to individual checks
         // Allows non-critical checks (Bayes, Similarity, OpenAI) to skip expensive operations for trusted/admin users
@@ -141,8 +153,8 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
                 ? "User is trusted - regular spam detection bypassed (critical checks passed)"
                 : "User is a chat admin - regular spam detection bypassed (critical checks passed)";
 
-            _logger.LogDebug(
-                "Skipping regular spam detection for user {UserId} in chat {ChatId}: {Reason}",
+            _logger.LogInformation(
+                "✓ Critical checks passed, skipping regular spam detection for user {UserId} in chat {ChatId}: {Reason}",
                 request.UserId,
                 request.ChatId,
                 skipReason);
