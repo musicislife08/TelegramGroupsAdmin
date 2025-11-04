@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Constants;
 
 namespace TelegramGroupsAdmin.Configuration.Repositories;
 
@@ -168,7 +169,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
         try
         {
             // Decrypt using Data Protection
-            var protector = _dataProtectionProvider.CreateProtector("ApiKeys");
+            var protector = _dataProtectionProvider.CreateProtector(DataProtectionPurposes.ApiKeys);
             var decryptedJson = protector.Unprotect(configRecord.ApiKeys);
 
             // Deserialize from JSON
@@ -191,7 +192,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
         var jsonKeys = JsonSerializer.Serialize(apiKeys, _jsonOptions);
 
         // Encrypt using Data Protection
-        var protector = _dataProtectionProvider.CreateProtector("ApiKeys");
+        var protector = _dataProtectionProvider.CreateProtector(DataProtectionPurposes.ApiKeys);
         var encryptedKeys = protector.Protect(jsonKeys);
 
         // Find or create global config record (chat_id = NULL)

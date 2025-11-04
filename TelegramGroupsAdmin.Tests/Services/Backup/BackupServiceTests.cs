@@ -6,6 +6,7 @@ using NSubstitute;
 using TelegramGroupsAdmin.Services.Backup;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Tests.TestData;
@@ -144,7 +145,7 @@ public class BackupServiceTests
         await using (var context = _testHelper!.GetDbContext())
         {
             var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == null);
-            var protector = _dataProtectionProvider!.CreateProtector("BackupPassphrase");
+            var protector = _dataProtectionProvider!.CreateProtector(DataProtectionPurposes.BackupPassphrase);
             config!.PassphraseEncrypted = protector.Protect("db-passphrase-wrong");
             await context.SaveChangesAsync();
         }
@@ -363,7 +364,7 @@ public class BackupServiceTests
             Assert.That(config?.ApiKeys, Is.Not.Null, "API keys should be re-encrypted after restore");
 
             // Verify can decrypt with test Data Protection provider
-            var protector = _dataProtectionProvider!.CreateProtector("ApiKeys");
+            var protector = _dataProtectionProvider!.CreateProtector(DataProtectionPurposes.ApiKeys);
             var decrypted = protector.Unprotect(config!.ApiKeys!);
             Assert.That(decrypted, Contains.Substring("VirusTotal"),
                 "Decrypted API keys should contain original test data");

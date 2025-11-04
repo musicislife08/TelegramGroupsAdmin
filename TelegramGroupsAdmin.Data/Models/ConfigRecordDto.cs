@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using TelegramGroupsAdmin.Data.Attributes;
+using TelegramGroupsAdmin.Data.Constants;
 
 namespace TelegramGroupsAdmin.Data.Models;
 
@@ -87,7 +88,7 @@ public class ConfigRecordDto
     /// Note: Uses TEXT not JSONB because encrypted data is base64, not valid JSON
     /// </summary>
     [Column("api_keys")]
-    [ProtectedData(Purpose = "ApiKeys")]
+    [ProtectedData(Purpose = DataProtectionPurposes.ApiKeys)]
     public string? ApiKeys { get; set; }
 
     /// <summary>
@@ -106,7 +107,7 @@ public class ConfigRecordDto
     /// Only used for global config (chat_id = NULL)
     /// </summary>
     [Column("passphrase_encrypted")]
-    [ProtectedData(Purpose = "TgSpamPreFilter.TotpSecrets")]
+    [ProtectedData(Purpose = DataProtectionPurposes.TotpSecrets)]
     public string? PassphraseEncrypted { get; set; }
 
     /// <summary>

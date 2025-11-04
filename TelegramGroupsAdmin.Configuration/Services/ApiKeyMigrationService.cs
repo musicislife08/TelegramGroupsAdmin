@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Constants;
 
 namespace TelegramGroupsAdmin.Configuration.Services;
 
@@ -74,7 +75,7 @@ public class ApiKeyMigrationService
         var apiKeysJson = JsonSerializer.Serialize(apiKeys, jsonOptions);
 
         // Encrypt using Data Protection
-        var protector = _dataProtectionProvider.CreateProtector("ApiKeys");
+        var protector = _dataProtectionProvider.CreateProtector(DataProtectionPurposes.ApiKeys);
         var encryptedApiKeys = protector.Protect(apiKeysJson);
 
         // Save to database
