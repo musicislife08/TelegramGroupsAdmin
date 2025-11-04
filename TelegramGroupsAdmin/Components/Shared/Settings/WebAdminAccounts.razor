@@ -124,9 +124,9 @@
                                     Resend Verification Email
                                 </MudMenuItem>
                             }
-                            @if (_currentUserPermissionLevel >= PermissionLevel.Owner && (context.TotpEnabled || context.TotpSetupStartedAt.HasValue))
+                            @if (_currentUserPermissionLevel >= PermissionLevel.Owner && !string.IsNullOrEmpty(context.TotpSecret))
                             {
-                                @if (context.TotpSetupStartedAt.HasValue)
+                                @if (context.TotpSetupStartedAt.HasValue && !context.TotpEnabled)
                                 {
                                     <MudMenuItem Icon="@Icons.Material.Filled.RestartAlt"
                                                 IconColor="Color.Warning"
@@ -134,17 +134,25 @@
                                         Clear TOTP Setup
                                     </MudMenuItem>
                                 }
-                                <MudMenuItem Icon="@Icons.Material.Filled.LockOpen"
-                                            IconColor="Color.Warning"
-                                            OnClick="@(() => DisableTotp(context))">
-                                    Disable TOTP
-                                </MudMenuItem>
                                 @if (context.TotpEnabled)
                                 {
+                                    <MudMenuItem Icon="@Icons.Material.Filled.LockOpen"
+                                                IconColor="Color.Warning"
+                                                OnClick="@(() => DisableTotp(context))">
+                                        Disable TOTP
+                                    </MudMenuItem>
                                     <MudMenuItem Icon="@Icons.Material.Filled.LockReset"
                                                 IconColor="Color.Warning"
                                                 OnClick="@(() => Reset2Fa(context))">
                                         Reset 2FA (Full Reset)
+                                    </MudMenuItem>
+                                }
+                                else
+                                {
+                                    <MudMenuItem Icon="@Icons.Material.Filled.Lock"
+                                                IconColor="Color.Success"
+                                                OnClick="@(() => EnableTotp(context))">
+                                        Enable TOTP
                                     </MudMenuItem>
                                 }
                             }
@@ -456,6 +464,37 @@
             catch (Exception ex)
             {
                 Snackbar.Add($"Error disabling TOTP: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task EnableTotp(UserRecord user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Enable TOTP",
+            $"Are you sure you want to enable TOTP for {user.Email}?\n\n" +
+            "This will require them to provide a 2FA code when logging in. Their existing TOTP secret will be used.",
+            yesText: "Enable TOTP",
+            cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                var success = await AuthService.AdminEnableTotpAsync(user.Id, _currentUserId!);
+                if (success)
+                {
+                    Snackbar.Add($"Enabled TOTP for {user.Email}", Severity.Success);
+                    await LoadUsersAsync();
+                }
+                else
+                {
+                    Snackbar.Add($"Failed to enable TOTP for {user.Email}. User may not have a TOTP secret.", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error enabling TOTP: {ex.Message}", Severity.Error);
             }
         }
     }

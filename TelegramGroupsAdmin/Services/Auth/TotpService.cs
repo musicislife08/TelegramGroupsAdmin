@@ -231,6 +231,47 @@ public class TotpService(
         return true;
     }
 
+    public async Task<bool> AdminEnableTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
+    {
+        // Verify admin is Owner
+        var admin = await userRepository.GetByIdAsync(adminUserId, ct);
+        if (admin is null || admin.PermissionLevelInt != (int)Core.Models.PermissionLevel.Owner)
+        {
+            logger.LogWarning("Non-Owner user {AdminUserId} attempted to admin-enable TOTP for user {TargetUserId}", adminUserId, targetUserId);
+            return false;
+        }
+
+        // Verify target user exists and has TOTP secret
+        var targetUser = await userRepository.GetByIdAsync(targetUserId, ct);
+        if (targetUser is null)
+        {
+            logger.LogWarning("Admin {AdminUserId} attempted to enable TOTP for non-existent user {TargetUserId}", adminUserId, targetUserId);
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(targetUser.TotpSecret))
+        {
+            logger.LogWarning("Admin {AdminUserId} attempted to enable TOTP for user {TargetUserId} without TOTP secret", adminUserId, targetUserId);
+            return false;
+        }
+
+        // Enable TOTP (requires existing secret)
+        await userRepository.EnableTotpAsync(targetUserId, ct);
+        await userRepository.UpdateSecurityStampAsync(targetUserId, ct);
+
+        logger.LogWarning("TOTP admin-enabled for user {TargetUserId} by Owner {AdminUserId}", targetUserId, adminUserId);
+
+        // Audit log
+        await auditLog.LogEventAsync(
+            AuditEventType.UserTotpEnabled,
+            actor: Actor.FromWebUser(adminUserId),
+            target: Actor.FromWebUser(targetUserId),
+            value: $"TOTP 2FA enabled by Owner admin override (admin: {admin.Email})",
+            ct: ct);
+
+        return true;
+    }
+
     public async Task<bool> AdminClearTotpSetupAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
     {
         // Verify admin is Owner

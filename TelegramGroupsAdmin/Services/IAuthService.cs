@@ -10,6 +10,7 @@ public interface IAuthService
     Task<TotpVerificationResult> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken ct = default);
     Task<bool> DisableTotpAsync(string userId, string password, CancellationToken ct = default);
     Task<bool> AdminDisableTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default);
+    Task<bool> AdminEnableTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default);
     Task<bool> AdminClearTotpSetupAsync(string targetUserId, string adminUserId, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(string userId, CancellationToken ct = default);
     Task<AuthResult> UseRecoveryCodeAsync(string userId, string code, CancellationToken ct = default);
