@@ -17,7 +17,6 @@ public static class ConfigurationExtensions
     {
         services.Configure<AppOptions>(configuration.GetSection("App"));
         services.Configure<OpenAIOptions>(configuration.GetSection("OpenAI"));
-        services.Configure<TelegramOptions>(configuration.GetSection("Telegram"));
         services.Configure<SpamDetectionOptions>(configuration.GetSection("SpamDetection"));
         services.Configure<SendGridOptions>(configuration.GetSection("SendGrid"));
 
@@ -40,6 +39,9 @@ public static class ConfigurationExtensions
 
         // File scanning configuration repository (Phase 4.17)
         services.AddScoped<IFileScanningConfigRepository, FileScanningConfigRepository>();
+
+        // Telegram configuration migration service (migrates env vars to database on first startup)
+        services.AddHostedService<TelegramConfigMigrationService>();
 
         return services;
     }
