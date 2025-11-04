@@ -590,22 +590,19 @@ public partial class MessageProcessingService(
             // Run content detection if message has text OR images (image-only spam detection)
             if (commandResult == null && (!string.IsNullOrWhiteSpace(text) || photoLocalPath != null))
             {
-                _ = Task.Run(async () =>
-                {
-                    using var detectionScope = serviceProvider.CreateScope();
-                    var contentOrchestrator = detectionScope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.ContentDetectionOrchestrator>();
+                using var detectionScope = serviceProvider.CreateScope();
+                var contentOrchestrator = detectionScope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.ContentDetectionOrchestrator>();
 
-                    // Use translated text if available (avoids double translation in ContentDetectionEngine)
-                    var textForDetection = translation?.TranslatedText ?? text;
+                // Use translated text if available (avoids double translation in ContentDetectionEngine)
+                var textForDetection = translation?.TranslatedText ?? text;
 
-                    await contentOrchestrator.RunDetectionAsync(
-                        botClient,
-                        message,
-                        textForDetection,
-                        photoLocalPath,
-                        editVersion: 0,
-                        CancellationToken.None);
-                }, CancellationToken.None);
+                await contentOrchestrator.RunDetectionAsync(
+                    botClient,
+                    message,
+                    textForDetection,
+                    photoLocalPath,
+                    editVersion: 0,
+                    cancellationToken);
             }
         }
         catch (Exception ex)

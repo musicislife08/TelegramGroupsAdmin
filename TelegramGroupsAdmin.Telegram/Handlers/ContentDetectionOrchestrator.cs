@@ -52,100 +52,87 @@ public class ContentDetectionOrchestrator
             var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
             var historyOptions = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TelegramGroupsAdmin.Configuration.MessageHistoryOptions>>();
 
-            // Build spam detection request
-            Stream? imageStream = null;
-            try
+            // Build spam detection request with photo local path if available
+            // Note: ImageSpamCheck uses PhotoLocalPath for all 3 layers (hash, OCR, Vision)
+            // No need to open a stream here - each layer reads the file as needed
+            string? photoFullPath = null;
+            if (!string.IsNullOrEmpty(photoLocalPath))
             {
-                // If photo exists, read from disk for OpenAI Vision analysis
-                if (!string.IsNullOrEmpty(photoLocalPath))
+                photoFullPath = Path.Combine(historyOptions.Value.ImageStoragePath, "media", photoLocalPath);
+                if (!File.Exists(photoFullPath))
                 {
-                    var fullPath = Path.Combine(historyOptions.Value.ImageStoragePath, "media", photoLocalPath);
-                    if (File.Exists(fullPath))
-                    {
-                        imageStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Photo file not found for spam detection: {PhotoPath}", fullPath);
-                    }
-                }
-
-                var request = new ContentCheckRequest
-                {
-                    Message = text ?? "", // Empty string for image-only messages
-                    UserId = message.From?.Id ?? 0,
-                    UserName = message.From?.Username,
-                    ChatId = message.Chat.Id,
-                    ImageData = imageStream
-                };
-
-                var result = await coordinator.CheckAsync(request, cancellationToken);
-
-                // Phase 4.14: Handle critical check violations FIRST (before regular spam)
-                // Critical violations apply to ALL users (trusted/admin included)
-                if (result.HasCriticalViolations)
-                {
-                    _logger.LogWarning(
-                        "Critical check violations detected for message {MessageId} from user {UserId}: {Violations}",
-                        message.MessageId,
-                        message.From?.Id,
-                        string.Join("; ", result.CriticalCheckViolations));
-
-                    // Use SpamActionService to handle critical violations
-                    // Policy: Delete + DM notice, NO ban/warn for trusted/admin users
-                    await _spamActionService.HandleCriticalCheckViolationAsync(
-                        botClient,
-                        message,
-                        result.CriticalCheckViolations,
-                        cancellationToken);
-
-                    // If critical violations found, don't process regular spam (already handled)
-                    return;
-                }
-
-                // Store detection result (spam or ham) for analytics and training
-                // Only store if spam detection actually ran (not skipped for trusted/admin users)
-                if (!result.SpamCheckSkipped && result.SpamResult != null)
-                {
-                    var detectionResult = await StoreDetectionResultAsync(
-                        detectionResultsRepo,
-                        message,
-                        result.SpamResult,
-                        editVersion,
-                        cancellationToken);
-
-                    // Check for auto-trust after storing non-spam detection result
-                    if (!result.SpamResult.IsSpam && message.From?.Id != null)
-                    {
-                        var autoTrustService = scope.ServiceProvider.GetRequiredService<UserAutoTrustService>();
-                        await autoTrustService.CheckAndApplyAutoTrustAsync(message.From.Id, message.Chat.Id, cancellationToken);
-                    }
-
-                    // Phase 4.21: Language warning for non-English non-spam messages from untrusted users
-                    // Note: Language detection happens earlier in ProcessNewMessageAsync, check translation there
-                    if (!result.SpamResult.IsSpam && message.From?.Id != null)
-                    {
-                        // Language warning is handled by LanguageWarningHandler (REFACTOR-2 Phase 2.2)
-                        // This will be extracted to handler in next phase
-                        var languageWarningHandler = scope.ServiceProvider.GetRequiredService<LanguageWarningHandler>();
-                        await languageWarningHandler.HandleWarningAsync(botClient, message, scope, cancellationToken);
-                    }
-
-                    // Phase 2.7: Handle spam actions based on net confidence
-                    await _spamActionService.HandleSpamDetectionActionsAsync(
-                        message,
-                        result.SpamResult,
-                        detectionResult,
-                        cancellationToken);
+                    _logger.LogWarning("Photo file not found for spam detection: {PhotoPath}", photoFullPath);
+                    photoFullPath = null; // Reset if file doesn't exist
                 }
             }
-            finally
+
+            var request = new ContentCheckRequest
             {
-                // Clean up image stream
-                if (imageStream != null)
+                Message = text ?? "", // Empty string for image-only messages
+                UserId = message.From?.Id ?? 0,
+                UserName = message.From?.Username,
+                ChatId = message.Chat.Id,
+                PhotoLocalPath = photoFullPath // Pass full for ImageSpamCheck layers
+            };
+
+            var result = await coordinator.CheckAsync(request, cancellationToken);
+
+            // Phase 4.14: Handle critical check violations FIRST (before regular spam)
+            // Critical violations apply to ALL users (trusted/admin included)
+            if (result.HasCriticalViolations)
+            {
+                _logger.LogWarning(
+                    "Critical check violations detected for message {MessageId} from user {UserId}: {Violations}",
+                    message.MessageId,
+                    message.From?.Id,
+                    string.Join("; ", result.CriticalCheckViolations));
+
+                // Use SpamActionService to handle critical violations
+                // Policy: Delete + DM notice, NO ban/warn for trusted/admin users
+                await _spamActionService.HandleCriticalCheckViolationAsync(
+                    botClient,
+                    message,
+                    result.CriticalCheckViolations,
+                    cancellationToken);
+
+                // If critical violations found, don't process regular spam (already handled)
+                return;
+            }
+
+            // Store detection result (spam or ham) for analytics and training
+            // Only store if spam detection actually ran (not skipped for trusted/admin users)
+            if (!result.SpamCheckSkipped && result.SpamResult != null)
+            {
+                var detectionResult = await StoreDetectionResultAsync(
+                    detectionResultsRepo,
+                    message,
+                    result.SpamResult,
+                    editVersion,
+                    cancellationToken);
+
+                // Check for auto-trust after storing non-spam detection result
+                if (!result.SpamResult.IsSpam && message.From?.Id != null)
                 {
-                    await imageStream.DisposeAsync();
+                    var autoTrustService = scope.ServiceProvider.GetRequiredService<UserAutoTrustService>();
+                    await autoTrustService.CheckAndApplyAutoTrustAsync(message.From.Id, message.Chat.Id, cancellationToken);
                 }
+
+                // Phase 4.21: Language warning for non-English non-spam messages from untrusted users
+                // Note: Language detection happens earlier in ProcessNewMessageAsync, check translation there
+                if (!result.SpamResult.IsSpam && message.From?.Id != null)
+                {
+                    // Language warning is handled by LanguageWarningHandler (REFACTOR-2 Phase 2.2)
+                    // This will be extracted to handler in next phase
+                    var languageWarningHandler = scope.ServiceProvider.GetRequiredService<LanguageWarningHandler>();
+                    await languageWarningHandler.HandleWarningAsync(botClient, message, scope, cancellationToken);
+                }
+
+                // Phase 2.7: Handle spam actions based on net confidence
+                await _spamActionService.HandleSpamDetectionActionsAsync(
+                    message,
+                    result.SpamResult,
+                    detectionResult,
+                    cancellationToken);
             }
         }
         catch (Exception ex)
