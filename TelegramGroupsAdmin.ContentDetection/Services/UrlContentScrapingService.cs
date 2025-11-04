@@ -72,7 +72,10 @@ public partial class UrlContentScrapingService(
             {
                 if (!string.IsNullOrWhiteSpace(content) && seenContent.Add(content))
                 {
-                    previewBuilder.AppendLine(content);
+                    // Normalize newlines within content to keep each URL's preview in a single block
+                    // Newlines in scraped content (like tweet text) should become spaces
+                    var normalizedContent = Regex.Replace(content, @"\r?\n", " ");
+                    previewBuilder.AppendLine(normalizedContent);
                 }
             }
 
