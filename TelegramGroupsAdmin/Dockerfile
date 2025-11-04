@@ -22,25 +22,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy solution and project files (for better layer caching)
-# Excludes TelegramGroupsAdmin.Tests - not needed for production runtime
-COPY ["TelegramGroupsAdmin.sln", "./"]
-COPY ["TelegramGroupsAdmin/TelegramGroupsAdmin.csproj", "TelegramGroupsAdmin/"]
-COPY ["TelegramGroupsAdmin.Configuration/TelegramGroupsAdmin.Configuration.csproj", "TelegramGroupsAdmin.Configuration/"]
-COPY ["TelegramGroupsAdmin.Core/TelegramGroupsAdmin.Core.csproj", "TelegramGroupsAdmin.Core/"]
-COPY ["TelegramGroupsAdmin.Data/TelegramGroupsAdmin.Data.csproj", "TelegramGroupsAdmin.Data/"]
-COPY ["TelegramGroupsAdmin.Telegram/TelegramGroupsAdmin.Telegram.csproj", "TelegramGroupsAdmin.Telegram/"]
-COPY ["TelegramGroupsAdmin.Telegram.Abstractions/TelegramGroupsAdmin.Telegram.Abstractions.csproj", "TelegramGroupsAdmin.Telegram.Abstractions/"]
-COPY ["TelegramGroupsAdmin.ContentDetection/TelegramGroupsAdmin.ContentDetection.csproj", "TelegramGroupsAdmin.ContentDetection/"]
-
-# Restore dependencies (cached layer if project files unchanged)
-RUN dotnet restore "TelegramGroupsAdmin/TelegramGroupsAdmin.csproj"
-
-# Copy all source code
-COPY . .
-
 # Download Tesseract English language data (tessdata_best for accuracy)
 # ML-5: OCR-based image spam detection
+# Cached layer - only re-downloads if apt packages change
 RUN wget -q https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata \
     -O /tmp/eng.traineddata && \
     echo "Downloaded eng.traineddata: $(du -h /tmp/eng.traineddata | cut -f1)"
@@ -49,6 +33,7 @@ RUN wget -q https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.trainedd
 # ML-6: Video frame extraction for video spam detection
 # Auto-detects architecture: amd64 or arm64
 # Version: Pinned to stable release, update via build arg in CI
+# Cached layer - only re-downloads if apt packages change or FFMPEG_VERSION changes
 ARG FFMPEG_VERSION=7.0.2
 RUN ARCH=$(dpkg --print-architecture) && \
     if [ "$ARCH" = "amd64" ]; then \
@@ -69,6 +54,23 @@ RUN ARCH=$(dpkg --print-architecture) && \
     chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe && \
     rm -rf /tmp/ffmpeg /tmp/ffmpeg.tar.xz && \
     echo "FFmpeg installed: $(/usr/local/bin/ffmpeg -version | head -n1)"
+
+# Copy solution and project files (for better layer caching)
+# Excludes TelegramGroupsAdmin.Tests - not needed for production runtime
+COPY ["TelegramGroupsAdmin.sln", "./"]
+COPY ["TelegramGroupsAdmin/TelegramGroupsAdmin.csproj", "TelegramGroupsAdmin/"]
+COPY ["TelegramGroupsAdmin.Configuration/TelegramGroupsAdmin.Configuration.csproj", "TelegramGroupsAdmin.Configuration/"]
+COPY ["TelegramGroupsAdmin.Core/TelegramGroupsAdmin.Core.csproj", "TelegramGroupsAdmin.Core/"]
+COPY ["TelegramGroupsAdmin.Data/TelegramGroupsAdmin.Data.csproj", "TelegramGroupsAdmin.Data/"]
+COPY ["TelegramGroupsAdmin.Telegram/TelegramGroupsAdmin.Telegram.csproj", "TelegramGroupsAdmin.Telegram/"]
+COPY ["TelegramGroupsAdmin.Telegram.Abstractions/TelegramGroupsAdmin.Telegram.Abstractions.csproj", "TelegramGroupsAdmin.Telegram.Abstractions/"]
+COPY ["TelegramGroupsAdmin.ContentDetection/TelegramGroupsAdmin.ContentDetection.csproj", "TelegramGroupsAdmin.ContentDetection/"]
+
+# Restore dependencies (cached layer if project files unchanged)
+RUN dotnet restore "TelegramGroupsAdmin/TelegramGroupsAdmin.csproj"
+
+# Copy all source code
+COPY . .
 
 # Publish
 WORKDIR /src/TelegramGroupsAdmin
