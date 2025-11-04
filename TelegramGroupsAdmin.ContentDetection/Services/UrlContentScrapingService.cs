@@ -152,6 +152,7 @@ public partial class UrlContentScrapingService(
     /// <summary>
     /// Extract meta tag content using regex.
     /// Supports both name= and property= attributes in any order.
+    /// Filters out technical metadata like viewport settings.
     /// </summary>
     private static string? ExtractMetaContent(string html, string nameOrProperty)
     {
@@ -168,11 +169,70 @@ public partial class UrlContentScrapingService(
             var match = Regex.Match(html, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
             if (match.Success)
             {
-                return match.Groups[1].Value.Trim();
+                var content = match.Groups[1].Value.Trim();
+
+                // Filter out technical metadata that provides no useful content
+                if (IsTechnicalMetadata(content))
+                {
+                    continue;
+                }
+
+                return content;
             }
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Checks if extracted content is technical metadata (viewport, charset, etc.) rather than meaningful text.
+    /// </summary>
+    private static bool IsTechnicalMetadata(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content) || content.Length < 10)
+        {
+            return true; // Too short to be useful content
+        }
+
+        // Common technical meta patterns to exclude
+        var technicalPatterns = new[]
+        {
+            @"^width=",                           // viewport: width=device-width
+            @"^initial-scale=",                   // viewport: initial-scale=1
+            @"^maximum-scale=",                   // viewport: maximum-scale=1
+            @"^user-scalable=",                   // viewport: user-scalable=0
+            @"^viewport-fit=",                    // viewport: viewport-fit=cover
+            @"^charset=",                         // charset=utf-8
+            @"^IE=",                              // IE=edge
+            @"^text/html;\s*charset=",           // content-type
+            @"^application/",                     // application mime types
+            @"^image/",                           // image mime types
+            @"^no-cache",                         // cache control
+            @"^max-age=",                         // cache control
+            @"^\d+;\s*url=",                      // refresh redirects
+        };
+
+        foreach (var pattern in technicalPatterns)
+        {
+            if (Regex.IsMatch(content, pattern, RegexOptions.IgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        // Check if content is mostly technical syntax (lots of equals signs, commas, hyphens but few spaces)
+        var techChars = content.Count(c => c is '=' or ',' or ';' or '-');
+        var spaces = content.Count(c => c == ' ');
+
+        // If more than 30% technical characters and fewer than 10% spaces, likely technical
+        if (content.Length > 0 &&
+            (float)techChars / content.Length > 0.3 &&
+            (float)spaces / content.Length < 0.1)
+        {
+            return true;
+        }
+
+        return false;
     }
 }
 
