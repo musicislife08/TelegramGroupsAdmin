@@ -147,10 +147,16 @@ public class TelegramPhotoService
             var currentPhotoId = smallestPhoto.FileUniqueId;
 
             // Smart cache check: return cached if file exists and photo hasn't changed
-            if (File.Exists(localPath) && knownPhotoId == currentPhotoId)
+            // If knownPhotoId is null (first fetch), just check file existence to avoid race conditions
+            if (File.Exists(localPath))
             {
-                _logger.LogDebug("User {UserId} photo unchanged (file_unique_id: {PhotoId})", userId, currentPhotoId);
-                return new UserPhotoResult(relativePath, currentPhotoId);
+                if (knownPhotoId == null || knownPhotoId == currentPhotoId)
+                {
+                    _logger.LogDebug("User {UserId} photo cached (file_unique_id: {PhotoId})", userId, currentPhotoId);
+                    return new UserPhotoResult(relativePath, currentPhotoId);
+                }
+                // Photo changed - will re-download below
+                _logger.LogDebug("User {UserId} photo changed ({Old} → {New}), re-downloading", userId, knownPhotoId, currentPhotoId);
             }
 
             // Photo changed or first download - fetch from Telegram
