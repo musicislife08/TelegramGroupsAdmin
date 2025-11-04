@@ -156,8 +156,12 @@
     {
         _errorMessage = null;
 
+        Logger.LogInformation("TOTP verification attempt for user {UserId}", UserId);
+
         if (Model == null || string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(IntermediateToken))
         {
+            Logger.LogWarning("TOTP verification failed: Missing form data (UserId: {UserId}, HasModel: {HasModel}, HasToken: {HasToken})",
+                UserId, Model != null, !string.IsNullOrEmpty(IntermediateToken));
             _errorMessage = "Form data is missing.";
             return;
         }
@@ -165,11 +169,22 @@
         // SECURITY: Validate token before allowing TOTP verification
         if (!IntermediateAuthService.ValidateToken(IntermediateToken, UserId))
         {
+            Logger.LogWarning("TOTP verification failed: Invalid or expired intermediate auth token for user {UserId}", UserId);
             _errorMessage = "Invalid or expired authentication session. Please log in again.";
             var httpContext = HttpContextAccessor.HttpContext;
             httpContext?.Response.Redirect("/login");
             return;
         }
+
+        if (string.IsNullOrWhiteSpace(Model.Code))
+        {
+            Logger.LogWarning("TOTP verification failed: Empty code provided for user {UserId}", UserId);
+            _errorMessage = "Please enter the 6-digit code from your authenticator app.";
+            return;
+        }
+
+        Logger.LogInformation("Attempting TOTP verification for user {UserId} (code length: {CodeLength})",
+            UserId, Model.Code.Length);
 
         try
         {
@@ -177,10 +192,14 @@
 
             if (!result.Success)
             {
+                Logger.LogWarning("TOTP verification failed for user {UserId}: {ErrorMessage} (SetupExpired: {SetupExpired})",
+                    UserId, result.ErrorMessage, result.SetupExpired);
                 _errorMessage = result.ErrorMessage ?? "Invalid verification code. Please try again.";
                 Model = new VerifyModel();
                 return;
             }
+
+            Logger.LogInformation("TOTP verification successful for user {UserId}, completing authentication", UserId);
 
             // SECURITY: Consume token after successful authentication to prevent reuse
             IntermediateAuthService.ConsumeToken(IntermediateToken);
