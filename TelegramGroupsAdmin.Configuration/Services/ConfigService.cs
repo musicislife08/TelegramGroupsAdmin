@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Caching.Memory;
+using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 
@@ -9,7 +11,10 @@ namespace TelegramGroupsAdmin.Configuration.Services;
 /// Service for managing unified configuration storage with automatic global/chat merging
 /// PERF-CFG-1: Uses IMemoryCache for 95% query reduction (200+ queries/hr → 10-15)
 /// </summary>
-public class ConfigService(IConfigRepository configRepository, IMemoryCache cache) : IConfigService
+public class ConfigService(
+    IConfigRepository configRepository,
+    IMemoryCache cache,
+    IDataProtectionProvider dataProtectionProvider) : IConfigService
 {
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(15); // Sliding expiration
 
@@ -178,6 +183,80 @@ public class ConfigService(IConfigRepository configRepository, IMemoryCache cach
         }
     }
 
+    /// <summary>
+    /// Get the encrypted Telegram bot token from database (global config only, chat_id = 0)
+    /// Returns decrypted token or null if not configured
+    /// </summary>
+    public async Task<string?> GetTelegramBotTokenAsync()
+    {
+        const string cacheKey = "cfg_telegram_bot_token";
+
+        // Check cache first
+        if (cache.TryGetValue<string>(cacheKey, out var cachedToken))
+        {
+            return cachedToken;
+        }
+
+        // Load from database (global config, chat_id = 0)
+        var record = await configRepository.GetAsync(0);
+        if (record?.TelegramBotTokenEncrypted == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            // Decrypt using Data Protection
+            var protector = dataProtectionProvider.CreateProtector(DataProtectionPurposes.TelegramBotToken);
+            var decryptedToken = protector.Unprotect(record.TelegramBotTokenEncrypted);
+
+            // Cache for 15 minutes
+            cache.Set(cacheKey, decryptedToken, new MemoryCacheEntryOptions
+            {
+                SlidingExpiration = CacheDuration
+            });
+
+            return decryptedToken;
+        }
+        catch (Exception)
+        {
+            // Decryption failed (corrupted data or wrong key)
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Save the Telegram bot token to database (encrypted, global config only, chat_id = 0)
+    /// </summary>
+    public async Task SaveTelegramBotTokenAsync(string botToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(botToken);
+
+        // Encrypt using Data Protection
+        var protector = dataProtectionProvider.CreateProtector(DataProtectionPurposes.TelegramBotToken);
+        var encryptedToken = protector.Protect(botToken);
+
+        // Get or create global config record (chat_id = 0)
+        var record = await configRepository.GetAsync(0);
+        if (record == null)
+        {
+            record = new ConfigRecordDto
+            {
+                ChatId = 0
+                // CreatedAt will be set by database default (NOW())
+            };
+        }
+
+        // Set encrypted token
+        record.TelegramBotTokenEncrypted = encryptedToken;
+
+        await configRepository.UpsertAsync(record);
+
+        // Invalidate cache
+        const string cacheKey = "cfg_telegram_bot_token";
+        cache.Remove(cacheKey);
+    }
+
     private static void SetConfigColumn(ConfigRecordDto record, ConfigType configType, string? json)
     {
         switch (configType)
@@ -226,7 +305,8 @@ public class ConfigService(IConfigRepository configRepository, IMemoryCache cach
             && string.IsNullOrEmpty(record.LogConfig)
             && string.IsNullOrEmpty(record.ModerationConfig)
             && string.IsNullOrEmpty(record.BotProtectionConfig)
-            && string.IsNullOrEmpty(record.TelegramBotConfig);
+            && string.IsNullOrEmpty(record.TelegramBotConfig)
+            && string.IsNullOrEmpty(record.TelegramBotTokenEncrypted);
     }
 
     /// <summary>
