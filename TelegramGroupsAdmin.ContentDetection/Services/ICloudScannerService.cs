@@ -27,9 +27,11 @@ public interface ICloudScannerService
     /// <summary>
     /// Upload and scan file with cloud service
     /// Only called if hash lookup returned Unknown or if service doesn't support hash lookup
+    /// Phase 6: Updated to accept file path instead of byte array for large file support
+    /// Cloud services can stream file uploads to reduce memory usage
     /// </summary>
     Task<CloudScanResult> ScanFileAsync(
-        byte[] fileBytes,
+        string filePath,
         string? fileName = null,
         CancellationToken cancellationToken = default);
 

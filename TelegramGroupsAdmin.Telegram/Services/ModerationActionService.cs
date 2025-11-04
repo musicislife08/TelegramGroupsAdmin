@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
@@ -28,7 +27,7 @@ public class ModerationActionService
     private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
     private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository;
     private readonly TelegramBotClientFactory _botClientFactory;
-    private readonly TelegramOptions _telegramOptions;
+    private readonly TelegramConfigLoader _configLoader;
     private readonly IConfigService _configService;
     private readonly IServiceProvider _serviceProvider;
     private readonly IUserMessagingService _messagingService;
@@ -45,7 +44,7 @@ public class ModerationActionService
         ITelegramUserMappingRepository telegramUserMappingRepository,
         IImageTrainingSamplesRepository imageTrainingSamplesRepository,
         TelegramBotClientFactory botClientFactory,
-        IOptions<TelegramOptions> telegramOptions,
+        TelegramConfigLoader configLoader,
         IConfigService configService,
         IServiceProvider serviceProvider,
         IUserMessagingService messagingService,
@@ -61,7 +60,7 @@ public class ModerationActionService
         _telegramUserMappingRepository = telegramUserMappingRepository;
         _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
         _botClientFactory = botClientFactory;
-        _telegramOptions = telegramOptions.Value;
+        _configLoader = configLoader;
         _configService = configService;
         _serviceProvider = serviceProvider;
         _messagingService = messagingService;
@@ -207,7 +206,8 @@ public class ModerationActionService
         string reason,
         CancellationToken cancellationToken = default)
     {
-        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
         return await MarkAsSpamAndBanAsync(botClient, messageId, userId, chatId, executor, reason, cancellationToken);
     }
 
@@ -337,7 +337,8 @@ public class ModerationActionService
             {
                 // 4. Auto-ban user
                 var autoBanReason = warningConfig.AutoBanReason.Replace("{count}", warnCount.ToString());
-                var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+                var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+                var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
                 var autoBanExecutor = Actor.AutoBan;
                 var banResult = await BanUserAsync(
@@ -500,7 +501,8 @@ public class ModerationActionService
         bool restoreTrust = false,
         CancellationToken cancellationToken = default)
     {
-        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
         return await UnbanUserAsync(botClient, userId, executor, reason, restoreTrust, cancellationToken);
     }
 
@@ -521,7 +523,8 @@ public class ModerationActionService
             var result = new ModerationResult();
 
             // Get bot client from factory (singleton instance)
-            var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+            var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+            var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
             // 1. Delete the message from Telegram and mark as deleted in database
             try
@@ -691,7 +694,8 @@ public class ModerationActionService
         TimeSpan duration,
         CancellationToken cancellationToken = default)
     {
-        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
         return await TempBanUserAsync(botClient, userId, messageId, executor, reason, duration, cancellationToken);
     }
 

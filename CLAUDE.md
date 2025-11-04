@@ -86,12 +86,20 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 ## Configuration (Env Vars)
 
-**Required**: OPENAI__APIKEY, TELEGRAM__BOTTOKEN, TELEGRAM__CHATID, SPAMDETECTION__APIKEY, SENDGRID__APIKEY/FROMEMAIL/FROMNAME
+**Required**: OPENAI__APIKEY, SPAMDETECTION__APIKEY, SENDGRID__APIKEY/FROMEMAIL/FROMNAME
 **Optional**: APP__BASEURL, OPENAI__MODEL/MAXTOKENS, MESSAGEHISTORY__*, IDENTITY__DATABASEPATH, DATAPROTECTION__KEYSPATH
-**Database-Managed**: VIRUSTOTAL__APIKEY (migrated to encrypted database storage, env var fallback supported)
+**Database-Managed** (with env var fallback for first-time setup):
+- **TELEGRAM__BOTTOKEN**: Bot API token (encrypted in `configs.telegram_bot_token_encrypted`)
+- **TELEGRAM__CHATID**: Primary chat ID (stored in `configs.telegram_bot_config` JSONB)
+- **TELEGRAM__APISERVERURL**: Optional self-hosted Bot API server URL for unlimited file downloads
+- **VIRUSTOTAL__APIKEY**: VirusTotal API key (encrypted in `configs.api_keys`)
+
+**Migration**: TelegramConfigMigrationService auto-migrates Telegram env vars → database on first startup. Configure via Settings → Telegram → Bot Configuration UI.
 
 ## Key Implementations
 
+- **Telegram Bot API Dual-Mode**: Supports standard api.telegram.org (20MB file limit) and self-hosted Bot API server (unlimited downloads up to 2GB). TelegramBotClientFactory caches clients by `token::url` key. Graceful error handling logs warnings for files >20MB on standard API with guidance to configure self-hosted mode. Settings UI provides inline setup instructions. See `docker-compose.bot-api.yml` for production-ready deployment template.
+- **File Scanning (Streaming Architecture)**: FileScanJob passes file path instead of loading entire files into memory. ClamAVScannerService validates file size <2GB before reading. VirusTotalScannerService uses StreamContent for efficient HTTP uploads. Tier1VotingCoordinator scans in parallel from disk. Supports files up to 2GB with minimal memory footprint.
 - **API Key Management**: File scanning API key (VirusTotal) stored encrypted in configs.api_keys (TEXT column, ASP.NET Core Data Protection). ApiKeyMigrationService migrates env vars on first startup. ApiKeyDelegatingHandler dynamically loads keys from database at request time with env var fallback. Settings UI allows editing. Backup/restore auto-handles decryption/re-encryption via [ProtectedData] attribute.
 - **Rate Limiting**: VirusTotal (Polly PartitionedRateLimiter, 4/min), OpenAI (429 detection), both fail-open
 - **Edit Detection**: On edit → message_edits, update messages, re-run spam detection, action if spam

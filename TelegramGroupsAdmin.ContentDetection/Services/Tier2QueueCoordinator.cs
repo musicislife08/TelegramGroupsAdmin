@@ -33,9 +33,11 @@ public class Tier2QueueCoordinator
     /// <summary>
     /// Execute Tier 2 cloud queue scan
     /// Tries services in priority order until one provides a definitive result
+    /// Phase 6: Updated to accept file path instead of byte array for large file support
     /// </summary>
     public async Task<Tier2ScanResult> ScanFileAsync(
-        byte[] fileBytes,
+        string filePath,
+        long fileSize,
         string fileHash,
         string? fileName = null,
         CancellationToken cancellationToken = default)
@@ -44,7 +46,7 @@ public class Tier2QueueCoordinator
         var config = await _configRepository.GetAsync(chatId: null, cancellationToken);
 
         _logger.LogInformation("Starting Tier 2 cloud queue scan (file: {FileName}, hash: {Hash}, size: {Size} bytes)",
-            fileName ?? "unknown", fileHash[..16] + "...", fileBytes.Length);
+            fileName ?? "unknown", fileHash[..16] + "...", fileSize);
 
         var startTime = DateTimeOffset.UtcNow;
         var scanResults = new List<CloudScanResult>();
@@ -127,7 +129,7 @@ public class Tier2QueueCoordinator
             }
 
             // Step 2: Upload file for scanning (hash was unknown/error or service doesn't support hash lookup)
-            var scanResult = await scanner.ScanFileAsync(fileBytes, fileName, cancellationToken);
+            var scanResult = await scanner.ScanFileAsync(filePath, fileName, cancellationToken);
             scanResults.Add(scanResult);
 
             switch (scanResult.ResultType)

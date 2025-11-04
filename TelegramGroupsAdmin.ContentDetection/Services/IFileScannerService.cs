@@ -13,10 +13,12 @@ public interface IFileScannerService
 
     /// <summary>
     /// Scan a file for malware/threats
+    /// Phase 6: Updated to accept file path instead of byte array for large file support
+    /// Scanners open their own streams to enable parallel scanning without memory duplication
     /// </summary>
-    /// <param name="fileBytes">File content as byte array</param>
+    /// <param name="filePath">Path to the file to scan</param>
     /// <param name="fileName">Original filename (optional, for context)</param>
     /// <param name="cancellationToken">Cancellation token for timeout handling</param>
     /// <returns>Scan result with threat detection status</returns>
-    Task<FileScanResult> ScanFileAsync(byte[] fileBytes, string? fileName = null, CancellationToken cancellationToken = default);
+    Task<FileScanResult> ScanFileAsync(string filePath, string? fileName = null, CancellationToken cancellationToken = default);
 }

@@ -1,7 +1,8 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -12,14 +13,14 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class TelegramConfigLoader
 {
-    private readonly ConfigService _configService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<TelegramConfigLoader> _logger;
 
     public TelegramConfigLoader(
-        ConfigService configService,
+        IServiceScopeFactory scopeFactory,
         ILogger<TelegramConfigLoader> logger)
     {
-        _configService = configService;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -30,8 +31,12 @@ public class TelegramConfigLoader
     /// <exception cref="InvalidOperationException">Thrown if bot token or chat ID not configured</exception>
     public async Task<(string BotToken, long ChatId, string? ApiServerUrl)> LoadConfigAsync()
     {
+        // Create scope to resolve scoped ConfigService
+        using var scope = _scopeFactory.CreateScope();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+
         // Load bot token (encrypted column)
-        var botToken = await _configService.GetTelegramBotTokenAsync();
+        var botToken = await configService.GetTelegramBotTokenAsync();
         if (string.IsNullOrWhiteSpace(botToken))
         {
             _logger.LogError("Telegram bot token not configured in database");
@@ -40,7 +45,7 @@ public class TelegramConfigLoader
         }
 
         // Load config (JSONB column)
-        var config = await _configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0);
+        var config = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0);
         if (config?.ChatId == null)
         {
             _logger.LogError("Telegram chat ID not configured in database");

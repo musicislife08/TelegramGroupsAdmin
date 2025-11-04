@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Configuration.Models;
 
 namespace TelegramGroupsAdmin.Configuration.Services;
 
@@ -12,16 +13,16 @@ namespace TelegramGroupsAdmin.Configuration.Services;
 /// </summary>
 public class TelegramConfigMigrationService : IHostedService
 {
-    private readonly ConfigService _configService;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TelegramConfigMigrationService> _logger;
 
     public TelegramConfigMigrationService(
-        ConfigService configService,
+        IServiceScopeFactory scopeFactory,
         IConfiguration configuration,
         ILogger<TelegramConfigMigrationService> logger)
     {
-        _configService = configService;
+        _scopeFactory = scopeFactory;
         _configuration = configuration;
         _logger = logger;
     }
@@ -48,9 +49,13 @@ public class TelegramConfigMigrationService : IHostedService
     /// </summary>
     private async Task MigrateTelegramConfigFromEnvironmentAsync(CancellationToken cancellationToken)
     {
+        // Create scope to resolve scoped ConfigService
+        using var scope = _scopeFactory.CreateScope();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+
         // Check if Telegram bot config already exists in database (chat_id = 0)
-        var existingConfig = await _configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0);
-        var existingToken = await _configService.GetTelegramBotTokenAsync();
+        var existingConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0);
+        var existingToken = await configService.GetTelegramBotTokenAsync();
 
         // If both token and config exist, skip migration
         if (existingToken != null && existingConfig != null)
@@ -83,7 +88,7 @@ public class TelegramConfigMigrationService : IHostedService
         // Save bot token (encrypted) if provided
         if (!string.IsNullOrWhiteSpace(botToken))
         {
-            await _configService.SaveTelegramBotTokenAsync(botToken);
+            await configService.SaveTelegramBotTokenAsync(botToken);
             _logger.LogInformation("Migrated Telegram bot token to encrypted database storage");
         }
 
@@ -97,7 +102,7 @@ public class TelegramConfigMigrationService : IHostedService
                 ApiServerUrl = string.IsNullOrWhiteSpace(apiServerUrl) ? null : apiServerUrl
             };
 
-            await _configService.SaveAsync(ConfigType.TelegramBot, 0, config);
+            await configService.SaveAsync(ConfigType.TelegramBot, 0, config);
             _logger.LogInformation(
                 "Migrated Telegram bot configuration to database: ChatId={ChatId}, ApiServerUrl={ApiServerUrl}",
                 chatId,

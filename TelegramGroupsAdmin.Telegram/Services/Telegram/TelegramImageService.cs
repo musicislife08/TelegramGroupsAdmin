@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Telegram.Bot;
+using Telegram.Bot.Exceptions;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 
@@ -9,16 +9,16 @@ namespace TelegramGroupsAdmin.Telegram.Services.Telegram;
 public class TelegramImageService : ITelegramImageService
 {
     private readonly TelegramBotClientFactory _botFactory;
-    private readonly TelegramOptions _options;
+    private readonly TelegramConfigLoader _configLoader;
     private readonly ILogger<TelegramImageService> _logger;
 
     public TelegramImageService(
         TelegramBotClientFactory botFactory,
-        IOptions<TelegramOptions> options,
+        TelegramConfigLoader configLoader,
         ILogger<TelegramImageService> logger)
     {
         _botFactory = botFactory;
-        _options = options.Value;
+        _configLoader = configLoader;
         _logger = logger;
     }
 
@@ -26,7 +26,8 @@ public class TelegramImageService : ITelegramImageService
     {
         try
         {
-            var botClient = _botFactory.GetOrCreate(_options.BotToken);
+            var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+            var botClient = _botFactory.GetOrCreate(botToken, apiServerUrl);
 
             _logger.LogDebug("Downloading photo {FileId}", fileId);
 
@@ -48,6 +49,14 @@ public class TelegramImageService : ITelegramImageService
                 stream.Length);
 
             return stream;
+        }
+        catch (ApiRequestException ex) when (ex.Message.Contains("file is too big"))
+        {
+            _logger.LogWarning(
+                "Skipping photo download for {FileId}: File exceeds Telegram Bot API 20MB limit. " +
+                "To download large photos, configure self-hosted Bot API server (Settings → Telegram Bot → API Server URL).",
+                fileId);
+            return null;
         }
         catch (Exception ex)
         {

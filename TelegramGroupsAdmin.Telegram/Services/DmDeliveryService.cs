@@ -1,13 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -20,18 +19,18 @@ public class DmDeliveryService : IDmDeliveryService
     private readonly ILogger<DmDeliveryService> _logger;
     private readonly TelegramBotClientFactory _botClientFactory;
     private readonly IServiceProvider _serviceProvider;
-    private readonly TelegramOptions _telegramOptions;
+    private readonly TelegramConfigLoader _configLoader;
 
     public DmDeliveryService(
         ILogger<DmDeliveryService> logger,
         TelegramBotClientFactory botClientFactory,
         IServiceProvider serviceProvider,
-        IOptions<TelegramOptions> telegramOptions)
+        TelegramConfigLoader configLoader)
     {
         _logger = logger;
         _botClientFactory = botClientFactory;
         _serviceProvider = serviceProvider;
-        _telegramOptions = telegramOptions.Value;
+        _configLoader = configLoader;
     }
 
     public async Task<DmDeliveryResult> SendDmAsync(
@@ -41,7 +40,8 @@ public class DmDeliveryService : IDmDeliveryService
         int? autoDeleteSeconds = null,
         CancellationToken cancellationToken = default)
     {
-        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
         try
         {
@@ -126,7 +126,8 @@ public class DmDeliveryService : IDmDeliveryService
         string messageText,
         CancellationToken cancellationToken = default)
     {
-        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
         try
         {
@@ -300,7 +301,8 @@ public class DmDeliveryService : IDmDeliveryService
         string? videoPath = null,
         CancellationToken cancellationToken = default)
     {
-        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
         try
         {

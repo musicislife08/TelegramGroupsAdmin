@@ -1,11 +1,10 @@
-using Microsoft.Extensions.Options;
 using TickerQ.Utilities.Base;
 using Telegram.Bot;
 using TickerQ.Utilities.Models;
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Jobs;
 
@@ -17,12 +16,12 @@ namespace TelegramGroupsAdmin.Jobs;
 public class DeleteUserMessagesJob(
     ILogger<DeleteUserMessagesJob> logger,
     TelegramBotClientFactory botClientFactory,
-    IOptions<TelegramOptions> telegramOptions,
+    TelegramConfigLoader configLoader,
     IMessageHistoryRepository messageHistoryRepository)
 {
     private readonly ILogger<DeleteUserMessagesJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
+    private readonly TelegramConfigLoader _configLoader = configLoader;
     private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
 
     /// <summary>
@@ -43,8 +42,11 @@ public class DeleteUserMessagesJob(
             "Starting cross-chat message cleanup for user {UserId}",
             payload.TelegramUserId);
 
+        // Load bot config from database
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+
         // Get bot client from factory
-        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
         // Fetch all user messages (non-deleted only)
         var userMessages = await _messageHistoryRepository.GetUserMessagesAsync(

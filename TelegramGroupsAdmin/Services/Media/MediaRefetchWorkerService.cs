@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Options;
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -17,7 +15,7 @@ public class MediaRefetchWorkerService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly MessageProcessingService _messageProcessingService;
     private readonly TelegramBotClientFactory _botClientFactory;
-    private readonly string _botToken;
+    private readonly TelegramConfigLoader _configLoader;
     private readonly ILogger<MediaRefetchWorkerService> _logger;
 
     public MediaRefetchWorkerService(
@@ -25,14 +23,14 @@ public class MediaRefetchWorkerService : BackgroundService
         IServiceScopeFactory scopeFactory,
         MessageProcessingService messageProcessingService,
         TelegramBotClientFactory botClientFactory,
-        IOptions<TelegramOptions> telegramOptions,
+        TelegramConfigLoader configLoader,
         ILogger<MediaRefetchWorkerService> logger)
     {
         _queueService = (MediaRefetchQueueService)queueService;
         _scopeFactory = scopeFactory;
         _messageProcessingService = messageProcessingService;
         _botClientFactory = botClientFactory;
-        _botToken = telegramOptions.Value.BotToken;
+        _configLoader = configLoader;
         _logger = logger;
     }
 
@@ -142,8 +140,11 @@ public class MediaRefetchWorkerService : BackgroundService
 
         _logger.LogInformation("Worker {WorkerId} refetching user photo: user {UserId}", workerId, request.UserId);
 
+        // Load bot config from database
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+
         // Get singleton bot client from factory (same instance used by TelegramAdminBotService)
-        var botClient = _botClientFactory.GetOrCreate(_botToken);
+        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
         // Get user's current file_unique_id from database
         var user = await userRepo.GetByIdAsync(request.UserId!.Value);

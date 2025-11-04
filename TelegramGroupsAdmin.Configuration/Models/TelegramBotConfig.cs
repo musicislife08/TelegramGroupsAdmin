@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Models;
+namespace TelegramGroupsAdmin.Configuration.Models;
 
 /// <summary>
 /// Configuration for Telegram bot service

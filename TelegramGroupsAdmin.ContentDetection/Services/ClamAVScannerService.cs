@@ -41,7 +41,7 @@ public class ClamAVScannerService : IFileScannerService
     }
 
     public async Task<FileScanResult> ScanFileAsync(
-        byte[] fileBytes,
+        string filePath,
         string? fileName = null,
         CancellationToken cancellationToken = default)
     {
@@ -65,22 +65,30 @@ public class ClamAVScannerService : IFileScannerService
                 };
             }
 
+            // Get file size for limit checking
+            var fileInfo = new FileInfo(filePath);
+            var fileSize = fileInfo.Length;
+
             // ClamAV has a hard 2GB limit (2147483647 bytes) - skip files larger than this
             const long maxClamAVSize = 2147483647L; // 2 GiB - 1 byte
-            if (fileBytes.Length > maxClamAVSize)
+            if (fileSize > maxClamAVSize)
             {
                 _logger.LogWarning("File size ({Size} bytes) exceeds ClamAV's 2GB limit, skipping ClamAV scan (will use VirusTotal only)",
-                    fileBytes.Length);
+                    fileSize);
 
                 return new FileScanResult
                 {
                     Scanner = ScannerName,
                     IsClean = true,  // Skip, rely on VirusTotal
                     ResultType = ScanResultType.Skipped,
-                    ErrorMessage = $"File too large for ClamAV ({fileBytes.Length} bytes > 2GB limit)",
+                    ErrorMessage = $"File too large for ClamAV ({fileSize} bytes > 2GB limit)",
                     ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
                 };
             }
+
+            // Read file into memory for nClam (library requires byte[])
+            // This is acceptable because we've already validated size < 2GB above
+            byte[] fileBytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
 
             // Scan file bytes with retry logic for transient ClamAV failures
             // nClam library doesn't auto-reconnect, so retry on network errors

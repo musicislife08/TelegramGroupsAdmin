@@ -1,4 +1,5 @@
 @using TelegramGroupsAdmin.Configuration
+@using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Configuration.Services
 @using TelegramGroupsAdmin.Configuration.Repositories
 @inject IConfigService ConfigService
@@ -29,7 +30,30 @@
                 </MudText>
             </MudItem>
 
-            <MudItem xs="12" Class="d-flex justify-start">
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_chatIdInput"
+                              Label="Chat ID"
+                              Variant="Variant.Outlined"
+                              Placeholder="-1001234567890"
+                              HelperText="Telegram chat ID where the bot operates (negative for groups)"
+                              Required="true"
+                              Error="@_chatIdError"
+                              ErrorText="@_chatIdErrorMessage" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_botConfig.ApiServerUrl"
+                              Label="Bot API Server URL (Optional)"
+                              Variant="Variant.Outlined"
+                              Placeholder="http://bot-api-server:8081"
+                              HelperText="Leave empty for standard api.telegram.org (20MB file limit)"
+                              Clearable="true" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                    Configure a self-hosted Bot API server to download files >20MB. See documentation below.
+                </MudText>
+            </MudItem>
+
+            <MudItem xs="12" Class="d-flex justify-start gap-2">
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Primary"
                            OnClick="SaveBotConfig"
@@ -52,6 +76,51 @@
                 <strong>Note:</strong> Changes take effect immediately. The bot will start or stop automatically without requiring an application restart.
             </MudText>
         </MudAlert>
+
+        <MudExpansionPanels Class="mt-4">
+            <MudExpansionPanel Text="Self-Hosted Bot API Server Setup" Icon="@Icons.Material.Filled.CloudUpload">
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    <strong>Why use a self-hosted Bot API server?</strong><br/>
+                    • Download files larger than 20MB (up to 2GB)<br/>
+                    • Improved file download performance<br/>
+                    • Full control over file storage and processing
+                </MudText>
+
+                <MudDivider Class="my-3" />
+
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Quick Start with Docker Compose</MudText>
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    1. Add to your docker-compose.yml:
+                </MudText>
+                <MudPaper Class="pa-3 mb-3" Style="background-color: #1e1e1e; color: #d4d4d4; font-family: 'Courier New', monospace; font-size: 12px; overflow-x: auto;">
+<pre>services:
+  telegram-bot-api:
+    image: aiogram/telegram-bot-api:latest
+    environment:
+      - TELEGRAM_API_ID=YOUR_API_ID
+      - TELEGRAM_API_HASH=YOUR_API_HASH
+    volumes:
+      - telegram-bot-api-data:/var/lib/telegram-bot-api
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+    command: --local
+
+volumes:
+  telegram-bot-api-data:</pre>
+                </MudPaper>
+
+                <MudText Typo="Typo.body2" Class="mb-2">
+                    2. Get API credentials from <a href="https://my.telegram.org/apps" target="_blank">https://my.telegram.org/apps</a><br/>
+                    3. Set API Server URL above to: <code>http://telegram-bot-api:8081</code><br/>
+                    4. Save configuration and restart the bot service
+                </MudText>
+
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">
+                    <strong>Important:</strong> The <code>--local</code> flag is required for unlimited file downloads. Without it, the 20MB limit still applies.
+                </MudAlert>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
     }
 </MudPaper>
 
@@ -214,6 +283,9 @@
     private bool _loadingBotConfig = true;
     private bool _savingBotConfig;
     private TelegramBotConfig? _botConfig;
+    private string _chatIdInput = "";
+    private bool _chatIdError = false;
+    private string _chatIdErrorMessage = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -230,11 +302,15 @@
             // Load global bot config (chat_id = null)
             _botConfig = await ConfigService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
                          ?? TelegramBotConfig.Default;
+
+            // Populate ChatId input field
+            _chatIdInput = _botConfig.ChatId?.ToString() ?? "";
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to load bot service configuration: {ex.Message}", Severity.Error);
             _botConfig = TelegramBotConfig.Default;
+            _chatIdInput = "";
         }
         finally
         {
@@ -245,6 +321,27 @@
     private async Task SaveBotConfig()
     {
         if (_botConfig == null) return;
+
+        // Validate ChatId input
+        _chatIdError = false;
+        _chatIdErrorMessage = "";
+
+        if (string.IsNullOrWhiteSpace(_chatIdInput))
+        {
+            _chatIdError = true;
+            _chatIdErrorMessage = "Chat ID is required";
+            return;
+        }
+
+        if (!long.TryParse(_chatIdInput.Trim(), out long chatId))
+        {
+            _chatIdError = true;
+            _chatIdErrorMessage = "Chat ID must be a valid number (e.g., -1001234567890)";
+            return;
+        }
+
+        // Update config with parsed ChatId
+        _botConfig.ChatId = chatId;
 
         _savingBotConfig = true;
         try

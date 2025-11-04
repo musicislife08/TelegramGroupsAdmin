@@ -1,9 +1,8 @@
-using Microsoft.Extensions.Options;
 using TickerQ.Utilities.Base;
 using TickerQ.Utilities.Models;
 using Telegram.Bot;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types.Enums;
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
@@ -11,6 +10,7 @@ using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Jobs;
 
@@ -31,7 +31,7 @@ public class FileScanJob(
     ITelegramUserRepository telegramUserRepository,
     IMessageHistoryRepository messageHistoryRepository,
     IDetectionResultsRepository detectionResultsRepository,
-    IOptions<TelegramOptions> telegramOptions)
+    TelegramConfigLoader configLoader)
 {
     private readonly ILogger<FileScanJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
@@ -39,7 +39,7 @@ public class FileScanJob(
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
     private readonly IDetectionResultsRepository _detectionResultsRepository = detectionResultsRepository;
-    private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
+    private readonly TelegramConfigLoader _configLoader = configLoader;
 
     /// <summary>
     /// Download file, scan for malware, take action if infected
@@ -63,8 +63,11 @@ public class FileScanJob(
             payload.ChatId,
             payload.MessageId);
 
+        // Load bot config from database
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+
         // Get bot client from factory (singleton instance, one per bot token)
-        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
         string? tempFilePath = null;
 
@@ -99,20 +102,19 @@ public class FileScanJob(
 
             _logger.LogDebug("File hash: {FileHash}", fileHash);
 
-            // Step 3: Read file bytes for scanning
-            byte[] fileBytes = await File.ReadAllBytesAsync(tempFilePath, cancellationToken);
-
-            // Step 4: Get user info for request
+            // Step 3: Get user info for request
             var user = await _telegramUserRepository.GetByTelegramIdAsync(payload.UserId, cancellationToken);
 
-            // Step 5: Create scan request and execute
+            // Step 4: Create scan request and execute
+            // Phase 6: Pass file path instead of loading entire file into memory
+            // Scanners will open their own streams to enable parallel scanning without memory duplication
             var scanRequest = new FileScanCheckRequest
             {
                 Message = $"File attachment: {payload.FileName ?? "unknown"}",
                 UserId = payload.UserId,
                 UserName = user?.Username,
                 ChatId = payload.ChatId,
-                FileBytes = fileBytes,
+                FilePath = tempFilePath,
                 FileName = payload.FileName ?? "unknown",
                 FileSize = payload.FileSize,
                 FileHash = fileHash,
@@ -158,6 +160,19 @@ public class FileScanJob(
             {
                 await HandleInfectedFileAsync(botClient, payload, scanResult, cancellationToken);
             }
+        }
+        catch (ApiRequestException ex) when (ex.Message.Contains("file is too big"))
+        {
+            _logger.LogWarning(
+                "Skipping file scan for message {MessageId}: File '{FileName}' exceeds Telegram Bot API 20MB limit. " +
+                "File ID: {FileId}, Size: {FileSize} bytes. " +
+                "To scan files >20MB, configure self-hosted Bot API server (Settings → Telegram Bot → API Server URL).",
+                payload.MessageId,
+                payload.FileName ?? "unknown",
+                payload.FileId,
+                payload.FileSize);
+            // Return without re-throwing - file scan skipped gracefully
+            return;
         }
         catch (Exception ex)
         {

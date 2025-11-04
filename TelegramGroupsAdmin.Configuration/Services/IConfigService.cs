@@ -41,4 +41,15 @@ public interface IConfigService
     /// <param name="configType">Type of config (enum for type safety)</param>
     /// <param name="chatId">Chat ID (null for global config)</param>
     Task DeleteAsync(ConfigType configType, long? chatId);
+
+    /// <summary>
+    /// Get the encrypted Telegram bot token from database (global config only, chat_id = 0)
+    /// Returns decrypted token or null if not configured
+    /// </summary>
+    Task<string?> GetTelegramBotTokenAsync();
+
+    /// <summary>
+    /// Save the Telegram bot token to database (encrypted, global config only, chat_id = 0)
+    /// </summary>
+    Task SaveTelegramBotTokenAsync(string botToken);
 }

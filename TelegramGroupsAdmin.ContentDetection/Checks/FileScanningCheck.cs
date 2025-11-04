@@ -113,7 +113,8 @@ public class FileScanningCheck : IContentCheck
                 req.FileHash, req.FileSize);
 
             var tier1Result = await _tier1Coordinator.ScanFileAsync(
-                req.FileBytes,
+                req.FilePath,
+                req.FileSize,
                 req.FileName,
                 req.CancellationToken);
 
@@ -161,7 +162,8 @@ public class FileScanningCheck : IContentCheck
                 req.UserId);
 
             var tier2Result = await _tier2Coordinator.ScanFileAsync(
-                req.FileBytes,
+                req.FilePath,
+                req.FileSize,
                 req.FileHash,
                 req.FileName,
                 req.CancellationToken);

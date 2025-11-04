@@ -215,7 +215,7 @@ public class VirusTotalScannerService : ICloudScannerService
     }
 
     public async Task<CloudScanResult> ScanFileAsync(
-        byte[] fileBytes,
+        string filePath,
         string? fileName = null,
         CancellationToken cancellationToken = default)
     {
@@ -239,6 +239,9 @@ public class VirusTotalScannerService : ICloudScannerService
 
         try
         {
+            // Get file size for logging
+            var fileSize = new FileInfo(filePath).Length;
+
             // Check quota
             bool quotaAvailable = await IsQuotaAvailableAsync(cancellationToken);
             if (!quotaAvailable)
@@ -260,10 +263,14 @@ public class VirusTotalScannerService : ICloudScannerService
             var client = _httpClientFactory.CreateClient("VirusTotal");
 
             using var content = new MultipartFormDataContent();
-            content.Add(new ByteArrayContent(fileBytes), "file", fileName ?? "unknown");
+
+            // Open file stream for upload (Phase 6: streaming instead of loading full file into memory)
+            await using var fileStream = File.OpenRead(filePath);
+            using var streamContent = new StreamContent(fileStream);
+            content.Add(streamContent, "file", fileName ?? "unknown");
 
             var requestUrl = "files";
-            _logger.LogDebug("VirusTotal file upload: POST {Url} (size: {Size} bytes)", requestUrl, fileBytes.Length);
+            _logger.LogDebug("VirusTotal file upload: POST {Url} (size: {Size} bytes)", requestUrl, fileSize);
 
             var response = await client.PostAsync(requestUrl, content, cancellationToken);
 

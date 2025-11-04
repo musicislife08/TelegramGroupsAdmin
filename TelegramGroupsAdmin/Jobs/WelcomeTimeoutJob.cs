@@ -1,12 +1,11 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using TickerQ.Utilities.Base;
 using Telegram.Bot;
 using TickerQ.Utilities.Models;
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Jobs;
 
@@ -19,12 +18,12 @@ public class WelcomeTimeoutJob(
     ILogger<WelcomeTimeoutJob> logger,
     IDbContextFactory<AppDbContext> contextFactory,
     TelegramBotClientFactory botClientFactory,
-    IOptions<TelegramOptions> telegramOptions)
+    TelegramConfigLoader configLoader)
 {
     private readonly ILogger<WelcomeTimeoutJob> _logger = logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
+    private readonly TelegramConfigLoader _configLoader = configLoader;
 
     /// <summary>
     /// Execute welcome timeout - kicks user if they haven't responded
@@ -45,8 +44,11 @@ public class WelcomeTimeoutJob(
             payload.UserId,
             payload.ChatId);
 
+        // Load bot config from database
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+
         // Get bot client from factory
-        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
         try
         {

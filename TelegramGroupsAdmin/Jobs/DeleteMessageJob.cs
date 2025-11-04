@@ -1,10 +1,9 @@
-using Microsoft.Extensions.Options;
 using TickerQ.Utilities.Base;
 using Telegram.Bot;
 using TickerQ.Utilities.Models;
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Jobs;
 
@@ -16,11 +15,11 @@ namespace TelegramGroupsAdmin.Jobs;
 public class DeleteMessageJob(
     ILogger<DeleteMessageJob> logger,
     TelegramBotClientFactory botClientFactory,
-    IOptions<TelegramOptions> telegramOptions)
+    TelegramConfigLoader configLoader)
 {
     private readonly ILogger<DeleteMessageJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
+    private readonly TelegramConfigLoader _configLoader = configLoader;
 
     /// <summary>
     /// Execute delayed message deletion
@@ -42,8 +41,11 @@ public class DeleteMessageJob(
             payload.ChatId,
             payload.Reason);
 
+        // Load bot config from database
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+
         // Get bot client from factory
-        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
         try
         {

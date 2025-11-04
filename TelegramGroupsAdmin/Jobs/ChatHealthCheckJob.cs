@@ -1,7 +1,6 @@
-using Microsoft.Extensions.Options;
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TickerQ.Utilities.Base;
 using TickerQ.Utilities.Models;
@@ -17,18 +16,18 @@ public class ChatHealthCheckJob
 {
     private readonly ChatManagementService _chatService;
     private readonly TelegramBotClientFactory _botFactory;
-    private readonly string _botToken;
+    private readonly TelegramConfigLoader _configLoader;
     private readonly ILogger<ChatHealthCheckJob> _logger;
 
     public ChatHealthCheckJob(
         ChatManagementService chatService,
         TelegramBotClientFactory botFactory,
-        IOptions<TelegramOptions> options,
+        TelegramConfigLoader configLoader,
         ILogger<ChatHealthCheckJob> logger)
     {
         _chatService = chatService;
         _botFactory = botFactory;
-        _botToken = options.Value.BotToken;
+        _configLoader = configLoader;
         _logger = logger;
     }
 
@@ -46,7 +45,9 @@ public class ChatHealthCheckJob
                 return;
             }
 
-            var botClient = _botFactory.GetOrCreate(_botToken);
+            // Load bot config from database
+            var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+            var botClient = _botFactory.GetOrCreate(botToken, apiServerUrl);
 
             if (payload.ChatId.HasValue)
             {

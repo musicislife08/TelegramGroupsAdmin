@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -17,7 +16,6 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class WelcomeService : IWelcomeService
 {
     private readonly ILogger<WelcomeService> _logger;
-    private readonly TelegramOptions _telegramOptions;
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotProtectionService _botProtectionService;
     private readonly IDmDeliveryService _dmDeliveryService;
@@ -68,13 +66,11 @@ public class WelcomeService : IWelcomeService
 
     public WelcomeService(
         ILogger<WelcomeService> logger,
-        IOptions<TelegramOptions> telegramOptions,
         IServiceProvider serviceProvider,
         IBotProtectionService botProtectionService,
         IDmDeliveryService dmDeliveryService)
     {
         _logger = logger;
-        _telegramOptions = telegramOptions.Value;
         _serviceProvider = serviceProvider;
         _botProtectionService = botProtectionService;
         _dmDeliveryService = dmDeliveryService;

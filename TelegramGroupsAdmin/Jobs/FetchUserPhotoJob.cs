@@ -1,7 +1,5 @@
-using Microsoft.Extensions.Options;
 using TickerQ.Utilities.Base;
 using TickerQ.Utilities.Models;
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -22,14 +20,14 @@ public class FetchUserPhotoJob(
     TelegramPhotoService photoService,
     ITelegramUserRepository telegramUserRepository,
     IPhotoHashService photoHashService,
-    IOptions<TelegramOptions> telegramOptions)
+    TelegramConfigLoader configLoader)
 {
     private readonly ILogger<FetchUserPhotoJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly TelegramPhotoService _photoService = photoService;
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly IPhotoHashService _photoHashService = photoHashService;
-    private readonly TelegramOptions _telegramOptions = telegramOptions.Value;
+    private readonly TelegramConfigLoader _configLoader = configLoader;
 
     /// <summary>
     /// Fetch user profile photo and update telegram_users table
@@ -50,8 +48,11 @@ public class FetchUserPhotoJob(
             payload.UserId,
             payload.MessageId);
 
+        // Load bot config from database
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+
         // Get bot client from factory
-        var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
         try
         {

@@ -1,7 +1,5 @@
-using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -20,7 +18,7 @@ public class ReportActionsService : IReportActionsService
     private readonly IMessageHistoryRepository _messageRepository;
     private readonly ModerationActionService _moderationService;
     private readonly TelegramBotClientFactory _botFactory;
-    private readonly TelegramOptions _telegramOptions;
+    private readonly TelegramConfigLoader _configLoader;
     private readonly IAuditService _auditService;
     private readonly BotMessageService _botMessageService;
     private readonly ILogger<ReportActionsService> _logger;
@@ -30,7 +28,7 @@ public class ReportActionsService : IReportActionsService
         IMessageHistoryRepository messageRepository,
         ModerationActionService moderationService,
         TelegramBotClientFactory botFactory,
-        IOptions<TelegramOptions> telegramOptions,
+        TelegramConfigLoader configLoader,
         IAuditService auditService,
         BotMessageService botMessageService,
         ILogger<ReportActionsService> logger)
@@ -39,7 +37,7 @@ public class ReportActionsService : IReportActionsService
         _messageRepository = messageRepository;
         _moderationService = moderationService;
         _botFactory = botFactory;
-        _telegramOptions = telegramOptions.Value;
+        _configLoader = configLoader;
         _auditService = auditService;
         _botMessageService = botMessageService;
         _logger = logger;
@@ -59,7 +57,8 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Message {report.MessageId} not found");
         }
 
-        var botClient = _botFactory.GetOrCreate(_telegramOptions.BotToken);
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var botClient = _botFactory.GetOrCreate(botToken, apiServerUrl);
 
         // Create executor actor from web user
         var executor = Core.Models.Actor.FromWebUser(reviewerId);
@@ -115,7 +114,8 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Message {report.MessageId} not found");
         }
 
-        var botClient = _botFactory.GetOrCreate(_telegramOptions.BotToken);
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var botClient = _botFactory.GetOrCreate(botToken, apiServerUrl);
 
         // Create executor actor from web user
         var executor = Core.Models.Actor.FromWebUser(reviewerId);
@@ -259,7 +259,8 @@ public class ReportActionsService : IReportActionsService
 
     private async Task SendReportReplyAsync(Report report, string message)
     {
-        var botClient = _botFactory.GetOrCreate(_telegramOptions.BotToken);
+        var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var botClient = _botFactory.GetOrCreate(botToken, apiServerUrl);
 
         try
         {

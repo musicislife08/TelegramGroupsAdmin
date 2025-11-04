@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Services;
@@ -11,6 +10,7 @@ using TelegramGroupsAdmin.ContentDetection.Configuration;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -32,7 +32,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     private readonly IImpersonationAlertsRepository _impersonationAlertsRepository;
     private readonly ModerationActionService _moderationActionService;
     private readonly TelegramBotClientFactory _botClientFactory;
-    private readonly TelegramOptions _telegramOptions;
+    private readonly TelegramConfigLoader _configLoader;
     private readonly IConfigService _configService;
     private readonly ILogger<ImpersonationDetectionService> _logger;
 
@@ -52,7 +52,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         IImpersonationAlertsRepository impersonationAlertsRepository,
         ModerationActionService moderationActionService,
         TelegramBotClientFactory botClientFactory,
-        IOptions<TelegramOptions> telegramOptions,
+        TelegramConfigLoader configLoader,
         IConfigService configService,
         ILogger<ImpersonationDetectionService> logger)
     {
@@ -65,7 +65,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         _impersonationAlertsRepository = impersonationAlertsRepository;
         _moderationActionService = moderationActionService;
         _botClientFactory = botClientFactory;
-        _telegramOptions = telegramOptions.Value;
+        _configLoader = configLoader;
         _configService = configService;
         _logger = logger;
     }
@@ -258,7 +258,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             {
                 var reason = $"Auto-banned: Impersonation detected (name match: {result.NameMatch}, photo match: {result.PhotoMatch}, score: {result.TotalScore})";
 
-                var botClient = _botClientFactory.GetOrCreate(_telegramOptions.BotToken);
+                var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+                var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
                 var executor = Core.Models.Actor.Impersonation;
                 var banResult = await _moderationActionService.BanUserAsync(
                     botClient: botClient,

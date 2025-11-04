@@ -31,9 +31,15 @@ public class FileScanningTestService : IFileScanningTestService
         var fileHash = CalculateSHA256(fileBytes);
         _logger.LogDebug("File hash: {Hash}", fileHash);
 
-        // Run Tier 1 scan
-        var tier1Result = await _tier1Coordinator.ScanFileAsync(fileBytes, fileName, cancellationToken)
-            ;
+        // Write to temp file for scanning (Phase 6: coordinators now accept file paths)
+        string? tempFilePath = null;
+        try
+        {
+            tempFilePath = Path.Combine(Path.GetTempPath(), $"file_scan_test_{Guid.NewGuid():N}_{fileName}");
+            await File.WriteAllBytesAsync(tempFilePath, fileBytes, cancellationToken);
+
+            // Run Tier 1 scan
+            var tier1Result = await _tier1Coordinator.ScanFileAsync(tempFilePath, fileBytes.Length, fileName, cancellationToken);
 
         // Map to UI-friendly result
         var result = new FileScanTestResult
@@ -62,14 +68,31 @@ public class FileScanningTestService : IFileScanningTestService
             AllScannersErrored = tier1Result.AllScannersErrored
         };
 
-        _logger.LogInformation(
-            "File scan test complete: {FileName} - {Result} (hash: {Hash}, duration: {Duration}ms)",
-            fileName,
-            result.IsInfected ? "INFECTED" : "CLEAN",
-            fileHash,
-            result.TotalDurationMs);
+            _logger.LogInformation(
+                "File scan test complete: {FileName} - {Result} (hash: {Hash}, duration: {Duration}ms)",
+                fileName,
+                result.IsInfected ? "INFECTED" : "CLEAN",
+                fileHash,
+                result.TotalDurationMs);
 
-        return result;
+            return result;
+        }
+        finally
+        {
+            // Clean up temp file
+            if (tempFilePath != null && File.Exists(tempFilePath))
+            {
+                try
+                {
+                    File.Delete(tempFilePath);
+                    _logger.LogDebug("Deleted temp file: {TempPath}", tempFilePath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete temp file: {TempPath}", tempFilePath);
+                }
+            }
+        }
     }
 
     /// <summary>

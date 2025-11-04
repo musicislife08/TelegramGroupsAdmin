@@ -29,20 +29,22 @@ public class Tier1VotingCoordinator
     /// <summary>
     /// Scan file with all Tier 1 scanners in parallel
     /// Returns aggregated result with OR voting logic
+    /// Phase 6: Updated to accept file path instead of byte array for large file support
     /// </summary>
     public async Task<Tier1ScanResult> ScanFileAsync(
-        byte[] fileBytes,
+        string filePath,
+        long fileSize,
         string? fileName = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Starting Tier 1 scan (file: {FileName}, size: {Size} bytes)",
-            fileName ?? "unknown", fileBytes.Length);
+            fileName ?? "unknown", fileSize);
 
         // Check file size limit
-        if (fileBytes.Length > _config.General.MaxFileSizeBytes)
+        if (fileSize > _config.General.MaxFileSizeBytes)
         {
             _logger.LogWarning("File exceeds size limit ({Size} > {Limit}), skipping scan",
-                fileBytes.Length, _config.General.MaxFileSizeBytes);
+                fileSize, _config.General.MaxFileSizeBytes);
 
             return new Tier1ScanResult
             {
@@ -50,7 +52,7 @@ public class Tier1VotingCoordinator
                 ThreatDetected = false,
                 ScannerResults = [],
                 TotalDurationMs = 0,
-                SkippedReason = $"File size {fileBytes.Length} exceeds limit {_config.General.MaxFileSizeBytes}"
+                SkippedReason = $"File size {fileSize} exceeds limit {_config.General.MaxFileSizeBytes}"
             };
         }
 
@@ -59,7 +61,7 @@ public class Tier1VotingCoordinator
         // Launch ClamAV scan
         if (_config.Tier1.ClamAV.Enabled)
         {
-            scanTasks.Add(_clamAvScanner.ScanFileAsync(fileBytes, fileName, cancellationToken));
+            scanTasks.Add(_clamAvScanner.ScanFileAsync(filePath, fileName, cancellationToken));
         }
 
         // TODO: Add Windows AMSI scanner when implemented (Phase 3)

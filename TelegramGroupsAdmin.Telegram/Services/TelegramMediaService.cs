@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
+using Telegram.Bot.Exceptions;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -16,12 +17,12 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class TelegramMediaService(
     ILogger<TelegramMediaService> logger,
     TelegramBotClientFactory botClientFactory,
-    IOptions<TelegramOptions> telegramOptions,
+    TelegramConfigLoader configLoader,
     IOptions<MessageHistoryOptions> historyOptions)
 {
     private readonly ILogger<TelegramMediaService> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly string _botToken = telegramOptions.Value.BotToken;
+    private readonly TelegramConfigLoader _configLoader = configLoader;
     private readonly string _mediaStoragePath = historyOptions.Value.ImageStoragePath; // Reuse same base path
 
     /// <summary>
@@ -38,7 +39,9 @@ public class TelegramMediaService(
     {
         try
         {
-            var botClient = _botClientFactory.GetOrCreate(_botToken);
+            // Load bot config from database
+            var (botToken, _, apiServerUrl) = await _configLoader.LoadConfigAsync();
+            var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
 
             // Get file info from Telegram
             var file = await botClient.GetFile(fileId, cancellationToken);
@@ -79,6 +82,19 @@ public class TelegramMediaService(
 
             // Return just the filename - UI will construct full path from MediaType
             return uniqueFileName;
+        }
+        catch (ApiRequestException ex) when (ex.Message.Contains("file is too big"))
+        {
+            // File exceeds Telegram Bot API 20MB download limit (standard api.telegram.org)
+            // This is expected for large files when not using self-hosted Bot API server
+            _logger.LogWarning(
+                "Skipping {MediaType} download for message {MessageId}: File exceeds Telegram Bot API 20MB limit. " +
+                "File ID: {FileId}. " +
+                "To download files >20MB, configure self-hosted Bot API server (Settings → Telegram Bot → API Server URL).",
+                mediaType,
+                messageId,
+                fileId);
+            return null; // Graceful skip - metadata saved, but no local file
         }
         catch (Exception ex)
         {

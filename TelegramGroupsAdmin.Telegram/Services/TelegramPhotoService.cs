@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using Telegram.Bot;
+using Telegram.Bot.Exceptions;
 using TelegramGroupsAdmin.Configuration;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -90,6 +91,14 @@ public class TelegramPhotoService
                 }
             }
         }
+        catch (ApiRequestException ex) when (ex.Message.Contains("file is too big"))
+        {
+            _logger.LogWarning(
+                "Skipping chat icon download for {ChatId}: File exceeds Telegram Bot API 20MB limit. " +
+                "To download large profile photos, configure self-hosted Bot API server (Settings → Telegram Bot → API Server URL).",
+                chatId);
+            return null;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to fetch chat icon for {ChatId}", chatId);
@@ -174,6 +183,14 @@ public class TelegramPhotoService
                     File.Delete(tempPath);
                 }
             }
+        }
+        catch (ApiRequestException ex) when (ex.Message.Contains("file is too big"))
+        {
+            _logger.LogWarning(
+                "Skipping user photo download for {UserId}: File exceeds Telegram Bot API 20MB limit. " +
+                "To download large profile photos, configure self-hosted Bot API server (Settings → Telegram Bot → API Server URL).",
+                userId);
+            return null;
         }
         catch (Exception ex)
         {

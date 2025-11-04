@@ -33,21 +33,11 @@ public class CriticalMigrationTests
         await helper.CreateDatabaseAndMigrateToAsync("20251024213912_BackfillAutoTrustedUsers");
 
         // First, create a web user that will be referenced in audit_log
-        await using (var context = helper.GetDbContext())
-        {
-            context.Users.Add(new UserRecordDto
-            {
-                Id = "user-123",
-                Email = "user123@test.com",
-                NormalizedEmail = "USER123@TEST.COM",
-                PasswordHash = "hash",
-                SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = PermissionLevel.Admin,
-                Status = UserStatus.Active,
-                CreatedAt = DateTimeOffset.UtcNow
-            });
-            await context.SaveChangesAsync();
-        }
+        // Use raw SQL to avoid EF Core trying to insert is_bot column (added in later migration)
+        await helper.ExecuteSqlAsync($@"
+            INSERT INTO users (id, email, normalized_email, password_hash, security_stamp, permission_level, status, is_active, totp_enabled, email_verified, created_at)
+            VALUES ('user-123', 'user123@test.com', 'USER123@TEST.COM', 'hash', '{Guid.NewGuid()}', 0, 1, true, false, false, NOW());
+        ");
 
         // Seed audit_log with test data using LEGACY schema (before Actor exclusive arc migration)
         await helper.ExecuteSqlAsync(@"
@@ -254,17 +244,15 @@ public class CriticalMigrationTests
         }
 
         // Create telegram users with different statuses
-        await using (var context = helper.GetDbContext())
-        {
-            context.TelegramUsers.AddRange(
-                new TelegramUserDto { TelegramUserId = 1001, FirstName = "Admin", IsTrusted = false, FirstSeenAt = DateTimeOffset.UtcNow },
-                new TelegramUserDto { TelegramUserId = 2001, FirstName = "Trusted", IsTrusted = true, FirstSeenAt = DateTimeOffset.UtcNow },
-                new TelegramUserDto { TelegramUserId = 3001, FirstName = "Regular", IsTrusted = false, FirstSeenAt = DateTimeOffset.UtcNow },
-                new TelegramUserDto { TelegramUserId = 4001, FirstName = "Both", IsTrusted = true, FirstSeenAt = DateTimeOffset.UtcNow },
-                new TelegramUserDto { TelegramUserId = 5001, FirstName = "Checked", IsTrusted = false, FirstSeenAt = DateTimeOffset.UtcNow }
-            );
-            await context.SaveChangesAsync();
-        }
+        // Use raw SQL to avoid EF Core trying to insert is_bot column (added in later migration)
+        await helper.ExecuteSqlAsync(@"
+            INSERT INTO telegram_users (telegram_user_id, first_name, is_trusted, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at) VALUES
+            (1001, 'Admin', false, false, NOW(), NOW(), NOW(), NOW()),
+            (2001, 'Trusted', true, false, NOW(), NOW(), NOW(), NOW()),
+            (3001, 'Regular', false, false, NOW(), NOW(), NOW(), NOW()),
+            (4001, 'Both', true, false, NOW(), NOW(), NOW(), NOW()),
+            (5001, 'Checked', false, false, NOW(), NOW(), NOW(), NOW());
+        ");
 
         // Create chat_admins (user 1001 and 4001 are admins in chat 100)
         await using (var context = helper.GetDbContext())

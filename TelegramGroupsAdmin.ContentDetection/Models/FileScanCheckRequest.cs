@@ -3,13 +3,16 @@ namespace TelegramGroupsAdmin.ContentDetection.Models;
 /// <summary>
 /// Request structure for file scanning checks
 /// Used when a Telegram message contains a document/file attachment
+/// Phase 6: Refactored to use file path instead of in-memory bytes for large file support
 /// </summary>
 public class FileScanCheckRequest : ContentCheckRequestBase
 {
     /// <summary>
-    /// File bytes to scan (downloaded from Telegram)
+    /// Path to the temporary file to scan (downloaded from Telegram)
+    /// Scanners open their own streams from this path to enable parallel scanning
+    /// File will be deleted by caller after all scans complete
     /// </summary>
-    public required byte[] FileBytes { get; init; }
+    public required string FilePath { get; init; }
 
     /// <summary>
     /// Original file name from Telegram
