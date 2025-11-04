@@ -346,6 +346,7 @@ public class DmDeliveryService : IDmDeliveryService
                         chatId: telegramUserId,
                         text: messageText,
                         parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                        linkPreviewOptions: new global::Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true },
                         cancellationToken: cancellationToken);
                 }
             }
@@ -356,6 +357,7 @@ public class DmDeliveryService : IDmDeliveryService
                     chatId: telegramUserId,
                     text: messageText,
                     parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
+                    linkPreviewOptions: new global::Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true },
                     cancellationToken: cancellationToken);
 
                 _logger.LogInformation("DM sent successfully to user {UserId}", telegramUserId);
