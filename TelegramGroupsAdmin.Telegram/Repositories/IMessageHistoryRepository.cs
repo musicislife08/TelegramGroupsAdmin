@@ -13,6 +13,7 @@ public interface IMessageHistoryRepository
     Task<UiModels.MessageRecord?> GetMessageAsync(long messageId, CancellationToken cancellationToken = default);
     Task UpdateMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default);
     Task UpdateMediaLocalPathAsync(long messageId, string localPath, CancellationToken cancellationToken = default);
+    Task UpdateMessageTextAsync(long messageId, string enrichedText, CancellationToken cancellationToken = default);
     Task MarkMessageAsDeletedAsync(long messageId, string deletionSource, CancellationToken cancellationToken = default);
 
     // Message counts (used by impersonation detection and chat-specific queries)

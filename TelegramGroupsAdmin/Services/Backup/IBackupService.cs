@@ -52,4 +52,26 @@ public interface IBackupService
     /// <param name="backupBytes">Backup file bytes</param>
     /// <returns>True if encrypted, false if plain gzip</returns>
     Task<bool> IsEncryptedAsync(byte[] backupBytes);
+
+    /// <summary>
+    /// Create a backup and save to disk with retention cleanup
+    /// Used by both scheduled backups and manual "Backup Now" button
+    /// </summary>
+    /// <param name="backupDirectory">Directory to save backup</param>
+    /// <param name="retentionConfig">Retention policy configuration</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Result with filename, path, size, and cleanup count</returns>
+    Task<BackupResult> CreateBackupWithRetentionAsync(
+        string backupDirectory,
+        RetentionConfig retentionConfig,
+        CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Result of creating a backup with retention cleanup
+/// </summary>
+public record BackupResult(
+    string Filename,
+    string FilePath,
+    long SizeBytes,
+    int DeletedCount);

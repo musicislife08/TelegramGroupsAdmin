@@ -214,6 +214,8 @@
                 @* Message Text (Phase 4.20: Show translation or original based on toggle) *@
                 @if (!string.IsNullOrEmpty(Message.MessageText))
                 {
+                    var (messageContent, urlPreviews) = ParseUrlPreviews(Message.MessageText);
+
                     @if (_showTranslation && Message.Translation != null)
                     {
                         <div class="tg-text tg-text-translated">
@@ -222,19 +224,37 @@
                     }
                     else
                     {
-                        <div class="tg-text">@Message.MessageText</div>
+                        <div class="tg-text">@messageContent</div>
                     }
-                }
 
-                @* URLs *@
-                @if (!string.IsNullOrEmpty(Message.Urls))
-                {
-                    <div class="tg-urls">
-                        @foreach (var url in GetUrls())
-                        {
-                            <div class="tg-url" title="@url">🔗 @TruncateUrl(url)</div>
-                        }
-                    </div>
+                    @* URL Previews Section (Telegram-style cards) *@
+                    @if (urlPreviews != null && urlPreviews.Any())
+                    {
+                        <div class="tg-url-previews">
+                            @foreach (var preview in urlPreviews)
+                            {
+                                <div class="tg-url-preview-card">
+                                    <a href="@preview.Url" target="_blank" class="tg-preview-url" rel="noopener noreferrer">@preview.Url</a>
+                                    @if (!string.IsNullOrEmpty(preview.Title))
+                                    {
+                                        <div class="tg-preview-title">@preview.Title</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(preview.Description))
+                                    {
+                                        <div class="tg-preview-description">@preview.Description</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(preview.OgTitle))
+                                    {
+                                        <div class="tg-preview-og-title">@preview.OgTitle</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(preview.OgDescription))
+                                    {
+                                        <div class="tg-preview-og-description">@preview.OgDescription</div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
                 }
             </div>
 
@@ -451,21 +471,6 @@
         return baseClass;
     }
 
-    private string[] GetUrls()
-    {
-        if (string.IsNullOrEmpty(Message.Urls))
-            return [];
-        return Message.Urls.Split(',', StringSplitOptions.RemoveEmptyEntries);
-    }
-
-    private string TruncateUrl(string url)
-    {
-        const int maxLength = 50;
-        if (url.Length <= maxLength)
-            return url;
-        return url.Substring(0, maxLength - 3) + "...";
-    }
-
     private string GetImagePath(string? path)
     {
         if (string.IsNullOrEmpty(path))
@@ -557,5 +562,64 @@
     private void ToggleTranslation()
     {
         _showTranslation = !_showTranslation;
+    }
+
+    /// <summary>
+    /// Parse message text to extract URL previews section
+    /// Returns tuple of (message content, list of URL previews)
+    /// </summary>
+    private (string messageContent, List<UrlPreview>? urlPreviews) ParseUrlPreviews(string messageText)
+    {
+        const string delimiter = "\n\n━━━ URL Previews ━━━\n\n";
+
+        if (!messageText.Contains(delimiter))
+        {
+            return (messageText, null);
+        }
+
+        var parts = messageText.Split(new[] { delimiter }, 2, StringSplitOptions.None);
+        var content = parts[0];
+        var previewSection = parts.Length > 1 ? parts[1] : null;
+
+        if (string.IsNullOrEmpty(previewSection))
+        {
+            return (content, null);
+        }
+
+        // Parse each URL preview block (separated by double newline)
+        var previewBlocks = previewSection.Split(new[] { "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var previews = new List<UrlPreview>();
+
+        foreach (var block in previewBlocks)
+        {
+            var lines = block.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            if (lines.Length == 0)
+                continue;
+
+            var preview = new UrlPreview
+            {
+                Url = lines[0],
+                Title = lines.Length > 1 ? lines[1] : null,
+                Description = lines.Length > 2 ? lines[2] : null,
+                OgTitle = lines.Length > 3 ? lines[3] : null,
+                OgDescription = lines.Length > 4 ? lines[4] : null
+            };
+
+            previews.Add(preview);
+        }
+
+        return (content, previews.Count > 0 ? previews : null);
+    }
+
+    /// <summary>
+    /// URL preview data extracted from enriched message text
+    /// </summary>
+    private record UrlPreview
+    {
+        public string Url { get; init; } = string.Empty;
+        public string? Title { get; init; }
+        public string? Description { get; init; }
+        public string? OgTitle { get; init; }
+        public string? OgDescription { get; init; }
     }
 }

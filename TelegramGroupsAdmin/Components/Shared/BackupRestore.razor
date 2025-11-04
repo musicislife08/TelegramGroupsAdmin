@@ -47,25 +47,25 @@ else
 
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Primary"
-                           StartIcon="@Icons.Material.Filled.Download"
-                           OnClick="@ExportBackup"
+                           StartIcon="@Icons.Material.Filled.Backup"
+                           OnClick="@CreateManualBackup"
                            Disabled="@_isExporting"
                            FullWidth="true">
                     @if (_isExporting)
                     {
                         <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                        <span>Creating encrypted backup...</span>
+                        <span>Creating backup...</span>
                     }
                     else
                     {
-                        <span>Create & Download Backup</span>
+                        <span>Backup Now</span>
                     }
                 </MudButton>
 
-                @if (_lastBackupSize > 0)
+                @if (_lastBackupFilename != null)
                 {
                     <MudAlert Severity="Severity.Success" Class="mt-4">
-                        Encrypted backup created: @FormatBytes(_lastBackupSize)
+                        Backup saved: <strong>@_lastBackupFilename</strong> (@FormatBytes(_lastBackupSize))
                     </MudAlert>
                 }
 
@@ -324,6 +324,7 @@ else
     private bool _encryptionConfigured;
     private bool _isExporting;
     private long _lastBackupSize;
+    private string? _lastBackupFilename;
 
     // Upload restore state
     private IBrowserFile? _selectedFile;
@@ -520,23 +521,39 @@ else
         }
     }
 
-    private async Task ExportBackup()
+    private async Task CreateManualBackup()
     {
         _isExporting = true;
         _lastBackupSize = 0;
+        _lastBackupFilename = null;
         StateHasChanged();
 
         try
         {
-            var backupBytes = await BackupService.ExportAsync();
-            _lastBackupSize = backupBytes.Length;
+            // Build retention config
+            var retentionConfig = new RetentionConfig
+            {
+                RetainHourlyBackups = _editRetainHourlyBackups,
+                RetainDailyBackups = _editRetainDailyBackups,
+                RetainWeeklyBackups = _editRetainWeeklyBackups,
+                RetainMonthlyBackups = _editRetainMonthlyBackups,
+                RetainYearlyBackups = _editRetainYearlyBackups
+            };
 
-            var fileName = $"telegram_groups_admin_backup_{DateTimeOffset.UtcNow:yyyyMMdd_HHmmss}.tar.gz";
-            await JsRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(backupBytes));
+            // Create backup with retention (shared logic with ScheduledBackupJob)
+            var result = await BackupService.CreateBackupWithRetentionAsync(_currentBackupDirectory, retentionConfig, CancellationToken.None);
 
-            Snackbar.Add($"Encrypted backup created successfully! ({FormatBytes(backupBytes.Length)})", Severity.Success);
+            _lastBackupSize = result.SizeBytes;
+            _lastBackupFilename = result.Filename;
 
-            // Refresh backup browser
+            var message = $"Backup created: {result.Filename} ({FormatBytes(result.SizeBytes)})";
+            if (result.DeletedCount > 0)
+            {
+                message += $" • Cleaned up {result.DeletedCount} old backup{(result.DeletedCount > 1 ? "s" : "")}";
+            }
+            Snackbar.Add(message, Severity.Success);
+
+            // Refresh backup browser to show new file
             if (_backupBrowser != null)
             {
                 await _backupBrowser.LoadBackupsAsync();

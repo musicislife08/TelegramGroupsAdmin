@@ -28,6 +28,7 @@ public class BackupService : IBackupService
     private readonly IPassphraseManagementService _passphraseService;
     private readonly IBackupConfigurationService _configService;
     private readonly DependencyResolutionService _dependencyResolutionService;
+    private readonly BackupRetentionService _retentionService;
     private const string CurrentVersion = "2.0";
 
     public BackupService(
@@ -42,7 +43,8 @@ public class BackupService : IBackupService
         TableExportService tableExportService,
         IPassphraseManagementService passphraseService,
         IBackupConfigurationService configService,
-        DependencyResolutionService dependencyResolutionService)
+        DependencyResolutionService dependencyResolutionService,
+        BackupRetentionService retentionService)
     {
         _dataSource = dataSource;
         _logger = logger;
@@ -56,6 +58,7 @@ public class BackupService : IBackupService
         _passphraseService = passphraseService;
         _configService = configService;
         _dependencyResolutionService = dependencyResolutionService;
+        _retentionService = retentionService;
     }
 
     public async Task<byte[]> ExportAsync()
@@ -762,6 +765,58 @@ public class BackupService : IBackupService
         }
     }
 
+    public async Task<BackupResult> CreateBackupWithRetentionAsync(
+        string backupDirectory,
+        RetentionConfig retentionConfig,
+        CancellationToken cancellationToken = default)
+    {
+        // Generate backup
+        var backupBytes = await ExportAsync();
+
+        // Ensure directory exists
+        Directory.CreateDirectory(backupDirectory);
+
+        // Save backup with timestamp
+        var timestamp = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss");
+        var filename = $"backup_{timestamp}.tar.gz";
+        var filepath = Path.Combine(backupDirectory, filename);
+
+        await File.WriteAllBytesAsync(filepath, backupBytes, cancellationToken);
+
+        // Apply retention cleanup
+        var backupFiles = Directory.GetFiles(backupDirectory, "backup_*.tar.gz")
+            .Select(f => new BackupFileInfo
+            {
+                FilePath = f,
+                CreatedAt = File.GetCreationTimeUtc(f),
+                FileSizeBytes = new FileInfo(f).Length
+            })
+            .ToList();
+
+        var toDelete = _retentionService.GetBackupsToDelete(backupFiles, retentionConfig);
+        var deletedCount = 0;
+
+        foreach (var backup in toDelete)
+        {
+            try
+            {
+                File.Delete(backup.FilePath);
+                deletedCount++;
+                _logger.LogDebug("Deleted old backup: {Filename}", Path.GetFileName(backup.FilePath));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to delete old backup: {Filename}", Path.GetFileName(backup.FilePath));
+            }
+        }
+
+        if (deletedCount > 0)
+        {
+            _logger.LogInformation("Deleted {Count} old backups via retention policy", deletedCount);
+        }
+
+        return new BackupResult(filename, filepath, backupBytes.Length, deletedCount);
+    }
 }
 
 /// <summary>

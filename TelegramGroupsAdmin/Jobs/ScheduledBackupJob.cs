@@ -40,34 +40,11 @@ public class ScheduledBackupJob
 
             using var scope = _scopeFactory.CreateScope();
             var backupService = scope.ServiceProvider.GetRequiredService<IBackupService>();
-            var retentionService = scope.ServiceProvider.GetRequiredService<BackupRetentionService>();
-
-            // Generate backup
-            var backupBytes = await backupService.ExportAsync();
-            var backupSizeMb = backupBytes.Length / 1024.0 / 1024.0;
 
             // Determine backup directory
             var backupDir = payload.BackupDirectory ?? Path.Combine("data", "backups");
-            Directory.CreateDirectory(backupDir); // Ensure directory exists
 
-            // Save backup with timestamp (updated extension to .tar.gz for encrypted backups)
-            var timestamp = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd_HH-mm-ss");
-            var filename = $"backup_{timestamp}.tar.gz";
-            var filepath = Path.Combine(backupDir, filename);
-
-            await File.WriteAllBytesAsync(filepath, backupBytes, cancellationToken);
-            _logger.LogInformation("Backup saved to {Filepath} ({SizeMB:F2} MB)", filepath, backupSizeMb);
-
-            // Clean up old backups using granular retention strategy
-            var backupFiles = Directory.GetFiles(backupDir, "backup_*.tar.gz")
-                .Select(f => new BackupFileInfo
-                {
-                    FilePath = f,
-                    CreatedAt = File.GetCreationTimeUtc(f),
-                    FileSizeBytes = new FileInfo(f).Length
-                })
-                .ToList();
-
+            // Build retention config
             var retentionConfig = new RetentionConfig
             {
                 RetainHourlyBackups = payload.RetainHourlyBackups,
@@ -77,26 +54,15 @@ public class ScheduledBackupJob
                 RetainYearlyBackups = payload.RetainYearlyBackups
             };
 
-            var toDelete = retentionService.GetBackupsToDelete(backupFiles, retentionConfig);
-            var deletedCount = 0;
+            // Create backup with retention (shared logic)
+            var result = await backupService.CreateBackupWithRetentionAsync(backupDir, retentionConfig, cancellationToken);
+            var backupSizeMb = result.SizeBytes / 1024.0 / 1024.0;
 
-            foreach (var backup in toDelete)
-            {
-                try
-                {
-                    File.Delete(backup.FilePath);
-                    deletedCount++;
-                    _logger.LogDebug("Deleted old backup: {Filename}", Path.GetFileName(backup.FilePath));
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to delete old backup: {Filename}", Path.GetFileName(backup.FilePath));
-                }
-            }
+            _logger.LogInformation("Backup saved to {Filepath} ({SizeMB:F2} MB)", result.FilePath, backupSizeMb);
 
-            if (deletedCount > 0)
+            if (result.DeletedCount > 0)
             {
-                _logger.LogInformation("Deleted {Count} old backups via granular retention policy", deletedCount);
+                _logger.LogInformation("Deleted {Count} old backups via retention policy", result.DeletedCount);
             }
 
             _logger.LogInformation("Scheduled backup completed successfully");

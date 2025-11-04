@@ -458,6 +458,25 @@ public partial class MessageProcessingService(
                     translation.DetectedLanguage);
             }
 
+            // Enrich message with URL previews if URLs are present (reuse already-extracted URLs from line 292)
+            // This runs AFTER message save but BEFORE content detection so all algorithms benefit
+            if (urls != null && urls.Any())
+            {
+                var urlScrapingService = messageScope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IUrlContentScrapingService>();
+                var enrichedText = await urlScrapingService.EnrichMessageWithUrlPreviewsAsync(text!, cancellationToken);
+
+                if (enrichedText != text) // Content was enriched
+                {
+                    await repository.UpdateMessageTextAsync(message.MessageId, enrichedText, cancellationToken);
+                    text = enrichedText; // Use enriched text for content detection later
+
+                    logger.LogDebug(
+                        "Enriched message {MessageId} with URL previews ({UrlCount} URLs)",
+                        message.MessageId,
+                        urls.Count);
+                }
+            }
+
             // Upsert user into telegram_users table (centralized user tracking)
             var telegramUserRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
             var telegramUser = new TelegramGroupsAdmin.Telegram.Models.TelegramUser(

@@ -173,16 +173,6 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 CancellationToken = cancellationToken
             },
 
-            CheckName.SeoScraping => new SeoScrapingCheckRequest
-            {
-                Message = originalRequest.Message ?? "",
-                UserId = originalRequest.UserId,
-                UserName = originalRequest.UserName,
-                ChatId = originalRequest.ChatId,
-                ConfidenceThreshold = 75, // No config property, using default
-                CancellationToken = cancellationToken
-            },
-
             CheckName.ImageSpam => new ImageCheckRequest
             {
                 Message = originalRequest.Message ?? "",
@@ -233,7 +223,6 @@ public class ContentDetectionEngine : IContentDetectionEngine
             CheckName.OpenAI => config.OpenAI.Enabled && (!config.OpenAI.VetoMode || request.HasSpamFlags),
             CheckName.ThreatIntel => config.ThreatIntel.Enabled && request.Urls.Any(),
             CheckName.UrlBlocklist => config.UrlBlocklist.Enabled && request.Urls.Any(),
-            CheckName.SeoScraping => config.SeoScraping.Enabled,
             CheckName.ImageSpam => config.ImageSpam.Enabled && (request.ImageData != null || !string.IsNullOrEmpty(request.PhotoFileId) || !string.IsNullOrEmpty(request.PhotoLocalPath)),
             CheckName.VideoSpam => config.VideoSpam.Enabled && !string.IsNullOrEmpty(request.VideoLocalPath),
             CheckName.FileScanning => true, // Always run file scanning if check exists

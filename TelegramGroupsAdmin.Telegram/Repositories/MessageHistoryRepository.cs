@@ -173,6 +173,18 @@ public class MessageHistoryRepository : IMessageHistoryRepository
         }
     }
 
+    public async Task UpdateMessageTextAsync(long messageId, string enrichedText, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await context.Messages.FindAsync([messageId], cancellationToken);
+
+        if (entity != null)
+        {
+            entity.MessageText = enrichedText;
+            await context.SaveChangesAsync(cancellationToken);
+        }
+    }
+
     public async Task UpdateMessageAsync(UiModels.MessageRecord message, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
