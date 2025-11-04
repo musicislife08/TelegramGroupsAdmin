@@ -126,6 +126,7 @@ public class UserRepository : IUserRepository
 
         entity.TotpSecret = null;
         entity.TotpEnabled = false;
+        entity.TotpSetupStartedAt = null;
         await context.SaveChangesAsync(ct);
 
         _logger.LogInformation("Disabled TOTP for user {UserId}", userId);
