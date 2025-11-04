@@ -196,6 +196,41 @@ public class TotpService(
         return true;
     }
 
+    public async Task<bool> AdminDisableTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
+    {
+        // Verify admin is Owner
+        var admin = await userRepository.GetByIdAsync(adminUserId, ct);
+        if (admin is null || admin.PermissionLevelInt != (int)Core.Models.PermissionLevel.Owner)
+        {
+            logger.LogWarning("Non-Owner user {AdminUserId} attempted to admin-disable TOTP for user {TargetUserId}", adminUserId, targetUserId);
+            return false;
+        }
+
+        // Verify target user exists
+        var targetUser = await userRepository.GetByIdAsync(targetUserId, ct);
+        if (targetUser is null)
+        {
+            logger.LogWarning("Admin {AdminUserId} attempted to disable TOTP for non-existent user {TargetUserId}", adminUserId, targetUserId);
+            return false;
+        }
+
+        // Disable TOTP without password check
+        await userRepository.DisableTotpAsync(targetUserId, ct);
+        await userRepository.UpdateSecurityStampAsync(targetUserId, ct);
+
+        logger.LogWarning("TOTP admin-disabled for user {TargetUserId} by Owner {AdminUserId}", targetUserId, adminUserId);
+
+        // Audit log
+        await auditLog.LogEventAsync(
+            AuditEventType.UserTotpReset,
+            actor: Actor.FromWebUser(adminUserId),
+            target: Actor.FromWebUser(targetUserId),
+            value: $"TOTP 2FA disabled by Owner admin override (admin: {admin.Email})",
+            ct: ct);
+
+        return true;
+    }
+
     public async Task<IReadOnlyList<string>> GenerateRecoveryCodesAsync(string userId, CancellationToken ct = default)
     {
         var codes = new List<string>();

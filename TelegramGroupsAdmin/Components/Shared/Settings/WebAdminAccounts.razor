@@ -126,10 +126,15 @@
                             }
                             @if (context.TotpEnabled && _currentUserPermissionLevel >= PermissionLevel.Owner)
                             {
+                                <MudMenuItem Icon="@Icons.Material.Filled.LockOpen"
+                                            IconColor="Color.Warning"
+                                            OnClick="@(() => DisableTotp(context))">
+                                    Disable TOTP
+                                </MudMenuItem>
                                 <MudMenuItem Icon="@Icons.Material.Filled.LockReset"
                                             IconColor="Color.Warning"
                                             OnClick="@(() => Reset2Fa(context))">
-                                    Reset 2FA
+                                    Reset 2FA (Full Reset)
                                 </MudMenuItem>
                             }
                             @if (context.IsLocked)
@@ -409,6 +414,36 @@
             catch (Exception ex)
             {
                 Snackbar.Add($"Error deleting user: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DisableTotp(UserRecord user)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Disable TOTP",
+            $"Are you sure you want to disable TOTP for {user.Email}?\n\n" +
+            "This will allow them to log in without 2FA. The user can re-enable TOTP later from their profile settings.",
+            yesText: "Disable TOTP", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                var success = await AuthService.AdminDisableTotpAsync(user.Id, _currentUserId!);
+                if (success)
+                {
+                    Snackbar.Add($"Disabled TOTP for {user.Email}", Severity.Success);
+                    await LoadUsersAsync();
+                }
+                else
+                {
+                    Snackbar.Add($"Failed to disable TOTP for {user.Email}. You may not have permission.", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error disabling TOTP: {ex.Message}", Severity.Error);
             }
         }
     }
