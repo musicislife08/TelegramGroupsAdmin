@@ -57,24 +57,23 @@ public partial class UrlContentScrapingService(
             // Format preview for this URL
             previewBuilder.AppendLine(url);
 
-            if (!string.IsNullOrWhiteSpace(preview.Title))
+            // Deduplicate content - collect unique non-empty values
+            // Priority order: og:description > description > og:title > title
+            var seenContent = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var contentPriority = new[]
             {
-                previewBuilder.AppendLine(preview.Title);
-            }
+                preview.OgDescription,
+                preview.Description,
+                preview.OgTitle,
+                preview.Title
+            };
 
-            if (!string.IsNullOrWhiteSpace(preview.Description))
+            foreach (var content in contentPriority)
             {
-                previewBuilder.AppendLine(preview.Description);
-            }
-
-            if (!string.IsNullOrWhiteSpace(preview.OgTitle))
-            {
-                previewBuilder.AppendLine(preview.OgTitle);
-            }
-
-            if (!string.IsNullOrWhiteSpace(preview.OgDescription))
-            {
-                previewBuilder.AppendLine(preview.OgDescription);
+                if (!string.IsNullOrWhiteSpace(content) && seenContent.Add(content))
+                {
+                    previewBuilder.AppendLine(content);
+                }
             }
 
             previewBuilder.AppendLine(); // Blank line between URLs
