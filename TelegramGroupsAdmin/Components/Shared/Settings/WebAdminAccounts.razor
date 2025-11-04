@@ -124,18 +124,21 @@
                                     Resend Verification Email
                                 </MudMenuItem>
                             }
-                            @if (context.TotpEnabled && _currentUserPermissionLevel >= PermissionLevel.Owner)
+                            @if (_currentUserPermissionLevel >= PermissionLevel.Owner && (context.TotpEnabled || context.TotpSetupStartedAt.HasValue))
                             {
                                 <MudMenuItem Icon="@Icons.Material.Filled.LockOpen"
                                             IconColor="Color.Warning"
                                             OnClick="@(() => DisableTotp(context))">
-                                    Disable TOTP
+                                    @(context.TotpEnabled ? "Disable TOTP" : "Clear TOTP Setup")
                                 </MudMenuItem>
-                                <MudMenuItem Icon="@Icons.Material.Filled.LockReset"
-                                            IconColor="Color.Warning"
-                                            OnClick="@(() => Reset2Fa(context))">
-                                    Reset 2FA (Full Reset)
-                                </MudMenuItem>
+                                @if (context.TotpEnabled)
+                                {
+                                    <MudMenuItem Icon="@Icons.Material.Filled.LockReset"
+                                                IconColor="Color.Warning"
+                                                OnClick="@(() => Reset2Fa(context))">
+                                        Reset 2FA (Full Reset)
+                                    </MudMenuItem>
+                                }
                             }
                             @if (context.IsLocked)
                             {
@@ -420,11 +423,20 @@
 
     private async Task DisableTotp(UserRecord user)
     {
+        var isSetupInProgress = !user.TotpEnabled && user.TotpSetupStartedAt.HasValue;
+        var title = isSetupInProgress ? "Clear TOTP Setup" : "Disable TOTP";
+        var message = isSetupInProgress
+            ? $"Are you sure you want to clear the incomplete TOTP setup for {user.Email}?\n\n" +
+              "This will remove their TOTP secret and allow them to log in normally. " +
+              "They can start TOTP setup again later if needed."
+            : $"Are you sure you want to disable TOTP for {user.Email}?\n\n" +
+              "This will allow them to log in without 2FA. The user can re-enable TOTP later from their profile settings.";
+
         var confirmed = await DialogService.ShowMessageBox(
-            "Disable TOTP",
-            $"Are you sure you want to disable TOTP for {user.Email}?\n\n" +
-            "This will allow them to log in without 2FA. The user can re-enable TOTP later from their profile settings.",
-            yesText: "Disable TOTP", cancelText: "Cancel");
+            title,
+            message,
+            yesText: title,
+            cancelText: "Cancel");
 
         if (confirmed == true)
         {
@@ -433,7 +445,8 @@
                 var success = await AuthService.AdminDisableTotpAsync(user.Id, _currentUserId!);
                 if (success)
                 {
-                    Snackbar.Add($"Disabled TOTP for {user.Email}", Severity.Success);
+                    var action = isSetupInProgress ? "Cleared incomplete TOTP setup" : "Disabled TOTP";
+                    Snackbar.Add($"{action} for {user.Email}", Severity.Success);
                     await LoadUsersAsync();
                 }
                 else
