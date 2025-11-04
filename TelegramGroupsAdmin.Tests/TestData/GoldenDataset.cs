@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Constants;
 
 namespace TelegramGroupsAdmin.Tests.TestData;
 
@@ -297,7 +298,7 @@ public static class GoldenDataset
     public static async Task SeedDatabaseAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
     {
         // Create Data Protector for API keys if provider available
-        var apiKeyProtector = dataProtectionProvider?.CreateProtector("ApiKeys");
+        var apiKeyProtector = dataProtectionProvider?.CreateProtector(DataProtectionPurposes.ApiKeys);
 
         // 1. Seed telegram_users (no FK dependencies)
         // Insert separately to handle nulls properly

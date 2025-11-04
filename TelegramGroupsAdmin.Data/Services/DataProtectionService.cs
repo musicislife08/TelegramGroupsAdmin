@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.DataProtection;
+using TelegramGroupsAdmin.Data.Constants;
 
 namespace TelegramGroupsAdmin.Data.Services;
 
@@ -8,7 +9,7 @@ public class DataProtectionService : IDataProtectionService
 
     public DataProtectionService(IDataProtectionProvider provider)
     {
-        _protector = provider.CreateProtector("TgSpamPreFilter.TotpSecrets");
+        _protector = provider.CreateProtector(DataProtectionPurposes.TotpSecrets);
     }
 
     public string Protect(string totpSecret)

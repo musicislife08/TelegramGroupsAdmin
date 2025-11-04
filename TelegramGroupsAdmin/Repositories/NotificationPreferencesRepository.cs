@@ -3,6 +3,7 @@ using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Data.Constants;
 using TelegramGroupsAdmin.Telegram.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
@@ -20,7 +21,7 @@ public class NotificationPreferencesRepository : INotificationPreferencesReposit
         ILogger<NotificationPreferencesRepository> logger)
     {
         _contextFactory = contextFactory;
-        _secretsProtector = dataProtectionProvider.CreateProtector("TgSpamPreFilter.NotificationSecrets");
+        _secretsProtector = dataProtectionProvider.CreateProtector(DataProtectionPurposes.NotificationSecrets);
         _logger = logger;
     }
 
