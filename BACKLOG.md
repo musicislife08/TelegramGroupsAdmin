@@ -1,6 +1,6 @@
 # Development Backlog - TelegramGroupsAdmin
 
-**Last Updated:** 2025-01-04
+**Last Updated:** 2025-11-04
 **Status:** Pre-production (breaking changes acceptable)
 **Overall Code Quality:** 89/100 (Excellent - homelab-optimized)
 
@@ -16,6 +16,47 @@ This document tracks technical debt, performance optimizations, refactoring work
 **Impact:** Prevent passphrase exposure in logs/exceptions
 
 **Action:** Audit BackupService, BackupEncryptionSetupDialog, BackupPassphraseRotationDialog, RotateBackupPassphraseJob for passphrase logging. Replace with `[REDACTED]` in all log statements.
+
+---
+
+### FEATURE-5.5: Duplicate Report Detection for /report Command
+
+**Priority:** MEDIUM - UX issue, admin notification spam
+**Impact:** Prevents duplicate reports, reduces admin notification fatigue
+
+**Current Problem:**
+- No duplicate protection at any level (database or application)
+- Same user can report same message unlimited times
+- Each duplicate creates separate database record + sends duplicate admin DM notifications
+- Clutters Reports dashboard and inflates metrics
+
+**Missing Safeguards:**
+1. **Database Level**: No unique constraint on `(message_id, chat_id, reported_by_user_id)`
+2. **Application Level**: ReportCommand.cs:89 directly inserts without checking existing reports
+3. **Repository Level**: ReportsRepository.InsertAsync performs blind inserts
+
+**Recommended Solution (Two Layers):**
+
+**Layer 1: Application-Level Check**
+- Add `IReportsRepository.GetExistingReportAsync(messageId, chatId, reportedByUserId)` method
+- Check before insert in ReportCommand.ExecuteAsync (line 68)
+- Return friendly message: "ℹ️ You've already reported this message (Report #123). Status: Pending"
+
+**Layer 2: Database Constraint**
+- Add partial unique index: `CREATE UNIQUE INDEX IX_reports_unique_pending_per_user ON reports (message_id, chat_id, reported_by_user_id) WHERE status = 0`
+- Prevents duplicates for Pending reports only
+- Allows re-reporting after admin resolves (status != Pending)
+
+**Files Affected:**
+- TelegramGroupsAdmin.Telegram/Repositories/IReportsRepository.cs (new method)
+- TelegramGroupsAdmin.Telegram/Repositories/ReportsRepository.cs (implementation)
+- TelegramGroupsAdmin.Telegram/Services/BotCommands/Commands/ReportCommand.cs (duplicate check logic)
+- TelegramGroupsAdmin.Data/Migrations/YYYYMMDDHHMMSS_AddDuplicateReportConstraint.cs (new migration)
+
+**Testing:**
+- Unit tests for duplicate detection
+- Integration test: same user reports same message twice
+- Integration test: different users report same message (both should succeed)
 
 ---
 
