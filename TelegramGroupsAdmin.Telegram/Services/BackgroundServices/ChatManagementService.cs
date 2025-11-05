@@ -615,6 +615,15 @@ public class ChatManagementService(
                     ct: cancellationToken);
             }
         }
+        catch (OperationCanceledException cancelEx)
+        {
+            // Timeout or cancellation - transient error, don't send notification
+            // Includes TaskCanceledException from HTTP client timeouts
+            logger.LogWarning(cancelEx, "Request timeout/cancellation during health check for chat {ChatId} - will retry on next cycle", chatId);
+            health.IsReachable = false;
+            health.Status = "Error";
+            health.Warnings.Add($"Request timeout: {cancelEx.Message}");
+        }
         catch (HttpRequestException httpEx)
         {
             // Transient network error - log warning but don't send notification
@@ -626,24 +635,38 @@ public class ChatManagementService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Health check failed for chat {ChatId}", chatId);
-            health.IsReachable = false;
-            health.Status = "Error";
-            health.Warnings.Add($"Cannot reach chat: {ex.Message}");
+            // Check if this is a transient error before sending notification
+            var isTransient = IsTransientNetworkError(ex);
 
-            // Notify about critical health failure (Phase 5.1)
-            // Only send notifications for non-transient errors (e.g., bot kicked, permission issues)
-            // Create scope to resolve scoped INotificationService from singleton
-            using var scope = serviceProvider.CreateScope();
-            var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            if (isTransient)
+            {
+                logger.LogWarning(ex, "Transient network error during health check for chat {ChatId} - will retry on next cycle", chatId);
+                health.IsReachable = false;
+                health.Status = "Error";
+                health.Warnings.Add($"Temporary network issue: {ex.Message}");
+            }
+            else
+            {
+                // Critical error - likely bot kicked or permission denied
+                logger.LogError(ex, "Health check failed for chat {ChatId}", chatId);
+                health.IsReachable = false;
+                health.Status = "Error";
+                health.Warnings.Add($"Cannot reach chat: {ex.Message}");
 
-            _ = notificationService.SendSystemNotificationAsync(
-                eventType: NotificationEventType.ChatHealthWarning,
-                subject: $"Chat Health Check Failed: {chatName ?? chatId.ToString()}",
-                message: $"Critical: Health check failed for chat '{chatName ?? chatId.ToString()}'.\n\n" +
-                         $"Error: {ex.Message}\n\n" +
-                         $"The bot may have been removed from the chat or lost permissions.",
-                ct: cancellationToken);
+                // Notify about critical health failure (Phase 5.1)
+                // Only send notifications for non-transient errors (e.g., bot kicked, permission issues)
+                // Create scope to resolve scoped INotificationService from singleton
+                using var scope = serviceProvider.CreateScope();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+
+                _ = notificationService.SendSystemNotificationAsync(
+                    eventType: NotificationEventType.ChatHealthWarning,
+                    subject: $"Chat Health Check Failed: {chatName ?? chatId.ToString()}",
+                    message: $"Critical: Health check failed for chat '{chatName ?? chatId.ToString()}'.\n\n" +
+                             $"Error: {ex.Message}\n\n" +
+                             $"The bot may have been removed from the chat or lost permissions.",
+                    ct: cancellationToken);
+            }
         }
 
         return (health, chatName);
@@ -780,5 +803,44 @@ public class ChatManagementService(
             // Non-fatal - invite link validation failure shouldn't fail health check
             logger.LogWarning(ex, "Failed to validate invite link for chat {ChatId}", chatId);
         }
+    }
+
+    /// <summary>
+    /// Detect if an exception is a transient network error that shouldn't trigger alerts
+    /// Checks exception type, message patterns, and inner exceptions
+    /// </summary>
+    private static bool IsTransientNetworkError(Exception ex)
+    {
+        // Check exception type name for known transient types
+        var typeName = ex.GetType().Name;
+        if (typeName.Contains("RequestException") ||
+            typeName.Contains("ApiRequestException") ||
+            typeName.Contains("HttpException"))
+        {
+            // Telegram.Bot library exceptions - check if network-related
+            var message = ex.Message;
+            if (message.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("HttpRequestException", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("An error occurred while sending", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("network", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("connection", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        // Check inner exception for HttpRequestException or OperationCanceledException
+        if (ex.InnerException != null)
+        {
+            if (ex.InnerException is HttpRequestException or OperationCanceledException)
+            {
+                return true;
+            }
+
+            // Recursively check inner exception
+            return IsTransientNetworkError(ex.InnerException);
+        }
+
+        return false;
     }
 }
