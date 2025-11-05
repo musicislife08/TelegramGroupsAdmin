@@ -18,7 +18,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 WHERE telegram_user_id IN (
                     SELECT DISTINCT user_id
                     FROM user_actions
-                    WHERE action_type = 1  -- Trust (from UserActionType enum)
+                    WHERE action_type = 3  -- Trust (UserActionType.Trust = 3, NOT 1!)
                       AND (expires_at IS NULL OR expires_at > NOW())
                 )
                 AND is_trusted = false;  -- Only update those not already marked

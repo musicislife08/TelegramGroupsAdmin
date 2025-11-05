@@ -21,6 +21,7 @@ public class TelegramUserListItem
     public bool IsBanned { get; set; }
     public bool HasWarnings { get; set; }
     public bool IsTagged { get; set; }  // Has notes or tags for tracking
+    public bool IsAdmin { get; set; }  // Is admin in at least one managed chat
 
     // Display helpers
     public string DisplayName => !string.IsNullOrEmpty(Username) ? $"@{Username}" : FirstName ?? $"User {TelegramUserId}";

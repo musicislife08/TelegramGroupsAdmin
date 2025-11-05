@@ -66,7 +66,8 @@ public class TelegramUserRepository : ITelegramUserRepository
             existing.LastName = user.LastName;
             existing.UserPhotoPath = user.UserPhotoPath;
             existing.PhotoHash = user.PhotoHash;
-            existing.IsTrusted = user.IsTrusted;
+            // NOTE: IsTrusted is NOT updated here - it's only set via UpdateTrustStatusAsync()
+            // to prevent message processing from clearing trust status set by admin/auto-trust
             // NOTE: BotDmEnabled is NOT updated here - it's only set via SetBotDmEnabledAsync()
             // to prevent message processing from resetting DM status after user completes /start
             existing.LastSeenAt = user.LastSeenAt;
@@ -276,7 +277,14 @@ public class TelegramUserRepository : ITelegramUserRepository
             .Distinct()
             .ToHashSetAsync(ct);
 
-        // Query 8: Get all users and populate with pre-computed stats (O(1) lookups)
+        // Query 8: Users who are admins in at least one chat
+        var usersWhoAreAdmins = await context.ChatAdmins
+            .Where(ca => ca.IsActive)
+            .Select(ca => ca.TelegramId)
+            .Distinct()
+            .ToHashSetAsync(ct);
+
+        // Query 9: Get all users and populate with pre-computed stats (O(1) lookups)
         var users = await context.TelegramUsers
             .AsNoTracking()
             .Select(u => new UiModels.TelegramUserListItem
@@ -295,8 +303,10 @@ public class TelegramUserRepository : ITelegramUserRepository
                 NoteCount = 0,
                 IsBanned = false,
                 HasWarnings = false,
-                IsTagged = false
+                IsTagged = false,
+                IsAdmin = false
             })
+            .OrderBy(u => u.Username ?? u.FirstName ?? u.LastName ?? u.TelegramUserId.ToString())
             .ToListAsync(ct);
 
         // Populate stats using pre-computed dictionaries (in-memory, fast)
@@ -308,6 +318,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             user.IsBanned = bannedUserIds.Contains(user.TelegramUserId);
             user.HasWarnings = usersWithWarnings.Contains(user.TelegramUserId);
             user.IsTagged = usersWithNotes.Contains(user.TelegramUserId) || usersWithTags.Contains(user.TelegramUserId);
+            user.IsAdmin = usersWhoAreAdmins.Contains(user.TelegramUserId);
         }
 
         return users;
@@ -387,7 +398,14 @@ public class TelegramUserRepository : ITelegramUserRepository
             .Distinct()
             .ToHashSetAsync(ct);
 
-        // Query 8: Get users who have posted in accessible chats
+        // Query 8: Users who are admins in at least one chat
+        var usersWhoAreAdmins = await context.ChatAdmins
+            .Where(ca => ca.IsActive && userIdsInChats.Contains(ca.TelegramId))
+            .Select(ca => ca.TelegramId)
+            .Distinct()
+            .ToHashSetAsync(ct);
+
+        // Query 9: Get users who have posted in accessible chats
         var users = await context.TelegramUsers
             .AsNoTracking()
             .Where(u => userIdsInChats.Contains(u.TelegramUserId))
@@ -407,8 +425,10 @@ public class TelegramUserRepository : ITelegramUserRepository
                 NoteCount = 0,
                 IsBanned = false,
                 HasWarnings = false,
-                IsTagged = false
+                IsTagged = false,
+                IsAdmin = false
             })
+            .OrderBy(u => u.Username ?? u.FirstName ?? u.LastName ?? u.TelegramUserId.ToString())
             .ToListAsync(ct);
 
         // Populate stats using pre-computed dictionaries (in-memory, fast)
@@ -420,6 +440,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             user.IsBanned = bannedUserIds.Contains(user.TelegramUserId);
             user.HasWarnings = usersWithWarnings.Contains(user.TelegramUserId);
             user.IsTagged = usersWithNotes.Contains(user.TelegramUserId) || usersWithTags.Contains(user.TelegramUserId);
+            user.IsAdmin = usersWhoAreAdmins.Contains(user.TelegramUserId);
         }
 
         return users;
@@ -484,6 +505,11 @@ public class TelegramUserRepository : ITelegramUserRepository
                     .Count(w => w.UserId == u.TelegramUserId
                         && w.ActionType == DataModels.UserActionType.Warn
                         && (w.ExpiresAt == null || w.ExpiresAt > DateTimeOffset.UtcNow)),
+
+                // User flags
+                IsTrusted = u.IsTrusted,
+                IsAdmin = context.ChatAdmins.Any(ca => ca.IsActive && ca.TelegramId == u.TelegramUserId),
+                IsTagged = context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId) || context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId),
 
                 // Ban details (Phase 4.19: Actor system)
                 BanDate = ua.IssuedAt,

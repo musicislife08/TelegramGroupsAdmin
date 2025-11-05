@@ -52,14 +52,14 @@
     }
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
-        <MudTabPanel Text="All" Icon="@Icons.Material.Filled.People" BadgeData="@FilteredAllUsers.Count">
-            <MudTable Items="@FilteredAllUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true" Virtualize="true" FixedHeader="true" Height="600px">
+        <MudTabPanel Text="Active" Icon="@Icons.Material.Filled.People" BadgeData="@FilteredActiveUsers.Count">
+            <MudTable Items="@FilteredActiveUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
                 <HeaderContent>
-                    <MudTh>User</MudTh>
-                    <MudTh>Status</MudTh>
-                    <MudTh>Chats</MudTh>
-                    <MudTh>Warnings</MudTh>
-                    <MudTh>Last Seen</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.DisplayName)">User</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.ChatCount)">Chats</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.WarningCount)">Warnings</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.LastSeenAt)">Last Seen</MudTableSortLabel></MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -76,7 +76,27 @@
                                 </MudAvatar>
                             }
                             <div>
-                                <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                                    @if (context.IsTrusted)
+                                    {
+                                        <MudTooltip Text="Trusted User">
+                                            <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                    @if (context.IsAdmin)
+                                    {
+                                        <MudTooltip Text="Admin in at least one chat">
+                                            <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Info" Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                    @if (context.IsTagged)
+                                    {
+                                        <MudTooltip Text="Has tags or notes">
+                                            <MudIcon Icon="@Icons.Material.Filled.LocalOffer" Color="Color.Warning" Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                </MudStack>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.TelegramUserId</MudText>
                             </div>
                         </MudStack>
@@ -119,12 +139,12 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Tagged" Icon="@Icons.Material.Filled.LocalOffer" BadgeData="@FilteredTaggedUsers.Count" BadgeColor="Color.Warning">
-            <MudTable Items="@FilteredTaggedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true" Virtualize="true" FixedHeader="true" Height="600px">
+            <MudTable Items="@FilteredTaggedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
                 <HeaderContent>
-                    <MudTh>User</MudTh>
-                    <MudTh>Status</MudTh>
-                    <MudTh>Warnings</MudTh>
-                    <MudTh>Last Seen</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.DisplayName)">User</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.Status)">Status</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.WarningCount)">Warnings</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.LastSeenAt)">Last Seen</MudTableSortLabel></MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -141,7 +161,27 @@
                                 </MudAvatar>
                             }
                             <div>
-                                <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                                    @if (context.IsTrusted)
+                                    {
+                                        <MudTooltip Text="Trusted User">
+                                            <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                    @if (context.IsAdmin)
+                                    {
+                                        <MudTooltip Text="Admin in at least one chat">
+                                            <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Info" Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                    @if (context.IsTagged)
+                                    {
+                                        <MudTooltip Text="Has tags or notes">
+                                            <MudIcon Icon="@Icons.Material.Filled.LocalOffer" Color="Color.Warning" Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                </MudStack>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.TelegramUserId</MudText>
                             </div>
                         </MudStack>
@@ -167,11 +207,11 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Trusted" Icon="@Icons.Material.Filled.VerifiedUser" BadgeData="@FilteredTrustedUsers.Count" BadgeColor="Color.Success">
-            <MudTable Items="@FilteredTrustedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true" Virtualize="true" FixedHeader="true" Height="600px">
+            <MudTable Items="@FilteredTrustedUsers" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
                 <HeaderContent>
-                    <MudTh>User</MudTh>
-                    <MudTh>Chats</MudTh>
-                    <MudTh>Last Seen</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.DisplayName)">User</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.ChatCount)">Chats</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TelegramUserListItem, object>(x => x.LastSeenAt)">Last Seen</MudTableSortLabel></MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -188,7 +228,27 @@
                                 </MudAvatar>
                             }
                             <div>
-                                <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                                    @if (context.IsTrusted)
+                                    {
+                                        <MudTooltip Text="Trusted User">
+                                            <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                    @if (context.IsAdmin)
+                                    {
+                                        <MudTooltip Text="Admin in at least one chat">
+                                            <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Info" Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                    @if (context.IsTagged)
+                                    {
+                                        <MudTooltip Text="Has tags or notes">
+                                            <MudIcon Icon="@Icons.Material.Filled.LocalOffer" Color="Color.Warning" Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                </MudStack>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.TelegramUserId</MudText>
                             </div>
                         </MudStack>
@@ -210,7 +270,7 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Banned" Icon="@Icons.Material.Filled.Block" BadgeData="@FilteredBannedUsersWithDetails.Count" BadgeColor="Color.Error">
-            <MudTable Items="@FilteredBannedUsersWithDetails" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true" Virtualize="true" FixedHeader="true" Height="600px">
+            <MudTable Items="@FilteredBannedUsersWithDetails" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@_loading" LoadingProgressColor="Color.Info" Dense="true">
                 <HeaderContent>
                     <MudTh>User</MudTh>
                     <MudTh>Ban Date</MudTh>
@@ -234,7 +294,27 @@
                                 </MudAvatar>
                             }
                             <div>
-                                <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Typo="Typo.body2">@context.DisplayName</MudText>
+                                    @if (context.IsTrusted)
+                                    {
+                                        <MudTooltip Text="Trusted User">
+                                            <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Success" Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                    @if (context.IsAdmin)
+                                    {
+                                        <MudTooltip Text="Admin in at least one chat">
+                                            <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Info" Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                    @if (context.IsTagged)
+                                    {
+                                        <MudTooltip Text="Has tags or notes">
+                                            <MudIcon Icon="@Icons.Material.Filled.LocalOffer" Color="Color.Warning" Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                </MudStack>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.TelegramUserId</MudText>
                             </div>
                         </MudStack>
@@ -327,6 +407,7 @@
 
     // Filtered lists (computed)
     private List<TelegramUserListItem> FilteredAllUsers => FilterUsers(_allUsers);
+    private List<TelegramUserListItem> FilteredActiveUsers => FilterUsers(_allUsers.Where(u => !u.IsBanned).ToList());
     private List<TelegramUserListItem> FilteredTaggedUsers => FilterUsers(_taggedUsers);
     private List<TelegramUserListItem> FilteredTrustedUsers => FilterUsers(_trustedUsers);
     private List<TelegramUserListItem> FilteredBannedUsers => FilterUsers(_bannedUsers);
@@ -371,8 +452,8 @@
 
     private void ApplyFilters()
     {
-        // Update filtered count (use "All" tab as source of truth)
-        _filteredCount = FilteredAllUsers.Count;
+        // Update filtered count (use "Active" tab as source of truth)
+        _filteredCount = FilteredActiveUsers.Count;
         StateHasChanged();
     }
 

@@ -13,6 +13,9 @@ public class BannedUserListItem
     public string? UserPhotoPath { get; set; }
     public DateTimeOffset LastSeenAt { get; set; }
     public int WarningCount { get; set; }
+    public bool IsTrusted { get; set; }
+    public bool IsAdmin { get; set; }
+    public bool IsTagged { get; set; }
 
     // Ban-specific details (from user_actions JOIN)
     public DateTimeOffset BanDate { get; set; }
