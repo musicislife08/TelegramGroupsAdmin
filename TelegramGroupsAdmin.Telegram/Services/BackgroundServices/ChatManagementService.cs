@@ -252,6 +252,37 @@ public class ChatManagementService(
                     user.Id,
                     user.Username ?? "unknown");
 
+                // AUTO-TRUST: Trust admins globally to prevent spam detection and cross-chat bans
+                try
+                {
+                    var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+                    var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+
+                    var trustAction = new UserActionRecord(
+                        Id: 0,
+                        UserId: user.Id,
+                        ActionType: UserActionType.Trust,
+                        MessageId: null,
+                        IssuedBy: Actor.AutoTrust,
+                        IssuedAt: DateTimeOffset.UtcNow,
+                        ExpiresAt: null,
+                        Reason: $"Admin in chat {chat.Id} ({chat.Title ?? "Unknown"})"
+                    );
+
+                    await userActionsRepo.InsertAsync(trustAction, cancellationToken);
+                    await userRepo.UpdateTrustStatusAsync(user.Id, isTrusted: true, cancellationToken);
+
+                    logger.LogInformation(
+                        "Auto-trusted user {UserId} (@{Username}) - admin in chat {ChatId}",
+                        user.Id,
+                        user.Username ?? "unknown",
+                        chat.Id);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to auto-trust admin {UserId} in chat {ChatId}", user.Id, chat.Id);
+                }
+
                 // Phase 5.2: Notify owners about admin promotion
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
                 var displayName = user.Username != null ? $"@{user.Username}" : user.FirstName ?? $"User {user.Id}";
@@ -397,6 +428,37 @@ public class ChatManagementService(
                         chatId,
                         admin.User.Id,
                         username ?? "unknown");
+
+                    // AUTO-TRUST: Trust new admins globally
+                    try
+                    {
+                        var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+                        var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+
+                        var trustAction = new UserActionRecord(
+                            Id: 0,
+                            UserId: admin.User.Id,
+                            ActionType: UserActionType.Trust,
+                            MessageId: null,
+                            IssuedBy: Actor.AutoTrust,
+                            IssuedAt: DateTimeOffset.UtcNow,
+                            ExpiresAt: null,
+                            Reason: $"Admin in chat {chatId}"
+                        );
+
+                        await userActionsRepo.InsertAsync(trustAction, cancellationToken);
+                        await userRepo.UpdateTrustStatusAsync(admin.User.Id, isTrusted: true, cancellationToken);
+
+                        logger.LogInformation(
+                            "Auto-trusted user {UserId} (@{Username}) - admin in chat {ChatId}",
+                            admin.User.Id,
+                            username ?? "unknown",
+                            chatId);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to auto-trust admin {UserId} in chat {ChatId}", admin.User.Id, chatId);
+                    }
                 }
             }
 

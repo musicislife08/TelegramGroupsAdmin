@@ -412,6 +412,23 @@ public class SpamActionService(
             var managedChats = await managedChatsRepo.GetAllChatsAsync(cancellationToken);
             var activeChats = managedChats.Where(c => c.IsActive).ToList();
 
+            // ADMIN PROTECTION: Check if user is admin in ANY managed chat
+            // If yes, skip ban entirely (protects admins globally across all chats)
+            using (var scope = serviceProvider.CreateScope())
+            {
+                var chatAdminsRepo = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
+                var adminChats = await chatAdminsRepo.GetAdminChatsAsync(message.From.Id, cancellationToken);
+
+                if (adminChats.Count > 0)
+                {
+                    logger.LogInformation(
+                        "Skipping auto-ban for user {UserId} - user is admin in {ChatCount} managed chat(s) (admin protection)",
+                        message.From.Id,
+                        adminChats.Count);
+                    return null;
+                }
+            }
+
             logger.LogInformation(
                 "Executing auto-ban for user {UserId} across {ChatCount} managed chats",
                 message.From.Id,
