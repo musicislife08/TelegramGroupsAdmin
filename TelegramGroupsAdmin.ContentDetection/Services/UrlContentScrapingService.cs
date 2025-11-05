@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
@@ -158,17 +159,25 @@ public partial class UrlContentScrapingService(
 
     /// <summary>
     /// Extract content from HTML tag using regex.
+    /// Decodes HTML entities (e.g., &#39; → ', &amp; → &).
     /// </summary>
     private static string? ExtractTag(string html, string pattern)
     {
         var match = Regex.Match(html, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        return match.Success ? match.Groups[1].Value.Trim() : null;
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var content = match.Groups[1].Value.Trim();
+        return string.IsNullOrWhiteSpace(content) ? null : WebUtility.HtmlDecode(content);
     }
 
     /// <summary>
     /// Extract meta tag content using regex.
     /// Supports both name= and property= attributes in any order.
     /// Filters out technical metadata like viewport settings.
+    /// Decodes HTML entities (e.g., &#39; → ', &amp; → &).
     /// </summary>
     private static string? ExtractMetaContent(string html, string nameOrProperty)
     {
@@ -187,13 +196,16 @@ public partial class UrlContentScrapingService(
             {
                 var content = match.Groups[1].Value.Trim();
 
+                // Decode HTML entities before filtering (e.g., &#39; → ')
+                var decodedContent = WebUtility.HtmlDecode(content);
+
                 // Filter out technical metadata that provides no useful content
-                if (IsTechnicalMetadata(content))
+                if (IsTechnicalMetadata(decodedContent))
                 {
                     continue;
                 }
 
-                return content;
+                return decodedContent;
             }
         }
 
@@ -239,6 +251,9 @@ public partial class UrlContentScrapingService(
             @"^no-cache",                         // cache control
             @"^max-age=",                         // cache control
             @"^\d+;\s*url=",                      // refresh redirects
+            @"^rgba?\s*\(",                       // CSS colors: rgb(255, 255, 255) or rgba(255, 255, 255, 0.98)
+            @"^hsla?\s*\(",                       // CSS colors: hsl() or hsla()
+            @"^#[0-9a-fA-F]{3,8}$",              // CSS hex colors: #fff or #ffffff
         };
 
         foreach (var pattern in technicalPatterns)
