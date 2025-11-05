@@ -665,6 +665,13 @@ public class AppDbContext : DbContext
             .Property(r => r.Status)
             .HasConversion<int>();
 
+        // Partial unique index: Only ONE pending report per message (prevents duplicate reports)
+        modelBuilder.Entity<ReportDto>()
+            .HasIndex(r => new { r.MessageId, r.ChatId })
+            .HasFilter("status = 0")
+            .IsUnique()
+            .HasDatabaseName("IX_reports_unique_pending_per_message");
+
         modelBuilder.Entity<AuditLogRecordDto>()
             .Property(al => al.EventType)
             .HasConversion<int>();

@@ -69,6 +69,26 @@ public class ReportCommand : IBotCommand
         using var scope = _serviceProvider.CreateScope();
         var reportsRepository = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
 
+        // Check for duplicate report (one pending report per message)
+        var existingReport = await reportsRepository.GetExistingPendingReportAsync(
+            reportedMessage.MessageId,
+            message.Chat.Id,
+            cancellationToken);
+
+        if (existingReport != null)
+        {
+            var reporterName = existingReport.ReportedByUserName ?? "System";
+            return new CommandResult(
+                $"ℹ️ This message has already been reported.\n\n" +
+                $"📋 Report #{existingReport.Id}\n" +
+                $"👤 Reported by: {reporterName}\n" +
+                $"📅 Reported: {existingReport.ReportedAt:g}\n" +
+                $"📊 Status: {existingReport.Status}\n\n" +
+                $"_Admins will review the report shortly._",
+                DeleteCommandMessage,
+                DeleteResponseAfterSeconds);
+        }
+
         var now = DateTimeOffset.UtcNow;
 
         var report = new Report(

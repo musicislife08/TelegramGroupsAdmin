@@ -132,6 +132,24 @@ public class ReportsRepository : IReportsRepository
         return await query.CountAsync(cancellationToken);
     }
 
+    public async Task<Report?> GetExistingPendingReportAsync(
+        int messageId,
+        long chatId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var entity = await context.Reports
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r =>
+                r.MessageId == messageId &&
+                r.ChatId == chatId &&
+                r.Status == DataModels.ReportStatus.Pending,
+                cancellationToken);
+
+        return entity?.ToModel();
+    }
+
     public async Task DeleteOldReportsAsync(DateTimeOffset olderThanTimestamp, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

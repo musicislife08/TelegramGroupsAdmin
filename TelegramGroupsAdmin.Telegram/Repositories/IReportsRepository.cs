@@ -50,6 +50,14 @@ public interface IReportsRepository
     Task<int> GetPendingCountAsync(long? chatId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Check if a message already has a pending report (duplicate prevention)
+    /// </summary>
+    Task<Report?> GetExistingPendingReportAsync(
+        int messageId,
+        long chatId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Delete old reports (cleanup)
     /// </summary>
     Task DeleteOldReportsAsync(DateTimeOffset olderThanTimestamp, CancellationToken cancellationToken = default);
