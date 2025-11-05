@@ -141,12 +141,25 @@ public class AuthService(
             value: user.TotpEnabled ? "Login (requires TOTP)" : "Login successful",
             ct: ct);
 
-        // If TOTP is enabled, require verification
+        // Handle TOTP states based on enabled flag and secret existence
         if (user.TotpEnabled)
         {
-            return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, true, null);
+            if (string.IsNullOrEmpty(user.TotpSecret))
+            {
+                // Admin enabled TOTP but user needs to set it up (forced setup)
+                // TotpEnabled=true, RequiresTotp=false → Login.razor redirects to setup
+                return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, false, null);
+            }
+            else
+            {
+                // Normal 2FA verification required
+                // TotpEnabled=true, RequiresTotp=true → Login.razor redirects to verify
+                return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, true, true, null);
+            }
         }
 
+        // TOTP disabled (either never set up or admin disabled for bypass)
+        // TotpEnabled=false, RequiresTotp=false → Normal login
         return new AuthResult(true, user.Id, user.Email, user.PermissionLevelInt, false, false, null);
     }
 

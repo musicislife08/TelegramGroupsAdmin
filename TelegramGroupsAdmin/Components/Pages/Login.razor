@@ -129,8 +129,8 @@
                 return;
             }
 
-            // Check if user needs to set up TOTP (not enabled yet)
-            if (!result.TotpEnabled)
+            // Check if user needs to set up TOTP (admin enabled but no secret yet)
+            if (result.TotpEnabled && !result.RequiresTotp)
             {
                 // SECURITY: Generate intermediate authentication token (valid for 5 minutes)
                 var intermediateToken = IntermediateAuthService.CreateToken(result.UserId!);
