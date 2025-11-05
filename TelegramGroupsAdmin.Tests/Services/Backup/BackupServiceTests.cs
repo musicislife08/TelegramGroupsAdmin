@@ -134,7 +134,7 @@ public class BackupServiceTests
         // Verify can extract metadata from encrypted backup
         var metadata = await _backupService.GetMetadataAsync(backupBytes);
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("2.0"));
+        Assert.That(metadata.Version, Is.EqualTo("2.1"));
         Assert.That(metadata.TableCount, Is.GreaterThan(0));
     }
 
@@ -144,7 +144,7 @@ public class BackupServiceTests
         // Arrange - Set DB passphrase (should be ignored)
         await using (var context = _testHelper!.GetDbContext())
         {
-            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == null);
+            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0);
             var protector = _dataProtectionProvider!.CreateProtector(DataProtectionPurposes.BackupPassphrase);
             config!.PassphraseEncrypted = protector.Protect("db-passphrase-wrong");
             await context.SaveChangesAsync();
@@ -187,7 +187,7 @@ public class BackupServiceTests
         // Verify seed worked
         await using (var context = _testHelper!.GetDbContext())
         {
-            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == null);
+            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0);
             Assert.That(config?.ApiKeys, Is.Not.Null, "API keys should be encrypted in database");
         }
 
@@ -360,7 +360,7 @@ public class BackupServiceTests
         // Assert - Verify API keys are re-encrypted
         await using (var context = _testHelper!.GetDbContext())
         {
-            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == null);
+            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0);
             Assert.That(config?.ApiKeys, Is.Not.Null, "API keys should be re-encrypted after restore");
 
             // Verify can decrypt with test Data Protection provider
@@ -449,7 +449,7 @@ public class BackupServiceTests
 
         // Assert
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("2.0"));
+        Assert.That(metadata.Version, Is.EqualTo("2.1"));
         Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
         Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
     }
@@ -465,7 +465,7 @@ public class BackupServiceTests
 
         // Assert
         Assert.That(metadata, Is.Not.Null);
-        Assert.That(metadata.Version, Is.EqualTo("2.0"));
+        Assert.That(metadata.Version, Is.EqualTo("2.1"));
     }
 
     [Test]
@@ -493,7 +493,7 @@ public class BackupServiceTests
     public async Task SaveEncryptionConfigAsync_ShouldCreateInitialConfig()
     {
         // Arrange - Remove existing config
-        await _testHelper!.ExecuteSqlAsync("DELETE FROM configs WHERE chat_id IS NULL");
+        await _testHelper!.ExecuteSqlAsync("DELETE FROM configs WHERE chat_id = 0");
 
         const string testPassphrase = "initial-config-pass-456";
 
@@ -503,7 +503,7 @@ public class BackupServiceTests
         // Assert - Verify config created
         await using (var context = _testHelper.GetDbContext())
         {
-            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == null);
+            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0);
             Assert.That(config, Is.Not.Null);
             Assert.That(config!.BackupEncryptionConfig, Is.Not.Null);
             Assert.That(config.PassphraseEncrypted, Is.Not.Null, "Passphrase should be encrypted");
@@ -517,7 +517,7 @@ public class BackupServiceTests
         const string testPassphrase = "get-pass-test-123";
         await using (var context = _testHelper!.GetDbContext())
         {
-            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == null);
+            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0);
             // MockDataProtectionService is pass-through, so "encrypted" = plaintext
             config!.PassphraseEncrypted = testPassphrase;
             await context.SaveChangesAsync();
@@ -536,7 +536,7 @@ public class BackupServiceTests
         // Arrange - Clear passphrase from config
         await using (var context = _testHelper!.GetDbContext())
         {
-            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == null);
+            var config = await context.Configs.FirstOrDefaultAsync(c => c.ChatId == 0);
             config!.PassphraseEncrypted = null;
             await context.SaveChangesAsync();
         }

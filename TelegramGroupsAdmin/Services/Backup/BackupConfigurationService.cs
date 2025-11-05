@@ -31,7 +31,7 @@ public class BackupConfigurationService : IBackupConfigurationService
         const string sql = """
             SELECT backup_encryption_config
             FROM configs
-            WHERE chat_id IS NULL
+            WHERE chat_id = 0
             LIMIT 1
             """;
 

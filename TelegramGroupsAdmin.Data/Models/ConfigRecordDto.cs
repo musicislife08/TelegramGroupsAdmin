@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// <summary>
 /// EF Core entity for configs table
 /// Unified configuration storage with JSONB columns for different config types
-/// chat_id = NULL means global config, otherwise chat-specific override
+/// chat_id = 0 means global config, otherwise chat-specific override
 /// </summary>
 [Table("configs")]
 public class ConfigRecordDto
@@ -21,10 +21,10 @@ public class ConfigRecordDto
     public long Id { get; set; }
 
     /// <summary>
-    /// Chat ID (NULL = global config, otherwise chat-specific override)
+    /// Chat ID (0 = global config, otherwise chat-specific override)
     /// </summary>
     [Column("chat_id")]
-    public long? ChatId { get; set; }
+    public long ChatId { get; set; } = 0;
 
     /// <summary>
     /// Spam detection configuration (JSONB)
@@ -60,7 +60,7 @@ public class ConfigRecordDto
     /// <summary>
     /// Telegram bot service configuration (JSONB)
     /// Controls whether the bot polling service is active
-    /// GLOBAL ONLY - only used when chat_id = NULL
+    /// GLOBAL ONLY - only used when chat_id = 0
     /// </summary>
     [Column("telegram_bot_config", TypeName = "jsonb")]
     public string? TelegramBotConfig { get; set; }
@@ -75,7 +75,7 @@ public class ConfigRecordDto
     /// <summary>
     /// Background jobs configuration (JSONB)
     /// Stores schedule and settings for scheduled backups, cleanup, etc.
-    /// Only used for global config (chat_id = NULL)
+    /// Only used for global config (chat_id = 0)
     /// </summary>
     [Column("background_jobs_config", TypeName = "jsonb")]
     public string? BackgroundJobsConfig { get; set; }
@@ -84,7 +84,7 @@ public class ConfigRecordDto
     /// API keys for external services (encrypted TEXT, not JSONB)
     /// Stores VirusTotal, MetaDefender, HybridAnalysis, Intezer API keys encrypted with Data Protection
     /// Encrypted at rest, automatically decrypted during backup export and re-encrypted during restore
-    /// Only used for global config (chat_id = NULL)
+    /// Only used for global config (chat_id = 0)
     /// Note: Uses TEXT not JSONB because encrypted data is base64, not valid JSON
     /// </summary>
     [Column("api_keys")]
@@ -95,7 +95,7 @@ public class ConfigRecordDto
     /// Backup encryption configuration (JSONB)
     /// Metadata for backup encryption (algorithm, iterations, timestamps)
     /// Note: Passphrase moved to separate passphrase_encrypted column for proper backup/restore handling
-    /// Only used for global config (chat_id = NULL)
+    /// Only used for global config (chat_id = 0)
     /// </summary>
     [Column("backup_encryption_config", TypeName = "jsonb")]
     public string? BackupEncryptionConfig { get; set; }
@@ -104,7 +104,7 @@ public class ConfigRecordDto
     /// Backup encryption passphrase (encrypted TEXT, not JSONB)
     /// Encrypted at rest with Data Protection, automatically decrypted during backup export and re-encrypted during restore
     /// Moved from BackupEncryptionConfig JSONB to dedicated column for cross-machine compatibility
-    /// Only used for global config (chat_id = NULL)
+    /// Only used for global config (chat_id = 0)
     /// </summary>
     [Column("passphrase_encrypted")]
     [ProtectedData(Purpose = DataProtectionPurposes.TotpSecrets)]

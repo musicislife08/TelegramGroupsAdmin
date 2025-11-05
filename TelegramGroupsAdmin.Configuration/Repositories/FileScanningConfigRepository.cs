@@ -83,7 +83,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
             // Create new record
             configRecord = new Data.Models.ConfigRecordDto
             {
-                ChatId = chatId,
+                ChatId = chatId ?? 0,
                 FileScanningConfig = jsonConfig,
                 CreatedAt = DateTimeOffset.UtcNow
             };
@@ -155,10 +155,10 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // API keys are global only (chat_id = NULL)
+        // API keys are global only (chat_id = 0)
         var configRecord = await context.Configs
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ChatId == null, cancellationToken)
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken)
             ;
 
         if (configRecord?.ApiKeys == null)
@@ -195,9 +195,9 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
         var protector = _dataProtectionProvider.CreateProtector(DataProtectionPurposes.ApiKeys);
         var encryptedKeys = protector.Protect(jsonKeys);
 
-        // Find or create global config record (chat_id = NULL)
+        // Find or create global config record (chat_id = 0)
         var configRecord = await context.Configs
-            .FirstOrDefaultAsync(c => c.ChatId == null, cancellationToken)
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken)
             ;
 
         if (configRecord == null)
@@ -205,7 +205,7 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
             // Create new global config record
             configRecord = new Data.Models.ConfigRecordDto
             {
-                ChatId = null,
+                ChatId = 0,
                 ApiKeys = encryptedKeys,
                 CreatedAt = DateTimeOffset.UtcNow
             };

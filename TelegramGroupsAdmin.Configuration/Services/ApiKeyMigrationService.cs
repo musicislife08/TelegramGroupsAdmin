@@ -40,9 +40,9 @@ public class ApiKeyMigrationService
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Get or create global config record (chat_id = NULL)
+        // Get or create global config record (chat_id = 0)
         var globalConfig = await context.Configs
-            .FirstOrDefaultAsync(c => c.ChatId == null, cancellationToken);
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
 
         // If api_keys already populated, skip migration
         if (globalConfig?.ApiKeys != null)
@@ -84,7 +84,7 @@ public class ApiKeyMigrationService
             // Create new global config record
             globalConfig = new Data.Models.ConfigRecordDto
             {
-                ChatId = null,
+                ChatId = 0,
                 ApiKeys = encryptedApiKeys,
                 CreatedAt = DateTimeOffset.UtcNow
             };

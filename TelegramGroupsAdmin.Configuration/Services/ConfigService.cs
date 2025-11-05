@@ -35,7 +35,7 @@ public class ConfigService(
         {
             record = new ConfigRecordDto
             {
-                ChatId = chatId
+                ChatId = chatId ?? 0
                 // CreatedAt will be set by database default (NOW())
             };
         }

@@ -29,7 +29,7 @@ public class BackupService : IBackupService
     private readonly IBackupConfigurationService _configService;
     private readonly DependencyResolutionService _dependencyResolutionService;
     private readonly BackupRetentionService _retentionService;
-    private const string CurrentVersion = "2.0";
+    private const string CurrentVersion = "2.1"; // SCHEMA-3: configs.chat_id NULL → 0 migration
 
     public BackupService(
         NpgsqlDataSource dataSource,
@@ -348,6 +348,9 @@ public class BackupService : IBackupService
 
         _logger.LogInformation("Backup metadata: version={Version}, created={CreatedAt}, tables={TableCount}",
             backup.Metadata.Version, DateTimeOffset.FromUnixTimeSeconds(backup.Metadata.CreatedAt), backup.Metadata.TableCount);
+
+        // Apply version-specific migrations to backup data before restore
+        ApplyBackupMigrations(backup);
 
         await using var connection = await _dataSource.OpenConnectionAsync();
         await using var transaction = await connection.BeginTransactionAsync();
@@ -736,7 +739,7 @@ public class BackupService : IBackupService
             const string updateSql = """
                 UPDATE configs
                 SET telegram_bot_config = '{"bot_enabled": false}'::jsonb
-                WHERE chat_id IS NULL
+                WHERE chat_id = 0
                 """;
 
             var rowsAffected = await connection.ExecuteAsync(updateSql);
@@ -816,6 +819,118 @@ public class BackupService : IBackupService
         }
 
         return new BackupResult(filename, filepath, backupBytes.Length, deletedCount);
+    }
+
+    /// <summary>
+    /// Apply version-specific migrations to backup data for backward compatibility.
+    /// This allows restoring old backups to newer database schemas.
+    /// </summary>
+    private void ApplyBackupMigrations(SystemBackup backup)
+    {
+        var backupVersion = backup.Metadata.Version;
+        _logger.LogInformation("Checking backup version {BackupVersion} for required migrations", backupVersion);
+
+        // Migration: v2.0 → v2.1 (SCHEMA-3: configs.chat_id NULL → 0)
+        // Old backups have configs.chat_id = NULL for global config
+        // New schema requires chat_id = 0 (NOT NULL with default 0)
+        if (string.Compare(backupVersion, "2.1", StringComparison.Ordinal) < 0)
+        {
+            _logger.LogInformation("Applying SCHEMA-3 migration: configs.chat_id NULL → 0 (backup v{Version} < 2.1)", backupVersion);
+            MigrateConfigsChatIdNullToZero(backup);
+        }
+    }
+
+    /// <summary>
+    /// SCHEMA-3 Migration: Transform configs.chat_id from NULL to 0 for global config.
+    /// This handles backward compatibility for backups taken before migration 20251105161051.
+    /// Handles edge case where backup has BOTH NULL and 0 rows (merges them like DB migration).
+    /// </summary>
+    private void MigrateConfigsChatIdNullToZero(SystemBackup backup)
+    {
+        if (!backup.Data.TryGetValue("configs", out var configRecords))
+        {
+            _logger.LogDebug("No configs table in backup, skipping SCHEMA-3 migration");
+            return;
+        }
+
+        var jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) }
+        };
+
+        // Step 1: Find NULL and 0 records
+        Dictionary<string, JsonElement>? nullRecord = null;
+        Dictionary<string, JsonElement>? zeroRecord = null;
+        int nullIndex = -1;
+        int zeroIndex = -1;
+
+        for (int i = 0; i < configRecords.Count; i++)
+        {
+            var jsonElement = (JsonElement)configRecords[i];
+
+            if (jsonElement.TryGetProperty("chat_id", out var chatIdProp))
+            {
+                if (chatIdProp.ValueKind == JsonValueKind.Null)
+                {
+                    nullRecord = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(jsonElement.GetRawText(), jsonOptions);
+                    nullIndex = i;
+                }
+                else if (chatIdProp.ValueKind == JsonValueKind.Number && chatIdProp.GetInt64() == 0)
+                {
+                    zeroRecord = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(jsonElement.GetRawText(), jsonOptions);
+                    zeroIndex = i;
+                }
+            }
+        }
+
+        // Step 2: Handle different scenarios
+        if (nullRecord != null && zeroRecord != null)
+        {
+            // EDGE CASE: Both NULL and 0 exist - MERGE them (like DB migration did)
+            _logger.LogWarning("Found BOTH chat_id=NULL and chat_id=0 in backup - merging (same as migration 20251105161051)");
+
+            // Merge zeroRecord into nullRecord using COALESCE logic (preserve existing, fill NULLs)
+            foreach (var kvp in zeroRecord)
+            {
+                if (!nullRecord.ContainsKey(kvp.Key) || nullRecord[kvp.Key].ValueKind == JsonValueKind.Null)
+                {
+                    nullRecord[kvp.Key] = kvp.Value;
+                }
+            }
+
+            // Set chat_id to 0
+            nullRecord["chat_id"] = JsonSerializer.SerializeToElement(0L, jsonOptions);
+
+            // Update the NULL record in place
+            var updatedJson = JsonSerializer.Serialize(nullRecord, jsonOptions);
+            configRecords[nullIndex] = JsonSerializer.Deserialize<JsonElement>(updatedJson, jsonOptions);
+
+            // Remove the duplicate 0 record
+            configRecords.RemoveAt(zeroIndex);
+
+            _logger.LogInformation("✅ SCHEMA-3 migration: Merged chat_id=NULL and chat_id=0 records, removed duplicate");
+        }
+        else if (nullRecord != null)
+        {
+            // Only NULL exists - simple conversion
+            nullRecord["chat_id"] = JsonSerializer.SerializeToElement(0L, jsonOptions);
+
+            var updatedJson = JsonSerializer.Serialize(nullRecord, jsonOptions);
+            configRecords[nullIndex] = JsonSerializer.Deserialize<JsonElement>(updatedJson, jsonOptions);
+
+            _logger.LogInformation("✅ SCHEMA-3 migration: Converted chat_id NULL → 0");
+        }
+        else if (zeroRecord != null)
+        {
+            // Only 0 exists - already correct, no action needed
+            _logger.LogDebug("SCHEMA-3 migration: chat_id=0 already exists, no conversion needed");
+        }
+        else
+        {
+            // No global config in backup
+            _logger.LogDebug("SCHEMA-3 migration: No global config (chat_id NULL or 0) found in backup");
+        }
     }
 }
 

@@ -456,66 +456,6 @@ if (spamSampleCount < 50 || legitMessageCount < 100)
 
 ---
 
-### SCHEMA-3: Standardize Global Config Pattern (chat_id = 0)
-
-**Priority:** HIGH - Bug fix + consistency improvement
-**Impact:** Adds database-enforced singleton protection (currently missing!), reduces AI coding errors, semantic clarity
-
-**Current Problem:**
-- `configs` table uses `chat_id = NULL` for global config with UNIQUE INDEX
-- **Discovery:** PostgreSQL UNIQUE indexes allow unlimited NULL values (NULL != NULL in SQL)
-- Current setup provides **zero database protection** against duplicate global configs
-- Mixed pattern: 5 other tables use `chat_id = 0` for global scope
-- Semantic mismatch: `null` means "unknown" in .NET, not "global default"
-
-**Empirical Testing Results (2025-11-03):**
-- NULL pattern: ✗ Allows multiple `chat_id = NULL` rows (no constraint enforcement)
-- 0 pattern with partial unique index: ✓ Blocks duplicate `chat_id = 0` rows (database enforced)
-- Test: `CREATE UNIQUE INDEX idx_test_zero_global ON table ((1)) WHERE chat_id = 0`
-
-**Migration Plan:**
-
-**Phase 1: Database Schema**
-1. Create EF migration `FixGlobalConfigConstraint`
-2. Drop `IX_configs_chat_id` unique index
-3. Add partial unique index: `CREATE UNIQUE INDEX idx_configs_single_global ON configs ((1)) WHERE chat_id = 0`
-4. Add regular unique index: `CREATE UNIQUE INDEX idx_configs_chat_specific ON configs (chat_id) WHERE chat_id != 0`
-5. Alter column: `chat_id SET NOT NULL DEFAULT 0`
-6. Data migration: `UPDATE configs SET chat_id = 0 WHERE chat_id IS NULL`
-7. Update `ConfigRecordDto.cs`: `long? ChatId` → `long ChatId = 0`
-8. Update `AppDbContext.cs`: Remove `.HasIndex(c => c.ChatId).IsUnique()`, add partial index config
-
-**Phase 2: Repository/Service Layer (9 files, 11 locations)**
-- BackgroundJobConfigService.cs (2 locations)
-- ApiKeyMigrationService.cs (1 location)
-- FileScanningConfigRepository.cs (2 locations)
-- BackupConfigurationService.cs (1 raw SQL location)
-- PassphraseManagementService.cs (3 raw SQL locations)
-- BackupService.cs (1 raw SQL location)
-- BackupServiceTests.cs (7+ test locations)
-- BackupRestore.razor (1 location)
-
-Replace: `c.ChatId == null` → `c.ChatId == 0` and `WHERE chat_id IS NULL` → `WHERE chat_id = 0`
-
-**Phase 3: Validation**
-- Run migration test suite (22 tests)
-- Manual testing: backup/restore, API keys, background jobs, settings UIs
-- Database verification: `SELECT COUNT(*) FROM configs WHERE chat_id = 0` (should be exactly 1)
-- Attempt duplicate insert: should fail with unique constraint violation
-
-**Benefits:**
-- ✅ Adds real database-enforced singleton (currently broken!)
-- ✅ Consistent pattern across all 6 config tables
-- ✅ Reduces AI assistant errors (chat_id context switching)
-- ✅ Better .NET semantics (0 = explicit global vs null = unknown)
-- ✅ Future-proof for new global-scoped tables
-
-**Impact:** ~12 files, 30 code locations, 1 migration, medium risk (well-scoped, good test coverage, pre-release timing)
-
-**Rollback:** Migration revert restores nullable chat_id with original (ineffective) unique index
-
----
-
 ### FEATURE-4.23: Cross-Chat Ban Message Cleanup
 
 **Priority:** MEDIUM
@@ -633,6 +573,8 @@ Replace: `c.ChatId == null` → `c.ChatId == 0` and `WHERE chat_id IS NULL` → 
 ---
 
 ## Completed Work
+
+**2025-11-05**: SCHEMA-3 (Standardized global config pattern - migrated chat_id NULL → 0, fixed database integrity bug where PostgreSQL UNIQUE indexes allow unlimited NULLs providing zero constraint enforcement, added partial unique indexes for singleton global config + chat-specific configs, updated 8 files with 20+ code locations, migration 20251105161051 with automatic data merging for edge case where both NULL and 0 rows existed, 22/22 tests passing, consistent pattern across all 6 config tables)
 
 **2025-10-30**: ML-6 (Video spam detection - 3-layer system reusing ML-5 pipeline: keyframe hash similarity + OCR on frames + OpenAI Vision fallback, VideoFrameExtractionService with FFmpeg static binary, smart short video handling, VideoTrainingSamplesRepository, database migration 20251030203913, Dockerfile with FFmpeg 7.0.2 pinned via build arg, 813MB final image), ML-5 (Image spam detection - 3-layer system: perceptual hash similarity + OCR text extraction + OpenAI Vision fallback, CLI wrapper for Tesseract with graceful degradation, ImageTextExtractionService with binary auto-detection, ImageTrainingSamplesRepository, database migration 20251030203913, StopWordsSpamCheck OrderBy fix for deterministic Take()), SECURITY-1 (Git history sanitization complete - BFG purged launchSettings.json + http-client.private.env.json + examples/compose.*.yml from 660 commits, 11 old unencrypted backups deleted, pre-commit hook with 8 secret patterns installed, .gitignore enhanced with 20+ secret file patterns, .git reduced to 3.3MB)
 

@@ -474,7 +474,7 @@ else
             await using var context = await ContextFactory.CreateDbContextAsync();
             var config = await context.Configs
                 .AsNoTracking()
-                .Where(c => c.ChatId == null)
+                .Where(c => c.ChatId == 0)
                 .FirstOrDefaultAsync();
 
             if (!string.IsNullOrEmpty(config?.BackupEncryptionConfig))

@@ -261,7 +261,7 @@ public static class GoldenDataset
     public static class Configs
     {
         public const long Config1_Id = 1;
-        public static readonly long? Config1_ChatId = null; // Global config (nullable, can't be const)
+        public const long Config1_ChatId = 0; // Global config (SCHEMA-3: chat_id = 0 for global)
 
         // Spam detection config (real structure, simplified)
         public const string SpamDetectionConfigJson = """
@@ -401,7 +401,7 @@ public static class GoldenDataset
             VALUES
             ({{Configs.Config1_Id}}, {0}, {1}::jsonb, {2}, {3}::jsonb, NOW() - INTERVAL '10 days')
             """,
-            Configs.Config1_ChatId!,
+            Configs.Config1_ChatId,
             Configs.SpamDetectionConfigJson!,
             encryptedApiKeys!,
             Configs.BackupEncryptionConfigJson!

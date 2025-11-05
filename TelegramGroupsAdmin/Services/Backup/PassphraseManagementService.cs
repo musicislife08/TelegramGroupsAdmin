@@ -64,7 +64,7 @@ public class PassphraseManagementService : IPassphraseManagementService
 
         // Read encrypted passphrase from dedicated column
         var encryptedPassphrase = await context.QuerySingleOrDefaultAsync<string>(
-            "SELECT passphrase_encrypted FROM configs WHERE chat_id IS NULL");
+            "SELECT passphrase_encrypted FROM configs WHERE chat_id = 0");
 
         if (string.IsNullOrEmpty(encryptedPassphrase))
         {
@@ -147,13 +147,13 @@ public class PassphraseManagementService : IPassphraseManagementService
 
         // Load or create global config record
         var configRecord = await context.QueryFirstOrDefaultAsync<DataModels.ConfigRecordDto>(
-            "SELECT * FROM configs WHERE chat_id IS NULL");
+            "SELECT * FROM configs WHERE chat_id = 0");
 
         if (configRecord == null)
         {
             configRecord = new DataModels.ConfigRecordDto
             {
-                ChatId = null,
+                ChatId = 0,
                 CreatedAt = DateTimeOffset.UtcNow
             };
         }

@@ -696,7 +696,7 @@ public class AppDbContext : DbContext
 
     private static void ConfigureSpecialEntities(ModelBuilder modelBuilder)
     {
-        // Configure configs table - id is PK, chat_id is nullable (NULL = global config)
+        // Configure configs table - id is PK, chat_id = 0 for global config
         modelBuilder.Entity<ConfigRecordDto>()
             .HasKey(c => c.Id);
 
@@ -706,10 +706,24 @@ public class AppDbContext : DbContext
             .HasDefaultValueSql("NOW()")
             .ValueGeneratedOnAdd();
 
-        // Create unique index on chat_id (allows one NULL for global config)
+        // Set default value for chat_id (0 = global config)
+        modelBuilder.Entity<ConfigRecordDto>()
+            .Property(c => c.ChatId)
+            .HasDefaultValue(0L);
+
+        // Partial unique index: Only ONE global config allowed (chat_id = 0)
         modelBuilder.Entity<ConfigRecordDto>()
             .HasIndex(c => c.ChatId)
-            .IsUnique();
+            .HasFilter("chat_id = 0")
+            .IsUnique()
+            .HasDatabaseName("idx_configs_single_global");
+
+        // Partial unique index: Each chat can have only ONE chat-specific config
+        modelBuilder.Entity<ConfigRecordDto>()
+            .HasIndex(c => c.ChatId)
+            .HasFilter("chat_id != 0")
+            .IsUnique()
+            .HasDatabaseName("idx_configs_chat_specific");
 
         // Configure image_training_samples table
         modelBuilder.Entity<ImageTrainingSampleDto>()

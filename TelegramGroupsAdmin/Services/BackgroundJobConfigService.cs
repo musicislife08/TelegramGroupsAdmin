@@ -39,10 +39,10 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Get global config (chat_id = NULL)
+        // Get global config (chat_id = 0)
         var config = await context.Configs
             .AsNoTracking()
-            .Where(c => c.ChatId == null)
+            .Where(c => c.ChatId == 0)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (config?.BackgroundJobsConfig == null)
@@ -69,14 +69,14 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 
         // Get or create global config
         var configRecord = await context.Configs
-            .Where(c => c.ChatId == null)
+            .Where(c => c.ChatId == 0)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (configRecord == null)
         {
             configRecord = new Data.Models.ConfigRecordDto
             {
-                ChatId = null,
+                ChatId = 0,
                 CreatedAt = DateTimeOffset.UtcNow
             };
             context.Configs.Add(configRecord);
