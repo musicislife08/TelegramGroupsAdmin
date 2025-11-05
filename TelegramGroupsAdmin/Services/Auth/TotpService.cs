@@ -241,7 +241,7 @@ public class TotpService(
             return false;
         }
 
-        // Verify target user exists and has TOTP secret
+        // Verify target user exists
         var targetUser = await userRepository.GetByIdAsync(targetUserId, ct);
         if (targetUser is null)
         {
@@ -249,13 +249,7 @@ public class TotpService(
             return false;
         }
 
-        if (string.IsNullOrEmpty(targetUser.TotpSecret))
-        {
-            logger.LogWarning("Admin {AdminUserId} attempted to enable TOTP for user {TargetUserId} without TOTP secret", adminUserId, targetUserId);
-            return false;
-        }
-
-        // Enable TOTP (requires existing secret)
+        // Enable TOTP (works even without secret - forces setup on next login)
         await userRepository.EnableTotpAsync(targetUserId, ct);
         await userRepository.UpdateSecurityStampAsync(targetUserId, ct);
 
@@ -272,13 +266,13 @@ public class TotpService(
         return true;
     }
 
-    public async Task<bool> AdminClearTotpSetupAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
+    public async Task<bool> AdminResetTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
     {
         // Verify admin is Owner
         var admin = await userRepository.GetByIdAsync(adminUserId, ct);
         if (admin is null || admin.PermissionLevelInt != (int)Core.Models.PermissionLevel.Owner)
         {
-            logger.LogWarning("Non-Owner user {AdminUserId} attempted to clear TOTP setup for user {TargetUserId}", adminUserId, targetUserId);
+            logger.LogWarning("Non-Owner user {AdminUserId} attempted to reset TOTP for user {TargetUserId}", adminUserId, targetUserId);
             return false;
         }
 
@@ -286,22 +280,22 @@ public class TotpService(
         var targetUser = await userRepository.GetByIdAsync(targetUserId, ct);
         if (targetUser is null)
         {
-            logger.LogWarning("Admin {AdminUserId} attempted to clear TOTP setup for non-existent user {TargetUserId}", adminUserId, targetUserId);
+            logger.LogWarning("Admin {AdminUserId} attempted to reset TOTP for non-existent user {TargetUserId}", adminUserId, targetUserId);
             return false;
         }
 
-        // Clear TOTP completely (wipes secret, enabled flag, timestamp)
+        // Reset TOTP completely (wipes secret, timestamp, and sets enabled=false)
         await userRepository.ResetTotpAsync(targetUserId, ct);
         await userRepository.UpdateSecurityStampAsync(targetUserId, ct);
 
-        logger.LogWarning("TOTP setup cleared for user {TargetUserId} by Owner {AdminUserId}", targetUserId, adminUserId);
+        logger.LogWarning("TOTP reset for user {TargetUserId} by Owner {AdminUserId}", targetUserId, adminUserId);
 
         // Audit log
         await auditLog.LogEventAsync(
             AuditEventType.UserTotpReset,
             actor: Actor.FromWebUser(adminUserId),
             target: Actor.FromWebUser(targetUserId),
-            value: $"TOTP setup cleared by Owner admin (admin: {admin.Email})",
+            value: $"TOTP reset by Owner admin (admin: {admin.Email})",
             ct: ct);
 
         return true;

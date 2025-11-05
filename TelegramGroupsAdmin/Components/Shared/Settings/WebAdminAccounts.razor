@@ -124,27 +124,14 @@
                                     Resend Verification Email
                                 </MudMenuItem>
                             }
-                            @if (_currentUserPermissionLevel >= PermissionLevel.Owner && !string.IsNullOrEmpty(context.TotpSecret))
+                            @if (_currentUserPermissionLevel >= PermissionLevel.Owner)
                             {
-                                @if (context.TotpSetupStartedAt.HasValue && !context.TotpEnabled)
-                                {
-                                    <MudMenuItem Icon="@Icons.Material.Filled.RestartAlt"
-                                                IconColor="Color.Warning"
-                                                OnClick="@(() => ClearTotpSetup(context))">
-                                        Clear TOTP Setup
-                                    </MudMenuItem>
-                                }
                                 @if (context.TotpEnabled)
                                 {
                                     <MudMenuItem Icon="@Icons.Material.Filled.LockOpen"
                                                 IconColor="Color.Warning"
                                                 OnClick="@(() => DisableTotp(context))">
                                         Disable TOTP
-                                    </MudMenuItem>
-                                    <MudMenuItem Icon="@Icons.Material.Filled.LockReset"
-                                                IconColor="Color.Warning"
-                                                OnClick="@(() => Reset2Fa(context))">
-                                        Reset 2FA (Full Reset)
                                     </MudMenuItem>
                                 }
                                 else
@@ -153,6 +140,14 @@
                                                 IconColor="Color.Success"
                                                 OnClick="@(() => EnableTotp(context))">
                                         Enable TOTP
+                                    </MudMenuItem>
+                                }
+                                @if (!string.IsNullOrEmpty(context.TotpSecret))
+                                {
+                                    <MudMenuItem Icon="@Icons.Material.Filled.RestartAlt"
+                                                IconColor="Color.Error"
+                                                OnClick="@(() => ResetTotp(context))">
+                                        Reset TOTP
                                     </MudMenuItem>
                                 }
                             }
@@ -442,7 +437,8 @@
         var confirmed = await DialogService.ShowMessageBox(
             "Disable TOTP",
             $"Are you sure you want to disable TOTP for {user.Email}?\n\n" +
-            "This will allow them to log in without 2FA. The TOTP secret will be preserved so they can re-enable it later.",
+            "This sets TotpEnabled=false, allowing them to bypass 2FA at login. " +
+            "Their TOTP secret is preserved.",
             yesText: "Disable TOTP",
             cancelText: "Cancel");
 
@@ -473,7 +469,8 @@
         var confirmed = await DialogService.ShowMessageBox(
             "Enable TOTP",
             $"Are you sure you want to enable TOTP for {user.Email}?\n\n" +
-            "This will require them to provide a 2FA code when logging in. Their existing TOTP secret will be used.",
+            "This sets TotpEnabled=true. If they have a TOTP secret, they'll need to verify. " +
+            "If not, they'll be redirected to setup 2FA on next login.",
             yesText: "Enable TOTP",
             cancelText: "Cancel");
 
@@ -489,7 +486,7 @@
                 }
                 else
                 {
-                    Snackbar.Add($"Failed to enable TOTP for {user.Email}. User may not have a TOTP secret.", Severity.Error);
+                    Snackbar.Add($"Failed to enable TOTP for {user.Email}. You may not have permission.", Severity.Error);
                 }
             }
             catch (Exception ex)
@@ -499,60 +496,36 @@
         }
     }
 
-    private async Task ClearTotpSetup(UserRecord user)
+    private async Task ResetTotp(UserRecord user)
     {
         var confirmed = await DialogService.ShowMessageBox(
-            "Clear TOTP Setup",
-            $"Are you sure you want to clear the TOTP setup for {user.Email}?\n\n" +
-            "This will completely wipe their TOTP secret, setup timestamp, and enabled flag. " +
-            "They will need to set up TOTP from scratch if they want to use it again.",
-            yesText: "Clear Setup",
-            cancelText: "Cancel");
+            "Reset TOTP",
+            $"Are you sure you want to reset TOTP for {user.Email}?\n\n" +
+            "This will:\n" +
+            "• Wipe their TOTP secret and setup timestamp\n" +
+            "• Set TotpEnabled=false (bypass 2FA)\n" +
+            "• Invalidate their current session\n\n" +
+            "User can log in normally until you re-enable TOTP.",
+            yesText: "Reset TOTP", cancelText: "Cancel");
 
         if (confirmed == true)
         {
             try
             {
-                var success = await AuthService.AdminClearTotpSetupAsync(user.Id, _currentUserId!);
+                var success = await AuthService.AdminResetTotpAsync(user.Id, _currentUserId!);
                 if (success)
                 {
-                    Snackbar.Add($"Cleared TOTP setup for {user.Email}", Severity.Success);
+                    Snackbar.Add($"Reset TOTP for {user.Email}", Severity.Success);
                     await LoadUsersAsync();
                 }
                 else
                 {
-                    Snackbar.Add($"Failed to clear TOTP setup for {user.Email}. You may not have permission.", Severity.Error);
+                    Snackbar.Add($"Failed to reset TOTP for {user.Email}. You may not have permission.", Severity.Error);
                 }
             }
             catch (Exception ex)
             {
-                Snackbar.Add($"Error clearing TOTP setup: {ex.Message}", Severity.Error);
-            }
-        }
-    }
-
-    private async Task Reset2Fa(UserRecord user)
-    {
-        var confirmed = await DialogService.ShowMessageBox(
-            "Reset 2FA",
-            $"Are you sure you want to reset 2FA for {user.Email}? This will:\n\n" +
-            "• Clear their TOTP secret\n" +
-            "• Delete all recovery codes\n" +
-            "• Force them to set up 2FA again on next login\n" +
-            "• Invalidate their current session",
-            yesText: "Reset 2FA", cancelText: "Cancel");
-
-        if (confirmed == true)
-        {
-            try
-            {
-                await UserManagementService.Reset2FaAsync(user.Id, _currentUserId!);
-                Snackbar.Add($"Reset 2FA for {user.Email}", Severity.Success);
-                await LoadUsersAsync();
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Error resetting 2FA: {ex.Message}", Severity.Error);
+                Snackbar.Add($"Error resetting TOTP: {ex.Message}", Severity.Error);
             }
         }
     }
