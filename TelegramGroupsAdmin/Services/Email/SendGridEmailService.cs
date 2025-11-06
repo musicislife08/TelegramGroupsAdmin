@@ -1,33 +1,24 @@
-using Microsoft.Extensions.Options;
 using SendGrid;
 using SendGrid.Helpers.Mail;
-using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Repositories;
 
 namespace TelegramGroupsAdmin.Services.Email;
 
 /// <summary>
 /// Email service implementation using SendGrid API
+/// Configuration loaded from database (hot-reload support)
 /// </summary>
 public class SendGridEmailService : IEmailService
 {
-    private readonly SendGridOptions _options;
+    private readonly IFileScanningConfigRepository _configRepo;
     private readonly ILogger<SendGridEmailService> _logger;
-    private readonly SendGridClient _client;
 
     public SendGridEmailService(
-        IOptions<SendGridOptions> options,
+        IFileScanningConfigRepository configRepo,
         ILogger<SendGridEmailService> logger)
     {
-        _options = options.Value;
+        _configRepo = configRepo;
         _logger = logger;
-        _client = new SendGridClient(_options.ApiKey);
-
-        // Debug log configuration at startup
-        _logger.LogDebug("SendGrid configured: Enabled={Enabled}, FromAddress={FromAddress}, FromName={FromName}, ApiKeySet={ApiKeySet}",
-            _options.Enabled,
-            _options.FromAddress,
-            _options.FromName,
-            !string.IsNullOrEmpty(_options.ApiKey));
     }
 
     public async Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, CancellationToken ct = default)
@@ -37,10 +28,27 @@ public class SendGridEmailService : IEmailService
 
     public async Task SendEmailAsync(IEnumerable<string> to, string subject, string body, bool isHtml = true, CancellationToken ct = default)
     {
-        if (!_options.Enabled)
+        // Load configuration from database (supports hot-reload)
+        var sendGridConfig = await _configRepo.GetSendGridConfigAsync(ct);
+        var apiKeys = await _configRepo.GetApiKeysAsync(ct);
+
+        if (sendGridConfig?.Enabled != true)
         {
             _logger.LogWarning("SendGrid service is disabled. Email not sent to: {Recipients}", string.Join(", ", to));
             return;
+        }
+
+        var apiKey = apiKeys?.SendGrid;
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            _logger.LogError("SendGrid API key not configured. Email not sent to: {Recipients}", string.Join(", ", to));
+            throw new InvalidOperationException("SendGrid API key not configured");
+        }
+
+        if (string.IsNullOrWhiteSpace(sendGridConfig.FromAddress))
+        {
+            _logger.LogError("SendGrid FromAddress not configured. Email not sent to: {Recipients}", string.Join(", ", to));
+            throw new InvalidOperationException("SendGrid FromAddress not configured");
         }
 
         try
@@ -50,7 +58,7 @@ public class SendGridEmailService : IEmailService
             _logger.LogInformation("Attempting to send email via SendGrid to: {Recipients}, Subject: {Subject}",
                 string.Join(", ", to), subject);
 
-            var from = new EmailAddress(_options.FromAddress, _options.FromName);
+            var from = new EmailAddress(sendGridConfig.FromAddress, sendGridConfig.FromName);
             var msg = MailHelper.CreateSingleEmailToMultipleRecipients(
                 from,
                 recipients,
@@ -59,8 +67,11 @@ public class SendGridEmailService : IEmailService
                 isHtml ? body : null   // HTML
             );
 
+            // Create client with API key from database
+            var client = new SendGridClient(apiKey);
+
             _logger.LogDebug("Sending email via SendGrid API...");
-            var response = await _client.SendEmailAsync(msg, ct);
+            var response = await client.SendEmailAsync(msg, ct);
 
             if (response.IsSuccessStatusCode)
             {
@@ -89,30 +100,42 @@ public class SendGridEmailService : IEmailService
         await SendEmailAsync(to, subject, body, isHtml: true, ct);
     }
 
-    public Task<bool> TestConnectionAsync(CancellationToken ct = default)
+    public async Task<bool> TestConnectionAsync(CancellationToken ct = default)
     {
-        if (!_options.Enabled)
-        {
-            _logger.LogWarning("SendGrid service is disabled. Connection test skipped.");
-            return Task.FromResult(false);
-        }
-
         try
         {
-            // SendGrid doesn't have a "test connection" endpoint, but we can verify the API key format
-            if (string.IsNullOrWhiteSpace(_options.ApiKey) || !_options.ApiKey.StartsWith("SG."))
+            // Load configuration from database
+            var sendGridConfig = await _configRepo.GetSendGridConfigAsync(ct);
+            var apiKeys = await _configRepo.GetApiKeysAsync(ct);
+
+            if (sendGridConfig?.Enabled != true)
             {
-                _logger.LogError("Invalid SendGrid API key format");
-                return Task.FromResult(false);
+                _logger.LogWarning("SendGrid service is disabled. Connection test skipped.");
+                return false;
             }
 
-            _logger.LogInformation("SendGrid API key format is valid");
-            return Task.FromResult(true);
+            var apiKey = apiKeys?.SendGrid;
+
+            // SendGrid doesn't have a "test connection" endpoint, but we can verify the API key format
+            if (string.IsNullOrWhiteSpace(apiKey) || !apiKey.StartsWith("SG."))
+            {
+                _logger.LogError("Invalid or missing SendGrid API key");
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(sendGridConfig.FromAddress))
+            {
+                _logger.LogError("SendGrid FromAddress not configured");
+                return false;
+            }
+
+            _logger.LogInformation("SendGrid configuration is valid");
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "SendGrid connection test failed");
-            return Task.FromResult(false);
+            return false;
         }
     }
 
