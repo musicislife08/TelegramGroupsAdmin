@@ -430,16 +430,6 @@ if (spamSampleCount < 50 || legitMessageCount < 100)
 
 ---
 
-### FEATURE-4.20: Auto-Fix Database Sequences on Backup Restore
-
-**Status:** DEFERRED ⏸️
-**Priority:** LOW - Monitor and revisit if recurs
-**Impact:** Data integrity (sequence drift between restores, root cause unknown)
-
-**Decision:** Deferred - backup/restore preserves sequences correctly. Test coverage added (SequenceIntegrityTests.cs). Will implement startup validation if problem recurs.
-
----
-
 ### FEATURE-5.2: Universal Notification Center
 
 **Priority:** MEDIUM
