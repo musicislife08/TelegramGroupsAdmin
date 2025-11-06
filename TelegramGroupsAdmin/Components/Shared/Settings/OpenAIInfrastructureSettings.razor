@@ -1,0 +1,197 @@
+@using TelegramGroupsAdmin.Configuration.Models
+@using TelegramGroupsAdmin.Configuration.Repositories
+@using TelegramGroupsAdmin.Services
+@inject IFileScanningConfigRepository ConfigRepository
+@inject IAuditService AuditService
+@inject BlazorAuthHelper AuthHelper
+@inject ISnackbar Snackbar
+
+<MudGrid>
+    <!-- Info Alert -->
+    <MudItem xs="12">
+        <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+            <MudText Typo="Typo.subtitle2"><strong>OpenAI</strong></MudText>
+            <MudText Typo="Typo.body2">
+                Configure OpenAI API connection. Enables GPT-powered spam detection, content translation,
+                image/video analysis, and AI veto mode across all chats.
+            </MudText>
+        </MudAlert>
+    </MudItem>
+
+    <!-- Main Configuration -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.h6">Connection Settings</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            OpenAI API credentials and connection status
+                        </MudText>
+                    </div>
+                    <MudChip Color="@(_isConfigured ? Color.Success : Color.Error)" Size="Size.Small" T="string">
+                        @(_isConfigured ? "Configured" : "Not Configured")
+                    </MudChip>
+                </MudStack>
+
+                <MudDivider Class="my-2" />
+
+                <!-- Enable/Disable Toggle -->
+                <MudSwitch @bind-Value="_config.Enabled"
+                          Label="Enable OpenAI Integration"
+                          Color="Color.Primary" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    When disabled, all OpenAI features (spam detection, translation, image analysis) are skipped
+                </MudText>
+
+                <!-- API Key -->
+                <MudTextField @bind-Value="_apiKeys.OpenAI"
+                             Label="API Key"
+                             Variant="Variant.Outlined"
+                             InputType="@(_showApiKey ? InputType.Text : InputType.Password)"
+                             HelperText="Get your API key from https://platform.openai.com/api-keys"
+                             Adornment="Adornment.End"
+                             AdornmentIcon="@(_showApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                             OnAdornmentClick="@(() => _showApiKey = !_showApiKey)">
+                </MudTextField>
+
+                <!-- Save Button -->
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Primary"
+                              OnClick="@SaveConfigAsync"
+                              Disabled="@_isSaving"
+                              StartIcon="@Icons.Material.Filled.Save">
+                        @if (_isSaving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            <text>&nbsp;Saving...</text>
+                        }
+                        else
+                        {
+                            <text>Save Settings</text>
+                        }
+                    </MudButton>
+
+                    <MudButton Variant="Variant.Outlined"
+                              Color="Color.Secondary"
+                              OnClick="@LoadConfigAsync"
+                              Disabled="@_isSaving"
+                              StartIcon="@Icons.Material.Filled.Refresh">
+                        Reset
+                    </MudButton>
+                </MudStack>
+
+                <MudAlert Severity="Severity.Success" Dense="true" Icon="@Icons.Material.Filled.Info">
+                    Changes apply immediately (hot-reload). No app restart required.
+                </MudAlert>
+
+                @if (!_isConfigured)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">
+                        <strong>Not Configured:</strong> Add your OpenAI API key and enable the integration above.
+                        Until configured, OpenAI spam detection, translation, and image analysis will be skipped.
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Feature Configuration Link -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">Feature Configuration</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Configure how OpenAI is used for content detection (model selection, per-chat settings, vision API)
+                    in <MudLink Href="/settings/content-detection/ai-integration">Content Detection → AI Integration</MudLink>.
+                </MudText>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private OpenAIConfig _config = new();
+    private ApiKeysConfig _apiKeys = new();
+    private bool _isSaving;
+    private bool _isConfigured;
+    private bool _showApiKey;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfigAsync();
+        await LoadApiKeysAsync();
+        CheckConfiguration();
+    }
+
+    private async Task LoadConfigAsync()
+    {
+        try
+        {
+            var config = await ConfigRepository.GetOpenAIConfigAsync();
+            _config = config ?? new OpenAIConfig();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new OpenAIConfig();
+        }
+    }
+
+    private async Task LoadApiKeysAsync()
+    {
+        try
+        {
+            var apiKeys = await ConfigRepository.GetApiKeysAsync();
+            _apiKeys = apiKeys ?? new ApiKeysConfig();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading API keys: {ex.Message}", Severity.Error);
+            _apiKeys = new ApiKeysConfig();
+        }
+    }
+
+    private void CheckConfiguration()
+    {
+        _isConfigured = !string.IsNullOrWhiteSpace(_apiKeys.OpenAI);
+    }
+
+    private async Task SaveConfigAsync()
+    {
+        _isSaving = true;
+        try
+        {
+            // Save OpenAI configuration (Enabled flag only; model/tokens/temp managed in AI Integration)
+            await ConfigRepository.SaveOpenAIConfigAsync(_config);
+
+            // Save API keys
+            await ConfigRepository.SaveApiKeysAsync(_apiKeys);
+
+            // Create audit log entry
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    Actor.FromWebUser(userId),
+                    Actor.FromWebUser(userId),
+                    $"openai_infrastructure:enabled={_config.Enabled}:api_key_configured={!string.IsNullOrWhiteSpace(_apiKeys.OpenAI)}");
+            }
+
+            // Update configuration status
+            CheckConfiguration();
+
+            Snackbar.Add("OpenAI connection settings saved successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving settings: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

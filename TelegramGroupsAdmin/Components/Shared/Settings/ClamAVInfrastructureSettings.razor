@@ -1,0 +1,226 @@
+@using TelegramGroupsAdmin.Configuration.Models
+@using TelegramGroupsAdmin.Configuration.Repositories
+@using TelegramGroupsAdmin.ContentDetection.Services
+@using TelegramGroupsAdmin.Services
+@inject IFileScanningConfigRepository ConfigRepository
+@inject ClamAVScannerService ClamAvService
+@inject IAuditService AuditService
+@inject BlazorAuthHelper AuthHelper
+@inject ISnackbar Snackbar
+
+<MudGrid>
+    <!-- Info Alert -->
+    <MudItem xs="12">
+        <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+            <MudText Typo="Typo.subtitle2"><strong>ClamAV</strong></MudText>
+            <MudText Typo="Typo.body2">
+                Configure ClamAV antivirus connection. ClamAV provides local malware scanning with 10M+ virus signatures.
+                Required for file scanning feature.
+            </MudText>
+        </MudAlert>
+    </MudItem>
+
+    <!-- Main Configuration -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.h6">Connection Settings</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            ClamAV daemon (clamd) connection details
+                        </MudText>
+                    </div>
+                    <MudChip Color="Color.Success" Size="Size.Small" T="string">Required</MudChip>
+                </MudStack>
+
+                <MudDivider Class="my-2" />
+
+                <MudTextField T="string"
+                             Label="Host"
+                             @bind-Value="_config.Tier1.ClamAV.Host"
+                             Variant="Variant.Outlined"
+                             HelperText="ClamAV server hostname or IP address (default: localhost)" />
+
+                <MudNumericField T="int"
+                                Label="Port"
+                                @bind-Value="_config.Tier1.ClamAV.Port"
+                                Variant="Variant.Outlined"
+                                Min="1"
+                                Max="65535"
+                                HelperText="ClamAV daemon port (default: 3310)" />
+
+                <MudNumericField T="int"
+                                Label="Timeout (seconds)"
+                                @bind-Value="_config.Tier1.ClamAV.TimeoutSeconds"
+                                Variant="Variant.Outlined"
+                                Min="5"
+                                Max="300"
+                                HelperText="Connection timeout in seconds (default: 30)" />
+
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Secondary"
+                               OnClick="@TestConnectionAsync"
+                               Disabled="@_isTesting"
+                               StartIcon="@Icons.Material.Filled.NetworkCheck">
+                        @if (_isTesting)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            <text>&nbsp;Testing...</text>
+                        }
+                        else
+                        {
+                            <text>Test Connection</text>
+                        }
+                    </MudButton>
+
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               OnClick="@SaveConfigAsync"
+                               Disabled="@_isSaving"
+                               StartIcon="@Icons.Material.Filled.Save">
+                        @if (_isSaving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            <text>&nbsp;Saving...</text>
+                        }
+                        else
+                        {
+                            <text>Save Settings</text>
+                        }
+                    </MudButton>
+
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Secondary"
+                               OnClick="@LoadConfigAsync"
+                               Disabled="@_isSaving"
+                               StartIcon="@Icons.Material.Filled.Refresh">
+                        Reset
+                    </MudButton>
+                </MudStack>
+
+                @if (!string.IsNullOrEmpty(_testResult))
+                {
+                    <MudAlert Severity="@_testSeverity" Dense="true">
+                        @_testResult
+                    </MudAlert>
+                }
+
+                <MudAlert Severity="Severity.Success" Dense="true" Icon="@Icons.Material.Filled.Info">
+                    Changes apply immediately (hot-reload). Use "Test Connection" to verify settings before saving.
+                </MudAlert>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Docker Setup Help -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">Docker Deployment</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    For homelab deployments, ClamAV typically runs as a separate container.
+                </MudText>
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <strong>Typical Docker Setup:</strong>
+                    <ul style="margin: 8px 0 0 20px; padding: 0;">
+                        <li>Host: <code>clamav</code> (container name) or <code>localhost</code> (if using host networking)</li>
+                        <li>Port: <code>3310</code> (default clamd port)</li>
+                        <li>Timeout: <code>30</code> seconds (sufficient for most files)</li>
+                    </ul>
+                </MudAlert>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private FileScanningConfig _config = new();
+    private bool _isSaving;
+    private bool _isTesting;
+    private string _testResult = string.Empty;
+    private Severity _testSeverity = Severity.Info;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfigAsync();
+    }
+
+    private async Task LoadConfigAsync()
+    {
+        try
+        {
+            var config = await ConfigRepository.GetAsync(chatId: null); // Global config (chat_id = 0)
+            _config = config ?? new FileScanningConfig();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new FileScanningConfig();
+        }
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        _isTesting = true;
+        _testResult = string.Empty;
+
+        try
+        {
+            // Use the ClamAV service to test the connection with current settings
+            var healthResult = await ClamAvService.GetHealthAsync();
+
+            if (healthResult.IsHealthy)
+            {
+                _testSeverity = Severity.Success;
+                _testResult = $"✓ Successfully connected to ClamAV at {_config.Tier1.ClamAV.Host}:{_config.Tier1.ClamAV.Port} (Version: {healthResult.Version})";
+            }
+            else
+            {
+                _testSeverity = Severity.Error;
+                _testResult = $"✗ Failed to connect to ClamAV at {_config.Tier1.ClamAV.Host}:{_config.Tier1.ClamAV.Port}. {healthResult.ErrorMessage}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _testSeverity = Severity.Error;
+            _testResult = $"✗ Connection test failed: {ex.Message}";
+        }
+        finally
+        {
+            _isTesting = false;
+        }
+    }
+
+    private async Task SaveConfigAsync()
+    {
+        _isSaving = true;
+        try
+        {
+            // Save file scanning configuration (global, chat_id = 0)
+            await ConfigRepository.SaveAsync(_config, chatId: null);
+
+            // Create audit log entry
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    Actor.FromWebUser(userId),
+                    Actor.FromWebUser(userId),
+                    $"clamav_connection:host={_config.Tier1.ClamAV.Host}:port={_config.Tier1.ClamAV.Port}:timeout={_config.Tier1.ClamAV.TimeoutSeconds}");
+            }
+
+            Snackbar.Add("ClamAV connection settings saved successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving settings: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

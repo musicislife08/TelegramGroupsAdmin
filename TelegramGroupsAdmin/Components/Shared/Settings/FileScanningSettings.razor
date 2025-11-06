@@ -26,6 +26,14 @@
         </MudAlert>
     </MudItem>
 
+    <!-- Infrastructure Link Alert -->
+    <MudItem xs="12">
+        <MudAlert Severity="Severity.Info" Dense="true">
+            Configure connection settings in <MudLink Href="/settings/system/clamav" Style="text-decoration: underline;"><strong>System → ClamAV</strong></MudLink>
+            and API key in <MudLink Href="/settings/system/virustotal" Style="text-decoration: underline;"><strong>System → VirusTotal</strong></MudLink>.
+        </MudAlert>
+    </MudItem>
+
     <!-- Tier 1: Local Scanners (Phase 1 - ACTIVE) -->
     <MudItem xs="12">
         <MudPaper Class="pa-4" Elevation="2">
@@ -56,55 +64,10 @@
                         </TitleContent>
                         <ChildContent>
                             <MudStack Spacing="2" Class="mt-2">
-                                <MudText Typo="Typo.body2">Industry-standard open-source antivirus engine</MudText>
-
-                                <MudTextField T="string" Label="Host" @bind-Value="_config.Tier1.ClamAV.Host" Variant="Variant.Outlined" />
-                                <MudNumericField T="int" Label="Port" @bind-Value="_config.Tier1.ClamAV.Port" Variant="Variant.Outlined" />
-                                <MudNumericField T="int" Label="Timeout (seconds)" @bind-Value="_config.Tier1.ClamAV.TimeoutSeconds" Variant="Variant.Outlined" />
-
-                                <MudStack Row="true" Spacing="2">
-                                    <MudButton Variant="Variant.Outlined"
-                                               Color="Color.Secondary"
-                                               OnClick="@TestClamAvConnectionAsync"
-                                               Disabled="@_isTestingClamAv"
-                                               StartIcon="@Icons.Material.Filled.NetworkCheck">
-                                        @if (_isTestingClamAv)
-                                        {
-                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                            <text>&nbsp;Testing...</text>
-                                        }
-                                        else
-                                        {
-                                            <text>Test Connection</text>
-                                        }
-                                    </MudButton>
-
-                                    <MudButton Variant="Variant.Filled"
-                                               Color="Color.Primary"
-                                               OnClick="@SaveConfigAsync"
-                                               Disabled="@_isSaving"
-                                               StartIcon="@Icons.Material.Filled.Save">
-                                        @if (_isSaving)
-                                        {
-                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                            <text>&nbsp;Saving...</text>
-                                        }
-                                        else
-                                        {
-                                            <text>Save Settings</text>
-                                        }
-                                    </MudButton>
-                                </MudStack>
-
-                                @if (!string.IsNullOrEmpty(_clamAvTestResult))
-                                {
-                                    <MudAlert Severity="@_clamAvTestSeverity" Dense="true">
-                                        @_clamAvTestResult
-                                    </MudAlert>
-                                }
+                                <MudText Typo="Typo.body2">Industry-standard open-source antivirus engine with 10M+ virus signatures</MudText>
 
                                 <MudAlert Severity="Severity.Info" Dense="true">
-                                    ClamAV connection settings. Use "Test Connection" to verify settings before saving.
+                                    ClamAV connection settings (host, port, timeout) are managed in <MudLink Href="/settings/system/clamav" Style="text-decoration: underline;"><strong>System → ClamAV</strong></MudLink>.
                                 </MudAlert>
                             </MudStack>
                         </ChildContent>
@@ -157,30 +120,13 @@
                             <MudStack Spacing="2" Class="mt-2">
                                 <MudText Typo="Typo.body2">Multi-engine cloud scanning with 70+ antivirus engines</MudText>
 
-                                <MudTextField @bind-Value="_apiKeys.VirusTotal"
-                                              Label="API Key"
-                                              Variant="Variant.Outlined"
-                                              InputType="InputType.Password"
-                                              HelperText="Get your API key from https://www.virustotal.com/gui/my-apikey"
-                                              Adornment="Adornment.End"
-                                              AdornmentIcon="@Icons.Material.Filled.Key">
-                                </MudTextField>
+                                <MudAlert Severity="Severity.Info" Dense="true">
+                                    VirusTotal API key is managed in <MudLink Href="/settings/system/virustotal" Style="text-decoration: underline;"><strong>System → VirusTotal</strong></MudLink>.
+                                </MudAlert>
 
-                                <MudButton Variant="Variant.Filled"
-                                           Color="Color.Primary"
-                                           OnClick="@SaveApiKeysAsync"
-                                           Disabled="@_isSavingApiKeys"
-                                           StartIcon="@Icons.Material.Filled.Save">
-                                    @if (_isSavingApiKeys)
-                                    {
-                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                                        <text>&nbsp;Saving...</text>
-                                    }
-                                    else
-                                    {
-                                        <text>Save API Keys</text>
-                                    }
-                                </MudButton>
+                                <MudDivider Class="my-2" />
+
+                                <MudText Typo="Typo.subtitle2">Rate Limiting & Quotas</MudText>
 
                                 <MudStack Row="true" Spacing="2">
                                     <FieldWithHelp HelpText="Daily quota limit (Free tier: 500/day). When exceeded, VirusTotal is skipped for remaining files. System uses fail-open design - files are allowed when quota exhausted (logged as warning). Resets daily at midnight UTC.">
@@ -194,11 +140,11 @@
                                 <MudAlert Severity="_virusTotalConfigured ? Severity.Success : Severity.Info" Dense="true">
                                     @if (_virusTotalConfigured)
                                     {
-                                        <text><strong>Configured:</strong> API key is set and ready to use.</text>
+                                        <text><strong>API Key Status:</strong> Configured and ready to use.</text>
                                     }
                                     else
                                     {
-                                        <text><strong>Not Configured:</strong> Add your VirusTotal API key above. VirusTotal will be skipped until configured.</text>
+                                        <text><strong>API Key Status:</strong> Not configured. Add your VirusTotal API key in <MudLink Href="/settings/system/virustotal" Style="text-decoration: underline;">System → VirusTotal</MudLink>.</text>
                                     }
                                 </MudAlert>
                             </MudStack>
@@ -537,15 +483,11 @@
     private Dictionary<string, int> _scanStats = new();
     private List<DetectionResultRecord> _scanResults = [];
     private bool _isSaving;
-    private bool _isSavingApiKeys;
     private bool _isLoadingQuotas;
     private bool _isLoadingHealth;
     private bool _isLoadingScanResults;
     private bool _isClearingCache;
-    private bool _isTestingClamAv;
     private bool _virusTotalConfigured;
-    private string _clamAvTestResult = string.Empty;
-    private Severity _clamAvTestSeverity = Severity.Info;
 
     // Pagination for scan results
     private int _currentPage = 1;
@@ -556,7 +498,7 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadConfig();
-        await LoadApiKeys();
+        await LoadApiKeysForStatusCheck(); // Only for checking VirusTotal configured status
         await LoadQuotas();
         await LoadHealthData();
         await LoadScanResults();
@@ -594,7 +536,7 @@
         }
     }
 
-    private async Task LoadApiKeys()
+    private async Task LoadApiKeysForStatusCheck()
     {
         try
         {
@@ -613,39 +555,6 @@
         // Check database first, fallback to env var
         _virusTotalConfigured = !string.IsNullOrWhiteSpace(_apiKeys.VirusTotal) ||
                                 !string.IsNullOrWhiteSpace(Configuration["VirusTotal:ApiKey"]);
-    }
-
-    private async Task SaveApiKeysAsync()
-    {
-        _isSavingApiKeys = true;
-        try
-        {
-            await ConfigRepository.SaveApiKeysAsync(_apiKeys);
-
-            // Create audit log entry
-            var userId = await AuthHelper.GetCurrentUserIdAsync();
-            if (!string.IsNullOrEmpty(userId))
-            {
-                await AuditService.LogEventAsync(
-                    AuditEventType.ConfigurationChanged,
-                    Actor.FromWebUser(userId),
-                    Actor.FromWebUser(userId),
-                    "file_scanning:api_keys_updated");
-            }
-
-            // Update configuration status
-            CheckVirusTotalConfiguration();
-
-            Snackbar.Add("API keys saved successfully", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error saving API keys: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _isSavingApiKeys = false;
-        }
     }
 
     private async Task SaveConfigAsync()
@@ -707,45 +616,6 @@
             len = len / 1024;
         }
         return $"{len:0.##} {sizes[order]}";
-    }
-
-    private async Task TestClamAvConnectionAsync()
-    {
-        _isTestingClamAv = true;
-        _clamAvTestResult = string.Empty;
-
-        try
-        {
-            var host = _config.Tier1.ClamAV.Host;
-            var port = _config.Tier1.ClamAV.Port;
-            var timeout = _config.Tier1.ClamAV.TimeoutSeconds;
-
-            _clamAvTestResult = $"Testing connection to {host}:{port} (timeout: {timeout}s)...";
-            StateHasChanged();
-            await Task.Delay(100); // Brief delay to show "testing" message
-
-            // Create a temporary ClamClient to test with current form values
-            var testClient = new nClam.ClamClient(host, port);
-
-            // Test ping (with cancellation token for timeout)
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeout));
-            await testClient.PingAsync(cts.Token);
-
-            // Get version to confirm it's really working
-            var version = await testClient.GetVersionAsync(cts.Token);
-
-            _clamAvTestResult = $"✅ Connection successful! ClamAV version: {version} at {host}:{port}";
-            _clamAvTestSeverity = Severity.Success;
-        }
-        catch (Exception ex)
-        {
-            _clamAvTestResult = $"❌ Connection failed: {ex.Message}\n\nHost: {_config.Tier1.ClamAV.Host}\nPort: {_config.Tier1.ClamAV.Port}\n\nTroubleshooting:\n- Check if ClamAV container is running\n- Verify host/port values match your Docker Compose\n- Check network connectivity between containers";
-            _clamAvTestSeverity = Severity.Error;
-        }
-        finally
-        {
-            _isTestingClamAv = false;
-        }
     }
 
     private async Task LoadHealthData()

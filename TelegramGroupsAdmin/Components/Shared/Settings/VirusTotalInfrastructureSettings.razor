@@ -1,0 +1,192 @@
+@using TelegramGroupsAdmin.Configuration.Models
+@using TelegramGroupsAdmin.Configuration.Repositories
+@using TelegramGroupsAdmin.Services
+@inject IFileScanningConfigRepository ConfigRepository
+@inject IAuditService AuditService
+@inject BlazorAuthHelper AuthHelper
+@inject ISnackbar Snackbar
+
+<MudGrid>
+    <!-- Info Alert -->
+    <MudItem xs="12">
+        <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+            <MudText Typo="Typo.subtitle2"><strong>VirusTotal</strong></MudText>
+            <MudText Typo="Typo.body2">
+                Configure VirusTotal API key. VirusTotal provides multi-engine cloud scanning with 70+ antivirus engines.
+                Optional service used as fallback when ClamAV finds no threats.
+            </MudText>
+        </MudAlert>
+    </MudItem>
+
+    <!-- Main Configuration -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.h6">API Key</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            VirusTotal API credentials
+                        </MudText>
+                    </div>
+                    <MudChip Color="@(_isConfigured ? Color.Success : Color.Warning)" Size="Size.Small" T="string">
+                        @(_isConfigured ? "Configured" : "Optional")
+                    </MudChip>
+                </MudStack>
+
+                <MudDivider Class="my-2" />
+
+                <MudTextField @bind-Value="_apiKeys.VirusTotal"
+                              Label="API Key"
+                              Variant="Variant.Outlined"
+                              InputType="@(_showApiKey ? InputType.Text : InputType.Password)"
+                              HelperText="Get your API key from https://www.virustotal.com/gui/my-apikey"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@(_showApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                              OnAdornmentClick="@(() => _showApiKey = !_showApiKey)">
+                </MudTextField>
+
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               OnClick="@SaveApiKeysAsync"
+                               Disabled="@_isSaving"
+                               StartIcon="@Icons.Material.Filled.Save">
+                        @if (_isSaving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            <text>&nbsp;Saving...</text>
+                        }
+                        else
+                        {
+                            <text>Save API Key</text>
+                        }
+                    </MudButton>
+
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Secondary"
+                               OnClick="@LoadApiKeysAsync"
+                               Disabled="@_isSaving"
+                               StartIcon="@Icons.Material.Filled.Refresh">
+                        Reset
+                    </MudButton>
+                </MudStack>
+
+                <MudAlert Severity="@(_isConfigured ? Severity.Success : Severity.Info)" Dense="true">
+                    @if (_isConfigured)
+                    {
+                        <text><strong>Configured:</strong> API key is set and ready to use.</text>
+                    }
+                    else
+                    {
+                        <text><strong>Not Configured:</strong> VirusTotal is optional. File scanning will work without it using ClamAV only.</text>
+                    }
+                </MudAlert>
+
+                <MudAlert Severity="Severity.Success" Dense="true" Icon="@Icons.Material.Filled.Info">
+                    Changes apply immediately (hot-reload). No app restart required.
+                </MudAlert>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Feature Configuration Link -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">Feature Configuration</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Configure VirusTotal scanning behavior (enable/disable, rate limits, quotas) in
+                    <MudLink Href="/settings/content-detection/file-scanning">Content Detection → File Scanning</MudLink>.
+                </MudText>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- API Tier Information -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">API Tier Limits</MudText>
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <strong>Free Tier:</strong>
+                    <ul style="margin: 8px 0 0 20px; padding: 0;">
+                        <li>500 requests per day</li>
+                        <li>4 requests per minute</li>
+                        <li>32MB file size limit</li>
+                    </ul>
+                </MudAlert>
+                <MudAlert Severity="Severity.Warning" Dense="true">
+                    When daily quota is exceeded, VirusTotal scanning is automatically disabled until quota resets at midnight UTC.
+                    Files will still be scanned by ClamAV (fail-open design for high availability).
+                </MudAlert>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private ApiKeysConfig _apiKeys = new();
+    private bool _isSaving;
+    private bool _isConfigured;
+    private bool _showApiKey;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadApiKeysAsync();
+        CheckConfiguration();
+    }
+
+    private async Task LoadApiKeysAsync()
+    {
+        try
+        {
+            var apiKeys = await ConfigRepository.GetApiKeysAsync();
+            _apiKeys = apiKeys ?? new ApiKeysConfig();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading API keys: {ex.Message}", Severity.Error);
+            _apiKeys = new ApiKeysConfig();
+        }
+    }
+
+    private void CheckConfiguration()
+    {
+        _isConfigured = !string.IsNullOrWhiteSpace(_apiKeys.VirusTotal);
+    }
+
+    private async Task SaveApiKeysAsync()
+    {
+        _isSaving = true;
+        try
+        {
+            // Save API keys
+            await ConfigRepository.SaveApiKeysAsync(_apiKeys);
+
+            // Create audit log entry
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    Actor.FromWebUser(userId),
+                    Actor.FromWebUser(userId),
+                    $"virustotal_api_key:configured={!string.IsNullOrWhiteSpace(_apiKeys.VirusTotal)}");
+            }
+
+            // Update configuration status
+            CheckConfiguration();
+
+            Snackbar.Add("VirusTotal API key saved successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving API key: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+}

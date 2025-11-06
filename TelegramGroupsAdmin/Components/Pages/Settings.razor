@@ -28,9 +28,10 @@
                     }
                     @if (_canEditInfrastructure)
                     {
-                        <MudNavLink Href="/settings/system/external-services" Icon="@Icons.Material.Filled.Extension" Match="NavLinkMatch.All">External Services</MudNavLink>
                         <MudNavLink Href="/settings/system/openai" Icon="@Icons.Material.Filled.Psychology" Match="NavLinkMatch.All">OpenAI</MudNavLink>
-                        <MudNavLink Href="/settings/system/sendgrid" Icon="@Icons.Material.Filled.Email" Match="NavLinkMatch.All">SendGrid</MudNavLink>
+                        <MudNavLink Href="/settings/system/email" Icon="@Icons.Material.Filled.Email" Match="NavLinkMatch.All">Email</MudNavLink>
+                        <MudNavLink Href="/settings/system/clamav" Icon="@Icons.Material.Filled.Shield" Match="NavLinkMatch.All">ClamAV</MudNavLink>
+                        <MudNavLink Href="/settings/system/virustotal" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">VirusTotal</MudNavLink>
                     }
                     <MudNavLink Href="/settings/system/logging" Icon="@Icons.Material.Filled.Terminal" Match="NavLinkMatch.All">Logging</MudNavLink>
                     @if (_canEditInfrastructure)
@@ -46,14 +47,13 @@
                     {
                         <MudNavLink Href="/settings/telegram/bot-config" Icon="@Icons.Material.Filled.Settings" Match="NavLinkMatch.All">Bot Configuration</MudNavLink>
                     }
-                    <MudNavLink Href="/settings/telegram/notifications" Icon="@Icons.Material.Filled.Notifications" Match="NavLinkMatch.All">Notifications</MudNavLink>
                 </MudNavGroup>
 
                 <!-- Content Detection Group -->
                 <MudNavGroup Title="Content Detection" Icon="@Icons.Material.Filled.Shield" Expanded="@_contentDetectionExpanded" ExpandedChanged="@((bool expanded) => _contentDetectionExpanded = expanded)">
                     <MudNavLink Href="/settings/content-detection/algorithms" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">Detection Algorithms</MudNavLink>
                     <MudNavLink Href="/settings/content-detection/tuning" Icon="@Icons.Material.Filled.Insights" Match="NavLinkMatch.All">Algorithm Tuning</MudNavLink>
-                    <MudNavLink Href="/settings/content-detection/external-services-config" Icon="@Icons.Material.Filled.CloudSync" Match="NavLinkMatch.All">External Services Config</MudNavLink>
+                    <MudNavLink Href="/settings/content-detection/ai-integration" Icon="@Icons.Material.Filled.CloudSync" Match="NavLinkMatch.All">AI Integration</MudNavLink>
                     <MudNavLink Href="/settings/content-detection/url-filters" Icon="@Icons.Material.Filled.Link" Match="NavLinkMatch.All">URL Filtering</MudNavLink>
                     <MudNavLink Href="/settings/content-detection/file-scanning" Icon="@Icons.Material.Filled.Scanner" Match="NavLinkMatch.All">File Scanning</MudNavLink>
                 </MudNavGroup>
@@ -115,30 +115,40 @@
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
-                        case "external-services":
-                            @if (_canEditInfrastructure)
-                            {
-                                <ExternalServicesSettings />
-                            }
-                            else
-                            {
-                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
-                            }
-                            break;
                         case "openai":
                             @if (_canEditInfrastructure)
                             {
-                                <OpenAISettings />
+                                <OpenAIInfrastructureSettings />
                             }
                             else
                             {
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
-                        case "sendgrid":
+                        case "email":
                             @if (_canEditInfrastructure)
                             {
-                                <SendGridSettings />
+                                <EmailInfrastructureSettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
+                            break;
+                        case "clamav":
+                            @if (_canEditInfrastructure)
+                            {
+                                <ClamAVInfrastructureSettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
+                            break;
+                        case "virustotal":
+                            @if (_canEditInfrastructure)
+                            {
+                                <VirusTotalInfrastructureSettings />
                             }
                             else
                             {
@@ -182,9 +192,6 @@
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
-                        case "notifications":
-                            <NotificationsSettings />
-                            break;
                         default:
                             @if (_canEditInfrastructure)
                             {
@@ -208,8 +215,8 @@
                         case "tuning":
                             <AlgorithmTuning />
                             break;
-                        case "external-services-config":
-                            <ContentDetectionExternal />
+                        case "ai-integration":
+                            <AIIntegrationSettings />
                             break;
                         case "url-filters":
                             <UrlFiltersConfig ChatId="0" />
@@ -301,19 +308,21 @@
             ("system", "general") => "General Settings",
             ("system", "security") => "Security Settings",
             ("system", "accounts") => "Admin Accounts",
-            ("system", "external-services") => "External Services",
+            ("system", "openai") => "OpenAI",
+            ("system", "email") => "Email",
+            ("system", "clamav") => "ClamAV",
+            ("system", "virustotal") => "VirusTotal",
             ("system", "logging") => "Logging Settings",
             ("system", "background-jobs") => "Background Jobs",
             ("system", "backup-config") => "Backup Configuration",
 
             // Telegram
             ("telegram", "bot-config") => "Bot Configuration",
-            ("telegram", "notifications") => "Notification Settings",
 
             // Content Detection
             ("content-detection", "algorithms") => "Detection Algorithms",
             ("content-detection", "tuning") => "Algorithm Tuning",
-            ("content-detection", "external-services-config") => "External Services Configuration",
+            ("content-detection", "ai-integration") => "AI Integration",
             ("content-detection", "url-filters") => "URL Filtering",
             ("content-detection", "file-scanning") => "File Scanning",
 

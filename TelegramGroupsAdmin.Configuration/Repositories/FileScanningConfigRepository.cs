@@ -73,9 +73,10 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
 
         _logger.LogInformation("Saving file scanning config for {ChatType}", chatId == null ? "global" : $"chat {chatId}");
 
-        // Find or create config record
+        // Find or create config record (normalize null to 0 for global config)
+        var normalizedChatId = chatId ?? 0;
         var configRecord = await context.Configs
-            .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken)
+            .FirstOrDefaultAsync(c => c.ChatId == normalizedChatId, cancellationToken)
             ;
 
         if (configRecord == null)
@@ -129,9 +130,11 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
         long? chatId,
         CancellationToken cancellationToken)
     {
+        // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
+        var normalizedChatId = chatId ?? 0;
         var configRecord = await context.Configs
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken)
+            .FirstOrDefaultAsync(c => c.ChatId == normalizedChatId, cancellationToken)
             ;
 
         if (configRecord?.FileScanningConfig == null)

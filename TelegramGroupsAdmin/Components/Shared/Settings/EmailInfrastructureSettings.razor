@@ -12,10 +12,10 @@
     <!-- Info Alert -->
     <MudItem xs="12">
         <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
-            <MudText Typo="Typo.subtitle2"><strong>SendGrid Email Service</strong></MudText>
+            <MudText Typo="Typo.subtitle2"><strong>Email</strong></MudText>
             <MudText Typo="Typo.body2">
-                SendGrid powers email delivery for password resets, email verification, account notifications,
-                and user invitations. Configuration changes apply immediately (hot-reload).
+                Configure email delivery for password resets, email verification, account notifications,
+                and user invitations. Currently using SendGrid (future SMTP support planned).
             </MudText>
         </MudAlert>
     </MudItem>
@@ -26,9 +26,9 @@
             <MudStack Spacing="3">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                     <div>
-                        <MudText Typo="Typo.h6">SendGrid Configuration</MudText>
+                        <MudText Typo="Typo.h6">Email Service</MudText>
                         <MudText Typo="Typo.body2" Color="Color.Secondary">
-                            Configure SendGrid API settings for email delivery
+                            SendGrid API credentials and sender configuration
                         </MudText>
                     </div>
                     <MudChip Color="@(_isConfigured ? Color.Success : Color.Error)" Size="Size.Small" T="string">
@@ -40,7 +40,7 @@
 
                 <!-- Enable/Disable Toggle -->
                 <MudSwitch @bind-Value="_config.Enabled"
-                          Label="Enable SendGrid Integration"
+                          Label="Enable Email Service"
                           Color="Color.Primary" />
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                     When disabled, password reset and email verification features are unavailable

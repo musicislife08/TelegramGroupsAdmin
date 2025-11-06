@@ -6,138 +6,23 @@
 
 <MudStack Spacing="3" Class="mb-4">
     <MudAlert Severity="Severity.Info" Dense="true">
-        Configure how content detection algorithms use external services. API keys are managed in
-        <MudLink OnClick="@(() => Navigation.NavigateTo("/settings/system/external-services"))" Style="cursor: pointer;" Color="Color.Primary"><strong>System → External Services</strong></MudLink>.
+        Configure how OpenAI Vision is used for image and video spam detection. API key and connection settings are managed in
+        <MudLink OnClick="@(() => Navigation.NavigateTo("/settings/system/openai"))" Style="cursor: pointer;" Color="Color.Primary"><strong>System → OpenAI</strong></MudLink>.
+    </MudAlert>
+</MudStack>
+
+<MudStack Spacing="2" Class="mb-4">
+    <MudAlert Severity="Severity.Info" Dense="true">
+        <strong>Other Detection Features:</strong>
+        <ul style="margin: 8px 0 0 20px; padding: 0;">
+            <li>URL Blocklist configuration → <MudLink OnClick="@(() => Navigation.NavigateTo("/settings/content-detection/url-filters"))" Style="cursor: pointer; text-decoration: underline;" Color="Color.Primary">URL Filtering</MudLink></li>
+            <li>Threat Intelligence (VirusTotal) → <MudLink OnClick="@(() => Navigation.NavigateTo("/settings/content-detection/file-scanning"))" Style="cursor: pointer; text-decoration: underline;" Color="Color.Primary">File Scanning</MudLink></li>
+            <li>SEO Scraping detection → <MudLink OnClick="@(() => Navigation.NavigateTo("/settings/content-detection/algorithms"))" Style="cursor: pointer; text-decoration: underline;" Color="Color.Primary">Detection Algorithms</MudLink></li>
+        </ul>
     </MudAlert>
 </MudStack>
 
 <MudGrid>
-    <MudItem xs="12" md="6">
-        <MudPaper Class="pa-4" Elevation="1">
-            <MudStack Spacing="3">
-                <MudText Typo="Typo.h6" Color="Color.Primary">URL Blocklist</MudText>
-
-                @if (!IsGlobalView)
-                {
-                    <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
-                        <MudSwitch T="bool" Value="_config.UrlBlocklist.UseGlobal"
-                                  ValueChanged="OnUrlUseGlobalChanged"
-                                  Label="@(_config.UrlBlocklist.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
-                                  Color="@(_config.UrlBlocklist.UseGlobal ? Color.Default : Color.Primary)" />
-                    </MudPaper>
-                }
-
-                @{
-                    var urlConfig = (IsGlobalView || !_config.UrlBlocklist.UseGlobal) ? _config.UrlBlocklist : _globalConfig.UrlBlocklist;
-                    var urlReadOnly = !IsGlobalView && _config.UrlBlocklist.UseGlobal;
-                    var urlCacheHours = (int)urlConfig.CacheDuration.TotalHours;
-                }
-
-                <MudSwitch T="bool" Value="urlConfig.Enabled"
-                          ValueChanged="OnUrlEnabledChanged"
-                          Label="Enable URL Blocklist Check"
-                          Color="Color.Primary"
-                          Disabled="@urlReadOnly" />
-
-                @if (urlConfig.Enabled)
-                {
-                    <MudNumericField Value="urlCacheHours"
-                                    ValueChanged="@((int val) => OnUrlCacheHoursChanged(val))"
-                                    Label="Cache Duration (hours)"
-                                    Min="1" Max="168"
-                                    Disabled="@urlReadOnly"
-                                    HelperText="@(urlReadOnly ? $"Using global value: {urlCacheHours}h" : "How long to cache blocklist entries")" />
-                }
-            </MudStack>
-        </MudPaper>
-    </MudItem>
-
-    <MudItem xs="12" md="6">
-        <MudPaper Class="pa-4" Elevation="1">
-            <MudStack Spacing="3">
-                <MudText Typo="Typo.h6" Color="Color.Primary">Threat Intelligence</MudText>
-
-                @if (!IsGlobalView)
-                {
-                    <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
-                        <MudSwitch T="bool" Value="_config.ThreatIntel.UseGlobal"
-                                  ValueChanged="OnThreatUseGlobalChanged"
-                                  Label="@(_config.ThreatIntel.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
-                                  Color="@(_config.ThreatIntel.UseGlobal ? Color.Default : Color.Primary)" />
-                    </MudPaper>
-                }
-
-                @{
-                    var threatConfig = (IsGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
-                    var threatReadOnly = !IsGlobalView && _config.ThreatIntel.UseGlobal;
-                    var threatTimeoutSeconds = (int)threatConfig.Timeout.TotalSeconds;
-                }
-
-                <MudSwitch T="bool" Value="threatConfig.Enabled"
-                          ValueChanged="OnThreatEnabledChanged"
-                          Label="Enable Threat Intelligence"
-                          Color="Color.Primary"
-                          Disabled="@threatReadOnly" />
-
-                @if (threatConfig.Enabled)
-                {
-                    <MudSwitch T="bool" Value="threatConfig.UseVirusTotal"
-                              ValueChanged="OnThreatUseVirusTotalChanged"
-                              Label="Use VirusTotal"
-                              Color="Color.Primary"
-                              Disabled="@threatReadOnly" />
-
-                    <MudNumericField Value="threatTimeoutSeconds"
-                                    ValueChanged="@((int val) => OnThreatTimeoutChanged(val))"
-                                    Label="Timeout (seconds)"
-                                    Min="5" Max="60"
-                                    Disabled="@threatReadOnly"
-                                    HelperText="@(threatReadOnly ? $"Using global value: {threatTimeoutSeconds}s" : "Request timeout for threat intel APIs")" />
-                }
-            </MudStack>
-        </MudPaper>
-    </MudItem>
-
-    <MudItem xs="12" md="6">
-        <MudPaper Class="pa-4" Elevation="1">
-            <MudStack Spacing="3">
-                <MudText Typo="Typo.h6" Color="Color.Primary">SEO Scraping</MudText>
-
-                @if (!IsGlobalView)
-                {
-                    <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
-                        <MudSwitch T="bool" Value="_config.SeoScraping.UseGlobal"
-                                  ValueChanged="OnSeoUseGlobalChanged"
-                                  Label="@(_config.SeoScraping.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
-                                  Color="@(_config.SeoScraping.UseGlobal ? Color.Default : Color.Primary)" />
-                    </MudPaper>
-                }
-
-                @{
-                    var seoConfig = (IsGlobalView || !_config.SeoScraping.UseGlobal) ? _config.SeoScraping : _globalConfig.SeoScraping;
-                    var seoReadOnly = !IsGlobalView && _config.SeoScraping.UseGlobal;
-                    var seoTimeoutSeconds = (int)seoConfig.Timeout.TotalSeconds;
-                }
-
-                <MudSwitch T="bool" Value="seoConfig.Enabled"
-                          ValueChanged="OnSeoEnabledChanged"
-                          Label="Enable SEO Scraping"
-                          Color="Color.Primary"
-                          Disabled="@seoReadOnly" />
-
-                @if (seoConfig.Enabled)
-                {
-                    <MudNumericField Value="seoTimeoutSeconds"
-                                    ValueChanged="@((int val) => OnSeoTimeoutChanged(val))"
-                                    Label="Timeout (seconds)"
-                                    Min="5" Max="30"
-                                    Disabled="@seoReadOnly"
-                                    HelperText="@(seoReadOnly ? $"Using global value: {seoTimeoutSeconds}s" : "Request timeout for SEO scraping")" />
-                }
-            </MudStack>
-        </MudPaper>
-    </MudItem>
-
     <MudItem xs="12" md="6">
         <MudPaper Class="pa-4" Elevation="1">
             <MudStack Spacing="3">
@@ -324,76 +209,6 @@
         {
             _isSaving = false;
         }
-    }
-
-    // URL Blocklist change handlers
-    private async Task OnUrlUseGlobalChanged(bool value)
-    {
-        _config.UrlBlocklist.UseGlobal = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnUrlEnabledChanged(bool value)
-    {
-        var config = (IsGlobalView || !_config.UrlBlocklist.UseGlobal) ? _config.UrlBlocklist : _globalConfig.UrlBlocklist;
-        config.Enabled = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnUrlCacheHoursChanged(int hours)
-    {
-        var config = (IsGlobalView || !_config.UrlBlocklist.UseGlobal) ? _config.UrlBlocklist : _globalConfig.UrlBlocklist;
-        config.CacheDuration = TimeSpan.FromHours(hours);
-        await SaveConfiguration();
-    }
-
-    // Threat Intelligence change handlers
-    private async Task OnThreatUseGlobalChanged(bool value)
-    {
-        _config.ThreatIntel.UseGlobal = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnThreatEnabledChanged(bool value)
-    {
-        var config = (IsGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
-        config.Enabled = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnThreatUseVirusTotalChanged(bool value)
-    {
-        var config = (IsGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
-        config.UseVirusTotal = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnThreatTimeoutChanged(int seconds)
-    {
-        var config = (IsGlobalView || !_config.ThreatIntel.UseGlobal) ? _config.ThreatIntel : _globalConfig.ThreatIntel;
-        config.Timeout = TimeSpan.FromSeconds(seconds);
-        await SaveConfiguration();
-    }
-
-    // SEO Scraping change handlers
-    private async Task OnSeoUseGlobalChanged(bool value)
-    {
-        _config.SeoScraping.UseGlobal = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnSeoEnabledChanged(bool value)
-    {
-        var config = (IsGlobalView || !_config.SeoScraping.UseGlobal) ? _config.SeoScraping : _globalConfig.SeoScraping;
-        config.Enabled = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnSeoTimeoutChanged(int seconds)
-    {
-        var config = (IsGlobalView || !_config.SeoScraping.UseGlobal) ? _config.SeoScraping : _globalConfig.SeoScraping;
-        config.Timeout = TimeSpan.FromSeconds(seconds);
-        await SaveConfiguration();
     }
 
     // Image Content Detection change handlers

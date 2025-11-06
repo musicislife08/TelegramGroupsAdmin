@@ -1,13 +1,47 @@
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Services.Blocklists
+@using TelegramGroupsAdmin.ContentDetection.Configuration
 @using Microsoft.AspNetCore.Components.Authorization
 @inject IBlocklistSubscriptionsRepository BlocklistRepo
 @inject IDomainFiltersRepository DomainFiltersRepo
 @inject IBlocklistSyncService BlocklistSync
+@inject ISpamDetectionConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthStateProvider
 @implements IDisposable
+
+<MudGrid>
+    <!-- URL Blocklist Feature Toggle -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.ToggleOn" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">URL Blocklist Detection</MudText>
+                </MudStack>
+
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    Enable or disable URL blocklist checking. When enabled, messages containing URLs from blocklists below will be flagged as spam.
+                </MudAlert>
+
+                <MudSwitch T="bool" Value="_urlBlocklistConfig.Enabled"
+                          ValueChanged="OnUrlBlocklistEnabledChanged"
+                          Label="Enable URL Blocklist Check"
+                          Color="Color.Primary" />
+
+                @if (_urlBlocklistConfig.Enabled)
+                {
+                    <MudNumericField Value="@((int)_urlBlocklistConfig.CacheDuration.TotalHours)"
+                                    ValueChanged="@((int val) => OnCacheDurationChanged(val))"
+                                    Label="Cache Duration (hours)"
+                                    Min="1" Max="168"
+                                    HelperText="How long to cache blocklist entries (1-168 hours)" />
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
 
 <MudGrid>
     <!-- Left Panel: Hard Block (Pre-Detection) -->
@@ -239,6 +273,10 @@
     private bool _syncing;
     private CancellationTokenSource? _reloadCts;
 
+    // URL Blocklist feature configuration
+    private UrlBlocklistConfig _urlBlocklistConfig = new();
+    private SpamDetectionConfig _globalSpamConfig = new();
+
     // Hard Block state
     private string _hardBlockCustomUrls = string.Empty;
     private string _hardBlockManualDomains = string.Empty;
@@ -253,6 +291,47 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadDataAsync();
+        await LoadUrlBlocklistConfigAsync();
+    }
+
+    private async Task LoadUrlBlocklistConfigAsync()
+    {
+        try
+        {
+            _globalSpamConfig = await ConfigRepository.GetGlobalConfigAsync();
+            _urlBlocklistConfig = _globalSpamConfig.UrlBlocklist;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading URL blocklist configuration: {ex.Message}", Severity.Error);
+            _urlBlocklistConfig = new UrlBlocklistConfig();
+        }
+    }
+
+    private async Task OnUrlBlocklistEnabledChanged(bool enabled)
+    {
+        _urlBlocklistConfig.Enabled = enabled;
+        await SaveUrlBlocklistConfigAsync();
+    }
+
+    private async Task OnCacheDurationChanged(int hours)
+    {
+        _urlBlocklistConfig.CacheDuration = TimeSpan.FromHours(hours);
+        await SaveUrlBlocklistConfigAsync();
+    }
+
+    private async Task SaveUrlBlocklistConfigAsync()
+    {
+        try
+        {
+            _globalSpamConfig.UrlBlocklist = _urlBlocklistConfig;
+            await ConfigRepository.UpdateGlobalConfigAsync(_globalSpamConfig);
+            Snackbar.Add("URL blocklist configuration saved", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving URL blocklist configuration: {ex.Message}", Severity.Error);
+        }
     }
 
     private async Task LoadDataAsync()
