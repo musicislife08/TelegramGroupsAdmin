@@ -531,29 +531,6 @@ if (spamSampleCount < 50 || legitMessageCount < 100)
 
 ---
 
-## Completed Work
-
-**2025-11-05**: FEATURE-5.5 (Duplicate report detection - prevents users from spamming /report on same message, only ONE pending report per message allowed from anyone until resolved, application-level check with GetExistingPendingReportAsync + database-enforced partial unique index on (message_id, chat_id) WHERE status=0, friendly auto-deleting bot response shows existing report details, allows re-reporting after admin resolves, migration 20251105174749, 22/22 tests passing), SCHEMA-3 (Standardized global config pattern - migrated chat_id NULL → 0, fixed database integrity bug where PostgreSQL UNIQUE indexes allow unlimited NULLs providing zero constraint enforcement, added partial unique indexes for singleton global config + chat-specific configs, updated 8 files with 20+ code locations, migration 20251105161051 with automatic data merging for edge case where both NULL and 0 rows existed, 22/22 tests passing, consistent pattern across all 6 config tables)
-
-**2025-10-30**: ML-6 (Video spam detection - 3-layer system reusing ML-5 pipeline: keyframe hash similarity + OCR on frames + OpenAI Vision fallback, VideoFrameExtractionService with FFmpeg static binary, smart short video handling, VideoTrainingSamplesRepository, database migration 20251030203913, Dockerfile with FFmpeg 7.0.2 pinned via build arg, 813MB final image), ML-5 (Image spam detection - 3-layer system: perceptual hash similarity + OCR text extraction + OpenAI Vision fallback, CLI wrapper for Tesseract with graceful degradation, ImageTextExtractionService with binary auto-detection, ImageTrainingSamplesRepository, database migration 20251030203913, StopWordsSpamCheck OrderBy fix for deterministic Take()), SECURITY-1 (Git history sanitization complete - BFG purged launchSettings.json + http-client.private.env.json + examples/compose.*.yml from 660 commits, 11 old unencrypted backups deleted, pre-commit hook with 8 secret patterns installed, .gitignore enhanced with 20+ secret file patterns, .git reduced to 3.3MB)
-
-**2025-10-29**: SECURITY-5 (Settings page authorization bypass fixed - GlobalAdminOrOwner policy + Owner-only infrastructure checks), SECURITY-6 (User management permission checks - GlobalAdmin can manage users, escalation prevention), cSpell configuration (29 domain terms, 0 spell warnings), Interface splits (3 files: WelcomeResponsesRepository, BotProtectionService, WelcomeService), REFACTOR-6 (ModelMappings 884 lines → 26 files in Mappings/ subdirectory, 69 files changed)
-
-**2025-10-28**: CODE-8 (Removed 157× ConfigureAwait - unnecessary in ASP.NET Core), DI-1 audit (175 registrations, 66 concrete-only justified, created DI-2 for 2 inconsistent repos), REFACTOR-2 (BackupService 1,202 → 750 lines, 4 handlers + 2 services extracted, breaking changes, 20/20 tests), PERF-3 (trust context early exit), REFACTOR-13 (OpenAI extraction, 40/40 tests)
-
-**2025-10-27**: CODE-9 (Removed reflection in MessageProcessingService - extracted CheckResultsSerializer static utility, compile-time safe, no performance overhead), CODE-1 + CODE-2 (Complete code organization overhaul - split ~60 files into 140+ individual files, fixed 7 name mismatches, renamed TotpProtectionService→DataProtectionService, one type per file achieved, 164 files changed), ANALYTICS-4 (Welcome system analytics - 4 new repository methods, WelcomeAnalytics.razor component, /analytics#welcome tab with join trends/response distribution/per-chat stats, timezone-aware queries), SCHEMA-1 (Audit log FK cascade rules fixed - migration 20251027002019, user deletion now works, 22/22 tests passing)
-
-**2025-10-26**: SECURITY-2 (Open redirect vulnerability fixed - UrlHelpers.IsLocalUrl() validation on all auth redirects), BUG-LOGOUT (Missing /logout page - existed since Oct 6, found by user on Cloudflare tunnel exposure)
-
-**2025-10-25**: BUG-1 (False negative tracking - analytics now shows both FP and FN rates with overall accuracy metrics)
-
-**2025-10-24**: ARCH-2 (Actor exclusive arc migration complete - audit_log table migrated with 6 new columns, 35+ call sites updated, UI updated, 84 rows migrated successfully)
-**2025-10-22**: PERF-CD-3 (Domain stats: 2.24× faster, 55ms→25ms via GroupBy aggregation), PERF-CD-4 (TF-IDF: 2.59× faster, 44% less memory via Dictionary counting + pre-indexed vocabulary)
-**2025-10-21**: ARCH-1 (Core library - 544 lines eliminated), ARCH-2 (Actor refactoring partial - moderation tables only), PERF-APP-1, PERF-APP-3, DI-1 (4 repositories), Comprehensive audit logging coverage, BlazorAuthHelper DRY refactoring (19 instances), Empirical performance testing (PERF-CD-1 removed via PostgreSQL profiling)
-**2025-10-19**: 8 performance optimizations (Users N+1, config caching, parallel bans, composite index, virtualization, record conversion, leak fix, allocation optimization)
-
----
-
 ## Performance Optimization Issues
 
 **Deployment Context:** 10+ chats, 1000+ users, 100-1000 messages/day, Messages page primary moderation tool
