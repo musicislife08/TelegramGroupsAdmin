@@ -1,6 +1,6 @@
 # Development Backlog - TelegramGroupsAdmin
 
-**Last Updated:** 2025-11-04
+**Last Updated:** 2025-11-05
 **Status:** Pre-production (breaking changes acceptable)
 **Overall Code Quality:** 89/100 (Excellent - homelab-optimized)
 
@@ -9,15 +9,6 @@ This document tracks technical debt, performance optimizations, refactoring work
 ---
 
 ## Feature Backlog
-
-### SECURITY-4: Backup Passphrase Logging Audit
-
-**Priority:** LOW - Preventative measure, no known leaks
-**Impact:** Prevent passphrase exposure in logs/exceptions
-
-**Action:** Audit BackupService, BackupEncryptionSetupDialog, BackupPassphraseRotationDialog, RotateBackupPassphraseJob for passphrase logging. Replace with `[REDACTED]` in all log statements.
-
----
 
 ### DOCS-3: Configuration Guide
 
