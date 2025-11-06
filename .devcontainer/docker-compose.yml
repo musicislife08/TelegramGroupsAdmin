@@ -1,0 +1,68 @@
+services:
+  # Development container - VS Code/Rider connects to this
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ../:/workspace:cached
+      # Persist bash history
+      - devcontainer-bashhistory:/commandhistory
+      # Mount docker socket for docker CLI
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: /bin/sh -c "while sleep 1000; do :; done"
+    network_mode: service:postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
+
+  # PostgreSQL 17 database
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: telegram_groups_admin
+      POSTGRES_USER: tgadmin
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      POSTGRES_MAX_CONNECTIONS: 100
+    ports:
+      - "5432:5432"
+      - "5161:5161"
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tgadmin -d telegram_groups_admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ClamAV antivirus scanner
+  clamav:
+    image: clamav/clamav:latest
+    platform: linux/amd64  # ClamAV doesn't have arm64 image - runs via emulation on M1/M2/M3 Macs
+    restart: unless-stopped
+    volumes:
+      - clamav-data:/var/lib/clamav
+    environment:
+      CLAMD_CONF_StreamMaxLength: 2000M
+      CLAMD_CONF_MaxFileSize: 2000M
+      CLAMD_CONF_MaxScanSize: 2000M
+      CLAMD_CONF_MaxScanTime: 300000
+      CLAMD_CONF_PCREMaxFileSize: 100M
+    network_mode: service:postgres
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  postgres-data:
+  clamav-data:
+  devcontainer-bashhistory:

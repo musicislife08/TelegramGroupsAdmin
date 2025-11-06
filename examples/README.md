@@ -4,10 +4,10 @@ This directory contains example Docker Compose configurations for deploying Tele
 
 ## Files
 
-### `compose.production.yml` - Pull from Docker Hub
+### `compose.production.yml` - Pull from GitHub Container Registry
 **Use this when:** You want to deploy quickly without building from source.
 
-- Pulls pre-built image from Docker Hub
+- Pulls pre-built image from GitHub Container Registry (GHCR)
 - Faster deployment (no build step)
 - Ideal for production servers
 - Image size: ~200MB (Ubuntu Chiseled runtime)
@@ -30,8 +30,8 @@ docker compose logs -f app
 open http://localhost:8080
 ```
 
-**Image location:** `your-dockerhub-username/telegramgroupsadmin:latest`
-*(Update this in compose.yml when the image is published)*
+**Image location:** `ghcr.io/musicislife08/telegramgroupsadmin:latest`
+*(GitHub Actions CI/CD pipeline planned - images will be published on release)*
 
 ---
 
@@ -70,11 +70,11 @@ open http://localhost:8080
 
 | Feature | Production | Development |
 |---------|-----------|-------------|
-| **Image Source** | Docker Hub (pre-built) | Local build |
+| **Image Source** | GitHub Container Registry (pre-built) | Local build |
 | **Build Time** | None (just pull) | 2-5 minutes |
 | **Deployment Speed** | ⚡ Fast | 🐢 Slower (first time) |
 | **Customization** | No source changes | Full source access |
-| **Image Tag** | `your-dockerhub-username/telegramgroupsadmin:latest` | `telegramgroupsadmin:local` |
+| **Image Tag** | `ghcr.io/musicislife08/telegramgroupsadmin:latest` | `telegramgroupsadmin:local` |
 | **Best For** | Production servers | Development, testing, customization |
 
 ---

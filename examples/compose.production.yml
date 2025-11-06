@@ -69,10 +69,12 @@ services:
       - telegram-admin
 
   # ---------------------------------------------------------------------------
-  # TelegramGroupsAdmin Application (Docker Hub Image)
+  # TelegramGroupsAdmin Application (GitHub Container Registry)
+  # NOTE: Images will be published to GHCR via GitHub Actions (CI/CD pipeline planned)
+  # For now, use compose.development.yml to build from source
   # ---------------------------------------------------------------------------
   app:
-    image: your-dockerhub-username/telegramgroupsadmin:latest  # CHANGE THIS when image is published!
+    image: ghcr.io/musicislife08/telegramgroupsadmin:latest
     container_name: telegram-groups-admin-app
     restart: unless-stopped
     ports:

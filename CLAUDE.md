@@ -4,7 +4,7 @@
 
 .NET 9.0 (9.0.100), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 9.0, TickerQ 2.5.3, OpenAI API, VirusTotal, SendGrid
 
-**Note**: Migrated from .NET 10 RC2 → .NET 9 due to [framework bug](https://github.com/dotnet/aspnetcore/issues/XXXXX) where Blazor Server apps don't generate `wwwroot/_framework/blazor.web.js` during publish, causing 404s in Production mode. Will revisit .NET 10 after RTM release.
+**Note**: Migrated from .NET 10 RC2 → .NET 9 due to a framework bug where Blazor Server apps don't generate `wwwroot/_framework/blazor.web.js` during publish, causing 404s in Production mode. Will upgrade to .NET 10 after RTM release (November 11, 2025).
 
 ## Use Case & Deployment Context
 

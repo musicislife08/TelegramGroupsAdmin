@@ -1,0 +1,102 @@
+{
+  "name": "TelegramGroupsAdmin",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspace",
+
+  // Features to add to the dev container
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "upgradePackages": true,
+      "username": "vscode",
+      "userUid": "1000",
+      "userGid": "1000"
+    },
+    "ghcr.io/devcontainers/features/dotnet:2": {
+      "version": "9.0",
+      "installUsingApt": false
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts",
+      "nodeGypDependencies": true,
+      "nvmInstall": true
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "version": "latest",
+      "moby": true
+    }
+  },
+
+  // Configure tool-specific properties
+  "customizations": {
+    // VS Code specific settings
+    "vscode": {
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll": "explicit",
+          "source.organizeImports": "explicit"
+        },
+        "files.eol": "\n",
+        "files.trimTrailingWhitespace": true,
+        "files.insertFinalNewline": true
+      },
+      "extensions": [
+        "ms-dotnettools.csdevkit",
+        "ms-dotnettools.csharp",
+        "ms-azuretools.vscode-docker",
+        "editorconfig.editorconfig",
+        "davidanson.vscode-markdownlint",
+        "anthropic.claude-code"
+      ]
+    },
+    // JetBrains Rider specific settings
+    "jetbrains": {
+      "backend": "Rider"
+    }
+  },
+
+  // Use 'forwardPorts' to make a list of ports inside the container available locally
+  "forwardPorts": [
+    5161,  // App (launchSettings.json)
+    8080,  // App (Docker)
+    5432,  // PostgreSQL
+    3310   // ClamAV
+  ],
+
+  // Port attributes
+  "portsAttributes": {
+    "5161": {
+      "label": "App (Development)",
+      "onAutoForward": "notify"
+    },
+    "8080": {
+      "label": "App (Docker)",
+      "onAutoForward": "notify"
+    },
+    "5432": {
+      "label": "PostgreSQL",
+      "onAutoForward": "silent"
+    },
+    "3310": {
+      "label": "ClamAV",
+      "onAutoForward": "silent"
+    }
+  },
+
+  // Commands to run after container is created
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  // Set container user
+  "remoteUser": "vscode",
+
+  // Mount docker socket for docker-outside-of-docker
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ]
+}
