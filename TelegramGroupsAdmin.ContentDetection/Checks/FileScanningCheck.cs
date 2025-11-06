@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// <summary>
 /// File scanning check using two-tier architecture:
 /// - Tier 1: Local scanners (ClamAV) run in parallel with OR voting
-/// - Tier 2: Cloud services (VirusTotal, MetaDefender, etc.) run sequentially in priority order (only if Tier 1 reports clean)
+/// - Tier 2: Cloud services (e.g., VirusTotal) run sequentially in priority order (only if Tier 1 reports clean)
 /// Phase 4.17 - always_run=true (bypasses trust/admin exemptions)
 /// Implements hash-based caching with 24-hour TTL
 /// </summary>

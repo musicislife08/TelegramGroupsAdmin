@@ -356,29 +356,6 @@ if (spamSampleCount < 50 || legitMessageCount < 100)
 
 ---
 
-### REFACTOR-7: Remove Unused File Scanning Services
-
-**Priority:** MEDIUM - Code cleanup
-**Impact:** Reduces maintenance burden, simplifies file scanning architecture
-
-**Context:** Currently support 4 cloud file scanning services (VirusTotal, MetaDefender, HybridAnalysis, Intezer). VirusTotal is industry standard and sufficient for our needs.
-
-**Tasks:**
-1. Delete scanner service classes: MetaDefenderScannerService, HybridAnalysisScannerService, IntezerScannerService
-2. Delete config classes: MetaDefenderConfig, HybridAnalysisConfig, IntezerConfig
-3. Update Tier2QueueCoordinator - remove 3 services from constructor/dictionary
-4. Update ServiceCollectionExtensions - remove DI registrations
-5. Update ApiKeyDelegatingHandler - remove key loading
-6. Update ApiKeyMigrationService - remove migration logic
-7. Update ApiKeysConfig - remove properties
-8. Update Tier2Config - update CloudQueuePriority defaults to only ["VirusTotal"]
-9. Consider FileScanQuotaRecord - remove columns (may need migration)
-10. Update docs (CLAUDE.md, FILE_SCANNING.md)
-
-**Result:** Single VirusTotal integration for file scanning, cleaner codebase
-
----
-
 ### DEPLOY-1: Docker Compose Simplicity Validation
 
 **Priority:** HIGH - Blocking for GitHub migration

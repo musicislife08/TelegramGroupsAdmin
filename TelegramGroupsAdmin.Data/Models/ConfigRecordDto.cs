@@ -82,7 +82,7 @@ public class ConfigRecordDto
 
     /// <summary>
     /// API keys for external services (encrypted TEXT, not JSONB)
-    /// Stores VirusTotal, MetaDefender, HybridAnalysis, Intezer API keys encrypted with Data Protection
+    /// Stores VirusTotal and other service API keys encrypted with Data Protection
     /// Encrypted at rest, automatically decrypted during backup export and re-encrypted during restore
     /// Only used for global config (chat_id = 0)
     /// Note: Uses TEXT not JSONB because encrypted data is base64, not valid JSON

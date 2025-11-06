@@ -251,8 +251,6 @@ public static class GoldenDataset
     public static class ApiKeys
     {
         public const string VirusTotal_Test = "vt_test_key_1a2b3c4d5e6f";
-        public const string MetaDefender_Test = "md_test_key_9z8y7x6w5v4u";
-        public const string HybridAnalysis_Test = "ha_test_key_qwerty123456";
     }
 
     /// <summary>
@@ -387,9 +385,7 @@ public static class GoldenDataset
             // Encrypt test API keys using Data Protection
             var apiKeysJson = $$"""
             {
-              "VirusTotal": "{{ApiKeys.VirusTotal_Test}}",
-              "MetaDefender": "{{ApiKeys.MetaDefender_Test}}",
-              "HybridAnalysis": "{{ApiKeys.HybridAnalysis_Test}}"
+              "VirusTotal": "{{ApiKeys.VirusTotal_Test}}"
             }
             """;
             encryptedApiKeys = apiKeyProtector.Protect(apiKeysJson);

@@ -2,12 +2,12 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
 /// Interface for Tier 2 cloud scanning services
-/// All cloud scanners (VirusTotal, MetaDefender, Hybrid Analysis, Intezer) implement this
+/// Cloud scanners (e.g., VirusTotal) implement this interface
 /// </summary>
 public interface ICloudScannerService
 {
     /// <summary>
-    /// Name of the cloud service (e.g., "VirusTotal", "MetaDefender")
+    /// Name of the cloud service (e.g., "VirusTotal")
     /// </summary>
     string ServiceName { get; }
 

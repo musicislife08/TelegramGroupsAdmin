@@ -16,7 +16,7 @@ public class FileScanQuotaRecord
 
     [Column("service")]
     [Required]
-    [MaxLength(50)]  // 'VirusTotal', 'MetaDefender', 'HybridAnalysis', 'Intezer'
+    [MaxLength(50)]  // 'VirusTotal', etc.
     public string Service { get; set; } = string.Empty;
 
     [Column("quota_type")]
@@ -34,7 +34,7 @@ public class FileScanQuotaRecord
     public int Count { get; set; } = 0;
 
     [Column("limit_value")]
-    public int LimitValue { get; set; }  // Quota limit (500 for VT daily, 40 for MetaDefender, etc.)
+    public int LimitValue { get; set; }  // Quota limit (varies by service)
 
     [Column("last_updated")]
     public DateTimeOffset LastUpdated { get; set; }
