@@ -3,6 +3,7 @@
 @using TelegramGroupsAdmin.Services
 @inject HttpClient HttpClient
 @inject IAuthService AuthService
+@inject IFeatureAvailabilityService FeatureAvailability
 @inject NavigationManager Navigation
 @inject ILogger<Register> Logger
 @inject IDialogService DialogService
@@ -47,6 +48,16 @@
         {
             <MudAlert Severity="Severity.Success" Class="mb-4">
                 @(_successMessage ?? "Account created successfully! You can now log in.")
+            </MudAlert>
+        }
+
+        @if (!_isFirstRun && !_isEmailVerificationEnabled)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                <MudText Typo="Typo.body2">
+                    <strong>Note:</strong> Email verification is currently disabled (email service not configured).
+                    You will be able to log in immediately after registration. If you cannot log in, contact your administrator.
+                </MudText>
             </MudAlert>
         }
 
@@ -114,6 +125,7 @@
     private bool _isLoading;
     private bool _registrationSuccess;
     private bool _isFirstRun;
+    private bool _isEmailVerificationEnabled;
     private string _inviteToken = string.Empty;
     private string _email = string.Empty;
     private string _password = string.Empty; // Initialized as empty, never null
@@ -127,6 +139,7 @@
     protected override async Task OnInitializedAsync()
     {
         _isFirstRun = await AuthService.IsFirstRunAsync();
+        _isEmailVerificationEnabled = await FeatureAvailability.IsEmailVerificationEnabledAsync();
 
         if (!string.IsNullOrEmpty(InviteQueryParam))
         {

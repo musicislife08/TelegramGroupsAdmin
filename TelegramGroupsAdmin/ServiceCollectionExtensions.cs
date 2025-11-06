@@ -133,6 +133,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMessageExportService, MessageExportService>();
         services.AddScoped<IUserManagementService, UserManagementService>();
         services.AddScoped<IAuditService, AuditService>();
+        services.AddScoped<IFeatureAvailabilityService, FeatureAvailabilityService>(); // FEATURE-5.3: Check external service configuration status
         services.AddScoped<BlazorAuthHelper>(); // Authentication context extraction helper for UI components
 
         // Prompt builder service (Phase 4.X: AI-powered prompt generation)

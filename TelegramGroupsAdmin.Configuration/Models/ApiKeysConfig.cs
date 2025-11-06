@@ -15,10 +15,24 @@ public class ApiKeysConfig
     public string? VirusTotal { get; set; }
 
     /// <summary>
+    /// OpenAI API key (https://platform.openai.com/api-keys)
+    /// Required for image spam detection and translation features
+    /// </summary>
+    public string? OpenAI { get; set; }
+
+    /// <summary>
+    /// SendGrid API key (https://app.sendgrid.com/settings/api_keys)
+    /// Required for email verification, password reset, and notification emails
+    /// </summary>
+    public string? SendGrid { get; set; }
+
+    /// <summary>
     /// Returns true if at least one API key is configured
     /// </summary>
     public bool HasAnyKey()
     {
-        return !string.IsNullOrWhiteSpace(VirusTotal);
+        return !string.IsNullOrWhiteSpace(VirusTotal) ||
+               !string.IsNullOrWhiteSpace(OpenAI) ||
+               !string.IsNullOrWhiteSpace(SendGrid);
     }
 }

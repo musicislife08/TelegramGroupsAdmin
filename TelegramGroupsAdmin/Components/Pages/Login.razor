@@ -9,6 +9,7 @@
 @using TelegramGroupsAdmin.Services.Auth
 @inject IAuthService AuthService
 @inject IIntermediateAuthService IntermediateAuthService
+@inject IFeatureAvailabilityService FeatureAvailability
 @inject IHttpContextAccessor HttpContextAccessor
 @inject ILogger<Login> Logger
 @inject NavigationManager Navigation
@@ -63,8 +64,17 @@
     <div class="divider"></div>
 
     <p class="text-center">
-        <a href="/forgot-password" style="color: #594ae2;">Forgot your password?</a><br />
-        Need to verify your email? <a href="/resend-verification" style="color: #594ae2;">Resend verification email</a><br />
+        @if (_isPasswordResetEnabled)
+        {
+            <span><a href="/forgot-password" style="color: #594ae2;">Forgot your password?</a><br /></span>
+            <span>Need to verify your email? <a href="/resend-verification" style="color: #594ae2;">Resend verification email</a><br /></span>
+        }
+        else
+        {
+            <div class="alert-info" style="margin-bottom: 1rem;">
+                Password reset and email verification are unavailable (email service not configured). Contact your administrator.
+            </div>
+        }
         Need an invite? Contact your administrator.
     </p>
 </div>
@@ -81,10 +91,14 @@
 
     private string? _errorMessage;
     private string? _successMessage;
+    private bool _isPasswordResetEnabled;
 
     protected override async Task OnInitializedAsync()
     {
         Model ??= new LoginModel();
+
+        // Check if password reset feature is available
+        _isPasswordResetEnabled = await FeatureAvailability.IsPasswordResetEnabledAsync();
 
         // Redirect to registration if no users exist (first run)
         if (await AuthService.IsFirstRunAsync())

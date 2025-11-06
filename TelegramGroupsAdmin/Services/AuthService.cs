@@ -20,6 +20,7 @@ public class AuthService(
     IPasswordHasher passwordHasher,
     IEmailService emailService,
     IAccountLockoutService accountLockoutService,
+    IFeatureAvailabilityService featureAvailability,
     IOptions<AppOptions> appOptions,
     ILogger<AuthService> logger)
     : IAuthService
@@ -475,7 +476,7 @@ public class AuthService(
             Status: UserStatus.Active,
             ModifiedBy: null,
             ModifiedAt: null,
-            EmailVerified: isFirstRun,
+            EmailVerified: isFirstRun || !await featureAvailability.IsEmailVerificationEnabledAsync(), // FEATURE-5.3: Skip email verification if email service not configured
             EmailVerificationToken: null,
             EmailVerificationTokenExpiresAt: null,
             PasswordResetToken: null,
@@ -500,8 +501,17 @@ public class AuthService(
                 value: $"Registered via invite from {invitedBy}",
                 ct: ct);
 
-            // Send verification email
-            await SendVerificationEmailAsync(userId, email, ct);
+            // Send verification email only if email service is configured
+            if (await featureAvailability.IsEmailVerificationEnabledAsync())
+            {
+                await SendVerificationEmailAsync(userId, email, ct);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "User {UserId} registered without email verification (email service not configured)",
+                    userId);
+            }
         }
         else
         {
