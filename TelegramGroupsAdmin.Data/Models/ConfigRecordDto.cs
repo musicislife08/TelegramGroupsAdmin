@@ -130,6 +130,24 @@ public class ConfigRecordDto
     public string? TelegramBotTokenEncrypted { get; set; }
 
     /// <summary>
+    /// OpenAI service configuration (JSONB)
+    /// Model selection, max tokens, and other non-sensitive settings
+    /// API key stored in api_keys column (encrypted)
+    /// Only used for global config (chat_id = 0)
+    /// </summary>
+    [Column("openai_config", TypeName = "jsonb")]
+    public string? OpenAIConfig { get; set; }
+
+    /// <summary>
+    /// SendGrid email service configuration (JSONB)
+    /// Enabled flag, from address, from name, and other non-sensitive settings
+    /// API key stored in api_keys column (encrypted)
+    /// Only used for global config (chat_id = 0)
+    /// </summary>
+    [Column("sendgrid_config", TypeName = "jsonb")]
+    public string? SendGridConfig { get; set; }
+
+    /// <summary>
     /// When this config was created (UTC timestamp)
     /// </summary>
     [Column("created_at")]

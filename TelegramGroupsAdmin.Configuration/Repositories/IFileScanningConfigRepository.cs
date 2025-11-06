@@ -47,4 +47,34 @@ public interface IFileScanningConfigRepository
     /// <param name="apiKeys">API keys to save</param>
     /// <param name="cancellationToken">Cancellation token</param>
     Task SaveApiKeysAsync(ApiKeysConfig apiKeys, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get OpenAI service configuration (global only - chat_id = NULL)
+    /// Configuration stored in configs.openai_config JSONB column
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>OpenAI config or default if not configured</returns>
+    Task<OpenAIConfig?> GetOpenAIConfigAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Save OpenAI service configuration (global only - chat_id = NULL)
+    /// </summary>
+    /// <param name="config">OpenAI configuration to save</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task SaveOpenAIConfigAsync(OpenAIConfig config, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get SendGrid email service configuration (global only - chat_id = NULL)
+    /// Configuration stored in configs.sendgrid_config JSONB column
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>SendGrid config or default if not configured</returns>
+    Task<SendGridConfig?> GetSendGridConfigAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Save SendGrid email service configuration (global only - chat_id = NULL)
+    /// </summary>
+    /// <param name="config">SendGrid configuration to save</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task SaveSendGridConfigAsync(SendGridConfig config, CancellationToken cancellationToken = default);
 }

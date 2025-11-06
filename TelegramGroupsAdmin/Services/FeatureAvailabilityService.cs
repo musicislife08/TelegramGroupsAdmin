@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Options;
-using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 
@@ -11,17 +9,14 @@ namespace TelegramGroupsAdmin.Services;
 /// </summary>
 public class FeatureAvailabilityService : IFeatureAvailabilityService
 {
-    private readonly IFileScanningConfigRepository _fileScanningRepo;
-    private readonly IOptions<SendGridOptions> _sendGridOptions;
+    private readonly IFileScanningConfigRepository _configRepo;
     private readonly ILogger<FeatureAvailabilityService> _logger;
 
     public FeatureAvailabilityService(
-        IFileScanningConfigRepository fileScanningRepo,
-        IOptions<SendGridOptions> sendGridOptions,
+        IFileScanningConfigRepository configRepo,
         ILogger<FeatureAvailabilityService> logger)
     {
-        _fileScanningRepo = fileScanningRepo;
-        _sendGridOptions = sendGridOptions;
+        _configRepo = configRepo;
         _logger = logger;
     }
 
@@ -29,14 +24,21 @@ public class FeatureAvailabilityService : IFeatureAvailabilityService
     {
         try
         {
-            // Check if SendGrid is enabled in config
-            if (!_sendGridOptions.Value.Enabled)
+            // Check if SendGrid is enabled in database config
+            var sendGridConfig = await _configRepo.GetSendGridConfigAsync();
+            if (sendGridConfig?.Enabled != true)
+            {
+                return false;
+            }
+
+            // Check if required fields are configured
+            if (string.IsNullOrWhiteSpace(sendGridConfig.FromAddress))
             {
                 return false;
             }
 
             // Check if API key is configured in database
-            var apiKeys = await _fileScanningRepo.GetApiKeysAsync();
+            var apiKeys = await _configRepo.GetApiKeysAsync();
             return !string.IsNullOrWhiteSpace(apiKeys?.SendGrid);
         }
         catch (Exception ex)
@@ -50,8 +52,15 @@ public class FeatureAvailabilityService : IFeatureAvailabilityService
     {
         try
         {
+            // Check if OpenAI is enabled in database config
+            var openAIConfig = await _configRepo.GetOpenAIConfigAsync();
+            if (openAIConfig?.Enabled != true)
+            {
+                return false;
+            }
+
             // Check if API key is configured in database
-            var apiKeys = await _fileScanningRepo.GetApiKeysAsync();
+            var apiKeys = await _configRepo.GetApiKeysAsync();
             return !string.IsNullOrWhiteSpace(apiKeys?.OpenAI);
         }
         catch (Exception ex)

@@ -222,4 +222,128 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
 
         _logger.LogInformation("API keys saved successfully to encrypted database storage");
     }
+
+    public async Task<OpenAIConfig?> GetOpenAIConfigAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // OpenAI config is global only (chat_id = 0)
+        var configRecord = await context.Configs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord?.OpenAIConfig == null)
+        {
+            // Return default config if not set
+            return new OpenAIConfig();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<OpenAIConfig>(configRecord.OpenAIConfig, _jsonOptions) ?? new OpenAIConfig();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to deserialize OpenAI config");
+            return new OpenAIConfig();
+        }
+    }
+
+    public async Task SaveOpenAIConfigAsync(OpenAIConfig config, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        _logger.LogInformation("Saving OpenAI configuration to database");
+
+        // Serialize to JSON
+        var jsonConfig = JsonSerializer.Serialize(config, _jsonOptions);
+
+        // Find or create global config record (chat_id = 0)
+        var configRecord = await context.Configs
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord == null)
+        {
+            // Create new global config record
+            configRecord = new Data.Models.ConfigRecordDto
+            {
+                ChatId = 0,
+                OpenAIConfig = jsonConfig,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await context.Configs.AddAsync(configRecord, cancellationToken);
+        }
+        else
+        {
+            // Update existing global config
+            configRecord.OpenAIConfig = jsonConfig;
+            configRecord.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("OpenAI configuration saved successfully");
+    }
+
+    public async Task<SendGridConfig?> GetSendGridConfigAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // SendGrid config is global only (chat_id = 0)
+        var configRecord = await context.Configs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord?.SendGridConfig == null)
+        {
+            // Return default config if not set
+            return new SendGridConfig();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<SendGridConfig>(configRecord.SendGridConfig, _jsonOptions) ?? new SendGridConfig();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to deserialize SendGrid config");
+            return new SendGridConfig();
+        }
+    }
+
+    public async Task SaveSendGridConfigAsync(SendGridConfig config, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        _logger.LogInformation("Saving SendGrid configuration to database");
+
+        // Serialize to JSON
+        var jsonConfig = JsonSerializer.Serialize(config, _jsonOptions);
+
+        // Find or create global config record (chat_id = 0)
+        var configRecord = await context.Configs
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord == null)
+        {
+            // Create new global config record
+            configRecord = new Data.Models.ConfigRecordDto
+            {
+                ChatId = 0,
+                SendGridConfig = jsonConfig,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await context.Configs.AddAsync(configRecord, cancellationToken);
+        }
+        else
+        {
+            // Update existing global config
+            configRecord.SendGridConfig = jsonConfig;
+            configRecord.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("SendGrid configuration saved successfully");
+    }
 }
