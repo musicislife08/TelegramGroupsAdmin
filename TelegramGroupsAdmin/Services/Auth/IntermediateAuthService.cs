@@ -35,7 +35,17 @@ public class IntermediateAuthService : IIntermediateAuthService
             userId, tokenData.ExpiresAt);
 
         // Clean up expired tokens (fire and forget)
-        _ = Task.Run(() => CleanupExpiredTokens());
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                CleanupExpiredTokens();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to clean up expired intermediate auth tokens");
+            }
+        });
 
         return token;
     }

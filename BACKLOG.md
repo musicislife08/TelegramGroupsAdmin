@@ -572,15 +572,6 @@ if (spamSampleCount < 50 || legitMessageCount < 100)
 
 ---
 
-### CODE-5: Fire-and-Forget Error Handling
-
-**Priority:** MEDIUM
-**Impact:** Silent failures in 4 fire-and-forget tasks
-
-**Action:** Wrap all `_ = Task.Run(...)` in try-catch with logging (MessageProcessingService x2, SpamActionService, IntermediateAuthService)
-
----
-
 ### CODE-6: Extract Magic Numbers to Configuration
 
 **Priority:** LOW
