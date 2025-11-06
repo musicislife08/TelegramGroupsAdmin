@@ -17,14 +17,17 @@ This directory contains example Docker Compose configurations for deploying Tele
 # 1. Copy to root directory
 cp examples/compose.production.yml compose.yml
 
-# 2. Edit compose.yml with your API keys
+# 2. Edit compose.yml - set PostgreSQL password only
 nano compose.yml
 
 # 3. Start services
 docker compose up -d
 
-# 4. Check logs
+# 4. Wait for database migrations
 docker compose logs -f app
+
+# 5. Open web UI and configure API keys (see Configuration section below)
+open http://localhost:8080
 ```
 
 **Image location:** `your-dockerhub-username/telegramgroupsadmin:latest`
@@ -45,14 +48,17 @@ docker compose logs -f app
 # 1. Copy to root directory
 cp examples/compose.development.yml compose.yml
 
-# 2. Edit compose.yml with your API keys
+# 2. Edit compose.yml - set PostgreSQL password only
 nano compose.yml
 
 # 3. Build and start services
 docker compose up -d --build
 
-# 4. Check logs
+# 4. Wait for database migrations
 docker compose logs -f app
+
+# 5. Open web UI and configure API keys (see Configuration section below)
+open http://localhost:8080
 ```
 
 **Build context:** `../` (repository root)
@@ -73,34 +79,48 @@ docker compose logs -f app
 
 ---
 
-## Required Configuration
+## Configuration
 
-Both files require you to configure these environment variables:
+### Step 1: Database Password (Required in compose.yml)
 
-### 🔑 Required API Keys
+Set a strong PostgreSQL password in `compose.yml`:
 
-1. **Telegram Bot Token** (`TELEGRAM__BOTTOKEN`)
-   - Get from: [@BotFather](https://t.me/BotFather)
-   - Format: `1234567890:ABCdefGHIjklMNOpqrsTUVwxyz`
-   - The bot automatically discovers all groups it's added to
+```yaml
+POSTGRES_PASSWORD: "your-strong-password-here"
+ConnectionStrings__PostgreSQL: "Host=postgres;Port=5432;Database=telegram_groups_admin;Username=tgadmin;Password=your-strong-password-here"
+```
 
-2. **OpenAI API Key** (`OPENAI__APIKEY`)
-   - Get from: [OpenAI Platform](https://platform.openai.com/api-keys)
-   - Format: `sk-proj-xxxxx...`
+**⚠️ Important:** Use the same password in both places!
 
-3. **VirusTotal API Key** (`VIRUSTOTAL__APIKEY`)
-   - Get from: [VirusTotal](https://www.virustotal.com/gui/my-apikey)
+### Step 2: Service Configuration (Web UI)
 
-4. **CAS API Key** (`SPAMDETECTION__APIKEY`)
-   - Get from: [CAS.chat](https://cas.chat/)
+After starting the application, all service API keys are configured through the **Settings UI**:
 
-5. **SendGrid API Key** (`SENDGRID__APIKEY`)
-   - Get from: [SendGrid](https://app.sendgrid.com/settings/api_keys)
-   - Also set `SENDGRID__FROMEMAIL` and `SENDGRID__FROMNAME`
+#### 🎯 First Login Setup
+1. Open http://localhost:8080 (or your domain)
+2. Create your first admin account
+3. Navigate to **Settings** in the sidebar
 
-6. **Database Password** (`POSTGRES_PASSWORD` and in connection string)
-   - Change from default `CHANGE_ME_STRONG_PASSWORD`
-   - Use same password in both places!
+#### 🔑 Configure API Keys
+
+**Settings > Infrastructure:**
+- **Telegram Bot Configuration**
+  - Get token from: [@BotFather](https://t.me/BotFather)
+  - Format: `1234567890:ABCdefGHIjklMNOpqrsTUVwxyz`
+
+- **OpenAI Configuration**
+  - Get key from: [OpenAI Platform](https://platform.openai.com/api-keys)
+  - Set model (recommended: `gpt-4o-mini`)
+
+- **SendGrid Configuration**
+  - Get key from: [SendGrid](https://app.sendgrid.com/settings/api_keys)
+  - Set from email and name
+
+**Settings > Features > Spam Detection:**
+- **VirusTotal API Key** - Get from: [VirusTotal](https://www.virustotal.com/gui/my-apikey)
+- **CAS API Key** - Get from: [CAS.chat](https://cas.chat/)
+
+**✅ All API keys are encrypted and stored in the database** - no environment variables needed!
 
 ---
 
@@ -162,8 +182,9 @@ docker compose up -d app
 - ✅ Uses Ubuntu Chiseled runtime (minimal attack surface)
 - ✅ No shell or package manager in app container
 - ✅ Data Protection keys persist in volume
+- ✅ All API keys encrypted and stored in database (not environment variables)
 - ⚠️ HTTPS should be handled by reverse proxy (Traefik, Nginx, Caddy)
-- ⚠️ Never commit compose.yml with real API keys to git!
+- ⚠️ Never commit compose.yml with database password to git!
 - ⚠️ Change default PostgreSQL password!
 
 ---
@@ -176,8 +197,11 @@ docker compose up -d app
 **Problem:** App can't connect to PostgreSQL
 **Solution:** Check passwords match in both `POSTGRES_PASSWORD` and connection string
 
-**Problem:** "TELEGRAM__BOTTOKEN is required" error
-**Solution:** Make sure all required environment variables are set (not commented out)
+**Problem:** Bot not responding in Telegram
+**Solution:** Configure bot token in Settings > Infrastructure > Telegram Bot Configuration
+
+**Problem:** Spam detection not working
+**Solution:** Configure API keys in Settings UI (OpenAI, VirusTotal, CAS)
 
 **Problem:** Build fails with "project not found"
 **Solution:** Make sure you're using development compose and context is set to `..`
@@ -191,10 +215,11 @@ docker compose up -d app
 
 1. Choose production or development compose file
 2. Copy to root: `cp examples/compose.*.yml compose.yml`
-3. Edit `compose.yml` with your API keys (replace all `CHANGE_ME` values)
+3. Edit `compose.yml` - set PostgreSQL password only
 4. Start: `docker compose up -d`
 5. Check logs: `docker compose logs -f app`
 6. Access: http://localhost:8080
-7. Create first user (becomes Owner automatically)
+7. Create first user account (becomes Owner automatically)
+8. Configure API keys in Settings UI (Infrastructure & Features sections)
 
-For more information, see main repository [CLAUDE.md](../CLAUDE.md) documentation.
+For more information, see main repository [README.md](../README.md) and [CLAUDE.md](../CLAUDE.md) documentation.

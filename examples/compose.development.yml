@@ -126,44 +126,14 @@ services:
       ConnectionStrings__PostgreSQL: "Host=postgres;Port=5432;Database=telegram_groups_admin;Username=tgadmin;Password=CHANGE_ME_STRONG_PASSWORD"
 
       # =======================================================================
-      # REQUIRED: Telegram Bot Configuration
+      # Service Configuration (All configured via Settings UI after first login)
       # =======================================================================
-      # How to get: Message @BotFather on Telegram, create a new bot
-      # Format: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz-1234567890
-      # The bot automatically discovers all groups it's added to
-      TELEGRAM__BOTTOKEN: "CHANGE_ME_GET_FROM_BOTFATHER"
-
-      # =======================================================================
-      # REQUIRED: OpenAI API Configuration
-      # =======================================================================
-      # How to get: https://platform.openai.com/api-keys
-      # Click "Create new secret key", copy the sk-proj-... value
-      OPENAI__APIKEY: "CHANGE_ME_GET_FROM_OPENAI"
-      OPENAI__MODEL: "gpt-4o-mini"  # Recommended for cost/performance
-      OPENAI__MAXTOKENS: "150"
-
-      # =======================================================================
-      # REQUIRED: VirusTotal API Configuration
-      # =======================================================================
-      # How to get: https://www.virustotal.com/gui/my-apikey
-      # Sign up for free account, copy API key from profile
-      VIRUSTOTAL__APIKEY: "CHANGE_ME_GET_FROM_VIRUSTOTAL"
-
-      # =======================================================================
-      # REQUIRED: CAS (Combot Anti-Spam) API Configuration
-      # =======================================================================
-      # How to get: https://cas.chat/
-      # Sign up and generate API key
-      SPAMDETECTION__APIKEY: "CHANGE_ME_GET_FROM_CAS"
-
-      # =======================================================================
-      # REQUIRED: SendGrid Email Configuration
-      # =======================================================================
-      # How to get: https://app.sendgrid.com/settings/api_keys
-      # Create API key with "Mail Send" permissions
-      SENDGRID__APIKEY: "CHANGE_ME_GET_FROM_SENDGRID"
-      SENDGRID__FROMEMAIL: "CHANGE_ME_YOUR_EMAIL@example.com"
-      SENDGRID__FROMNAME: "Telegram Groups Admin"
+      # After creating your first admin account, configure these in the UI:
+      # - Settings > Infrastructure > Telegram Bot Configuration
+      # - Settings > Infrastructure > OpenAI Configuration
+      # - Settings > Infrastructure > SendGrid Configuration
+      # - Settings > Features > Spam Detection (VirusTotal, CAS)
+      # All API keys are stored encrypted in the database
 
       # =======================================================================
       # ClamAV Connection (Internal Docker Network)
@@ -192,15 +162,18 @@ networks:
     name: telegram-admin
 
 # =============================================================================
-# IMPORTANT: Replace ALL "CHANGE_ME" values before starting!
+# IMPORTANT: Setup Steps
 # =============================================================================
-# Required API Keys (get them from these URLs):
-# 1. Telegram Bot Token: https://t.me/BotFather
-# 2. OpenAI API Key: https://platform.openai.com/api-keys
-# 3. VirusTotal API Key: https://www.virustotal.com/gui/my-apikey
-# 4. CAS API Key: https://cas.chat/
-# 5. SendGrid API Key: https://app.sendgrid.com/settings/api_keys
-# 6. PostgreSQL Password: Make this a strong password!
+# 1. Set a strong PostgreSQL password (replace CHANGE_ME_STRONG_PASSWORD above)
+# 2. Start containers: docker compose up -d
+# 3. Wait for database migrations to complete (check logs)
+# 4. Open http://localhost:8080 and create first admin account
+# 5. Configure services in Settings UI:
+#    - Settings > Infrastructure > Telegram Bot (get token from @BotFather)
+#    - Settings > Infrastructure > OpenAI (get key from platform.openai.com)
+#    - Settings > Infrastructure > SendGrid (get key from sendgrid.com)
+#    - Settings > Features > Spam Detection (VirusTotal, CAS)
+# All API keys stored encrypted in database - no env vars needed!
 # =============================================================================
 
 # =============================================================================

@@ -325,7 +325,6 @@ window.insertTextAtCursor = (text, elementId) => {
 };
 
 // Capture scroll state before DOM updates (for preserving position when new messages arrive)
-// TODO: Remove verbose console.log statements after polish phase - keep console.warn for errors only
 window.captureScrollState = (container) => {
     if (!container) {
         console.warn('[ScrollPreservation] Container element not found');
@@ -337,13 +336,6 @@ window.captureScrollState = (container) => {
         scrollHeight: container.scrollHeight,
         clientHeight: container.clientHeight
     };
-
-    // TODO: Remove this debug logging after verification in production
-    console.log('[ScrollPreservation] Captured state:', {
-        ...state,
-        scrollPercentage: ((state.scrollTop / (state.scrollHeight - state.clientHeight)) * 100).toFixed(2) + '%',
-        maxScroll: state.scrollHeight - state.clientHeight
-    });
 
     return state;
 };
@@ -360,7 +352,6 @@ window.restoreScrollState = (container, previousState) => {
     const heightDifference = newScrollHeight - previousState.scrollHeight;
 
     if (heightDifference <= 0) {
-        console.log('[ScrollPreservation] No height change, skipping adjustment');
         return;
     }
 
@@ -380,34 +371,14 @@ window.restoreScrollState = (container, previousState) => {
     // User is at bottom if scrollTop is near 0 OR near maxScroll (browser-dependent)
     const wasAtBottom = distanceFromBottom <= 5 || distanceFromMax <= 5;
 
-    // TODO: Remove this debug logging after verification in production
-    console.log('[ScrollPreservation] Bottom detection:', {
-        scrollTop: previousState.scrollTop,
-        maxScroll: maxScroll,
-        distanceFromBottom: distanceFromBottom,
-        distanceFromMax: distanceFromMax,
-        wasAtBottom: wasAtBottom
-    });
-
     if (wasAtBottom) {
         // User was watching conversation - let new message appear naturally
         // Browser will show it at bottom (scrollTop stays near 0)
-        console.log('[ScrollPreservation] User at bottom, new message visible naturally');
     } else {
         // User was reading history - browser doesn't compensate in column-reverse
         // We need to adjust scrollTop to maintain visual position
         // For NEGATIVE scrollTop (some browsers): add height difference (becomes more negative)
         // For POSITIVE scrollTop (other browsers): subtract height difference
-
-        // TODO: Remove this debug logging after verification in production
-        console.log('[ScrollPreservation] BEFORE adjustment:', {
-            currentScrollTop: container.scrollTop,
-            previousScrollTop: previousState.scrollTop,
-            previousScrollHeight: previousState.scrollHeight,
-            currentScrollHeight: container.scrollHeight,
-            heightDifference: heightDifference,
-            scrollTopDrift: container.scrollTop - previousState.scrollTop
-        });
 
         // Adjust based on scrollTop polarity
         let newScrollTop;
@@ -427,15 +398,6 @@ window.restoreScrollState = (container, previousState) => {
         setTimeout(() => {
             container.style.scrollBehavior = '';
         }, 0);
-
-        // TODO: Remove this debug logging after verification in production
-        console.log('[ScrollPreservation] AFTER adjustment:', {
-            oldScrollTop: previousState.scrollTop,
-            newScrollTop: newScrollTop,
-            actualScrollTop: container.scrollTop,
-            heightDifference: heightDifference,
-            adjustment: newScrollTop - previousState.scrollTop
-        });
     }
 };
 
@@ -446,8 +408,6 @@ let scrollRestorationPending = false;
 window.restoreScrollStateAfterRender = (container, previousState) => {
     // Prevent multiple simultaneous restorations
     if (scrollRestorationPending) {
-        // TODO: Remove this debug logging after verification in production
-        console.log('[ScrollPreservation] Restoration already pending, skipping duplicate call');
         return;
     }
 
