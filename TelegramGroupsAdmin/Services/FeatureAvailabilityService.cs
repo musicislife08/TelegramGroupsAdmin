@@ -75,7 +75,7 @@ public class FeatureAvailabilityService : IFeatureAvailabilityService
         try
         {
             // Check if API key is configured in database
-            var apiKeys = await _fileScanningRepo.GetApiKeysAsync();
+            var apiKeys = await _configRepo.GetApiKeysAsync();
             return !string.IsNullOrWhiteSpace(apiKeys?.VirusTotal);
         }
         catch (Exception ex)

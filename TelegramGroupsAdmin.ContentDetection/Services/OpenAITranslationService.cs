@@ -1,28 +1,28 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Repositories;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
 /// OpenAI-based translation service for detecting and translating foreign language spam
+/// Configuration loaded from database (hot-reload support)
 /// </summary>
 public class OpenAITranslationService : IOpenAITranslationService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<OpenAITranslationService> _logger;
-    private readonly OpenAIOptions _options;
+    private readonly IFileScanningConfigRepository _configRepo;
 
     public OpenAITranslationService(
         IHttpClientFactory httpClientFactory,
         ILogger<OpenAITranslationService> logger,
-        IOptions<OpenAIOptions> options)
+        IFileScanningConfigRepository configRepo)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;
-        _options = options.Value;
+        _configRepo = configRepo;
     }
 
     /// <summary>
@@ -35,7 +35,18 @@ public class OpenAITranslationService : IOpenAITranslationService
 
         try
         {
-            if (string.IsNullOrEmpty(_options.ApiKey))
+            // Load configuration from database (supports hot-reload)
+            var openAIConfig = await _configRepo.GetOpenAIConfigAsync(cancellationToken);
+            var apiKeys = await _configRepo.GetApiKeysAsync(cancellationToken);
+
+            if (openAIConfig?.Enabled != true)
+            {
+                _logger.LogDebug("OpenAI service is disabled, skipping translation");
+                return null;
+            }
+
+            var apiKey = apiKeys?.OpenAI;
+            if (string.IsNullOrEmpty(apiKey))
             {
                 _logger.LogDebug("OpenAI API key not configured, skipping translation");
                 return null;
@@ -52,17 +63,20 @@ IMPORTANT: Respond with ONLY the raw JSON object. Do NOT wrap it in markdown cod
 
             var request = new
             {
-                model = "gpt-4o-mini",
+                model = openAIConfig.Model,
                 messages = new[]
                 {
                     new { role = "user", content = prompt }
                 },
-                max_tokens = 200,
-                temperature = 0.1
+                max_tokens = Math.Min(openAIConfig.MaxTokens, 200), // Cap at 200 for translation
+                temperature = openAIConfig.Temperature
             };
 
-            // Use named "OpenAI" HttpClient (configured in ServiceCollectionExtensions)
-            var httpClient = _httpClientFactory.CreateClient("OpenAI");
+            // Create HttpClient with API key from database
+            var httpClient = _httpClientFactory.CreateClient();
+            httpClient.BaseAddress = new Uri("https://api.openai.com/v1/");
+            httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+
             var response = await httpClient.PostAsJsonAsync("chat/completions", request, cancellationToken);
 
             if (!response.IsSuccessStatusCode)

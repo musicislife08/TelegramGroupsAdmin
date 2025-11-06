@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Options;
-using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Services.PromptBuilder;
@@ -9,23 +8,24 @@ namespace TelegramGroupsAdmin.Services.PromptBuilder;
 /// <summary>
 /// Service for generating AI-powered custom spam detection prompts using OpenAI
 /// Phase 4.X: Meta-AI feature - using AI to configure AI
+/// Configuration loaded from database (hot-reload support)
 /// </summary>
 public class PromptBuilderService : IPromptBuilderService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IDetectionResultsRepository _detectionResultsRepository;
-    private readonly OpenAIOptions _openAiOptions;
+    private readonly IFileScanningConfigRepository _configRepo;
     private readonly ILogger<PromptBuilderService> _logger;
 
     public PromptBuilderService(
         IHttpClientFactory httpClientFactory,
         IDetectionResultsRepository detectionResultsRepository,
-        IOptions<OpenAIOptions> openAiOptions,
+        IFileScanningConfigRepository configRepo,
         ILogger<PromptBuilderService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _detectionResultsRepository = detectionResultsRepository;
-        _openAiOptions = openAiOptions.Value;
+        _configRepo = configRepo;
         _logger = logger;
     }
 
@@ -35,8 +35,23 @@ public class PromptBuilderService : IPromptBuilderService
     {
         try
         {
+            // Load configuration from database (supports hot-reload)
+            var openAIConfig = await _configRepo.GetOpenAIConfigAsync(cancellationToken);
+            var apiKeys = await _configRepo.GetApiKeysAsync(cancellationToken);
+
+            // Validate OpenAI is enabled
+            if (openAIConfig?.Enabled != true)
+            {
+                return new PromptBuilderResponse
+                {
+                    Success = false,
+                    ErrorMessage = "OpenAI service is disabled"
+                };
+            }
+
             // Validate API key
-            if (string.IsNullOrEmpty(_openAiOptions.ApiKey))
+            var apiKey = apiKeys?.OpenAI;
+            if (string.IsNullOrEmpty(apiKey))
             {
                 return new PromptBuilderResponse
                 {
@@ -51,8 +66,8 @@ public class PromptBuilderService : IPromptBuilderService
             // Build the meta-prompt
             var metaPrompt = BuildMetaPrompt(request, trainingSamples);
 
-            // Call OpenAI API
-            var generatedPrompt = await CallOpenAiAsync(metaPrompt, cancellationToken);
+            // Call OpenAI API with config from database
+            var generatedPrompt = await CallOpenAiAsync(metaPrompt, openAIConfig, apiKey, cancellationToken);
 
             if (string.IsNullOrWhiteSpace(generatedPrompt))
             {
@@ -101,8 +116,23 @@ public class PromptBuilderService : IPromptBuilderService
     {
         try
         {
+            // Load configuration from database (supports hot-reload)
+            var openAIConfig = await _configRepo.GetOpenAIConfigAsync(cancellationToken);
+            var apiKeys = await _configRepo.GetApiKeysAsync(cancellationToken);
+
+            // Validate OpenAI is enabled
+            if (openAIConfig?.Enabled != true)
+            {
+                return new PromptBuilderResponse
+                {
+                    Success = false,
+                    ErrorMessage = "OpenAI service is disabled"
+                };
+            }
+
             // Validate API key
-            if (string.IsNullOrEmpty(_openAiOptions.ApiKey))
+            var apiKey = apiKeys?.OpenAI;
+            if (string.IsNullOrEmpty(apiKey))
             {
                 return new PromptBuilderResponse
                 {
@@ -114,8 +144,8 @@ public class PromptBuilderService : IPromptBuilderService
             // Build the improvement meta-prompt
             var metaPrompt = BuildImprovementMetaPrompt(currentPrompt, improvementFeedback);
 
-            // Call OpenAI API
-            var improvedPrompt = await CallOpenAiAsync(metaPrompt, cancellationToken);
+            // Call OpenAI API with config from database
+            var improvedPrompt = await CallOpenAiAsync(metaPrompt, openAIConfig, apiKey, cancellationToken);
 
             if (string.IsNullOrWhiteSpace(improvedPrompt))
             {
@@ -281,20 +311,23 @@ public class PromptBuilderService : IPromptBuilderService
     /// <summary>
     /// Call OpenAI API with the meta-prompt to generate custom rules
     /// </summary>
-    private async Task<string> CallOpenAiAsync(string metaPrompt, CancellationToken cancellationToken)
+    private async Task<string> CallOpenAiAsync(string metaPrompt, TelegramGroupsAdmin.Configuration.Models.OpenAIConfig openAIConfig, string apiKey, CancellationToken cancellationToken)
     {
-        var httpClient = _httpClientFactory.CreateClient("OpenAI");
+        // Create HttpClient with API key from database
+        var httpClient = _httpClientFactory.CreateClient();
+        httpClient.BaseAddress = new Uri("https://api.openai.com/v1/");
+        httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
 
         var request = new
         {
-            model = _openAiOptions.Model,
+            model = openAIConfig.Model,
             messages = new[]
             {
                 new { role = "system", content = "You are an expert at creating spam detection rules for online communities." },
                 new { role = "user", content = metaPrompt }
             },
-            temperature = 0.3, // Lower temperature for more focused, consistent output
-            max_tokens = 1000  // Enough for detailed rules
+            temperature = Math.Min(openAIConfig.Temperature, 0.3), // Cap at 0.3 for focused output
+            max_tokens = Math.Min(openAIConfig.MaxTokens, 1000)  // Cap at 1000 for detailed rules
         };
 
         var requestJson = JsonSerializer.Serialize(request);

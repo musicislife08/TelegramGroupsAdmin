@@ -1,43 +1,46 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using OpenAIConfigDb = TelegramGroupsAdmin.Configuration.Models.OpenAIConfig;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
 /// Core spam detection engine that orchestrates all spam detection checks
 /// Loads configuration once, builds strongly-typed requests for each check, and aggregates results
+/// OpenAI configuration loaded from database (hot-reload support)
 /// </summary>
 public class ContentDetectionEngine : IContentDetectionEngine
 {
     private readonly ILogger<ContentDetectionEngine> _logger;
     private readonly ISpamDetectionConfigRepository _configRepository;
+    private readonly IFileScanningConfigRepository _fileScanningConfigRepo;
     private readonly IEnumerable<IContentCheck> _spamChecks;
     private readonly IOpenAITranslationService _translationService;
     private readonly IUrlPreFilterService _preFilterService;
-    private readonly OpenAIOptions _openAIOptions;
     private readonly SpamDetectionOptions _spamDetectionOptions;
 
     public ContentDetectionEngine(
         ILogger<ContentDetectionEngine> logger,
         ISpamDetectionConfigRepository configRepository,
+        IFileScanningConfigRepository fileScanningConfigRepo,
         IEnumerable<IContentCheck> spamChecks,
         IOpenAITranslationService translationService,
         IUrlPreFilterService preFilterService,
-        IOptions<OpenAIOptions> openAIOptions,
         IOptions<SpamDetectionOptions> spamDetectionOptions)
     {
         _logger = logger;
         _configRepository = configRepository;
+        _fileScanningConfigRepo = fileScanningConfigRepo;
         _spamChecks = spamChecks;
         _translationService = translationService;
         _preFilterService = preFilterService;
-        _openAIOptions = openAIOptions.Value;
         _spamDetectionOptions = spamDetectionOptions.Value;
     }
 
@@ -63,6 +66,8 @@ public class ContentDetectionEngine : IContentDetectionEngine
         IContentCheck check,
         ContentCheckRequest originalRequest,
         SpamDetectionConfig config,
+        OpenAIConfigDb? openAIConfig,
+        string? openAIApiKey,
         CancellationToken cancellationToken)
     {
         return check.CheckName switch
@@ -144,9 +149,9 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 HasSpamFlags = originalRequest.HasSpamFlags,
                 MinMessageLength = config.MinMessageLength,
                 CheckShortMessages = config.OpenAI.CheckShortMessages,
-                ApiKey = _openAIOptions.ApiKey,
-                Model = _openAIOptions.Model,
-                MaxTokens = _openAIOptions.MaxTokens,
+                ApiKey = openAIApiKey ?? "",
+                Model = openAIConfig?.Model ?? "gpt-4o-mini",
+                MaxTokens = openAIConfig?.MaxTokens ?? 500,
                 CancellationToken = cancellationToken
             },
 
@@ -184,7 +189,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 PhotoLocalPath = originalRequest.PhotoLocalPath, // ML-5: For OCR + hash similarity
                 CustomPrompt = null, // No config property
                 ConfidenceThreshold = 80, // No config property, using default
-                ApiKey = _openAIOptions.ApiKey,
+                ApiKey = openAIApiKey ?? "",
                 CancellationToken = cancellationToken
             },
 
@@ -197,7 +202,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                 VideoLocalPath = originalRequest.VideoLocalPath ?? "",
                 CustomPrompt = null, // No config property
                 ConfidenceThreshold = 80, // No config property, using default
-                ApiKey = _openAIOptions.ApiKey,
+                ApiKey = openAIApiKey ?? "",
                 CancellationToken = cancellationToken
             },
 
@@ -244,6 +249,11 @@ public class ContentDetectionEngine : IContentDetectionEngine
     {
         // Load latest config from database (per-chat or global)
         var config = await GetConfigAsync(request, cancellationToken);
+
+        // Load OpenAI config from database (hot-reload support)
+        var openAIConfig = await _fileScanningConfigRepo.GetOpenAIConfigAsync(cancellationToken);
+        var apiKeys = await _fileScanningConfigRepo.GetApiKeysAsync(cancellationToken);
+        var openAIApiKey = apiKeys?.OpenAI;
 
         var checkResults = new List<ContentCheckResponse>();
 
@@ -303,7 +313,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
 
                 if (ShouldRunCheck(openAICheck, vetoRequest, config))
                 {
-                    var checkRequest = BuildRequestForCheck(openAICheck, vetoRequest, config, cancellationToken);
+                    var checkRequest = BuildRequestForCheck(openAICheck, vetoRequest, config, openAIConfig, openAIApiKey, cancellationToken);
                     var vetoResult = await openAICheck.CheckAsync(checkRequest);
                     checkResults.Add(vetoResult);
 
@@ -336,6 +346,11 @@ public class ContentDetectionEngine : IContentDetectionEngine
         // Load latest config from database (per-chat or global)
         var config = await GetConfigAsync(request, cancellationToken);
 
+        // Load OpenAI config for checks that need it (ImageSpam, VideoSpam)
+        var openAIConfig = await _fileScanningConfigRepo.GetOpenAIConfigAsync(cancellationToken);
+        var apiKeys = await _fileScanningConfigRepo.GetApiKeysAsync(cancellationToken);
+        var openAIApiKey = apiKeys?.OpenAI;
+
         var checkResults = new List<ContentCheckResponse>();
 
         // Run all checks in two phases:
@@ -347,7 +362,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
         {
             try
             {
-                var checkRequest = BuildRequestForCheck(invisibleCharsCheck, request, config, cancellationToken);
+                var checkRequest = BuildRequestForCheck(invisibleCharsCheck, request, config, openAIConfig, openAIApiKey, cancellationToken);
                 var result = await invisibleCharsCheck.CheckAsync(checkRequest);
                 checkResults.Add(result);
             }
@@ -370,7 +385,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
 
             try
             {
-                var checkRequest = BuildRequestForCheck(check, processedRequest, config, cancellationToken);
+                var checkRequest = BuildRequestForCheck(check, processedRequest, config, openAIConfig, openAIApiKey, cancellationToken);
                 var result = await check.CheckAsync(checkRequest);
                 checkResults.Add(result);
             }
