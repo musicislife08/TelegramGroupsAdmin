@@ -8,21 +8,10 @@
 
 ## Use Case & Deployment Context
 
-**Target Environment**: Homelab deployment for personal/community use
-**Workload**: Small to mid-sized Telegram groups (10-1,000 members)
-**Message Volume**: 500-5,000 messages/day (current load), designed to handle up to 20,000/day
-**User Base**: Single administrator or small admin team (1-5 people)
-**Network**: Private network, reverse proxy optional, trusted user environment
-
-**Performance Benchmarks** (measured in production):
-
-- Spam detection: 255ms average, 821ms P95 (9 algorithms + OpenAI)
-- Analytics queries: <100ms
-- Message page load: 50+ messages without lag
-
+**Target Environment**: Homelab deployment for personal/community use (10-1,000 member groups, 500-20,000 messages/day)
 **Design Philosophy**: Optimize for **operational simplicity** and **reliability** over horizontal scalability. Prefer single-instance architecture with minimal external dependencies (no Redis, no S3, no message queues). Code maintainability prioritized for solo/small team maintenance.
 
-**AI Agent Guidance**: When reviewing this codebase, evaluate against homelab deployment standards, not enterprise SaaS requirements. Recommendations should prioritize operational simplicity, feature completeness, and single-maintainer comprehensibility over microservices patterns, distributed systems, or premature optimization for scale.
+**AI Agent Guidance**: Evaluate against homelab deployment standards, not enterprise SaaS requirements. Prioritize operational simplicity, feature completeness, and single-maintainer comprehensibility over microservices patterns, distributed systems, or premature optimization for scale.
 
 ## Deployment Architecture
 
@@ -59,73 +48,65 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 ## Projects
 
-- **TelegramGroupsAdmin**: Main app, Blazor+API, TickerQ jobs (WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob, TempbanExpiryJob, FileScanJob)
+- **TelegramGroupsAdmin**: Main app, Blazor+API, TickerQ jobs
+- **TelegramGroupsAdmin.Core**: Shared models, enums, interfaces (breaks circular dependencies between projects)
 - **TelegramGroupsAdmin.Configuration**: Config IOptions classes, AddApplicationConfiguration()
-- **TelegramGroupsAdmin.Data**: EF Core DbContext, migrations, Data Protection (internal to repos)
-- **TelegramGroupsAdmin.Telegram**: Bot services, 14 commands, repos, orchestrators, DM notifications, TelegramMediaService, AddTelegramServices()
-- **TelegramGroupsAdmin.Telegram.Abstractions**: TelegramBotClientFactory, job payloads (breaks circular deps)
+- **TelegramGroupsAdmin.Data**: EF Core DbContext, migrations, Data Protection (DB-internal models)
+- **TelegramGroupsAdmin.Telegram**: Bot services, commands, repos, orchestrators, DM notifications, AddTelegramServices()
+- **TelegramGroupsAdmin.Telegram.Abstractions**: TelegramBotClientFactory, job payloads (breaks Telegram → Main circular dep)
 - **TelegramGroupsAdmin.SpamDetection**: 9 spam algorithms, self-contained, database-driven
-- **TelegramGroupsAdmin.ContentDetection**: URL filtering (blocklists, domain filters), impersonation detection (photo hash, Levenshtein), file scanning (ClamAV+VirusTotal), AddContentDetectionServices()
-- **TelegramGroupsAdmin.Tests**: Migration tests (NUnit + Testcontainers.PostgreSQL), 19 tests in 5 phases, validates migrations against real PostgreSQL 17
+- **TelegramGroupsAdmin.ContentDetection**: URL filtering, impersonation detection, file scanning (ClamAV+VirusTotal)
+- **TelegramGroupsAdmin.Tests**: Migration tests (NUnit + Testcontainers.PostgreSQL), validates against real PostgreSQL 17
 
 ## Architecture Patterns
 
-**Extension Methods**: ServiceCollectionExtensions (AddBlazorServices, AddCookieAuthentication, AddApplicationServices, AddHttpClients, AddTelegramServices, AddRepositories, AddTgSpamWebDataServices, AddTickerQBackgroundJobs), WebApplicationExtensions (ConfigurePipeline, MapApiEndpoints, RunDatabaseMigrationsAsync), ConfigurationExtensions (AddApplicationConfiguration)
+**Extension Methods**: ServiceCollectionExtensions (Add* methods), WebApplicationExtensions (Configure*, Map*, RunDatabaseMigrationsAsync), ConfigurationExtensions
 
-**Layered**: UI Models (Blazor DTOs) → Repositories (conversion) → Data Models (DB internal). ModelMappings.cs: .ToModel()/.ToDto() extensions. Repos return/accept UI models only.
+**Layered Architecture**:
+- Data layer: DB-internal models (Data.Models namespace)
+- Telegram layer: Telegram domain models (Telegram.Models namespace)
+- UI layer: Blazor DTOs
+- Repositories handle conversion via .ToModel()/.ToDto() extensions (26 files in Mappings/ subdirectory)
+- Repos return/accept UI models only, never expose Data models
 
-**Spam Detection**: ISpamDetectorFactory orchestrates 9 checks (StopWords, CAS, Similarity/TF-IDF, Bayes, MultiLanguage, Spacing, OpenAI, ThreatIntel/VirusTotal, Image/Vision), confidence aggregation, OpenAI veto, self-learning
+**Partial Unique Indexes** (PostgreSQL):
+- Pattern: `WHERE` clause to enforce constraints only when specific condition met
+- Used in: configs (chat_id=0 singleton), reports (status=0 pending), message_translations (message_id/edit_id not null)
+- Purpose: State-dependent uniqueness (e.g., only ONE pending report per message, but can re-report after resolution)
 
-**Background Services** (composition pattern):
+**Exclusive Arc Pattern**:
+- Pattern: Mutually exclusive foreign keys (message_id XOR edit_id, checked via constraints)
+- Used in: message_translations (exclusive to message OR edit), audit_log (actor can be user OR telegram_user OR system)
+- Purpose: Polymorphic relationships without nullable FKs
 
-1. TelegramAdminBotService - Bot polling, update routing (5 types), command registration, health checks every 1 min
-2. MessageProcessingService - New messages, edits, media download (Animation/Video/Audio/Voice/Sticker/VideoNote), spam orchestration, URL extraction, user photo scheduling, file scan scheduling, **translation before save** (Phase 4.20), **language warnings** (Phase 4.21)
-3. ChatManagementService - MyChatMember, admin cache, health checks (permissions + invite link validation), chat names
-4. SpamActionService - Training QC, auto-ban (cross-chat), borderline reports
-5. CleanupBackgroundService - Message retention (keeps spam/ham samples)
+**Database-First Configuration**:
+- Pattern: Settings stored in database (encrypted when sensitive), not env vars
+- Migration: TelegramConfigMigrationService, ApiKeyMigrationService auto-migrate on first startup
+- Fallback: Env vars used for first-time setup only
+- UI: Settings pages allow live editing without restart
 
-## Configuration (Env Vars)
+**Background Services**: TelegramAdminBotService (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), SpamActionService (training QC, cross-chat bans), CleanupBackgroundService (retention)
 
-**Required**: OPENAI__APIKEY, SPAMDETECTION__APIKEY, SENDGRID__APIKEY/FROMEMAIL/FROMNAME
-**Optional**: APP__BASEURL, OPENAI__MODEL/MAXTOKENS, MESSAGEHISTORY__*, IDENTITY__DATABASEPATH, DATAPROTECTION__KEYSPATH
-**Database-Managed** (with env var fallback for first-time setup):
-- **TELEGRAM__BOTTOKEN**: Bot API token (encrypted in `configs.telegram_bot_token_encrypted`)
-- **TELEGRAM__CHATID**: Primary chat ID (stored in `configs.telegram_bot_config` JSONB)
-- **TELEGRAM__APISERVERURL**: Optional self-hosted Bot API server URL for unlimited file downloads
-- **VIRUSTOTAL__APIKEY**: VirusTotal API key (encrypted in `configs.api_keys`)
+## Configuration
 
-**Migration**: TelegramConfigMigrationService auto-migrates Telegram env vars → database on first startup. Configure via Settings → Telegram → Bot Configuration UI.
+**Pattern**: Database-first with env var fallback for first-time setup only
 
-## Key Implementations
+**Required Env Vars**: OpenAI API key, SendGrid settings
+**Database-Managed** (encrypted): Telegram bot token, VirusTotal API key, other service credentials
+**Migration Services**: TelegramConfigMigrationService, ApiKeyMigrationService auto-migrate on first startup
+**Runtime Editing**: Settings UI allows live config changes without restart
 
-- **Telegram Bot API Dual-Mode**: Supports standard api.telegram.org (20MB file limit) and self-hosted Bot API server (unlimited downloads up to 2GB). TelegramBotClientFactory caches clients by `token::url` key. Graceful error handling logs warnings for files >20MB on standard API with guidance to configure self-hosted mode. Settings UI provides inline setup instructions. See `docker-compose.bot-api.yml` for production-ready deployment template.
-- **File Scanning (Streaming Architecture)**: FileScanJob passes file path instead of loading entire files into memory. ClamAVScannerService validates file size <2GB before reading. VirusTotalScannerService uses StreamContent for efficient HTTP uploads. Tier1VotingCoordinator scans in parallel from disk. Supports files up to 2GB with minimal memory footprint.
-- **API Key Management**: File scanning API key (VirusTotal) stored encrypted in configs.api_keys (TEXT column, ASP.NET Core Data Protection). ApiKeyMigrationService migrates env vars on first startup. ApiKeyDelegatingHandler dynamically loads keys from database at request time with env var fallback. Settings UI allows editing. Backup/restore auto-handles decryption/re-encryption via [ProtectedData] attribute.
-- **Rate Limiting**: VirusTotal (Polly PartitionedRateLimiter, 4/min), OpenAI (429 detection), both fail-open
-- **Edit Detection**: On edit → message_edits, update messages, re-run spam detection, action if spam
-- **Email Verification**: 24h token (32 random bytes), login blocked until verified (except first Owner)
-- **TOTP Security**: IntermediateAuthService (5min tokens after password), 15min expiry for abandoned setups
-- **TickerQ Jobs**: All jobs re-throw exceptions for proper retry/logging. WelcomeTimeoutJob, DeleteMessageJob, FetchUserPhotoJob, TempbanExpiryJob, FileScanJob. Jobs in main app for source generator, payloads in Abstractions. Polling interval: 5s (default 60s) via UpdateMissedJobCheckDelay().
-- **Infinite Scroll**: IntersectionObserver on scroll sentinel, timestamp-based pagination (`beforeTimestamp`), MudVirtualize, loads 50 messages/page
-- **Scroll Preservation**: Handles negative scrollTop (Chrome/Edge flex-reverse), captures state before DOM update, double requestAnimationFrame for layout completion, polarity-aware adjustment formula, 5px bottom threshold
-- **DM Notifications**: IDmDeliveryService (Singleton, creates scopes), pending_notifications (30d expiry), auto-delivery on `/start`. Account linking (`/link`) separate from DM setup. Future: Notification preferences UI with deep link to enable bot DMs.
-- **Media Attachments**: TelegramMediaService downloads and saves media (Animation/Video/Audio/Voice/Sticker/VideoNote) to /data/media, stored in messages table. Documents metadata-only (no download for display, file scanner handles temp download). MediaType enum duplicated in Data/Telegram layers (architectural boundary). UI displays media with HTML5 elements (video/audio controls, autoplay for GIFs).
-- **AI Prompt Builder**: Meta-AI feature using OpenAI to generate/improve custom spam detection prompts. Two workflows: (1) Generate from scratch via form (group topic, rules, strictness, training samples), (2) Improve existing version with feedback. prompt_versions table tracks history with versioning, metadata (generation params), created_by. Shared PromptImprovementDialog reused by generation flow and version history. Auto-grow textarea shows full prompt. Settings → Content Detection → OpenAI Integration shows version history with View/Restore/Improve buttons.
-- **Translation Storage** (Phase 4.20): message_translations table with exclusive arc pattern (message_id XOR edit_id), LEFT JOIN in main query. MessageProcessingService translates before save (≥10 chars, <80% Latin script) using OpenAITranslationService. UI: toggle button (🌐 badge), manual translate button in popover menu, EditHistoryDialog shows translations for edits. Translation reused by spam detection (OpenAI Vision, MultiLanguage). CASCADE delete, partial indexes for performance.
+## Key Architectural Features
 
-## API Endpoints
+**Telegram Bot API Dual-Mode**: Standard api.telegram.org (20MB limit) or self-hosted Bot API server (up to 2GB). TelegramBotClientFactory caches clients by `token::url` key. Graceful fallback for oversized files.
 
-- GET /health
-- POST /api/auth/login → {requiresTotp, userId, intermediateToken}
-- POST /api/auth/register, /api/auth/logout, /api/auth/verify-totp
-- GET /verify-email?token=X
-- POST /resend-verification, /forgot-password, /reset-password
+**File Scanning Streaming Architecture**: FileScanJob passes file paths (not loaded into memory). ClamAVScannerService validates size <2GB, VirusTotalScannerService uses StreamContent. Supports 2GB files with minimal memory.
 
-## Blazor Pages
+**TickerQ Job Architecture**: Jobs in main app (for source generator), payloads in Abstractions (breaks circular deps). Jobs re-throw exceptions for retry/logging. Polling interval: 5s (default 60s override).
 
-**Public**: /login, /login/verify, /login/setup-2fa, /register
-**Authenticated**: / (dashboard), /analytics (Admin+), /messages, /users (Admin+), /reports (Admin+), /audit (Admin+), /settings (Admin+), /profile
-**Features**: URL fragment nav, nested sidebar navigation in Settings, component reuse
+**Translation Storage**: Exclusive arc pattern (message_id XOR edit_id) in message_translations table. MessageProcessingService translates before save (≥10 chars, <80% Latin script). Reused by spam detection.
+
+**DM Notifications**: IDmDeliveryService (Singleton), pending_notifications table (30d expiry), auto-delivery on `/start`. Account linking (`/link`) separate from DM setup.
 
 ## Permissions
 
@@ -134,11 +115,6 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 **Enum Location**: Core.Models.PermissionLevel (canonical with Display attributes), Data.Models.PermissionLevel (DB-only, self-contained)
 **User Status**: 0=Pending, 1=Active, 2=Disabled, 3=Deleted
 **Invites**: 7-day expiry, first user auto-Owner, permission inheritance
-
-## Build Quality
-
-**Standard**: 0 errors, 0 warnings (production-ready)
-**History**: 158+ errors→0, 62+ warnings→0, MudBlazor v8.13.0, records→classes for binding, null safety, type safety
 
 ## Troubleshooting
 
@@ -151,32 +127,21 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 ### TickerQ Background Jobs
 
-**Dashboard**: `/tickerq-dashboard` (development mode only, disabled in production)
+**Dashboard**: `/tickerq-dashboard` (development mode only)
 
-**0 Active Functions** (source generator not discovering jobs):
+**Common Issues**:
+- **0 Active Functions**: Source generator not discovering jobs. Check: (1) Explicit analyzer reference in .csproj, (2) `TickerQInstanceFactory.Initialize()` called BEFORE `app.UseTickerQ()` in Program.cs (timing critical)
+- **0 Active Threads**: Workers not starting. Check: (1) Initialize() timing, (2) Debug logging for "TickerQ" messages, (3) Tables exist in `ticker` schema (NOT public)
+- **Job Syntax**: Use `TickerQ.Utilities.Base.TickerFunctionAttribute` and `TickerFunctionContext<T>`. Reference existing jobs for patterns.
 
-1. Verify explicit analyzer reference in .csproj: `<Analyzer Include="$(NuGetPackageRoot)tickerq/2.5.3/analyzers/dotnet/cs/TickerQ.SourceGenerator.dll" />`
-2. Build with `/p:EmitCompilerGeneratedFiles=true` to check `obj/generated/TickerQ.SourceGenerator/*/TickerQInstanceFactory.g.cs` exists
-3. Confirm `TelegramGroupsAdmin.TickerQInstanceFactory.Initialize()` is called in Program.cs **BEFORE** `app.UseTickerQ()` (timing critical for .NET 10 RC2)
+## Documentation
 
-**0 Active Threads** (workers not starting):
-
-1. Check `TickerQInstanceFactory.Initialize()` runs BEFORE `app.UseTickerQ()` in pipeline (Program.cs line ~59)
-2. Enable debug logging: `builder.Logging.SetMinimumLevel(LogLevel.Debug)` and search for "TickerQ" or "Hosting" messages
-3. Verify tables exist: `SELECT table_name FROM information_schema.tables WHERE table_schema = 'ticker';` (NOT public schema!)
-
-**Job Syntax**: `using TickerQ.Utilities.Base;` (TickerFunctionAttribute), `using TickerQ.Utilities.Models;` (`TickerFunctionContext<T>`)
-
-## Development Status
-
-**Complete**: Phase 1-4 (Foundation, spam detection, TickerQ jobs, welcome system, file scanning, translations, notifications)
-**Roadmap**: See BACKLOG.md for all pending work and future features
-
-**Note**: BACKLOG.md contains **pending work only** (features, bugs, refactoring). For completed work history, use `git log` - all completed tasks are documented in commit messages with full technical details. Do not maintain a "Completed Work" section in BACKLOG.md to avoid duplication.
+**BACKLOG.md**: Contains **pending work only** (features, bugs, refactoring). Do not add "Completed Work" sections - use `git log` for history.
+**Commit Messages**: All completed work documented with full technical details. Single source of truth for project history.
 
 ## Testing
 
-**Migration Tests**: 22 tests (all passing) via Testcontainers.PostgreSQL, validates against real PostgreSQL 17
+**Migration Tests**: NUnit + Testcontainers.PostgreSQL, validates all migrations against real PostgreSQL 17 (tests always passing)
 
 ## CRITICAL RULES
 
