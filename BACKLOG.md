@@ -406,6 +406,34 @@ if (spamSampleCount < 50 || legitMessageCount < 100)
 
 ---
 
+### DEPLOY-3: Evaluate PostgreSQL 18 Upgrade
+
+**Priority:** LOW - Wait for ecosystem maturity (target: March-April 2026)
+**Impact:** Performance improvements (async I/O, JSON SIMD), data integrity checksums
+
+**Current Status:** PostgreSQL 18 released Sept 25, 2025 (6 weeks old). All tests pass (22/22 migrations + 20/20 backup tests validated with Testcontainers).
+
+**Blockers:**
+- Wait for PostgreSQL 18.2 or 18.3 point release (bug fixes stabilized)
+- Wait for EF Core and Npgsql official support statements
+- Breaking change: Data checksums enabled by default (requires matching settings for pg_upgrade)
+
+**Preparation Steps:**
+1. Monitor Npgsql release notes for PostgreSQL 18 support announcement
+2. Monitor EF Core 9/10 compatibility matrix
+3. Enable checksums on PostgreSQL 17 cluster before upgrade: `pg_checksums --enable -D /var/lib/postgresql/data` (requires downtime)
+4. Re-run Testcontainers test suite against postgres:18 image before production migration
+
+**Benefits:**
+- Async I/O subsystem: Faster sequential scans, VACUUM, bitmap heap scans
+- JSON SIMD: Minimal benefit for small JSONB configs (~1 KB), but future-proofing
+- Data checksums: Corruption detection (good for homelab hardware)
+- Enhanced RETURNING: Better change tracking capabilities
+
+**Notes:** No killer features for current workload. Upgrade when mature, not urgent.
+
+---
+
 ### SCHEMA-2: Migrate Data Protection Purpose String
 
 **Priority:** LOW - Cosmetic issue
