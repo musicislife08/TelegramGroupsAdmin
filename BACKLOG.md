@@ -309,52 +309,6 @@ if (spamSampleCount < 50 || legitMessageCount < 100)
 
 ---
 
-### FEATURE-5.3: Migrate API Keys to Database with UI Management
-
-**Priority:** HIGH - Better architecture, removes env var dependency
-**Impact:** All API keys managed via encrypted database storage with full UI controls
-
-**Architecture Changes:**
-
-**Encrypted Secrets (`configs.api_keys` JSONB):**
-- OpenAI API Key
-- VirusTotal API Key
-- SendGrid API Key
-- Telegram Bot Token
-
-**Plain Config (separate JSONB columns):**
-- `sendgrid_config`: {FromEmail, FromName, Enabled}
-- `telegram_config`: Already exists, just add UI
-- `openai_config`: {MaxTokens, AvailableModels[]} - global settings
-- Per-chat: Model selection in spam_detection_config (dropdown from cached models)
-
-**OpenAI Model Management:**
-- Store cached model list in `openai_config.AvailableModels`
-- "Refresh Model List" button calls OpenAI `/v1/models` API
-- Filter to chat models only (gpt-*, exclude embeddings/whisper)
-- Pre-seed with current models: gpt-4o, gpt-4o-mini, gpt-3.5-turbo, gpt-4-turbo
-- Per-chat model selection from cached list (no code changes for new models)
-
-**Settings UI Reorganization:**
-1. **System → Integrations** (infrastructure secrets + config):
-   - SendGrid: API Key (encrypted), FromEmail, FromName, Enabled toggle
-   - Telegram Bot: Token (encrypted)
-
-2. **Protection → External Services** (spam/security):
-   - OpenAI: API Key (encrypted), MaxTokens, Refresh Models button
-   - VirusTotal: API Key (encrypted)
-
-**All fields editable with show/hide toggles for secrets**
-
-**Migration Strategy:** Option B - DB-only, no env var migration
-- Remove `ApiKeyMigrationService`
-- Remove env var fallback from `ApiKeyDelegatingHandler`
-- Features disabled until configured via UI
-- Fresh installs: configure via UI only
-
-**Result:** Clean separation of secrets/config, no env var complexity, UI-driven configuration
-
----
 
 ### DEPLOY-1: Docker Compose Simplicity Validation
 
@@ -442,14 +396,6 @@ if (spamSampleCount < 50 || legitMessageCount < 100)
 
 ---
 
-### FEATURE-4.9: Bot Configuration Hot-Reload
-
-**Priority:** LOW
-**Impact:** Developer experience, deployment flexibility
-
-**Enhancement:** Implement IOptionsMonitor for runtime config updates (new chats, bot token rotation, thresholds) without restart
-
----
 
 ### FEATURE-5.4: OpenAI Moderation API for Content Safety (Post-Open Source)
 
