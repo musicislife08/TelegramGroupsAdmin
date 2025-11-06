@@ -19,47 +19,6 @@ This document tracks technical debt, performance optimizations, refactoring work
 
 ---
 
-### FEATURE-5.5: Duplicate Report Detection for /report Command
-
-**Priority:** MEDIUM - UX issue, admin notification spam
-**Impact:** Prevents duplicate reports, reduces admin notification fatigue
-
-**Current Problem:**
-- No duplicate protection at any level (database or application)
-- Same user can report same message unlimited times
-- Each duplicate creates separate database record + sends duplicate admin DM notifications
-- Clutters Reports dashboard and inflates metrics
-
-**Missing Safeguards:**
-1. **Database Level**: No unique constraint on `(message_id, chat_id, reported_by_user_id)`
-2. **Application Level**: ReportCommand.cs:89 directly inserts without checking existing reports
-3. **Repository Level**: ReportsRepository.InsertAsync performs blind inserts
-
-**Recommended Solution (Two Layers):**
-
-**Layer 1: Application-Level Check**
-- Add `IReportsRepository.GetExistingReportAsync(messageId, chatId, reportedByUserId)` method
-- Check before insert in ReportCommand.ExecuteAsync (line 68)
-- Return friendly message: "ℹ️ You've already reported this message (Report #123). Status: Pending"
-
-**Layer 2: Database Constraint**
-- Add partial unique index: `CREATE UNIQUE INDEX IX_reports_unique_pending_per_user ON reports (message_id, chat_id, reported_by_user_id) WHERE status = 0`
-- Prevents duplicates for Pending reports only
-- Allows re-reporting after admin resolves (status != Pending)
-
-**Files Affected:**
-- TelegramGroupsAdmin.Telegram/Repositories/IReportsRepository.cs (new method)
-- TelegramGroupsAdmin.Telegram/Repositories/ReportsRepository.cs (implementation)
-- TelegramGroupsAdmin.Telegram/Services/BotCommands/Commands/ReportCommand.cs (duplicate check logic)
-- TelegramGroupsAdmin.Data/Migrations/YYYYMMDDHHMMSS_AddDuplicateReportConstraint.cs (new migration)
-
-**Testing:**
-- Unit tests for duplicate detection
-- Integration test: same user reports same message twice
-- Integration test: different users report same message (both should succeed)
-
----
-
 ### DOCS-3: Configuration Guide
 
 **Priority:** MEDIUM
@@ -574,7 +533,7 @@ if (spamSampleCount < 50 || legitMessageCount < 100)
 
 ## Completed Work
 
-**2025-11-05**: SCHEMA-3 (Standardized global config pattern - migrated chat_id NULL → 0, fixed database integrity bug where PostgreSQL UNIQUE indexes allow unlimited NULLs providing zero constraint enforcement, added partial unique indexes for singleton global config + chat-specific configs, updated 8 files with 20+ code locations, migration 20251105161051 with automatic data merging for edge case where both NULL and 0 rows existed, 22/22 tests passing, consistent pattern across all 6 config tables)
+**2025-11-05**: FEATURE-5.5 (Duplicate report detection - prevents users from spamming /report on same message, only ONE pending report per message allowed from anyone until resolved, application-level check with GetExistingPendingReportAsync + database-enforced partial unique index on (message_id, chat_id) WHERE status=0, friendly auto-deleting bot response shows existing report details, allows re-reporting after admin resolves, migration 20251105174749, 22/22 tests passing), SCHEMA-3 (Standardized global config pattern - migrated chat_id NULL → 0, fixed database integrity bug where PostgreSQL UNIQUE indexes allow unlimited NULLs providing zero constraint enforcement, added partial unique indexes for singleton global config + chat-specific configs, updated 8 files with 20+ code locations, migration 20251105161051 with automatic data merging for edge case where both NULL and 0 rows existed, 22/22 tests passing, consistent pattern across all 6 config tables)
 
 **2025-10-30**: ML-6 (Video spam detection - 3-layer system reusing ML-5 pipeline: keyframe hash similarity + OCR on frames + OpenAI Vision fallback, VideoFrameExtractionService with FFmpeg static binary, smart short video handling, VideoTrainingSamplesRepository, database migration 20251030203913, Dockerfile with FFmpeg 7.0.2 pinned via build arg, 813MB final image), ML-5 (Image spam detection - 3-layer system: perceptual hash similarity + OCR text extraction + OpenAI Vision fallback, CLI wrapper for Tesseract with graceful degradation, ImageTextExtractionService with binary auto-detection, ImageTrainingSamplesRepository, database migration 20251030203913, StopWordsSpamCheck OrderBy fix for deterministic Take()), SECURITY-1 (Git history sanitization complete - BFG purged launchSettings.json + http-client.private.env.json + examples/compose.*.yml from 660 commits, 11 old unencrypted backups deleted, pre-commit hook with 8 secret patterns installed, .gitignore enhanced with 20+ secret file patterns, .git reduced to 3.3MB)
 
