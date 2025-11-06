@@ -1,221 +1,224 @@
-@using TelegramGroupsAdmin.Configuration
-@using Microsoft.Extensions.Options
-@inject IOptions<OpenAIOptions> OpenAiOptionsAccessor
-@inject IOptions<SendGridOptions> SendGridOptionsAccessor
-@inject IOptions<SpamDetectionOptions> SpamDetectionOptionsAccessor
+@using TelegramGroupsAdmin.Services
+@inject IFeatureAvailabilityService FeatureService
+@inject NavigationManager Navigation
 
 <MudStack Spacing="4">
+    <!-- Overview Alert -->
+    <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+        <MudText Typo="Typo.subtitle2"><strong>External Services Integration</strong></MudText>
+        <MudText Typo="Typo.body2">
+            Configure third-party service integrations for enhanced functionality. All settings support hot-reload (no restart required).
+            Click on each service card below to manage detailed configuration.
+        </MudText>
+    </MudAlert>
+
     <!-- OpenAI Integration -->
-    <MudPaper Class="pa-4">
+    <MudPaper Class="pa-4" Elevation="2">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
-            <div>
-                <MudText Typo="Typo.h6">OpenAI Integration</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    GPT-4 for spam detection and content translation
-                </MudText>
+            <div style="flex: 1;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Psychology" Color="Color.Primary" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h6">OpenAI Integration</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            GPT-4 for spam detection, translation, and image analysis
+                        </MudText>
+                    </div>
+                </MudStack>
             </div>
-            <MudChip Color="_openAiConfigured ? Color.Success : Color.Error" Size="Size.Small" T="string">
-                @(_openAiConfigured ? "Configured" : "Not Configured")
-            </MudChip>
+            <MudStack AlignItems="AlignItems.End" Spacing="2">
+                <MudChip Color="@(_openAIConfigured ? Color.Success : Color.Error)" Size="Size.Small" T="string">
+                    @(_openAIConfigured ? "Configured" : "Not Configured")
+                </MudChip>
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          Size="Size.Small"
+                          StartIcon="@Icons.Material.Filled.Settings"
+                          Href="/settings/openai">
+                    Configure
+                </MudButton>
+            </MudStack>
         </MudStack>
 
-        <MudStack Spacing="3">
-            <MudTextField Value="@MaskApiKey(_openAiSettings.ApiKey)"
-                         Label="API Key"
-                         Variant="Variant.Outlined"
-                         HelperText="OpenAI API key (from platform.openai.com)"
-                         Disabled="true"
-                         Adornment="Adornment.Start"
-                         AdornmentIcon="@Icons.Material.Filled.Key" />
+        <MudDivider Class="my-2" />
 
-            <MudTextField Value="_openAiSettings.Model"
-                         Label="Model"
-                         Variant="Variant.Outlined"
-                         HelperText="GPT model to use (default: gpt-4o-mini)"
-                         Disabled="true" />
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Powered Features:</MudText>
+        <MudStack Row="true" Spacing="1">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.Shield">Custom Spam Detection</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.Translate">Translation Service</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.Image">Image Spam Detection</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.VideoLibrary">Video Spam Detection</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.Gavel">OpenAI Veto Mode</MudChip>
+        </MudStack>
 
-            <MudNumericField Value="_openAiSettings.MaxTokens"
-                           Label="Max Tokens"
-                           Variant="Variant.Outlined"
-                           Min="100"
-                           Max="4000"
-                           HelperText="Maximum tokens per request"
-                           Disabled="true" />
-
-            <MudAlert Severity="Severity.Info" Dense="true">
-                OpenAI settings are configured via environment variables:
-                OPENAI__APIKEY, OPENAI__MODEL, OPENAI__MAXTOKENS
+        @if (!_openAIConfigured)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">
+                OpenAI features are unavailable. Click "Configure" to add your API key.
             </MudAlert>
-        </MudStack>
+        }
     </MudPaper>
 
-    <!-- SendGrid Integration -->
-    <MudPaper Class="pa-4">
+    <!-- SendGrid Email Service -->
+    <MudPaper Class="pa-4" Elevation="2">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
-            <div>
-                <MudText Typo="Typo.h6">SendGrid Email Service</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    Email delivery for user verification and password resets
-                </MudText>
+            <div style="flex: 1;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Email" Color="Color.Primary" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h6">SendGrid Email Service</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Email delivery for authentication and notifications
+                        </MudText>
+                    </div>
+                </MudStack>
             </div>
-            <MudChip Color="_sendGridConfigured ? Color.Success : Color.Error" Size="Size.Small" T="string">
-                @(_sendGridConfigured ? "Configured" : "Not Configured")
-            </MudChip>
+            <MudStack AlignItems="AlignItems.End" Spacing="2">
+                <MudChip Color="@(_emailConfigured ? Color.Success : Color.Error)" Size="Size.Small" T="string">
+                    @(_emailConfigured ? "Configured" : "Not Configured")
+                </MudChip>
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          Size="Size.Small"
+                          StartIcon="@Icons.Material.Filled.Settings"
+                          Href="/settings/sendgrid">
+                    Configure
+                </MudButton>
+            </MudStack>
         </MudStack>
 
-        <MudStack Spacing="3">
-            <MudSwitch Value="_sendGridSettings.Enabled"
-                      Label="Enable SendGrid"
-                      Color="Color.Primary"
-                      Disabled="true" />
+        <MudDivider Class="my-2" />
 
-            <MudTextField Value="@MaskApiKey(_sendGridSettings.ApiKey)"
-                         Label="API Key"
-                         Variant="Variant.Outlined"
-                         HelperText="SendGrid API key (from app.sendgrid.com)"
-                         Disabled="true"
-                         Adornment="Adornment.Start"
-                         AdornmentIcon="@Icons.Material.Filled.Key" />
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Powered Features:</MudText>
+        <MudStack Row="true" Spacing="1">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.LockReset">Password Reset</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.VerifiedUser">Email Verification</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.Mail">Welcome Emails</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.PersonAdd">User Invitations</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.Notifications">Account Notifications</MudChip>
+        </MudStack>
 
-            <MudTextField Value="_sendGridSettings.FromAddress"
-                         Label="From Email"
-                         Variant="Variant.Outlined"
-                         HelperText="Verified sender email address"
-                         Disabled="true"
-                         Adornment="Adornment.Start"
-                         AdornmentIcon="@Icons.Material.Filled.Email" />
-
-            <MudTextField Value="_sendGridSettings.FromName"
-                         Label="From Name"
-                         Variant="Variant.Outlined"
-                         HelperText="Display name for emails"
-                         Disabled="true" />
-
-            <MudAlert Severity="Severity.Info" Dense="true">
-                SendGrid settings are configured via environment variables:
-                SENDGRID__ENABLED, SENDGRID__APIKEY, SENDGRID__FROMEMAIL, SENDGRID__FROMNAME
+        @if (!_emailConfigured)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">
+                Email features are unavailable. Password reset and email verification are disabled.
             </MudAlert>
-        </MudStack>
+        }
     </MudPaper>
 
     <!-- VirusTotal Integration -->
-    <MudPaper Class="pa-4">
+    <MudPaper Class="pa-4" Elevation="2">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
-            <div>
-                <MudText Typo="Typo.h6">VirusTotal Integration</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    File scanning and URL threat intelligence (optional)
-                </MudText>
+            <div style="flex: 1;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Security" Color="Color.Primary" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h6">VirusTotal Integration</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Cloud file scanning with 70+ antivirus engines (optional)
+                        </MudText>
+                    </div>
+                </MudStack>
             </div>
-            <MudChip Color="_virusTotalConfigured ? Color.Success : Color.Warning" Size="Size.Small" T="string">
-                @(_virusTotalConfigured ? "Configured" : "Optional")
-            </MudChip>
+            <MudStack AlignItems="AlignItems.End" Spacing="2">
+                <MudChip Color="@(_virusTotalConfigured ? Color.Success : Color.Warning)" Size="Size.Small" T="string">
+                    @(_virusTotalConfigured ? "Configured" : "Optional")
+                </MudChip>
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          Size="Size.Small"
+                          StartIcon="@Icons.Material.Filled.Settings"
+                          Href="/settings/file-scanning">
+                    Configure
+                </MudButton>
+            </MudStack>
         </MudStack>
 
-        <MudStack Spacing="3">
-            <MudTextField Value="@MaskApiKey(_virusTotalApiKey)"
-                         Label="API Key"
-                         Variant="Variant.Outlined"
-                         HelperText="VirusTotal API key (from virustotal.com)"
-                         Disabled="true"
-                         Adornment="Adornment.Start"
-                         AdornmentIcon="@Icons.Material.Filled.Key" />
+        <MudDivider Class="my-2" />
 
-            <MudAlert Severity="Severity.Info" Dense="true">
-                VirusTotal API key is stored in the database (Settings UI > File Scanning).
-                Environment variable fallback: VIRUSTOTAL__APIKEY
-            </MudAlert>
-
-            <MudAlert Severity="Severity.Info" Dense="true">
-                Configure usage in Content Detection → External Services Config and File Scanning settings.
-            </MudAlert>
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Powered Features:</MudText>
+        <MudStack Row="true" Spacing="1">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.CloudQueue">Cloud File Scanning</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.BugReport">Multi-Engine Detection</MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.Link">URL Threat Intelligence</MudChip>
         </MudStack>
+
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+            VirusTotal is optional. ClamAV (always-on local scanner) provides primary malware protection.
+            VirusTotal adds cloud-based fallback with 70+ engines when ClamAV finds nothing.
+        </MudAlert>
     </MudPaper>
 
-    <!-- Telegram Bot Integration -->
-    <MudPaper Class="pa-4">
+    <!-- Telegram Bot -->
+    <MudPaper Class="pa-4" Elevation="2">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
-            <div>
-                <MudText Typo="Typo.h6">Telegram Bot</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    Core bot configuration for group management
-                </MudText>
+            <div style="flex: 1;">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.SmartToy" Color="Color.Primary" Size="Size.Large" />
+                    <div>
+                        <MudText Typo="Typo.h6">Telegram Bot</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Core bot configuration for group management
+                        </MudText>
+                    </div>
+                </MudStack>
             </div>
-            <MudChip Color="_telegramConfigured ? Color.Success : Color.Error" Size="Size.Small" T="string">
-                @(_telegramConfigured ? "Configured" : "Not Configured")
-            </MudChip>
+            <MudStack AlignItems="AlignItems.End" Spacing="2">
+                <MudChip Color="Color.Success" Size="Size.Small" T="string">
+                    Configured
+                </MudChip>
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          Size="Size.Small"
+                          StartIcon="@Icons.Material.Filled.Settings"
+                          Href="/settings/telegram">
+                    Configure
+                </MudButton>
+            </MudStack>
         </MudStack>
 
-        <MudStack Spacing="3">
-            <MudTextField Value="@MaskApiKey(_telegramBotToken)"
-                         Label="Bot Token"
-                         Variant="Variant.Outlined"
-                         HelperText="@_telegramBotHelperText"
-                         Disabled="true"
-                         Adornment="Adornment.Start"
-                         AdornmentIcon="@Icons.Material.Filled.Key" />
+        <MudDivider Class="my-2" />
 
-            <MudAlert Severity="Severity.Info" Dense="true">
-                Telegram bot token is configured via environment variable: TELEGRAM__BOTTOKEN
-            </MudAlert>
-
-            <MudAlert Severity="Severity.Success" Dense="true">
-                Configure bot behavior in Telegram → Bot Configuration section.
-            </MudAlert>
-        </MudStack>
+        <MudAlert Severity="Severity.Success" Dense="true">
+            Telegram bot is running. Token configured via database (migrated from environment variable on first startup).
+            Configure bot behavior, dual-mode settings, and permissions in Telegram → Bot Configuration.
+        </MudAlert>
     </MudPaper>
+
+    <!-- Hot-Reload Info -->
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+        <MudText Typo="Typo.subtitle2"><strong>Hot-Reload Configuration</strong></MudText>
+        <MudText Typo="Typo.body2" Class="mt-2">
+            All service configurations support hot-reload - changes take effect immediately without restarting the application.
+            Settings are stored in the database and loaded on-demand by each service.
+        </MudText>
+    </MudAlert>
 </MudStack>
 
 @code {
-    private OpenAIOptions _openAiSettings = new() { ApiKey = "" };
-    private SendGridOptions _sendGridSettings = new();
-    private string _virusTotalApiKey = string.Empty;
-    private string _telegramBotToken = string.Empty;
-
-    private bool _openAiConfigured;
-    private bool _sendGridConfigured;
+    private bool _openAIConfigured;
+    private bool _emailConfigured;
     private bool _virusTotalConfigured;
-    private bool _telegramConfigured;
-    private readonly string _telegramBotHelperText = "Telegram bot token (from @BotFather)";
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        // Load OpenAI settings
-        _openAiSettings = new OpenAIOptions
-        {
-            ApiKey = OpenAiOptionsAccessor.Value.ApiKey,
-            Model = OpenAiOptionsAccessor.Value.Model,
-            MaxTokens = OpenAiOptionsAccessor.Value.MaxTokens
-        };
-        _openAiConfigured = !string.IsNullOrWhiteSpace(_openAiSettings.ApiKey);
-
-        // Load SendGrid settings
-        _sendGridSettings = new SendGridOptions
-        {
-            Enabled = SendGridOptionsAccessor.Value.Enabled,
-            ApiKey = SendGridOptionsAccessor.Value.ApiKey,
-            FromAddress = SendGridOptionsAccessor.Value.FromAddress,
-            FromName = SendGridOptionsAccessor.Value.FromName
-        };
-        _sendGridConfigured = !string.IsNullOrWhiteSpace(_sendGridSettings.ApiKey);
-
-        // Load VirusTotal settings (from SpamDetectionOptions for env var fallback)
-        _virusTotalApiKey = SpamDetectionOptionsAccessor.Value.ApiKey ?? string.Empty;
-        _virusTotalConfigured = !string.IsNullOrWhiteSpace(_virusTotalApiKey);
-
-        // Telegram bot token (not exposed to UI for security)
-        _telegramBotToken = "***configured***"; // Placeholder
-        _telegramConfigured = true; // Assume configured if app is running
+        await LoadFeatureStatus();
     }
 
-    private string MaskApiKey(string? apiKey)
+    private async Task LoadFeatureStatus()
     {
-        if (string.IsNullOrWhiteSpace(apiKey))
-            return "(not configured)";
-
-        if (apiKey.Length <= 8)
-            return new string('*', apiKey.Length);
-
-        return $"{apiKey[..4]}{'*'.ToString().PadLeft(apiKey.Length - 8, '*')}{apiKey[^4..]}";
+        try
+        {
+            _openAIConfigured = await FeatureService.IsOpenAIConfiguredAsync();
+            _emailConfigured = await FeatureService.IsEmailConfiguredAsync();
+            _virusTotalConfigured = await FeatureService.IsVirusTotalConfiguredAsync();
+        }
+        catch (Exception)
+        {
+            // Graceful degradation - if feature check fails, assume not configured
+            _openAIConfigured = false;
+            _emailConfigured = false;
+            _virusTotalConfigured = false;
+        }
     }
 }

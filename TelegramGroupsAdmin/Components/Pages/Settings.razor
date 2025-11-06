@@ -29,6 +29,8 @@
                     @if (_canEditInfrastructure)
                     {
                         <MudNavLink Href="/settings/system/external-services" Icon="@Icons.Material.Filled.Extension" Match="NavLinkMatch.All">External Services</MudNavLink>
+                        <MudNavLink Href="/settings/system/openai" Icon="@Icons.Material.Filled.Psychology" Match="NavLinkMatch.All">OpenAI</MudNavLink>
+                        <MudNavLink Href="/settings/system/sendgrid" Icon="@Icons.Material.Filled.Email" Match="NavLinkMatch.All">SendGrid</MudNavLink>
                     }
                     <MudNavLink Href="/settings/system/logging" Icon="@Icons.Material.Filled.Terminal" Match="NavLinkMatch.All">Logging</MudNavLink>
                     @if (_canEditInfrastructure)
@@ -117,6 +119,26 @@
                             @if (_canEditInfrastructure)
                             {
                                 <ExternalServicesSettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
+                            break;
+                        case "openai":
+                            @if (_canEditInfrastructure)
+                            {
+                                <OpenAISettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
+                            break;
+                        case "sendgrid":
+                            @if (_canEditInfrastructure)
+                            {
+                                <SendGridSettings />
                             }
                             else
                             {

@@ -1,0 +1,401 @@
+@using TelegramGroupsAdmin.Configuration.Models
+@using TelegramGroupsAdmin.Configuration.Repositories
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Services.Email
+@inject IFileScanningConfigRepository ConfigRepository
+@inject IAuditService AuditService
+@inject IEmailService EmailService
+@inject BlazorAuthHelper AuthHelper
+@inject ISnackbar Snackbar
+
+<MudGrid>
+    <!-- Info Alert -->
+    <MudItem xs="12">
+        <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+            <MudText Typo="Typo.subtitle2"><strong>SendGrid Email Service</strong></MudText>
+            <MudText Typo="Typo.body2">
+                SendGrid powers email delivery for password resets, email verification, account notifications,
+                and user invitations. Configuration changes apply immediately (hot-reload).
+            </MudText>
+        </MudAlert>
+    </MudItem>
+
+    <!-- Main Configuration -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <div>
+                        <MudText Typo="Typo.h6">SendGrid Configuration</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Configure SendGrid API settings for email delivery
+                        </MudText>
+                    </div>
+                    <MudChip Color="@(_isConfigured ? Color.Success : Color.Error)" Size="Size.Small" T="string">
+                        @(_isConfigured ? "Configured" : "Not Configured")
+                    </MudChip>
+                </MudStack>
+
+                <MudDivider Class="my-2" />
+
+                <!-- Enable/Disable Toggle -->
+                <MudSwitch @bind-Value="_config.Enabled"
+                          Label="Enable SendGrid Integration"
+                          Color="Color.Primary" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    When disabled, password reset and email verification features are unavailable
+                </MudText>
+
+                <!-- API Key -->
+                <MudTextField @bind-Value="_apiKeys.SendGrid"
+                             Label="API Key"
+                             Variant="Variant.Outlined"
+                             InputType="@(_showApiKey ? InputType.Text : InputType.Password)"
+                             HelperText="Get your API key from https://app.sendgrid.com/settings/api_keys"
+                             Adornment="Adornment.End"
+                             AdornmentIcon="@(_showApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                             OnAdornmentClick="@(() => _showApiKey = !_showApiKey)">
+                </MudTextField>
+
+                <!-- From Address -->
+                <MudTextField @bind-Value="_config.FromAddress"
+                             Label="From Email Address"
+                             Variant="Variant.Outlined"
+                             HelperText="Verified sender email address (must be verified in SendGrid)"
+                             Disabled="@(!_config.Enabled)"
+                             Adornment="Adornment.Start"
+                             AdornmentIcon="@Icons.Material.Filled.Email">
+                </MudTextField>
+
+                <!-- From Name -->
+                <MudTextField @bind-Value="_config.FromName"
+                             Label="From Name"
+                             Variant="Variant.Outlined"
+                             HelperText="Display name for outgoing emails (e.g., 'TelegramGroupsAdmin Support')"
+                             Disabled="@(!_config.Enabled)">
+                </MudTextField>
+
+                <!-- Save & Test Buttons -->
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled"
+                              Color="Color.Primary"
+                              OnClick="@SaveConfigAsync"
+                              Disabled="@_isSaving"
+                              StartIcon="@Icons.Material.Filled.Save">
+                        @if (_isSaving)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            <text>&nbsp;Saving...</text>
+                        }
+                        else
+                        {
+                            <text>Save Settings</text>
+                        }
+                    </MudButton>
+
+                    <MudButton Variant="Variant.Outlined"
+                              Color="Color.Secondary"
+                              OnClick="@TestConnectionAsync"
+                              Disabled="@(_isTesting || !_isConfigured)"
+                              StartIcon="@Icons.Material.Filled.NetworkCheck">
+                        @if (_isTesting)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            <text>&nbsp;Testing...</text>
+                        }
+                        else
+                        {
+                            <text>Test Connection</text>
+                        }
+                    </MudButton>
+
+                    <MudButton Variant="Variant.Outlined"
+                              Color="Color.Secondary"
+                              OnClick="@LoadConfig"
+                              Disabled="@_isSaving"
+                              StartIcon="@Icons.Material.Filled.Refresh">
+                        Reset
+                    </MudButton>
+                </MudStack>
+
+                @if (!string.IsNullOrEmpty(_testResult))
+                {
+                    <MudAlert Severity="@_testSeverity" Dense="true">
+                        @_testResult
+                    </MudAlert>
+                }
+
+                <MudAlert Severity="Severity.Success" Dense="true" Icon="@Icons.Material.Filled.Info">
+                    Changes apply immediately (hot-reload). No app restart required.
+                </MudAlert>
+
+                @if (!_isConfigured)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">
+                        <strong>Not Configured:</strong> Add your SendGrid API key and sender details above.
+                        Until configured, password reset and email verification will be disabled.
+                    </MudAlert>
+                }
+                else if (!_config.Enabled)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">
+                        <strong>Disabled:</strong> SendGrid is configured but disabled. Enable it above to restore email functionality.
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Feature Status -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6">Features Powered by SendGrid</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    These features will be available when SendGrid is configured and enabled
+                </MudText>
+
+                <MudDivider Class="my-2" />
+
+                <MudSimpleTable Hover="true" Dense="true">
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>Description</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Password Reset</strong></td>
+                            <td>Send password reset links to users who forgot their password</td>
+                            <td>
+                                @if (_config.Enabled && _isConfigured)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">Active</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.PowerOff">Disabled</MudChip>
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Email Verification</strong></td>
+                            <td>Send verification emails for new user registrations</td>
+                            <td>
+                                @if (_config.Enabled && _isConfigured)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">Active</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.PowerOff">Disabled</MudChip>
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Welcome Emails</strong></td>
+                            <td>Send welcome emails to newly registered users</td>
+                            <td>
+                                @if (_config.Enabled && _isConfigured)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">Active</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.PowerOff">Disabled</MudChip>
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>User Invitations</strong></td>
+                            <td>Email invitation links to new users</td>
+                            <td>
+                                @if (_config.Enabled && _isConfigured)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">Active</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.PowerOff">Disabled</MudChip>
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Account Notifications</strong></td>
+                            <td>Send account locked/unlocked/disabled notifications</td>
+                            <td>
+                                @if (_config.Enabled && _isConfigured)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">Active</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Icon="@Icons.Material.Filled.PowerOff">Disabled</MudChip>
+                                }
+                            </td>
+                        </tr>
+                    </tbody>
+                </MudSimpleTable>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Setup Instructions -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.h6">SendGrid Setup Instructions</MudText>
+
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <strong>Step 1:</strong> Sign up for SendGrid at <a href="https://signup.sendgrid.com" target="_blank">https://signup.sendgrid.com</a> (free tier: 100 emails/day)
+                </MudAlert>
+
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <strong>Step 2:</strong> Create an API key with "Mail Send" permissions at
+                    <a href="https://app.sendgrid.com/settings/api_keys" target="_blank">https://app.sendgrid.com/settings/api_keys</a>
+                </MudAlert>
+
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    <strong>Step 3:</strong> Verify a sender identity (single email or domain) at
+                    <a href="https://app.sendgrid.com/settings/sender_auth" target="_blank">https://app.sendgrid.com/settings/sender_auth</a>
+                </MudAlert>
+
+                <MudAlert Severity="Severity.Warning" Dense="true">
+                    <strong>Important:</strong> Your "From Email Address" must be verified in SendGrid before you can send emails.
+                    Use "Single Sender Verification" for quick setup, or "Domain Authentication" for production use.
+                </MudAlert>
+
+                <MudAlert Severity="Severity.Success" Dense="true">
+                    <strong>Free Tier Limits:</strong>
+                    <ul style="margin: 8px 0 0 20px; padding: 0;">
+                        <li>100 emails per day (sufficient for small-medium deployments)</li>
+                        <li>Single sender verification (no custom domain required)</li>
+                        <li>All email templates included</li>
+                    </ul>
+                </MudAlert>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private SendGridConfig _config = new();
+    private ApiKeysConfig _apiKeys = new();
+    private bool _isSaving;
+    private bool _isTesting;
+    private bool _isConfigured;
+    private bool _showApiKey;
+    private string _testResult = string.Empty;
+    private Severity _testSeverity = Severity.Info;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfig();
+        await LoadApiKeys();
+        CheckConfiguration();
+    }
+
+    private async Task LoadConfig()
+    {
+        try
+        {
+            var config = await ConfigRepository.GetSendGridConfigAsync();
+            _config = config ?? new SendGridConfig();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new SendGridConfig();
+        }
+    }
+
+    private async Task LoadApiKeys()
+    {
+        try
+        {
+            var apiKeys = await ConfigRepository.GetApiKeysAsync();
+            _apiKeys = apiKeys ?? new ApiKeysConfig();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading API keys: {ex.Message}", Severity.Error);
+            _apiKeys = new ApiKeysConfig();
+        }
+    }
+
+    private void CheckConfiguration()
+    {
+        _isConfigured = !string.IsNullOrWhiteSpace(_apiKeys.SendGrid) &&
+                        !string.IsNullOrWhiteSpace(_config.FromAddress);
+    }
+
+    private async Task SaveConfigAsync()
+    {
+        _isSaving = true;
+        try
+        {
+            // Save SendGrid configuration
+            await ConfigRepository.SaveSendGridConfigAsync(_config);
+
+            // Save API keys
+            await ConfigRepository.SaveApiKeysAsync(_apiKeys);
+
+            // Create audit log entry
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    Actor.FromWebUser(userId),
+                    Actor.FromWebUser(userId),
+                    $"sendgrid:enabled={_config.Enabled}:from={_config.FromAddress}:name={_config.FromName}");
+            }
+
+            // Update configuration status
+            CheckConfiguration();
+
+            Snackbar.Add("SendGrid settings saved successfully", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving settings: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        _isTesting = true;
+        _testResult = string.Empty;
+
+        try
+        {
+            var success = await EmailService.TestConnectionAsync();
+
+            if (success)
+            {
+                _testResult = "✅ SendGrid configuration is valid! API key and sender address are properly configured.";
+                _testSeverity = Severity.Success;
+            }
+            else
+            {
+                _testResult = "❌ SendGrid configuration test failed. Check that your API key is valid and starts with 'SG.', and that the From Address is configured.";
+                _testSeverity = Severity.Error;
+            }
+        }
+        catch (Exception ex)
+        {
+            _testResult = $"❌ Connection test failed: {ex.Message}";
+            _testSeverity = Severity.Error;
+        }
+        finally
+        {
+            _isTesting = false;
+        }
+    }
+}
