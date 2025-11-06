@@ -172,6 +172,8 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 **Complete**: Phase 1-4 (Foundation, spam detection, TickerQ jobs, welcome system, file scanning, translations, notifications)
 **Roadmap**: See BACKLOG.md for all pending work and future features
 
+**Note**: BACKLOG.md contains **pending work only** (features, bugs, refactoring). For completed work history, use `git log` - all completed tasks are documented in commit messages with full technical details. Do not maintain a "Completed Work" section in BACKLOG.md to avoid duplication.
+
 ## Testing
 
 **Migration Tests**: 22 tests (all passing) via Testcontainers.PostgreSQL, validates against real PostgreSQL 17
