@@ -376,7 +376,8 @@ volumes:
         _loading = true;
         try
         {
-            _config = await ConfigService.GetEffectiveAsync<BotProtectionConfig>(ConfigType.UrlFilter, null)
+            // Load global bot protection config (chatId=0)
+            _config = await ConfigService.GetEffectiveAsync<BotProtectionConfig>(ConfigType.UrlFilter, 0)
                       ?? BotProtectionConfig.Default;
 
             // Convert whitelist to text (one per line)
@@ -406,7 +407,8 @@ volumes:
                 .Where(s => !string.IsNullOrWhiteSpace(s))
                 .ToList();
 
-            await ConfigService.SaveAsync(ConfigType.UrlFilter, null, _config);
+            // Save global bot protection config (chatId=0)
+            await ConfigService.SaveAsync(ConfigType.UrlFilter, 0, _config);
             Snackbar.Add("Bot protection configuration saved globally", Severity.Success);
         }
         catch (Exception ex)

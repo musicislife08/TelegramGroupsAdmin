@@ -52,8 +52,8 @@ public class SerilogDynamicConfiguration
             using var scope = _scopeFactory.CreateScope();
             var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
 
-            // Load config from database
-            var config = await configService.GetAsync<LogConfig>(ConfigType.Log, chatId: null);
+            // Load config from database (global config at chatId=0)
+            var config = await configService.GetAsync<LogConfig>(ConfigType.Log, chatId: 0);
 
             if (config != null)
             {

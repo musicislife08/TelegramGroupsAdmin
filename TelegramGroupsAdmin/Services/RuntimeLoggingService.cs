@@ -54,7 +54,7 @@ public class RuntimeLoggingService : IRuntimeLoggingService
         // Also check database for LastModified timestamp
         using var scope = _scopeFactory.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var dbConfig = await configService.GetAsync<LogConfig>(ConfigType.Log, chatId: null);
+        var dbConfig = await configService.GetAsync<LogConfig>(ConfigType.Log, chatId: 0);
 
         if (dbConfig != null)
         {
@@ -71,8 +71,8 @@ public class RuntimeLoggingService : IRuntimeLoggingService
         using var scope = _scopeFactory.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
 
-        // Save to database
-        await configService.SaveAsync(ConfigType.Log, chatId: null, config);
+        // Save to database (global config at chatId=0)
+        await configService.SaveAsync(ConfigType.Log, chatId: 0, config);
 
         // Apply immediately to ILoggerFactory
         ApplyLogLevels(config);
