@@ -11,11 +11,11 @@ A list of my notes to talk about in the future
 After devcontainer setup is complete, revisit these:
 
 ### Documentation
-- Create CONTRIBUTING.md with development setup and patterns
-- Add screenshots to README showing the UI (Dashboard, Settings, Message Monitoring, Analytics)
+
 - Add README badges (license, build status, etc.)
 
 ### GitHub Templates
+
 - Add .github/ISSUE_TEMPLATE/ for bug reports and feature requests
 - Add .github/PULL_REQUEST_TEMPLATE.md
 - Consider .github/workflows/ for CI/CD (Docker image publishing to GHCR)

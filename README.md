@@ -1,5 +1,8 @@
 # TelegramGroupsAdmin
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![.NET 9.0](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)
+
 **AI-powered Telegram group moderation with advanced spam detection, content filtering, and comprehensive analytics.**
 
 A self-hosted Blazor Server application designed for homelab deployment, combining 9 spam detection algorithms, AI-powered content analysis, file scanning, and real-time moderation tools.
@@ -139,16 +142,19 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
    ```
 
 6. **Verify health**
+
    ```bash
    curl http://localhost:8080/healthz/live   # Liveness check
    curl http://localhost:8080/healthz/ready  # Readiness check (includes DB)
    ```
 
-7. **Access web UI**
+7. **Access web UI and configure**
    - Navigate to: <http://localhost:8080>
    - Create first user (automatically becomes Owner)
+   - Configure bot token at **Settings → Telegram → Bot Configuration**
+   - Configure API keys at **Settings → System** (OpenAI, Email, etc.)
    - Add bot to Telegram groups
-   - Configure spam detection in Settings
+   - Enable spam detection at **Settings → Content Detection**
 
 ### Required Configuration
 

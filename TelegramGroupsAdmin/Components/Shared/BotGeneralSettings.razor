@@ -22,11 +22,33 @@
     {
         <MudGrid>
             <MudItem xs="12">
+                <MudChip Color="@(_isBotTokenConfigured ? Color.Success : Color.Error)" Size="Size.Small" T="string">
+                    @(_isBotTokenConfigured ? "Bot Token Configured" : "Bot Token Not Set")
+                </MudChip>
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_botToken"
+                              Label="Bot Token"
+                              Variant="Variant.Outlined"
+                              InputType="@(_showBotToken ? InputType.Text : InputType.Password)"
+                              HelperText="Get your bot token from BotFather on Telegram"
+                              Placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@(_showBotToken ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                              OnAdornmentClick="@(() => _showBotToken = !_showBotToken)" />
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                    Stored encrypted in database. Visit <MudLink Href="https://t.me/BotFather" Target="_blank">BotFather</MudLink> to create a new bot.
+                </MudText>
+            </MudItem>
+
+            <MudItem xs="12">
                 <MudSwitch @bind-Value="_botConfig.BotEnabled"
                            Color="Color.Primary"
-                           Label="Enable Telegram Bot Service" />
+                           Label="Enable Telegram Bot Service"
+                           Disabled="!_isBotTokenConfigured" />
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                    Master switch for the entire bot service (applies globally to all chats)
+                    Master switch for the entire bot service (applies globally to all chats). Requires bot token to be configured.
                 </MudText>
             </MudItem>
 
@@ -56,6 +78,13 @@
                     {
                         <span>Save Bot Service Settings</span>
                     }
+                </MudButton>
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           OnClick="LoadBotConfig"
+                           Disabled="_savingBotConfig">
+                    Reset
                 </MudButton>
             </MudItem>
         </MudGrid>
@@ -272,6 +301,9 @@ volumes:
     private bool _loadingBotConfig = true;
     private bool _savingBotConfig;
     private TelegramBotConfig? _botConfig;
+    private string _botToken = "";
+    private bool _showBotToken;
+    private bool _isBotTokenConfigured;
 
     protected override async Task OnInitializedAsync()
     {
@@ -288,11 +320,18 @@ volumes:
             // Load global bot config (chat_id = 0 for global config)
             _botConfig = await ConfigService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
                          ?? TelegramBotConfig.Default;
+
+            // Load bot token (encrypted)
+            var token = await ConfigService.GetTelegramBotTokenAsync();
+            _botToken = token ?? "";
+            _isBotTokenConfigured = !string.IsNullOrWhiteSpace(token);
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to load bot service configuration: {ex.Message}", Severity.Error);
             _botConfig = TelegramBotConfig.Default;
+            _botToken = "";
+            _isBotTokenConfigured = false;
         }
         finally
         {
@@ -307,6 +346,13 @@ volumes:
         _savingBotConfig = true;
         try
         {
+            // Save bot token (encrypted) if provided
+            if (!string.IsNullOrWhiteSpace(_botToken))
+            {
+                await ConfigService.SaveTelegramBotTokenAsync(_botToken);
+                _isBotTokenConfigured = true;
+            }
+
             // Save as global config (chat_id = 0)
             await ConfigService.SaveAsync(ConfigType.TelegramBot, 0, _botConfig);
 

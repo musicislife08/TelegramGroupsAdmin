@@ -1,0 +1,130 @@
+name: Bug Report
+description: Report a bug or issue with TelegramGroupsAdmin
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the information below to help us investigate and resolve the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+      placeholder: "Example: Spam detection fails when processing messages with Cyrillic characters"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Send a message with '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen
+      placeholder: "Example: Message should be analyzed and marked as ham"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened
+      placeholder: "Example: Error logged and message not processed"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment-mode
+    attributes:
+      label: Deployment Mode
+      description: How are you running TelegramGroupsAdmin?
+      options:
+        - Docker Compose (production - pre-built image)
+        - Docker Compose (development - build from source)
+        - Building from source (dotnet run)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version are you running?
+      placeholder: "Docker image tag (e.g., latest, v1.0.0) or git commit hash"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Details about your environment
+      placeholder: |
+        - OS: [e.g., Ubuntu 22.04, macOS 14, Windows 11]
+        - Docker version: [run `docker --version`]
+        - Docker Compose version: [run `docker compose version`]
+        - PostgreSQL version: [usually 17 from compose file]
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: services-involved
+    attributes:
+      label: Services Involved
+      description: Which services might be related to this issue? (Check all that apply)
+      options:
+        - label: Blazor Web UI
+        - label: Telegram Bot API
+        - label: PostgreSQL Database
+        - label: OpenAI API (GPT-4 / Vision)
+        - label: VirusTotal API
+        - label: ClamAV (file scanning)
+        - label: SendGrid (email)
+        - label: CAS.chat
+        - label: Background Jobs (TickerQ)
+        - label: Not sure / Multiple services
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: |
+        Copy and paste any relevant log output. Please sanitize/remove any API keys, tokens, or sensitive information.
+        Run `docker compose logs app` to get application logs.
+      placeholder: |
+        [Paste logs here - remember to remove sensitive information]
+      render: shell
+
+  - type: textarea
+    id: docker-compose-config
+    attributes:
+      label: Docker Compose Configuration (Optional)
+      description: |
+        If relevant, paste your compose.yml configuration.
+        **IMPORTANT: Remove all API keys, tokens, and passwords before pasting!**
+      placeholder: |
+        [Paste sanitized compose.yml here - REMOVE ALL SECRETS]
+      render: yaml
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here (screenshots, configuration details, etc.)
+      placeholder: Any additional information that might help diagnose the issue

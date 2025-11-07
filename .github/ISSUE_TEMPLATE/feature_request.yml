@@ -1,0 +1,99 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for TelegramGroupsAdmin
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please provide as much detail as possible to help us understand your idea.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: A clear and concise description of the feature you'd like to see
+      placeholder: "Example: Add support for custom spam detection rules using regex patterns"
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case / Problem to Solve
+      description: Describe the problem this feature would solve or the use case it would enable
+      placeholder: |
+        Example: I manage multiple Telegram groups with different spam patterns. Some groups need custom rules
+        for detecting specific types of spam that the existing algorithms don't catch well.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: How would you like this feature to work?
+      placeholder: |
+        Example: Add a new section in Settings where admins can define custom regex patterns.
+        Each pattern would have a confidence score that contributes to the overall spam detection.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative solutions or workarounds?
+      placeholder: |
+        Example: I could use the existing stopwords feature, but regex would be more flexible.
+        I also considered using external filtering, but keeping everything in one system would be better.
+
+  - type: dropdown
+    id: feature-area
+    attributes:
+      label: Feature Area
+      description: Which area of the application would this feature affect?
+      options:
+        - Spam Detection
+        - Content Filtering
+        - User Management
+        - Analytics / Reporting
+        - Web UI / UX
+        - Bot Commands
+        - Settings / Configuration
+        - Background Jobs
+        - Notifications
+        - API / Integrations
+        - Performance / Infrastructure
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority (Your Perspective)
+      description: How important is this feature to you?
+      options:
+        - Critical (blocking my use case)
+        - High (significantly improves experience)
+        - Medium (nice to have)
+        - Low (minor enhancement)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be interested in helping implement this feature?
+      options:
+        - label: I'd be willing to submit a PR for this feature
+        - label: I can help test this feature when available
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, mockups, or examples about the feature request
+      placeholder: Any additional information, examples from other tools, UI mockups, etc.

@@ -89,11 +89,20 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 ## Configuration
 
-**Pattern**: Database-first with env var fallback for first-time setup only
+**Pattern**: Database-first, all configuration via Settings UI (no env vars required)
 
-**Required Env Vars**: OpenAI API key, SendGrid settings
-**Database-Managed** (encrypted): Telegram bot token, VirusTotal API key, other service credentials
-**Migration Services**: TelegramConfigMigrationService, ApiKeyMigrationService auto-migrate on first startup
+**UI-Managed** (encrypted in database):
+- **Telegram Bot Token**: Settings → Telegram → Bot Configuration → General
+- **OpenAI API Key**: Settings → System → OpenAI
+- **SendGrid Settings**: Settings → System → Email
+- **VirusTotal API Key**: Settings → Content Detection → File Scanning
+- **CAS API Key**: Settings → Content Detection → Detection Algorithms
+
+**Migration Services** (optional, one-time only):
+- TelegramConfigMigrationService: Migrates `TELEGRAM__BOTTOKEN` env var to database on first startup
+- ApiKeyMigrationService: Migrates OpenAI/SendGrid env vars to database on first startup
+- After migration, remove env vars - all future changes via Settings UI
+
 **Runtime Editing**: Settings UI allows live config changes without restart
 
 ## Key Architectural Features
