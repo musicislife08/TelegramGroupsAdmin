@@ -20,6 +20,9 @@ public class TelegramMediaService(
     TelegramConfigLoader configLoader,
     IOptions<MessageHistoryOptions> historyOptions)
 {
+    // Telegram Bot API file download limit (standard api.telegram.org)
+    private const long MaxFileSizeBytes = 20 * 1024 * 1024; // 20MB
+
     private readonly ILogger<TelegramMediaService> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly TelegramConfigLoader _configLoader = configLoader;
@@ -86,15 +89,15 @@ public class TelegramMediaService(
         catch (ApiRequestException ex) when (ex.Message.Contains("file is too big"))
         {
             // File exceeds Telegram Bot API 20MB download limit (standard api.telegram.org)
-            // This is expected for large files when not using self-hosted Bot API server
+            // NOTE: This catch block should rarely execute due to proactive size check in MediaProcessingHandler
+            // Only catches edge cases where file is requested directly (not through normal message flow)
             _logger.LogWarning(
-                "Skipping {MediaType} download for message {MessageId}: File exceeds Telegram Bot API 20MB limit. " +
-                "File ID: {FileId}. " +
-                "To download files >20MB, configure self-hosted Bot API server (Settings → Telegram Bot → API Server URL).",
+                "File too large for Telegram Bot API (20MB limit): {MediaType} file {FileId} for message {MessageId}. " +
+                "Metadata saved but file_id should have been set to null to prevent retry attempts.",
                 mediaType,
-                messageId,
-                fileId);
-            return null; // Graceful skip - metadata saved, but no local file
+                fileId,
+                messageId);
+            return null; // Return null ensures file_id not saved in database
         }
         catch (Exception ex)
         {

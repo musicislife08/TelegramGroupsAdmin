@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -11,11 +12,18 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class MediaProcessingHandler
 {
-    private readonly TelegramMediaService _mediaService;
+    // Telegram Bot API file download limit (standard api.telegram.org)
+    private const long MaxFileSizeBytes = 20 * 1024 * 1024; // 20MB
 
-    public MediaProcessingHandler(TelegramMediaService mediaService)
+    private readonly TelegramMediaService _mediaService;
+    private readonly ILogger<MediaProcessingHandler> _logger;
+
+    public MediaProcessingHandler(
+        TelegramMediaService mediaService,
+        ILogger<MediaProcessingHandler> logger)
     {
         _mediaService = mediaService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -32,6 +40,33 @@ public class MediaProcessingHandler
         if (detection == null)
         {
             return null;
+        }
+
+        // Proactive size check: Reject oversized files BEFORE attempting download
+        // Telegram provides FileSize in message metadata - use it to avoid wasted API calls
+        if (detection.FileSize > MaxFileSizeBytes)
+        {
+            _logger.LogWarning(
+                "Skipping oversized {MediaType} download: {FileSizeMB:F2}MB exceeds {LimitMB}MB limit " +
+                "(message {MessageId} in chat {ChatId}, file: {FileName})",
+                detection.MediaType,
+                detection.FileSize / 1024.0 / 1024.0,
+                MaxFileSizeBytes / 1024.0 / 1024.0,
+                messageId,
+                chatId,
+                detection.FileName ?? "unknown");
+
+            // Return metadata WITHOUT file_id (prevents UI from showing download button)
+            // Setting FileId = null ensures MediaRefetchWorkerService won't attempt download
+            return new MediaProcessingResult(
+                MediaType: detection.MediaType,
+                FileId: null, // Null file_id prevents download attempts
+                FileSize: detection.FileSize,
+                FileName: detection.FileName,
+                MimeType: detection.MimeType,
+                Duration: detection.Duration,
+                LocalPath: null
+            );
         }
 
         // Download and save media file (EXCEPT Documents - metadata only for Documents)
@@ -182,7 +217,7 @@ public record MediaDetectionResult(
 /// </summary>
 public record MediaProcessingResult(
     MediaType MediaType,
-    string FileId,
+    string? FileId, // Null for oversized files (prevents download attempts)
     long FileSize,
     string? FileName,
     string? MimeType,

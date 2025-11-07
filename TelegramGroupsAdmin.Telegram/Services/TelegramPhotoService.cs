@@ -13,6 +13,10 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class TelegramPhotoService
 {
+    // Telegram Bot API file download limit (standard api.telegram.org)
+    // Profile photos exceeding this limit are extremely rare
+    private const long MaxFileSizeBytes = 20 * 1024 * 1024; // 20MB
+
     private readonly ILogger<TelegramPhotoService> _logger;
     private readonly MessageHistoryOptions _options;
     private readonly string _chatIconsPath;
@@ -93,9 +97,11 @@ public class TelegramPhotoService
         }
         catch (ApiRequestException ex) when (ex.Message.Contains("file is too big"))
         {
+            // NOTE: This catch block should rarely execute - profile photos are typically small
+            // Only catches edge cases where chat has extremely large profile photo (>20MB)
             _logger.LogWarning(
-                "Skipping chat icon download for {ChatId}: File exceeds Telegram Bot API 20MB limit. " +
-                "To download large profile photos, configure self-hosted Bot API server (Settings → Telegram Bot → API Server URL).",
+                "Chat icon download failed: File exceeds Telegram Bot API 20MB limit for chat {ChatId}. " +
+                "Profile photos this large are extremely rare.",
                 chatId);
             return null;
         }
@@ -192,9 +198,11 @@ public class TelegramPhotoService
         }
         catch (ApiRequestException ex) when (ex.Message.Contains("file is too big"))
         {
+            // NOTE: This catch block should rarely execute - profile photos are typically small
+            // Only catches edge cases where user has extremely large profile photo (>20MB)
             _logger.LogWarning(
-                "Skipping user photo download for {UserId}: File exceeds Telegram Bot API 20MB limit. " +
-                "To download large profile photos, configure self-hosted Bot API server (Settings → Telegram Bot → API Server URL).",
+                "User photo download failed: File exceeds Telegram Bot API 20MB limit for user {UserId}. " +
+                "Profile photos this large are extremely rare.",
                 userId);
             return null;
         }
