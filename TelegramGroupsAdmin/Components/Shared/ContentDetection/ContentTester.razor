@@ -1,8 +1,12 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Abstractions
+@using TelegramGroupsAdmin.ContentDetection.Constants
+@using TelegramGroupsAdmin.Core.Utilities
 @inject IContentCheckCoordinator ContentCheckCoordinator
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
+@inject IEnumerable<IContentCheck> ContentChecks
 @implements IDisposable
 
 <MudPaper Class="pa-4" Elevation="0">
@@ -124,10 +128,9 @@
                     </MudStack>
                 </MudPaper>
             }
-            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
-                <strong>Note:</strong> File scanning integration is not yet complete (Phase 4.14).
-                This tester currently only processes text + images + URLs. File support coming soon.
-            </MudAlert>
+            <MudText Typo="Typo.caption" Class="mt-1">
+                Upload files to test malware scanning (ClamAV + VirusTotal). Test with eicar.com test file.
+            </MudText>
         </MudItem>
 
         <!-- Run Test Button -->
@@ -269,6 +272,46 @@
             </MudPaper>
         }
 
+        <!-- File Scan Results -->
+        @if (_fileScanResult != null)
+        {
+            <MudPaper Class="pa-3 mb-3" Outlined="true" Style="@(_fileScanResult.Result == CheckResultType.Spam ? "border-left: 4px solid var(--mud-palette-error);" : "border-left: 4px solid var(--mud-palette-success);")">
+                <MudText Typo="Typo.h6" Color="@(_fileScanResult.Result == CheckResultType.Spam ? Color.Error : Color.Success)" Class="mb-2">
+                    <MudIcon Icon="@(_fileScanResult.Result == CheckResultType.Spam ? Icons.Material.Filled.Warning : Icons.Material.Filled.Shield)" Color="@(_fileScanResult.Result == CheckResultType.Spam ? Color.Error : Color.Success)" />
+                    File Scan Results
+                </MudText>
+                <MudStack Spacing="2">
+                    <MudAlert Severity="@(_fileScanResult.Result == CheckResultType.Spam ? Severity.Error : Severity.Success)" Dense="true">
+                        <strong>Status:</strong> @(_fileScanResult.Result == CheckResultType.Spam ? "⚠️ MALWARE DETECTED" : "✅ Clean")
+                    </MudAlert>
+                    @if (!string.IsNullOrEmpty(_fileScanResult.Details))
+                    {
+                        <MudText Typo="Typo.body2"><strong>Details:</strong> @_fileScanResult.Details</MudText>
+                    }
+                    <MudText Typo="Typo.body2"><strong>Confidence:</strong> @_fileScanResult.Confidence%</MudText>
+                    @if (_fileScanResult.ProcessingTimeMs > 0)
+                    {
+                        <MudText Typo="Typo.caption">Scan time: @_fileScanResult.ProcessingTimeMs ms</MudText>
+                    }
+                </MudStack>
+                @if (_fileScanResult.Result == CheckResultType.Spam)
+                {
+                    <MudAlert Severity="Severity.Warning" Class="mt-2" Dense="true">
+                        <strong>Production Action:</strong> This file would be immediately deleted and the user would receive a DM notification.
+                    </MudAlert>
+                }
+            </MudPaper>
+        }
+        else if (_fileScanRunning)
+        {
+            <MudPaper Class="pa-3 mb-3" Outlined="true">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    <MudText Typo="Typo.body2">Scanning file for malware...</MudText>
+                </MudStack>
+            </MudPaper>
+        }
+
         <!-- Recommended Action -->
         <MudPaper Class="pa-4 mb-3" Outlined="true" Style="background-color: var(--mud-palette-background-grey);">
             <MudText Typo="Typo.h6" Class="mb-3">
@@ -362,6 +405,8 @@
     private IBrowserFile? _selectedFile;
     private bool _isRunning;
     private ContentCheckCoordinatorResult? _result;
+    private ContentCheckResponse? _fileScanResult;
+    private bool _fileScanRunning;
 
     // JS interop for paste listener
     private DotNetObjectReference<ContentTester>? _dotNetHelper;
@@ -517,6 +562,12 @@
             // Call the SAME coordinator that real messages use
             _result = await ContentCheckCoordinator.CheckAsync(request, CancellationToken.None);
 
+            // Run file scan if file is selected (runs in parallel with spam detection display)
+            if (_selectedFile != null)
+            {
+                await RunFileScanAsync();
+            }
+
             // Show summary
             if (_result.HasCriticalViolations)
             {
@@ -566,6 +617,94 @@
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Failed to delete temp video: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    private async Task RunFileScanAsync()
+    {
+        if (_selectedFile == null)
+        {
+            return;
+        }
+
+        _fileScanRunning = true;
+        _fileScanResult = null;
+        string? tempFilePath = null;
+
+        try
+        {
+            // Step 1: Save file to temp location
+            tempFilePath = Path.Combine(Path.GetTempPath(), $"tester_{Guid.NewGuid():N}_{_selectedFile.Name}");
+
+            await using (var fileStream = File.Create(tempFilePath))
+            {
+                var maxSize = 100 * 1024 * 1024; // 100MB limit for test UI
+                await using var uploadStream = _selectedFile.OpenReadStream(maxAllowedSize: maxSize);
+                await uploadStream.CopyToAsync(fileStream);
+            }
+
+            // Step 2: Calculate SHA256 hash for cache lookup
+            string fileHash;
+            await using (var fileStream = File.OpenRead(tempFilePath))
+            {
+                fileHash = await HashUtilities.ComputeSHA256Async(fileStream, CancellationToken.None);
+            }
+
+            // Step 3: Create scan request (follows FileScanJob pattern)
+            var scanRequest = new FileScanCheckRequest
+            {
+                Message = $"File attachment: {_selectedFile.Name}",
+                UserId = string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId),
+                UserName = _userName,
+                ChatId = _selectedChatId ?? 0,
+                FilePath = tempFilePath,
+                FileName = _selectedFile.Name,
+                FileSize = _selectedFile.Size,
+                FileHash = fileHash,
+                CancellationToken = CancellationToken.None
+            };
+
+            // Step 4: Get FileScanningCheck service and execute
+            var fileScanningCheck = ContentChecks.FirstOrDefault(c => c.CheckName == CheckName.FileScanning);
+            if (fileScanningCheck == null)
+            {
+                Snackbar.Add("File scanning service not available", Severity.Warning);
+                return;
+            }
+
+            _fileScanResult = await fileScanningCheck.CheckAsync(scanRequest);
+
+            // Show summary
+            if (_fileScanResult.Result == CheckResultType.Spam)
+            {
+                Snackbar.Add($"⚠️ Malware detected: {_fileScanResult.Details}", Severity.Error);
+            }
+            else
+            {
+                Snackbar.Add("✅ File is clean", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error scanning file: {ex.Message}", Severity.Error);
+            Console.WriteLine($"File scan error: {ex}");
+        }
+        finally
+        {
+            _fileScanRunning = false;
+
+            // Cleanup temp file
+            if (!string.IsNullOrEmpty(tempFilePath) && File.Exists(tempFilePath))
+            {
+                try
+                {
+                    File.Delete(tempFilePath);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to delete temp file: {ex.Message}");
                 }
             }
         }
