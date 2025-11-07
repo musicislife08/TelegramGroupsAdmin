@@ -87,6 +87,7 @@ public class SpamCommand : IBotCommand
             message.Chat.Id,
             executor,
             reason,
+            spamMessage, // Pass the Telegram message for backfilling if not in database
             cancellationToken);
 
         if (!result.Success)

@@ -81,6 +81,7 @@ public class ModerationActionService
         long chatId,
         Actor executor,
         string reason,
+        global::Telegram.Bot.Types.Message? telegramMessage = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -108,7 +109,7 @@ public class ModerationActionService
 
             if (message != null)
             {
-                // 4. Create detection result (manual spam classification) - only if message exists in DB
+                // 4. Create detection result (manual spam classification) - message exists in DB
                 var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
                 var detectionResult = new DetectionResultRecord
                 {
@@ -135,13 +136,94 @@ public class ModerationActionService
                     executor,
                     cancellationToken);
             }
-            else
+            else if (telegramMessage != null)
             {
                 // Message not in database (bot wasn't running when message was sent)
-                // Skip detection result creation but continue with ban
+                // Backfill from the Telegram Message object provided by caller
+                try
+                {
+                    var messageText = telegramMessage.Text ?? telegramMessage.Caption;
+
+                    if (!string.IsNullOrWhiteSpace(messageText))
+                    {
+                        // Backfill the missing message record with actual Telegram data
+                        var messageRecord = new MessageRecord(
+                            MessageId: messageId,
+                            UserId: userId,
+                            UserName: telegramMessage.From?.Username,
+                            FirstName: telegramMessage.From?.FirstName,
+                            ChatId: chatId,
+                            Timestamp: telegramMessage.Date,
+                            MessageText: messageText,
+                            PhotoFileId: null,
+                            PhotoFileSize: null,
+                            Urls: null,
+                            EditDate: null,
+                            ContentHash: null,
+                            ChatName: null,
+                            PhotoLocalPath: null,
+                            PhotoThumbnailPath: null,
+                            ChatIconPath: null,
+                            UserPhotoPath: null,
+                            DeletedAt: null,
+                            DeletionSource: null,
+                            ReplyToMessageId: null,
+                            ReplyToUser: null,
+                            ReplyToText: null,
+                            MediaType: null,
+                            MediaFileId: null,
+                            MediaFileSize: null,
+                            MediaFileName: null,
+                            MediaMimeType: null,
+                            MediaLocalPath: null,
+                            MediaDuration: null,
+                            Translation: null,
+                            SpamCheckSkipReason: SpamCheckSkipReason.NotSkipped
+                        );
+
+                        await _messageHistoryRepository.InsertMessageAsync(messageRecord, cancellationToken);
+
+                        // Now create the detection result with the real message_id
+                        var detectionResult = new DetectionResultRecord
+                        {
+                            MessageId = messageId,
+                            DetectedAt = DateTimeOffset.UtcNow,
+                            DetectionSource = "manual",
+                            DetectionMethod = "Manual",
+                            Confidence = 100,
+                            Reason = reason,
+                            AddedBy = executor,
+                            UserId = userId,
+                            UsedForTraining = true, // Text spam marked via /spam should be used for training
+                            NetConfidence = 100,
+                            CheckResultsJson = null,
+                            EditVersion = 0
+                        };
+                        await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
+
+                        _logger.LogInformation(
+                            "Message {MessageId} not in database. Backfilled from Telegram with real data for user {UserId}",
+                            messageId, userId);
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "Message {MessageId} has no text content. Skipping backfill for user {UserId}",
+                            messageId, userId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Failed to backfill message {MessageId}. Skipping training data, but proceeding with ban for user {UserId}",
+                        messageId, userId);
+                }
+            }
+            else
+            {
+                // No message data available (called from UI without Telegram Message object)
                 _logger.LogWarning(
-                    "Message {MessageId} not found in database (bot may not have been running). " +
-                    "Skipping detection result creation, but proceeding with ban for user {UserId}",
+                    "Message {MessageId} not in database and no Telegram message provided. Skipping training data for user {UserId}",
                     messageId, userId);
             }
 
@@ -220,7 +302,7 @@ public class ModerationActionService
     {
         var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
         var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
-        return await MarkAsSpamAndBanAsync(botClient, messageId, userId, chatId, executor, reason, cancellationToken);
+        return await MarkAsSpamAndBanAsync(botClient, messageId, userId, chatId, executor, reason, null, cancellationToken);
     }
 
     /// <summary>
