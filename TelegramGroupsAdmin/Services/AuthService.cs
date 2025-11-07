@@ -14,7 +14,7 @@ namespace TelegramGroupsAdmin.Services;
 
 public class AuthService(
     IUserRepository userRepository,
-    VerificationTokenRepository verificationTokenRepository,
+    IVerificationTokenRepository verificationTokenRepository,
     IAuditService auditLog,
     ITotpService totpService,
     IPasswordHasher passwordHasher,

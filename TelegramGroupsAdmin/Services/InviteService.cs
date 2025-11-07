@@ -8,13 +8,13 @@ namespace TelegramGroupsAdmin.Services;
 
 public class InviteService : IInviteService
 {
-    private readonly InviteRepository _inviteRepository;
+    private readonly IInviteRepository _inviteRepository;
     private readonly IAuditService _auditService;
     private readonly ILogger<InviteService> _logger;
     private readonly AppOptions _appOptions;
 
     public InviteService(
-        InviteRepository inviteRepository,
+        IInviteRepository inviteRepository,
         IAuditService auditService,
         IOptions<AppOptions> appOptions,
         ILogger<InviteService> logger)

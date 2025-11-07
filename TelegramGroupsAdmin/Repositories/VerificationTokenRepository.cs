@@ -6,7 +6,7 @@ using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
-public class VerificationTokenRepository
+public class VerificationTokenRepository : IVerificationTokenRepository
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<VerificationTokenRepository> _logger;

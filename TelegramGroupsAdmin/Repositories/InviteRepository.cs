@@ -7,7 +7,7 @@ using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Repositories;
 
-public class InviteRepository
+public class InviteRepository : IInviteRepository
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<InviteRepository> _logger;
