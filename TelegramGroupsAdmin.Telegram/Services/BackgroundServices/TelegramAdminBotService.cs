@@ -135,7 +135,8 @@ public class TelegramAdminBotService(
         using (var scope = _scopeFactory.CreateScope())
         {
             var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-            botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, null)
+            // Load global bot config (chat_id = 0 for global config)
+            botConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
                        ?? TelegramBotConfig.Default;
         }
 
