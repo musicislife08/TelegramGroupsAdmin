@@ -103,35 +103,47 @@ public class ModerationActionService
                 _logger.LogWarning(ex, "Failed to delete message {MessageId} in chat {ChatId} (may already be deleted)", messageId, chatId);
             }
 
-            // 3. Check if message has text (skip training for image-only spam)
+            // 3. Check if message exists in database (may not if bot wasn't running when message was sent)
             var message = await _messageHistoryRepository.GetMessageAsync(messageId, cancellationToken);
-            var hasText = !string.IsNullOrWhiteSpace(message?.MessageText);
 
-            // 4. Create detection result (manual spam classification)
-            var detectionResult = new DetectionResultRecord
+            if (message != null)
             {
-                MessageId = messageId,
-                DetectedAt = DateTimeOffset.UtcNow,
-                DetectionSource = "manual",
-                DetectionMethod = "Manual",
-                // IsSpam computed from net_confidence (100 = strong spam)
-                Confidence = 100, // 100% spam
-                Reason = reason,
-                AddedBy = executor,
-                UserId = userId,
-                UsedForTraining = hasText, // Only use text messages for training (image-only spam excluded)
-                NetConfidence = 100, // Strong spam signal (manual admin decision)
-                CheckResultsJson = null,
-                EditVersion = 0
-            };
-            await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
+                // 4. Create detection result (manual spam classification) - only if message exists in DB
+                var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
+                var detectionResult = new DetectionResultRecord
+                {
+                    MessageId = messageId,
+                    DetectedAt = DateTimeOffset.UtcNow,
+                    DetectionSource = "manual",
+                    DetectionMethod = "Manual",
+                    // IsSpam computed from net_confidence (100 = strong spam)
+                    Confidence = 100, // 100% spam
+                    Reason = reason,
+                    AddedBy = executor,
+                    UserId = userId,
+                    UsedForTraining = hasText, // Only use text messages for training (image-only spam excluded)
+                    NetConfidence = 100, // Strong spam signal (manual admin decision)
+                    CheckResultsJson = null,
+                    EditVersion = 0
+                };
+                await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
 
-            // 4b. ML-5: Save image training sample if message has a photo
-            await _imageTrainingSamplesRepository.SaveTrainingSampleAsync(
-                messageId,
-                isSpam: true,
-                executor,
-                cancellationToken);
+                // 4b. ML-5: Save image training sample if message has a photo
+                await _imageTrainingSamplesRepository.SaveTrainingSampleAsync(
+                    messageId,
+                    isSpam: true,
+                    executor,
+                    cancellationToken);
+            }
+            else
+            {
+                // Message not in database (bot wasn't running when message was sent)
+                // Skip detection result creation but continue with ban
+                _logger.LogWarning(
+                    "Message {MessageId} not found in database (bot may not have been running). " +
+                    "Skipping detection result creation, but proceeding with ban for user {UserId}",
+                    messageId, userId);
+            }
 
             // 5. Remove any existing trust actions (compromised account protection)
             await _userActionsRepository.ExpireTrustsForUserAsync(userId, chatId: null, cancellationToken);
