@@ -45,10 +45,10 @@ public class WelcomeTimeoutJob(
             payload.ChatId);
 
         // Load bot config from database
-        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var botToken = await _configLoader.LoadConfigAsync();
 
         // Get bot client from factory
-        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
+        var botClient = _botClientFactory.GetOrCreate(botToken);
 
         try
         {

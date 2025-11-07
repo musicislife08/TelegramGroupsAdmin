@@ -85,7 +85,7 @@ public class SpamActionService(
             var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
             var botFactory = scope.ServiceProvider.GetRequiredService<TelegramBotClientFactory>();
             var configLoader = scope.ServiceProvider.GetRequiredService<TelegramConfigLoader>();
-            var (botToken, apiServerUrl) = await configLoader.LoadConfigAsync();
+            var botToken = await configLoader.LoadConfigAsync();
             var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
             var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
 
@@ -106,7 +106,6 @@ public class SpamActionService(
                     managedChatsRepo,
                     botFactory,
                     botToken,
-                    apiServerUrl,
                     message,
                     spamResult,
                     hardBlockResult,
@@ -150,7 +149,6 @@ public class SpamActionService(
                     messagingService,
                     botFactory,
                     botToken,
-                    apiServerUrl,
                     message,
                     spamResult,
                     detectionResult,
@@ -188,7 +186,6 @@ public class SpamActionService(
                     messagingService,
                     botFactory,
                     botToken,
-                    apiServerUrl,
                     message,
                     spamResult,
                     detectionResult,
@@ -219,7 +216,6 @@ public class SpamActionService(
                     managedChatsRepo,
                     botFactory,
                     botToken,
-                    apiServerUrl,
                     message,
                     spamResult,
                     openAIResult,
@@ -272,7 +268,6 @@ public class SpamActionService(
                     messagingService,
                     botFactory,
                     botToken,
-                    apiServerUrl,
                     message,
                     spamResult,
                     detectionResult,
@@ -304,7 +299,6 @@ public class SpamActionService(
         IUserMessagingService messagingService,
         TelegramBotClientFactory botFactory,
         string botToken,
-        string? apiServerUrl,
         Message message,
         TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
         DetectionResultRecord detectionResult,
@@ -358,7 +352,7 @@ public class SpamActionService(
                                     $"[Jump to message](https://t.me/c/{Math.Abs(message.Chat.Id).ToString().TrimStart('-')}/{message.MessageId})\n\n" +
                                     $"Review in the Reports tab or use moderation commands.";
 
-            var botClient = botFactory.GetOrCreate(botToken, apiServerUrl);
+            var botClient = botFactory.GetOrCreate(botToken);
             var results = await messagingService.SendToMultipleUsersAsync(
                 botClient,
                 userIds: adminUserIds,
@@ -384,7 +378,6 @@ public class SpamActionService(
         IManagedChatsRepository managedChatsRepo,
         TelegramBotClientFactory botFactory,
         string botToken,
-        string? apiServerUrl,
         Message message,
         TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
         TelegramGroupsAdmin.ContentDetection.Models.ContentCheckResponse openAIResult,
@@ -392,7 +385,7 @@ public class SpamActionService(
     {
         try
         {
-            var botClient = botFactory.GetOrCreate(botToken, apiServerUrl);
+            var botClient = botFactory.GetOrCreate(botToken);
 
             // Store ban action in database
             var banAction = new UserActionRecord(

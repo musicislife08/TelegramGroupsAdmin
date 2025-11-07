@@ -57,8 +57,8 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Message {report.MessageId} not found");
         }
 
-        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
-        var botClient = _botFactory.GetOrCreate(botToken, apiServerUrl);
+        var botToken = await _configLoader.LoadConfigAsync();
+        var botClient = _botFactory.GetOrCreate(botToken);
 
         // Create executor actor from web user
         var executor = Core.Models.Actor.FromWebUser(reviewerId);
@@ -114,8 +114,8 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Message {report.MessageId} not found");
         }
 
-        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
-        var botClient = _botFactory.GetOrCreate(botToken, apiServerUrl);
+        var botToken = await _configLoader.LoadConfigAsync();
+        var botClient = _botFactory.GetOrCreate(botToken);
 
         // Create executor actor from web user
         var executor = Core.Models.Actor.FromWebUser(reviewerId);
@@ -259,8 +259,8 @@ public class ReportActionsService : IReportActionsService
 
     private async Task SendReportReplyAsync(Report report, string message)
     {
-        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
-        var botClient = _botFactory.GetOrCreate(botToken, apiServerUrl);
+        var botToken = await _configLoader.LoadConfigAsync();
+        var botClient = _botFactory.GetOrCreate(botToken);
 
         try
         {

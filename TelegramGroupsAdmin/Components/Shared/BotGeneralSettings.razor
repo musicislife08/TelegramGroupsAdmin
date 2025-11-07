@@ -3,13 +3,10 @@
 @using TelegramGroupsAdmin.Configuration.Services
 @using TelegramGroupsAdmin.Configuration.Repositories
 @using TelegramGroupsAdmin.Telegram.Abstractions.Services
-@using global::Telegram.Bot
-@using global::Telegram.Bot.Requests
 @inject IConfigService ConfigService
 @inject IConfigRepository ConfigRepository
 @inject IMessageHistoryService MessageHistoryService
 @inject ISnackbar Snackbar
-@inject TelegramBotClientFactory BotClientFactory
 
 <!-- Bot Service Control (Global Only) -->
 <MudPaper Class="pa-4 mb-4" Elevation="1">
@@ -56,39 +53,6 @@
                 </MudText>
             </MudItem>
 
-            <MudItem xs="12">
-                <MudTextField @bind-Value="_botConfig.ApiServerUrl"
-                              Label="Bot API Server URL (Optional)"
-                              Variant="Variant.Outlined"
-                              Placeholder="http://bot-api-server:8081"
-                              HelperText="Leave empty for standard api.telegram.org (20MB file limit)"
-                              Clearable="true" />
-                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
-                    Configure a self-hosted Bot API server to download files >20MB. See documentation below.
-                </MudText>
-
-                @if (!string.IsNullOrWhiteSpace(_botConfig.ApiServerUrl))
-                {
-                    <MudButton Variant="Variant.Text"
-                               Color="Color.Info"
-                               Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.NetworkCheck"
-                               Class="mt-2"
-                               OnClick="TestBotApiConnection"
-                               Disabled="_testingConnection">
-                        @if (_testingConnection)
-                        {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                            <span>Testing...</span>
-                        }
-                        else
-                        {
-                            <span>Test Bot API Connection</span>
-                        }
-                    </MudButton>
-                }
-            </MudItem>
-
             <MudItem xs="12" Class="d-flex justify-start gap-2">
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Primary"
@@ -119,51 +83,6 @@
                 <strong>Note:</strong> Changes take effect immediately. The bot will start or stop automatically without requiring an application restart.
             </MudText>
         </MudAlert>
-
-        <MudExpansionPanels Class="mt-4">
-            <MudExpansionPanel Text="Self-Hosted Bot API Server Setup" Icon="@Icons.Material.Filled.CloudUpload">
-                <MudText Typo="Typo.body2" Class="mb-2">
-                    <strong>Why use a self-hosted Bot API server?</strong><br/>
-                    • Download files larger than 20MB (up to 2GB)<br/>
-                    • Improved file download performance<br/>
-                    • Full control over file storage and processing
-                </MudText>
-
-                <MudDivider Class="my-3" />
-
-                <MudText Typo="Typo.subtitle2" Class="mb-2">Quick Start with Docker Compose</MudText>
-                <MudText Typo="Typo.body2" Class="mb-2">
-                    1. Add to your docker-compose.yml:
-                </MudText>
-                <MudPaper Class="pa-3 mb-3" Style="background-color: #1e1e1e; color: #d4d4d4; font-family: 'Courier New', monospace; font-size: 12px; overflow-x: auto;">
-<pre>services:
-  telegram-bot-api:
-    image: aiogram/telegram-bot-api:latest
-    environment:
-      - TELEGRAM_API_ID=YOUR_API_ID
-      - TELEGRAM_API_HASH=YOUR_API_HASH
-    volumes:
-      - telegram-bot-api-data:/var/lib/telegram-bot-api
-    ports:
-      - "8081:8081"
-    restart: unless-stopped
-    command: --local
-
-volumes:
-  telegram-bot-api-data:</pre>
-                </MudPaper>
-
-                <MudText Typo="Typo.body2" Class="mb-2">
-                    2. Get API credentials from <a href="https://my.telegram.org/apps" target="_blank">https://my.telegram.org/apps</a><br/>
-                    3. Set API Server URL above to: <code>http://telegram-bot-api:8081</code><br/>
-                    4. Save configuration and restart the bot service
-                </MudText>
-
-                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">
-                    <strong>Important:</strong> The <code>--local</code> flag is required for unlimited file downloads. Without it, the 20MB limit still applies.
-                </MudAlert>
-            </MudExpansionPanel>
-        </MudExpansionPanels>
     }
 </MudPaper>
 
@@ -329,7 +248,6 @@ volumes:
     private string _botToken = "";
     private bool _showBotToken;
     private bool _isBotTokenConfigured;
-    private bool _testingConnection;
 
     protected override async Task OnInitializedAsync()
     {
@@ -394,59 +312,6 @@ volumes:
         finally
         {
             _savingBotConfig = false;
-        }
-    }
-
-    private async Task TestBotApiConnection()
-    {
-        if (string.IsNullOrWhiteSpace(_botToken))
-        {
-            Snackbar.Add("Bot token not configured. Please save the bot token first.", Severity.Warning);
-            return;
-        }
-
-        _testingConnection = true;
-        try
-        {
-            var apiUrl = _botConfig?.ApiServerUrl;
-            var botClient = BotClientFactory.GetOrCreate(_botToken, apiUrl);
-
-            // Test 1: Basic connectivity - getMe
-            var me = await botClient.GetMe();
-            var apiMode = string.IsNullOrWhiteSpace(apiUrl) ? "Standard API" : $"Self-hosted API ({apiUrl})";
-
-            // Test 2: Try to get file info (we'll use the bot's profile photo if available)
-            string detailMessage;
-            try
-            {
-                var photos = await botClient.GetUserProfilePhotos(me.Id, limit: 1);
-                if (photos.TotalCount > 0 && photos.Photos.Length > 0)
-                {
-                    var photo = photos.Photos[0][0]; // Smallest size
-                    var file = await botClient.GetFile(photo.FileId);
-
-                    var sizeKb = (file.FileSize ?? 0) / 1024.0;
-                    detailMessage = $"✅ Bot: @{me.Username} (ID: {me.Id})\n✅ API Mode: {apiMode}\n✅ File API working: Retrieved file info ({sizeKb:F1} KB)\n✅ File downloads: Available";
-                }
-                else
-                {
-                    detailMessage = $"✅ Bot: @{me.Username} (ID: {me.Id})\n✅ API Mode: {apiMode}\n✅ Connection successful\n⚠️ No profile photo to test file download";
-                }
-            }
-            catch (Exception ex)
-            {
-                detailMessage = $"✅ Bot: @{me.Username} (ID: {me.Id})\n✅ API Mode: {apiMode}\n⚠️ File API test failed: {ex.Message}";
-            }
-
-            Snackbar.Add(detailMessage, Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"❌ Connection test failed: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _testingConnection = false;
         }
     }
 

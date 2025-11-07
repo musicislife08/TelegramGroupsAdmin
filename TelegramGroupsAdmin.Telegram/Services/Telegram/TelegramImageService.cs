@@ -26,8 +26,8 @@ public class TelegramImageService : ITelegramImageService
     {
         try
         {
-            var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
-            var botClient = _botFactory.GetOrCreate(botToken, apiServerUrl);
+            var botToken = await _configLoader.LoadConfigAsync();
+            var botClient = _botFactory.GetOrCreate(botToken);
 
             _logger.LogDebug("Downloading photo {FileId}", fileId);
 

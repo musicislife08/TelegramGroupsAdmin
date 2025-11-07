@@ -38,7 +38,6 @@ public class TelegramAdminBotService(
 
     // Cached configuration loaded once at startup
     private string? _botToken;
-    private string? _apiServerUrl;
 
     // Events for real-time UI updates (forwarded from child services)
     public event Action<MessageRecord>? OnNewMessage
@@ -172,13 +171,11 @@ public class TelegramAdminBotService(
         // Load configuration from database (if not already loaded)
         if (_botToken == null)
         {
-            (_botToken, _apiServerUrl) = await _configLoader.LoadConfigAsync();
-            logger.LogInformation(
-                "Loaded Telegram bot configuration: ApiMode={ApiMode}",
-                string.IsNullOrWhiteSpace(_apiServerUrl) ? "Standard (api.telegram.org, 20MB limit)" : $"Self-hosted ({_apiServerUrl}, unlimited)");
+            _botToken = await _configLoader.LoadConfigAsync();
+            logger.LogInformation("Loaded Telegram bot configuration from database");
         }
 
-        _botClient = botFactory.GetOrCreate(_botToken, _apiServerUrl);
+        _botClient = botFactory.GetOrCreate(_botToken);
         var botClient = _botClient;
 
         // Fetch and cache bot info

@@ -64,10 +64,10 @@ public class FileScanJob(
             payload.MessageId);
 
         // Load bot config from database
-        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var botToken = await _configLoader.LoadConfigAsync();
 
         // Get bot client from factory (singleton instance, one per bot token)
-        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
+        var botClient = _botClientFactory.GetOrCreate(botToken);
 
         string? tempFilePath = null;
 

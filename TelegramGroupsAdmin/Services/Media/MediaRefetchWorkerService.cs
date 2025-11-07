@@ -141,10 +141,10 @@ public class MediaRefetchWorkerService : BackgroundService
         _logger.LogInformation("Worker {WorkerId} refetching user photo: user {UserId}", workerId, request.UserId);
 
         // Load bot config from database
-        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
+        var botToken = await _configLoader.LoadConfigAsync();
 
         // Get singleton bot client from factory (same instance used by TelegramAdminBotService)
-        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
+        var botClient = _botClientFactory.GetOrCreate(botToken);
 
         // Get user's current file_unique_id from database
         var user = await userRepo.GetByIdAsync(request.UserId!.Value);

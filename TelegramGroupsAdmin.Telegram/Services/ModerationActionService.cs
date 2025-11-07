@@ -300,8 +300,8 @@ public class ModerationActionService
         string reason,
         CancellationToken cancellationToken = default)
     {
-        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
-        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
+        var botToken = await _configLoader.LoadConfigAsync();
+        var botClient = _botClientFactory.GetOrCreate(botToken);
         return await MarkAsSpamAndBanAsync(botClient, messageId, userId, chatId, executor, reason, null, cancellationToken);
     }
 
@@ -431,8 +431,8 @@ public class ModerationActionService
             {
                 // 4. Auto-ban user
                 var autoBanReason = warningConfig.AutoBanReason.Replace("{count}", warnCount.ToString());
-                var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
-                var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
+                var botToken = await _configLoader.LoadConfigAsync();
+                var botClient = _botClientFactory.GetOrCreate(botToken);
 
                 var autoBanExecutor = Actor.AutoBan;
                 var banResult = await BanUserAsync(
@@ -595,8 +595,8 @@ public class ModerationActionService
         bool restoreTrust = false,
         CancellationToken cancellationToken = default)
     {
-        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
-        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
+        var botToken = await _configLoader.LoadConfigAsync();
+        var botClient = _botClientFactory.GetOrCreate(botToken);
         return await UnbanUserAsync(botClient, userId, executor, reason, restoreTrust, cancellationToken);
     }
 
@@ -617,8 +617,8 @@ public class ModerationActionService
             var result = new ModerationResult();
 
             // Get bot client from factory (singleton instance)
-            var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
-            var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
+            var botToken = await _configLoader.LoadConfigAsync();
+            var botClient = _botClientFactory.GetOrCreate(botToken);
 
             // 1. Delete the message from Telegram and mark as deleted in database
             try
@@ -788,8 +788,8 @@ public class ModerationActionService
         TimeSpan duration,
         CancellationToken cancellationToken = default)
     {
-        var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
-        var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
+        var botToken = await _configLoader.LoadConfigAsync();
+        var botClient = _botClientFactory.GetOrCreate(botToken);
         return await TempBanUserAsync(botClient, userId, messageId, executor, reason, duration, cancellationToken);
     }
 

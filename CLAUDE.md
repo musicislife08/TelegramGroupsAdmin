@@ -107,9 +107,9 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 ## Key Architectural Features
 
-**Telegram Bot API Dual-Mode**: Standard api.telegram.org (20MB limit) or self-hosted Bot API server (up to 2GB). TelegramBotClientFactory caches clients by `token::url` key. Graceful fallback for oversized files.
+**Telegram Bot API**: Uses standard api.telegram.org endpoint with 20MB file download limit. TelegramBotClientFactory caches clients by bot token. Graceful fallback for oversized files.
 
-**File Scanning Streaming Architecture**: FileScanJob passes file paths (not loaded into memory). ClamAVScannerService validates size <2GB, VirusTotalScannerService uses StreamContent. Supports 2GB files with minimal memory.
+**File Scanning Streaming Architecture**: FileScanJob passes file paths (not loaded into memory). ClamAVScannerService validates size <20MB, VirusTotalScannerService uses StreamContent. Supports files up to 20MB with minimal memory.
 
 **TickerQ Job Architecture**: Jobs in main app (for source generator), payloads in Abstractions (breaks circular deps). Jobs re-throw exceptions for retry/logging. Polling interval: 5s (default 60s override).
 

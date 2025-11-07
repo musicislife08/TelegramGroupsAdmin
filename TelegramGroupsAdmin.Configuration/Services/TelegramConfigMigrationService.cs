@@ -7,9 +7,9 @@ using TelegramGroupsAdmin.Configuration.Models;
 namespace TelegramGroupsAdmin.Configuration.Services;
 
 /// <summary>
-/// One-time migration service to populate Telegram bot configuration from environment variables
+/// One-time migration service to populate Telegram bot token from environment variables
 /// Called during application startup after migrations run, before bot services start
-/// Migrates TELEGRAM__BOTTOKEN, TELEGRAM__APISERVERURL from env vars to database
+/// Migrates TELEGRAM__BOTTOKEN from env vars to database (encrypted storage)
 /// NOTE: ChatId is NOT migrated - the bot is multi-group and discovers chats dynamically
 /// </summary>
 public class TelegramConfigMigrationService : IHostedService
@@ -54,56 +54,35 @@ public class TelegramConfigMigrationService : IHostedService
         using var scope = _scopeFactory.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
 
-        // Check if Telegram bot config already exists in database (chat_id = 0)
-        var existingConfig = await configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0);
+        // Check if Telegram bot token already exists in database
         var existingToken = await configService.GetTelegramBotTokenAsync();
 
-        // If both token and config exist, skip migration
-        if (existingToken != null && existingConfig != null)
+        // If token exists, skip migration
+        if (existingToken != null)
         {
-            _logger.LogInformation("Telegram bot configuration already exists in database, skipping env var migration");
+            _logger.LogInformation("Telegram bot token already exists in database, skipping env var migration");
             return;
         }
 
-        // Read configuration from environment variables
+        // Read bot token from environment variables
         var botToken = _configuration["Telegram:BotToken"];
-        var apiServerUrl = _configuration["Telegram:ApiServerUrl"];
 
-        // If no env vars found, skip migration
-        if (string.IsNullOrWhiteSpace(botToken) && string.IsNullOrWhiteSpace(apiServerUrl))
+        // If no env var found, skip migration
+        if (string.IsNullOrWhiteSpace(botToken))
         {
-            _logger.LogInformation("No Telegram configuration found in environment variables, skipping migration");
+            _logger.LogInformation("No Telegram bot token found in environment variables, skipping migration");
             return;
         }
 
-        _logger.LogInformation("Migrating Telegram bot configuration from environment variables to database...");
+        _logger.LogInformation("Migrating Telegram bot token from environment variables to database...");
 
-        // Save bot token (encrypted) if provided
-        if (!string.IsNullOrWhiteSpace(botToken))
-        {
-            await configService.SaveTelegramBotTokenAsync(botToken);
-            _logger.LogInformation("Migrated Telegram bot token to encrypted database storage");
-        }
-
-        // Save config (JSONB) if ApiServerUrl provided
-        // NOTE: ChatId is NOT saved here - bot discovers chats dynamically when added to groups
-        if (!string.IsNullOrWhiteSpace(apiServerUrl))
-        {
-            var config = new TelegramBotConfig
-            {
-                BotEnabled = false, // Users must explicitly enable after verifying config
-                ApiServerUrl = string.IsNullOrWhiteSpace(apiServerUrl) ? null : apiServerUrl
-            };
-
-            await configService.SaveAsync(ConfigType.TelegramBot, 0, config);
-            _logger.LogInformation(
-                "Migrated Telegram bot configuration to database: ApiServerUrl={ApiServerUrl}",
-                apiServerUrl ?? "(standard api.telegram.org)");
-        }
+        // Save bot token to encrypted database storage
+        await configService.SaveTelegramBotTokenAsync(botToken);
+        _logger.LogInformation("Migrated Telegram bot token to encrypted database storage");
 
         _logger.LogWarning(
-            "Telegram bot configuration migrated from environment variables to database (chat_id=0). " +
-            "IMPORTANT: Remove TELEGRAM__BOTTOKEN and TELEGRAM__APISERVERURL from your environment " +
-            "configuration. Future changes should be made via Settings → Telegram Bot UI.");
+            "Telegram bot token migrated from environment variables to database. " +
+            "IMPORTANT: Remove TELEGRAM__BOTTOKEN from your environment configuration. " +
+            "Future changes should be made via Settings → Telegram Bot UI.");
     }
 }

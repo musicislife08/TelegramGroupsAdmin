@@ -258,8 +258,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             {
                 var reason = $"Auto-banned: Impersonation detected (name match: {result.NameMatch}, photo match: {result.PhotoMatch}, score: {result.TotalScore})";
 
-                var (botToken, apiServerUrl) = await _configLoader.LoadConfigAsync();
-                var botClient = _botClientFactory.GetOrCreate(botToken, apiServerUrl);
+                var botToken = await _configLoader.LoadConfigAsync();
+                var botClient = _botClientFactory.GetOrCreate(botToken);
                 var executor = Core.Models.Actor.Impersonation;
                 var banResult = await _moderationActionService.BanUserAsync(
                     botClient: botClient,

@@ -2,7 +2,7 @@ namespace TelegramGroupsAdmin.Configuration.Models;
 
 /// <summary>
 /// Configuration for Telegram bot service
-/// Controls bot polling and API server settings
+/// Controls bot polling settings
 /// Stored in configs table as JSONB (telegram_bot_config column) at chat_id=0 (global config)
 /// Note: BotToken stored separately in telegram_bot_token_encrypted column (encrypted TEXT)
 /// </summary>
@@ -21,20 +21,10 @@ public class TelegramBotConfig
     public bool BotEnabled { get; set; }
 
     /// <summary>
-    /// Optional custom Bot API server URL for self-hosted mode
-    /// When null/empty: Uses standard api.telegram.org (20MB file download limit)
-    /// When set: Uses custom server (e.g., http://bot-api-server:8081) with unlimited downloads
-    /// Requires self-hosted telegram-bot-api container with --local flag
-    /// Migrated from TELEGRAM__APISERVERURL env var to database
-    /// </summary>
-    public string? ApiServerUrl { get; set; }
-
-    /// <summary>
     /// Default configuration (disabled by default - users enable after setup)
     /// </summary>
     public static TelegramBotConfig Default => new()
     {
-        BotEnabled = false,
-        ApiServerUrl = null
+        BotEnabled = false
     };
 }
