@@ -264,7 +264,9 @@
         _loading = true;
         try
         {
-            var config = await ConfigService.GetAsync<WelcomeConfig>(ConfigType.Welcome, ChatId);
+            // Convert null ChatId (global) to 0 for database query
+            // SQL NULL comparisons don't work with WHERE ChatId == NULL
+            var config = await ConfigService.GetAsync<WelcomeConfig>(ConfigType.Welcome, ChatId ?? 0);
 
             if (config == null)
             {
@@ -323,7 +325,8 @@
         _saving = true;
         try
         {
-            await ConfigService.SaveAsync(ConfigType.Welcome, ChatId, _config);
+            // Convert null ChatId (global) to 0 for database query
+            await ConfigService.SaveAsync(ConfigType.Welcome, ChatId ?? 0, _config);
             var scope = ChatId.HasValue ? $"for chat {ChatId}" : "globally";
             Snackbar.Add($"Welcome configuration saved {scope}", Severity.Success);
 
