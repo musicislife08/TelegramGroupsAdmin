@@ -177,11 +177,11 @@ services:
       # Observability Configuration (Optional - For Development/Debugging)
       # =======================================================================
       # Seq - Structured Logging (http://localhost:5341)
-      SEQ_URL: http://seq:5341
+      SEQ_URL: http://seq:80
       # SEQ_API_KEY: ""  # Optional - leave empty for no authentication
 
       # Aspire Dashboard - Unified UI with Traces & Metrics (http://localhost:18888)
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://aspire-dashboard:4317
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://aspire-dashboard:18889
       OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_SERVICE_NAME: TelegramGroupsAdmin
 
