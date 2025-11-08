@@ -1,6 +1,7 @@
 @using TelegramGroupsAdmin.Helpers
 @using TelegramGroupsAdmin.ContentDetection.Utilities
 @using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Constants
 @* Telegram-authentic message bubble design *@
 
 <div class="@GetBubbleClass()" @onclick:stopPropagation="true" data-message-id="@Message.MessageId">
