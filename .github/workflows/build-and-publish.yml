@@ -74,11 +74,11 @@ jobs:
 
   publish-docker:
     name: Build and Publish Docker Image
-    needs: build-and-test
     runs-on: ubuntu-latest
 
     # Only publish when PRs are merged to master or develop (not on direct pushes or PR reviews)
     # This prevents Docker builds during PR work - only runs after merge is complete
+    # Note: No dependency on build-and-test job - this job is self-sufficient and re-runs GitVersion independently
     if: |
       github.event_name == 'pull_request' &&
       github.event.action == 'closed' &&

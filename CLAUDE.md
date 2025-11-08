@@ -42,8 +42,8 @@ gh pr create --base develop --head feature/your-feature-name \
   --title "feat: Add new feature" \
   --body "Description of changes"
 
-# 6. Wait for CI checks to pass (Build and Test)
-# 7. Merge PR via GitHub UI
+# 6. Wait for CI checks to pass (Build and Test runs during PR review, not on merge)
+# 7. Merge PR via GitHub UI (Docker images publish after merge, build does not re-run)
 # 8. Delete feature branch after merge
 # 9. Pull latest develop
 git checkout develop
