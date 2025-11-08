@@ -487,27 +487,6 @@ if (spamSampleCount < 50 || legitMessageCount < 100)
 
 ---
 
-### DI-2: Create Interfaces for InviteRepository and VerificationTokenRepository
-
-**Status:** BACKLOG 📋
-**Severity:** Best Practice | **Impact:** Consistency, testability
-**Discovered:** 2025-10-28 via DI audit
-
-**Current State:**
-- InviteRepository and VerificationTokenRepository registered as concrete types
-- Inconsistent with rest of codebase (109 other services use interface-based DI)
-- Both are actively used repositories in TelegramGroupsAdmin/Repositories/
-
-**Work Required:**
-- Create IInviteRepository interface (3 methods)
-- Create IVerificationTokenRepository interface (4 methods)
-- Update DI registrations in ServiceCollectionExtensions.cs (2 lines)
-- Update consuming code to inject interfaces
-
-**Priority:** LOW - Consistency improvement, not blocking
-
----
-
 ### CODE-6: Extract Magic Numbers to Configuration
 
 **Priority:** LOW
