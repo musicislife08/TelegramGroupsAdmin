@@ -23,6 +23,7 @@ launchSettings.json
 # HTTP client environment files (JetBrains Rider)
 http-client.private.env.json
 **/http-client.private*.json
+**/*.http
 
 # appsettings with secrets (should use env vars instead)
 appsettings.Development.json
