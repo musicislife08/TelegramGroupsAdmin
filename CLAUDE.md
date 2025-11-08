@@ -2,7 +2,7 @@
 
 ## Stack
 
-.NET 9.0 (9.0.100), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 9.0, TickerQ 2.5.3, OpenAI API, VirusTotal, SendGrid
+.NET 9.0 (9.0.100), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 9.0, TickerQ 2.5.3, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
 
 **Note**: Migrated from .NET 10 RC2 → .NET 9 due to a framework bug where Blazor Server apps don't generate `wwwroot/_framework/blazor.web.js` during publish, causing 404s in Production mode. Will upgrade to .NET 10 after RTM release (November 11, 2025).
 
@@ -105,6 +105,16 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 **Runtime Editing**: Settings UI allows live config changes without restart
 
+**Observability (Optional)** (environment variables, for debugging/development):
+- `SEQ_URL`: Seq server URL (e.g., `http://seq:5341`) - if not set, logs only to console
+- `SEQ_API_KEY`: Seq API key for ingestion authentication (optional, leave empty for no auth)
+- `OTEL_SERVICE_NAME`: Service name for traces/metrics (default: `TelegramGroupsAdmin`)
+
+When `SEQ_URL` is configured, the application automatically enables:
+- **Structured Logging**: Serilog logs sent to Seq with trace correlation
+- **Distributed Tracing**: OpenTelemetry traces for HTTP requests, database queries, background jobs
+- **Metrics**: Prometheus metrics endpoint at `/metrics` (runtime performance, request rates, job execution)
+
 ## Key Architectural Features
 
 **Telegram Bot API**: Uses standard api.telegram.org endpoint with 20MB file download limit. TelegramBotClientFactory caches clients by bot token. Graceful fallback for oversized files.
@@ -142,6 +152,18 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - **0 Active Functions**: Source generator not discovering jobs. Check: (1) Explicit analyzer reference in .csproj, (2) `TickerQInstanceFactory.Initialize()` called BEFORE `app.UseTickerQ()` in Program.cs (timing critical)
 - **0 Active Threads**: Workers not starting. Check: (1) Initialize() timing, (2) Debug logging for "TickerQ" messages, (3) Tables exist in `ticker` schema (NOT public)
 - **Job Syntax**: Use `TickerQ.Utilities.Base.TickerFunctionAttribute` and `TickerFunctionContext<T>`. Reference existing jobs for patterns.
+
+### Observability (Seq + OpenTelemetry)
+
+**Accessing Seq**: http://localhost:5341 (when `SEQ_URL` environment variable is configured)
+
+**Common Issues**:
+- **Seq not receiving logs**: Check `SEQ_URL` environment variable, verify network connectivity (`docker network inspect telegram-admin`), check container logs (`docker logs tga-seq`)
+- **Missing traces**: Verify `ActivitySource` registration in Program.cs, check OTLP exporter configuration points to correct Seq URL
+- **`/metrics` returning 404**: Ensure `app.MapPrometheusScrapingEndpoint()` called after `app.UseRouting()` in Program.cs, verify `SEQ_URL` is set (metrics endpoint only mapped when observability enabled)
+- **High memory usage**: Configure OpenTelemetry batch size limits via environment variables, adjust sampling rate if needed
+- **Seq retention**: Configure retention policies in Seq UI (Settings → Retention), default is 7 days
+- **Application works without Seq**: By design - all observability is optional. If `SEQ_URL` not set, app logs to console only and operates normally
 
 ## Documentation
 

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using TickerQ.Utilities.Base;
 using TickerQ.Utilities.Models;
 using Telegram.Bot;
@@ -6,6 +7,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -48,30 +50,36 @@ public class FileScanJob(
     [TickerFunction(functionName: "FileScan")]
     public async Task ExecuteAsync(TickerFunctionContext<FileScanJobPayload> context, CancellationToken cancellationToken)
     {
-        var payload = context.Request;
-        if (payload == null)
-        {
-            _logger.LogError("FileScanJob received null payload");
-            return;
-        }
-
-        _logger.LogInformation(
-            "Scanning file '{FileName}' ({FileSize} bytes) from user {UserId} in chat {ChatId} (message {MessageId})",
-            payload.FileName ?? "unknown",
-            payload.FileSize,
-            payload.UserId,
-            payload.ChatId,
-            payload.MessageId);
-
-        // Load bot config from database
-        var botToken = await _configLoader.LoadConfigAsync();
-
-        // Get bot client from factory (singleton instance, one per bot token)
-        var botClient = _botClientFactory.GetOrCreate(botToken);
-
-        string? tempFilePath = null;
+        const string jobName = "FileScan";
+        var startTimestamp = Stopwatch.GetTimestamp();
+        var success = false;
 
         try
+        {
+            var payload = context.Request;
+            if (payload == null)
+            {
+                _logger.LogError("FileScanJob received null payload");
+                return;
+            }
+
+            _logger.LogInformation(
+                "Scanning file '{FileName}' ({FileSize} bytes) from user {UserId} in chat {ChatId} (message {MessageId})",
+                payload.FileName ?? "unknown",
+                payload.FileSize,
+                payload.UserId,
+                payload.ChatId,
+                payload.MessageId);
+
+            // Load bot config from database
+            var botToken = await _configLoader.LoadConfigAsync();
+
+            // Get bot client from factory (singleton instance, one per bot token)
+            var botClient = _botClientFactory.GetOrCreate(botToken);
+
+            string? tempFilePath = null;
+
+            try
         {
             // Step 1: Download file from Telegram to temporary location
             tempFilePath = Path.Combine(Path.GetTempPath(), $"tg_scan_{Guid.NewGuid():N}_{payload.FileName ?? "file"}");
@@ -174,34 +182,51 @@ public class FileScanJob(
             // Return without re-throwing - file scan skipped gracefully
             return;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Failed to scan file for message {MessageId} (user {UserId}, chat {ChatId})",
-                payload.MessageId,
-                payload.UserId,
-                payload.ChatId);
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to scan file for message {MessageId} (user {UserId}, chat {ChatId})",
+                    payload.MessageId,
+                    payload.UserId,
+                    payload.ChatId);
 
-            // Re-throw to let TickerQ handle retry logic
-            // Retriable scenarios: ClamAV daemon restart, VirusTotal rate limit, network timeout
-            throw;
+                // Re-throw to let TickerQ handle retry logic
+                // Retriable scenarios: ClamAV daemon restart, VirusTotal rate limit, network timeout
+                throw;
+            }
+            finally
+            {
+                // Step 6: Clean up temporary file
+                if (tempFilePath != null && File.Exists(tempFilePath))
+                {
+                    try
+                    {
+                        File.Delete(tempFilePath);
+                        _logger.LogDebug("Deleted temporary file {TempPath}", tempFilePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete temporary file {TempPath}", tempFilePath);
+                    }
+                }
+            }
+
+            success = true;
         }
         finally
         {
-            // Step 6: Clean up temporary file
-            if (tempFilePath != null && File.Exists(tempFilePath))
+            var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+
+            // Record metrics (using TagList to avoid boxing/allocations)
+            var tags = new TagList
             {
-                try
-                {
-                    File.Delete(tempFilePath);
-                    _logger.LogDebug("Deleted temporary file {TempPath}", tempFilePath);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to delete temporary file {TempPath}", tempFilePath);
-                }
-            }
+                { "job_name", jobName },
+                { "status", success ? "success" : "failure" }
+            };
+
+            TelemetryConstants.JobExecutions.Add(1, tags);
+            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
         }
     }
 

@@ -78,10 +78,10 @@ public class BackupServiceTests
 
         // Add mock TickerQ service (for passphrase rotation)
         // Note: Passphrase rotation tests will be skipped for baseline (test isolation - no TickerQ in test env)
-        var mockTickerManager = Substitute.For<TickerQ.Utilities.Interfaces.Managers.ITimeTickerManager<TickerQ.Utilities.Models.Ticker.TimeTicker>>();
+        var mockTickerManager = Substitute.For<TickerQ.Utilities.Interfaces.Managers.ITimeTickerManager<TickerQ.Utilities.Entities.TimeTickerEntity>>();
         // Return default TickerResult with IsSucceded property stubbed
-        mockTickerManager.AddAsync(Arg.Any<TickerQ.Utilities.Models.Ticker.TimeTicker>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(default(TickerQ.Utilities.Models.TickerResult<TickerQ.Utilities.Models.Ticker.TimeTicker>)));
+        mockTickerManager.AddAsync(Arg.Any<TickerQ.Utilities.Entities.TimeTickerEntity>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(default(TickerQ.Utilities.Models.TickerResult<TickerQ.Utilities.Entities.TimeTickerEntity>)));
         services.AddScoped(_ => mockTickerManager);
 
         // Add backup services (using shared extension method from main app)

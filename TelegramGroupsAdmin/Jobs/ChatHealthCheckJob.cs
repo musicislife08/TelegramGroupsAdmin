@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -36,38 +38,60 @@ public class ChatHealthCheckJob
         TickerFunctionContext<ChatHealthCheckPayload> context,
         CancellationToken cancellationToken)
     {
+        const string jobName = "ChatHealthCheck";
+        var startTimestamp = Stopwatch.GetTimestamp();
+        var success = false;
+
         try
         {
-            var payload = context.Request;
-            if (payload == null)
+            try
             {
-                _logger.LogError("ChatHealthCheckJob received null payload");
-                return;
+                var payload = context.Request;
+                if (payload == null)
+                {
+                    _logger.LogError("ChatHealthCheckJob received null payload");
+                    return;
+                }
+
+                // Load bot config from database
+                var botToken = await _configLoader.LoadConfigAsync();
+                var botClient = _botFactory.GetOrCreate(botToken);
+
+                if (payload.ChatId.HasValue)
+                {
+                    // Single chat refresh (from manual UI button)
+                    _logger.LogInformation("Running health check for chat {ChatId}", payload.ChatId.Value);
+                    await _chatService.RefreshSingleChatAsync(botClient, payload.ChatId.Value, includeIcon: true, cancellationToken);
+                }
+                else
+                {
+                    // All chats refresh (from recurring job)
+                    _logger.LogInformation("Running health check for all chats");
+                    await _chatService.RefreshAllHealthAsync(botClient, cancellationToken);
+                }
+
+                _logger.LogInformation("Chat health check completed successfully");
+                success = true;
             }
-
-            // Load bot config from database
-            var botToken = await _configLoader.LoadConfigAsync();
-            var botClient = _botFactory.GetOrCreate(botToken);
-
-            if (payload.ChatId.HasValue)
+            catch (Exception ex)
             {
-                // Single chat refresh (from manual UI button)
-                _logger.LogInformation("Running health check for chat {ChatId}", payload.ChatId.Value);
-                await _chatService.RefreshSingleChatAsync(botClient, payload.ChatId.Value, includeIcon: true, cancellationToken);
+                _logger.LogError(ex, "Chat health check failed");
+                throw; // Re-throw for TickerQ retry logic
             }
-            else
-            {
-                // All chats refresh (from recurring job)
-                _logger.LogInformation("Running health check for all chats");
-                await _chatService.RefreshAllHealthAsync(botClient, cancellationToken);
-            }
-
-            _logger.LogInformation("Chat health check completed successfully");
         }
-        catch (Exception ex)
+        finally
         {
-            _logger.LogError(ex, "Chat health check failed");
-            throw; // Re-throw for TickerQ retry logic
+            var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+
+            // Record metrics (using TagList to avoid boxing/allocations)
+            var tags = new TagList
+            {
+                { "job_name", jobName },
+                { "status", success ? "success" : "failure" }
+            };
+
+            TelemetryConstants.JobExecutions.Add(1, tags);
+            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
         }
     }
 }

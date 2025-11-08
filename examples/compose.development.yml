@@ -69,6 +69,38 @@ services:
       - telegram-admin
 
   # ---------------------------------------------------------------------------
+  # Seq - Structured Log Server (Optional - For Development/Debugging)
+  # ---------------------------------------------------------------------------
+  seq:
+    image: datalust/seq:latest
+    container_name: telegram-groups-admin-seq
+    restart: unless-stopped
+    ports:
+      - "5341:80"  # Seq UI accessible at http://localhost:5341
+    volumes:
+      - ./seqdata:/data
+    environment:
+      ACCEPT_EULA: "Y"
+      SEQ_FIRSTRUN_NOAUTHENTICATION: "True"  # Disable authentication for development
+    networks:
+      - telegram-admin
+
+  # ---------------------------------------------------------------------------
+  # Aspire Dashboard - Unified Observability UI (Optional - In-Memory)
+  # ---------------------------------------------------------------------------
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:latest
+    container_name: telegram-groups-admin-aspire
+    restart: unless-stopped
+    ports:
+      - "18888:18888"  # Dashboard UI accessible at http://localhost:18888
+      - "4317:18889"   # OTLP gRPC endpoint (internal port 18889 mapped to standard 4317)
+    environment:
+      ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"  # Disable authentication for development
+    networks:
+      - telegram-admin
+
+  # ---------------------------------------------------------------------------
   # TelegramGroupsAdmin Application (Build from Source)
   # ---------------------------------------------------------------------------
   app:
@@ -142,6 +174,18 @@ services:
       CLAMAV__PORT: "3310"
 
       # =======================================================================
+      # Observability Configuration (Optional - For Development/Debugging)
+      # =======================================================================
+      # Seq - Structured Logging (http://localhost:5341)
+      SEQ_URL: http://seq:5341
+      # SEQ_API_KEY: ""  # Optional - leave empty for no authentication
+
+      # Aspire Dashboard - Unified UI with Traces & Metrics (http://localhost:18888)
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://aspire-dashboard:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_SERVICE_NAME: TelegramGroupsAdmin
+
+      # =======================================================================
       # Message History Configuration
       # =======================================================================
       MESSAGEHISTORY__ENABLED: "true"
@@ -174,6 +218,10 @@ networks:
 #    - Settings > Infrastructure > SendGrid (get key from sendgrid.com)
 #    - Settings > Features > Spam Detection (VirusTotal, CAS)
 # All API keys stored encrypted in database - no env vars needed!
+#
+# Optional Observability Tools (included for development):
+# - Seq (Logs): http://localhost:5341
+# - Aspire Dashboard (Traces + Metrics): http://localhost:18888
 # =============================================================================
 
 # =============================================================================
@@ -191,9 +239,12 @@ networks:
 # =============================================================================
 # ./data/postgres/  - PostgreSQL database files
 # ./data/clamav/    - ClamAV virus signatures (~200MB)
+# ./data/seq/       - Seq structured logs (optional)
 # ./data/app/       - Application data:
 #   ./data/app/keys/   - Data Protection keys (DO NOT DELETE!)
 #   ./data/app/images/ - Downloaded message images
 #   ./data/app/media/  - Downloaded media files (videos, audio, etc.)
 # ./backups/        - Database backup files (from /export command)
+#
+# Note: Aspire Dashboard is in-memory only (no persistent storage)
 # =============================================================================

@@ -14,6 +14,7 @@ using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Core.Services;
+using TickerQ.Instrumentation.OpenTelemetry;
 
 namespace TelegramGroupsAdmin;
 
@@ -322,28 +323,36 @@ public static class ServiceCollectionExtensions
     {
         services.AddTickerQ(options =>
         {
-            // Max concurrent jobs
-            options.SetMaxConcurrency(4);
+            // Configure scheduler settings (max concurrency, polling interval)
+            options.ConfigureScheduler(scheduler =>
+            {
+                // Max concurrent jobs
+                scheduler.MaxConcurrency = 4;
 
-            // Polling interval: Check for due jobs every 5 seconds (default is 60s)
-            // For smaller apps like this, faster polling improves responsiveness without significant overhead
-            // File scanning feels more immediate (5s vs 60s delay)
-            options.UpdateMissedJobCheckDelay(TimeSpan.FromSeconds(5));
+                // Polling interval: Check for due jobs every 5 seconds (default is 30s)
+                // For smaller apps like this, faster polling improves responsiveness without significant overhead
+                // File scanning feels more immediate (5s vs 30s delay)
+                scheduler.FallbackIntervalChecker = TimeSpan.FromSeconds(5);
+            });
 
             // Use EF Core for persistence (PostgreSQL via AppDbContext)
-            options.AddOperationalStore<TelegramGroupsAdmin.Data.AppDbContext>(efOptions =>
+            options.AddOperationalStore(efOptions =>
             {
-                // Only include TickerQ tables during design-time migrations
-                efOptions.UseModelCustomizerForMigrations();
+                // Use application DbContext with model customizer for migrations
+                efOptions.UseApplicationDbContext<TelegramGroupsAdmin.Data.AppDbContext>(
+                    TickerQ.EntityFrameworkCore.Customizer.ConfigurationType.UseModelCustomizer);
             });
+
+            // OpenTelemetry instrumentation for job tracing and metrics
+            // Note: TickerQ 9.0 simplified this - configuration is now via OpenTelemetry's own APIs
+            options.AddOpenTelemetryInstrumentation();
 
             // Dashboard UI at /tickerq-dashboard (development only)
             if (environment.IsDevelopment())
             {
                 options.AddDashboard(dbopt =>
                 {
-                    dbopt.BasePath = "/tickerq-dashboard";
-                    dbopt.EnableBasicAuth = false;
+                    dbopt.SetBasePath("/tickerq-dashboard");
                 });
             }
         });

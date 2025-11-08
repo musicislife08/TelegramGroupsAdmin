@@ -28,7 +28,9 @@ public static class ServiceCollectionExtensions
                         maxRetryDelay: TimeSpan.FromSeconds(30),
                         errorCodesToAdd: null);
                 })
-                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)),
+                .ConfigureWarnings(w => w
+                    .Ignore(RelationalEventId.PendingModelChangesWarning)
+                    .Ignore(RelationalEventId.MultipleCollectionIncludeWarning)), // TickerQ internal queries
             contextLifetime: ServiceLifetime.Scoped,
             optionsLifetime: ServiceLifetime.Singleton);
 
@@ -43,7 +45,9 @@ public static class ServiceCollectionExtensions
                         maxRetryDelay: TimeSpan.FromSeconds(30),
                         errorCodesToAdd: null);
                 })
-                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
+                .ConfigureWarnings(w => w
+                    .Ignore(RelationalEventId.PendingModelChangesWarning)
+                    .Ignore(RelationalEventId.MultipleCollectionIncludeWarning))); // TickerQ internal queries
 
         return services;
     }

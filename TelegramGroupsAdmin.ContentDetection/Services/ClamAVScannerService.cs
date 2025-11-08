@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using nClam;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Core.Telemetry;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
@@ -45,6 +46,12 @@ public class ClamAVScannerService : IFileScannerService
         string? fileName = null,
         CancellationToken cancellationToken = default)
     {
+        using var activity = TelemetryConstants.FileScanning.StartActivity("file_scanning.clamav.scan");
+        activity?.SetTag("file_scanner.tier", "tier1");
+        activity?.SetTag("file_scanner.name", ScannerName);
+        activity?.SetTag("file_scanner.file_name", fileName);
+
+        var startTimestamp = Stopwatch.GetTimestamp();
         var stopwatch = Stopwatch.StartNew();
 
         try
@@ -56,13 +63,15 @@ public class ClamAVScannerService : IFileScannerService
             if (!config.Tier1.ClamAV.Enabled)
             {
                 _logger.LogDebug("ClamAV scanner is disabled, returning clean result");
-                return new FileScanResult
+                var disabledResult = new FileScanResult
                 {
                     Scanner = ScannerName,
                     IsClean = true,
                     ResultType = ScanResultType.Clean,
                     ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
                 };
+                RecordScanMetrics(startTimestamp, disabledResult, activity);
+                return disabledResult;
             }
 
             // Get file size for limit checking
@@ -169,20 +178,22 @@ public class ClamAVScannerService : IFileScannerService
                     _logger.LogDebug("ClamAV scan: File is clean (duration: {Duration}ms)",
                         stopwatch.ElapsedMilliseconds);
 
-                    return new FileScanResult
+                    var cleanResult = new FileScanResult
                     {
                         Scanner = ScannerName,
                         IsClean = true,
                         ResultType = ScanResultType.Clean,
                         ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
                     };
+                    RecordScanMetrics(startTimestamp, cleanResult, activity);
+                    return cleanResult;
 
                 case ClamScanResults.VirusDetected:
                     _logger.LogWarning("ClamAV scan: Virus detected - {VirusName} (duration: {Duration}ms)",
                         scanResult.InfectedFiles?.FirstOrDefault()?.VirusName ?? "Unknown",
                         stopwatch.ElapsedMilliseconds);
 
-                    return new FileScanResult
+                    var infectedResult = new FileScanResult
                     {
                         Scanner = ScannerName,
                         IsClean = false,
@@ -194,11 +205,13 @@ public class ClamAVScannerService : IFileScannerService
                             ["infected_files_count"] = scanResult.InfectedFiles?.Count ?? 0
                         }
                     };
+                    RecordScanMetrics(startTimestamp, infectedResult, activity);
+                    return infectedResult;
 
                 case ClamScanResults.Error:
                     _logger.LogError("ClamAV scan error: {RawResult}", scanResult.RawResult);
 
-                    return new FileScanResult
+                    var errorResult = new FileScanResult
                     {
                         Scanner = ScannerName,
                         IsClean = true,  // Fail-open
@@ -206,12 +219,14 @@ public class ClamAVScannerService : IFileScannerService
                         ErrorMessage = scanResult.RawResult,
                         ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
                     };
+                    RecordScanMetrics(startTimestamp, errorResult, activity);
+                    return errorResult;
 
                 case ClamScanResults.Unknown:
                 default:
                     _logger.LogWarning("ClamAV scan returned unknown result: {RawResult}", scanResult.RawResult);
 
-                    return new FileScanResult
+                    var unknownResult = new FileScanResult
                     {
                         Scanner = ScannerName,
                         IsClean = true,  // Fail-open on unknown
@@ -219,6 +234,8 @@ public class ClamAVScannerService : IFileScannerService
                         ErrorMessage = $"Unknown scan result: {scanResult.RawResult}",
                         ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
                     };
+                    RecordScanMetrics(startTimestamp, unknownResult, activity);
+                    return unknownResult;
             }
         }
         catch (Exception ex)
@@ -226,7 +243,7 @@ public class ClamAVScannerService : IFileScannerService
             stopwatch.Stop();
             _logger.LogError(ex, "Exception during ClamAV scan");
 
-            return new FileScanResult
+            var exceptionResult = new FileScanResult
             {
                 Scanner = ScannerName,
                 IsClean = true,  // Fail-open on exception
@@ -234,6 +251,38 @@ public class ClamAVScannerService : IFileScannerService
                 ErrorMessage = ex.Message,
                 ScanDurationMs = (int)stopwatch.ElapsedMilliseconds
             };
+            RecordScanMetrics(startTimestamp, exceptionResult, activity);
+            return exceptionResult;
+        }
+    }
+
+    /// <summary>
+    /// Record telemetry metrics for file scan execution
+    /// </summary>
+    private static void RecordScanMetrics(long startTimestamp, FileScanResult result, Activity? activity)
+    {
+        var durationMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+
+        // Record duration histogram
+        TelemetryConstants.FileScanDuration.Record(durationMs,
+            new KeyValuePair<string, object?>("tier", "tier1"));
+
+        // Record scan result counter
+        var resultType = result.IsClean ? "clean" : "malicious";
+        TelemetryConstants.FileScanResults.Add(1,
+            new KeyValuePair<string, object?>("tier", "tier1"),
+            new KeyValuePair<string, object?>("result", resultType));
+
+        // Enrich activity with scan result details
+        if (activity != null)
+        {
+            activity.SetTag("file_scanner.is_clean", result.IsClean);
+            activity.SetTag("file_scanner.result_type", result.ResultType.ToString());
+            activity.SetTag("file_scanner.duration_ms", durationMs);
+            if (!string.IsNullOrEmpty(result.ThreatName))
+            {
+                activity.SetTag("file_scanner.threat_name", result.ThreatName);
+            }
         }
     }
 

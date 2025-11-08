@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Backup;
 using TelegramGroupsAdmin.Telegram.Abstractions.JobPayloads;
@@ -37,19 +39,25 @@ public class RotateBackupPassphraseJob
     [TickerFunction("rotate_backup_passphrase")]
     public async Task ExecuteAsync(TickerFunctionContext<RotateBackupPassphrasePayload> context, CancellationToken cancellationToken)
     {
-        var payload = context.Request;
-        if (payload == null)
-        {
-            _logger.LogError("RotateBackupPassphraseJob received null payload");
-            return;
-        }
-        var userId = payload.UserId; // Web user GUID string
-        var newPassphrase = payload.NewPassphrase;
-        var backupDirectory = payload.BackupDirectory;
-
-        _logger.LogInformation("Starting passphrase rotation for user {UserId} in directory {Directory}", userId, backupDirectory);
+        const string jobName = "RotateBackupPassphrase";
+        var startTimestamp = Stopwatch.GetTimestamp();
+        var success = false;
 
         try
+        {
+            var payload = context.Request;
+            if (payload == null)
+            {
+                _logger.LogError("RotateBackupPassphraseJob received null payload");
+                return;
+            }
+            var userId = payload.UserId; // Web user GUID string
+            var newPassphrase = payload.NewPassphrase;
+            var backupDirectory = payload.BackupDirectory;
+
+            _logger.LogInformation("Starting passphrase rotation for user {UserId} in directory {Directory}", userId, backupDirectory);
+
+            try
         {
             // Get decrypted old passphrase from database
             var oldPassphrase = await _passphraseService.GetDecryptedPassphraseAsync();
@@ -164,11 +172,28 @@ public class RotateBackupPassphraseJob
                 ct: cancellationToken);
 
             _logger.LogInformation("Audit log entry created for passphrase rotation");
+
+            success = true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "❌ Passphrase rotation failed");
             throw; // Re-throw for TickerQ retry logic
+        }
+        }
+        finally
+        {
+            var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+
+            // Record metrics (using TagList to avoid boxing/allocations)
+            var tags = new TagList
+            {
+                { "job_name", jobName },
+                { "status", success ? "success" : "failure" }
+            };
+
+            TelemetryConstants.JobExecutions.Add(1, tags);
+            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
         }
     }
 

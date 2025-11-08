@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
@@ -7,6 +8,7 @@ using TelegramGroupsAdmin.ContentDetection.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Telemetry;
 using OpenAIConfigDb = TelegramGroupsAdmin.Configuration.Models.OpenAIConfig;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -247,6 +249,12 @@ public class ContentDetectionEngine : IContentDetectionEngine
     /// </summary>
     public async Task<ContentDetectionResult> CheckMessageAsync(ContentCheckRequest request, CancellationToken cancellationToken = default)
     {
+        using var activity = TelemetryConstants.SpamDetection.StartActivity("spam_detection.check_message");
+        activity?.SetTag("user_id", request.UserId);
+        activity?.SetTag("chat_id", request.ChatId);
+
+        var startTimestamp = Stopwatch.GetTimestamp();
+
         // Load latest config from database (per-chat or global)
         var config = await GetConfigAsync(request, cancellationToken);
 
@@ -269,7 +277,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
                     request.UserId, request.ChatId, hardBlock.Reason);
 
                 // Return immediate hard block result (skip all other checks)
-                return new ContentDetectionResult
+                var hardBlockResult = new ContentDetectionResult
                 {
                     IsSpam = true,
                     HardBlock = hardBlock,
@@ -291,6 +299,9 @@ public class ContentDetectionEngine : IContentDetectionEngine
                         }
                     ]
                 };
+
+                RecordDetectionMetrics(startTimestamp, hardBlockResult, activity);
+                return hardBlockResult;
             }
         }
 
@@ -323,19 +334,98 @@ public class ContentDetectionEngine : IContentDetectionEngine
                     {
                         _logger.LogInformation("OpenAI vetoed spam detection for user {UserId} with {Confidence}% confidence",
                             request.UserId, vetoResult.Confidence);
-                        return CreateVetoedResult(checkResults, vetoResult);
+                        var vetoedResult = CreateVetoedResult(checkResults, vetoResult);
+                        RecordDetectionMetrics(startTimestamp, vetoedResult, activity);
+                        return vetoedResult;
                     }
                     else if (vetoResult.Result == CheckResultType.Review)
                     {
                         _logger.LogInformation("OpenAI flagged message for human review for user {UserId}",
                             request.UserId);
-                        return CreateReviewResult(checkResults, vetoResult);
+                        var reviewResult = CreateReviewResult(checkResults, vetoResult);
+                        RecordDetectionMetrics(startTimestamp, reviewResult, activity);
+                        return reviewResult;
                     }
                 }
             }
         }
 
-        return AggregateResults(checkResults, config);
+        var finalResult = AggregateResults(checkResults, config);
+        RecordDetectionMetrics(startTimestamp, finalResult, activity);
+        return finalResult;
+    }
+
+    /// <summary>
+    /// Execute a spam check with telemetry instrumentation
+    /// </summary>
+    private static async Task<ContentCheckResponse> ExecuteCheckWithTelemetryAsync(
+        IContentCheck check,
+        ContentCheckRequestBase checkRequest)
+    {
+        using var activity = TelemetryConstants.SpamDetection.StartActivity($"spam_detection.check.{check.CheckName}");
+        activity?.SetTag("spam_detection.check_name", check.CheckName);
+
+        var startTimestamp = Stopwatch.GetTimestamp();
+
+        var result = await check.CheckAsync(checkRequest);
+
+        var durationMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+
+        // Record duration histogram for individual check
+        TelemetryConstants.SpamDetectionDuration.Record(durationMs,
+            new KeyValuePair<string, object?>("algorithm", check.CheckName));
+
+        // Record detection result counter for individual check
+        var resultType = result.Result switch
+        {
+            CheckResultType.Spam => "spam",
+            CheckResultType.Clean => "clean",
+            CheckResultType.Review => "review",
+            CheckResultType.HardBlock => "hard_block",
+            _ => "unknown"
+        };
+
+        TelemetryConstants.SpamDetections.Add(1,
+            new KeyValuePair<string, object?>("algorithm", check.CheckName),
+            new KeyValuePair<string, object?>("result", resultType));
+
+        // Enrich activity with check result details
+        if (activity != null)
+        {
+            activity.SetTag("spam_detection.result", resultType);
+            activity.SetTag("spam_detection.confidence", result.Confidence);
+            activity.SetTag("spam_detection.duration_ms", durationMs);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Record telemetry metrics for spam detection execution
+    /// </summary>
+    private static void RecordDetectionMetrics(long startTimestamp, ContentDetectionResult result, Activity? activity)
+    {
+        var durationMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+
+        // Record duration histogram
+        TelemetryConstants.SpamDetectionDuration.Record(durationMs,
+            new KeyValuePair<string, object?>("algorithm", "pipeline"));
+
+        // Record detection result counter
+        var resultType = result.IsSpam ? "spam" : "clean";
+        TelemetryConstants.SpamDetections.Add(1,
+            new KeyValuePair<string, object?>("algorithm", "pipeline"),
+            new KeyValuePair<string, object?>("result", resultType));
+
+        // Enrich activity with result details
+        if (activity != null)
+        {
+            activity.SetTag("spam_detection.is_spam", result.IsSpam);
+            activity.SetTag("spam_detection.net_confidence", result.NetConfidence);
+            activity.SetTag("spam_detection.spam_flags", result.SpamFlags);
+            activity.SetTag("spam_detection.checks_run", result.CheckResults.Count);
+            activity.SetTag("spam_detection.duration_ms", durationMs);
+        }
     }
 
     /// <summary>
@@ -363,7 +453,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
             try
             {
                 var checkRequest = BuildRequestForCheck(invisibleCharsCheck, request, config, openAIConfig, openAIApiKey, cancellationToken);
-                var result = await invisibleCharsCheck.CheckAsync(checkRequest);
+                var result = await ExecuteCheckWithTelemetryAsync(invisibleCharsCheck, checkRequest);
                 checkResults.Add(result);
             }
             catch (Exception ex)
@@ -386,7 +476,7 @@ public class ContentDetectionEngine : IContentDetectionEngine
             try
             {
                 var checkRequest = BuildRequestForCheck(check, processedRequest, config, openAIConfig, openAIApiKey, cancellationToken);
-                var result = await check.CheckAsync(checkRequest);
+                var result = await ExecuteCheckWithTelemetryAsync(check, checkRequest);
                 checkResults.Add(result);
             }
             catch (Exception ex)

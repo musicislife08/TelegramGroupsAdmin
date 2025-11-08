@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using TickerQ.Utilities.Base;
 using TickerQ.Utilities.Models;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -36,81 +38,104 @@ public class FetchUserPhotoJob(
     [TickerFunction(functionName: "FetchUserPhoto")]
     public async Task ExecuteAsync(TickerFunctionContext<FetchUserPhotoPayload> context, CancellationToken cancellationToken)
     {
-        var payload = context.Request;
-        if (payload == null)
-        {
-            _logger.LogError("FetchUserPhotoJob received null payload");
-            return;
-        }
-
-        _logger.LogDebug(
-            "Fetching user photo for user {UserId} (message {MessageId})",
-            payload.UserId,
-            payload.MessageId);
-
-        // Load bot config from database
-        var botToken = await _configLoader.LoadConfigAsync();
-
-        // Get bot client from factory
-        var botClient = _botClientFactory.GetOrCreate(botToken);
+        const string jobName = "FetchUserPhoto";
+        var startTimestamp = Stopwatch.GetTimestamp();
+        var success = false;
 
         try
         {
-            // Fetch user photo (cached if already downloaded)
-            var userPhotoPath = await _photoService.GetUserPhotoAsync(botClient, payload.UserId);
-
-            if (userPhotoPath != null)
+            var payload = context.Request;
+            if (payload == null)
             {
-                // Phase 4.10: Compute perceptual hash for fast impersonation detection lookups
-                string? photoHashBase64 = null;
-                try
+                _logger.LogError("FetchUserPhotoJob received null payload");
+                return;
+            }
+
+            _logger.LogDebug(
+                "Fetching user photo for user {UserId} (message {MessageId})",
+                payload.UserId,
+                payload.MessageId);
+
+            // Load bot config from database
+            var botToken = await _configLoader.LoadConfigAsync();
+
+            // Get bot client from factory
+            var botClient = _botClientFactory.GetOrCreate(botToken);
+
+            try
+            {
+                // Fetch user photo (cached if already downloaded)
+                var userPhotoPath = await _photoService.GetUserPhotoAsync(botClient, payload.UserId);
+
+                if (userPhotoPath != null)
                 {
-                    var photoHashBytes = await _photoHashService.ComputePhotoHashAsync(userPhotoPath);
-                    if (photoHashBytes != null)
+                    // Phase 4.10: Compute perceptual hash for fast impersonation detection lookups
+                    string? photoHashBase64 = null;
+                    try
                     {
-                        photoHashBase64 = Convert.ToBase64String(photoHashBytes);
-                        _logger.LogDebug(
-                            "Computed pHash for user {UserId} (8 bytes → 12 char Base64)",
+                        var photoHashBytes = await _photoHashService.ComputePhotoHashAsync(userPhotoPath);
+                        if (photoHashBytes != null)
+                        {
+                            photoHashBase64 = Convert.ToBase64String(photoHashBytes);
+                            _logger.LogDebug(
+                                "Computed pHash for user {UserId} (8 bytes → 12 char Base64)",
+                                payload.UserId);
+                        }
+                    }
+                    catch (Exception hashEx)
+                    {
+                        // Log but don't fail job if hash computation fails
+                        _logger.LogWarning(
+                            hashEx,
+                            "Failed to compute photo hash for user {UserId}, continuing without hash",
                             payload.UserId);
                     }
+
+                    // Update telegram_users table with photo path and pHash (centralized storage)
+                    await _telegramUserRepository.UpdateUserPhotoPathAsync(
+                        payload.UserId,
+                        userPhotoPath,
+                        photoHashBase64,
+                        cancellationToken);
+
+                    _logger.LogInformation(
+                        "Cached user photo for user {UserId}: {PhotoPath} (pHash: {HasHash})",
+                        payload.UserId,
+                        userPhotoPath,
+                        photoHashBase64 != null ? "stored" : "none");
                 }
-                catch (Exception hashEx)
+                else
                 {
-                    // Log but don't fail job if hash computation fails
-                    _logger.LogWarning(
-                        hashEx,
-                        "Failed to compute photo hash for user {UserId}, continuing without hash",
+                    _logger.LogDebug(
+                        "User {UserId} has no profile photo",
                         payload.UserId);
                 }
 
-                // Update telegram_users table with photo path and pHash (centralized storage)
-                await _telegramUserRepository.UpdateUserPhotoPathAsync(
-                    payload.UserId,
-                    userPhotoPath,
-                    photoHashBase64,
-                    cancellationToken);
-
-                _logger.LogInformation(
-                    "Cached user photo for user {UserId}: {PhotoPath} (pHash: {HasHash})",
-                    payload.UserId,
-                    userPhotoPath,
-                    photoHashBase64 != null ? "stored" : "none");
+                success = true;
             }
-            else
+            catch (Exception ex)
             {
-                _logger.LogDebug(
-                    "User {UserId} has no profile photo",
-                    payload.UserId);
+                _logger.LogError(
+                    ex,
+                    "Failed to fetch user photo for user {UserId} (message {MessageId})",
+                    payload.UserId,
+                    payload.MessageId);
+                throw; // Re-throw to let TickerQ handle retry logic and record exception
             }
         }
-        catch (Exception ex)
+        finally
         {
-            _logger.LogError(
-                ex,
-                "Failed to fetch user photo for user {UserId} (message {MessageId})",
-                payload.UserId,
-                payload.MessageId);
-            throw; // Re-throw to let TickerQ handle retry logic and record exception
+            var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+
+            // Record metrics (using TagList to avoid boxing/allocations)
+            var tags = new TagList
+            {
+                { "job_name", jobName },
+                { "status", success ? "success" : "failure" }
+            };
+
+            TelemetryConstants.JobExecutions.Add(1, tags);
+            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
         }
     }
 }

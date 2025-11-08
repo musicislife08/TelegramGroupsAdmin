@@ -1,6 +1,12 @@
+using System.Diagnostics;
+using System.Reflection;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Serilog;
 using TelegramGroupsAdmin;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data.Extensions;
 using TelegramGroupsAdmin.ContentDetection.Extensions;
 using TelegramGroupsAdmin.Telegram.Extensions;
@@ -52,7 +58,13 @@ builder.Host.UseSerilog((context, services, configuration) =>
 {
     var config = services.GetRequiredService<SerilogDynamicConfiguration>();
 
-    configuration
+    // Get observability configuration from environment variables (optional)
+    var seqUrl = context.Configuration["SEQ_URL"];
+    var seqApiKey = context.Configuration["SEQ_API_KEY"];
+    var otlpEndpoint = context.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"];
+    var serviceName = context.Configuration["OTEL_SERVICE_NAME"] ?? "TelegramGroupsAdmin";
+
+    var loggerConfig = configuration
         .MinimumLevel.ControlledBy(config.DefaultSwitch)
         .MinimumLevel.Override("Microsoft", config.GetSwitch("Microsoft"))
         .MinimumLevel.Override("Microsoft.Hosting.Lifetime", config.GetSwitch("Microsoft.Hosting.Lifetime"))
@@ -61,7 +73,29 @@ builder.Host.UseSerilog((context, services, configuration) =>
         .MinimumLevel.Override("Npgsql", config.GetSwitch("Npgsql"))
         .MinimumLevel.Override("System", config.GetSwitch("System"))
         .MinimumLevel.Override("TelegramGroupsAdmin", config.GetSwitch("TelegramGroupsAdmin"))
+        .MinimumLevel.Override("TickerQ.Instrumentation.OpenTelemetry.OpenTelemetryInstrumentation", config.GetSwitch("TickerQ"))
+        .Enrich.FromLogContext()
         .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] {Message:lj}{NewLine}{Exception}");
+
+    // Add Seq sink if URL is configured (persistent structured logs)
+    if (!string.IsNullOrEmpty(seqUrl))
+    {
+        loggerConfig.WriteTo.Seq(seqUrl, apiKey: seqApiKey);
+    }
+
+    // Add OpenTelemetry sink if OTLP endpoint is configured (sends to Aspire Dashboard)
+    if (!string.IsNullOrEmpty(otlpEndpoint))
+    {
+        loggerConfig.WriteTo.OpenTelemetry(options =>
+        {
+            options.Endpoint = otlpEndpoint;
+            options.Protocol = Serilog.Sinks.OpenTelemetry.OtlpProtocol.Grpc;
+            options.ResourceAttributes = new Dictionary<string, object>
+            {
+                ["service.name"] = serviceName
+            };
+        });
+    }
 });
 
 // Background job system (TickerQ with PostgreSQL backend)
@@ -85,11 +119,46 @@ builder.Services.AddHealthChecks()
         name: "postgresql",
         tags: ["ready", "db"]);
 
+// OpenTelemetry Observability (optional - enabled via OTEL_EXPORTER_OTLP_ENDPOINT)
+// Supports both Seq (logs + traces) and Aspire Dashboard (logs + traces + metrics)
+var otlpEndpoint = builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"];
+var serviceName = builder.Configuration["OTEL_SERVICE_NAME"] ?? "TelegramGroupsAdmin";
+var serviceVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
+var environment = builder.Environment.EnvironmentName;
+
+if (!string.IsNullOrEmpty(otlpEndpoint))
+{
+    // Note: Logging is handled by Serilog's OpenTelemetry sink (configured above in UseSerilog)
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource
+            .AddService(serviceName, serviceVersion: serviceVersion)
+            .AddAttributes(new Dictionary<string, object>
+            {
+                ["deployment.environment"] = environment
+            }))
+        .WithTracing(tracing => tracing
+            .AddAspNetCoreInstrumentation()  // Blazor Server requests, SignalR circuits
+            .AddHttpClientInstrumentation()  // OpenAI, VirusTotal, Telegram Bot API
+            .AddSource("Npgsql")             // Npgsql automatic tracing (via Npgsql.OpenTelemetry package)
+            .AddSource("TickerQ")            // TickerQ background job tracing (via built-in instrumentation)
+            .AddSource("TelegramGroupsAdmin.*")  // Custom ActivitySources (from TelemetryConstants)
+            .AddOtlpExporter())              // Send traces to Aspire Dashboard
+        .WithMetrics(metrics => metrics
+            .AddAspNetCoreInstrumentation()  // Request rate, duration, active requests
+            .AddHttpClientInstrumentation()  // HTTP client success/failure rates
+            .AddRuntimeInstrumentation()     // GC, CPU, memory, thread pool
+            .AddMeter("Npgsql")              // Npgsql database metrics (connections, commands, bytes)
+            .AddMeter("TickerQ")             // TickerQ background job metrics (not yet available in 9.0-beta.1, reserved for future)
+            .AddMeter("TelegramGroupsAdmin.*")  // Custom meters (from TelemetryConstants)
+            .AddOtlpExporter()               // Send metrics to Aspire Dashboard
+            .AddPrometheusExporter());       // ALSO expose /metrics endpoint for Prometheus scraping
+}
+
 var app = builder.Build();
 
 // Explicitly initialize TickerQ functions BEFORE UseTickerQ() is called
-// (for .NET 10 RC2 compatibility - ModuleInitializer doesn't auto-execute)
-TelegramGroupsAdmin.TickerQInstanceFactory.Initialize();
+// (for .NET 9 compatibility - ModuleInitializer doesn't auto-execute)
+TelegramGroupsAdmin.TickerQInstanceFactoryExtensions.Initialize();
 
 // Run database migrations
 await app.RunDatabaseMigrationsAsync(connectionString);
@@ -202,5 +271,12 @@ app.ConfigurePipeline();
 
 // Map API endpoints
 app.MapApiEndpoints();
+
+// Map Prometheus metrics endpoint (only if OpenTelemetry is enabled)
+if (!string.IsNullOrEmpty(otlpEndpoint))
+{
+    app.MapPrometheusScrapingEndpoint();
+    app.Logger.LogInformation("Prometheus metrics endpoint mapped to /metrics");
+}
 
 app.Run();

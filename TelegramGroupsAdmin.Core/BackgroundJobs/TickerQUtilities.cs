@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TickerQ.Utilities.Entities;
 using TickerQ.Utilities.Interfaces.Managers;
-using TickerQ.Utilities.Models.Ticker;
 
 namespace TelegramGroupsAdmin.Core.BackgroundJobs;
 
@@ -83,12 +83,12 @@ public static class TickerQUtilities
 
             // Get TickerQ manager from scope (it's scoped)
             using var scope = serviceProvider.CreateScope();
-            var timeTickerManager = scope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+            var timeTickerManager = scope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTickerEntity>>();
 
             var executionTime = DateTimeOffset.UtcNow.AddSeconds(delaySeconds);
             var request = global::TickerQ.Utilities.TickerHelper.CreateTickerRequest(payload);
 
-            var result = await timeTickerManager.AddAsync(new TimeTicker
+            var result = await timeTickerManager.AddAsync(new TimeTickerEntity
             {
                 Function = functionName,
                 ExecutionTime = executionTime.UtcDateTime, // Use UtcDateTime to preserve timezone
@@ -97,7 +97,7 @@ public static class TickerQUtilities
                 RetryIntervals = retryIntervals
             });
 
-            if (!result.IsSucceded)
+            if (!result.IsSucceeded)
             {
                 logger.LogWarning(
                     "Failed to schedule TickerQ job {FunctionName}: {Error}",
@@ -141,7 +141,7 @@ public static class TickerQUtilities
             logger.LogDebug("Attempting to cancel TickerQ job {JobId}", jobId);
 
             using var scope = serviceProvider.CreateScope();
-            var timeTickerManager = scope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
+            var timeTickerManager = scope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTickerEntity>>();
 
             await timeTickerManager.DeleteAsync(jobId);
 

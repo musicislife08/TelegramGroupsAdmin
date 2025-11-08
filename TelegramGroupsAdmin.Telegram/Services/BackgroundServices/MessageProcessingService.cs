@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -7,6 +8,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -57,6 +59,12 @@ public partial class MessageProcessingService(
     /// </summary>
     public async Task HandleNewMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken = default)
     {
+        using var activity = TelemetryConstants.MessageProcessing.StartActivity("message_processing.handle_new_message");
+        activity?.SetTag("message.chat_id", message.Chat.Id);
+        activity?.SetTag("message.message_id", message.MessageId);
+        activity?.SetTag("message.chat_type", message.Chat.Type.ToString());
+        activity?.SetTag("message.has_text", !string.IsNullOrWhiteSpace(message.Text ?? message.Caption));
+
         // Skip private chats - only process group messages for history/spam detection
         if (message.Chat.Type == ChatType.Private)
         {
@@ -620,6 +628,11 @@ public partial class MessageProcessingService(
     /// </summary>
     public async Task HandleEditedMessageAsync(ITelegramBotClient botClient, Message editedMessage, CancellationToken cancellationToken = default)
     {
+        using var activity = TelemetryConstants.MessageProcessing.StartActivity("message_processing.handle_edited_message");
+        activity?.SetTag("message.chat_id", editedMessage.Chat.Id);
+        activity?.SetTag("message.message_id", editedMessage.MessageId);
+        activity?.SetTag("message.chat_type", editedMessage.Chat.Type.ToString());
+
         try
         {
             using var scope = _scopeFactory.CreateScope();

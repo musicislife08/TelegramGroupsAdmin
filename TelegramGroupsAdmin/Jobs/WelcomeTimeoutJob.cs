@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using TickerQ.Utilities.Base;
 using Telegram.Bot;
 using TickerQ.Utilities.Models;
+using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
@@ -32,26 +34,30 @@ public class WelcomeTimeoutJob(
     [TickerFunction(functionName: "WelcomeTimeout")]
     public async Task ExecuteAsync(TickerFunctionContext<WelcomeTimeoutPayload> context, CancellationToken cancellationToken)
     {
-        var payload = context.Request;
-        if (payload == null)
-        {
-            _logger.LogError("WelcomeTimeoutJob received null payload");
-            return;
-        }
-
-        _logger.LogInformation(
-            "Processing welcome timeout for user {UserId} in chat {ChatId}",
-            payload.UserId,
-            payload.ChatId);
-
-        // Load bot config from database
-        var botToken = await _configLoader.LoadConfigAsync();
-
-        // Get bot client from factory
-        var botClient = _botClientFactory.GetOrCreate(botToken);
+        const string jobName = "WelcomeTimeout";
+        var startTimestamp = Stopwatch.GetTimestamp();
+        var success = false;
 
         try
         {
+            var payload = context.Request;
+            if (payload == null)
+            {
+                _logger.LogError("WelcomeTimeoutJob received null payload");
+                return;
+            }
+
+            _logger.LogInformation(
+                "Processing welcome timeout for user {UserId} in chat {ChatId}",
+                payload.UserId,
+                payload.ChatId);
+
+            // Load bot config from database
+            var botToken = await _configLoader.LoadConfigAsync();
+
+            // Get bot client from factory
+            var botClient = _botClientFactory.GetOrCreate(botToken);
+
             // Check if user has responded
             await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
             var response = await dbContext.WelcomeResponses
@@ -127,15 +133,31 @@ public class WelcomeTimeoutJob(
                 "Recorded welcome timeout for user {UserId} in chat {ChatId}",
                 payload.UserId,
                 payload.ChatId);
+
+            success = true;
         }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
                 "Failed to process welcome timeout for user {UserId} in chat {ChatId}",
-                payload.UserId,
-                payload.ChatId);
+                context.Request?.UserId,
+                context.Request?.ChatId);
             throw; // Re-throw to let TickerQ handle retry logic
+        }
+        finally
+        {
+            var elapsedMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+
+            // Record metrics (using TagList to avoid boxing/allocations)
+            var tags = new TagList
+            {
+                { "job_name", jobName },
+                { "status", success ? "success" : "failure" }
+            };
+
+            TelemetryConstants.JobExecutions.Add(1, tags);
+            TelemetryConstants.JobDuration.Record(elapsedMs, new TagList { { "job_name", jobName } });
         }
     }
 }

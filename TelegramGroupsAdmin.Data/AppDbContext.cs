@@ -1,19 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data.Models;
 using TickerQ.EntityFrameworkCore.Configurations;
-using TickerQ.EntityFrameworkCore.Entities;
+using TickerQ.Utilities.Entities;
 
 namespace TelegramGroupsAdmin.Data;
 
 /// <summary>
 /// EF Core DbContext for TelegramGroupsAdmin
 /// </summary>
-public class AppDbContext : DbContext
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
-    {
-    }
-
     // Core message tables
     public DbSet<MessageRecordDto> Messages => Set<MessageRecordDto>();
     public DbSet<MessageEditRecordDto> MessageEdits => Set<MessageEditRecordDto>();
@@ -97,9 +93,9 @@ public class AppDbContext : DbContext
 
         // Apply TickerQ entity configurations (needed for migrations)
         // Default schema is "ticker"
-        modelBuilder.ApplyConfiguration(new TimeTickerConfigurations());
-        modelBuilder.ApplyConfiguration(new CronTickerConfigurations());
-        modelBuilder.ApplyConfiguration(new CronTickerOccurrenceConfigurations());
+        modelBuilder.ApplyConfiguration(new TimeTickerConfigurations<TimeTickerEntity>());
+        modelBuilder.ApplyConfiguration(new CronTickerConfigurations<CronTickerEntity>());
+        modelBuilder.ApplyConfiguration(new CronTickerOccurrenceConfigurations<CronTickerEntity>());
     }
 
     private static void ConfigureRelationships(ModelBuilder modelBuilder)
