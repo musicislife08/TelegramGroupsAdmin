@@ -1,0 +1,185 @@
+name: Build and Publish
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+    paths-ignore:
+      - 'CLAUDE.md'
+      - 'README.md'
+      - 'BACKLOG.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.gitattributes'
+      - '.github/workflows/claude*.yml'
+  pull_request:
+    types: [ready_for_review, synchronize]
+    branches:
+      - develop
+    paths-ignore:
+      - 'CLAUDE.md'
+      - 'README.md'
+      - 'BACKLOG.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.gitattributes'
+      - '.github/workflows/claude*.yml'
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    # Skip draft PRs to save CI minutes
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+
+    outputs:
+      semver: ${{ steps.gitversion.outputs.semVer }}
+      major: ${{ steps.gitversion.outputs.major }}
+      minor: ${{ steps.gitversion.outputs.minor }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for GitVersion
+
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v1
+        with:
+          versionSpec: '5.x'
+
+      - name: Determine Version
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v1
+
+      - name: Display Version
+        env:
+          SEMVER: ${{ steps.gitversion.outputs.semVer }}
+          NUGET_VERSION: ${{ steps.gitversion.outputs.nuGetVersion }}
+        run: |
+          echo "SemVer: ${SEMVER}"
+          echo "NuGetVersion: ${NUGET_VERSION}"
+          echo "### Version: ${SEMVER}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Run all tests
+        run: dotnet test --no-build --configuration Release --verbosity normal
+
+  publish-docker:
+    name: Build and Publish Docker Image
+    needs: build-and-test
+    runs-on: ubuntu-latest
+
+    # Only publish on master or develop pushes (not PRs)
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for GitVersion
+
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v1
+        with:
+          versionSpec: '5.x'
+
+      - name: Determine Version
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine Docker tags
+        id: docker-tags
+        env:
+          GITHUB_REF: ${{ github.ref }}
+          SEMVER: ${{ steps.gitversion.outputs.semVer }}
+          MAJOR: ${{ steps.gitversion.outputs.major }}
+          MINOR: ${{ steps.gitversion.outputs.minor }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Convert repository name to lowercase for Docker
+          REPO_LOWER="${REPO,,}"
+
+          if [ "${GITHUB_REF}" == "refs/heads/master" ]; then
+            # Master branch: latest + semver
+            TAGS="${REGISTRY}/${REPO_LOWER}:latest"
+            TAGS="${TAGS},${REGISTRY}/${REPO_LOWER}:${SEMVER}"
+            TAGS="${TAGS},${REGISTRY}/${REPO_LOWER}:${MAJOR}.${MINOR}"
+          else
+            # Develop branch: development + beta semver
+            TAGS="${REGISTRY}/${REPO_LOWER}:development"
+            TAGS="${TAGS},${REGISTRY}/${REPO_LOWER}:${SEMVER}"
+          fi
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./TelegramGroupsAdmin/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.docker-tags.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image published summary
+        env:
+          TAGS: ${{ steps.docker-tags.outputs.tags }}
+          VERSION: ${{ steps.gitversion.outputs.semVer }}
+          GITHUB_REF: ${{ github.ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Convert repository name to lowercase for Docker
+          REPO_LOWER="${REPO,,}"
+
+          echo "### Docker Image Published :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Architectures:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${TAGS}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Pull commands:**" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          if [ "${GITHUB_REF}" == "refs/heads/master" ]; then
+            echo "# Stable (latest)" >> $GITHUB_STEP_SUMMARY
+            echo "docker pull ${REGISTRY}/${REPO_LOWER}:latest" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "# Development (testing)" >> $GITHUB_STEP_SUMMARY
+            echo "docker pull ${REGISTRY}/${REPO_LOWER}:development" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo '```' >> $GITHUB_STEP_SUMMARY
