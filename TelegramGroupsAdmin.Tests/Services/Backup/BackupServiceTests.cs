@@ -68,8 +68,15 @@ public class BackupServiceTests
             options.UseNpgsql(_testHelper.ConnectionString);
         });
 
-        // Add logging
-        services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
+        // Add logging with test-specific suppressions
+        services.AddLogging(builder =>
+        {
+            builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
+            // Suppress Data Protection ephemeral key warnings (expected in tests)
+            builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
+            // Suppress TableExportService decryption warnings (expected with ephemeral keys)
+            builder.AddFilter("TelegramGroupsAdmin.Services.Backup.Handlers.TableExportService", LogLevel.Error);
+        });
 
         // Add mock services (BackupService dependencies)
         services.AddSingleton<IDmDeliveryService, MockDmDeliveryService>();

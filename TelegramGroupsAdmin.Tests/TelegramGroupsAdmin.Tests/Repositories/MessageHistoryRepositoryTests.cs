@@ -80,8 +80,13 @@ public class MessageHistoryRepositoryTests
             options.UseNpgsql(_testHelper.ConnectionString);
         });
 
-        // Add logging
-        services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Warning));
+        // Add logging with test-specific suppressions
+        services.AddLogging(builder =>
+        {
+            builder.AddConsole().SetMinimumLevel(LogLevel.Warning);
+            // Suppress Data Protection ephemeral key warnings (expected in tests)
+            builder.AddFilter("Microsoft.AspNetCore.DataProtection", LogLevel.Error);
+        });
 
         // Configure MessageHistoryOptions with temp image storage
         _imageStoragePath = Path.Combine(Path.GetTempPath(), $"test_images_{Guid.NewGuid():N}");
