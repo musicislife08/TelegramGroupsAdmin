@@ -14,7 +14,7 @@ on:
       - '.gitattributes'
       - '.github/workflows/claude*.yml'
   pull_request:
-    types: [ready_for_review, synchronize, closed]
+    types: [opened, ready_for_review, synchronize, closed]
     branches:
       - develop
       - master
