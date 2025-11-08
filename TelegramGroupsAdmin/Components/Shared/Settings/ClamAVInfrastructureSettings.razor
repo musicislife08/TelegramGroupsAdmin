@@ -151,7 +151,8 @@
     {
         try
         {
-            var config = await ConfigRepository.GetAsync(chatId: null); // Global config (chat_id = 0)
+            // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
+            var config = await ConfigRepository.GetAsync(chatId: 0); // Global config (chat_id = 0)
             _config = config ?? new FileScanningConfig();
         }
         catch (Exception ex)
@@ -199,7 +200,7 @@
         try
         {
             // Save file scanning configuration (global, chat_id = 0)
-            await ConfigRepository.SaveAsync(_config, chatId: null);
+            await ConfigRepository.SaveAsync(_config, chatId: 0);
 
             // Create audit log entry
             var userId = await AuthHelper.GetCurrentUserIdAsync();

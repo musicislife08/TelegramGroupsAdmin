@@ -88,8 +88,9 @@ public class RuntimeLoggingService : IRuntimeLoggingService
         using var scope = _scopeFactory.CreateScope();
         var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
 
-        // Delete from database
-        await configService.DeleteAsync(ConfigType.Log, chatId: null);
+        // Delete from database (global config, chatId = 0)
+        // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
+        await configService.DeleteAsync(ConfigType.Log, chatId: 0);
 
         // Get default config
         var defaultConfig = new LogConfig
