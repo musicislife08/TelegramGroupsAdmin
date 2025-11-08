@@ -22,7 +22,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
         {
             // Update existing record - manually copy properties to avoid Id modification error
             // DO NOT use SetValues() - it tries to copy Id which is a key property
-            existing.ChatId = config.ChatId;
+            // NOTE: ChatId is NOT copied - we queried by ChatId, so it's already the same value (immutable natural key)
             existing.SpamDetectionConfig = config.SpamDetectionConfig;
             existing.WelcomeConfig = config.WelcomeConfig;
             existing.LogConfig = config.LogConfig;
@@ -39,7 +39,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
             existing.OpenAIConfig = config.OpenAIConfig;
             existing.SendGridConfig = config.SendGridConfig;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
-            // NOTE: Id and CreatedAt are NOT copied - they are immutable
+            // Immutable properties NOT copied: Id (primary key), ChatId (natural key used for query), CreatedAt (database default)
         }
         else
         {
