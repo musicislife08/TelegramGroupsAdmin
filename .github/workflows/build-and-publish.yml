@@ -14,9 +14,10 @@ on:
       - '.gitattributes'
       - '.github/workflows/claude*.yml'
   pull_request:
-    types: [ready_for_review, synchronize]
+    types: [ready_for_review, synchronize, closed]
     branches:
       - develop
+      - master
     paths-ignore:
       - 'CLAUDE.md'
       - 'README.md'
@@ -85,8 +86,13 @@ jobs:
     needs: build-and-test
     runs-on: ubuntu-latest
 
-    # Only publish on master or develop pushes (not PRs)
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
+    # Only publish when PRs are merged to master or develop (not on direct pushes or PR reviews)
+    # This prevents Docker builds during PR work - only runs after merge is complete
+    if: |
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      (github.event.pull_request.base.ref == 'master' || github.event.pull_request.base.ref == 'develop')
 
     permissions:
       contents: read
@@ -120,7 +126,7 @@ jobs:
       - name: Determine Docker tags
         id: docker-tags
         env:
-          GITHUB_REF: ${{ github.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
           SEMVER: ${{ steps.gitversion.outputs.semVer }}
           MAJOR: ${{ steps.gitversion.outputs.major }}
           MINOR: ${{ steps.gitversion.outputs.minor }}
@@ -129,7 +135,7 @@ jobs:
           # Convert repository name to lowercase for Docker
           REPO_LOWER="${REPO,,}"
 
-          if [ "${GITHUB_REF}" == "refs/heads/master" ]; then
+          if [ "${BASE_REF}" == "master" ]; then
             # Master branch: latest + semver
             TAGS="${REGISTRY}/${REPO_LOWER}:latest"
             TAGS="${TAGS},${REGISTRY}/${REPO_LOWER}:${SEMVER}"
@@ -156,7 +162,7 @@ jobs:
         env:
           TAGS: ${{ steps.docker-tags.outputs.tags }}
           VERSION: ${{ steps.gitversion.outputs.semVer }}
-          GITHUB_REF: ${{ github.ref }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
           REPO: ${{ github.repository }}
         run: |
           # Convert repository name to lowercase for Docker
@@ -175,7 +181,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Pull commands:**" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          if [ "${GITHUB_REF}" == "refs/heads/master" ]; then
+          if [ "${BASE_REF}" == "master" ]; then
             echo "# Stable (latest)" >> $GITHUB_STEP_SUMMARY
             echo "docker pull ${REGISTRY}/${REPO_LOWER}:latest" >> $GITHUB_STEP_SUMMARY
           else
