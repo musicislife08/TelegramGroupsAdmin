@@ -125,7 +125,7 @@ jobs:
       - name: Determine Docker tags
         id: docker-tags
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BRANCH_NAME: ${{ github.ref_name }}
           SEMVER: ${{ steps.gitversion.outputs.semVer }}
           MAJOR: ${{ steps.gitversion.outputs.major }}
           MINOR: ${{ steps.gitversion.outputs.minor }}
@@ -134,7 +134,7 @@ jobs:
           # Convert repository name to lowercase for Docker
           REPO_LOWER="${REPO,,}"
 
-          if [ "${BASE_REF}" == "master" ]; then
+          if [ "${BRANCH_NAME}" == "master" ]; then
             # Master branch: latest + semver
             TAGS="${REGISTRY}/${REPO_LOWER}:latest"
             TAGS="${TAGS},${REGISTRY}/${REPO_LOWER}:${SEMVER}"
@@ -161,7 +161,7 @@ jobs:
         env:
           TAGS: ${{ steps.docker-tags.outputs.tags }}
           VERSION: ${{ steps.gitversion.outputs.semVer }}
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BRANCH_NAME: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
           # Convert repository name to lowercase for Docker
@@ -180,7 +180,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Pull commands:**" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          if [ "${BASE_REF}" == "master" ]; then
+          if [ "${BRANCH_NAME}" == "master" ]; then
             echo "# Stable (latest)" >> $GITHUB_STEP_SUMMARY
             echo "docker pull ${REGISTRY}/${REPO_LOWER}:latest" >> $GITHUB_STEP_SUMMARY
           else
