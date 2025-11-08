@@ -1,0 +1,42 @@
+# GitVersion Configuration
+# Two-branch strategy: develop (testing) → main (stable)
+
+mode: ContinuousDeployment
+
+branches:
+  main:
+    # Main branch = stable releases (e.g., 1.2.3)
+    mode: ContinuousDelivery
+    tag: ''
+    increment: Patch
+    is-release-branch: true
+    track-merge-target: false
+
+  master:
+    # Alias for main (GitHub uses 'master' as default branch name)
+    mode: ContinuousDelivery
+    tag: ''
+    increment: Patch
+    is-release-branch: true
+    track-merge-target: false
+
+  develop:
+    # Develop branch = beta/prerelease (e.g., 1.3.0-beta.5)
+    mode: ContinuousDeployment
+    tag: beta
+    increment: Minor
+    is-release-branch: false
+    track-merge-target: false
+
+  feature:
+    # Feature branches inherit from parent branch
+    tag: useBranchName
+    increment: Inherit
+    is-release-branch: false
+
+# Start versioning at 0.1.0 if no tags exist
+next-version: 0.1.0
+
+# Ignore merge commits for version bumping
+ignore:
+  sha: []
