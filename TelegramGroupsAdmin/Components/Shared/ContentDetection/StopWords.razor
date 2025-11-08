@@ -21,6 +21,22 @@
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
     }
 
+    <!-- ML Recommendations Section -->
+    <MudExpansionPanels Class="mb-4">
+        <MudExpansionPanel>
+            <TitleContent>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Psychology" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">ML Recommendations</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Beta</MudChip>
+                </MudStack>
+            </TitleContent>
+            <ChildContent>
+                <StopWordRecommendations OnStopWordsChanged="@LoadStopWords" />
+            </ChildContent>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+
     <MudPaper Class="pa-4" Elevation="2">
         <MudStack Spacing="3">
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
@@ -42,13 +58,14 @@
                      Breakpoint="Breakpoint.Sm"
                      Loading="@_loading"
                      LoadingProgressColor="Color.Info"
-                     Dense="true">
+                     Dense="true"
+                     SortLabel="Word">
                 <HeaderContent>
                     <MudTh><MudTableSortLabel SortBy="new Func<StopWordItem, object>(x => x.Word)">Word</MudTableSortLabel></MudTh>
-                    <MudTh>Status</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<StopWordItem, object>(x => x.Enabled)">Status</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<StopWordItem, object>(x => x.AddedDate)">Added Date</MudTableSortLabel></MudTh>
-                    <MudTh>Added By</MudTh>
-                    <MudTh>Notes</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<StopWordItem, object>(x => x.AddedBy ?? string.Empty)">Added By</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<StopWordItem, object>(x => x.Notes ?? string.Empty)">Notes</MudTableSortLabel></MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -86,6 +103,11 @@
                                          Size="Size.Small"
                                          OnClick="@(() => EditStopWord(context))"
                                          title="Edit" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                         Color="Color.Error"
+                                         Size="Size.Small"
+                                         OnClick="@(() => DeleteStopWord(context))"
+                                         title="Delete" />
                         </MudStack>
                     </MudTd>
                 </RowTemplate>
@@ -218,6 +240,29 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Error updating stop word status: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task DeleteStopWord(StopWordItem stopWord)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Stop Word",
+            $"Are you sure you want to permanently delete the stop word '{stopWord.Word}'? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        try
+        {
+            await StopWordsRepository.DeleteStopWordAsync(stopWord.Id);
+            Snackbar.Add($"Stop word '{stopWord.Word}' deleted successfully", Severity.Success);
+            await LoadStopWords();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error deleting stop word: {ex.Message}", Severity.Error);
         }
     }
 

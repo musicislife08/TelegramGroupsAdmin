@@ -1,0 +1,438 @@
+@using TelegramGroupsAdmin.ContentDetection.ML
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Repositories
+@inject IStopWordRecommendationService RecommendationService
+@inject IStopWordsRepository StopWordsRepository
+@inject ISnackbar Snackbar
+@inject IJSRuntime JsRuntime
+@inject ILogger<StopWordRecommendations> Logger
+
+<MudGrid>
+    <!-- Info Alert -->
+    <MudItem xs="12">
+        <ConceptualAlert Title="How ML Stop Word Optimization Works" Severity="Severity.Info">
+            <div>
+                Analyzes <strong>spam training corpus vs legitimate messages</strong> to identify:
+                <ul>
+                    <li><strong>Additions</strong>: Words appearing frequently in spam but rarely in legitimate messages (high spam-to-legit ratio)</li>
+                    <li><strong>Removals</strong>: Existing stop words with low precision (&lt;70%) or causing too many false positives</li>
+                    <li><strong>Performance Cleanup</strong>: Inefficient stop words to remove when check execution time exceeds 200ms</li>
+                </ul>
+            </div>
+            <div class="mt-2">
+                Uses <strong>word frequency analysis</strong> to recommend optimal stop words that maximize spam detection while minimizing false positives.
+                Requires at least 50 spam training samples and 100 legitimate messages for reliable recommendations.
+            </div>
+        </ConceptualAlert>
+    </MudItem>
+
+    <!-- Generate New Recommendations -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.AutoFixHigh" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Generate Recommendations</MudText>
+                    <HelpTooltip Text="Analysis requires at least 50 spam training samples and 100 legitimate messages. The service compares word frequencies to find words that appear predominantly in spam (for additions) or cause too many false positives (for removals). Longer analysis periods (30+ days) provide better recommendations." />
+                </MudStack>
+
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Analyze messages from a specific time period to generate stop word optimization recommendations.
+                    Requires at least 50 spam samples and 100 legitimate messages for training.
+                </MudText>
+
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudDatePicker Label="Analysis Period Start"
+                                   @bind-Date="_analysisPeriodStart"
+                                   Variant="Variant.Outlined"
+                                   MaxDate="DateTime.Now" />
+
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               OnClick="@GenerateRecommendationsAsync"
+                               Disabled="@_isGenerating"
+                               StartIcon="@Icons.Material.Filled.Psychology">
+                        @if (_isGenerating)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            <text>&nbsp;Analyzing...</text>
+                        }
+                        else
+                        {
+                            <text>Generate Recommendations</text>
+                        }
+                    </MudButton>
+                </MudStack>
+
+                @if (!string.IsNullOrEmpty(_generationMessage))
+                {
+                    <MudAlert Severity="@_generationMessageSeverity">@_generationMessage</MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Recommendations Display -->
+    @if (_currentBatch != null)
+    {
+        <!-- Summary Stats -->
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudStack Row="true" Spacing="4">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Training Data</MudText>
+                        <MudText Typo="Typo.body1"><strong>@_currentBatch.TotalSpamSamples</strong> spam / <strong>@_currentBatch.TotalLegitMessages</strong> legit</MudText>
+                    </MudStack>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Analysis Period</MudText>
+                        <MudText Typo="Typo.body2">
+                            <span class="local-timestamp" data-utc="@_currentBatch.AnalysisPeriodStart.ToString("o")">@_currentBatch.AnalysisPeriodStart.ToLocalTime().ToString("MMM d, yyyy")</span>
+                            to
+                            <span class="local-timestamp" data-utc="@_currentBatch.AnalysisPeriodEnd.ToString("o")">@_currentBatch.AnalysisPeriodEnd.ToLocalTime().ToString("MMM d, yyyy")</span>
+                        </MudText>
+                    </MudStack>
+                    @if (_currentBatch.CurrentAverageExecutionTimeMs.HasValue)
+                    {
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Avg Execution Time</MudText>
+                            <MudText Typo="Typo.body1" Color="@(_currentBatch.IsPerformanceCleanupRecommended ? Color.Warning : Color.Success)">
+                                <strong>@_currentBatch.CurrentAverageExecutionTimeMs.Value.ToString("F1")ms</strong>
+                            </MudText>
+                        </MudStack>
+                    }
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Addition Recommendations -->
+        @if (_currentBatch.AdditionRecommendations.Count > 0)
+        {
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Success" />
+                    Words to Add (@_currentBatch.AdditionRecommendations.Count)
+                </MudText>
+
+                @foreach (var rec in _currentBatch.AdditionRecommendations.Take(10))
+                {
+                    <MudPaper Class="pa-3 mb-2" Elevation="1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudChip T="string" Size="Size.Medium" Color="Color.Primary">@rec.Word</MudChip>
+
+                            <MudStack Spacing="0" Style="flex-grow: 1;">
+                                <MudText Typo="Typo.body2">
+                                    <strong>@rec.SpamFrequencyPercent.ToString("F1")%</strong> spam frequency
+                                    / <strong>@rec.LegitFrequencyPercent.ToString("F1")%</strong> legit frequency
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Ratio: @rec.SpamToLegitRatio.ToString("F1")x | Appears in @rec.SpamSampleCount/@rec.TotalSpamSamples spam messages
+                                </MudText>
+                            </MudStack>
+
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Success"
+                                       Size="Size.Small"
+                                       OnClick="@(() => AddStopWordAsync(rec.Word))"
+                                       Disabled="@_isApplying"
+                                       StartIcon="@Icons.Material.Filled.Add">
+                                Add
+                            </MudButton>
+                        </MudStack>
+                    </MudPaper>
+                }
+
+                @if (_currentBatch.AdditionRecommendations.Count > 10)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                        Showing top 10 of @_currentBatch.AdditionRecommendations.Count recommendations (sorted by spam-to-legit ratio)
+                    </MudText>
+                }
+            </MudItem>
+        }
+
+        <!-- Removal Recommendations -->
+        @if (_currentBatch.RemovalRecommendations.Count > 0)
+        {
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Remove" Color="Color.Error" />
+                    Words to Remove (@_currentBatch.RemovalRecommendations.Count)
+                </MudText>
+
+                @foreach (var rec in _currentBatch.RemovalRecommendations)
+                {
+                    <MudPaper Class="pa-3 mb-2" Elevation="1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudChip T="string" Size="Size.Medium" Color="Color.Error">@rec.Word</MudChip>
+
+                            <MudStack Spacing="0" Style="flex-grow: 1;">
+                                <MudText Typo="Typo.body2">
+                                    <strong>@rec.PrecisionPercent.ToString("F1")%</strong> precision
+                                    (@rec.CorrectTriggers correct / @rec.FalsePositives false positives)
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @rec.RemovalReason
+                                </MudText>
+                            </MudStack>
+
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Error"
+                                       Size="Size.Small"
+                                       OnClick="@(() => RemoveStopWordAsync(rec.Word))"
+                                       Disabled="@_isApplying"
+                                       StartIcon="@Icons.Material.Filled.Delete">
+                                Remove
+                            </MudButton>
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudItem>
+        }
+
+        <!-- Performance Cleanup Recommendations -->
+        @if (_currentBatch.PerformanceCleanupRecommendations.Count > 0)
+        {
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Speed" Color="Color.Warning" />
+                    Performance Cleanup (@_currentBatch.PerformanceCleanupRecommendations.Count)
+                </MudText>
+
+                <MudAlert Severity="Severity.Warning" Class="mb-3">
+                    StopWords check execution time (@(_currentBatch.CurrentAverageExecutionTimeMs?.ToString("F1") ?? "N/A")ms) exceeds threshold (@_currentBatch.PerformanceThresholdMs ms).
+                    Consider removing these inefficient words to improve performance.
+                </MudAlert>
+
+                @foreach (var rec in _currentBatch.PerformanceCleanupRecommendations)
+                {
+                    <MudPaper Class="pa-3 mb-2" Elevation="1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudChip T="string" Size="Size.Medium" Color="Color.Warning">@rec.Word</MudChip>
+
+                            <MudStack Spacing="0" Style="flex-grow: 1;">
+                                <MudText Typo="Typo.body2">
+                                    <strong>@rec.PrecisionPercent.ToString("F1")%</strong> precision
+                                    | Inefficiency score: <strong>@rec.InefficientScore.ToString("F1")</strong>
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    Estimated time savings: @rec.EstimatedTimeSavingsMs.ToString("F1")ms
+                                    (@rec.FalsePositives FP / @rec.TotalTriggers triggers)
+                                </MudText>
+                            </MudStack>
+
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Warning"
+                                       Size="Size.Small"
+                                       OnClick="@(() => RemoveStopWordAsync(rec.Word))"
+                                       Disabled="@_isApplying"
+                                       StartIcon="@Icons.Material.Filled.Delete">
+                                Remove
+                            </MudButton>
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudItem>
+        }
+
+        @if (!_currentBatch.HasRecommendations)
+        {
+            <MudItem xs="12">
+                <MudPaper Class="pa-8" Elevation="0">
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Color="Color.Success" />
+                        <MudText Typo="Typo.h6" Color="Color.Success">No recommendations needed</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            @if (!string.IsNullOrEmpty(_currentBatch.ValidationMessage))
+                            {
+                                <text>@_currentBatch.ValidationMessage</text>
+                            }
+                            else
+                            {
+                                <text>Your stop words list is optimized. All words have good precision and no performance issues detected.</text>
+                            }
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        }
+    }
+</MudGrid>
+
+@code {
+    [Parameter]
+    public EventCallback OnStopWordsChanged { get; set; }
+
+    private StopWordRecommendationBatch? _currentBatch;
+    private DateTime? _analysisPeriodStart = DateTime.Now.AddDays(-30);
+    private bool _isGenerating;
+    private bool _isApplying;
+    private string _generationMessage = "";
+    private Severity _generationMessageSeverity = Severity.Info;
+    private string _userTimeZone = "UTC";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Get user's timezone from browser (must be called after render for JS interop)
+            try
+            {
+                _userTimeZone = await JsRuntime.InvokeAsync<string>("getUserTimeZone");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to detect user timezone, defaulting to UTC");
+                _userTimeZone = "UTC";
+            }
+        }
+    }
+
+    private async Task GenerateRecommendationsAsync()
+    {
+        if (!_analysisPeriodStart.HasValue)
+        {
+            Snackbar.Add("Please select an analysis period start date", Severity.Warning);
+            return;
+        }
+
+        _isGenerating = true;
+        _generationMessage = "";
+        _currentBatch = null;
+        try
+        {
+            // Convert date picker value (unspecified kind) to UTC based on user's timezone
+            var userTimeZoneInfo = TimeZoneInfo.FindSystemTimeZoneById(_userTimeZone);
+            var dateInUserTz = DateTime.SpecifyKind(_analysisPeriodStart.Value, DateTimeKind.Unspecified);
+            var utcDate = TimeZoneInfo.ConvertTimeToUtc(dateInUserTz, userTimeZoneInfo);
+            var since = new DateTimeOffset(utcDate, TimeSpan.Zero);
+
+            _currentBatch = await RecommendationService.GenerateRecommendationsAsync(since);
+
+            if (!_currentBatch.HasRecommendations)
+            {
+                if (!string.IsNullOrEmpty(_currentBatch.ValidationMessage))
+                {
+                    _generationMessage = _currentBatch.ValidationMessage;
+                    _generationMessageSeverity = Severity.Warning;
+                }
+                else
+                {
+                    _generationMessage = "No recommendations generated. Your stop words are already optimized!";
+                    _generationMessageSeverity = Severity.Success;
+                }
+            }
+            else
+            {
+                var totalRecs = _currentBatch.AdditionRecommendations.Count +
+                               _currentBatch.RemovalRecommendations.Count +
+                               _currentBatch.PerformanceCleanupRecommendations.Count;
+
+                _generationMessage = $"Successfully generated {totalRecs} recommendation(s): " +
+                                   $"{_currentBatch.AdditionRecommendations.Count} additions, " +
+                                   $"{_currentBatch.RemovalRecommendations.Count} removals, " +
+                                   $"{_currentBatch.PerformanceCleanupRecommendations.Count} performance cleanups";
+                _generationMessageSeverity = Severity.Success;
+
+                Snackbar.Add($"Generated {totalRecs} recommendations", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            _generationMessage = $"Failed to generate recommendations: {ex.Message}";
+            _generationMessageSeverity = Severity.Error;
+            Snackbar.Add($"Generation failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isGenerating = false;
+        }
+    }
+
+    private async Task AddStopWordAsync(string word)
+    {
+        _isApplying = true;
+        try
+        {
+            var stopWord = new TelegramGroupsAdmin.ContentDetection.Models.StopWord(
+                Id: 0,
+                Word: word.ToLowerInvariant(),
+                Enabled: true,
+                AddedDate: DateTimeOffset.UtcNow,
+                AddedBy: "ML Recommendation",
+                Notes: $"Added via ML recommendation on {DateTimeOffset.UtcNow:yyyy-MM-dd}"
+            );
+
+            await StopWordsRepository.AddStopWordAsync(stopWord);
+            Snackbar.Add($"Added stop word: {word}", Severity.Success);
+
+            // Remove from current batch
+            if (_currentBatch != null)
+            {
+                _currentBatch = _currentBatch with
+                {
+                    AdditionRecommendations = _currentBatch.AdditionRecommendations
+                        .Where(r => r.Word != word)
+                        .ToList()
+                };
+            }
+
+            // Notify parent component to reload stop words
+            await OnStopWordsChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to add stop word: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isApplying = false;
+        }
+    }
+
+    private async Task RemoveStopWordAsync(string word)
+    {
+        _isApplying = true;
+        try
+        {
+            // Find the stop word by word text
+            var allStopWords = await StopWordsRepository.GetAllStopWordsAsync();
+            var stopWord = allStopWords.FirstOrDefault(sw => sw.Word.Equals(word, StringComparison.OrdinalIgnoreCase));
+
+            if (stopWord != null)
+            {
+                // Delete the stop word
+                await StopWordsRepository.DeleteStopWordAsync(stopWord.Id);
+                Snackbar.Add($"Deleted stop word: {word}", Severity.Success);
+
+                // Remove from current batch
+                if (_currentBatch != null)
+                {
+                    _currentBatch = _currentBatch with
+                    {
+                        RemovalRecommendations = _currentBatch.RemovalRecommendations
+                            .Where(r => r.Word != word)
+                            .ToList(),
+                        PerformanceCleanupRecommendations = _currentBatch.PerformanceCleanupRecommendations
+                            .Where(r => r.Word != word)
+                            .ToList()
+                    };
+                }
+
+                // Notify parent component to reload stop words
+                await OnStopWordsChanged.InvokeAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Stop word not found: {word}", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to remove stop word: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isApplying = false;
+        }
+    }
+}
