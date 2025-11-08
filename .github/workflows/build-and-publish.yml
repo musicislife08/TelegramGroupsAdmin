@@ -34,7 +34,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
 
-    # Skip draft PRs to save CI minutes
+    # Skip draft PRs to save CI minutes (homelab deployment doesn't need draft builds)
     if: github.event_name == 'push' || github.event.pull_request.draft == false
 
     outputs:
