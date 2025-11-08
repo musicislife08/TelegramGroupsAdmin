@@ -1,4 +1,7 @@
 @using TelegramGroupsAdmin.Helpers
+@using TelegramGroupsAdmin.ContentDetection.Utilities
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Constants
 @* Telegram-authentic message bubble design *@
 
 <div class="@GetBubbleClass()" @onclick:stopPropagation="true" data-message-id="@Message.MessageId">
@@ -67,8 +70,12 @@
                 }
                 @if (SpamCheck != null)
                 {
-                    <span class="tg-badge tg-badge-@(SpamCheck.IsSpam ? "spam" : "ham")">
+                    <span class="tg-badge tg-badge-@(SpamCheck.IsSpam ? "spam" : "ham")" title="@_cachedTooltip">
                         @(SpamCheck.IsSpam ? "spam" : "ham") @SpamCheck.Confidence%
+                        @if (!string.IsNullOrEmpty(_cachedContributingFactors))
+                        {
+                            <span style="font-weight: normal; opacity: 0.9;"> • @_cachedContributingFactors</span>
+                        }
                     </span>
                 }
                 @* Phase 4.20: Translation badge with toggle *@
@@ -426,6 +433,10 @@
     private bool _popoverOpen;
     private bool _showTranslation = true; // Phase 4.20: Show translation by default when available
 
+    // UX-1: Cached detection display values (computed once per parameter set)
+    private string? _cachedContributingFactors;
+    private string? _cachedTooltip;
+
     /// <summary>
     /// Show admin notes dialog when notes icon is clicked
     /// Phase 4.12: Display all notes for the message author
@@ -621,5 +632,114 @@
         public string? Description { get; init; }
         public string? OgTitle { get; init; }
         public string? OgDescription { get; init; }
+    }
+
+    /// <summary>
+    /// Cache detection display values when parameters change
+    /// Phase UX-1: Performance optimization - compute once instead of on every render
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+
+        if (SpamCheck != null && DetectionHistory?.Any() == true)
+        {
+            var contributingFactors = GetContributingFactors();
+            _cachedContributingFactors = contributingFactors?.Any() == true
+                ? string.Join(", ", contributingFactors)
+                : null;
+            _cachedTooltip = GetDetectionTooltip(contributingFactors);
+        }
+        else
+        {
+            _cachedContributingFactors = null;
+            _cachedTooltip = SpamCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
+        }
+    }
+
+    /// <summary>
+    /// Get the latest detection result from history (cached to avoid repeated LINQ queries)
+    /// Phase UX-1: Performance optimization
+    /// </summary>
+    private DetectionResultRecord? GetLatestDetection() =>
+        DetectionHistory?.OrderByDescending(d => d.DetectedAt).FirstOrDefault();
+
+    /// <summary>
+    /// Get top contributing factors from detection history for spam/ham badge
+    /// Phase UX-1: Show which algorithms contributed to the decision
+    /// Returns top 3 algorithms by confidence score
+    /// </summary>
+    private List<string>? GetContributingFactors()
+    {
+        var latest = GetLatestDetection();
+        if (latest?.CheckResultsJson == null)
+            return null;
+
+        // Parse the check results
+        var checkResults = CheckResultsSerializer.Deserialize(latest.CheckResultsJson);
+        if (checkResults == null || !checkResults.Any())
+            return null;
+
+        // Get top 3 contributing algorithms (highest confidence spam or ham checks)
+        var topContributors = checkResults
+            .Where(c => c.Confidence > 0)  // Only show checks that had confidence
+            .OrderByDescending(c => c.Confidence)
+            .Take(3)
+            .Select(c => $"{GetFriendlyCheckName(c.CheckName)} {c.Confidence}%")
+            .ToList();
+
+        return topContributors.Any() ? topContributors : null;
+    }
+
+    /// <summary>
+    /// Get tooltip text showing full detection details
+    /// Phase UX-1: Enhanced transparency for spam detection decisions
+    /// </summary>
+    private string GetDetectionTooltip(List<string>? contributingFactors)
+    {
+        var latest = GetLatestDetection();
+        if (latest == null)
+            return SpamCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
+
+        var tooltip = $"{(latest.IsSpam ? "SPAM" : "HAM")} - {latest.NetConfidence}% confidence\n";
+        tooltip += $"Detection: {latest.DetectionMethod}\n";
+        tooltip += $"Source: {latest.DetectionSource}\n";
+
+        if (contributingFactors?.Any() == true)
+        {
+            tooltip += $"\nTop Contributors:\n• {string.Join("\n• ", contributingFactors)}";
+        }
+
+        if (!string.IsNullOrEmpty(latest.Reason))
+        {
+            tooltip += $"\n\nReason: {latest.Reason}";
+        }
+
+        return tooltip;
+    }
+
+    /// <summary>
+    /// Convert CheckName enum to friendly display name
+    /// Phase UX-1: User-friendly algorithm names for spam detection results
+    /// </summary>
+    private static string GetFriendlyCheckName(CheckName checkName)
+    {
+        return checkName switch
+        {
+            CheckName.CAS => "CAS",
+            CheckName.StopWords => "Keywords",
+            CheckName.Similarity => "Similarity",
+            CheckName.Bayes => "Bayes",
+            CheckName.OpenAI => "AI",
+            CheckName.ThreatIntel => "Threat Intel",
+            CheckName.ImageSpam => "Image",
+            CheckName.VideoSpam => "Video",
+            CheckName.Spacing => "Spacing",
+            CheckName.InvisibleChars => "Invisible Chars",
+            CheckName.UrlBlocklist => "URL Block",
+            CheckName.SeoScraping => "SEO Spam",
+            CheckName.FileScanning => "File Scan",
+            _ => checkName.ToString()
+        };
     }
 }

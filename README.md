@@ -260,6 +260,320 @@ dotnet run --project TelegramGroupsAdmin --migrate-only
 
 ---
 
+## Troubleshooting
+
+### Container Health Checks
+
+#### Check Service Status
+```bash
+docker compose ps
+
+# Expected output:
+# NAME                              STATUS
+# telegram-groups-admin-app         Up (healthy)
+# telegram-groups-admin-clamav      Up (healthy)
+# telegram-groups-admin-db          Up (healthy)
+```
+
+#### Check Application Health
+```bash
+# Liveness check (is app alive?)
+curl http://localhost:8080/healthz/live
+
+# Readiness check (is app ready? includes DB connection)
+curl http://localhost:8080/healthz/ready
+```
+
+### Common Issues
+
+#### ClamAV Connection Issues
+
+**Symptom:** Logs show "ClamAV connection failed" or health check failing
+```
+Error: Failed to connect to ClamAV at clamav:3310
+```
+
+**Diagnosis:**
+```bash
+# Check if ClamAV container is running
+docker compose ps clamav
+
+# Check ClamAV logs
+docker compose logs clamav
+
+# Test ClamAV connectivity from app container
+docker compose exec app nc -zv clamav 3310
+```
+
+**Solution:**
+1. **First-time startup**: ClamAV needs 5-10 minutes to download virus signatures (~200MB)
+   ```bash
+   # Wait and monitor progress
+   docker compose logs -f clamav
+   # Look for: "ClamAV update process started" and "Database updated"
+   ```
+
+2. **After signatures downloaded**: Verify ClamAV is listening
+   ```bash
+   docker compose exec clamav clamdscan --ping 1
+   # Expected: "PONG"
+   ```
+
+3. **Still failing**: Restart ClamAV container
+   ```bash
+   docker compose restart clamav
+   ```
+
+#### Bot Not Responding in Telegram
+
+**Symptom:** Bot appears offline or doesn't respond to commands in Telegram groups
+
+**Diagnosis:**
+```bash
+# Check app logs for bot connection errors
+docker compose logs app | grep -i "telegram\|bot"
+
+# Look for:
+# - "Successfully connected to Telegram"
+# - "Bot token validation failed"
+# - "401 Unauthorized"
+```
+
+**Solution:**
+1. **Bot token not configured**: Configure in Settings UI
+   - Navigate to: **Settings → Telegram → Bot Configuration → General**
+   - Get token from: [@BotFather](https://t.me/BotFather)
+   - Save and restart application
+
+2. **Invalid token**: Verify token format
+   - Format: `1234567890:ABCdefGHIjklMNOpqrsTUVwxyz`
+   - No spaces or extra characters
+
+3. **Bot privacy mode**: Disable privacy mode in @BotFather
+   ```
+   /setprivacy → Select your bot → Disable
+   ```
+
+4. **Bot not added to group**: Ensure bot is a member with admin privileges
+
+#### Database Connection Problems
+
+**Symptom:** App crashes on startup with database errors
+```
+Error: Connection refused (postgres:5432)
+Npgsql.NpgsqlException: Failed to connect to postgres:5432
+```
+
+**Diagnosis:**
+```bash
+# Check if PostgreSQL is running
+docker compose ps postgres
+
+# Check PostgreSQL logs
+docker compose logs postgres
+
+# Test PostgreSQL connectivity
+docker compose exec postgres pg_isready -U tgadmin -d telegram_groups_admin
+```
+
+**Solution:**
+1. **Password mismatch**: Verify passwords match in `compose.yml`
+   ```yaml
+   # These must be IDENTICAL:
+   POSTGRES_PASSWORD: "your-strong-password"
+   ConnectionStrings__PostgreSQL: "...Password=your-strong-password"
+   ```
+
+2. **PostgreSQL not ready**: Wait for health check to pass
+   ```bash
+   # Health check takes ~10-30 seconds
+   docker compose logs -f postgres
+   # Look for: "database system is ready to accept connections"
+   ```
+
+3. **Port conflict**: Check if port 5432 is already in use
+   ```bash
+   lsof -i :5432  # macOS/Linux
+   netstat -ano | findstr :5432  # Windows
+
+   # Solution: Change port in compose.yml
+   ports:
+     - "5433:5432"  # Use different host port
+   ```
+
+#### Permission Errors on /data Volume
+
+**Symptom:** App crashes with "Permission denied" errors
+```
+System.UnauthorizedAccessException: Access to the path '/data/keys' is denied
+```
+
+**Diagnosis:**
+```bash
+# Check volume mount permissions
+ls -la ./data
+
+# Check app container user
+docker compose exec app id
+# Expected: uid=1654 gid=1654
+```
+
+**Solution:**
+1. **Fix ownership**: Ensure host directory is writable
+   ```bash
+   # Option 1: Grant write permissions
+   chmod -R 755 ./data
+
+   # Option 2: Match container UID/GID
+   sudo chown -R 1654:1654 ./data
+   ```
+
+2. **SELinux issues** (RHEL/CentOS/Fedora):
+   ```bash
+   # Add SELinux label
+   chcon -Rt svirt_sandbox_file_t ./data
+   ```
+
+#### Rate Limiting Errors
+
+**Symptom:** Logs show HTTP 429 errors from external APIs
+```
+OpenAI API: Rate limit exceeded
+VirusTotal API: Too many requests
+```
+
+**Diagnosis:**
+```bash
+# Check logs for rate limit patterns
+docker compose logs app | grep -i "rate limit\|429\|quota"
+```
+
+**Solution:**
+1. **OpenAI rate limits**:
+   - Reduce concurrent spam checks in **Settings → Content Detection → Spam Detection**
+   - Consider upgrading OpenAI tier at https://platform.openai.com/settings/organization/billing
+   - Disable image spam detection temporarily
+
+2. **VirusTotal rate limits** (Free tier: 500 requests/day):
+   - Reduce file scanning frequency
+   - Upgrade to premium API key
+   - Files >2GB skip VirusTotal automatically
+
+3. **Telegram rate limits**:
+   - Bot API has built-in rate limiting (30 messages/second per chat)
+   - App automatically retries with exponential backoff
+   - Check for loops or excessive message sending
+
+#### Application Logs
+
+**View real-time logs:**
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f app
+docker compose logs -f postgres
+docker compose logs -f clamav
+
+# Filter for errors
+docker compose logs app | grep -i error
+
+# Filter for specific feature
+docker compose logs app | grep -i "spam\|detection"
+```
+
+**Log rotation:** Logs automatically rotate at 10MB (keeps 15 files = 150MB total)
+
+#### Database Migrations Failing
+
+**Symptom:** App crashes on startup with migration errors
+```
+Error applying migration '20250108123456_MigrationName'
+```
+
+**Diagnosis:**
+```bash
+# Check app logs for specific migration error
+docker compose logs app | grep -i migration
+
+# Connect to database to inspect
+docker compose exec postgres psql -U tgadmin -d telegram_groups_admin
+# \dt  -- List tables
+# SELECT * FROM __EFMigrationsHistory;  -- Check applied migrations
+# \q   -- Exit
+```
+
+**Solution:**
+1. **Corrupted migration**: Restore from backup
+   ```bash
+   # Stop app
+   docker compose stop app
+
+   # Restore backup (if available)
+   docker compose exec postgres pg_restore -U tgadmin -d telegram_groups_admin /backups/backup.sql
+
+   # Restart app
+   docker compose start app
+   ```
+
+2. **Clean database** (⚠️ DELETES ALL DATA):
+   ```bash
+   docker compose down
+   rm -rf ./data/postgres/*
+   docker compose up -d
+   ```
+
+#### Build Failures (Development Mode)
+
+**Symptom:** Build fails during `docker compose up --build`
+```
+Error: Cannot find project file
+Error: Restore failed
+```
+
+**Diagnosis:**
+```bash
+# Check build context
+docker compose config | grep context
+# Expected: context: ..
+```
+
+**Solution:**
+1. **Wrong compose file**: Ensure using `compose.development.yml`
+   ```bash
+   cp examples/compose.development.yml compose.yml
+   ```
+
+2. **Build context incorrect**: Verify context points to repository root
+   ```yaml
+   # In compose.yml:
+   build:
+     context: ..  # Parent directory (repository root)
+     dockerfile: TelegramGroupsAdmin/Dockerfile
+   ```
+
+3. **Clean build**:
+   ```bash
+   docker compose build --no-cache app
+   docker compose up -d app
+   ```
+
+### Getting Help
+
+If you're still experiencing issues:
+
+1. **Enable debug logging**: Set `ASPNETCORE_ENVIRONMENT=Development` in compose.yml (⚠️ verbose logs)
+2. **Check diagnostics**: Review logs with `docker compose logs app --tail=500`
+3. **Verify configuration**: Ensure all CHANGE_ME values replaced in compose.yml
+4. **Review documentation**: See [examples/README.md](examples/README.md) for detailed setup
+5. **Report issue**: Create [GitHub Issue](https://github.com/musicislife08/TelegramGroupsAdmin/issues) with:
+   - Docker Compose logs (`docker compose logs`)
+   - System info (`docker version`, `docker compose version`)
+   - Steps to reproduce
+
+---
+
 ## Contributing
 
 Contributions are welcome! Please follow these guidelines:

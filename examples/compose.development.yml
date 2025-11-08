@@ -239,11 +239,11 @@ networks:
 # =============================================================================
 # ./data/postgres/  - PostgreSQL database files
 # ./data/clamav/    - ClamAV virus signatures (~200MB)
-# ./data/seq/       - Seq structured logs (optional)
-# ./data/app/       - Application data:
-#   ./data/app/keys/   - Data Protection keys (DO NOT DELETE!)
-#   ./data/app/images/ - Downloaded message images
-#   ./data/app/media/  - Downloaded media files (videos, audio, etc.)
+# ./seqdata/        - Seq structured logs (optional, development only)
+# ./data/           - Application data:
+#   ./data/keys/      - Data Protection keys (DO NOT DELETE!)
+#   ./data/images/    - Downloaded message images
+#   ./data/media/     - Downloaded media files (videos, audio, etc.)
 # ./backups/        - Database backup files (from /export command)
 #
 # Note: Aspire Dashboard is in-memory only (no persistent storage)
