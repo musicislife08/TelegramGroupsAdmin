@@ -62,7 +62,7 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: Run all tests
-        run: dotnet test --no-build --configuration Release --verbosity normal --settings TelegramGroupsAdmin.Tests/test.runsettings
+        run: dotnet test --no-build --configuration Release --verbosity normal
 
   publish-docker:
     name: Build and Publish Docker Image
