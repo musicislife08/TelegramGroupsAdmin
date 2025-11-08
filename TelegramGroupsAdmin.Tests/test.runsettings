@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <RunConfiguration>
+    <EnvironmentVariables>
+      <!-- Suppress Data Protection key encryption warning in tests -->
+      <Logging__LogLevel__Microsoft.AspNetCore.DataProtection>Error</Logging__LogLevel__Microsoft.AspNetCore.DataProtection>
+    </EnvironmentVariables>
+  </RunConfiguration>
+</RunSettings>

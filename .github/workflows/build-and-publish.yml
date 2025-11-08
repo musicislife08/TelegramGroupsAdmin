@@ -110,15 +110,18 @@ jobs:
           MINOR: ${{ steps.gitversion.outputs.minor }}
           REPO: ${{ github.repository }}
         run: |
+          # Convert repository name to lowercase for Docker
+          REPO_LOWER="${REPO,,}"
+
           if [ "${GITHUB_REF}" == "refs/heads/master" ]; then
             # Master branch: latest + semver
-            TAGS="${REGISTRY}/${REPO}:latest"
-            TAGS="${TAGS},${REGISTRY}/${REPO}:${SEMVER}"
-            TAGS="${TAGS},${REGISTRY}/${REPO}:${MAJOR}.${MINOR}"
+            TAGS="${REGISTRY}/${REPO_LOWER}:latest"
+            TAGS="${TAGS},${REGISTRY}/${REPO_LOWER}:${SEMVER}"
+            TAGS="${TAGS},${REGISTRY}/${REPO_LOWER}:${MAJOR}.${MINOR}"
           else
             # Develop branch: development + beta semver
-            TAGS="${REGISTRY}/${REPO}:development"
-            TAGS="${TAGS},${REGISTRY}/${REPO}:${SEMVER}"
+            TAGS="${REGISTRY}/${REPO_LOWER}:development"
+            TAGS="${TAGS},${REGISTRY}/${REPO_LOWER}:${SEMVER}"
           fi
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
 
@@ -136,7 +139,12 @@ jobs:
         env:
           TAGS: ${{ steps.docker-tags.outputs.tags }}
           VERSION: ${{ steps.gitversion.outputs.semVer }}
+          GITHUB_REF: ${{ github.ref }}
+          REPO: ${{ github.repository }}
         run: |
+          # Convert repository name to lowercase for Docker
+          REPO_LOWER="${REPO,,}"
+
           echo "### Docker Image Published :rocket:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${VERSION}" >> $GITHUB_STEP_SUMMARY
@@ -150,9 +158,9 @@ jobs:
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           if [ "${GITHUB_REF}" == "refs/heads/master" ]; then
             echo "# Stable (latest)" >> $GITHUB_STEP_SUMMARY
-            echo "docker pull ${REGISTRY}/${REPO}:latest" >> $GITHUB_STEP_SUMMARY
+            echo "docker pull ${REGISTRY}/${REPO_LOWER}:latest" >> $GITHUB_STEP_SUMMARY
           else
             echo "# Development (testing)" >> $GITHUB_STEP_SUMMARY
-            echo "docker pull ${REGISTRY}/${REPO}:development" >> $GITHUB_STEP_SUMMARY
+            echo "docker pull ${REGISTRY}/${REPO_LOWER}:development" >> $GITHUB_STEP_SUMMARY
           fi
           echo '```' >> $GITHUB_STEP_SUMMARY
