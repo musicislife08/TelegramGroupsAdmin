@@ -1,10 +1,23 @@
 name: Build and Publish
 
 on:
-  # Note: No push trigger - branch protection enforces PR-only workflow
-  # This prevents duplicate CI runs when PRs are merged (both push and pull_request[closed] would fire)
+  # Split triggers to prevent duplicate runs and ensure Docker publishes from correct branch:
+  # - pull_request: Runs build/test during PR review (feature branch context)
+  # - push: Runs Docker publish after PR merge (target branch context - develop/master)
   pull_request:
-    types: [opened, ready_for_review, synchronize, closed]
+    types: [opened, ready_for_review, synchronize]  # NOT closed - that's handled by push trigger
+    branches:
+      - develop
+      - master
+    paths-ignore:
+      - 'CLAUDE.md'
+      - 'README.md'
+      - 'BACKLOG.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.gitattributes'
+      - '.github/workflows/claude*.yml'
+  push:
     branches:
       - develop
       - master
@@ -25,9 +38,8 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
 
-    # Skip draft PRs and closed (merged) PRs to save CI minutes
-    # Build already ran during PR review, no need to run again on merge
-    if: github.event.pull_request.draft == false && github.event.action != 'closed'
+    # Only run on pull_request events (during PR review), skip on push events (after merge)
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
 
     outputs:
       semver: ${{ steps.gitversion.outputs.semVer }}
@@ -76,14 +88,10 @@ jobs:
     name: Build and Publish Docker Image
     runs-on: ubuntu-latest
 
-    # Only publish when PRs are merged to master or develop (not on direct pushes or PR reviews)
-    # This prevents Docker builds during PR work - only runs after merge is complete
+    # Only run on push events to develop/master (after PR merge), skip during PR review
+    # This ensures Docker images are built from the correct branch (not the deleted feature branch)
     # Note: No dependency on build-and-test job - this job is self-sufficient and re-runs GitVersion independently
-    if: |
-      github.event_name == 'pull_request' &&
-      github.event.action == 'closed' &&
-      github.event.pull_request.merged == true &&
-      (github.event.pull_request.base.ref == 'master' || github.event.pull_request.base.ref == 'develop')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
 
     permissions:
       contents: read
@@ -117,7 +125,7 @@ jobs:
       - name: Determine Docker tags
         id: docker-tags
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BRANCH_NAME: ${{ github.ref_name }}
           SEMVER: ${{ steps.gitversion.outputs.semVer }}
           MAJOR: ${{ steps.gitversion.outputs.major }}
           MINOR: ${{ steps.gitversion.outputs.minor }}
@@ -126,7 +134,7 @@ jobs:
           # Convert repository name to lowercase for Docker
           REPO_LOWER="${REPO,,}"
 
-          if [ "${BASE_REF}" == "master" ]; then
+          if [ "${BRANCH_NAME}" == "master" ]; then
             # Master branch: latest + semver
             TAGS="${REGISTRY}/${REPO_LOWER}:latest"
             TAGS="${TAGS},${REGISTRY}/${REPO_LOWER}:${SEMVER}"
@@ -153,7 +161,7 @@ jobs:
         env:
           TAGS: ${{ steps.docker-tags.outputs.tags }}
           VERSION: ${{ steps.gitversion.outputs.semVer }}
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BRANCH_NAME: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
           # Convert repository name to lowercase for Docker
@@ -172,7 +180,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Pull commands:**" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          if [ "${BASE_REF}" == "master" ]; then
+          if [ "${BRANCH_NAME}" == "master" ]; then
             echo "# Stable (latest)" >> $GITHUB_STEP_SUMMARY
             echo "docker pull ${REGISTRY}/${REPO_LOWER}:latest" >> $GITHUB_STEP_SUMMARY
           else
