@@ -34,4 +34,9 @@ public interface IStopWordsRepository
     /// Update stop word notes
     /// </summary>
     Task<bool> UpdateStopWordNotesAsync(long id, string? notes, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Delete a stop word by ID
+    /// </summary>
+    Task<bool> DeleteStopWordAsync(long id, CancellationToken cancellationToken = default);
 }

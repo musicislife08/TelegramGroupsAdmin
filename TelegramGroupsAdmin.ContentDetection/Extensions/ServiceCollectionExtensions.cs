@@ -68,6 +68,10 @@ public static class ServiceCollectionExtensions
         // Register ML.NET threshold optimization services
         services.AddScoped<FeatureExtractionService>();
         services.AddScoped<IThresholdRecommendationService, ThresholdRecommendationService>();
+        services.AddScoped<IStopWordRecommendationService, StopWordRecommendationService>(); // ML-6: Stop word recommendations
+
+        // Register stop words repository
+        services.AddScoped<IStopWordsRepository, StopWordsRepository>();
 
         // Register individual content checks
         // NOTE: Translation happens in ContentDetectionEngine preprocessing, not as a content check

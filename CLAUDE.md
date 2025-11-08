@@ -6,6 +6,97 @@
 
 **Note**: Migrated from .NET 10 RC2 → .NET 9 due to a framework bug where Blazor Server apps don't generate `wwwroot/_framework/blazor.web.js` during publish, causing 404s in Production mode. Will upgrade to .NET 10 after RTM release (November 11, 2025).
 
+## Git Workflow (CRITICAL - FOLLOW EVERY TIME)
+
+**Repository**: https://github.com/musicislife08/TelegramGroupsAdmin
+
+**Branch Protection Enforced:**
+- ❌ **NEVER commit directly to `master` or `develop`** - Both branches are protected and require PRs
+- ❌ **NEVER create PRs from feature branches to `master`** - Automated validation will block this
+- ✅ **ALWAYS use feature branches** - Create branch for every change, no matter how small
+- ✅ **ALWAYS create PR to `develop` first** - All changes must go through develop for testing
+- ✅ **ALWAYS wait for CI to pass** - Both `Build and Test` and `Validate PR Source Branch` must be green
+
+**Required Workflow for ALL Changes:**
+
+```bash
+# 1. Start from latest develop
+git checkout develop
+git pull origin develop
+
+# 2. Create feature branch (descriptive name)
+git checkout -b feature/your-feature-name
+# OR: git checkout -b fix/bug-description
+# OR: git checkout -b refactor/what-you-refactored
+
+# 3. Make changes, commit with conventional commit messages
+git add .
+git commit -m "feat: add new feature"
+# OR: fix:, refactor:, docs:, test:, ci:, chore:
+
+# 4. Push feature branch
+git push -u origin feature/your-feature-name
+
+# 5. Create PR to develop (NOT master)
+gh pr create --base develop --head feature/your-feature-name \
+  --title "feat: Add new feature" \
+  --body "Description of changes"
+
+# 6. Wait for CI checks to pass (Build and Test)
+# 7. Merge PR via GitHub UI
+# 8. Delete feature branch after merge
+# 9. Pull latest develop
+git checkout develop
+git pull origin develop
+```
+
+**Release to Production (develop → master):**
+
+```bash
+# Only when develop is stable and ready for release
+gh pr create --base master --head develop \
+  --title "Release: v1.2.3" \
+  --body "Release notes here"
+
+# Merge via GitHub UI after CI passes
+# Docker images auto-published:
+#   - ghcr.io/musicislife08/telegramgroupsadmin:latest
+#   - ghcr.io/musicislife08/telegramgroupsadmin:1.2.3
+#   - ghcr.io/musicislife08/telegramgroupsadmin:1.2
+```
+
+**Emergency Hotfix (RARE - User must explicitly request):**
+
+```bash
+# Create hotfix branch from master
+git checkout master
+git pull origin master
+git checkout -b hotfix/critical-bug
+
+# Make minimal fix, commit, push
+git push -u origin hotfix/critical-bug
+
+# Create PR to master (user bypasses protection as admin)
+gh pr create --base master --head hotfix/critical-bug
+
+# After merge to master, backport to develop
+git checkout develop
+git merge master
+git push origin develop
+```
+
+**Docker Image Tags:**
+- **develop branch** → `development` + semver (e.g., `1.3.0-beta.5`)
+- **master branch** → `latest` + semver + major.minor (e.g., `latest`, `1.2.3`, `1.2`)
+- **Architectures**: Multi-arch images support `linux/amd64` and `linux/arm64`
+
+**AI Agent Instructions:**
+- At the start of EVERY session, check current branch with `git branch`
+- If on `master` or `develop`, IMMEDIATELY switch to a feature branch
+- NEVER suggest bypassing the PR workflow "to save time" - branch protection is mandatory
+- If user asks to commit directly to master/develop, remind them of the protected workflow
+- Always create PRs to `develop` first, never to `master` (validation will block it)
+
 ## Use Case & Deployment Context
 
 **Target Environment**: Homelab deployment for personal/community use (10-1,000 member groups, 500-20,000 messages/day)

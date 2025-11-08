@@ -1,5 +1,11 @@
 name: Validate PR Target
 
+# IMPORTANT: This workflow intentionally does NOT use paths-ignore.
+# We enforce the develop → master workflow for ALL PRs, regardless of
+# file changes. Even documentation-only PRs must go through develop first.
+# This ensures consistent workflow enforcement and prevents accidental
+# feature → master merges.
+
 on:
   pull_request:
     branches:
@@ -33,6 +39,8 @@ jobs:
             echo "3. Then create PR: develop → master"
             echo ""
             echo "This ensures all changes go through the develop branch for testing before reaching master."
+            echo ""
+            echo "📖 See CLAUDE.md 'Git Workflow' section for full documentation"
             exit 1
           fi
 
