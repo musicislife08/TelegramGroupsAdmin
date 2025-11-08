@@ -70,14 +70,11 @@
                 }
                 @if (SpamCheck != null)
                 {
-                    var contributingFactors = GetContributingFactors();
-                    var tooltipText = GetDetectionTooltip(contributingFactors);
-
-                    <span class="tg-badge tg-badge-@(SpamCheck.IsSpam ? "spam" : "ham")" title="@tooltipText">
+                    <span class="tg-badge tg-badge-@(SpamCheck.IsSpam ? "spam" : "ham")" title="@_cachedTooltip">
                         @(SpamCheck.IsSpam ? "spam" : "ham") @SpamCheck.Confidence%
-                        @if (contributingFactors?.Any() == true)
+                        @if (!string.IsNullOrEmpty(_cachedContributingFactors))
                         {
-                            <span style="font-weight: normal; opacity: 0.9;"> • @string.Join(", ", contributingFactors)</span>
+                            <span style="font-weight: normal; opacity: 0.9;"> • @_cachedContributingFactors</span>
                         }
                     </span>
                 }
@@ -436,6 +433,10 @@
     private bool _popoverOpen;
     private bool _showTranslation = true; // Phase 4.20: Show translation by default when available
 
+    // UX-1: Cached detection display values (computed once per parameter set)
+    private string? _cachedContributingFactors;
+    private string? _cachedTooltip;
+
     /// <summary>
     /// Show admin notes dialog when notes icon is clicked
     /// Phase 4.12: Display all notes for the message author
@@ -634,16 +635,43 @@
     }
 
     /// <summary>
+    /// Cache detection display values when parameters change
+    /// Phase UX-1: Performance optimization - compute once instead of on every render
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+
+        if (SpamCheck != null && DetectionHistory?.Any() == true)
+        {
+            var contributingFactors = GetContributingFactors();
+            _cachedContributingFactors = contributingFactors?.Any() == true
+                ? string.Join(", ", contributingFactors)
+                : null;
+            _cachedTooltip = GetDetectionTooltip(contributingFactors);
+        }
+        else
+        {
+            _cachedContributingFactors = null;
+            _cachedTooltip = SpamCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
+        }
+    }
+
+    /// <summary>
+    /// Get the latest detection result from history (cached to avoid repeated LINQ queries)
+    /// Phase UX-1: Performance optimization
+    /// </summary>
+    private DetectionResultRecord? GetLatestDetection() =>
+        DetectionHistory?.OrderByDescending(d => d.DetectedAt).FirstOrDefault();
+
+    /// <summary>
     /// Get top contributing factors from detection history for spam/ham badge
     /// Phase UX-1: Show which algorithms contributed to the decision
+    /// Returns top 3 algorithms by confidence score
     /// </summary>
     private List<string>? GetContributingFactors()
     {
-        if (DetectionHistory == null || !DetectionHistory.Any())
-            return null;
-
-        // Get the latest detection result
-        var latest = DetectionHistory.OrderByDescending(d => d.DetectedAt).FirstOrDefault();
+        var latest = GetLatestDetection();
         if (latest?.CheckResultsJson == null)
             return null;
 
@@ -669,10 +697,7 @@
     /// </summary>
     private string GetDetectionTooltip(List<string>? contributingFactors)
     {
-        if (DetectionHistory == null || !DetectionHistory.Any())
-            return SpamCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
-
-        var latest = DetectionHistory.OrderByDescending(d => d.DetectedAt).FirstOrDefault();
+        var latest = GetLatestDetection();
         if (latest == null)
             return SpamCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
 
@@ -695,21 +720,25 @@
 
     /// <summary>
     /// Convert CheckName enum to friendly display name
-    /// Phase UX-1: User-friendly algorithm names
+    /// Phase UX-1: User-friendly algorithm names for spam detection results
     /// </summary>
-    private string GetFriendlyCheckName(CheckName checkName)
+    private static string GetFriendlyCheckName(CheckName checkName)
     {
-        return checkName.ToString() switch
+        return checkName switch
         {
-            "CASBanned" => "CAS",
-            "StopWords" => "Keywords",
-            "SimilarityCheck" => "Similarity",
-            "NaiveBayes" => "Bayes",
-            "OpenAI" => "AI",
-            "ThreatIntelligence" => "Threat Intel",
-            "ImageSpam" => "Image",
-            "MultiLanguage" => "Language",
-            "SpacingAnalysis" => "Spacing",
+            CheckName.CAS => "CAS",
+            CheckName.StopWords => "Keywords",
+            CheckName.Similarity => "Similarity",
+            CheckName.Bayes => "Bayes",
+            CheckName.OpenAI => "AI",
+            CheckName.ThreatIntel => "Threat Intel",
+            CheckName.ImageSpam => "Image",
+            CheckName.VideoSpam => "Video",
+            CheckName.Spacing => "Spacing",
+            CheckName.InvisibleChars => "Invisible Chars",
+            CheckName.UrlBlocklist => "URL Block",
+            CheckName.SeoScraping => "SEO Spam",
+            CheckName.FileScanning => "File Scan",
             _ => checkName.ToString()
         };
     }
