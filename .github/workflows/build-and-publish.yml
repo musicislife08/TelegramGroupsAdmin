@@ -1,18 +1,8 @@
 name: Build and Publish
 
 on:
-  push:
-    branches:
-      - master
-      - develop
-    paths-ignore:
-      - 'CLAUDE.md'
-      - 'README.md'
-      - 'BACKLOG.md'
-      - 'LICENSE'
-      - '.gitignore'
-      - '.gitattributes'
-      - '.github/workflows/claude*.yml'
+  # Note: No push trigger - branch protection enforces PR-only workflow
+  # This prevents duplicate CI runs when PRs are merged (both push and pull_request[closed] would fire)
   pull_request:
     types: [opened, ready_for_review, synchronize, closed]
     branches:
@@ -35,8 +25,9 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-latest
 
-    # Skip draft PRs to save CI minutes (homelab deployment doesn't need draft builds)
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    # Skip draft PRs and closed (merged) PRs to save CI minutes
+    # Build already ran during PR review, no need to run again on merge
+    if: github.event.pull_request.draft == false && github.event.action != 'closed'
 
     outputs:
       semver: ${{ steps.gitversion.outputs.semVer }}
