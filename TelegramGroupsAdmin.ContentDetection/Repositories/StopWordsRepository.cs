@@ -181,4 +181,31 @@ public class StopWordsRepository : IStopWordsRepository
             throw;
         }
     }
+
+    /// <summary>
+    /// Delete a stop word by ID
+    /// </summary>
+    public async Task<bool> DeleteStopWordAsync(long id, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        try
+        {
+            var stopWord = await context.StopWords.FindAsync([id], cancellationToken);
+            if (stopWord == null)
+            {
+                return false;
+            }
+
+            context.StopWords.Remove(stopWord);
+            await context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Deleted stop word {Id} ({Word})", id, stopWord.Word);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete stop word {Id}", id);
+            throw;
+        }
+    }
 }
