@@ -135,6 +135,16 @@ public partial class MessageProcessingService(
                 message.MessageId,
                 message.Chat.Id);
 
+            // Skip deletion if the bot itself was removed from the group
+            // Bot no longer has permissions to delete messages after being kicked
+            if (message.LeftChatMember != null && message.LeftChatMember.Id == botClient.BotId)
+            {
+                logger.LogInformation(
+                    "Skipping deletion of LeftChatMember service message - bot was removed from chat {ChatId}",
+                    message.Chat.Id);
+                return; // Don't try to delete or process further
+            }
+
             try
             {
                 // Use BotMessageService for tracked deletion
