@@ -1,4 +1,6 @@
 @using TelegramGroupsAdmin.Helpers
+@using TelegramGroupsAdmin.ContentDetection.Utilities
+@using TelegramGroupsAdmin.ContentDetection.Models
 @* Telegram-authentic message bubble design *@
 
 <div class="@GetBubbleClass()" @onclick:stopPropagation="true" data-message-id="@Message.MessageId">
@@ -67,8 +69,15 @@
                 }
                 @if (SpamCheck != null)
                 {
-                    <span class="tg-badge tg-badge-@(SpamCheck.IsSpam ? "spam" : "ham")">
+                    var contributingFactors = GetContributingFactors();
+                    var tooltipText = GetDetectionTooltip(contributingFactors);
+
+                    <span class="tg-badge tg-badge-@(SpamCheck.IsSpam ? "spam" : "ham")" title="@tooltipText">
                         @(SpamCheck.IsSpam ? "spam" : "ham") @SpamCheck.Confidence%
+                        @if (contributingFactors?.Any() == true)
+                        {
+                            <span style="font-weight: normal; opacity: 0.9;"> • @string.Join(", ", contributingFactors)</span>
+                        }
                     </span>
                 }
                 @* Phase 4.20: Translation badge with toggle *@
@@ -621,5 +630,86 @@
         public string? Description { get; init; }
         public string? OgTitle { get; init; }
         public string? OgDescription { get; init; }
+    }
+
+    /// <summary>
+    /// Get top contributing factors from detection history for spam/ham badge
+    /// Phase UX-1: Show which algorithms contributed to the decision
+    /// </summary>
+    private List<string>? GetContributingFactors()
+    {
+        if (DetectionHistory == null || !DetectionHistory.Any())
+            return null;
+
+        // Get the latest detection result
+        var latest = DetectionHistory.OrderByDescending(d => d.DetectedAt).FirstOrDefault();
+        if (latest?.CheckResultsJson == null)
+            return null;
+
+        // Parse the check results
+        var checkResults = CheckResultsSerializer.Deserialize(latest.CheckResultsJson);
+        if (checkResults == null || !checkResults.Any())
+            return null;
+
+        // Get top 3 contributing algorithms (highest confidence spam or ham checks)
+        var topContributors = checkResults
+            .Where(c => c.Confidence > 0)  // Only show checks that had confidence
+            .OrderByDescending(c => c.Confidence)
+            .Take(3)
+            .Select(c => $"{GetFriendlyCheckName(c.CheckName)} {c.Confidence}%")
+            .ToList();
+
+        return topContributors.Any() ? topContributors : null;
+    }
+
+    /// <summary>
+    /// Get tooltip text showing full detection details
+    /// Phase UX-1: Enhanced transparency for spam detection decisions
+    /// </summary>
+    private string GetDetectionTooltip(List<string>? contributingFactors)
+    {
+        if (DetectionHistory == null || !DetectionHistory.Any())
+            return SpamCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
+
+        var latest = DetectionHistory.OrderByDescending(d => d.DetectedAt).FirstOrDefault();
+        if (latest == null)
+            return SpamCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
+
+        var tooltip = $"{(latest.IsSpam ? "SPAM" : "HAM")} - {latest.NetConfidence}% confidence\n";
+        tooltip += $"Detection: {latest.DetectionMethod}\n";
+        tooltip += $"Source: {latest.DetectionSource}\n";
+
+        if (contributingFactors?.Any() == true)
+        {
+            tooltip += $"\nTop Contributors:\n• {string.Join("\n• ", contributingFactors)}";
+        }
+
+        if (!string.IsNullOrEmpty(latest.Reason))
+        {
+            tooltip += $"\n\nReason: {latest.Reason}";
+        }
+
+        return tooltip;
+    }
+
+    /// <summary>
+    /// Convert CheckName enum to friendly display name
+    /// Phase UX-1: User-friendly algorithm names
+    /// </summary>
+    private string GetFriendlyCheckName(CheckName checkName)
+    {
+        return checkName.ToString() switch
+        {
+            "CASBanned" => "CAS",
+            "StopWords" => "Keywords",
+            "SimilarityCheck" => "Similarity",
+            "NaiveBayes" => "Bayes",
+            "OpenAI" => "AI",
+            "ThreatIntelligence" => "Threat Intel",
+            "ImageSpam" => "Image",
+            "MultiLanguage" => "Language",
+            "SpacingAnalysis" => "Spacing",
+            _ => checkName.ToString()
+        };
     }
 }

@@ -31,7 +31,7 @@ open http://localhost:8080
 ```
 
 **Image location:** `ghcr.io/musicislife08/telegramgroupsadmin:latest`
-*(GitHub Actions CI/CD pipeline planned - images will be published on release)*
+*(Images automatically published via GitHub Actions on every release)*
 
 ---
 
@@ -130,16 +130,15 @@ All data is stored in `./data/` directory (relative to compose.yml location):
 
 ```
 ./data/
-├── postgres/     # PostgreSQL database files
-├── clamav/       # ClamAV virus signatures (~200MB)
-├── app/          # Application data:
-│   ├── keys/     #   Data Protection encryption keys (NEVER DELETE!)
-│   ├── images/   #   Downloaded message images
-│   └── media/    #   Downloaded media files
-└── backups/      # Database backups (from --export command)
+├── postgres/  # PostgreSQL database files
+├── clamav/    # ClamAV virus signatures (~200MB)
+├── keys/      # Data Protection encryption keys (NEVER DELETE!)
+├── images/    # Downloaded message images
+├── media/     # Downloaded media files
+└── backups/   # Database backups (from --export command)
 ```
 
-**⚠️ Important:** Never delete `./data/app/keys/` - contains encryption keys!
+**⚠️ Important:** Never delete `./data/keys/` - contains encryption keys!
 
 ---
 
