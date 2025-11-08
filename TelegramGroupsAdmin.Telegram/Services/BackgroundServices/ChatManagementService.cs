@@ -673,7 +673,7 @@ public class ChatManagementService(
     }
 
     /// <summary>
-    /// Refresh health for all managed chats
+    /// Refresh health for all active managed chats (excludes chats where bot was removed)
     /// </summary>
     public async Task RefreshAllHealthAsync(ITelegramBotClient? botClient, CancellationToken cancellationToken = default)
     {
@@ -687,14 +687,14 @@ public class ChatManagementService(
 
             using var scope = serviceProvider.CreateScope();
             var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-            var chats = await managedChatsRepository.GetAllChatsAsync(cancellationToken);
+            var chats = await managedChatsRepository.GetActiveChatsAsync(cancellationToken);
 
-            foreach (var chat in chats.Where(c => c.IsActive))
+            foreach (var chat in chats)
             {
                 await RefreshHealthForChatAsync(botClient, chat.ChatId, cancellationToken);
             }
 
-            logger.LogDebug("Completed health check for {Count} chats", chats.Count(c => c.IsActive));
+            logger.LogDebug("Completed health check for {Count} active chats", chats.Count);
         }
         catch (Exception ex)
         {
