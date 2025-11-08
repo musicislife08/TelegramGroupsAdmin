@@ -42,7 +42,7 @@ public class StopWordsSpamCheck(
     /// Execute stop words spam check with strongly-typed request
     /// Config comes from request - check loads stop words from DB with guardrails
     /// </summary>
-    public async Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public async ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (StopWordsCheckRequest)request;
 

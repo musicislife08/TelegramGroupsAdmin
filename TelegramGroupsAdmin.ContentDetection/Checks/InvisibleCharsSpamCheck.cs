@@ -25,7 +25,7 @@ public class InvisibleCharsSpamCheck(ILogger<InvisibleCharsSpamCheck> logger) : 
         return true;
     }
 
-    public Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (InvisibleCharsCheckRequest)request;
 
@@ -38,7 +38,7 @@ public class InvisibleCharsSpamCheck(ILogger<InvisibleCharsSpamCheck> logger) : 
                 logger.LogDebug("InvisibleChars check for user {UserId}: Found {Count} invisible characters",
                     req.UserId, count);
 
-                return Task.FromResult(new ContentCheckResponse
+                return new ValueTask<ContentCheckResponse>(new ContentCheckResponse
                 {
                     CheckName = CheckName,
                     Result = CheckResultType.Spam,
@@ -50,7 +50,7 @@ public class InvisibleCharsSpamCheck(ILogger<InvisibleCharsSpamCheck> logger) : 
             // Phase 2.6: Asymmetric confidence scoring
             // Simple checks have low confidence when NOT spam (absence of evidence ≠ strong evidence)
             // 20% confidence in "not spam" result (vs 0% before)
-            return Task.FromResult(new ContentCheckResponse
+            return new ValueTask<ContentCheckResponse>(new ContentCheckResponse
             {
                 CheckName = CheckName,
                 Result = CheckResultType.Clean,
@@ -60,7 +60,7 @@ public class InvisibleCharsSpamCheck(ILogger<InvisibleCharsSpamCheck> logger) : 
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId));
+            return new ValueTask<ContentCheckResponse>(ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId));
         }
     }
 

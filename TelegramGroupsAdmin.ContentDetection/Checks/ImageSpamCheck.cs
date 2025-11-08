@@ -51,7 +51,7 @@ public class ImageSpamCheck(
     /// <summary>
     /// Execute image spam check using OpenAI Vision
     /// </summary>
-    public async Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public async ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (ImageCheckRequest)request;
 

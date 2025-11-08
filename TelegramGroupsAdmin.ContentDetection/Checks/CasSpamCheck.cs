@@ -39,7 +39,7 @@ public class CasSpamCheck(
     /// Execute CAS spam check with strongly-typed request
     /// Config comes from request - no database access needed
     /// </summary>
-    public async Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public async ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (CasCheckRequest)request;
 

@@ -23,7 +23,7 @@ public interface IConfigService
     /// <param name="configType">Type of config (enum for type safety)</param>
     /// <param name="chatId">Chat ID (null for global config)</param>
     /// <returns>Configuration object or null if not found</returns>
-    Task<T?> GetAsync<T>(ConfigType configType, long? chatId) where T : class;
+    ValueTask<T?> GetAsync<T>(ConfigType configType, long? chatId) where T : class;
 
     /// <summary>
     /// Get effective configuration for a chat by merging global and chat-specific settings
@@ -33,7 +33,7 @@ public interface IConfigService
     /// <param name="configType">Type of config (enum for type safety)</param>
     /// <param name="chatId">Chat ID (returns global config if null)</param>
     /// <returns>Merged configuration object or null if no config exists</returns>
-    Task<T?> GetEffectiveAsync<T>(ConfigType configType, long? chatId) where T : class;
+    ValueTask<T?> GetEffectiveAsync<T>(ConfigType configType, long? chatId) where T : class;
 
     /// <summary>
     /// Delete a configuration value for a specific config type and chat
@@ -46,7 +46,7 @@ public interface IConfigService
     /// Get the encrypted Telegram bot token from database (global config only, chat_id = 0)
     /// Returns decrypted token or null if not configured
     /// </summary>
-    Task<string?> GetTelegramBotTokenAsync();
+    ValueTask<string?> GetTelegramBotTokenAsync();
 
     /// <summary>
     /// Save the Telegram bot token to database (encrypted, global config only, chat_id = 0)

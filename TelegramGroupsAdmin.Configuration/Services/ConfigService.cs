@@ -66,7 +66,7 @@ public class ConfigService(
         }
     }
 
-    public async Task<T?> GetAsync<T>(ConfigType configType, long? chatId) where T : class
+    public async ValueTask<T?> GetAsync<T>(ConfigType configType, long? chatId) where T : class
     {
         var cacheKey = $"cfg_{configType}_{chatId}";
 
@@ -100,7 +100,7 @@ public class ConfigService(
         return config;
     }
 
-    public async Task<T?> GetEffectiveAsync<T>(ConfigType configType, long? chatId) where T : class
+    public async ValueTask<T?> GetEffectiveAsync<T>(ConfigType configType, long? chatId) where T : class
     {
         // If requesting global config, just return it directly (uses cached GetAsync)
         if (chatId == null)
@@ -187,7 +187,7 @@ public class ConfigService(
     /// Get the encrypted Telegram bot token from database (global config only, chat_id = 0)
     /// Returns decrypted token or null if not configured
     /// </summary>
-    public async Task<string?> GetTelegramBotTokenAsync()
+    public async ValueTask<string?> GetTelegramBotTokenAsync()
     {
         const string cacheKey = "cfg_telegram_bot_token";
 

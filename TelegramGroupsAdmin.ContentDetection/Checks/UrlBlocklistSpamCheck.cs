@@ -41,7 +41,7 @@ public partial class UrlBlocklistSpamCheck(
     /// <summary>
     /// Execute URL filter spam check (soft blocks only, hard blocks already filtered)
     /// </summary>
-    public async Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public async ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (UrlBlocklistCheckRequest)request;
 

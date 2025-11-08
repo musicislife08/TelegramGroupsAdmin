@@ -45,7 +45,7 @@ public class BayesSpamCheck(
     /// Execute Bayes spam check with strongly-typed request
     /// Config values come from request - check loads training data from DB with guardrails
     /// </summary>
-    public async Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public async ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (BayesCheckRequest)request;
 

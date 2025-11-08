@@ -55,7 +55,7 @@ public class VideoSpamCheck(
     /// <summary>
     /// Execute video spam check using 3-layer detection
     /// </summary>
-    public async Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public async ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (VideoCheckRequest)request;
 

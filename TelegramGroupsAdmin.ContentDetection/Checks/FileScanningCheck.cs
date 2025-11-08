@@ -48,7 +48,7 @@ public class FileScanningCheck : IContentCheck
         return false;
     }
 
-    public async Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public async ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (FileScanCheckRequest)request;
 

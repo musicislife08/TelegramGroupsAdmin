@@ -40,7 +40,7 @@ public partial class ThreatIntelSpamCheck(
     /// <summary>
     /// Execute threat intelligence spam check
     /// </summary>
-    public async Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public async ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (ThreatIntelCheckRequest)request;
 

@@ -33,9 +33,8 @@ public class SpacingSpamCheck(ILogger<SpacingSpamCheck> logger) : IContentCheck
     /// <summary>
     /// Execute spacing spam check with strongly-typed request
     /// Config comes from request - no database access needed
-    /// Note: Kept async for interface compliance even though no async operations
     /// </summary>
-    public Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (SpacingCheckRequest)request;
 
@@ -46,7 +45,7 @@ public class SpacingSpamCheck(ILogger<SpacingSpamCheck> logger) : IContentCheck
             var result = isSpam ? CheckResultType.Spam : CheckResultType.Clean;
             var confidence = CalculateConfidence(analysis);
 
-            return Task.FromResult(new ContentCheckResponse
+            return new ValueTask<ContentCheckResponse>(new ContentCheckResponse
             {
                 CheckName = CheckName,
                 Result = result,
@@ -56,7 +55,7 @@ public class SpacingSpamCheck(ILogger<SpacingSpamCheck> logger) : IContentCheck
         }
         catch (Exception ex)
         {
-            return Task.FromResult(ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId));
+            return new ValueTask<ContentCheckResponse>(ContentCheckHelpers.CreateFailureResponse(CheckName, ex, logger, req.UserId));
         }
     }
 

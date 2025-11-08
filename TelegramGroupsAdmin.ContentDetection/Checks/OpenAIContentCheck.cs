@@ -52,7 +52,7 @@ public class OpenAIContentCheck(
     /// <summary>
     /// Execute OpenAI spam check
     /// </summary>
-    public async Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public async ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (OpenAICheckRequest)request;
 

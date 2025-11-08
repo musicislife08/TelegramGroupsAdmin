@@ -63,7 +63,7 @@ public class SimilaritySpamCheck(
     /// Execute similarity spam check with strongly-typed request
     /// Config values come from request - check loads spam samples from DB with guardrails
     /// </summary>
-    public async Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public async ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (SimilarityCheckRequest)request;
 

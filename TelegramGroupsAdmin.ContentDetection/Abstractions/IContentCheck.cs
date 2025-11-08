@@ -23,7 +23,7 @@ public interface IContentCheck
     /// </summary>
     /// <param name="request">Strongly-typed request with all data needed for this check</param>
     /// <returns>The result of this content check</returns>
-    Task<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request);
+    ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request);
 
     /// <summary>
     /// Whether this check should be executed for the given request
