@@ -8,9 +8,11 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
 {
     public async Task<ConfigRecordDto?> GetAsync(long? chatId, CancellationToken cancellationToken = default)
     {
+        // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
+        var normalizedChatId = chatId ?? 0;
         return await context.Configs
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
+            .FirstOrDefaultAsync(c => c.ChatId == normalizedChatId, cancellationToken);
     }
 
     public async Task UpsertAsync(ConfigRecordDto config, CancellationToken cancellationToken = default)
@@ -53,8 +55,10 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
 
     public async Task DeleteAsync(long? chatId, CancellationToken cancellationToken = default)
     {
+        // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
+        var normalizedChatId = chatId ?? 0;
         var config = await context.Configs
-            .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
+            .FirstOrDefaultAsync(c => c.ChatId == normalizedChatId, cancellationToken);
 
         if (config != null)
         {
