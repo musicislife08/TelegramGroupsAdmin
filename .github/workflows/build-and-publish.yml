@@ -277,22 +277,36 @@ jobs:
           AMD64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-amd64-${SEMVER}"
           ARM64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-arm64-${SEMVER}"
 
-          # Create and push manifest for each tag
+          # Create and push manifest for each tag with error handling
           IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
+          FAILED_TAGS=()
+
           for TAG in "${TAG_ARRAY[@]}"; do
             echo "Creating manifest for ${TAG}..."
-            docker buildx imagetools create -t "${TAG}" \
+            if docker buildx imagetools create -t "${TAG}" \
               "${AMD64_IMAGE}" \
-              "${ARM64_IMAGE}"
+              "${ARM64_IMAGE}"; then
+              echo "  ✓ Successfully created manifest for ${TAG}"
+            else
+              echo "  ✗ Failed to create manifest for ${TAG}"
+              FAILED_TAGS+=("${TAG}")
+            fi
           done
 
-          echo "Multi-arch manifests published successfully!"
+          # Check if any manifests failed
+          if [ ${#FAILED_TAGS[@]} -gt 0 ]; then
+            echo "❌ Failed to create manifests for: ${FAILED_TAGS[*]}"
+            exit 1
+          fi
+
+          echo "✅ All multi-arch manifests published successfully!"
 
       - name: Cleanup intermediate images
         if: always()
         env:
           SEMVER: ${{ needs.docker-version.outputs.semver }}
           REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Convert repository name to lowercase for Docker
           REPO_LOWER="${REPO,,}"
@@ -303,16 +317,34 @@ jobs:
 
           echo "Cleaning up intermediate platform images..."
 
-          # Delete intermediate images (ignore errors if already deleted)
-          gh api --method DELETE "/user/packages/container/${REPO_LOWER}/versions" \
-            -f name="build-amd64-${SEMVER}" 2>/dev/null || echo "AMD64 intermediate image already cleaned"
+          # Get package name from repository (remove org prefix)
+          PACKAGE_NAME="${REPO_LOWER#*/}"
 
-          gh api --method DELETE "/user/packages/container/${REPO_LOWER}/versions" \
-            -f name="build-arm64-${SEMVER}" 2>/dev/null || echo "ARM64 intermediate image already cleaned"
+          # Delete intermediate images by tag (ignore errors if already deleted)
+          # Note: These are build-only intermediate images, safe to delete after manifest merge
+          for TAG in "build-amd64-${SEMVER}" "build-arm64-${SEMVER}"; do
+            echo "Attempting to delete ${TAG}..."
+
+            # Get version ID for this tag
+            VERSION_ID=$(gh api \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/user/packages/container/${PACKAGE_NAME}/versions" \
+              --jq ".[] | select(.metadata.container.tags[] | contains(\"${TAG}\")) | .id" 2>/dev/null || echo "")
+
+            if [ -n "$VERSION_ID" ]; then
+              gh api --method DELETE \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "/user/packages/container/${PACKAGE_NAME}/versions/${VERSION_ID}" 2>/dev/null \
+                && echo "  ✓ Deleted ${TAG}" \
+                || echo "  ⚠ Failed to delete ${TAG} (version ID: ${VERSION_ID})"
+            else
+              echo "  ℹ ${TAG} not found or already cleaned"
+            fi
+          done
 
           echo "✅ Intermediate images cleanup complete"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Image published summary
         env:

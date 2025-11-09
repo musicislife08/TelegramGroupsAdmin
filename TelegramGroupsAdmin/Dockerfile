@@ -56,8 +56,12 @@ RUN wget -q https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.trainedd
 # Stage 2: Tesseract Build Environment
 # Install Tesseract OCR with all dependencies for target architecture
 # Separate stage to cache these heavy system packages
+# Platform-aware to ensure correct architecture binaries are installed
 # -----------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS tesseract-env
+FROM --platform=$TARGETPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS tesseract-env
+
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
 
 # Install Tesseract OCR and dependencies
 # These will be copied to final runtime image
