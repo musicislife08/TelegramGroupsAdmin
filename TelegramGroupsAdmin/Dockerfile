@@ -101,8 +101,8 @@ COPY ["TelegramGroupsAdmin.ContentDetection/TelegramGroupsAdmin.ContentDetection
 
 # Restore with runtime identifier for cross-compilation
 # Runs on BUILDPLATFORM (fast AMD64), downloads packages for TARGETPLATFORM
-# Cache mount with sharing=locked prevents corruption from concurrent builds
-RUN --mount=type=cache,target=/root/.nuget/packages,id=nuget-$TARGETPLATFORM,sharing=locked \
+# Unified cache for multi-arch builds (when building both platforms in single job)
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
     case "$TARGETPLATFORM" in \
         "linux/amd64") RID="linux-x64" ;; \
         "linux/arm64") RID="linux-arm64" ;; \
@@ -134,8 +134,8 @@ COPY . .
 
 # Build and publish with cross-compilation
 # KEY OPTIMIZATION: Runs on AMD64 host, compiles for ARM64 target (no QEMU!)
-# Cache mount with sharing=locked prevents corruption from concurrent builds
-RUN --mount=type=cache,target=/root/.nuget/packages,id=nuget-$TARGETPLATFORM,sharing=locked \
+# Unified cache for multi-arch builds (matches restore stage cache)
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
     case "$TARGETPLATFORM" in \
         "linux/amd64") RID="linux-x64" ;; \
         "linux/arm64") RID="linux-arm64" ;; \
