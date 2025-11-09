@@ -84,31 +84,15 @@ jobs:
       - name: Run all tests
         run: dotnet test --no-build --configuration Release --verbosity normal
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image (validation only, no push)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./TelegramGroupsAdmin/Dockerfile
-          platforms: linux/amd64
-          push: false
-          cache-from: type=gha,scope=buildx-amd64
-          tags: telegramgroupsadmin:pr-${{ github.event.pull_request.number }}
-
-      - name: Docker build summary
-        run: |
-          echo "### Docker Build Validated :whale:" >> $GITHUB_STEP_SUMMARY
-          echo "Multi-stage Dockerfile builds successfully for AMD64" >> $GITHUB_STEP_SUMMARY
-
   # Shared versioning job for Docker builds (runs before parallel platform builds)
   docker-version:
     name: Determine Docker Version
     runs-on: ubuntu-latest
 
-    # Only run on push events to develop/master (after PR merge)
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
+    # Run on PRs to develop/master (validation) and pushes to develop/master (publish)
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'))
 
     outputs:
       semver: ${{ steps.gitversion.outputs.semVer }}
@@ -200,7 +184,8 @@ jobs:
           context: .
           file: ./TelegramGroupsAdmin/Dockerfile
           platforms: ${{ matrix.platform }}
-          push: true
+          # Push only on post-merge (push events), validate only on PRs
+          push: ${{ github.event_name == 'push' }}
           # Tag with platform suffix for intermediate images (merged later)
           tags: ${{ env.REGISTRY }}/${{ github.repository }}:build-${{ matrix.platform_tag }}-${{ needs.docker-version.outputs.semver }}
           # Per-platform cache keys for better cache reuse
@@ -214,9 +199,17 @@ jobs:
         env:
           PLATFORM: ${{ matrix.platform }}
           VERSION: ${{ needs.docker-version.outputs.semver }}
+          EVENT: ${{ github.event_name }}
         run: |
-          echo "### Built $PLATFORM Image :package:" >> $GITHUB_STEP_SUMMARY
+          if [ "$EVENT" == "pull_request" ]; then
+            echo "### Validated $PLATFORM Build :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+            echo "**Status:** Build validation only (no push)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Built $PLATFORM Image :package:" >> $GITHUB_STEP_SUMMARY
+            echo "**Status:** Built and pushed to registry" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "**Version:** ${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** ${PLATFORM}" >> $GITHUB_STEP_SUMMARY
           echo "**Runner:** ${{ matrix.runner }}" >> $GITHUB_STEP_SUMMARY
 
   # Merge multi-arch manifest and push final images
@@ -224,6 +217,9 @@ jobs:
     name: Publish Multi-Arch Manifest
     runs-on: ubuntu-latest
     needs: [docker-version, build-platform-images]
+
+    # Only run on push events (after PR merge) since manifest requires pushed images
+    if: github.event_name == 'push'
 
     permissions:
       contents: read
