@@ -181,9 +181,9 @@ jobs:
           # Push only on post-merge (push events), validate only on PRs
           push: ${{ github.event_name == 'push' }}
           tags: ${{ needs.docker-version.outputs.tags }}
-          # Unified cache for both platforms
-          cache-from: type=gha,scope=buildx-multiarch
-          cache-to: type=gha,mode=max,scope=buildx-multiarch
+          # Unified cache for both platforms (v2: force fresh cache after fixing NuGet cache IDs)
+          cache-from: type=gha,scope=buildx-multiarch-v2
+          cache-to: type=gha,mode=max,scope=buildx-multiarch-v2
           # Enable BuildKit inline cache for cross-platform sharing
           build-args: |
             BUILDKIT_INLINE_CACHE=1
