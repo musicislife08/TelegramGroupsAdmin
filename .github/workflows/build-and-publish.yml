@@ -174,23 +174,27 @@ jobs:
           # Install Docker Desktop for Mac via Homebrew
           brew install --cask docker
 
-          # Start Docker Desktop and wait for it to be ready
-          open -a Docker
+          # Start Docker Desktop (correct app name)
+          sudo open -a "Docker Desktop"
 
-          # Wait for Docker daemon to be ready (max 60s)
-          echo "Waiting for Docker to start..."
-          for i in {1..30}; do
+          # Wait for Docker daemon to be ready (max 2 minutes)
+          echo "Waiting for Docker daemon to start..."
+          for i in {1..60}; do
             if docker info >/dev/null 2>&1; then
               echo "Docker is ready!"
+              docker --version
+              docker info
               break
             fi
-            echo "Waiting for Docker... ($i/30)"
+            echo "Waiting for Docker... ($i/60)"
             sleep 2
           done
 
-          # Verify Docker is working
-          docker --version
-          docker info
+          # Fail if Docker didn't start
+          if ! docker info >/dev/null 2>&1; then
+            echo "ERROR: Docker failed to start"
+            exit 1
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
