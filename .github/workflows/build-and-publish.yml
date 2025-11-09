@@ -84,18 +84,19 @@ jobs:
       - name: Run all tests
         run: dotnet test --no-build --configuration Release --verbosity normal
 
-  publish-docker:
-    name: Build and Publish Docker Image
+  # Shared versioning job for Docker builds (runs before parallel platform builds)
+  docker-version:
+    name: Determine Docker Version
     runs-on: ubuntu-latest
 
-    # Only run on push events to develop/master (after PR merge), skip during PR review
-    # This ensures Docker images are built from the correct branch (not the deleted feature branch)
-    # Note: No dependency on build-and-test job - this job is self-sufficient and re-runs GitVersion independently
+    # Only run on push events to develop/master (after PR merge)
     if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
 
-    permissions:
-      contents: read
-      packages: write
+    outputs:
+      semver: ${{ steps.gitversion.outputs.semVer }}
+      major: ${{ steps.gitversion.outputs.major }}
+      minor: ${{ steps.gitversion.outputs.minor }}
+      tags: ${{ steps.docker-tags.outputs.tags }}
 
     steps:
       - name: Checkout code
@@ -111,16 +112,6 @@ jobs:
       - name: Determine Version
         id: gitversion
         uses: gittools/actions/gitversion/execute@v1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine Docker tags
         id: docker-tags
@@ -146,21 +137,121 @@ jobs:
           fi
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
 
-      - name: Build and push Docker image
+  # Parallel platform-specific builds (AMD64 and ARM64 run concurrently)
+  build-platform-images:
+    name: Build ${{ matrix.platform }} Image
+    runs-on: ${{ matrix.runner }}
+    needs: docker-version
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false  # Continue ARM build even if AMD fails (or vice versa)
+      matrix:
+        include:
+          # AMD64 build on standard GitHub runners (fast, no QEMU)
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            platform_tag: amd64
+
+          # ARM64 build options:
+          # Option 1 (CURRENT): Standard GitHub runner with QEMU emulation (slower but free)
+          # Option 2 (FASTER): Native ARM runners (comment out above, uncomment below)
+          #   GitHub ARM runners: ~same cost as standard ($0.008/min)
+          #   Runs-on syntax: runs-on: ubuntu-latest-arm
+          #   Requires GitHub-hosted ARM runners or self-hosted ARM runners
+          - platform: linux/arm64
+            runner: ubuntu-latest  # Uses QEMU emulation (slower)
+            # runner: ubuntu-latest-arm  # Uncomment for native ARM runners (3x faster)
+            platform_tag: arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push platform image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./TelegramGroupsAdmin/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ steps.docker-tags.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Tag with platform suffix for intermediate images (merged later)
+          tags: ${{ env.REGISTRY }}/${{ github.repository }}:build-${{ matrix.platform_tag }}-${{ needs.docker-version.outputs.semver }}
+          # Per-platform cache keys for better cache reuse
+          cache-from: type=gha,scope=buildx-${{ matrix.platform_tag }}
+          cache-to: type=gha,mode=max,scope=buildx-${{ matrix.platform_tag }}
+          # Enable BuildKit inline cache for cross-platform sharing
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Build summary
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          VERSION: ${{ needs.docker-version.outputs.semver }}
+        run: |
+          echo "### Built $PLATFORM Image :package:" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "**Runner:** ${{ matrix.runner }}" >> $GITHUB_STEP_SUMMARY
+
+  # Merge multi-arch manifest and push final images
+  publish-manifest:
+    name: Publish Multi-Arch Manifest
+    runs-on: ubuntu-latest
+    needs: [docker-version, build-platform-images]
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
+        env:
+          TAGS: ${{ needs.docker-version.outputs.tags }}
+          SEMVER: ${{ needs.docker-version.outputs.semver }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Convert repository name to lowercase for Docker
+          REPO_LOWER="${REPO,,}"
+
+          # Platform-specific intermediate images
+          AMD64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-amd64-${SEMVER}"
+          ARM64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-arm64-${SEMVER}"
+
+          # Create and push manifest for each tag
+          IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
+          for TAG in "${TAG_ARRAY[@]}"; do
+            echo "Creating manifest for ${TAG}..."
+            docker buildx imagetools create -t "${TAG}" \
+              "${AMD64_IMAGE}" \
+              "${ARM64_IMAGE}"
+          done
+
+          echo "Multi-arch manifests published successfully!"
 
       - name: Image published summary
         env:
-          TAGS: ${{ steps.docker-tags.outputs.tags }}
-          VERSION: ${{ steps.gitversion.outputs.semVer }}
+          TAGS: ${{ needs.docker-version.outputs.tags }}
+          VERSION: ${{ needs.docker-version.outputs.semver }}
           BRANCH_NAME: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
@@ -172,6 +263,14 @@ jobs:
           echo "**Version:** ${VERSION}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Architectures:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Strategy:** Parallel platform builds + manifest merge" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Optimizations:**" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Cross-compilation (no QEMU for builds)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Parallel AMD64 + ARM64 builds" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Per-platform cache keys" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Multi-stage Dockerfile (5 stages)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
