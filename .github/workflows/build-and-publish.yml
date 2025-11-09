@@ -84,6 +84,24 @@ jobs:
       - name: Run all tests
         run: dotnet test --no-build --configuration Release --verbosity normal
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (validation only, no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./TelegramGroupsAdmin/Dockerfile
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha,scope=buildx-amd64
+          tags: telegramgroupsadmin:pr-${{ github.event.pull_request.number }}
+
+      - name: Docker build summary
+        run: |
+          echo "### Docker Build Validated :whale:" >> $GITHUB_STEP_SUMMARY
+          echo "Multi-stage Dockerfile builds successfully for AMD64" >> $GITHUB_STEP_SUMMARY
+
   # Shared versioning job for Docker builds (runs before parallel platform builds)
   docker-version:
     name: Determine Docker Version
@@ -156,15 +174,10 @@ jobs:
             runner: ubuntu-latest
             platform_tag: amd64
 
-          # ARM64 build options:
-          # Option 1 (CURRENT): Standard GitHub runner with QEMU emulation (slower but free)
-          # Option 2 (FASTER): Native ARM runners (comment out above, uncomment below)
-          #   GitHub ARM runners: ~same cost as standard ($0.008/min)
-          #   Runs-on syntax: runs-on: ubuntu-latest-arm
-          #   Requires GitHub-hosted ARM runners or self-hosted ARM runners
+          # ARM64 build on native ARM runners (3x faster than QEMU)
+          # GitHub ARM runners: Same cost as standard ($0.008/min)
           - platform: linux/arm64
-            runner: ubuntu-latest  # Uses QEMU emulation (slower)
-            # runner: ubuntu-latest-arm  # Uncomment for native ARM runners (3x faster)
+            runner: ubuntu-latest-arm
             platform_tag: arm64
 
     steps:
