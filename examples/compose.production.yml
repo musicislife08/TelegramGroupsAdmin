@@ -70,8 +70,8 @@ services:
 
   # ---------------------------------------------------------------------------
   # TelegramGroupsAdmin Application (GitHub Container Registry)
-  # NOTE: Images will be published to GHCR via GitHub Actions (CI/CD pipeline planned)
-  # For now, use compose.development.yml to build from source
+  # NOTE: Images are automatically published to GHCR via GitHub Actions on every release
+  # Latest stable: ghcr.io/musicislife08/telegramgroupsadmin:latest
   # ---------------------------------------------------------------------------
   app:
     image: ghcr.io/musicislife08/telegramgroupsadmin:latest
@@ -176,9 +176,9 @@ networks:
 # =============================================================================
 # ./data/postgres/  - PostgreSQL database files
 # ./data/clamav/    - ClamAV virus signatures (~200MB)
-# ./data/app/       - Application data:
-#   ./data/app/keys/   - Data Protection keys (DO NOT DELETE!)
-#   ./data/app/images/ - Downloaded message images
-#   ./data/app/media/  - Downloaded media files (videos, audio, etc.)
+# ./data/           - Application data:
+#   ./data/keys/      - Data Protection keys (DO NOT DELETE!)
+#   ./data/images/    - Downloaded message images
+#   ./data/media/     - Downloaded media files (videos, audio, etc.)
 # ./backups/        - Database backup files (from /export command)
 # =============================================================================

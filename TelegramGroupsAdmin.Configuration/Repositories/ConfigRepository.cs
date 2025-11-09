@@ -8,9 +8,11 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
 {
     public async Task<ConfigRecordDto?> GetAsync(long? chatId, CancellationToken cancellationToken = default)
     {
+        // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
+        var normalizedChatId = chatId ?? 0;
         return await context.Configs
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
+            .FirstOrDefaultAsync(c => c.ChatId == normalizedChatId, cancellationToken);
     }
 
     public async Task UpsertAsync(ConfigRecordDto config, CancellationToken cancellationToken = default)
@@ -20,9 +22,26 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
 
         if (existing != null)
         {
-            // Update existing record using EF Core's SetValues
-            context.Entry(existing).CurrentValues.SetValues(config);
+            // Update existing record - manually copy properties to avoid Id modification error
+            // DO NOT use SetValues() - it tries to copy Id which is a key property
+            // NOTE: ChatId is NOT copied - we queried by ChatId, so it's already the same value (immutable natural key)
+            existing.SpamDetectionConfig = config.SpamDetectionConfig;
+            existing.WelcomeConfig = config.WelcomeConfig;
+            existing.LogConfig = config.LogConfig;
+            existing.ModerationConfig = config.ModerationConfig;
+            existing.BotProtectionConfig = config.BotProtectionConfig;
+            existing.TelegramBotConfig = config.TelegramBotConfig;
+            existing.FileScanningConfig = config.FileScanningConfig;
+            existing.BackgroundJobsConfig = config.BackgroundJobsConfig;
+            existing.ApiKeys = config.ApiKeys;
+            existing.BackupEncryptionConfig = config.BackupEncryptionConfig;
+            existing.PassphraseEncrypted = config.PassphraseEncrypted;
+            existing.InviteLink = config.InviteLink;
+            existing.TelegramBotTokenEncrypted = config.TelegramBotTokenEncrypted;
+            existing.OpenAIConfig = config.OpenAIConfig;
+            existing.SendGridConfig = config.SendGridConfig;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
+            // Immutable properties NOT copied: Id (primary key), ChatId (natural key used for query), CreatedAt (database default)
         }
         else
         {
@@ -36,8 +55,10 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
 
     public async Task DeleteAsync(long? chatId, CancellationToken cancellationToken = default)
     {
+        // Normalize null to 0 for global config (SQL NULL comparison doesn't work with ==)
+        var normalizedChatId = chatId ?? 0;
         var config = await context.Configs
-            .FirstOrDefaultAsync(c => c.ChatId == chatId, cancellationToken);
+            .FirstOrDefaultAsync(c => c.ChatId == normalizedChatId, cancellationToken);
 
         if (config != null)
         {
