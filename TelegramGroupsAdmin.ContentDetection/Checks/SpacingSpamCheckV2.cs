@@ -1,0 +1,79 @@
+using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
+using TelegramGroupsAdmin.ContentDetection.Models;
+
+namespace TelegramGroupsAdmin.ContentDetection.Checks;
+
+/// <summary>
+/// V2 spacing check with proper abstention
+/// Scoring: 0.8 points when patterns found (research: formatting anomaly = 0.8)
+/// </summary>
+public class SpacingSpamCheckV2(ILogger<SpacingSpamCheckV2> logger) : IContentCheckV2
+{
+    private const double ScoreFormattingAnomaly = 0.8;
+
+    public CheckName CheckName => CheckName.Spacing;
+
+    public bool ShouldExecute(ContentCheckRequest request)
+    {
+        return !string.IsNullOrWhiteSpace(request.Message);
+    }
+
+    public ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
+    {
+        var req = (SpacingCheckRequest)request;
+
+        try
+        {
+            var (hasSuspiciousSpacing, details) = CheckForSuspiciousSpacing(req.Message, req.SuspiciousRatioThreshold);
+
+            if (hasSuspiciousSpacing)
+            {
+                return ValueTask.FromResult(new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = ScoreFormattingAnomaly,
+                    Abstained = false,
+                    Details = details
+                });
+            }
+
+            return ValueTask.FromResult(new ContentCheckResponseV2
+            {
+                CheckName = CheckName,
+                Score = 0.0,
+                Abstained = true,
+                Details = "No suspicious spacing patterns detected"
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error in SpacingSpamCheckV2");
+            return ValueTask.FromResult(new ContentCheckResponseV2
+            {
+                CheckName = CheckName,
+                Score = 0.0,
+                Abstained = true,
+                Details = $"Error: {ex.Message}",
+                Error = ex
+            });
+        }
+    }
+
+    private static (bool hasSuspiciousSpacing, string details) CheckForSuspiciousSpacing(string message, double threshold)
+    {
+        // Simplified spacing check - count short words
+        var words = message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var shortWords = words.Count(w => w.Length <= 2);
+        var suspiciousRatio = words.Length > 0 ? (double)shortWords / words.Length : 0;
+
+        if (suspiciousRatio > threshold)
+        {
+            return (true, $"Suspicious short word ratio: {suspiciousRatio:P0}");
+        }
+
+        return (false, "No suspicious spacing detected");
+    }
+}
