@@ -139,34 +139,16 @@ jobs:
           fi
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
 
-  # Parallel platform-specific builds (AMD64 and ARM64 run concurrently)
-  build-platform-images:
-    name: Build ${{ matrix.platform }} Image
-    runs-on: ${{ matrix.runner }}
+  # Single multi-arch build (simplified approach - 30s slower but much simpler)
+  # Trade-off: AMD64 30s + ARM64 3min = 3.5min total vs 3min parallel
+  build-and-publish-multiarch:
+    name: Build and Publish Multi-Arch Image
+    runs-on: ubuntu-latest
     needs: docker-version
 
     permissions:
       contents: read
       packages: write
-
-    strategy:
-      fail-fast: false  # Continue ARM build even if AMD fails (or vice versa)
-      matrix:
-        include:
-          # AMD64 build on standard Ubuntu runners (native, no QEMU)
-          - platform: linux/amd64
-            runner: ubuntu-latest
-            platform_tag: amd64
-
-          # ARM64 build using cross-compilation on Ubuntu runners
-          # Dockerfile uses --platform=$BUILDPLATFORM to minimize QEMU overhead:
-          # - Dependencies, restore, build stages run on native AMD64 (fast!)
-          # - Only tesseract-env stage uses QEMU (lightweight package install)
-          # - FFmpeg download is architecture-aware (downloads ARM64 binary)
-          # - .NET cross-compilation doesn't need QEMU
-          - platform: linux/arm64
-            runner: ubuntu-latest
-            platform_tag: arm64
 
     steps:
       - name: Checkout code
@@ -190,206 +172,322 @@ jobs:
           REPO_LOWER="${REPO_LOWER,,}"
           echo "name=${REPO_LOWER}" >> $GITHUB_OUTPUT
 
-      - name: Build and push platform image
+      - name: Build and push multi-arch image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./TelegramGroupsAdmin/Dockerfile
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64,linux/arm64
           # Push only on post-merge (push events), validate only on PRs
           push: ${{ github.event_name == 'push' }}
-          # Tag with platform suffix for intermediate images (merged later)
-          tags: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}:build-${{ matrix.platform_tag }}-${{ needs.docker-version.outputs.semver }}
-          # Per-platform cache keys for better cache reuse
-          cache-from: type=gha,scope=buildx-${{ matrix.platform_tag }}
-          cache-to: type=gha,mode=max,scope=buildx-${{ matrix.platform_tag }}
+          tags: ${{ needs.docker-version.outputs.tags }}
+          # Unified cache for both platforms
+          cache-from: type=gha,scope=buildx-multiarch
+          cache-to: type=gha,mode=max,scope=buildx-multiarch
           # Enable BuildKit inline cache for cross-platform sharing
           build-args: |
             BUILDKIT_INLINE_CACHE=1
 
       - name: Build summary
         env:
-          PLATFORM: ${{ matrix.platform }}
           VERSION: ${{ needs.docker-version.outputs.semver }}
           EVENT: ${{ github.event_name }}
+          TAGS: ${{ needs.docker-version.outputs.tags }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          REPO: ${{ steps.repo.outputs.name }}
         run: |
           if [ "$EVENT" == "pull_request" ]; then
-            echo "### Validated $PLATFORM Build :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+            echo "### Validated Multi-Arch Build :white_check_mark:" >> $GITHUB_STEP_SUMMARY
             echo "**Status:** Build validation only (no push)" >> $GITHUB_STEP_SUMMARY
           else
-            echo "### Built $PLATFORM Image :package:" >> $GITHUB_STEP_SUMMARY
+            echo "### Docker Image Published :rocket:" >> $GITHUB_STEP_SUMMARY
             echo "**Status:** Built and pushed to registry" >> $GITHUB_STEP_SUMMARY
           fi
-          echo "**Version:** ${VERSION}" >> $GITHUB_STEP_SUMMARY
-          echo "**Platform:** ${PLATFORM}" >> $GITHUB_STEP_SUMMARY
-          echo "**Runner:** ${{ matrix.runner }}" >> $GITHUB_STEP_SUMMARY
-
-  # Merge multi-arch manifest and push final images
-  publish-manifest:
-    name: Publish Multi-Arch Manifest
-    runs-on: ubuntu-latest
-    needs: [docker-version, build-platform-images]
-
-    # Only run on push events (after PR merge) since manifest requires pushed images
-    if: github.event_name == 'push'
-
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Validate platform images exist
-        env:
-          SEMVER: ${{ needs.docker-version.outputs.semver }}
-          REPO: ${{ github.repository }}
-        run: |
-          # Convert repository name to lowercase for Docker
-          REPO_LOWER="${REPO,,}"
-
-          # Platform-specific intermediate images
-          AMD64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-amd64-${SEMVER}"
-          ARM64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-arm64-${SEMVER}"
-
-          echo "Validating platform images exist before manifest merge..."
-
-          # Inspect both images to ensure they exist and are valid
-          docker buildx imagetools inspect "${AMD64_IMAGE}" || {
-            echo "ERROR: AMD64 image not found: ${AMD64_IMAGE}"
-            exit 1
-          }
-
-          docker buildx imagetools inspect "${ARM64_IMAGE}" || {
-            echo "ERROR: ARM64 image not found: ${ARM64_IMAGE}"
-            exit 1
-          }
-
-          echo "✅ Both platform images validated successfully"
-
-      - name: Create and push multi-arch manifest
-        env:
-          TAGS: ${{ needs.docker-version.outputs.tags }}
-          SEMVER: ${{ needs.docker-version.outputs.semver }}
-          REPO: ${{ github.repository }}
-        run: |
-          # Convert repository name to lowercase for Docker
-          REPO_LOWER="${REPO,,}"
-
-          # Platform-specific intermediate images
-          AMD64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-amd64-${SEMVER}"
-          ARM64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-arm64-${SEMVER}"
-
-          # Create and push manifest for each tag with error handling
-          IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
-          FAILED_TAGS=()
-
-          for TAG in "${TAG_ARRAY[@]}"; do
-            echo "Creating manifest for ${TAG}..."
-            if docker buildx imagetools create -t "${TAG}" \
-              "${AMD64_IMAGE}" \
-              "${ARM64_IMAGE}"; then
-              echo "  ✓ Successfully created manifest for ${TAG}"
-            else
-              echo "  ✗ Failed to create manifest for ${TAG}"
-              FAILED_TAGS+=("${TAG}")
-            fi
-          done
-
-          # Check if any manifests failed
-          if [ ${#FAILED_TAGS[@]} -gt 0 ]; then
-            echo "❌ Failed to create manifests for: ${FAILED_TAGS[*]}"
-            exit 1
-          fi
-
-          echo "✅ All multi-arch manifests published successfully!"
-
-      - name: Cleanup intermediate images
-        if: always()
-        env:
-          SEMVER: ${{ needs.docker-version.outputs.semver }}
-          REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Convert repository name to lowercase for Docker
-          REPO_LOWER="${REPO,,}"
-
-          # Platform-specific intermediate images
-          AMD64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-amd64-${SEMVER}"
-          ARM64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-arm64-${SEMVER}"
-
-          echo "Cleaning up intermediate platform images..."
-
-          # Get package name from repository (remove org prefix)
-          PACKAGE_NAME="${REPO_LOWER#*/}"
-
-          # Delete intermediate images by tag (ignore errors if already deleted)
-          # Note: These are build-only intermediate images, safe to delete after manifest merge
-          for TAG in "build-amd64-${SEMVER}" "build-arm64-${SEMVER}"; do
-            echo "Attempting to delete ${TAG}..."
-
-            # Get version ID for this tag
-            VERSION_ID=$(gh api \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "/user/packages/container/${PACKAGE_NAME}/versions" \
-              --jq ".[] | select(.metadata.container.tags[] | contains(\"${TAG}\")) | .id" 2>/dev/null || echo "")
-
-            if [ -n "$VERSION_ID" ]; then
-              gh api --method DELETE \
-                -H "Accept: application/vnd.github+json" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "/user/packages/container/${PACKAGE_NAME}/versions/${VERSION_ID}" 2>/dev/null \
-                && echo "  ✓ Deleted ${TAG}" \
-                || echo "  ⚠ Failed to delete ${TAG} (version ID: ${VERSION_ID})"
-            else
-              echo "  ℹ ${TAG} not found or already cleaned"
-            fi
-          done
-
-          echo "✅ Intermediate images cleanup complete"
-
-      - name: Image published summary
-        env:
-          TAGS: ${{ needs.docker-version.outputs.tags }}
-          VERSION: ${{ needs.docker-version.outputs.semver }}
-          BRANCH_NAME: ${{ github.ref_name }}
-          REPO: ${{ github.repository }}
-        run: |
-          # Convert repository name to lowercase for Docker
-          REPO_LOWER="${REPO,,}"
-
-          echo "### Docker Image Published :rocket:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${VERSION}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Architectures:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Build Strategy:** Parallel platform builds + manifest merge" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Strategy:** Single multi-arch build (cross-compilation)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Optimizations:**" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Cross-compilation (no QEMU for builds)" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Parallel AMD64 + ARM64 builds" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Per-platform cache keys" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Cross-compilation (minimal QEMU overhead)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Unified cache for all platforms" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Multi-stage Dockerfile (5 stages)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Direct manifest creation (no intermediate images)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${TAGS}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Pull commands:**" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          if [ "${BRANCH_NAME}" == "master" ]; then
-            echo "# Stable (latest)" >> $GITHUB_STEP_SUMMARY
-            echo "docker pull ${REGISTRY}/${REPO_LOWER}:latest" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "# Development (testing)" >> $GITHUB_STEP_SUMMARY
-            echo "docker pull ${REGISTRY}/${REPO_LOWER}:development" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$EVENT" == "push" ]; then
+            echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "${TAGS}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Pull commands:**" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            if [ "${BRANCH_NAME}" == "master" ]; then
+              echo "# Stable (latest)" >> $GITHUB_STEP_SUMMARY
+              echo "docker pull ${REGISTRY}/${REPO}:latest" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "# Development (testing)" >> $GITHUB_STEP_SUMMARY
+              echo "docker pull ${REGISTRY}/${REPO}:development" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo '```' >> $GITHUB_STEP_SUMMARY
           fi
-          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # COMMENTED OUT - Old parallel build approach (easy rollback if needed)
+  # Kept for reference - parallel builds were only 30s faster
+  #
+  # # Parallel platform-specific builds (AMD64 and ARM64 run concurrently)
+  # build-platform-images:
+  #   name: Build ${{ matrix.platform }} Image
+  #   runs-on: ${{ matrix.runner }}
+  #   needs: docker-version
+  #
+  #   permissions:
+  #     contents: read
+  #     packages: write
+  #
+  #   strategy:
+  #     fail-fast: false  # Continue ARM build even if AMD fails (or vice versa)
+  #     matrix:
+  #       include:
+  #         # AMD64 build on standard Ubuntu runners (native, no QEMU)
+  #         - platform: linux/amd64
+  #           runner: ubuntu-latest
+  #           platform_tag: amd64
+  #
+  #         # ARM64 build using cross-compilation on Ubuntu runners
+  #         # Dockerfile uses --platform=$BUILDPLATFORM to minimize QEMU overhead:
+  #         # - Dependencies, restore, build stages run on native AMD64 (fast!)
+  #         # - Only tesseract-env stage uses QEMU (lightweight package install)
+  #         # - FFmpeg download is architecture-aware (downloads ARM64 binary)
+  #         # - .NET cross-compilation doesn't need QEMU
+  #         - platform: linux/arm64
+  #           runner: ubuntu-latest
+  #           platform_tag: arm64
+  #
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+  #
+  #     - name: Login to GitHub Container Registry
+  #       uses: docker/login-action@v3
+  #       with:
+  #         registry: ${{ env.REGISTRY }}
+  #         username: ${{ github.actor }}
+  #         password: ${{ secrets.GITHUB_TOKEN }}
+  #
+  #     - name: Prepare Docker repository name
+  #       id: repo
+  #       run: |
+  #         # Convert repository name to lowercase for Docker compatibility
+  #         REPO_LOWER="${{ github.repository }}"
+  #         REPO_LOWER="${REPO_LOWER,,}"
+  #         echo "name=${REPO_LOWER}" >> $GITHUB_OUTPUT
+  #
+  #     - name: Build and push platform image
+  #       uses: docker/build-push-action@v5
+  #       with:
+  #         context: .
+  #         file: ./TelegramGroupsAdmin/Dockerfile
+  #         platforms: ${{ matrix.platform }}
+  #         # Push only on post-merge (push events), validate only on PRs
+  #         push: ${{ github.event_name == 'push' }}
+  #         # Tag with platform suffix for intermediate images (merged later)
+  #         tags: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}:build-${{ matrix.platform_tag }}-${{ needs.docker-version.outputs.semver }}
+  #         # Per-platform cache keys for better cache reuse
+  #         cache-from: type=gha,scope=buildx-${{ matrix.platform_tag }}
+  #         cache-to: type=gha,mode=max,scope=buildx-${{ matrix.platform_tag }}
+  #         # Enable BuildKit inline cache for cross-platform sharing
+  #         build-args: |
+  #           BUILDKIT_INLINE_CACHE=1
+  #
+  #     - name: Build summary
+  #       env:
+  #         PLATFORM: ${{ matrix.platform }}
+  #         VERSION: ${{ needs.docker-version.outputs.semver }}
+  #         EVENT: ${{ github.event_name }}
+  #       run: |
+  #         if [ "$EVENT" == "pull_request" ]; then
+  #           echo "### Validated $PLATFORM Build :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+  #           echo "**Status:** Build validation only (no push)" >> $GITHUB_STEP_SUMMARY
+  #         else
+  #           echo "### Built $PLATFORM Image :package:" >> $GITHUB_STEP_SUMMARY
+  #           echo "**Status:** Built and pushed to registry" >> $GITHUB_STEP_SUMMARY
+  #         fi
+  #         echo "**Version:** ${VERSION}" >> $GITHUB_STEP_SUMMARY
+  #         echo "**Platform:** ${PLATFORM}" >> $GITHUB_STEP_SUMMARY
+  #         echo "**Runner:** ${{ matrix.runner }}" >> $GITHUB_STEP_SUMMARY
+  #
+  # # Merge multi-arch manifest and push final images
+  # publish-manifest:
+  #   name: Publish Multi-Arch Manifest
+  #   runs-on: ubuntu-latest
+  #   needs: [docker-version, build-platform-images]
+  #
+  #   # Only run on push events (after PR merge) since manifest requires pushed images
+  #   if: github.event_name == 'push'
+  #
+  #   permissions:
+  #     contents: read
+  #     packages: write
+  #
+  #   steps:
+  #     - name: Login to GitHub Container Registry
+  #       uses: docker/login-action@v3
+  #       with:
+  #         registry: ${{ env.REGISTRY }}
+  #         username: ${{ github.actor }}
+  #         password: ${{ secrets.GITHUB_TOKEN }}
+  #
+  #     - name: Validate platform images exist
+  #       env:
+  #         SEMVER: ${{ needs.docker-version.outputs.semver }}
+  #         REPO: ${{ github.repository }}
+  #       run: |
+  #         # Convert repository name to lowercase for Docker
+  #         REPO_LOWER="${REPO,,}"
+  #
+  #         # Platform-specific intermediate images
+  #         AMD64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-amd64-${SEMVER}"
+  #         ARM64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-arm64-${SEMVER}"
+  #
+  #         echo "Validating platform images exist before manifest merge..."
+  #
+  #         # Inspect both images to ensure they exist and are valid
+  #         docker buildx imagetools inspect "${AMD64_IMAGE}" || {
+  #           echo "ERROR: AMD64 image not found: ${AMD64_IMAGE}"
+  #           exit 1
+  #         }
+  #
+  #         docker buildx imagetools inspect "${ARM64_IMAGE}" || {
+  #           echo "ERROR: ARM64 image not found: ${ARM64_IMAGE}"
+  #           exit 1
+  #         }
+  #
+  #         echo "✅ Both platform images validated successfully"
+  #
+  #     - name: Create and push multi-arch manifest
+  #       env:
+  #         TAGS: ${{ needs.docker-version.outputs.tags }}
+  #         SEMVER: ${{ needs.docker-version.outputs.semver }}
+  #         REPO: ${{ github.repository }}
+  #       run: |
+  #         # Convert repository name to lowercase for Docker
+  #         REPO_LOWER="${REPO,,}"
+  #
+  #         # Platform-specific intermediate images
+  #         AMD64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-amd64-${SEMVER}"
+  #         ARM64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-arm64-${SEMVER}"
+  #
+  #         # Create and push manifest for each tag with error handling
+  #         IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
+  #         FAILED_TAGS=()
+  #
+  #         for TAG in "${TAG_ARRAY[@]}"; do
+  #           echo "Creating manifest for ${TAG}..."
+  #           if docker buildx imagetools create -t "${TAG}" \
+  #             "${AMD64_IMAGE}" \
+  #             "${ARM64_IMAGE}"; then
+  #             echo "  ✓ Successfully created manifest for ${TAG}"
+  #           else
+  #             echo "  ✗ Failed to create manifest for ${TAG}"
+  #             FAILED_TAGS+=("${TAG}")
+  #           fi
+  #         done
+  #
+  #         # Check if any manifests failed
+  #         if [ ${#FAILED_TAGS[@]} -gt 0 ]; then
+  #           echo "❌ Failed to create manifests for: ${FAILED_TAGS[*]}"
+  #           exit 1
+  #         fi
+  #
+  #         echo "✅ All multi-arch manifests published successfully!"
+  #
+  #     - name: Cleanup intermediate images
+  #       if: always()
+  #       env:
+  #         SEMVER: ${{ needs.docker-version.outputs.semver }}
+  #         REPO: ${{ github.repository }}
+  #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #       run: |
+  #         # Convert repository name to lowercase for Docker
+  #         REPO_LOWER="${REPO,,}"
+  #
+  #         # Platform-specific intermediate images
+  #         AMD64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-amd64-${SEMVER}"
+  #         ARM64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-arm64-${SEMVER}"
+  #
+  #         echo "Cleaning up intermediate platform images..."
+  #
+  #         # Get package name from repository (remove org prefix)
+  #         PACKAGE_NAME="${REPO_LOWER#*/}"
+  #
+  #         # Delete intermediate images by tag (ignore errors if already deleted)
+  #         # Note: These are build-only intermediate images, safe to delete after manifest merge
+  #         for TAG in "build-amd64-${SEMVER}" "build-arm64-${SEMVER}"; do
+  #           echo "Attempting to delete ${TAG}..."
+  #
+  #           # Get version ID for this tag
+  #           VERSION_ID=$(gh api \
+  #             -H "Accept: application/vnd.github+json" \
+  #             -H "X-GitHub-Api-Version: 2022-11-28" \
+  #             "/user/packages/container/${PACKAGE_NAME}/versions" \
+  #             --jq ".[] | select(.metadata.container.tags[] | contains(\"${TAG}\")) | .id" 2>/dev/null || echo "")
+  #
+  #           if [ -n "$VERSION_ID" ]; then
+  #             gh api --method DELETE \
+  #               -H "Accept: application/vnd.github+json" \
+  #               -H "X-GitHub-Api-Version: 2022-11-28" \
+  #               "/user/packages/container/${PACKAGE_NAME}/versions/${VERSION_ID}" 2>/dev/null \
+  #               && echo "  ✓ Deleted ${TAG}" \
+  #               || echo "  ⚠ Failed to delete ${TAG} (version ID: ${VERSION_ID})"
+  #           else
+  #             echo "  ℹ ${TAG} not found or already cleaned"
+  #           fi
+  #         done
+  #
+  #         echo "✅ Intermediate images cleanup complete"
+  #
+  #     - name: Image published summary
+  #       env:
+  #         TAGS: ${{ needs.docker-version.outputs.tags }}
+  #         VERSION: ${{ needs.docker-version.outputs.semver }}
+  #         BRANCH_NAME: ${{ github.ref_name }}
+  #         REPO: ${{ github.repository }}
+  #       run: |
+  #         # Convert repository name to lowercase for Docker
+  #         REPO_LOWER="${REPO,,}"
+  #
+  #         echo "### Docker Image Published :rocket:" >> $GITHUB_STEP_SUMMARY
+  #         echo "" >> $GITHUB_STEP_SUMMARY
+  #         echo "**Version:** ${VERSION}" >> $GITHUB_STEP_SUMMARY
+  #         echo "" >> $GITHUB_STEP_SUMMARY
+  #         echo "**Architectures:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+  #         echo "" >> $GITHUB_STEP_SUMMARY
+  #         echo "**Build Strategy:** Parallel platform builds + manifest merge" >> $GITHUB_STEP_SUMMARY
+  #         echo "" >> $GITHUB_STEP_SUMMARY
+  #         echo "**Optimizations:**" >> $GITHUB_STEP_SUMMARY
+  #         echo "- ✅ Cross-compilation (no QEMU for builds)" >> $GITHUB_STEP_SUMMARY
+  #         echo "- ✅ Parallel AMD64 + ARM64 builds" >> $GITHUB_STEP_SUMMARY
+  #         echo "- ✅ Per-platform cache keys" >> $GITHUB_STEP_SUMMARY
+  #         echo "- ✅ Multi-stage Dockerfile (5 stages)" >> $GITHUB_STEP_SUMMARY
+  #         echo "" >> $GITHUB_STEP_SUMMARY
+  #         echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+  #         echo '```' >> $GITHUB_STEP_SUMMARY
+  #         echo "${TAGS}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+  #         echo '```' >> $GITHUB_STEP_SUMMARY
+  #         echo "" >> $GITHUB_STEP_SUMMARY
+  #         echo "**Pull commands:**" >> $GITHUB_STEP_SUMMARY
+  #         echo '```bash' >> $GITHUB_STEP_SUMMARY
+  #         if [ "${BRANCH_NAME}" == "master" ]; then
+  #           echo "# Stable (latest)" >> $GITHUB_STEP_SUMMARY
+  #           echo "docker pull ${REGISTRY}/${REPO_LOWER}:latest" >> $GITHUB_STEP_SUMMARY
+  #         else
+  #           echo "# Development (testing)" >> $GITHUB_STEP_SUMMARY
+  #           echo "docker pull ${REGISTRY}/${REPO_LOWER}:development" >> $GITHUB_STEP_SUMMARY
+  #         fi
+  #         echo '```' >> $GITHUB_STEP_SUMMARY
