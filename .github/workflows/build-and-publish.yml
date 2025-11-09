@@ -174,8 +174,8 @@ jobs:
           # Install Docker Desktop for Mac via Homebrew
           brew install --cask docker
 
-          # Start Docker Desktop (correct app name)
-          sudo open -a "Docker Desktop"
+          # Start Docker.app using full path
+          sudo open /Applications/Docker.app
 
           # Wait for Docker daemon to be ready (max 2 minutes)
           echo "Waiting for Docker daemon to start..."
