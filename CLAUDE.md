@@ -38,9 +38,18 @@ git commit -m "feat: add new feature"
 git push -u origin feature/your-feature-name
 
 # 5. Create PR to develop (NOT master)
+# IMPORTANT: Add closing keywords to link issues in the Development section
+# This auto-closes issues when PR merges and shows them in the sidebar
 gh pr create --base develop --head feature/your-feature-name \
   --title "feat: Add new feature" \
-  --body "Description of changes"
+  --body "Closes #123, Closes #456
+
+## Summary
+Description of changes..."
+
+# Closing keywords: Closes, Fixes, Resolves (case-insensitive, with variations)
+# Format: "Closes #123" or "Fixes #456" (separate multiple with commas)
+# These appear in the PR's Development section sidebar and auto-close on merge
 
 # 6. Wait for CI checks to pass (Build and Test runs during PR review, not on merge)
 # 7. Merge PR via GitHub UI (Docker images publish after merge, build does not re-run)
@@ -54,9 +63,13 @@ git pull origin develop
 
 ```bash
 # Only when develop is stable and ready for release
+# IMPORTANT: Add closing keywords at top of PR body to link resolved issues
 gh pr create --base master --head develop \
   --title "Release: v1.2.3" \
-  --body "Release notes here"
+  --body "Closes #31, Closes #35, Closes #40
+
+## Summary
+Release notes here..."
 
 # Merge via GitHub UI after CI passes
 # Docker images auto-published:
@@ -96,6 +109,7 @@ git push origin develop
 - NEVER suggest bypassing the PR workflow "to save time" - branch protection is mandatory
 - If user asks to commit directly to master/develop, remind them of the protected workflow
 - Always create PRs to `develop` first, never to `master` (validation will block it)
+- **ALWAYS include closing keywords** (`Closes #123`) at the top of PR body to link issues in Development section
 
 ## Use Case & Deployment Context
 
