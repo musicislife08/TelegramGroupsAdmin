@@ -237,6 +237,33 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate platform images exist
+        env:
+          SEMVER: ${{ needs.docker-version.outputs.semver }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Convert repository name to lowercase for Docker
+          REPO_LOWER="${REPO,,}"
+
+          # Platform-specific intermediate images
+          AMD64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-amd64-${SEMVER}"
+          ARM64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-arm64-${SEMVER}"
+
+          echo "Validating platform images exist before manifest merge..."
+
+          # Inspect both images to ensure they exist and are valid
+          docker buildx imagetools inspect "${AMD64_IMAGE}" || {
+            echo "ERROR: AMD64 image not found: ${AMD64_IMAGE}"
+            exit 1
+          }
+
+          docker buildx imagetools inspect "${ARM64_IMAGE}" || {
+            echo "ERROR: ARM64 image not found: ${ARM64_IMAGE}"
+            exit 1
+          }
+
+          echo "✅ Both platform images validated successfully"
+
       - name: Create and push multi-arch manifest
         env:
           TAGS: ${{ needs.docker-version.outputs.tags }}
@@ -260,6 +287,32 @@ jobs:
           done
 
           echo "Multi-arch manifests published successfully!"
+
+      - name: Cleanup intermediate images
+        if: always()
+        env:
+          SEMVER: ${{ needs.docker-version.outputs.semver }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Convert repository name to lowercase for Docker
+          REPO_LOWER="${REPO,,}"
+
+          # Platform-specific intermediate images
+          AMD64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-amd64-${SEMVER}"
+          ARM64_IMAGE="${REGISTRY}/${REPO_LOWER}:build-arm64-${SEMVER}"
+
+          echo "Cleaning up intermediate platform images..."
+
+          # Delete intermediate images (ignore errors if already deleted)
+          gh api --method DELETE "/user/packages/container/${REPO_LOWER}/versions" \
+            -f name="build-amd64-${SEMVER}" 2>/dev/null || echo "AMD64 intermediate image already cleaned"
+
+          gh api --method DELETE "/user/packages/container/${REPO_LOWER}/versions" \
+            -f name="build-arm64-${SEMVER}" 2>/dev/null || echo "ARM64 intermediate image already cleaned"
+
+          echo "✅ Intermediate images cleanup complete"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Image published summary
         env:

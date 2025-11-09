@@ -22,9 +22,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Download FFmpeg static build (architecture-specific)
+# Download FFmpeg static build (architecture-specific) with checksum validation
 # Uses TARGETPLATFORM to download correct binary during cross-compilation
 # Example: TARGETPLATFORM=linux/arm64 downloads arm64 binary on amd64 host
+# Security: Validates MD5 checksum before extraction
 RUN case "$TARGETPLATFORM" in \
         "linux/amd64") FFMPEG_ARCH="amd64" ;; \
         "linux/arm64") FFMPEG_ARCH="arm64" ;; \
@@ -33,11 +34,16 @@ RUN case "$TARGETPLATFORM" in \
     echo "Downloading FFmpeg ${FFMPEG_VERSION} for ${FFMPEG_ARCH} (target: $TARGETPLATFORM, building on: $BUILDPLATFORM)..." && \
     wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-${FFMPEG_VERSION}-${FFMPEG_ARCH}-static.tar.xz \
         -O /tmp/ffmpeg.tar.xz && \
+    wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-${FFMPEG_VERSION}-${FFMPEG_ARCH}-static.tar.xz.md5 \
+        -O /tmp/ffmpeg.tar.xz.md5 && \
+    echo "Validating checksum..." && \
+    cd /tmp && md5sum -c ffmpeg.tar.xz.md5 && \
+    echo "Checksum validated successfully" && \
     echo "Extracting FFmpeg ${FFMPEG_VERSION}..." && \
     mkdir -p /deps/ffmpeg && \
     tar -xf /tmp/ffmpeg.tar.xz -C /deps/ffmpeg --strip-components=1 && \
     chmod +x /deps/ffmpeg/ffmpeg /deps/ffmpeg/ffprobe && \
-    rm -rf /tmp/ffmpeg.tar.xz && \
+    rm -rf /tmp/ffmpeg.tar.xz /tmp/ffmpeg.tar.xz.md5 && \
     echo "FFmpeg ready: $(/deps/ffmpeg/ffmpeg -version | head -n1)"
 
 # Download Tesseract language data (architecture-independent)
@@ -86,7 +92,8 @@ COPY ["TelegramGroupsAdmin.ContentDetection/TelegramGroupsAdmin.ContentDetection
 
 # Restore with runtime identifier for cross-compilation
 # Runs on BUILDPLATFORM (fast AMD64), downloads packages for TARGETPLATFORM
-RUN --mount=type=cache,target=/root/.nuget/packages,id=nuget-$TARGETPLATFORM \
+# Cache mount with sharing=locked prevents corruption from concurrent builds
+RUN --mount=type=cache,target=/root/.nuget/packages,id=nuget-$TARGETPLATFORM,sharing=locked \
     case "$TARGETPLATFORM" in \
         "linux/amd64") RID="linux-x64" ;; \
         "linux/arm64") RID="linux-arm64" ;; \
@@ -95,7 +102,7 @@ RUN --mount=type=cache,target=/root/.nuget/packages,id=nuget-$TARGETPLATFORM \
     echo "Restoring packages for $RID (target: $TARGETPLATFORM, building on: $BUILDPLATFORM)..." && \
     dotnet restore "TelegramGroupsAdmin/TelegramGroupsAdmin.csproj" \
         -r $RID \
-        --verbosity quiet
+        --verbosity minimal
 
 # -----------------------------------------------------------------------------
 # Stage 4: Build & Publish
@@ -110,16 +117,16 @@ ARG BUILDPLATFORM
 
 WORKDIR /src
 
-# Copy restored packages from restore stage
+# Copy project files from restore stage
 COPY --from=restore /src .
-COPY --from=restore /root/.nuget /root/.nuget
 
 # Copy all source code
 COPY . .
 
 # Build and publish with cross-compilation
 # KEY OPTIMIZATION: Runs on AMD64 host, compiles for ARM64 target (no QEMU!)
-RUN --mount=type=cache,target=/root/.nuget/packages,id=nuget-$TARGETPLATFORM \
+# Cache mount with sharing=locked prevents corruption from concurrent builds
+RUN --mount=type=cache,target=/root/.nuget/packages,id=nuget-$TARGETPLATFORM,sharing=locked \
     case "$TARGETPLATFORM" in \
         "linux/amd64") RID="linux-x64" ;; \
         "linux/arm64") RID="linux-arm64" ;; \
