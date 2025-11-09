@@ -178,6 +178,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Prepare Docker repository name
+        id: repo
+        run: |
+          # Convert repository name to lowercase for Docker compatibility
+          REPO_LOWER="${{ github.repository }}"
+          REPO_LOWER="${REPO_LOWER,,}"
+          echo "name=${REPO_LOWER}" >> $GITHUB_OUTPUT
+
       - name: Build and push platform image
         uses: docker/build-push-action@v5
         with:
@@ -187,7 +195,7 @@ jobs:
           # Push only on post-merge (push events), validate only on PRs
           push: ${{ github.event_name == 'push' }}
           # Tag with platform suffix for intermediate images (merged later)
-          tags: ${{ env.REGISTRY }}/${{ github.repository }}:build-${{ matrix.platform_tag }}-${{ needs.docker-version.outputs.semver }}
+          tags: ${{ env.REGISTRY }}/${{ steps.repo.outputs.name }}:build-${{ matrix.platform_tag }}-${{ needs.docker-version.outputs.semver }}
           # Per-platform cache keys for better cache reuse
           cache-from: type=gha,scope=buildx-${{ matrix.platform_tag }}
           cache-to: type=gha,mode=max,scope=buildx-${{ matrix.platform_tag }}
