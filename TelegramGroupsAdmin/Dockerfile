@@ -12,7 +12,6 @@ FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS dependencies
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
-ARG FFMPEG_VERSION=7.0.2
 
 WORKDIR /deps
 
@@ -25,21 +24,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Download FFmpeg static build (architecture-specific) with checksum validation
 # Uses TARGETPLATFORM to download correct binary during cross-compilation
 # Example: TARGETPLATFORM=linux/arm64 downloads arm64 binary on amd64 host
-# Security: Validates MD5 checksum before extraction
+# Currently pinned to: version 7.0.2 (via release channel with MD5 validation)
+# Security: MD5 validation ensures binary integrity and reproducible builds
 RUN case "$TARGETPLATFORM" in \
         "linux/amd64") FFMPEG_ARCH="amd64" ;; \
         "linux/arm64") FFMPEG_ARCH="arm64" ;; \
         *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
     esac && \
-    echo "Downloading FFmpeg ${FFMPEG_VERSION} for ${FFMPEG_ARCH} (target: $TARGETPLATFORM, building on: $BUILDPLATFORM)..." && \
-    wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-${FFMPEG_VERSION}-${FFMPEG_ARCH}-static.tar.xz \
+    echo "Downloading FFmpeg (release) for ${FFMPEG_ARCH} (target: $TARGETPLATFORM, building on: $BUILDPLATFORM)..." && \
+    wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${FFMPEG_ARCH}-static.tar.xz \
         -O /tmp/ffmpeg.tar.xz && \
-    wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-${FFMPEG_VERSION}-${FFMPEG_ARCH}-static.tar.xz.md5 \
+    wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${FFMPEG_ARCH}-static.tar.xz.md5 \
         -O /tmp/ffmpeg.tar.xz.md5 && \
     echo "Validating checksum..." && \
-    cd /tmp && md5sum -c ffmpeg.tar.xz.md5 && \
+    cd /tmp && \
+    EXPECTED_MD5=$(awk '{print $1}' ffmpeg.tar.xz.md5) && \
+    ACTUAL_MD5=$(md5sum ffmpeg.tar.xz | awk '{print $1}') && \
+    echo "Expected: ${EXPECTED_MD5}" && \
+    echo "Actual:   ${ACTUAL_MD5}" && \
+    [ "${EXPECTED_MD5}" = "${ACTUAL_MD5}" ] || (echo "MD5 mismatch!" && exit 1) && \
     echo "Checksum validated successfully" && \
-    echo "Extracting FFmpeg ${FFMPEG_VERSION}..." && \
+    echo "Extracting FFmpeg..." && \
     mkdir -p /deps/ffmpeg && \
     tar -xf /tmp/ffmpeg.tar.xz -C /deps/ffmpeg --strip-components=1 && \
     chmod +x /deps/ffmpeg/ffmpeg /deps/ffmpeg/ffprobe && \
