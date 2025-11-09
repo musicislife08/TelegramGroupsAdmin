@@ -158,10 +158,10 @@ jobs:
             runner: ubuntu-latest
             platform_tag: amd64
 
-          # ARM64 build on native ARM runners (3x faster than QEMU)
-          # GitHub ARM runners: Same cost as standard ($0.008/min)
+          # ARM64 build on macOS ARM runners (native Apple Silicon, no QEMU)
+          # Free for public repos, uses GitHub Actions minutes
           - platform: linux/arm64
-            runner: ubuntu-latest-arm
+            runner: macos-15
             platform_tag: arm64
 
     steps:
