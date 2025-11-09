@@ -247,18 +247,19 @@ public static class ServiceCollectionExtensions
             });
 
         // Named HttpClient for OpenAI (shared by all OpenAI services)
+        // Uses ApiKeyDelegatingHandler to load API key from database (with env var fallback)
         services.AddHttpClient("OpenAI", client =>
         {
             client.BaseAddress = new Uri("https://api.openai.com/v1/");
             client.Timeout = TimeSpan.FromSeconds(30);
             client.DefaultRequestHeaders.Add("User-Agent", "TelegramGroupsAdmin/1.0");
-
-            var apiKey = configuration["OpenAI:ApiKey"];
-            if (!string.IsNullOrEmpty(apiKey))
-            {
-                client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-            }
-        });
+        })
+            .AddHttpMessageHandler(sp => new ApiKeyDelegatingHandler(
+                sp,
+                configuration,
+                serviceName: "OpenAI",
+                headerName: "Authorization",
+                headerValueFormat: "Bearer {0}"));
 
         services.AddHttpClient();
 
