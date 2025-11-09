@@ -153,48 +153,24 @@ jobs:
       fail-fast: false  # Continue ARM build even if AMD fails (or vice versa)
       matrix:
         include:
-          # AMD64 build on standard GitHub runners (fast, no QEMU)
+          # AMD64 build on standard Ubuntu runners (native, no QEMU)
           - platform: linux/amd64
             runner: ubuntu-latest
             platform_tag: amd64
 
-          # ARM64 build on macOS ARM runners (native Apple Silicon, no QEMU)
-          # Free for public repos, uses GitHub Actions minutes
+          # ARM64 build using cross-compilation on Ubuntu runners
+          # Dockerfile uses --platform=$BUILDPLATFORM to minimize QEMU overhead:
+          # - Dependencies, restore, build stages run on native AMD64 (fast!)
+          # - Only tesseract-env stage uses QEMU (lightweight package install)
+          # - FFmpeg download is architecture-aware (downloads ARM64 binary)
+          # - .NET cross-compilation doesn't need QEMU
           - platform: linux/arm64
-            runner: macos-15
+            runner: ubuntu-latest
             platform_tag: arm64
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install Docker on macOS
-        if: runner.os == 'macOS'
-        run: |
-          # Install Docker Desktop for Mac via Homebrew
-          brew install --cask docker
-
-          # Start Docker.app using full path
-          sudo open /Applications/Docker.app
-
-          # Wait for Docker daemon to be ready (max 2 minutes)
-          echo "Waiting for Docker daemon to start..."
-          for i in {1..60}; do
-            if docker info >/dev/null 2>&1; then
-              echo "Docker is ready!"
-              docker --version
-              docker info
-              break
-            fi
-            echo "Waiting for Docker... ($i/60)"
-            sleep 2
-          done
-
-          # Fail if Docker didn't start
-          if ! docker info >/dev/null 2>&1; then
-            echo "ERROR: Docker failed to start"
-            exit 1
-          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
