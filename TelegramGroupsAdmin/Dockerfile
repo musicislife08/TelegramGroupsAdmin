@@ -147,7 +147,6 @@ RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
         -c $BUILD_CONFIGURATION \
         -r $RID \
         -o /app/publish \
-        --no-restore \
         --self-contained false \
         /p:UseAppHost=false \
         /p:PublishTrimmed=false \
