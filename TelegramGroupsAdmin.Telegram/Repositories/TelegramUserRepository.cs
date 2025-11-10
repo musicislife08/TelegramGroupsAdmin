@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Data;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
@@ -85,12 +86,23 @@ public class TelegramUserRepository : ITelegramUserRepository
             entity.CreatedAt = DateTimeOffset.UtcNow;
             entity.UpdatedAt = DateTimeOffset.UtcNow;
 
-            context.TelegramUsers.Add(entity);
+            // Always trust Telegram service account (channel posts, anonymous admin posts)
+            if (user.TelegramUserId == TelegramConstants.ServiceAccountUserId)
+            {
+                entity.IsTrusted = true;
+                _logger.LogInformation(
+                    "Created Telegram service account (user {TelegramUserId}) with automatic trust",
+                    user.TelegramUserId);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Created Telegram user {TelegramUserId} (@{Username})",
+                    user.TelegramUserId,
+                    user.Username);
+            }
 
-            _logger.LogInformation(
-                "Created Telegram user {TelegramUserId} (@{Username})",
-                user.TelegramUserId,
-                user.Username);
+            context.TelegramUsers.Add(entity);
         }
 
         await context.SaveChangesAsync(ct);
@@ -161,6 +173,16 @@ public class TelegramUserRepository : ITelegramUserRepository
     /// </summary>
     public async Task UpdateTrustStatusAsync(long telegramUserId, bool isTrusted, CancellationToken ct = default)
     {
+        // Protect Telegram service account - cannot remove trust
+        if (telegramUserId == TelegramConstants.ServiceAccountUserId && !isTrusted)
+        {
+            _logger.LogWarning(
+                "Blocked attempt to remove trust from Telegram service account (user {TelegramUserId}). " +
+                "Service account must always remain trusted.",
+                telegramUserId);
+            return;
+        }
+
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
         var entity = await context.TelegramUsers
             .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, ct);

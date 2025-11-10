@@ -5,6 +5,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
@@ -71,6 +72,29 @@ public class ModerationActionService
     }
 
     /// <summary>
+    /// Checks if user is Telegram's service account (777000) and returns error if moderation is attempted.
+    /// Service account is used for channel posts and anonymous admin posts and must be exempt from moderation.
+    /// </summary>
+    private ModerationResult? CheckServiceAccountProtection(long userId)
+    {
+        if (userId == TelegramConstants.ServiceAccountUserId)
+        {
+            _logger.LogWarning(
+                "Moderation action blocked for Telegram service account (user {UserId}). " +
+                "This user represents channel posts and anonymous admin posts and cannot be moderated.",
+                userId);
+
+            return new ModerationResult
+            {
+                Success = false,
+                ErrorMessage = "Cannot perform moderation actions on Telegram service account (channel/anonymous posts)"
+            };
+        }
+
+        return null; // No protection needed, proceed with moderation
+    }
+
+    /// <summary>
     /// Mark message as spam, delete it, ban user globally, remove trust, and create detection result.
     /// Used by: /spam command, Messages.razor "Mark as Spam", Reports "Spam & Ban" action
     /// </summary>
@@ -84,6 +108,11 @@ public class ModerationActionService
         global::Telegram.Bot.Types.Message? telegramMessage = null,
         CancellationToken cancellationToken = default)
     {
+        // Protect Telegram service account from moderation
+        var protectionResult = CheckServiceAccountProtection(userId);
+        if (protectionResult != null)
+            return protectionResult;
+
         try
         {
             var result = new ModerationResult();
@@ -317,6 +346,11 @@ public class ModerationActionService
         string reason,
         CancellationToken cancellationToken = default)
     {
+        // Protect Telegram service account from moderation
+        var protectionResult = CheckServiceAccountProtection(userId);
+        if (protectionResult != null)
+            return protectionResult;
+
         try
         {
             var result = new ModerationResult();
@@ -392,6 +426,11 @@ public class ModerationActionService
         long? chatId = null,
         CancellationToken cancellationToken = default)
     {
+        // Protect Telegram service account from moderation
+        var protectionResult = CheckServiceAccountProtection(userId);
+        if (protectionResult != null)
+            return protectionResult;
+
         try
         {
             // 1. Insert the warning
@@ -679,6 +718,11 @@ public class ModerationActionService
         TimeSpan duration,
         CancellationToken cancellationToken = default)
     {
+        // Protect Telegram service account from moderation
+        var protectionResult = CheckServiceAccountProtection(userId);
+        if (protectionResult != null)
+            return protectionResult;
+
         try
         {
             var result = new ModerationResult();
@@ -806,6 +850,11 @@ public class ModerationActionService
         TimeSpan duration,
         CancellationToken cancellationToken = default)
     {
+        // Protect Telegram service account from moderation
+        var protectionResult = CheckServiceAccountProtection(userId);
+        if (protectionResult != null)
+            return protectionResult;
+
         try
         {
             var result = new ModerationResult();
