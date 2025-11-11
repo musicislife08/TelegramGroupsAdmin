@@ -465,6 +465,39 @@ public partial class MessageProcessingService(
             var repository = messageScope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
             await repository.InsertMessageAsync(messageRecord, cancellationToken);
 
+            // CRITICAL: Check if user was banned while this message was being processed
+            // Handles race condition where multiple messages arrive simultaneously:
+            // - Message 1 triggers spam detection → user banned
+            // - Message 2 (this one) was being processed in parallel → saved to DB
+            // - Without this check, Message 2 stays in chat forever
+            // With this check, Message 2 gets deleted immediately
+            var userActionsRepoForBanCheck = messageScope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+            bool isUserBanned = await userActionsRepoForBanCheck.IsUserBannedAsync(
+                message.From!.Id,
+                message.Chat.Id,
+                cancellationToken);
+
+            if (isUserBanned)
+            {
+                logger.LogWarning(
+                    "User {UserId} is already banned in chat {ChatId}, deleting message {MessageId} immediately (multi-message spam cleanup)",
+                    message.From.Id,
+                    message.Chat.Id,
+                    message.MessageId);
+
+                var moderationService = messageScope.ServiceProvider.GetRequiredService<ModerationActionService>();
+                await moderationService.DeleteMessageAsync(
+                    messageId: message.MessageId,
+                    chatId: message.Chat.Id,
+                    userId: message.From.Id,
+                    deletedBy: Core.Models.Actor.AutoDetection,
+                    reason: "User banned during message processing (multi-message spam campaign)",
+                    cancellationToken: cancellationToken);
+
+                // Don't process this message further (no spam detection, no user photo fetch, etc.)
+                return;
+            }
+
             // Save translation to database if present
             if (translation != null)
             {
