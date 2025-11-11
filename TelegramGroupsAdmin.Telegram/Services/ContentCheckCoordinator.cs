@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SpamLibRequest = TelegramGroupsAdmin.ContentDetection.Models.ContentCheckRequest;
+using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
@@ -33,6 +34,28 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
         SpamLibRequest request,
         CancellationToken cancellationToken = default)
     {
+        // CRITICAL: Early exit for Telegram service account (user 777000)
+        // Service account is used for channel posts and anonymous admin posts
+        // Must bypass ALL checks (including database queries) to avoid race condition
+        // on first message before user record is created
+        if (request.UserId == TelegramConstants.ServiceAccountUserId)
+        {
+            _logger.LogInformation(
+                "Skipping all content detection for Telegram service account (user {UserId}) in chat {ChatId}",
+                request.UserId,
+                request.ChatId);
+
+            return new ContentCheckCoordinatorResult
+            {
+                IsUserTrusted = true, // Service account is always trusted
+                IsUserAdmin = false,
+                SpamCheckSkipped = true,
+                SkipReason = "Telegram service account (channel/anonymous posts) - always trusted",
+                CriticalCheckViolations = [],
+                SpamResult = null
+            };
+        }
+
         bool isUserTrusted = false;
         bool isUserAdmin = false;
 

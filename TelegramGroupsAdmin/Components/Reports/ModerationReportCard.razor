@@ -1,5 +1,6 @@
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Core
 @using DataModels = TelegramGroupsAdmin.Data.Models
 
 @inject IMessageHistoryRepository MessageRepository
@@ -216,6 +217,12 @@
     {
         if (_message == null)
             return "Unknown";
+
+        // Special handling for Telegram service account (channel posts, anonymous admin posts)
+        if (_message.UserId == TelegramConstants.ServiceAccountUserId)
+        {
+            return _message.ChatName ?? "Telegram Service Account";
+        }
 
         // Priority 1: Username (check both telegram_users table and message cache)
         if (_reportedUser?.Username != null)

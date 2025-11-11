@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -123,6 +124,16 @@ public class TelegramUserManagementService
 
         // Toggle trust status
         var newTrustStatus = !user.IsTrusted;
+
+        // Protect Telegram service account - cannot remove trust
+        if (telegramUserId == TelegramConstants.ServiceAccountUserId && !newTrustStatus)
+        {
+            _logger.LogWarning(
+                "Blocked attempt to remove trust from Telegram service account (user {TelegramUserId}). " +
+                "Service account must always remain trusted.",
+                telegramUserId);
+            return false;
+        }
         await _userRepository.UpdateTrustStatusAsync(telegramUserId, newTrustStatus, ct);
 
         if (newTrustStatus)
