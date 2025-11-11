@@ -62,7 +62,7 @@
                    @bind:event="oninput"
                    @onkeydown="HandleKeyDown"
                    disabled="@(!IsEnabled)"
-                   maxlength="4000" />
+                   maxlength="@MaxMessageLength" />
         </div>
 
         @* Emoji Button (disabled for Phase 1) *@
@@ -100,6 +100,9 @@
 
     [Parameter]
     public string PlaceholderText { get; set; } = "Type a message...";
+
+    [Parameter]
+    public int MaxMessageLength { get; set; } = 4096; // Telegram max, can be reduced for signature
 
     [Parameter]
     public string? CurrentText { get; set; }

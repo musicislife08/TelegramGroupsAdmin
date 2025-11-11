@@ -53,7 +53,7 @@ public class WebBotMessagingService : IWebBotMessagingService
             if (string.IsNullOrEmpty(botToken))
             {
                 _logger.LogDebug("WebBotMessaging unavailable: Bot token not configured");
-                return new WebBotFeatureAvailability(false, null, "Bot token not configured");
+                return new WebBotFeatureAvailability(false, null, null, "Bot token not configured");
             }
 
             // Check 2: Bot must be enabled globally
@@ -64,7 +64,7 @@ public class WebBotMessagingService : IWebBotMessagingService
             if (botConfig?.BotEnabled != true)
             {
                 _logger.LogDebug("WebBotMessaging unavailable: Bot is disabled");
-                return new WebBotFeatureAvailability(false, null, "Bot is disabled");
+                return new WebBotFeatureAvailability(false, null, null, "Bot is disabled");
             }
 
             // Check 3: User must have linked Telegram account
@@ -74,7 +74,7 @@ public class WebBotMessagingService : IWebBotMessagingService
             if (!linkedTelegramId.HasValue)
             {
                 _logger.LogDebug("WebBotMessaging unavailable for user {UserId}: No linked Telegram account", webUserId);
-                return new WebBotFeatureAvailability(false, null, "Link your Telegram account to send messages");
+                return new WebBotFeatureAvailability(false, null, null, "Link your Telegram account to send messages");
             }
 
             var linkedUser = await _userRepo.GetByTelegramIdAsync(linkedTelegramId.Value, cancellationToken);
@@ -82,7 +82,7 @@ public class WebBotMessagingService : IWebBotMessagingService
             if (linkedUser == null || string.IsNullOrEmpty(linkedUser.Username))
             {
                 _logger.LogDebug("WebBotMessaging unavailable for user {UserId}: Linked user not found or has no username", webUserId);
-                return new WebBotFeatureAvailability(false, null, "Linked Telegram account has no username");
+                return new WebBotFeatureAvailability(false, null, null, "Linked Telegram account has no username");
             }
 
             // Get bot's user ID for identifying bot messages
@@ -104,12 +104,12 @@ public class WebBotMessagingService : IWebBotMessagingService
                 webUserId,
                 linkedUser.Username);
 
-            return new WebBotFeatureAvailability(true, botUserId, null);
+            return new WebBotFeatureAvailability(true, botUserId, linkedUser.Username, null);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to check feature availability for user {UserId}", webUserId);
-            return new WebBotFeatureAvailability(false, null, $"Error checking availability: {ex.Message}");
+            return new WebBotFeatureAvailability(false, null, null, $"Error checking availability: {ex.Message}");
         }
     }
 
@@ -147,9 +147,23 @@ public class WebBotMessagingService : IWebBotMessagingService
                 return new WebBotMessageResult(false, null, "Linked Telegram account has no username");
             }
 
+            // Validate input
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return new WebBotMessageResult(false, null, "Message text cannot be empty");
+            }
+
             // Append signature: \n\n—username
             var signature = $"\n\n—{linkedUser.Username}";
             var messageWithSignature = text + signature;
+
+            // Validate total length (Telegram limit: 4096 characters)
+            if (messageWithSignature.Length > 4096)
+            {
+                var maxTextLength = 4096 - signature.Length;
+                return new WebBotMessageResult(false, null,
+                    $"Message too long. Maximum length with signature is {maxTextLength} characters.");
+            }
 
             // Build reply parameters if replying
             ReplyParameters? replyParameters = null;
@@ -198,6 +212,19 @@ public class WebBotMessagingService : IWebBotMessagingService
             }
 
             var botClient = _botFactory.GetOrCreate(botToken);
+
+            // Validate input
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return new WebBotMessageResult(false, null, "Message text cannot be empty");
+            }
+
+            // Validate length (Telegram limit: 4096 characters)
+            if (text.Length > 4096)
+            {
+                return new WebBotMessageResult(false, null,
+                    $"Message too long. Maximum length is 4096 characters (current: {text.Length}).");
+            }
 
             // Edit message via BotMessageService (no signature added/modified)
             var editedMessage = await _botMessageService.EditAndUpdateMessageAsync(

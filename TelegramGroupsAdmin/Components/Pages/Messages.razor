@@ -127,6 +127,7 @@
                 @* Message Input (Phase 1: Bot messages) *@
                 <ChatInput IsEnabled="_isFeatureAvailable"
                            PlaceholderText="@GetChatInputPlaceholder()"
+                           MaxMessageLength="@GetMaxMessageLength()"
                            CurrentText="_editingOriginalText"
                            IsEditMode="@(_isEditingMessageId.HasValue)"
                            ReplyToMessageId="_replyToMessageId"
@@ -183,6 +184,7 @@
     // Phase 1: Send & Edit Messages as Bot state
     private bool _isFeatureAvailable; // Feature enabled (bot enabled + user has linked account)
     private long? _botUserId; // Bot's Telegram user ID (for identifying bot messages)
+    private string? _linkedUsername; // User's linked Telegram username (for calculating signature length)
     private string? _featureUnavailableReason; // Reason why feature is unavailable (for placeholder text)
     private long? _isEditingMessageId; // Message currently being edited
     private long? _replyToMessageId; // Message being replied to
@@ -1435,7 +1437,26 @@
         var result = await WebBotMessagingService.CheckFeatureAvailabilityAsync(userId);
         _isFeatureAvailable = result.IsAvailable;
         _botUserId = result.BotUserId;
+        _linkedUsername = result.LinkedUsername;
         _featureUnavailableReason = result.UnavailableReason;
+    }
+
+    /// <summary>
+    /// Calculate maximum message length accounting for signature
+    /// Telegram limit: 4096 characters
+    /// Signature format: \n\n—{username} (3 fixed chars + username length)
+    /// </summary>
+    private int GetMaxMessageLength()
+    {
+        const int telegramLimit = 4096;
+
+        if (!_isFeatureAvailable || string.IsNullOrEmpty(_linkedUsername))
+        {
+            return telegramLimit; // No signature, full limit
+        }
+
+        var signatureLength = 3 + _linkedUsername.Length; // "\n\n—" + username
+        return telegramLimit - signatureLength;
     }
 
     /// <summary>

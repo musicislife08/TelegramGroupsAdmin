@@ -59,6 +59,7 @@ public interface IWebBotMessagingService
 public record WebBotFeatureAvailability(
     bool IsAvailable,
     long? BotUserId,
+    string? LinkedUsername,
     string? UnavailableReason);
 
 /// <summary>
