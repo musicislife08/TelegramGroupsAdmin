@@ -155,8 +155,11 @@ public class BotMessageService
                 text: text,
                 cancellationToken: cancellationToken);
 
-        // Update edit_date in messages table
-        await _messageRepo.UpdateMessageEditDateAsync(messageId, DateTimeOffset.UtcNow, cancellationToken);
+        // Update edit_date in messages table (use Telegram's timestamp from response)
+        var editDate = editedMessage.EditDate.HasValue
+            ? new DateTimeOffset(editedMessage.EditDate.Value, TimeSpan.Zero) // DateTime (UTC) → DateTimeOffset
+            : DateTimeOffset.UtcNow; // Fallback if Telegram doesn't provide EditDate
+        await _messageRepo.UpdateMessageEditDateAsync(messageId, editDate, cancellationToken);
 
         _logger.LogDebug(
             "Edited bot message {MessageId} (chat: {ChatId})",

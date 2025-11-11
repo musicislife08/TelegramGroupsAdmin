@@ -6,7 +6,9 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -22,6 +24,7 @@ public class WebBotMessagingService : IWebBotMessagingService
     private readonly BotMessageService _botMessageService;
     private readonly ITelegramUserRepository _userRepo;
     private readonly ITelegramUserMappingRepository _mappingRepo;
+    private readonly TelegramAdminBotService _botService;
     private readonly ILogger<WebBotMessagingService> _logger;
 
     public WebBotMessagingService(
@@ -31,6 +34,7 @@ public class WebBotMessagingService : IWebBotMessagingService
         BotMessageService botMessageService,
         ITelegramUserRepository userRepo,
         ITelegramUserMappingRepository mappingRepo,
+        TelegramAdminBotService botService,
         ILogger<WebBotMessagingService> logger)
     {
         _scopeFactory = scopeFactory;
@@ -39,6 +43,7 @@ public class WebBotMessagingService : IWebBotMessagingService
         _botMessageService = botMessageService;
         _userRepo = userRepo;
         _mappingRepo = mappingRepo;
+        _botService = botService;
         _logger = logger;
     }
 
@@ -67,36 +72,24 @@ public class WebBotMessagingService : IWebBotMessagingService
                 return new WebBotFeatureAvailability(false, null, null, "Bot is disabled");
             }
 
-            // Check 3: User must have linked Telegram account
-            var mappings = await _mappingRepo.GetByUserIdAsync(webUserId, cancellationToken);
-            var linkedTelegramId = mappings.FirstOrDefault()?.TelegramId;
-
-            if (!linkedTelegramId.HasValue)
+            // Check 3: User must have linked Telegram account with username
+            var (linkedUser, errorMessage) = await GetLinkedTelegramUserAsync(webUserId, cancellationToken);
+            if (linkedUser == null)
             {
-                _logger.LogDebug("WebBotMessaging unavailable for user {UserId}: No linked Telegram account", webUserId);
-                return new WebBotFeatureAvailability(false, null, null, "Link your Telegram account to send messages");
+                return new WebBotFeatureAvailability(false, null, null, errorMessage);
             }
 
-            var linkedUser = await _userRepo.GetByTelegramIdAsync(linkedTelegramId.Value, cancellationToken);
+            // Get bot's user ID for identifying bot messages (use cached value from TelegramAdminBotService)
+            var botInfo = _botService.BotUserInfo;
+            long? botUserId = botInfo?.Id;
 
-            if (linkedUser == null || string.IsNullOrEmpty(linkedUser.Username))
+            if (botUserId == null)
             {
-                _logger.LogDebug("WebBotMessaging unavailable for user {UserId}: Linked user not found or has no username", webUserId);
-                return new WebBotFeatureAvailability(false, null, null, "Linked Telegram account has no username");
+                _logger.LogWarning("Bot user ID not available (bot may not be started yet)");
             }
-
-            // Get bot's user ID for identifying bot messages
-            long? botUserId = null;
-            try
+            else
             {
-                var botClient = _botFactory.GetOrCreate(botToken);
-                var botInfo = await botClient.GetMe(cancellationToken);
-                botUserId = botInfo.Id;
                 _logger.LogDebug("Bot user ID: {BotUserId}", botUserId);
-            }
-            catch (Exception botEx)
-            {
-                _logger.LogWarning(botEx, "Failed to get bot user ID");
             }
 
             _logger.LogInformation(
@@ -132,19 +125,10 @@ public class WebBotMessagingService : IWebBotMessagingService
             var botClient = _botFactory.GetOrCreate(botToken);
 
             // Get linked Telegram user for signature
-            var mappings = await _mappingRepo.GetByUserIdAsync(webUserId, cancellationToken);
-            var linkedTelegramId = mappings.FirstOrDefault()?.TelegramId;
-
-            if (!linkedTelegramId.HasValue)
+            var (linkedUser, errorMessage) = await GetLinkedTelegramUserAsync(webUserId, cancellationToken);
+            if (linkedUser == null)
             {
-                return new WebBotMessageResult(false, null, "No linked Telegram account");
-            }
-
-            var linkedUser = await _userRepo.GetByTelegramIdAsync(linkedTelegramId.Value, cancellationToken);
-
-            if (linkedUser == null || string.IsNullOrEmpty(linkedUser.Username))
-            {
-                return new WebBotMessageResult(false, null, "Linked Telegram account has no username");
+                return new WebBotMessageResult(false, null, errorMessage);
             }
 
             // Validate input
@@ -246,5 +230,33 @@ public class WebBotMessagingService : IWebBotMessagingService
             _logger.LogError(ex, "Failed to edit bot message {MessageId} for user {UserId}", messageId, webUserId);
             return new WebBotMessageResult(false, null, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Get linked Telegram user for web user ID with validation
+    /// </summary>
+    /// <returns>Tuple of (TelegramUser, ErrorMessage) - user is null if validation fails</returns>
+    private async Task<(TelegramUser? User, string? ErrorMessage)> GetLinkedTelegramUserAsync(
+        string webUserId,
+        CancellationToken cancellationToken)
+    {
+        var mappings = await _mappingRepo.GetByUserIdAsync(webUserId, cancellationToken);
+        var linkedTelegramId = mappings.FirstOrDefault()?.TelegramId;
+
+        if (!linkedTelegramId.HasValue)
+        {
+            _logger.LogDebug("WebBotMessaging unavailable for user {UserId}: No linked Telegram account", webUserId);
+            return (null, "No linked Telegram account");
+        }
+
+        var linkedUser = await _userRepo.GetByTelegramIdAsync(linkedTelegramId.Value, cancellationToken);
+
+        if (linkedUser == null || string.IsNullOrEmpty(linkedUser.Username))
+        {
+            _logger.LogDebug("WebBotMessaging unavailable for user {UserId}: Linked user not found or has no username", webUserId);
+            return (null, "Linked Telegram account has no username");
+        }
+
+        return (linkedUser, null);
     }
 }
