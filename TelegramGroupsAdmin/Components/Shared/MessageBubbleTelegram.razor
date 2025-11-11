@@ -283,6 +283,25 @@
                                 @onmouseenter="@(() => _popoverOpen = true)"
                                 @onmouseleave="@(() => _popoverOpen = false)">
                         <div class="tg-actions-list">
+                            @* Phase 1: Reply button (all messages) *@
+                            <MudMenuItem OnClick="@(() => { _popoverOpen = false; OnReplyToClick.InvokeAsync(Message.MessageId); })">
+                                <div class="tg-menu-item">
+                                    <MudIcon Icon="@Icons.Material.Filled.Reply" Size="Size.Small" />
+                                    <span>Reply</span>
+                                </div>
+                            </MudMenuItem>
+
+                            @* Phase 1: Edit button (bot messages only) *@
+                            @if (IsBotMessage)
+                            {
+                                <MudMenuItem OnClick="@(() => { _popoverOpen = false; OnEditClick.InvokeAsync((Message.MessageId, Message.MessageText ?? string.Empty)); })">
+                                    <div class="tg-menu-item">
+                                        <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                                        <span>Edit Message</span>
+                                    </div>
+                                </MudMenuItem>
+                            }
+
                             @if (EditCount > 0)
                             {
                                 <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnViewEdits.InvokeAsync(Message); })">
@@ -408,6 +427,24 @@
 
     [Parameter]
     public EventCallback<long> OnReplyClick { get; set; }
+
+    /// <summary>
+    /// Phase 1: Send & Edit Messages as Bot - Reply button callback
+    /// </summary>
+    [Parameter]
+    public EventCallback<long> OnReplyToClick { get; set; }
+
+    /// <summary>
+    /// Phase 1: Send & Edit Messages as Bot - Edit button callback (messageId, messageText)
+    /// </summary>
+    [Parameter]
+    public EventCallback<(long MessageId, string MessageText)> OnEditClick { get; set; }
+
+    /// <summary>
+    /// Phase 1: Send & Edit Messages as Bot - Is this message from the bot?
+    /// </summary>
+    [Parameter]
+    public bool IsBotMessage { get; set; }
 
     /// <summary>
     /// Phase 4.20: Manual translation callback
