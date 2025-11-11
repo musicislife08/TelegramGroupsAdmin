@@ -1,7 +1,9 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -15,16 +17,19 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class BotMessageService
 {
     private readonly IMessageHistoryRepository _messageRepo;
+    private readonly IMessageEditService _editService;
     private readonly ITelegramUserRepository _userRepo;
     private readonly ILogger<BotMessageService> _logger;
     private User? _cachedBotInfo; // In-memory cache to avoid repeated GetMe() calls
 
     public BotMessageService(
         IMessageHistoryRepository messageRepo,
+        IMessageEditService editService,
         ITelegramUserRepository userRepo,
         ILogger<BotMessageService> logger)
     {
         _messageRepo = messageRepo;
+        _editService = editService;
         _userRepo = userRepo;
         _logger = logger;
     }
@@ -130,7 +135,7 @@ public class BotMessageService
     }
 
     /// <summary>
-    /// Edit message via bot AND update edit_date in database.
+    /// Edit message via bot AND save edit history to message_edits table.
     /// Used for web UI editing of bot messages (Phase 1: Send & Edit Messages as Bot).
     /// </summary>
     public async Task<Message> EditAndUpdateMessageAsync(
@@ -141,6 +146,15 @@ public class BotMessageService
         ParseMode? parseMode = null,
         CancellationToken cancellationToken = default)
     {
+        // Get old message from database for edit history
+        var oldMessage = await _messageRepo.GetMessageAsync(messageId, cancellationToken);
+        if (oldMessage == null)
+        {
+            throw new InvalidOperationException($"Message {messageId} not found in database");
+        }
+
+        var oldText = oldMessage.MessageText;
+
         // Edit message via Telegram
         var editedMessage = parseMode.HasValue
             ? await botClient.EditMessageText(
@@ -155,14 +169,43 @@ public class BotMessageService
                 text: text,
                 cancellationToken: cancellationToken);
 
-        // Update edit_date in messages table (use Telegram's timestamp from response)
         var editDate = editedMessage.EditDate.HasValue
             ? new DateTimeOffset(editedMessage.EditDate.Value, TimeSpan.Zero) // DateTime (UTC) → DateTimeOffset
             : DateTimeOffset.UtcNow; // Fallback if Telegram doesn't provide EditDate
-        await _messageRepo.UpdateMessageEditDateAsync(messageId, editDate, cancellationToken);
+
+        // Extract URLs and calculate content hashes
+        var oldUrls = UrlUtilities.ExtractUrls(oldText);
+        var newUrls = UrlUtilities.ExtractUrls(text);
+
+        var oldContentHash = HashUtilities.ComputeContentHash(oldText ?? "", oldUrls != null ? JsonSerializer.Serialize(oldUrls) : "");
+        var newContentHash = HashUtilities.ComputeContentHash(text ?? "", newUrls != null ? JsonSerializer.Serialize(newUrls) : "");
+
+        // Save edit history to message_edits table
+        var editRecord = new MessageEditRecord(
+            Id: 0, // Will be set by INSERT
+            MessageId: messageId,
+            EditDate: editDate,
+            OldText: oldText,
+            NewText: text,
+            OldContentHash: oldContentHash,
+            NewContentHash: newContentHash
+        );
+
+        await _editService.InsertMessageEditAsync(editRecord, cancellationToken);
+
+        // Update message in messages table with new text and edit date
+        var updatedMessage = oldMessage with
+        {
+            MessageText = text,
+            EditDate = editDate,
+            Urls = newUrls != null ? JsonSerializer.Serialize(newUrls) : null,
+            ContentHash = newContentHash
+        };
+
+        await _messageRepo.UpdateMessageAsync(updatedMessage, cancellationToken);
 
         _logger.LogDebug(
-            "Edited bot message {MessageId} (chat: {ChatId})",
+            "Edited bot message {MessageId} (chat: {ChatId}) and saved edit history",
             messageId,
             chatId);
 
