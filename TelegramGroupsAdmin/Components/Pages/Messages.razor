@@ -125,19 +125,19 @@
                 </div>
 
                 @* Message Input (Phase 1: Bot messages) *@
-                <ChatInput IsEnabled="_isFeatureAvailable"
+                <ChatInput IsEnabled="@_isFeatureAvailable"
                            PlaceholderText="@GetChatInputPlaceholder()"
                            MaxMessageLength="@GetMaxMessageLength()"
-                           CurrentText="_editingOriginalText"
+                           CurrentText="@_editingOriginalText"
                            IsEditMode="@(_isEditingMessageId.HasValue)"
-                           ReplyToMessageId="_replyToMessageId"
+                           ReplyToMessageId="@_replyToMessageId"
                            ReplyToUser="@GetReplyToUser()"
                            ReplyToText="@GetReplyToText()"
-                           OnSendMessage="SendMessageAsync"
-                           OnEditMessage="EditMessageAsync"
-                           OnCancelEdit="CancelEdit"
-                           OnCancelReply="CancelReply"
-                           OnReplyPreviewClick="HandleReplyClick" />
+                           OnSendMessage="@SendMessageAsync"
+                           OnEditMessage="@EditMessageAsync"
+                           OnCancelEdit="@CancelEdit"
+                           OnCancelReply="@CancelReply"
+                           OnReplyPreviewClick="@HandleReplyClick" />
             }
         }
         else
