@@ -7,7 +7,7 @@
 
 .telegram-layout {
     display: flex;
-    height: calc(100vh - 64px); /* Account for app header */
+    height: calc(100vh - 64px - 48px); /* Account for app header (64px) and container margin (my-4 = 48px) */
     background: #0e1621;
     overflow: hidden;
 }
@@ -102,7 +102,7 @@
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
     .telegram-layout {
-        height: calc(100vh - 56px); /* Smaller header on mobile */
+        height: calc(100vh - 56px - 48px); /* Smaller header on mobile (56px) and container margin (48px) */
     }
 
     .telegram-sidebar {

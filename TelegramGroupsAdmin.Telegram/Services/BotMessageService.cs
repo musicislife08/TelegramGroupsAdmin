@@ -130,6 +130,43 @@ public class BotMessageService
     }
 
     /// <summary>
+    /// Edit message via bot AND update edit_date in database.
+    /// Used for web UI editing of bot messages (Phase 1: Send & Edit Messages as Bot).
+    /// </summary>
+    public async Task<Message> EditAndUpdateMessageAsync(
+        ITelegramBotClient botClient,
+        long chatId,
+        int messageId,
+        string text,
+        ParseMode? parseMode = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Edit message via Telegram
+        var editedMessage = parseMode.HasValue
+            ? await botClient.EditMessageText(
+                chatId: chatId,
+                messageId: messageId,
+                text: text,
+                parseMode: parseMode.Value,
+                cancellationToken: cancellationToken)
+            : await botClient.EditMessageText(
+                chatId: chatId,
+                messageId: messageId,
+                text: text,
+                cancellationToken: cancellationToken);
+
+        // Update edit_date in messages table
+        await _messageRepo.UpdateMessageEditDateAsync(messageId, DateTimeOffset.UtcNow, cancellationToken);
+
+        _logger.LogDebug(
+            "Edited bot message {MessageId} (chat: {ChatId})",
+            messageId,
+            chatId);
+
+        return editedMessage;
+    }
+
+    /// <summary>
     /// Delete message via bot AND mark as deleted in database.
     /// Gracefully handles cases where message is already deleted from Telegram.
     /// </summary>
