@@ -97,6 +97,7 @@ public static class TickerQUtilities
                 RetryIntervals = retryIntervals
             });
 
+            // Note: TickerQ 2.5.3 has typo "IsSucceded" instead of "IsSucceeded"
             if (!result.IsSucceded)
             {
                 logger.LogWarning(
