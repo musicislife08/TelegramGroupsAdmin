@@ -14,6 +14,6 @@ public class ChatHealthStatus
     public bool CanPromoteMembers { get; set; }
     public bool CanInviteUsers { get; set; }
     public int AdminCount { get; set; }
-    public string Status { get; set; } = "Unknown";
+    public ChatHealthStatusType Status { get; set; } = ChatHealthStatusType.Unknown;
     public List<string> Warnings { get; set; } = [];
 }

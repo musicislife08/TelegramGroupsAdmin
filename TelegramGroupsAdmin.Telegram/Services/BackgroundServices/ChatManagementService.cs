@@ -35,12 +35,17 @@ public class ChatManagementService(
     /// Uses cached health data from most recent health check.
     /// Chats with Warning/Error/Unknown status are excluded to prevent action failures.
     /// Returns HashSet for O(1) lookup performance when filtering large chat lists.
+    ///
+    /// Fail-Closed Behavior: If health cache is empty (cold start before first health check),
+    /// returns empty set, causing all moderation actions to be skipped. This prevents
+    /// permission errors until health status is confirmed. Health checks run on startup
+    /// and every 30 minutes, so cold start window is typically less than 30 seconds.
     /// </summary>
     /// <returns>HashSet of chat IDs with "Healthy" status</returns>
     public HashSet<long> GetHealthyChatIds()
     {
         var healthyChatIds = _healthCache
-            .Where(kvp => kvp.Value.Status == "Healthy")
+            .Where(kvp => kvp.Value.Status == ChatHealthStatusType.Healthy)
             .Select(kvp => kvp.Key)
             .ToHashSet();
 
@@ -66,6 +71,18 @@ public class ChatManagementService(
         }
 
         return healthyChatIds;
+    }
+
+    /// <summary>
+    /// Filters a list of chat IDs to only include healthy chats (bot has admin permissions).
+    /// DRY helper to avoid repeating health gate pattern across multiple call sites.
+    /// </summary>
+    /// <param name="chatIds">Chat IDs to filter</param>
+    /// <returns>Only chat IDs that are in the healthy set</returns>
+    public List<long> FilterHealthyChats(IEnumerable<long> chatIds)
+    {
+        var healthyChatIds = GetHealthyChatIds();
+        return chatIds.Where(healthyChatIds.Contains).ToList();
     }
 
     /// <summary>
@@ -566,7 +583,7 @@ public class ChatManagementService(
         {
             ChatId = chatId,
             IsReachable = false,
-            Status = "Unknown"
+            Status = ChatHealthStatusType.Unknown
         };
         string? chatName = null;
 
@@ -580,7 +597,7 @@ public class ChatManagementService(
             // Skip health check for private chats (only relevant for groups)
             if (chat.Type == ChatType.Private)
             {
-                health.Status = "N/A";
+                health.Status = ChatHealthStatusType.NotApplicable;
                 health.Warnings.Add("Health checks not applicable to private chats");
                 logger.LogDebug("Skipping health check for private chat {ChatId}", chatId);
                 return (health, chatName);
@@ -614,12 +631,12 @@ public class ChatManagementService(
             }
 
             // Determine overall status
-            health.Status = "Healthy";
+            health.Status = ChatHealthStatusType.Healthy;
             health.Warnings.Clear();
 
             if (!health.IsAdmin)
             {
-                health.Status = "Warning";
+                health.Status = ChatHealthStatusType.Warning;
                 health.Warnings.Add("Bot is not an admin in this chat");
             }
             else
@@ -630,11 +647,11 @@ public class ChatManagementService(
                     health.Warnings.Add("Bot cannot ban/restrict users");
 
                 if (health.Warnings.Count > 0)
-                    health.Status = "Warning";
+                    health.Status = ChatHealthStatusType.Warning;
             }
 
             // Send notification if health warnings detected (Phase 5.1)
-            if (health.Status is "Warning" or "Error")
+            if (health.Status is ChatHealthStatusType.Warning or ChatHealthStatusType.Error)
             {
                 var warningsText = string.Join("\n- ", health.Warnings);
 
@@ -659,7 +676,7 @@ public class ChatManagementService(
             // Includes TaskCanceledException from HTTP client timeouts
             logger.LogWarning(cancelEx, "Request timeout/cancellation during health check for chat {ChatId} - will retry on next cycle", chatId);
             health.IsReachable = false;
-            health.Status = "Error";
+            health.Status = ChatHealthStatusType.Error;
             health.Warnings.Add($"Request timeout: {cancelEx.Message}");
         }
         catch (HttpRequestException httpEx)
@@ -668,7 +685,7 @@ public class ChatManagementService(
             // These are usually temporary API connectivity issues that resolve on their own
             logger.LogWarning(httpEx, "Transient network error during health check for chat {ChatId} - will retry on next cycle", chatId);
             health.IsReachable = false;
-            health.Status = "Error";
+            health.Status = ChatHealthStatusType.Error;
             health.Warnings.Add($"Temporary network issue: {httpEx.Message}");
         }
         catch (Exception ex)
@@ -680,7 +697,7 @@ public class ChatManagementService(
             {
                 logger.LogWarning(ex, "Transient network error during health check for chat {ChatId} - will retry on next cycle", chatId);
                 health.IsReachable = false;
-                health.Status = "Error";
+                health.Status = ChatHealthStatusType.Error;
                 health.Warnings.Add($"Temporary network issue: {ex.Message}");
             }
             else
@@ -688,7 +705,7 @@ public class ChatManagementService(
                 // Critical error - likely bot kicked or permission denied
                 logger.LogError(ex, "Health check failed for chat {ChatId}", chatId);
                 health.IsReachable = false;
-                health.Status = "Error";
+                health.Status = ChatHealthStatusType.Error;
                 health.Warnings.Add($"Cannot reach chat: {ex.Message}");
 
                 // Notify about critical health failure (Phase 5.1)
@@ -881,4 +898,19 @@ public class ChatManagementService(
 
         return false;
     }
+
+#if DEBUG
+    /// <summary>
+    /// TEST HELPER: Allows tests to inject health cache state for testing health gate behavior.
+    /// Only available in DEBUG builds.
+    /// </summary>
+    public void SetHealthCacheForTesting(Dictionary<long, ChatHealthStatus> healthCache)
+    {
+        _healthCache.Clear();
+        foreach (var kvp in healthCache)
+        {
+            _healthCache[kvp.Key] = kvp.Value;
+        }
+    }
+#endif
 }

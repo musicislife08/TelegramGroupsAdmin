@@ -424,7 +424,7 @@ public class SpamActionService(
             }
 
             // Health gate: Filter for chats where bot has confirmed permissions
-            var healthyChatIds = chatManagementService.GetHealthyChatIds();
+            var healthyChatIds = chatManagementService.FilterHealthyChats(activeChats.Select(c => c.ChatId)).ToHashSet();
             var actionableChats = activeChats.Where(c => healthyChatIds.Contains(c.ChatId)).ToList();
 
             // Log chats skipped due to health issues

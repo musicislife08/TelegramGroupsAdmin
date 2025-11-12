@@ -269,8 +269,7 @@ public class ModerationActionService
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
             // Health gate: Filter for chats where bot has confirmed permissions
-            var healthyChatIds = _chatManagementService.GetHealthyChatIds();
-            var actionableChatIds = activeChatIds.Where(id => healthyChatIds.Contains(id)).ToList();
+            var actionableChatIds = _chatManagementService.FilterHealthyChats(activeChatIds);
 
             // Log chats skipped due to health issues
             var skippedChats = activeChatIds.Except(actionableChatIds).ToList();
@@ -383,8 +382,7 @@ public class ModerationActionService
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
             // Health gate: Filter for chats where bot has confirmed permissions
-            var healthyChatIds = _chatManagementService.GetHealthyChatIds();
-            var actionableChatIds = activeChatIds.Where(id => healthyChatIds.Contains(id)).ToList();
+            var actionableChatIds = _chatManagementService.FilterHealthyChats(activeChatIds);
 
             // Log chats skipped due to health issues
             var skippedChats = activeChatIds.Except(actionableChatIds).ToList();
@@ -598,8 +596,7 @@ public class ModerationActionService
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
             // Health gate: Filter for chats where bot has confirmed permissions
-            var healthyChatIds = _chatManagementService.GetHealthyChatIds();
-            var actionableChatIds = activeChatIds.Where(id => healthyChatIds.Contains(id)).ToList();
+            var actionableChatIds = _chatManagementService.FilterHealthyChats(activeChatIds);
 
             // Log chats skipped due to health issues
             var skippedChats = activeChatIds.Except(actionableChatIds).ToList();
@@ -782,8 +779,7 @@ public class ModerationActionService
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
             // Health gate: Filter for chats where bot has confirmed permissions
-            var healthyChatIds = _chatManagementService.GetHealthyChatIds();
-            var actionableChatIds = activeChatIds.Where(id => healthyChatIds.Contains(id)).ToList();
+            var actionableChatIds = _chatManagementService.FilterHealthyChats(activeChatIds);
 
             // Log chats skipped due to health issues
             var skippedChats = activeChatIds.Except(actionableChatIds).ToList();
@@ -929,8 +925,7 @@ public class ModerationActionService
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
             // Health gate: Filter for chats where bot has confirmed permissions
-            var healthyChatIds = _chatManagementService.GetHealthyChatIds();
-            var actionableChatIds = activeChatIds.Where(id => healthyChatIds.Contains(id)).ToList();
+            var actionableChatIds = _chatManagementService.FilterHealthyChats(activeChatIds);
 
             // Log chats skipped due to health issues
             var skippedChats = activeChatIds.Except(actionableChatIds).ToList();

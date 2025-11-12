@@ -75,7 +75,7 @@
                 </MudTd>
                 <MudTd DataLabel="Health">
                     <MudChip T="string" Size="Size.Small" Color="@GetHealthColor(context.HealthStatus.Status)">
-                        @context.HealthStatus.Status
+                        @context.HealthStatus.Status.ToString()
                     </MudChip>
                     @if (context.HealthStatus.Warnings.Count > 0)
                     {
@@ -172,7 +172,7 @@
                 var health = BotService.GetCachedHealth(chat.ChatId) ?? new ChatHealthStatus
                 {
                     ChatId = chat.ChatId,
-                    Status = "Checking...",
+                    Status = ChatHealthStatusType.Unknown,
                     IsReachable = true
                 };
 
@@ -243,13 +243,13 @@
         };
     }
 
-    private Color GetHealthColor(string status)
+    private Color GetHealthColor(ChatHealthStatusType status)
     {
         return status switch
         {
-            "Healthy" => Color.Success,
-            "Warning" => Color.Warning,
-            "Error" => Color.Error,
+            ChatHealthStatusType.Healthy => Color.Success,
+            ChatHealthStatusType.Warning => Color.Warning,
+            ChatHealthStatusType.Error => Color.Error,
             _ => Color.Default
         };
     }
