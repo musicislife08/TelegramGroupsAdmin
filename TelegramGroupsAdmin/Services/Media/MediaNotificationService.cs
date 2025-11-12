@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Threading;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Services.Media;
@@ -11,12 +12,12 @@ namespace TelegramGroupsAdmin.Services.Media;
 public class MediaNotificationService : IMediaNotificationService
 {
     private readonly ConcurrentDictionary<string, List<Action>> _subscriptions = new();
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     public void Subscribe(long messageId, MediaType mediaType, Action callback)
     {
         var key = $"{messageId}:{mediaType}";
-        lock (_lock)
+        using (_lock.EnterScope())
         {
             if (!_subscriptions.TryGetValue(key, out var callbacks))
             {
@@ -30,7 +31,7 @@ public class MediaNotificationService : IMediaNotificationService
     public void SubscribeUserPhoto(long userId, Action callback)
     {
         var key = $"{userId}:photo";
-        lock (_lock)
+        using (_lock.EnterScope())
         {
             if (!_subscriptions.TryGetValue(key, out var callbacks))
             {
@@ -44,7 +45,7 @@ public class MediaNotificationService : IMediaNotificationService
     public void Unsubscribe(long messageId, MediaType mediaType, Action callback)
     {
         var key = $"{messageId}:{mediaType}";
-        lock (_lock)
+        using (_lock.EnterScope())
         {
             if (_subscriptions.TryGetValue(key, out var callbacks))
             {
@@ -60,7 +61,7 @@ public class MediaNotificationService : IMediaNotificationService
     public void UnsubscribeUserPhoto(long userId, Action callback)
     {
         var key = $"{userId}:photo";
-        lock (_lock)
+        using (_lock.EnterScope())
         {
             if (_subscriptions.TryGetValue(key, out var callbacks))
             {
@@ -78,7 +79,7 @@ public class MediaNotificationService : IMediaNotificationService
         var key = $"{messageId}:{mediaType}";
         List<Action>? callbacks;
 
-        lock (_lock)
+        using (_lock.EnterScope())
         {
             if (!_subscriptions.TryGetValue(key, out callbacks) || callbacks == null)
             {
@@ -107,7 +108,7 @@ public class MediaNotificationService : IMediaNotificationService
         var key = $"{userId}:photo";
         List<Action>? callbacks;
 
-        lock (_lock)
+        using (_lock.EnterScope())
         {
             if (!_subscriptions.TryGetValue(key, out callbacks) || callbacks == null)
             {

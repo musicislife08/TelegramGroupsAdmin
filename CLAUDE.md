@@ -2,9 +2,7 @@
 
 ## Stack
 
-.NET 9.0 (9.0.100), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 9.0, TickerQ 2.5.3, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
-
-**Note**: Migrated from .NET 10 RC2 → .NET 9 due to a framework bug where Blazor Server apps don't generate `wwwroot/_framework/blazor.web.js` during publish, causing 404s in Production mode. Will upgrade to .NET 10 after RTM release (November 11, 2025).
+.NET 10.0 (10.0.100), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 9.0, TickerQ 2.5.3, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
 
 ## Git Workflow (CRITICAL - FOLLOW EVERY TIME)
 
@@ -247,7 +245,6 @@ When `SEQ_URL` is configured, the application automatically enables:
 - DB growing: Check retention (720h default), cleanup running
 - Rate limits: Check logs for VirusTotalService/OpenAIVisionSpamDetectionService warnings
 - Testing: Always use `--migrate-only` flag, never run app in normal mode (only one instance allowed)
-- **Blazor 404 in Production**: .NET 10 RC2 bug - framework files not generated during publish. Use .NET 9 stable until .NET 10 RTM.
 
 ### TickerQ Background Jobs
 

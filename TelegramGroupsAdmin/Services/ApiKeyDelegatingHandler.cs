@@ -12,17 +12,20 @@ public class ApiKeyDelegatingHandler : DelegatingHandler
     private readonly IConfiguration _configuration;
     private readonly string _serviceName;
     private readonly string _headerName;
+    private readonly string? _headerValueFormat;
 
     public ApiKeyDelegatingHandler(
         IServiceProvider serviceProvider,
         IConfiguration configuration,
         string serviceName,
-        string headerName)
+        string headerName,
+        string? headerValueFormat = null)
     {
         _serviceProvider = serviceProvider;
         _configuration = configuration;
         _serviceName = serviceName;
         _headerName = headerName;
+        _headerValueFormat = headerValueFormat;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -43,6 +46,8 @@ public class ApiKeyDelegatingHandler : DelegatingHandler
                 apiKey = _serviceName switch
                 {
                     "VirusTotal" => apiKeys.VirusTotal,
+                    "OpenAI" => apiKeys.OpenAI,
+                    "SendGrid" => apiKeys.SendGrid,
                     _ => null
                 };
             }
@@ -62,7 +67,11 @@ public class ApiKeyDelegatingHandler : DelegatingHandler
         // Add API key header if found
         if (!string.IsNullOrWhiteSpace(apiKey))
         {
-            request.Headers.TryAddWithoutValidation(_headerName, apiKey);
+            var headerValue = string.IsNullOrWhiteSpace(_headerValueFormat)
+                ? apiKey
+                : string.Format(_headerValueFormat, apiKey);
+
+            request.Headers.TryAddWithoutValidation(_headerName, headerValue);
         }
 
         return await base.SendAsync(request, cancellationToken);

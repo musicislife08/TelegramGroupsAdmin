@@ -52,6 +52,11 @@ jobs:
         with:
           fetch-depth: 0  # Full history for GitVersion
 
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Install GitVersion
         uses: gittools/actions/gitversion/setup@v1
         with:
@@ -70,11 +75,6 @@ jobs:
           echo "NuGetVersion: ${NUGET_VERSION}"
           echo "### Version: ${SEMVER}" >> $GITHUB_STEP_SUMMARY
 
-      - name: Setup .NET 9
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.0.x'
-
       - name: Restore dependencies
         run: dotnet restore
 
@@ -84,24 +84,32 @@ jobs:
       - name: Run all tests
         run: dotnet test --no-build --configuration Release --verbosity normal
 
-  publish-docker:
-    name: Build and Publish Docker Image
+  # Shared versioning job for Docker builds (runs before parallel platform builds)
+  docker-version:
+    name: Determine Docker Version
     runs-on: ubuntu-latest
 
-    # Only run on push events to develop/master (after PR merge), skip during PR review
-    # This ensures Docker images are built from the correct branch (not the deleted feature branch)
-    # Note: No dependency on build-and-test job - this job is self-sufficient and re-runs GitVersion independently
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
+    # Run on PRs to develop/master (validation) and pushes to develop/master (publish)
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'))
 
-    permissions:
-      contents: read
-      packages: write
+    outputs:
+      semver: ${{ steps.gitversion.outputs.semVer }}
+      major: ${{ steps.gitversion.outputs.major }}
+      minor: ${{ steps.gitversion.outputs.minor }}
+      tags: ${{ steps.docker-tags.outputs.tags }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Full history for GitVersion
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
 
       - name: Install GitVersion
         uses: gittools/actions/gitversion/setup@v1
@@ -111,16 +119,6 @@ jobs:
       - name: Determine Version
         id: gitversion
         uses: gittools/actions/gitversion/execute@v1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Determine Docker tags
         id: docker-tags
@@ -146,45 +144,97 @@ jobs:
           fi
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
 
-      - name: Build and push Docker image
+  # Single multi-arch build (simplified approach - 30s slower but much simpler)
+  # Trade-off: AMD64 30s + ARM64 3min = 3.5min total vs 3min parallel
+  build-and-publish-multiarch:
+    name: Build and Publish Multi-Arch Image
+    runs-on: ubuntu-latest
+    needs: docker-version
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare Docker repository name
+        id: repo
+        run: |
+          # Convert repository name to lowercase for Docker compatibility
+          REPO_LOWER="${{ github.repository }}"
+          REPO_LOWER="${REPO_LOWER,,}"
+          echo "name=${REPO_LOWER}" >> $GITHUB_OUTPUT
+
+      - name: Build and push multi-arch image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./TelegramGroupsAdmin/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.docker-tags.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Push only on post-merge (push events), validate only on PRs
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ needs.docker-version.outputs.tags }}
+          # Unified cache for both platforms (v2: force fresh cache after fixing NuGet cache IDs)
+          cache-from: type=gha,scope=buildx-multiarch-v2
+          cache-to: type=gha,mode=max,scope=buildx-multiarch-v2
+          # Enable BuildKit inline cache for cross-platform sharing
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
 
-      - name: Image published summary
+      - name: Build summary
         env:
-          TAGS: ${{ steps.docker-tags.outputs.tags }}
-          VERSION: ${{ steps.gitversion.outputs.semVer }}
+          VERSION: ${{ needs.docker-version.outputs.semver }}
+          EVENT: ${{ github.event_name }}
+          TAGS: ${{ needs.docker-version.outputs.tags }}
           BRANCH_NAME: ${{ github.ref_name }}
-          REPO: ${{ github.repository }}
+          REPO: ${{ steps.repo.outputs.name }}
         run: |
-          # Convert repository name to lowercase for Docker
-          REPO_LOWER="${REPO,,}"
-
-          echo "### Docker Image Published :rocket:" >> $GITHUB_STEP_SUMMARY
+          if [ "$EVENT" == "pull_request" ]; then
+            echo "### Validated Multi-Arch Build :white_check_mark:" >> $GITHUB_STEP_SUMMARY
+            echo "**Status:** Build validation only (no push)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Docker Image Published :rocket:" >> $GITHUB_STEP_SUMMARY
+            echo "**Status:** Built and pushed to registry" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version:** ${VERSION}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Architectures:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${TAGS}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "**Build Strategy:** Single multi-arch build (cross-compilation)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Pull commands:**" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          if [ "${BRANCH_NAME}" == "master" ]; then
-            echo "# Stable (latest)" >> $GITHUB_STEP_SUMMARY
-            echo "docker pull ${REGISTRY}/${REPO_LOWER}:latest" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "# Development (testing)" >> $GITHUB_STEP_SUMMARY
-            echo "docker pull ${REGISTRY}/${REPO_LOWER}:development" >> $GITHUB_STEP_SUMMARY
+          echo "**Optimizations:**" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Cross-compilation (minimal QEMU overhead)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Unified cache for all platforms" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Multi-stage Dockerfile (5 stages)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Direct manifest creation (no intermediate images)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$EVENT" == "push" ]; then
+            echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "${TAGS}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Pull commands:**" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            if [ "${BRANCH_NAME}" == "master" ]; then
+              echo "# Stable (latest)" >> $GITHUB_STEP_SUMMARY
+              echo "docker pull ${REGISTRY}/${REPO}:latest" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "# Development (testing)" >> $GITHUB_STEP_SUMMARY
+              echo "docker pull ${REGISTRY}/${REPO}:development" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo '```' >> $GITHUB_STEP_SUMMARY
           fi
-          echo '```' >> $GITHUB_STEP_SUMMARY

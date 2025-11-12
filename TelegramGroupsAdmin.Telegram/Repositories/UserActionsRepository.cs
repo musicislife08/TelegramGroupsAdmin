@@ -107,13 +107,14 @@ public class UserActionsRepository : IUserActionsRepository
     public async Task<bool> IsUserTrustedAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Check for active 'trust' action (all trusts are global now)
-        var now = DateTimeOffset.UtcNow;
-        var isTrusted = await context.UserActions
+
+        // Single source of truth: telegram_users.is_trusted column
+        // This includes: service account auto-trust, manual trust, and auto-trust (Phase 5.5)
+        // user_actions table is for audit trail only (who/when/why), not for current state
+        var isTrusted = await context.TelegramUsers
             .AsNoTracking()
-            .AnyAsync(ua => ua.UserId == userId
-                && ua.ActionType == DataModels.UserActionType.Trust
-                && (ua.ExpiresAt == null || ua.ExpiresAt > now), cancellationToken);
+            .Where(u => u.TelegramUserId == userId && u.IsTrusted)
+            .AnyAsync(cancellationToken);
 
         return isTrusted;
     }

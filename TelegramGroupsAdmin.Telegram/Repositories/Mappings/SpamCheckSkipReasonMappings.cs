@@ -8,15 +8,21 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class SpamCheckSkipReasonMappings
 {
-    /// <summary>
-    /// Convert SpamCheckSkipReason from Telegram layer to Data layer
-    /// </summary>
-    public static DataModels.SpamCheckSkipReason ToDataModel(this UiModels.SpamCheckSkipReason reason)
-        => (DataModels.SpamCheckSkipReason)(int)reason;
+    extension(UiModels.SpamCheckSkipReason reason)
+    {
+        /// <summary>
+        /// Convert SpamCheckSkipReason from Telegram layer to Data layer
+        /// </summary>
+        public DataModels.SpamCheckSkipReason ToDataModel()
+            => (DataModels.SpamCheckSkipReason)(int)reason;
+    }
 
-    /// <summary>
-    /// Convert SpamCheckSkipReason from Data layer to Telegram layer
-    /// </summary>
-    public static UiModels.SpamCheckSkipReason ToTelegramModel(this DataModels.SpamCheckSkipReason reason)
-        => (UiModels.SpamCheckSkipReason)(int)reason;
+    extension(DataModels.SpamCheckSkipReason reason)
+    {
+        /// <summary>
+        /// Convert SpamCheckSkipReason from Data layer to Telegram layer
+        /// </summary>
+        public UiModels.SpamCheckSkipReason ToTelegramModel()
+            => (UiModels.SpamCheckSkipReason)(int)reason;
+    }
 }

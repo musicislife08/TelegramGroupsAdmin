@@ -8,32 +8,38 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class WelcomeResponseMappings
 {
-    public static UiModels.WelcomeResponse ToModel(this DataModels.WelcomeResponseDto data) => new(
-        Id: data.Id,
-        ChatId: data.ChatId,
-        UserId: data.UserId,
-        Username: data.Username,
-        WelcomeMessageId: data.WelcomeMessageId,
-        Response: (UiModels.WelcomeResponseType)data.Response,
-        RespondedAt: data.RespondedAt,
-        DmSent: data.DmSent,
-        DmFallback: data.DmFallback,
-        CreatedAt: data.CreatedAt,
-        TimeoutJobId: data.TimeoutJobId
-    );
-
-    public static DataModels.WelcomeResponseDto ToDto(this UiModels.WelcomeResponse ui) => new()
+    extension(DataModels.WelcomeResponseDto data)
     {
-        Id = ui.Id,
-        ChatId = ui.ChatId,
-        UserId = ui.UserId,
-        Username = ui.Username,
-        WelcomeMessageId = ui.WelcomeMessageId,
-        Response = (DataModels.WelcomeResponseType)ui.Response,
-        RespondedAt = ui.RespondedAt,
-        DmSent = ui.DmSent,
-        DmFallback = ui.DmFallback,
-        CreatedAt = ui.CreatedAt,
-        TimeoutJobId = ui.TimeoutJobId
-    };
+        public UiModels.WelcomeResponse ToModel() => new(
+            Id: data.Id,
+            ChatId: data.ChatId,
+            UserId: data.UserId,
+            Username: data.Username,
+            WelcomeMessageId: data.WelcomeMessageId,
+            Response: (UiModels.WelcomeResponseType)data.Response,
+            RespondedAt: data.RespondedAt,
+            DmSent: data.DmSent,
+            DmFallback: data.DmFallback,
+            CreatedAt: data.CreatedAt,
+            TimeoutJobId: data.TimeoutJobId
+        );
+    }
+
+    extension(UiModels.WelcomeResponse ui)
+    {
+        public DataModels.WelcomeResponseDto ToDto() => new()
+        {
+            Id = ui.Id,
+            ChatId = ui.ChatId,
+            UserId = ui.UserId,
+            Username = ui.Username,
+            WelcomeMessageId = ui.WelcomeMessageId,
+            Response = (DataModels.WelcomeResponseType)ui.Response,
+            RespondedAt = ui.RespondedAt,
+            DmSent = ui.DmSent,
+            DmFallback = ui.DmFallback,
+            CreatedAt = ui.CreatedAt,
+            TimeoutJobId = ui.TimeoutJobId
+        };
+    }
 }

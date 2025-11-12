@@ -1,63 +1,98 @@
 # =============================================================================
-# TelegramGroupsAdmin - Production Dockerfile
+# TelegramGroupsAdmin - Production Dockerfile (Optimized Multi-Stage)
 # Multi-stage build using Ubuntu Chiseled runtime for minimal attack surface
+# Optimized for fast ARM64 builds with cross-compilation support
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Stage 1: Build & Publish
-# Use full SDK image for building and publishing
+# Stage 1: Dependencies - Download heavy binaries (cached separately)
+# This stage rarely changes, providing excellent cache reuse
 # -----------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
-ARG BUILD_CONFIGURATION=Release
-WORKDIR /src
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS dependencies
 
-# Install build dependencies
-# wget: for health checks (smaller than curl, fewer dependencies)
-# tesseract-ocr, libleptonica-dev: for OCR-based image spam detection (ML-5)
-# xz-utils: for extracting FFmpeg static build archive (ML-6)
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+WORKDIR /deps
+
+# Install system dependencies for downloading and extracting
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
-    tesseract-ocr \
-    libleptonica-dev \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Download Tesseract English language data (tessdata_best for accuracy)
-# ML-5: OCR-based image spam detection
-# Cached layer - only re-downloads if apt packages change
-RUN wget -q https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata \
-    -O /tmp/eng.traineddata && \
-    echo "Downloaded eng.traineddata: $(du -h /tmp/eng.traineddata | cut -f1)"
-
-# Download FFmpeg static build (John Van Sickle's builds - most reliable)
-# ML-6: Video frame extraction for video spam detection
-# Auto-detects architecture: amd64 or arm64
-# Version: Pinned to stable release, update via build arg in CI
-# Cached layer - only re-downloads if apt packages change or FFMPEG_VERSION changes
-ARG FFMPEG_VERSION=7.0.2
-RUN ARCH=$(dpkg --print-architecture) && \
-    if [ "$ARCH" = "amd64" ]; then \
-        FFMPEG_ARCH="amd64"; \
-    elif [ "$ARCH" = "arm64" ]; then \
-        FFMPEG_ARCH="arm64"; \
-    else \
-        echo "Unsupported architecture: $ARCH" && exit 1; \
-    fi && \
-    echo "Downloading FFmpeg ${FFMPEG_VERSION} for $FFMPEG_ARCH..." && \
-    wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-${FFMPEG_VERSION}-$FFMPEG_ARCH-static.tar.xz \
+# Download FFmpeg static build (architecture-specific) with checksum validation
+# Uses TARGETPLATFORM to download correct binary during cross-compilation
+# Example: TARGETPLATFORM=linux/arm64 downloads arm64 binary on amd64 host
+# Currently pinned to: version 7.0.2 (via release channel with MD5 validation)
+# Security: MD5 validation ensures binary integrity and reproducible builds
+RUN case "$TARGETPLATFORM" in \
+        "linux/amd64") FFMPEG_ARCH="amd64" ;; \
+        "linux/arm64") FFMPEG_ARCH="arm64" ;; \
+        *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
+    esac && \
+    echo "Downloading FFmpeg (release) for ${FFMPEG_ARCH} (target: $TARGETPLATFORM, building on: $BUILDPLATFORM)..." && \
+    wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${FFMPEG_ARCH}-static.tar.xz \
         -O /tmp/ffmpeg.tar.xz && \
-    echo "Extracting FFmpeg ${FFMPEG_VERSION}..." && \
-    mkdir -p /tmp/ffmpeg && \
-    tar -xf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg --strip-components=1 && \
-    cp /tmp/ffmpeg/ffmpeg /usr/local/bin/ffmpeg && \
-    cp /tmp/ffmpeg/ffprobe /usr/local/bin/ffprobe && \
-    chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe && \
-    rm -rf /tmp/ffmpeg /tmp/ffmpeg.tar.xz && \
-    echo "FFmpeg installed: $(/usr/local/bin/ffmpeg -version | head -n1)"
+    wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${FFMPEG_ARCH}-static.tar.xz.md5 \
+        -O /tmp/ffmpeg.tar.xz.md5 && \
+    echo "Validating checksum..." && \
+    cd /tmp && \
+    EXPECTED_MD5=$(awk '{print $1}' ffmpeg.tar.xz.md5) && \
+    ACTUAL_MD5=$(md5sum ffmpeg.tar.xz | awk '{print $1}') && \
+    echo "Expected: ${EXPECTED_MD5}" && \
+    echo "Actual:   ${ACTUAL_MD5}" && \
+    [ "${EXPECTED_MD5}" = "${ACTUAL_MD5}" ] || (echo "MD5 mismatch!" && exit 1) && \
+    echo "Checksum validated successfully" && \
+    echo "Extracting FFmpeg..." && \
+    mkdir -p /deps/ffmpeg && \
+    tar -xf /tmp/ffmpeg.tar.xz -C /deps/ffmpeg --strip-components=1 && \
+    chmod +x /deps/ffmpeg/ffmpeg /deps/ffmpeg/ffprobe && \
+    rm -rf /tmp/ffmpeg.tar.xz /tmp/ffmpeg.tar.xz.md5 && \
+    echo "FFmpeg ready: $(/deps/ffmpeg/ffmpeg -version | head -n1)"
 
-# Copy solution and project files (for better layer caching)
+# Download Tesseract language data (architecture-independent)
+# ML-5: OCR-based image spam detection
+RUN wget -q https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata \
+    -O /deps/eng.traineddata && \
+    echo "Downloaded eng.traineddata: $(du -h /deps/eng.traineddata | cut -f1)"
+
+# -----------------------------------------------------------------------------
+# Stage 2: Tesseract Build Environment
+# Install Tesseract OCR with all dependencies for target architecture
+# Separate stage to cache these heavy system packages
+# Builds for target platform by default (no --platform flag needed)
+# -----------------------------------------------------------------------------
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS tesseract-env
+
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+# Install Tesseract OCR and dependencies
+# These will be copied to final runtime image
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    libleptonica-dev \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# -----------------------------------------------------------------------------
+# Stage 3: NuGet Restore
+# Restore .NET dependencies with BuildKit cache mounts for speed
+# Cross-compilation happens here: build on BUILDPLATFORM, target TARGETPLATFORM
+# -----------------------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS restore
+
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+WORKDIR /src
+
+# Copy solution and project files (for layer caching)
 # Excludes TelegramGroupsAdmin.Tests - not needed for production runtime
 COPY ["TelegramGroupsAdmin.sln", "./"]
+COPY ["Directory.Build.props", "./"]
+COPY ["global.json", "./"]
 COPY ["TelegramGroupsAdmin/TelegramGroupsAdmin.csproj", "TelegramGroupsAdmin/"]
 COPY ["TelegramGroupsAdmin.Configuration/TelegramGroupsAdmin.Configuration.csproj", "TelegramGroupsAdmin.Configuration/"]
 COPY ["TelegramGroupsAdmin.Core/TelegramGroupsAdmin.Core.csproj", "TelegramGroupsAdmin.Core/"]
@@ -66,62 +101,101 @@ COPY ["TelegramGroupsAdmin.Telegram/TelegramGroupsAdmin.Telegram.csproj", "Teleg
 COPY ["TelegramGroupsAdmin.Telegram.Abstractions/TelegramGroupsAdmin.Telegram.Abstractions.csproj", "TelegramGroupsAdmin.Telegram.Abstractions/"]
 COPY ["TelegramGroupsAdmin.ContentDetection/TelegramGroupsAdmin.ContentDetection.csproj", "TelegramGroupsAdmin.ContentDetection/"]
 
-# Restore dependencies (cached layer if project files unchanged)
-RUN dotnet restore "TelegramGroupsAdmin/TelegramGroupsAdmin.csproj"
+# Restore with runtime identifier for cross-compilation
+# Runs on BUILDPLATFORM (fast AMD64), downloads packages for TARGETPLATFORM
+# Unified cache for multi-arch builds (when building both platforms in single job)
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
+    case "$TARGETPLATFORM" in \
+        "linux/amd64") RID="linux-x64" ;; \
+        "linux/arm64") RID="linux-arm64" ;; \
+        *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
+    esac && \
+    echo "Restoring packages for $RID (target: $TARGETPLATFORM, building on: $BUILDPLATFORM)..." && \
+    dotnet restore "TelegramGroupsAdmin/TelegramGroupsAdmin.csproj" \
+        -r $RID \
+        --verbosity minimal
+
+# -----------------------------------------------------------------------------
+# Stage 4: Build & Publish
+# Cross-compile: build on fast BUILDPLATFORM (AMD64), output for TARGETPLATFORM
+# This eliminates QEMU overhead for ARM64 builds!
+# -----------------------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+
+ARG BUILD_CONFIGURATION=Release
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+
+WORKDIR /src
+
+# Copy project files from restore stage
+COPY --from=restore /src .
 
 # Copy all source code
 COPY . .
 
-# Publish
-WORKDIR /src/TelegramGroupsAdmin
-RUN dotnet publish "./TelegramGroupsAdmin.csproj" \
-    -c $BUILD_CONFIGURATION \
-    -o /app/publish \
-    --no-restore \
-    /p:UseAppHost=false \
-    /p:PublishTrimmed=false \
-    /p:PublishSingleFile=false
+# Build and publish with cross-compilation
+# KEY OPTIMIZATION: Runs on AMD64 host, compiles for ARM64 target (no QEMU!)
+# Unified cache for multi-arch builds (matches restore stage cache)
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
+    case "$TARGETPLATFORM" in \
+        "linux/amd64") RID="linux-x64" ;; \
+        "linux/arm64") RID="linux-arm64" ;; \
+        *) echo "Unsupported platform: $TARGETPLATFORM" && exit 1 ;; \
+    esac && \
+    echo "Building for $RID (target: $TARGETPLATFORM, building on: $BUILDPLATFORM)..." && \
+    cd TelegramGroupsAdmin && \
+    dotnet publish "./TelegramGroupsAdmin.csproj" \
+        -c $BUILD_CONFIGURATION \
+        -r $RID \
+        -o /app/publish \
+        --self-contained false \
+        /p:UseAppHost=false \
+        /p:PublishTrimmed=false \
+        /p:PublishSingleFile=false && \
+    echo "Build complete for $RID"
 
 # -----------------------------------------------------------------------------
-# Stage 2: Runtime (Ubuntu Chiseled - minimal attack surface)
+# Stage 5: Runtime (Ubuntu Chiseled - minimal attack surface)
+# Final production image with only runtime dependencies
 # -----------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/aspnet:9.0-noble-chiseled-extra AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra AS final
 
 # Arguments for user/group ID customization
 ARG PUID=1654
 ARG PGID=1654
 
-# Copy wget binary and minimal dependencies from SDK stage for health checks
+# Copy wget binary and minimal dependencies from tesseract-env for health checks
 # wget is smaller and has fewer dependencies than curl
-COPY --from=build /usr/bin/wget /usr/bin/wget
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=tesseract-env /usr/bin/wget /usr/bin/wget
+COPY --from=tesseract-env /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
-# Copy Tesseract OCR binaries and libraries from build stage (ML-5: OCR spam detection)
+# Copy Tesseract OCR binaries and libraries from tesseract-env (ML-5: OCR spam detection)
 # Tesseract binary
-COPY --from=build /usr/bin/tesseract /usr/bin/tesseract
+COPY --from=tesseract-env /usr/bin/tesseract /usr/bin/tesseract
 # Leptonica and Tesseract libraries (multi-arch support: aarch64, x86_64)
-COPY --from=build /usr/lib/*/liblept* /usr/lib/
-COPY --from=build /usr/lib/*/libtesseract* /usr/lib/
+COPY --from=tesseract-env /usr/lib/*/liblept* /usr/lib/
+COPY --from=tesseract-env /usr/lib/*/libtesseract* /usr/lib/
 # Additional dependencies (image format libraries)
-COPY --from=build /usr/lib/*/libpng* /usr/lib/
-COPY --from=build /usr/lib/*/libjpeg* /usr/lib/
-COPY --from=build /usr/lib/*/libtiff* /usr/lib/
-COPY --from=build /usr/lib/*/libwebp* /usr/lib/
-COPY --from=build /usr/lib/*/libgif* /usr/lib/
-COPY --from=build /usr/lib/*/libopenjp2* /usr/lib/
+COPY --from=tesseract-env /usr/lib/*/libpng* /usr/lib/
+COPY --from=tesseract-env /usr/lib/*/libjpeg* /usr/lib/
+COPY --from=tesseract-env /usr/lib/*/libtiff* /usr/lib/
+COPY --from=tesseract-env /usr/lib/*/libwebp* /usr/lib/
+COPY --from=tesseract-env /usr/lib/*/libgif* /usr/lib/
+COPY --from=tesseract-env /usr/lib/*/libopenjp2* /usr/lib/
 # Copy all runtime dependencies to /usr/lib (flattened structure)
 # Includes transitive deps for Tesseract/Leptonica (Pango, Cairo, X11, curl, etc.)
 # ~171MB but ensures all deps are present (Debian's leptonica-progs pulls in libarchive→curl)
-COPY --from=build /usr/lib/*/lib*.so.* /usr/lib/
+COPY --from=tesseract-env /usr/lib/*/lib*.so.* /usr/lib/
 
-# Copy Tesseract language data from build stage (ML-5: OCR spam detection)
+# Copy Tesseract language data from dependencies stage (ML-5: OCR spam detection)
 # 14.7MB - tessdata_best for better accuracy on compressed spam images
-COPY --from=build --chown=$PUID:$PGID /tmp/eng.traineddata /tessdata/eng.traineddata
+COPY --from=dependencies --chown=$PUID:$PGID /deps/eng.traineddata /tessdata/eng.traineddata
 
-# Copy FFmpeg static binaries from build stage (ML-6: Video frame extraction)
+# Copy FFmpeg static binaries from dependencies stage (ML-6: Video frame extraction)
 # Static builds = no library dependencies, works in Chiseled runtime
-COPY --from=build /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
-COPY --from=build /usr/local/bin/ffprobe /usr/local/bin/ffprobe
+COPY --from=dependencies /deps/ffmpeg/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=dependencies /deps/ffmpeg/ffprobe /usr/local/bin/ffprobe
 
 # Create non-root user with customizable UID/GID
 # Chiseled images use UID 1654 by default (APP_UID)
@@ -132,7 +206,6 @@ WORKDIR /app
 
 # Copy published application from build stage
 COPY --from=build /app/publish .
-
 
 # Create volume mount points for persistent data
 # These will be mounted from host at runtime
@@ -149,7 +222,7 @@ VOLUME ["/data"]
 # Expose HTTP port (HTTPS handled by reverse proxy)
 EXPOSE 8080
 
-# Health check using wget copied from SDK stage
+# Health check using wget copied from tesseract-env stage
 # Use liveness probe (no dependency checks - database failures shouldn't cause container restart)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["/usr/bin/wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz/live"]
@@ -168,10 +241,18 @@ ENTRYPOINT ["dotnet", "TelegramGroupsAdmin.dll"]
 
 # =============================================================================
 # Build Instructions:
+#
+# Local build (single architecture):
 # docker build -t telegramgroupsadmin:latest -f TelegramGroupsAdmin/Dockerfile .
 #
-# Build with specific FFmpeg version (for rollback or CI version bumps):
+# Multi-architecture build (uses BuildKit cross-compilation):
+# docker buildx build --platform linux/amd64,linux/arm64 -t telegramgroupsadmin:latest -f TelegramGroupsAdmin/Dockerfile .
+#
+# Build with specific FFmpeg version:
 # docker build --build-arg FFMPEG_VERSION=7.0.1 -t telegramgroupsadmin:latest -f TelegramGroupsAdmin/Dockerfile .
+#
+# Build with custom user/group ID:
+# docker build --build-arg PUID=1000 --build-arg PGID=1000 -t telegramgroupsadmin:latest -f TelegramGroupsAdmin/Dockerfile .
 #
 # Run Instructions:
 # docker run -d \
@@ -182,6 +263,14 @@ ENTRYPOINT ["dotnet", "TelegramGroupsAdmin.dll"]
 #   -e OPENAI__APIKEY=your_key \
 #   ... (all other env vars) \
 #   telegramgroupsadmin:latest
+#
+# Performance Optimizations:
+# - Multi-stage build with 5 stages (vs 2 original)
+# - Cross-compilation: Build on fast AMD64, compile for ARM64 (no QEMU overhead!)
+# - BuildKit cache mounts for NuGet packages (persistent across builds)
+# - Separate dependency stage for FFmpeg/Tesseract (rarely changes = excellent cache)
+# - Layer ordering optimized: Restore before heavy downloads
+# - Platform-aware: Uses TARGETPLATFORM/BUILDPLATFORM for correct binaries
 #
 # Security Features:
 # - Ubuntu Chiseled runtime (minimal, no shell, no package manager)

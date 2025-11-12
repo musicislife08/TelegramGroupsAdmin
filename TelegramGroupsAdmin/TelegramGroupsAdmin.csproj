@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <RootNamespace>TelegramGroupsAdmin</RootNamespace>
@@ -36,6 +36,7 @@
         <PackageReference Include="MudBlazor" Version="8.14.0" />
         <PackageReference Include="Npgsql" Version="9.0.4" />
         <PackageReference Include="Npgsql.DependencyInjection" Version="9.0.4" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
         <PackageReference Include="Npgsql.OpenTelemetry" Version="9.0.4" />
         <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.13.1" />
         <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.11.0-beta.1" />
@@ -51,16 +52,15 @@
         <PackageReference Include="Serilog.Sinks.Seq" Version="9.0.0" />
         <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
         <PackageReference Include="Telegram.Bot" Version="22.7.5" />
-        <PackageReference Include="TickerQ" Version="9.0.0-beta.1" />
-        <PackageReference Include="TickerQ.Dashboard" Version="9.0.0-beta.1" />
-        <PackageReference Include="TickerQ.EntityFrameworkCore" Version="9.0.0-beta.1" />
-        <PackageReference Include="TickerQ.Instrumentation.OpenTelemetry" Version="9.0.0-beta.1" />
-        <PackageReference Include="TickerQ.Utilities" Version="9.0.0-beta.1" />
+        <PackageReference Include="TickerQ" Version="2.5.3" />
+        <PackageReference Include="TickerQ.Dashboard" Version="2.5.3" />
+        <PackageReference Include="TickerQ.EntityFrameworkCore" Version="2.5.3" />
+        <PackageReference Include="TickerQ.Utilities" Version="2.5.3" />
     </ItemGroup>
 
-    <!-- Explicitly register TickerQ source generator for .NET 9 -->
+    <!-- Explicitly register TickerQ source generator for .NET 10 -->
     <ItemGroup>
-        <Analyzer Include="$(NuGetPackageRoot)tickerq/9.0.0-beta.1/analyzers/dotnet/cs/TickerQ.SourceGenerator.dll" />
+        <Analyzer Include="$(NuGetPackageRoot)tickerq/2.5.3/analyzers/dotnet/cs/TickerQ.SourceGenerator.dll" />
     </ItemGroup>
 
     <ItemGroup>

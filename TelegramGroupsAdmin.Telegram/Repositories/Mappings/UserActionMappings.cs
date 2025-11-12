@@ -8,37 +8,42 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class UserActionMappings
 {
-    public static UiModels.UserActionRecord ToModel(
-        this DataModels.UserActionRecordDto data,
-        string? webUserEmail = null,
-        string? telegramUsername = null,
-        string? telegramFirstName = null) => new(
-        Id: data.Id,
-        UserId: data.UserId,
-        ActionType: (UiModels.UserActionType)data.ActionType,
-        MessageId: data.MessageId,
-        IssuedBy: ActorMappings.ToActor(data.WebUserId, data.TelegramUserId, data.SystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
-        IssuedAt: data.IssuedAt,
-        ExpiresAt: data.ExpiresAt,
-        Reason: data.Reason
-    );
-
-    public static DataModels.UserActionRecordDto ToDto(this UiModels.UserActionRecord ui)
+    extension(DataModels.UserActionRecordDto data)
     {
-        ActorMappings.SetActorColumns(ui.IssuedBy, out var webUserId, out var telegramUserId, out var systemIdentifier);
+        public UiModels.UserActionRecord ToModel(
+            string? webUserEmail = null,
+            string? telegramUsername = null,
+            string? telegramFirstName = null) => new(
+            Id: data.Id,
+            UserId: data.UserId,
+            ActionType: (UiModels.UserActionType)data.ActionType,
+            MessageId: data.MessageId,
+            IssuedBy: ActorMappings.ToActor(data.WebUserId, data.TelegramUserId, data.SystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
+            IssuedAt: data.IssuedAt,
+            ExpiresAt: data.ExpiresAt,
+            Reason: data.Reason
+        );
+    }
 
-        return new()
+    extension(UiModels.UserActionRecord ui)
+    {
+        public DataModels.UserActionRecordDto ToDto()
         {
-            Id = ui.Id,
-            UserId = ui.UserId,
-            ActionType = (DataModels.UserActionType)(int)ui.ActionType,
-            MessageId = ui.MessageId,
-            WebUserId = webUserId,
-            TelegramUserId = telegramUserId,
-            SystemIdentifier = systemIdentifier,
-            IssuedAt = ui.IssuedAt,
-            ExpiresAt = ui.ExpiresAt,
-            Reason = ui.Reason
-        };
+            ActorMappings.SetActorColumns(ui.IssuedBy, out var webUserId, out var telegramUserId, out var systemIdentifier);
+
+            return new()
+            {
+                Id = ui.Id,
+                UserId = ui.UserId,
+                ActionType = (DataModels.UserActionType)(int)ui.ActionType,
+                MessageId = ui.MessageId,
+                WebUserId = webUserId,
+                TelegramUserId = telegramUserId,
+                SystemIdentifier = systemIdentifier,
+                IssuedAt = ui.IssuedAt,
+                ExpiresAt = ui.ExpiresAt,
+                Reason = ui.Reason
+            };
+        }
     }
 }

@@ -8,25 +8,31 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class PendingNotificationMappings
 {
-    public static UiModels.PendingNotificationModel ToModel(this DataModels.PendingNotificationRecord db) => new()
+    extension(DataModels.PendingNotificationRecord db)
     {
-        Id = db.Id,
-        TelegramUserId = db.TelegramUserId,
-        NotificationType = db.NotificationType,
-        MessageText = db.MessageText,
-        CreatedAt = db.CreatedAt,
-        RetryCount = db.RetryCount,
-        ExpiresAt = db.ExpiresAt
-    };
+        public UiModels.PendingNotificationModel ToModel() => new()
+        {
+            Id = db.Id,
+            TelegramUserId = db.TelegramUserId,
+            NotificationType = db.NotificationType,
+            MessageText = db.MessageText,
+            CreatedAt = db.CreatedAt,
+            RetryCount = db.RetryCount,
+            ExpiresAt = db.ExpiresAt
+        };
+    }
 
-    public static DataModels.PendingNotificationRecord ToRecord(this UiModels.PendingNotificationModel ui) => new()
+    extension(UiModels.PendingNotificationModel ui)
     {
-        Id = ui.Id,
-        TelegramUserId = ui.TelegramUserId,
-        NotificationType = ui.NotificationType,
-        MessageText = ui.MessageText,
-        CreatedAt = ui.CreatedAt,
-        RetryCount = ui.RetryCount,
-        ExpiresAt = ui.ExpiresAt
-    };
+        public DataModels.PendingNotificationRecord ToRecord() => new()
+        {
+            Id = ui.Id,
+            TelegramUserId = ui.TelegramUserId,
+            NotificationType = ui.NotificationType,
+            MessageText = ui.MessageText,
+            CreatedAt = ui.CreatedAt,
+            RetryCount = ui.RetryCount,
+            ExpiresAt = ui.ExpiresAt
+        };
+    }
 }

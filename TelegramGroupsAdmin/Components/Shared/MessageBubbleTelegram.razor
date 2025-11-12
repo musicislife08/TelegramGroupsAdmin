@@ -2,6 +2,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Utilities
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Constants
+@using TelegramGroupsAdmin.Core
 @* Telegram-authentic message bubble design *@
 
 <div class="@GetBubbleClass()" @onclick:stopPropagation="true" data-message-id="@Message.MessageId">
@@ -9,7 +10,7 @@
     <div class="tg-avatar-container">
         @if (!string.IsNullOrEmpty(Message.UserPhotoPath))
         {
-            <img src="@GetImagePath(Message.UserPhotoPath)" alt="@(Message.UserName ?? Message.FirstName ?? $"User {Message.UserId}")" class="tg-avatar" loading="lazy" />
+            <img src="@GetImagePath(Message.UserPhotoPath)" alt="@GetUserDisplayName()" class="tg-avatar" loading="lazy" />
         }
         else
         {
@@ -27,7 +28,7 @@
             @* Telegram-style Header: User name + timestamp + badges *@
             <div class="tg-header">
                 <span class="tg-user-name" @onclick="() => OnFilterByUser.InvokeAsync(Message.UserId)" title="Filter by this user">
-                    @(Message.UserName ?? Message.FirstName ?? $"User {Message.UserId}")
+                    @GetUserDisplayName()
                 </span>
                 <span class="tg-timestamp local-timestamp" data-utc="@Message.Timestamp.ToString("o")">
                     @Message.Timestamp.ToLocalTime().ToString("MMM d, yyyy h:mm tt")
@@ -282,6 +283,25 @@
                                 @onmouseenter="@(() => _popoverOpen = true)"
                                 @onmouseleave="@(() => _popoverOpen = false)">
                         <div class="tg-actions-list">
+                            @* Phase 1: Reply button (all messages) *@
+                            <MudMenuItem OnClick="@(() => { _popoverOpen = false; OnReplyToClick.InvokeAsync(Message.MessageId); })">
+                                <div class="tg-menu-item">
+                                    <MudIcon Icon="@Icons.Material.Filled.Reply" Size="Size.Small" />
+                                    <span>Reply</span>
+                                </div>
+                            </MudMenuItem>
+
+                            @* Phase 1: Edit button (bot messages only) *@
+                            @if (IsBotMessage)
+                            {
+                                <MudMenuItem OnClick="@(() => { _popoverOpen = false; OnEditClick.InvokeAsync((Message.MessageId, Message.MessageText ?? string.Empty)); })">
+                                    <div class="tg-menu-item">
+                                        <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                                        <span>Edit Message</span>
+                                    </div>
+                                </MudMenuItem>
+                            }
+
                             @if (EditCount > 0)
                             {
                                 <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnViewEdits.InvokeAsync(Message); })">
@@ -407,6 +427,24 @@
 
     [Parameter]
     public EventCallback<long> OnReplyClick { get; set; }
+
+    /// <summary>
+    /// Phase 1: Send & Edit Messages as Bot - Reply button callback
+    /// </summary>
+    [Parameter]
+    public EventCallback<long> OnReplyToClick { get; set; }
+
+    /// <summary>
+    /// Phase 1: Send & Edit Messages as Bot - Edit button callback (messageId, messageText)
+    /// </summary>
+    [Parameter]
+    public EventCallback<(long MessageId, string MessageText)> OnEditClick { get; set; }
+
+    /// <summary>
+    /// Phase 1: Send & Edit Messages as Bot - Is this message from the bot?
+    /// </summary>
+    [Parameter]
+    public bool IsBotMessage { get; set; }
 
     /// <summary>
     /// Phase 4.20: Manual translation callback
@@ -716,6 +754,21 @@
         }
 
         return tooltip;
+    }
+
+    /// <summary>
+    /// Get display name for user, handling special case for Telegram service account (user 777000).
+    /// For service account, shows the group/channel name instead of "Telegram" or "User 777000".
+    /// </summary>
+    private string GetUserDisplayName()
+    {
+        // Special handling for Telegram service account (channel posts, anonymous admin posts)
+        if (Message.UserId == TelegramConstants.ServiceAccountUserId)
+        {
+            return Message.ChatName ?? "Telegram Service Account";
+        }
+
+        return Message.UserName ?? Message.FirstName ?? $"User {Message.UserId}";
     }
 
     /// <summary>

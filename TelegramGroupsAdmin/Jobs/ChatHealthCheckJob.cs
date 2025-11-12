@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Models;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -19,17 +22,20 @@ public class ChatHealthCheckJob
     private readonly ChatManagementService _chatService;
     private readonly TelegramBotClientFactory _botFactory;
     private readonly TelegramConfigLoader _configLoader;
+    private readonly IConfigService _configService;
     private readonly ILogger<ChatHealthCheckJob> _logger;
 
     public ChatHealthCheckJob(
         ChatManagementService chatService,
         TelegramBotClientFactory botFactory,
         TelegramConfigLoader configLoader,
+        IConfigService configService,
         ILogger<ChatHealthCheckJob> logger)
     {
         _chatService = chatService;
         _botFactory = botFactory;
         _configLoader = configLoader;
+        _configService = configService;
         _logger = logger;
     }
 
@@ -50,6 +56,17 @@ public class ChatHealthCheckJob
                 if (payload == null)
                 {
                     _logger.LogError("ChatHealthCheckJob received null payload");
+                    return;
+                }
+
+                // Check if bot is enabled before running health checks
+                var botConfig = await _configService.GetAsync<TelegramBotConfig>(ConfigType.TelegramBot, 0)
+                               ?? TelegramBotConfig.Default;
+
+                if (!botConfig.BotEnabled)
+                {
+                    _logger.LogDebug("Skipping chat health check - bot is disabled");
+                    success = true; // Not a failure, just skipped
                     return;
                 }
 

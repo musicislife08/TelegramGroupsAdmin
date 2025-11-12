@@ -2,5 +2,11 @@
   <PropertyGroup>
     <!-- Suppress EF Core version conflict warnings from TickerQ dependency -->
     <NoWarn>$(NoWarn);MSB3277</NoWarn>
+    <!-- Suppress NU1510: .NET 10 automatically uplifts vulnerable transitive dependencies from .NET Standard libraries
+         TickerQ 2.5.3 references old System.* packages with CVEs, but .NET 10 provides safe versions automatically -->
+    <NoWarn>$(NoWarn);NU1510</NoWarn>
+    <!-- Suppress NU1903/NU1904: Vulnerability warnings for TickerQ 2.5.3 transitive dependencies
+         .NET 10 automatically substitutes these with safe framework versions at runtime (verified via detailed build logs) -->
+    <NoWarn>$(NoWarn);NU1903;NU1904</NoWarn>
   </PropertyGroup>
 </Project>

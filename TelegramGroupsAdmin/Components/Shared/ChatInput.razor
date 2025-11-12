@@ -1,34 +1,199 @@
-@* Chat input area - Stubbed for future WTelegram integration *@
+@using TelegramGroupsAdmin.Telegram.Models
 
-<div class="chat-input-wrapper">
-    <button class="attach-button" type="button" disabled title="Coming soon">
-        <svg viewBox="0 0 24 24" class="attach-icon">
-            <path fill="currentColor" d="M16.5,6V17.5A4,4 0 0,1 12.5,21.5A4,4 0 0,1 8.5,17.5V5A2.5,2.5 0 0,1 11,2.5A2.5,2.5 0 0,1 13.5,5V15.5A1,1 0 0,1 12.5,16.5A1,1 0 0,1 11.5,15.5V6H10V15.5A2.5,2.5 0 0,0 12.5,18A2.5,2.5 0 0,0 15,15.5V5A4,4 0 0,0 11,1A4,4 0 0,0 7,5V17.5A5.5,5.5 0 0,0 12.5,23A5.5,5.5 0 0,0 18,17.5V6H16.5Z" />
-        </svg>
-    </button>
+@* Chat input area - Phase 1: Bot messages only *@
 
-    <div class="input-container">
-        <input type="text"
-               class="message-input"
-               placeholder="@PlaceholderText"
-               disabled
-               readonly />
+<div class="chat-input-container">
+    @* Reply Preview (shows when replying) *@
+    @if (ReplyToMessageId.HasValue)
+    {
+        <div class="reply-section">
+            <ReplyPreview
+                ReplyToMessageId="@ReplyToMessageId"
+                ReplyToUser="@ReplyToUser"
+                ReplyToText="@ReplyToText"
+                OnReplyClick="@HandleReplyPreviewClick" />
+            <button class="cancel-button" type="button" @onclick="HandleCancelReply" title="Cancel reply">
+                <svg viewBox="0 0 24 24" class="cancel-icon">
+                    <path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+                </svg>
+            </button>
+        </div>
+    }
+
+    @* Edit Mode Indicator (shows when editing) *@
+    @if (IsEditMode)
+    {
+        <div class="edit-indicator">
+            <svg viewBox="0 0 24 24" class="edit-icon">
+                <path fill="currentColor" d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.87,8.87M3,17.25V21H6.75L17.81,9.93L14.06,6.18L3,17.25Z" />
+            </svg>
+            <span>Edit message</span>
+            <button class="cancel-button" type="button" @onclick="HandleCancelEdit" title="Cancel edit">
+                <svg viewBox="0 0 24 24" class="cancel-icon">
+                    <path fill="currentColor" d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+                </svg>
+            </button>
+        </div>
+    }
+
+    <div class="chat-input-wrapper">
+        @* User/Bot Toggle (disabled for Phase 1 - always Bot) *@
+        <div class="mode-toggle" title="Phase 2: Send as your Telegram account">
+            <button class="mode-button" disabled>
+                <svg viewBox="0 0 24 24" class="mode-icon">
+                    <path fill="currentColor" d="M12 2A10 10 0 0 0 2 12A10 10 0 0 0 12 22A10 10 0 0 0 22 12A10 10 0 0 0 12 2M12 4A8 8 0 0 1 20 12A8 8 0 0 1 12 20A8 8 0 0 1 4 12A8 8 0 0 1 12 4M7.5 14.5L9 16L11 14L13 16L14.5 14.5L12.5 12.5L14.5 10.5L13 9L11 11L9 9L7.5 10.5L9.5 12.5L7.5 14.5Z" />
+                </svg>
+                <span class="mode-label">Bot</span>
+            </button>
+        </div>
+
+        @* Attach Button (disabled for Phase 1) *@
+        <button class="attach-button" type="button" disabled title="Phase 2: Attach media">
+            <svg viewBox="0 0 24 24" class="attach-icon">
+                <path fill="currentColor" d="M16.5,6V17.5A4,4 0 0,1 12.5,21.5A4,4 0 0,1 8.5,17.5V5A2.5,2.5 0 0,1 11,2.5A2.5,2.5 0 0,1 13.5,5V15.5A1,1 0 0,1 12.5,16.5A1,1 0 0,1 11.5,15.5V6H10V15.5A2.5,2.5 0 0,0 12.5,18A2.5,2.5 0 0,0 15,15.5V5A4,4 0 0,0 11,1A4,4 0 0,0 7,5V17.5A5.5,5.5 0 0,0 12.5,23A5.5,5.5 0 0,0 18,17.5V6H16.5Z" />
+            </svg>
+        </button>
+
+        <div class="input-container">
+            <input type="text"
+                   class="message-input"
+                   placeholder="@PlaceholderText"
+                   @bind="_messageText"
+                   @bind:event="oninput"
+                   @onkeydown="HandleKeyDown"
+                   disabled="@(!IsEnabled)"
+                   maxlength="@MaxMessageLength" />
+        </div>
+
+        @* Emoji Button (disabled for Phase 1) *@
+        <button class="emoji-button" type="button" disabled title="Phase 2: Emoji picker">
+            <svg viewBox="0 0 24 24" class="emoji-icon">
+                <path fill="currentColor" d="M12,2C6.47,2 2,6.47 2,12C2,17.53 6.47,22 12,22A10,10 0 0,0 22,12C22,6.47 17.5,2 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20M16.18,7.76L15.06,8.88C15.58,9.62 15.88,10.5 15.88,11.44C15.88,12.38 15.58,13.26 15.06,14L16.18,15.12C16.96,14.13 17.46,12.86 17.46,11.44C17.46,10.03 16.96,8.76 16.18,7.76M7.82,7.76C7.04,8.76 6.54,10.03 6.54,11.44C6.54,12.86 7.04,14.13 7.82,15.12L8.94,14C8.42,13.26 8.12,12.38 8.12,11.44C8.12,10.5 8.42,9.62 8.94,8.88L7.82,7.76M12,14A2.5,2.5 0 0,0 14.5,11.5H9.5A2.5,2.5 0 0,0 12,14Z" />
+            </svg>
+        </button>
+
+        @* Send/Save Button *@
+        <button class="send-button @(CanSend ? "enabled" : "")"
+                type="button"
+                @onclick="HandleSend"
+                disabled="@(!CanSend)"
+                title="@(IsEditMode ? "Save changes" : "Send message")">
+            @if (IsEditMode)
+            {
+                <svg viewBox="0 0 24 24" class="send-icon">
+                    <path fill="currentColor" d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" />
+                </svg>
+            }
+            else
+            {
+                <svg viewBox="0 0 24 24" class="send-icon">
+                    <path fill="currentColor" d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
+                </svg>
+            }
+        </button>
     </div>
-
-    <button class="emoji-button" type="button" disabled title="Coming soon">
-        <svg viewBox="0 0 24 24" class="emoji-icon">
-            <path fill="currentColor" d="M12,2C6.47,2 2,6.47 2,12C2,17.53 6.47,22 12,22A10,10 0 0,0 22,12C22,6.47 17.5,2 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20M16.18,7.76L15.06,8.88C15.58,9.62 15.88,10.5 15.88,11.44C15.88,12.38 15.58,13.26 15.06,14L16.18,15.12C16.96,14.13 17.46,12.86 17.46,11.44C17.46,10.03 16.96,8.76 16.18,7.76M7.82,7.76C7.04,8.76 6.54,10.03 6.54,11.44C6.54,12.86 7.04,14.13 7.82,15.12L8.94,14C8.42,13.26 8.12,12.38 8.12,11.44C8.12,10.5 8.42,9.62 8.94,8.88L7.82,7.76M12,14A2.5,2.5 0 0,0 14.5,11.5H9.5A2.5,2.5 0 0,0 12,14Z" />
-        </svg>
-    </button>
-
-    <button class="send-button" type="button" disabled title="Coming soon">
-        <svg viewBox="0 0 24 24" class="send-icon">
-            <path fill="currentColor" d="M2,21L23,12L2,3V10L17,12L2,14V21Z" />
-        </svg>
-    </button>
 </div>
 
 @code {
     [Parameter]
-    public string PlaceholderText { get; set; } = "Coming soon: Send messages as your Telegram account";
+    public bool IsEnabled { get; set; } = false;
+
+    [Parameter]
+    public string PlaceholderText { get; set; } = "Type a message...";
+
+    [Parameter]
+    public int MaxMessageLength { get; set; } = 4096; // Telegram max, can be reduced for signature
+
+    [Parameter]
+    public string? CurrentText { get; set; }
+
+    [Parameter]
+    public bool IsEditMode { get; set; }
+
+    [Parameter]
+    public long? ReplyToMessageId { get; set; }
+
+    [Parameter]
+    public string? ReplyToUser { get; set; }
+
+    [Parameter]
+    public string? ReplyToText { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnSendMessage { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnEditMessage { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancelEdit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancelReply { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnReplyPreviewClick { get; set; }
+
+    private string _messageText = string.Empty;
+
+    private bool CanSend => IsEnabled && !string.IsNullOrWhiteSpace(_messageText);
+
+    protected override void OnParametersSet()
+    {
+        // Load text when entering edit mode
+        if (IsEditMode && CurrentText != null && _messageText != CurrentText)
+        {
+            _messageText = CurrentText;
+        }
+
+        // Clear text when exiting edit mode
+        if (!IsEditMode && string.IsNullOrEmpty(CurrentText))
+        {
+            _messageText = string.Empty;
+        }
+    }
+
+    private async Task HandleSend()
+    {
+        if (!CanSend)
+            return;
+
+        var textToSend = _messageText.Trim();
+
+        if (IsEditMode)
+        {
+            await OnEditMessage.InvokeAsync(textToSend);
+        }
+        else
+        {
+            await OnSendMessage.InvokeAsync(textToSend);
+        }
+
+        _messageText = string.Empty;
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        // Send on Enter (without Shift)
+        if (e.Key == "Enter" && !e.ShiftKey && CanSend)
+        {
+            await HandleSend();
+        }
+    }
+
+    private async Task HandleCancelEdit()
+    {
+        _messageText = string.Empty;
+        await OnCancelEdit.InvokeAsync();
+    }
+
+    private async Task HandleCancelReply()
+    {
+        await OnCancelReply.InvokeAsync();
+    }
+
+    private async Task HandleReplyPreviewClick(long messageId)
+    {
+        await OnReplyPreviewClick.InvokeAsync(messageId);
+    }
 }

@@ -16,10 +16,12 @@ namespace TelegramGroupsAdmin.Telegram.Extensions;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
-    /// <summary>
-    /// Registers all Telegram services including bot commands, background services, repositories, and moderation
-    /// </summary>
-    public static IServiceCollection AddTelegramServices(this IServiceCollection services)
+    extension(IServiceCollection services)
+    {
+        /// <summary>
+        /// Registers all Telegram services including bot commands, background services, repositories, and moderation
+        /// </summary>
+        public IServiceCollection AddTelegramServices()
     {
         // Telegram repositories
         services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>();
@@ -89,6 +91,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IWelcomeService, WelcomeService>();
         services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
         services.AddScoped<BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
+        services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
 
         // Phase 4.10: Anti-Impersonation Detection
         services.AddSingleton<IPhotoHashService, PhotoHashService>();
@@ -136,6 +139,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());
         services.AddHostedService(sp => sp.GetRequiredService<TelegramAdminBotService>());
 
-        return services;
+            return services;
+        }
     }
 }

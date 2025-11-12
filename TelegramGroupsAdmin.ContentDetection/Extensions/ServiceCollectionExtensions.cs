@@ -12,15 +12,17 @@ namespace TelegramGroupsAdmin.ContentDetection.Extensions;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
-    /// <summary>
-    /// Add content detection services to the service collection
-    /// </summary>
-    /// <param name="services">Service collection</param>
-    /// <returns>Service collection for chaining</returns>
-    public static IServiceCollection AddContentDetection(this IServiceCollection services)
+    extension(IServiceCollection services)
     {
-        // Register main spam detection engine (loads config from repository dynamically)
-        services.AddScoped<IContentDetectionEngine, ContentDetectionEngine>();
+        /// <summary>
+        /// Add content detection services to the service collection
+        /// </summary>
+        /// <returns>Service collection for chaining</returns>
+        public IServiceCollection AddContentDetection()
+    {
+        // Register V2 spam detection engine (SpamAssassin-style additive scoring)
+        // Rollback: Change ContentDetectionEngineV2 → ContentDetectionEngine
+        services.AddScoped<IContentDetectionEngine, ContentDetectionEngineV2>();
 
         // Register core services
         services.AddScoped<ITokenizerService, TokenizerService>();
@@ -73,7 +75,7 @@ public static class ServiceCollectionExtensions
         // Register stop words repository
         services.AddScoped<IStopWordsRepository, StopWordsRepository>();
 
-        // Register individual content checks
+        // Register V1 content checks (original implementation with voting)
         // NOTE: Translation happens in ContentDetectionEngine preprocessing, not as a content check
         services.AddScoped<IContentCheck, Checks.InvisibleCharsSpamCheck>();  // Runs FIRST on original message
         services.AddScoped<IContentCheck, Checks.StopWordsSpamCheck>();
@@ -88,12 +90,30 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IContentCheck, Checks.VideoSpamCheck>();  // ML-6: Video spam detection
         services.AddScoped<IContentCheck, Checks.FileScanningCheck>();  // Phase 4.17: File scanning (always_run=true)
 
+        // Register V2 spam detection engine (SpamAssassin-style additive scoring)
+        // Fixes critical bug where abstentions voted "Clean" and cancelled spam signals
+        services.AddScoped<ContentDetectionEngineV2>();
+
+        // Register V2 content checks (proper abstention support)
+        // Key fix: Return Score=0 when finding nothing (not "Clean 20%")
+        services.AddScoped<IContentCheckV2, Checks.InvisibleCharsSpamCheckV2>();
+        services.AddScoped<IContentCheckV2, Checks.StopWordsSpamCheckV2>();
+        services.AddScoped<IContentCheckV2, Checks.CasSpamCheckV2>();
+        services.AddScoped<IContentCheckV2, Checks.SimilaritySpamCheckV2>();
+        services.AddScoped<IContentCheckV2, Checks.BayesSpamCheckV2>();
+        services.AddScoped<IContentCheckV2, Checks.SpacingSpamCheckV2>();
+        services.AddScoped<IContentCheckV2, Checks.UrlBlocklistSpamCheckV2>();
+        services.AddScoped<IContentCheckV2, Checks.ThreatIntelSpamCheckV2>();
+        services.AddScoped<IContentCheckV2, Checks.ImageSpamCheckV2>();
+        services.AddScoped<IContentCheckV2, Checks.VideoSpamCheckV2>();
+
         // Register HTTP client for external API calls
         services.AddHttpClient();
 
         // Register memory cache for caching API responses
         services.AddMemoryCache();
 
-        return services;
+            return services;
+        }
     }
 }

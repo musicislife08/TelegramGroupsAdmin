@@ -8,24 +8,30 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class MessageTranslationMappings
 {
-    public static UiModels.MessageTranslation ToModel(this DataModels.MessageTranslationDto data) => new(
-        Id: data.Id,
-        MessageId: data.MessageId,
-        EditId: data.EditId,
-        TranslatedText: data.TranslatedText,
-        DetectedLanguage: data.DetectedLanguage,
-        Confidence: data.Confidence,
-        TranslatedAt: data.TranslatedAt
-    );
-
-    public static DataModels.MessageTranslationDto ToDto(this UiModels.MessageTranslation ui) => new()
+    extension(DataModels.MessageTranslationDto data)
     {
-        Id = ui.Id,
-        MessageId = ui.MessageId,
-        EditId = ui.EditId,
-        TranslatedText = ui.TranslatedText,
-        DetectedLanguage = ui.DetectedLanguage,
-        Confidence = ui.Confidence,
-        TranslatedAt = ui.TranslatedAt
-    };
+        public UiModels.MessageTranslation ToModel() => new(
+            Id: data.Id,
+            MessageId: data.MessageId,
+            EditId: data.EditId,
+            TranslatedText: data.TranslatedText,
+            DetectedLanguage: data.DetectedLanguage,
+            Confidence: data.Confidence,
+            TranslatedAt: data.TranslatedAt
+        );
+    }
+
+    extension(UiModels.MessageTranslation ui)
+    {
+        public DataModels.MessageTranslationDto ToDto() => new()
+        {
+            Id = ui.Id,
+            MessageId = ui.MessageId,
+            EditId = ui.EditId,
+            TranslatedText = ui.TranslatedText,
+            DetectedLanguage = ui.DetectedLanguage,
+            Confidence = ui.Confidence,
+            TranslatedAt = ui.TranslatedAt
+        };
+    }
 }
