@@ -8,19 +8,25 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class TagDefinitionMappings
 {
-    public static UiModels.TagDefinition ToModel(this DataModels.TagDefinitionDto data) => new()
+    extension(DataModels.TagDefinitionDto data)
     {
-        TagName = data.TagName,
-        Color = (UiModels.TagColor)data.Color, // Cast enum from Data to UI layer
-        UsageCount = data.UsageCount,
-        CreatedAt = data.CreatedAt
-    };
+        public UiModels.TagDefinition ToModel() => new()
+        {
+            TagName = data.TagName,
+            Color = (UiModels.TagColor)data.Color, // Cast enum from Data to UI layer
+            UsageCount = data.UsageCount,
+            CreatedAt = data.CreatedAt
+        };
+    }
 
-    public static DataModels.TagDefinitionDto ToDto(this UiModels.TagDefinition ui) => new()
+    extension(UiModels.TagDefinition ui)
     {
-        TagName = ui.TagName,
-        Color = (DataModels.TagColor)ui.Color, // Cast enum from UI to Data layer
-        UsageCount = ui.UsageCount,
-        CreatedAt = ui.CreatedAt
-    };
+        public DataModels.TagDefinitionDto ToDto() => new()
+        {
+            TagName = ui.TagName,
+            Color = (DataModels.TagColor)ui.Color, // Cast enum from UI to Data layer
+            UsageCount = ui.UsageCount,
+            CreatedAt = ui.CreatedAt
+        };
+    }
 }

@@ -8,27 +8,33 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class PromptVersionMappings
 {
-    public static UiModels.PromptVersion ToModel(this DataModels.PromptVersionDto data) => new()
+    extension(DataModels.PromptVersionDto data)
     {
-        Id = data.Id,
-        ChatId = data.ChatId,
-        Version = data.Version,
-        PromptText = data.PromptText,
-        IsActive = data.IsActive,
-        CreatedAt = data.CreatedAt,
-        CreatedBy = data.CreatedBy,
-        GenerationMetadata = data.GenerationMetadata
-    };
+        public UiModels.PromptVersion ToModel() => new()
+        {
+            Id = data.Id,
+            ChatId = data.ChatId,
+            Version = data.Version,
+            PromptText = data.PromptText,
+            IsActive = data.IsActive,
+            CreatedAt = data.CreatedAt,
+            CreatedBy = data.CreatedBy,
+            GenerationMetadata = data.GenerationMetadata
+        };
+    }
 
-    public static DataModels.PromptVersionDto ToDto(this UiModels.PromptVersion ui) => new()
+    extension(UiModels.PromptVersion ui)
     {
-        Id = ui.Id,
-        ChatId = ui.ChatId,
-        Version = ui.Version,
-        PromptText = ui.PromptText,
-        IsActive = ui.IsActive,
-        CreatedAt = ui.CreatedAt,
-        CreatedBy = ui.CreatedBy,
-        GenerationMetadata = ui.GenerationMetadata
-    };
+        public DataModels.PromptVersionDto ToDto() => new()
+        {
+            Id = ui.Id,
+            ChatId = ui.ChatId,
+            Version = ui.Version,
+            PromptText = ui.PromptText,
+            IsActive = ui.IsActive,
+            CreatedAt = ui.CreatedAt,
+            CreatedBy = ui.CreatedBy,
+            GenerationMetadata = ui.GenerationMetadata
+        };
+    }
 }

@@ -12,110 +12,113 @@ namespace TelegramGroupsAdmin;
 
 public static class WebApplicationExtensions
 {
-    /// <summary>
-    /// Configures the HTTP request pipeline with standard middleware
-    /// </summary>
-    public static WebApplication ConfigurePipeline(this WebApplication app)
+    extension(WebApplication app)
     {
-        // Configure forwarded headers for reverse proxy support (SWAG, nginx, etc.)
-        // This allows the app to understand the original HTTPS request from clients
-        // even though it's running on HTTP inside the container
-        var forwardedHeadersOptions = new ForwardedHeadersOptions
+        /// <summary>
+        /// Configures the HTTP request pipeline with standard middleware
+        /// </summary>
+        public WebApplication ConfigurePipeline()
         {
-            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-        };
+            // Configure forwarded headers for reverse proxy support (SWAG, nginx, etc.)
+            // This allows the app to understand the original HTTPS request from clients
+            // even though it's running on HTTP inside the container
+            var forwardedHeadersOptions = new ForwardedHeadersOptions
+            {
+                ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+            };
 
-        // Trust all proxies (Docker internal network)
-        // In production behind a reverse proxy, the proxy is the only source of requests
-        forwardedHeadersOptions.KnownNetworks.Clear();
-        forwardedHeadersOptions.KnownProxies.Clear();
+            // Trust all proxies (Docker internal network)
+            // In production behind a reverse proxy, the proxy is the only source of requests
+            forwardedHeadersOptions.KnownIPNetworks.Clear();
+            forwardedHeadersOptions.KnownProxies.Clear();
 
-        app.UseForwardedHeaders(forwardedHeadersOptions);
+            app.UseForwardedHeaders(forwardedHeadersOptions);
 
-        if (!app.Environment.IsDevelopment())
-        {
-            app.UseExceptionHandler("/Error", createScopeForErrors: true);
-            app.UseHsts();
+            if (!app.Environment.IsDevelopment())
+            {
+                app.UseExceptionHandler("/Error", createScopeForErrors: true);
+                app.UseHsts();
+            }
+
+            app.UseHttpsRedirection();
+
+            // Serve static files from wwwroot
+            // UseStaticFiles is needed for running in Production mode from source (e.g., Rider debugging)
+            // MapStaticAssets (below) provides optimized delivery when running from published output
+            app.UseStaticFiles();
+
+            // Configure static file serving for images
+            ConfigureImageStaticFiles(app);
+
+            // TickerQ background job processor (dashboard configured in AddTickerQBackgroundJobs())
+            app.UseTickerQ();
+
+            app.UseAuthentication();
+            app.UseAuthorization();
+            app.UseAntiforgery();
+
+            app.MapRazorComponents<App>()
+                .AddInteractiveServerRenderMode();
+
+            app.MapStaticAssets();
+
+            return app;
         }
 
-        app.UseHttpsRedirection();
-
-        // Serve static files from wwwroot
-        // UseStaticFiles is needed for running in Production mode from source (e.g., Rider debugging)
-        // MapStaticAssets (below) provides optimized delivery when running from published output
-        app.UseStaticFiles();
-
-        // Configure static file serving for images
-        ConfigureImageStaticFiles(app);
-
-        // TickerQ background job processor (dashboard configured in AddTickerQBackgroundJobs())
-        app.UseTickerQ();
-
-        app.UseAuthentication();
-        app.UseAuthorization();
-        app.UseAntiforgery();
-
-        app.MapRazorComponents<App>()
-            .AddInteractiveServerRenderMode();
-
-        app.MapStaticAssets();
-
-        return app;
-    }
-
-    /// <summary>
-    /// Maps all API endpoints
-    /// </summary>
-    public static WebApplication MapApiEndpoints(this WebApplication app)
-    {
-        // Kubernetes/Docker health check endpoints
-        // Liveness probe: Returns 200 if app is alive and responsive (no dependency checks)
-        // Used by Kubernetes to determine if container should be restarted
-        // Database failures should NOT cause liveness to fail (restarting won't fix database issues)
-        app.MapHealthChecks("/healthz/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+        /// <summary>
+        /// Maps all API endpoints
+        /// </summary>
+        public WebApplication MapApiEndpoints()
         {
-            Predicate = _ => false // Exclude all checks - just confirms app is responsive
-        })
-        .AllowAnonymous();
+            // Kubernetes/Docker health check endpoints
+            // Liveness probe: Returns 200 if app is alive and responsive (no dependency checks)
+            // Used by Kubernetes to determine if container should be restarted
+            // Database failures should NOT cause liveness to fail (restarting won't fix database issues)
+            app.MapHealthChecks("/healthz/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+            {
+                Predicate = _ => false // Exclude all checks - just confirms app is responsive
+            })
+            .AllowAnonymous();
 
-        // Readiness probe: Returns 200 if app is ready to handle requests (includes database check)
-        // Used by Kubernetes to determine if container should receive traffic
-        // If database is down, app becomes "not ready" but doesn't restart
-        app.MapHealthChecks("/healthz/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
-        {
-            Predicate = healthCheck => healthCheck.Tags.Contains("ready")
-        })
-        .AllowAnonymous();
+            // Readiness probe: Returns 200 if app is ready to handle requests (includes database check)
+            // Used by Kubernetes to determine if container should receive traffic
+            // If database is down, app becomes "not ready" but doesn't restart
+            app.MapHealthChecks("/healthz/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+            {
+                Predicate = healthCheck => healthCheck.Tags.Contains("ready")
+            })
+            .AllowAnonymous();
 
-        app.MapAuthEndpoints();
-        app.MapEmailVerificationEndpoints();
+            app.MapAuthEndpoints();
+            app.MapEmailVerificationEndpoints();
 
-        return app;
-    }
-
-    /// <summary>
-    /// Runs database migrations using EF Core
-    /// </summary>
-    public static async Task RunDatabaseMigrationsAsync(this WebApplication app, string connectionString)
-    {
-        app.Logger.LogInformation("Running PostgreSQL database migrations (EF Core)");
-
-        using var scope = app.Services.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        await context.Database.MigrateAsync();
-
-        app.Logger.LogInformation("PostgreSQL database migration complete");
-
-        // One-time migration: Populate api_keys column from environment variables
-        try
-        {
-            var apiKeyMigration = scope.ServiceProvider.GetRequiredService<ApiKeyMigrationService>();
-            await apiKeyMigration.MigrateApiKeysFromEnvironmentAsync();
+            return app;
         }
-        catch (Exception ex)
+
+        /// <summary>
+        /// Runs database migrations using EF Core
+        /// </summary>
+        public async Task RunDatabaseMigrationsAsync(string connectionString)
         {
-            app.Logger.LogWarning(ex, "Failed to migrate API keys from environment variables (non-fatal)");
+            app.Logger.LogInformation("Running PostgreSQL database migrations (EF Core)");
+
+            using var scope = app.Services.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            await context.Database.MigrateAsync();
+
+            app.Logger.LogInformation("PostgreSQL database migration complete");
+
+            // One-time migration: Populate api_keys column from environment variables
+            try
+            {
+                var apiKeyMigration = scope.ServiceProvider.GetRequiredService<ApiKeyMigrationService>();
+                await apiKeyMigration.MigrateApiKeysFromEnvironmentAsync();
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "Failed to migrate API keys from environment variables (non-fatal)");
+            }
         }
     }
 

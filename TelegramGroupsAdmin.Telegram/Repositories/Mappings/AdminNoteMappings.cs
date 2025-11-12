@@ -8,36 +8,41 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class AdminNoteMappings
 {
-    public static UiModels.AdminNote ToModel(
-        this DataModels.AdminNoteDto data,
-        string? webUserEmail = null,
-        string? telegramUsername = null,
-        string? telegramFirstName = null) => new()
-        {
-            Id = data.Id,
-            TelegramUserId = data.TelegramUserId,
-            NoteText = data.NoteText,
-            CreatedBy = ActorMappings.ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
-            CreatedAt = data.CreatedAt,
-            UpdatedAt = data.UpdatedAt,
-            IsPinned = data.IsPinned
-        };
-
-    public static DataModels.AdminNoteDto ToDto(this UiModels.AdminNote ui)
+    extension(DataModels.AdminNoteDto data)
     {
-        ActorMappings.SetActorColumns(ui.CreatedBy, out var webUserId, out var telegramUserId, out var systemIdentifier);
+        public UiModels.AdminNote ToModel(
+            string? webUserEmail = null,
+            string? telegramUsername = null,
+            string? telegramFirstName = null) => new()
+            {
+                Id = data.Id,
+                TelegramUserId = data.TelegramUserId,
+                NoteText = data.NoteText,
+                CreatedBy = ActorMappings.ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
+                CreatedAt = data.CreatedAt,
+                UpdatedAt = data.UpdatedAt,
+                IsPinned = data.IsPinned
+            };
+    }
 
-        return new()
+    extension(UiModels.AdminNote ui)
+    {
+        public DataModels.AdminNoteDto ToDto()
         {
-            Id = ui.Id,
-            TelegramUserId = ui.TelegramUserId,
-            NoteText = ui.NoteText,
-            ActorWebUserId = webUserId,
-            ActorTelegramUserId = telegramUserId,
-            ActorSystemIdentifier = systemIdentifier,
-            CreatedAt = ui.CreatedAt,
-            UpdatedAt = ui.UpdatedAt,
-            IsPinned = ui.IsPinned
-        };
+            ActorMappings.SetActorColumns(ui.CreatedBy, out var webUserId, out var telegramUserId, out var systemIdentifier);
+
+            return new()
+            {
+                Id = ui.Id,
+                TelegramUserId = ui.TelegramUserId,
+                NoteText = ui.NoteText,
+                ActorWebUserId = webUserId,
+                ActorTelegramUserId = telegramUserId,
+                ActorSystemIdentifier = systemIdentifier,
+                CreatedAt = ui.CreatedAt,
+                UpdatedAt = ui.UpdatedAt,
+                IsPinned = ui.IsPinned
+            };
+        }
     }
 }

@@ -12,12 +12,13 @@ namespace TelegramGroupsAdmin.ContentDetection.Extensions;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
-    /// <summary>
-    /// Add content detection services to the service collection
-    /// </summary>
-    /// <param name="services">Service collection</param>
-    /// <returns>Service collection for chaining</returns>
-    public static IServiceCollection AddContentDetection(this IServiceCollection services)
+    extension(IServiceCollection services)
+    {
+        /// <summary>
+        /// Add content detection services to the service collection
+        /// </summary>
+        /// <returns>Service collection for chaining</returns>
+        public IServiceCollection AddContentDetection()
     {
         // Register V2 spam detection engine (SpamAssassin-style additive scoring)
         // Rollback: Change ContentDetectionEngineV2 → ContentDetectionEngine
@@ -112,6 +113,7 @@ public static class ServiceCollectionExtensions
         // Register memory cache for caching API responses
         services.AddMemoryCache();
 
-        return services;
+            return services;
+        }
     }
 }

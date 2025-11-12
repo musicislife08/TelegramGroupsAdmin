@@ -8,10 +8,13 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class RecoveryCodeMappings
 {
-    public static UiModels.RecoveryCodeRecord ToModel(this DataModels.RecoveryCodeRecordDto data) => new(
-        Id: data.Id,
-        UserId: data.UserId,
-        CodeHash: data.CodeHash,
-        UsedAt: data.UsedAt
-    );
+    extension(DataModels.RecoveryCodeRecordDto data)
+    {
+        public UiModels.RecoveryCodeRecord ToModel() => new(
+            Id: data.Id,
+            UserId: data.UserId,
+            CodeHash: data.CodeHash,
+            UsedAt: data.UsedAt
+        );
+    }
 }

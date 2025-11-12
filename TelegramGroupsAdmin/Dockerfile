@@ -8,7 +8,7 @@
 # Stage 1: Dependencies - Download heavy binaries (cached separately)
 # This stage rarely changes, providing excellent cache reuse
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS dependencies
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS dependencies
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
@@ -63,7 +63,7 @@ RUN wget -q https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.trainedd
 # Separate stage to cache these heavy system packages
 # Builds for target platform by default (no --platform flag needed)
 # -----------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS tesseract-env
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS tesseract-env
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
@@ -81,7 +81,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Restore .NET dependencies with BuildKit cache mounts for speed
 # Cross-compilation happens here: build on BUILDPLATFORM, target TARGETPLATFORM
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS restore
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS restore
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
@@ -118,7 +118,7 @@ RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
 # Cross-compile: build on fast BUILDPLATFORM (AMD64), output for TARGETPLATFORM
 # This eliminates QEMU overhead for ARM64 builds!
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 ARG BUILD_CONFIGURATION=Release
 ARG TARGETPLATFORM
@@ -157,7 +157,7 @@ RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
 # Stage 5: Runtime (Ubuntu Chiseled - minimal attack surface)
 # Final production image with only runtime dependencies
 # -----------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/aspnet:9.0-noble-chiseled-extra AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra AS final
 
 # Arguments for user/group ID customization
 ARG PUID=1654

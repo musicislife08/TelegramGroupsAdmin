@@ -8,22 +8,28 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class TelegramUserMappingMappings
 {
-    public static UiModels.TelegramUserMappingRecord ToModel(this DataModels.TelegramUserMappingRecordDto data) => new(
-        Id: data.Id,
-        TelegramId: data.TelegramId,
-        TelegramUsername: data.TelegramUsername,
-        UserId: data.UserId,
-        LinkedAt: data.LinkedAt,
-        IsActive: data.IsActive
-    );
-
-    public static DataModels.TelegramUserMappingRecordDto ToDto(this UiModels.TelegramUserMappingRecord ui) => new()
+    extension(DataModels.TelegramUserMappingRecordDto data)
     {
-        Id = ui.Id,
-        TelegramId = ui.TelegramId,
-        TelegramUsername = ui.TelegramUsername,
-        UserId = ui.UserId,
-        LinkedAt = ui.LinkedAt,
-        IsActive = ui.IsActive
-    };
+        public UiModels.TelegramUserMappingRecord ToModel() => new(
+            Id: data.Id,
+            TelegramId: data.TelegramId,
+            TelegramUsername: data.TelegramUsername,
+            UserId: data.UserId,
+            LinkedAt: data.LinkedAt,
+            IsActive: data.IsActive
+        );
+    }
+
+    extension(UiModels.TelegramUserMappingRecord ui)
+    {
+        public DataModels.TelegramUserMappingRecordDto ToDto() => new()
+        {
+            Id = ui.Id,
+            TelegramId = ui.TelegramId,
+            TelegramUsername = ui.TelegramUsername,
+            UserId = ui.UserId,
+            LinkedAt = ui.LinkedAt,
+            IsActive = ui.IsActive
+        };
+    }
 }
