@@ -898,19 +898,4 @@ public class ChatManagementService(
 
         return false;
     }
-
-#if DEBUG
-    /// <summary>
-    /// TEST HELPER: Allows tests to inject health cache state for testing health gate behavior.
-    /// Only available in DEBUG builds.
-    /// </summary>
-    public void SetHealthCacheForTesting(Dictionary<long, ChatHealthStatus> healthCache)
-    {
-        _healthCache.Clear();
-        foreach (var kvp in healthCache)
-        {
-            _healthCache[kvp.Key] = kvp.Value;
-        }
-    }
-#endif
 }
