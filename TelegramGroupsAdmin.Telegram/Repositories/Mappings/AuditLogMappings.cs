@@ -8,21 +8,24 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class AuditLogMappings
 {
-    public static UiModels.AuditLogRecord ToModel(this DataModels.AuditLogRecordDto data) => new(
-        Id: data.Id,
-        EventType: (UiModels.AuditEventType)data.EventType,
-        Timestamp: data.Timestamp,
+    extension(DataModels.AuditLogRecordDto data)
+    {
+        public UiModels.AuditLogRecord ToModel() => new(
+            Id: data.Id,
+            EventType: (UiModels.AuditEventType)data.EventType,
+            Timestamp: data.Timestamp,
 
-        // Actor exclusive arc (ARCH-2)
-        ActorWebUserId: data.ActorWebUserId,
-        ActorTelegramUserId: data.ActorTelegramUserId,
-        ActorSystemIdentifier: data.ActorSystemIdentifier,
+            // Actor exclusive arc (ARCH-2)
+            ActorWebUserId: data.ActorWebUserId,
+            ActorTelegramUserId: data.ActorTelegramUserId,
+            ActorSystemIdentifier: data.ActorSystemIdentifier,
 
-        // Target exclusive arc (ARCH-2)
-        TargetWebUserId: data.TargetWebUserId,
-        TargetTelegramUserId: data.TargetTelegramUserId,
-        TargetSystemIdentifier: data.TargetSystemIdentifier,
+            // Target exclusive arc (ARCH-2)
+            TargetWebUserId: data.TargetWebUserId,
+            TargetTelegramUserId: data.TargetTelegramUserId,
+            TargetSystemIdentifier: data.TargetSystemIdentifier,
 
-        Value: data.Value
-    );
+            Value: data.Value
+        );
+    }
 }

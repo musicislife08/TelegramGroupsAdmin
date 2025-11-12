@@ -214,7 +214,7 @@ public class SimilaritySpamCheck(
                     s.DetectedAt,
                     s.DetectionSource,
                     s.Confidence,
-                    new long[] { s.ChatId },
+                    [s.ChatId],
                     s.SystemIdentifier ?? "unknown", // Phase 4.19: Actor system (simplified for internal use)
                     0, // DetectionCount removed in normalized schema
                     null // LastDetectedDate removed in normalized schema

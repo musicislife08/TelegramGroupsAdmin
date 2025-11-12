@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using TickerQ.Utilities.Entities;
+using TickerQ.Utilities.Models.Ticker;
 using TickerQ.Utilities.Interfaces.Managers;
 
 namespace TelegramGroupsAdmin.Core.BackgroundJobs;
@@ -83,12 +83,12 @@ public static class TickerQUtilities
 
             // Get TickerQ manager from scope (it's scoped)
             using var scope = serviceProvider.CreateScope();
-            var timeTickerManager = scope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTickerEntity>>();
+            var timeTickerManager = scope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
 
             var executionTime = DateTimeOffset.UtcNow.AddSeconds(delaySeconds);
             var request = global::TickerQ.Utilities.TickerHelper.CreateTickerRequest(payload);
 
-            var result = await timeTickerManager.AddAsync(new TimeTickerEntity
+            var result = await timeTickerManager.AddAsync(new TimeTicker
             {
                 Function = functionName,
                 ExecutionTime = executionTime.UtcDateTime, // Use UtcDateTime to preserve timezone
@@ -97,7 +97,8 @@ public static class TickerQUtilities
                 RetryIntervals = retryIntervals
             });
 
-            if (!result.IsSucceeded)
+            // Note: TickerQ 2.5.3 has typo "IsSucceded" instead of "IsSucceeded"
+            if (!result.IsSucceded)
             {
                 logger.LogWarning(
                     "Failed to schedule TickerQ job {FunctionName}: {Error}",
@@ -141,7 +142,7 @@ public static class TickerQUtilities
             logger.LogDebug("Attempting to cancel TickerQ job {JobId}", jobId);
 
             using var scope = serviceProvider.CreateScope();
-            var timeTickerManager = scope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTickerEntity>>();
+            var timeTickerManager = scope.ServiceProvider.GetRequiredService<ITimeTickerManager<TimeTicker>>();
 
             await timeTickerManager.DeleteAsync(jobId);
 

@@ -8,27 +8,33 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class ChatAdminMappings
 {
-    public static UiModels.ChatAdmin ToModel(this DataModels.ChatAdminRecordDto data) => new()
+    extension(DataModels.ChatAdminRecordDto data)
     {
-        Id = data.Id,
-        ChatId = data.ChatId,
-        TelegramId = data.TelegramId,
-        Username = data.Username,
-        IsCreator = data.IsCreator,
-        PromotedAt = data.PromotedAt,
-        LastVerifiedAt = data.LastVerifiedAt,
-        IsActive = data.IsActive
-    };
+        public UiModels.ChatAdmin ToModel() => new()
+        {
+            Id = data.Id,
+            ChatId = data.ChatId,
+            TelegramId = data.TelegramId,
+            Username = data.Username,
+            IsCreator = data.IsCreator,
+            PromotedAt = data.PromotedAt,
+            LastVerifiedAt = data.LastVerifiedAt,
+            IsActive = data.IsActive
+        };
+    }
 
-    public static DataModels.ChatAdminRecordDto ToDto(this UiModels.ChatAdmin ui) => new()
+    extension(UiModels.ChatAdmin ui)
     {
-        Id = ui.Id,
-        ChatId = ui.ChatId,
-        TelegramId = ui.TelegramId,
-        Username = ui.Username,
-        IsCreator = ui.IsCreator,
-        PromotedAt = ui.PromotedAt,
-        LastVerifiedAt = ui.LastVerifiedAt,
-        IsActive = ui.IsActive
-    };
+        public DataModels.ChatAdminRecordDto ToDto() => new()
+        {
+            Id = ui.Id,
+            ChatId = ui.ChatId,
+            TelegramId = ui.TelegramId,
+            Username = ui.Username,
+            IsCreator = ui.IsCreator,
+            PromotedAt = ui.PromotedAt,
+            LastVerifiedAt = ui.LastVerifiedAt,
+            IsActive = ui.IsActive
+        };
+    }
 }

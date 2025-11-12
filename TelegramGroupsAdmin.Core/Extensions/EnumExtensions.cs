@@ -8,21 +8,23 @@ namespace TelegramGroupsAdmin.Core.Extensions;
 /// </summary>
 public static class EnumExtensions
 {
-    /// <summary>
-    /// Gets the Display(Name) attribute value for an enum value.
-    /// Falls back to ToString() if no Display attribute is found.
-    /// </summary>
-    /// <param name="enumValue">The enum value</param>
-    /// <returns>Display name or enum value as string</returns>
-    public static string GetDisplayName(this Enum enumValue)
+    extension(Enum enumValue)
     {
-        var field = enumValue.GetType().GetField(enumValue.ToString());
-        if (field == null)
+        /// <summary>
+        /// Gets the Display(Name) attribute value for an enum value.
+        /// Falls back to ToString() if no Display attribute is found.
+        /// </summary>
+        /// <returns>Display name or enum value as string</returns>
+        public string GetDisplayName()
         {
-            return enumValue.ToString();
-        }
+            var field = enumValue.GetType().GetField(enumValue.ToString());
+            if (field == null)
+            {
+                return enumValue.ToString();
+            }
 
-        var displayAttribute = field.GetCustomAttribute<DisplayAttribute>();
-        return displayAttribute?.Name ?? enumValue.ToString();
+            var displayAttribute = field.GetCustomAttribute<DisplayAttribute>();
+            return displayAttribute?.Name ?? enumValue.ToString();
+        }
     }
 }

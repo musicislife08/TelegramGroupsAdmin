@@ -8,52 +8,57 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class UserTagMappings
 {
-    public static UiModels.UserTag ToModel(
-        this DataModels.UserTagDto data,
-        string? webUserEmail = null,
-        string? telegramUsername = null,
-        string? telegramFirstName = null,
-        string? removedByWebUserEmail = null,
-        string? removedByTelegramUsername = null,
-        string? removedByTelegramFirstName = null) => new()
-        {
-            Id = data.Id,
-            TelegramUserId = data.TelegramUserId,
-            TagName = data.TagName,
-            AddedBy = ActorMappings.ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
-            AddedAt = data.AddedAt,
-            RemovedAt = data.RemovedAt,
-            RemovedBy = data.RemovedAt.HasValue
-            ? ActorMappings.ToActor(data.RemovedByWebUserId, data.RemovedByTelegramUserId, data.RemovedBySystemIdentifier, removedByWebUserEmail, removedByTelegramUsername, removedByTelegramFirstName)
-            : null
-        };
-
-    public static DataModels.UserTagDto ToDto(this UiModels.UserTag ui)
+    extension(DataModels.UserTagDto data)
     {
-        ActorMappings.SetActorColumns(ui.AddedBy, out var webUserId, out var telegramUserId, out var systemIdentifier);
+        public UiModels.UserTag ToModel(
+            string? webUserEmail = null,
+            string? telegramUsername = null,
+            string? telegramFirstName = null,
+            string? removedByWebUserEmail = null,
+            string? removedByTelegramUsername = null,
+            string? removedByTelegramFirstName = null) => new()
+            {
+                Id = data.Id,
+                TelegramUserId = data.TelegramUserId,
+                TagName = data.TagName,
+                AddedBy = ActorMappings.ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
+                AddedAt = data.AddedAt,
+                RemovedAt = data.RemovedAt,
+                RemovedBy = data.RemovedAt.HasValue
+                ? ActorMappings.ToActor(data.RemovedByWebUserId, data.RemovedByTelegramUserId, data.RemovedBySystemIdentifier, removedByWebUserEmail, removedByTelegramUsername, removedByTelegramFirstName)
+                : null
+            };
+    }
 
-        string? removedByWebUserId = null;
-        long? removedByTelegramUserId = null;
-        string? removedBySystemIdentifier = null;
-
-        if (ui.RemovedBy != null)
+    extension(UiModels.UserTag ui)
+    {
+        public DataModels.UserTagDto ToDto()
         {
-            ActorMappings.SetActorColumns(ui.RemovedBy, out removedByWebUserId, out removedByTelegramUserId, out removedBySystemIdentifier);
+            ActorMappings.SetActorColumns(ui.AddedBy, out var webUserId, out var telegramUserId, out var systemIdentifier);
+
+            string? removedByWebUserId = null;
+            long? removedByTelegramUserId = null;
+            string? removedBySystemIdentifier = null;
+
+            if (ui.RemovedBy != null)
+            {
+                ActorMappings.SetActorColumns(ui.RemovedBy, out removedByWebUserId, out removedByTelegramUserId, out removedBySystemIdentifier);
+            }
+
+            return new()
+            {
+                Id = ui.Id,
+                TelegramUserId = ui.TelegramUserId,
+                TagName = ui.TagName,
+                ActorWebUserId = webUserId,
+                ActorTelegramUserId = telegramUserId,
+                ActorSystemIdentifier = systemIdentifier,
+                AddedAt = ui.AddedAt,
+                RemovedAt = ui.RemovedAt,
+                RemovedByWebUserId = removedByWebUserId,
+                RemovedByTelegramUserId = removedByTelegramUserId,
+                RemovedBySystemIdentifier = removedBySystemIdentifier
+            };
         }
-
-        return new()
-        {
-            Id = ui.Id,
-            TelegramUserId = ui.TelegramUserId,
-            TagName = ui.TagName,
-            ActorWebUserId = webUserId,
-            ActorTelegramUserId = telegramUserId,
-            ActorSystemIdentifier = systemIdentifier,
-            AddedAt = ui.AddedAt,
-            RemovedAt = ui.RemovedAt,
-            RemovedByWebUserId = removedByWebUserId,
-            RemovedByTelegramUserId = removedByTelegramUserId,
-            RemovedBySystemIdentifier = removedBySystemIdentifier
-        };
     }
 }

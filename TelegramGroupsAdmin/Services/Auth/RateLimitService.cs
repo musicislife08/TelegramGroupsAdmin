@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Threading;
 
 namespace TelegramGroupsAdmin.Services.Auth;
 
@@ -10,6 +11,7 @@ public class RateLimitService : IRateLimitService
 {
     private readonly ILogger<RateLimitService> _logger;
     private readonly ConcurrentDictionary<string, List<DateTimeOffset>> _attempts = new();
+    private readonly Lock _lock = new();
 
     // Rate limit configurations (attempts / time window)
     private static readonly Dictionary<string, (int MaxAttempts, TimeSpan Window)> RateLimits = new()
@@ -44,8 +46,8 @@ public class RateLimitService : IRateLimitService
             // Get or create attempt list
             var attempts = _attempts.GetOrAdd(key, _ => new List<DateTimeOffset>());
 
-            // Thread-safe cleanup and check
-            lock (attempts)
+            // Thread-safe cleanup and check using C# 13 Lock.EnterScope()
+            using (_lock.EnterScope())
             {
                 // Remove expired attempts
                 attempts.RemoveAll(a => a < now - limit.Window);
@@ -92,7 +94,7 @@ public class RateLimitService : IRateLimitService
 
             var attempts = _attempts.GetOrAdd(key, _ => new List<DateTimeOffset>());
 
-            lock (attempts)
+            using (_lock.EnterScope())
             {
                 attempts.Add(now);
             }

@@ -8,22 +8,28 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class TelegramLinkTokenMappings
 {
-    public static UiModels.TelegramLinkTokenRecord ToModel(this DataModels.TelegramLinkTokenRecordDto data) => new(
-        Token: data.Token,
-        UserId: data.UserId,
-        CreatedAt: data.CreatedAt,
-        ExpiresAt: data.ExpiresAt,
-        UsedAt: data.UsedAt,
-        UsedByTelegramId: data.UsedByTelegramId
-    );
-
-    public static DataModels.TelegramLinkTokenRecordDto ToDto(this UiModels.TelegramLinkTokenRecord ui) => new()
+    extension(DataModels.TelegramLinkTokenRecordDto data)
     {
-        Token = ui.Token,
-        UserId = ui.UserId,
-        CreatedAt = ui.CreatedAt,
-        ExpiresAt = ui.ExpiresAt,
-        UsedAt = ui.UsedAt,
-        UsedByTelegramId = ui.UsedByTelegramId
-    };
+        public UiModels.TelegramLinkTokenRecord ToModel() => new(
+            Token: data.Token,
+            UserId: data.UserId,
+            CreatedAt: data.CreatedAt,
+            ExpiresAt: data.ExpiresAt,
+            UsedAt: data.UsedAt,
+            UsedByTelegramId: data.UsedByTelegramId
+        );
+    }
+
+    extension(UiModels.TelegramLinkTokenRecord ui)
+    {
+        public DataModels.TelegramLinkTokenRecordDto ToDto() => new()
+        {
+            Token = ui.Token,
+            UserId = ui.UserId,
+            CreatedAt = ui.CreatedAt,
+            ExpiresAt = ui.ExpiresAt,
+            UsedAt = ui.UsedAt,
+            UsedByTelegramId = ui.UsedByTelegramId
+        };
+    }
 }

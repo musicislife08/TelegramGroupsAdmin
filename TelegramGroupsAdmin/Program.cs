@@ -73,7 +73,6 @@ builder.Host.UseSerilog((context, services, configuration) =>
         .MinimumLevel.Override("Npgsql", config.GetSwitch("Npgsql"))
         .MinimumLevel.Override("System", config.GetSwitch("System"))
         .MinimumLevel.Override("TelegramGroupsAdmin", config.GetSwitch("TelegramGroupsAdmin"))
-        .MinimumLevel.Override("TickerQ.Instrumentation.OpenTelemetry.OpenTelemetryInstrumentation", config.GetSwitch("TickerQ"))
         .Enrich.FromLogContext()
         .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] {Message:lj}{NewLine}{Exception}");
 
@@ -140,7 +139,6 @@ if (!string.IsNullOrEmpty(otlpEndpoint))
             .AddAspNetCoreInstrumentation()  // Blazor Server requests, SignalR circuits
             .AddHttpClientInstrumentation()  // OpenAI, VirusTotal, Telegram Bot API
             .AddSource("Npgsql")             // Npgsql automatic tracing (via Npgsql.OpenTelemetry package)
-            .AddSource("TickerQ")            // TickerQ background job tracing (via built-in instrumentation)
             .AddSource("TelegramGroupsAdmin.*")  // Custom ActivitySources (from TelemetryConstants)
             .AddOtlpExporter())              // Send traces to Aspire Dashboard
         .WithMetrics(metrics => metrics
@@ -148,7 +146,6 @@ if (!string.IsNullOrEmpty(otlpEndpoint))
             .AddHttpClientInstrumentation()  // HTTP client success/failure rates
             .AddRuntimeInstrumentation()     // GC, CPU, memory, thread pool
             .AddMeter("Npgsql")              // Npgsql database metrics (connections, commands, bytes)
-            .AddMeter("TickerQ")             // TickerQ background job metrics (not yet available in 9.0-beta.1, reserved for future)
             .AddMeter("TelegramGroupsAdmin.*")  // Custom meters (from TelemetryConstants)
             .AddOtlpExporter()               // Send metrics to Aspire Dashboard
             .AddPrometheusExporter());       // ALSO expose /metrics endpoint for Prometheus scraping
@@ -157,8 +154,8 @@ if (!string.IsNullOrEmpty(otlpEndpoint))
 var app = builder.Build();
 
 // Explicitly initialize TickerQ functions BEFORE UseTickerQ() is called
-// (for .NET 9 compatibility - ModuleInitializer doesn't auto-execute)
-TelegramGroupsAdmin.TickerQInstanceFactoryExtensions.Initialize();
+// (required for TickerQ v2.5.3 - source generator needs explicit initialization)
+TelegramGroupsAdmin.TickerQInstanceFactory.Initialize();
 
 // Run database migrations
 await app.RunDatabaseMigrationsAsync(connectionString);
