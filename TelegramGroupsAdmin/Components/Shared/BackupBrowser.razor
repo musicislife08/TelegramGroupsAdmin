@@ -28,6 +28,84 @@
         }
         else
         {
+            @* Latest Backup - Quick Access *@
+            @if (_backups.Any())
+            {
+                var latestBackup = _backups.First(); // Already sorted by CreatedAt descending
+                var willBeKept = _backupRetentionInfo.TryGetValue(latestBackup.FilePath, out var info) && info.WillBeKept;
+                var tier = _backupRetentionInfo.TryGetValue(latestBackup.FilePath, out var tierInfo) ? tierInfo.PrimaryTier : BackupTier.Hourly;
+
+                <MudPaper Class="pa-4 mb-4" Elevation="2" Style="border-left: 4px solid var(--mud-palette-primary);">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.NewReleases" Color="Color.Primary" Size="Size.Large" />
+                            <div>
+                                <MudText Typo="Typo.h6" Color="Color.Primary">Latest Backup</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Most recent backup for quick download</MudText>
+                            </div>
+                        </MudStack>
+
+                        <MudDivider />
+
+                        <MudGrid>
+                            <MudItem xs="12" md="8">
+                                <MudStack Spacing="1">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex-wrap: wrap;">
+                                        <MudIcon Icon="@Icons.Material.Filled.Archive" Size="Size.Small" Color="Color.Primary" />
+                                        <MudText Typo="Typo.body1"><strong>@latestBackup.FileName</strong></MudText>
+
+                                        @if (latestBackup.IsEncrypted)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Lock">Encrypted</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.LockOpen">Unencrypted</MudChip>
+                                        }
+
+                                        <MudChip T="string" Size="Size.Small" Color="@GetTierColor(tier)" Icon="@GetTierIcon(tier)">@tier</MudChip>
+
+                                        @if (!willBeKept)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.DeleteSweep" title="Will be deleted on next cleanup">
+                                                Will be deleted
+                                            </MudChip>
+                                        }
+                                    </MudStack>
+
+                                    <MudStack Row="true" Spacing="4">
+                                        <MudText Typo="Typo.body2">
+                                            <strong>Created:</strong> @latestBackup.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                                        </MudText>
+                                        <MudText Typo="Typo.body2">
+                                            <strong>Size:</strong> @FormatBytes(latestBackup.FileSizeBytes)
+                                        </MudText>
+                                    </MudStack>
+                                </MudStack>
+                            </MudItem>
+
+                            <MudItem xs="12" md="4" Class="d-flex justify-end align-center">
+                                <MudButtonGroup Variant="Variant.Filled">
+                                    <MudButton StartIcon="@Icons.Material.Filled.Download"
+                                               Color="Color.Primary"
+                                               OnClick="@(() => DownloadBackup(latestBackup))">
+                                        Download
+                                    </MudButton>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Info"
+                                                   Color="Color.Primary"
+                                                   OnClick="@(() => ViewMetadata(latestBackup))"
+                                                   title="View Metadata" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.SettingsBackupRestore"
+                                                   Color="Color.Primary"
+                                                   OnClick="@(() => OnRestoreRequested.InvokeAsync(latestBackup))"
+                                                   title="Wipe & Restore from this Backup" />
+                                </MudButtonGroup>
+                            </MudItem>
+                        </MudGrid>
+                    </MudStack>
+                </MudPaper>
+            }
+
             @* Grouped by retention tier *@
             @foreach (var tierGroup in _tierGroups.OrderByDescending(g => g.Tier))
             {
