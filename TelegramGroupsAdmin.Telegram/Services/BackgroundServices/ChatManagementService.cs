@@ -31,17 +31,18 @@ public class ChatManagementService(
         => _healthCache.TryGetValue(chatId, out var health) ? health : null;
 
     /// <summary>
-    /// Get list of chat IDs where bot has healthy status (admin + required permissions).
+    /// Get set of chat IDs where bot has healthy status (admin + required permissions).
     /// Uses cached health data from most recent health check.
     /// Chats with Warning/Error/Unknown status are excluded to prevent action failures.
+    /// Returns HashSet for O(1) lookup performance when filtering large chat lists.
     /// </summary>
-    /// <returns>List of chat IDs with "Healthy" status</returns>
-    public List<long> GetHealthyChatIds()
+    /// <returns>HashSet of chat IDs with "Healthy" status</returns>
+    public HashSet<long> GetHealthyChatIds()
     {
         var healthyChatIds = _healthCache
             .Where(kvp => kvp.Value.Status == "Healthy")
             .Select(kvp => kvp.Key)
-            .ToList();
+            .ToHashSet();
 
         if (_healthCache.Count == 0)
         {
