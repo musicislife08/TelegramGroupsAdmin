@@ -31,6 +31,43 @@ public class ChatManagementService(
         => _healthCache.TryGetValue(chatId, out var health) ? health : null;
 
     /// <summary>
+    /// Get list of chat IDs where bot has healthy status (admin + required permissions).
+    /// Uses cached health data from most recent health check.
+    /// Chats with Warning/Error/Unknown status are excluded to prevent action failures.
+    /// </summary>
+    /// <returns>List of chat IDs with "Healthy" status</returns>
+    public List<long> GetHealthyChatIds()
+    {
+        var healthyChatIds = _healthCache
+            .Where(kvp => kvp.Value.Status == "Healthy")
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        if (_healthCache.Count == 0)
+        {
+            logger.LogWarning(
+                "Health cache is empty - health check may not have run yet. " +
+                "No chats will be excluded from moderation actions.");
+        }
+        else if (healthyChatIds.Count == 0)
+        {
+            logger.LogWarning(
+                "No healthy chats found in cache ({TotalChats} total). " +
+                "All moderation actions will be skipped until health check completes successfully.",
+                _healthCache.Count);
+        }
+        else
+        {
+            logger.LogDebug(
+                "Health gate: {HealthyCount}/{TotalCount} chats are healthy and actionable",
+                healthyChatIds.Count,
+                _healthCache.Count);
+        }
+
+        return healthyChatIds;
+    }
+
+    /// <summary>
     /// Handle MyChatMember updates (bot added/removed, admin promotion/demotion)
     /// Only tracks groups/supergroups - private chats are not managed
     /// </summary>
