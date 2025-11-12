@@ -52,6 +52,11 @@ jobs:
         with:
           fetch-depth: 0  # Full history for GitVersion
 
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Install GitVersion
         uses: gittools/actions/gitversion/setup@v1
         with:
@@ -69,11 +74,6 @@ jobs:
           echo "SemVer: ${SEMVER}"
           echo "NuGetVersion: ${NUGET_VERSION}"
           echo "### Version: ${SEMVER}" >> $GITHUB_STEP_SUMMARY
-
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
 
       - name: Restore dependencies
         run: dotnet restore
