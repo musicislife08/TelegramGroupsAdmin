@@ -12,9 +12,21 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Streamlined version focusing on the most effective patterns
 /// Config comes from strongly-typed request - no database access needed
 /// </summary>
-public class SpacingSpamCheck(ILogger<SpacingSpamCheck> logger) : IContentCheck
+public partial class SpacingSpamCheck(ILogger<SpacingSpamCheck> logger) : IContentCheck
 {
     public CheckName CheckName => CheckName.Spacing;
+
+    // Regex for removing URLs from message text
+    [GeneratedRegex(@"https?://[^\s]+", RegexOptions.IgnoreCase)]
+    private static partial Regex UrlRemovalRegex();
+
+    // Regex for removing @mentions from message text
+    [GeneratedRegex(@"@\w+", RegexOptions.IgnoreCase)]
+    private static partial Regex MentionRemovalRegex();
+
+    // Regex for detecting letter spacing pattern (4+ single letters separated by spaces)
+    [GeneratedRegex(@"\b[a-zA-Z]\s[a-zA-Z]\s[a-zA-Z]\s[a-zA-Z]", RegexOptions.IgnoreCase)]
+    private static partial Regex LetterSpacingRegex();
 
     /// <summary>
     /// Check if spacing check should be executed
@@ -124,8 +136,8 @@ public class SpacingSpamCheck(ILogger<SpacingSpamCheck> logger) : IContentCheck
     private static string[] ExtractWords(string message)
     {
         // Remove URLs and mentions to focus on actual text content
-        var cleanMessage = Regex.Replace(message, @"https?://[^\s]+", "", RegexOptions.IgnoreCase);
-        cleanMessage = Regex.Replace(cleanMessage, @"@\w+", "", RegexOptions.IgnoreCase);
+        var cleanMessage = UrlRemovalRegex().Replace(message, "");
+        cleanMessage = MentionRemovalRegex().Replace(cleanMessage, "");
 
         // Split by spaces but preserve word structure
         return cleanMessage.Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
@@ -182,7 +194,7 @@ public class SpacingSpamCheck(ILogger<SpacingSpamCheck> logger) : IContentCheck
         // Look for pattern of 4+ single letters separated by single spaces
         // Match: "l i k e  t h i s" but not "I got my car"
         // Requiring 4+ letters reduces false positives from natural English with "I" and "a"
-        return Regex.IsMatch(message, @"\b[a-zA-Z]\s[a-zA-Z]\s[a-zA-Z]\s[a-zA-Z]", RegexOptions.IgnoreCase);
+        return LetterSpacingRegex().IsMatch(message);
     }
 
     /// <summary>
