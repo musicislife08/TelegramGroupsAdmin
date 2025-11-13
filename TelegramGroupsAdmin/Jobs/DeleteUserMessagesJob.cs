@@ -1,7 +1,5 @@
 using System.Diagnostics;
-using TickerQ.Utilities.Base;
 using Telegram.Bot;
-using TickerQ.Utilities.Models;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions;
@@ -11,17 +9,17 @@ using TelegramGroupsAdmin.Telegram.Services;
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// TickerQ job to delete all messages from a banned user across all chats
+/// Job logic to delete all messages from a banned user across all chats
 /// Phase 4.23: Cross-chat ban message cleanup
 /// Respects Telegram's 48-hour deletion window and rate limits
 /// </summary>
-public class DeleteUserMessagesJob(
-    ILogger<DeleteUserMessagesJob> logger,
+public class DeleteUserMessagesJobLogic(
+    ILogger<DeleteUserMessagesJobLogic> logger,
     TelegramBotClientFactory botClientFactory,
     TelegramConfigLoader configLoader,
     IMessageHistoryRepository messageHistoryRepository)
 {
-    private readonly ILogger<DeleteUserMessagesJob> _logger = logger;
+    private readonly ILogger<DeleteUserMessagesJobLogic> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly TelegramConfigLoader _configLoader = configLoader;
     private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
@@ -30,8 +28,7 @@ public class DeleteUserMessagesJob(
     /// Execute cross-chat message cleanup for banned user
     /// Deletes all non-deleted messages from the user with rate limiting
     /// </summary>
-    [TickerFunction(functionName: "DeleteUserMessages")]
-    public async Task ExecuteAsync(TickerFunctionContext<DeleteUserMessagesPayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(DeleteUserMessagesPayload payload, CancellationToken cancellationToken)
     {
         const string jobName = "DeleteUserMessages";
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -39,10 +36,9 @@ public class DeleteUserMessagesJob(
 
         try
         {
-            var payload = context.Request;
             if (payload == null)
             {
-                _logger.LogError("DeleteUserMessagesJob received null payload");
+                _logger.LogError("DeleteUserMessagesJobLogic received null payload");
                 return;
             }
 
@@ -149,7 +145,7 @@ public class DeleteUserMessagesJob(
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error in DeleteUserMessagesJob");
+            _logger.LogError(ex, "Unexpected error in DeleteUserMessagesJobLogic");
             throw;
         }
         finally

@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
-using TickerQ.Utilities.Base;
 using Telegram.Bot;
-using TickerQ.Utilities.Models;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -12,18 +10,18 @@ using TelegramGroupsAdmin.Telegram.Services;
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// TickerQ job to handle tempban expiry - completely removes user from "Removed users" list
+/// Job logic to handle tempban expiry - completely removes user from "Removed users" list
 /// Scheduled when tempban is issued, runs at expiry time
 /// Calls UnbanChatMember() across all managed chats to allow invite link rejoining
 /// Phase 4.6: Tempban with auto-unrestrict
 /// </summary>
-public class TempbanExpiryJob(
-    ILogger<TempbanExpiryJob> logger,
+public class TempbanExpiryJobLogic(
+    ILogger<TempbanExpiryJobLogic> logger,
     IDbContextFactory<AppDbContext> contextFactory,
     TelegramBotClientFactory botClientFactory,
     TelegramConfigLoader configLoader)
 {
-    private readonly ILogger<TempbanExpiryJob> _logger = logger;
+    private readonly ILogger<TempbanExpiryJobLogic> _logger = logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly TelegramConfigLoader _configLoader = configLoader;
@@ -33,8 +31,7 @@ public class TempbanExpiryJob(
     /// Completely removes user from Telegram's "Removed users" list
     /// Allows user to use invite links to rejoin
     /// </summary>
-    [TickerFunction(functionName: "TempbanExpiry")]
-    public async Task ExecuteAsync(TickerFunctionContext<TempbanExpiryJobPayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(TempbanExpiryJobPayload payload, CancellationToken cancellationToken)
     {
         const string jobName = "TempbanExpiry";
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -42,10 +39,9 @@ public class TempbanExpiryJob(
 
         try
         {
-            var payload = context.Request;
             if (payload == null)
             {
-                _logger.LogError("TempbanExpiryJob received null payload");
+                _logger.LogError("TempbanExpiryJobLogic received null payload");
                 return;
             }
 
@@ -130,7 +126,7 @@ public class TempbanExpiryJob(
                     ex,
                     "Failed to process tempban expiry for user {UserId}",
                     payload.UserId);
-                throw; // Re-throw to let TickerQ handle retry logic
+                throw; // Re-throw for retry logic and exception recording
             }
         }
         finally

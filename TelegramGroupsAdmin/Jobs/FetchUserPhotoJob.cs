@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using TickerQ.Utilities.Base;
-using TickerQ.Utilities.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
@@ -11,20 +9,20 @@ using TelegramGroupsAdmin.Telegram.Services;
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// TickerQ job to fetch and cache user profile photos in telegram_users table
+/// Job logic to fetch and cache user profile photos in telegram_users table
 /// Runs asynchronously after message save with 0s delay for instant execution
 /// Provides persistence, retry logic, and proper error handling (replaces fire-and-forget)
 /// Phase 4.10: Computes and stores pHash (8 bytes) for fast impersonation detection lookups
 /// </summary>
-public class FetchUserPhotoJob(
-    ILogger<FetchUserPhotoJob> logger,
+public class FetchUserPhotoJobLogic(
+    ILogger<FetchUserPhotoJobLogic> logger,
     TelegramBotClientFactory botClientFactory,
     TelegramPhotoService photoService,
     ITelegramUserRepository telegramUserRepository,
     IPhotoHashService photoHashService,
     TelegramConfigLoader configLoader)
 {
-    private readonly ILogger<FetchUserPhotoJob> _logger = logger;
+    private readonly ILogger<FetchUserPhotoJobLogic> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly TelegramPhotoService _photoService = photoService;
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
@@ -33,10 +31,9 @@ public class FetchUserPhotoJob(
 
     /// <summary>
     /// Fetch user profile photo and update telegram_users table
-    /// Scheduled via TickerQ with 0s delay for instant execution
+    /// Executed with 0s delay for instant execution
     /// </summary>
-    [TickerFunction(functionName: "FetchUserPhoto")]
-    public async Task ExecuteAsync(TickerFunctionContext<FetchUserPhotoPayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(FetchUserPhotoPayload payload, CancellationToken cancellationToken)
     {
         const string jobName = "FetchUserPhoto";
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -44,10 +41,9 @@ public class FetchUserPhotoJob(
 
         try
         {
-            var payload = context.Request;
             if (payload == null)
             {
-                _logger.LogError("FetchUserPhotoJob received null payload");
+                _logger.LogError("FetchUserPhotoJobLogic received null payload");
                 return;
             }
 
@@ -118,9 +114,9 @@ public class FetchUserPhotoJob(
                 _logger.LogError(
                     ex,
                     "Failed to fetch user photo for user {UserId} (message {MessageId})",
-                    payload.UserId,
-                    payload.MessageId);
-                throw; // Re-throw to let TickerQ handle retry logic and record exception
+                    payload?.UserId,
+                    payload?.MessageId);
+                throw; // Re-throw for retry logic and exception recording
             }
         }
         finally

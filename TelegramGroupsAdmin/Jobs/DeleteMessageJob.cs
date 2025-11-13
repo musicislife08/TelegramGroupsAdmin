@@ -1,7 +1,5 @@
 using System.Diagnostics;
-using TickerQ.Utilities.Base;
 using Telegram.Bot;
-using TickerQ.Utilities.Models;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
@@ -10,25 +8,23 @@ using TelegramGroupsAdmin.Telegram.Services;
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// TickerQ job to handle delayed message deletion
+/// Job logic to handle delayed message deletion
 /// Replaces fire-and-forget Task.Run in WelcomeService (C1 critical issue)
 /// Phase 4.4: Welcome system
 /// </summary>
-public class DeleteMessageJob(
-    ILogger<DeleteMessageJob> logger,
+public class DeleteMessageJobLogic(
+    ILogger<DeleteMessageJobLogic> logger,
     TelegramBotClientFactory botClientFactory,
     TelegramConfigLoader configLoader)
 {
-    private readonly ILogger<DeleteMessageJob> _logger = logger;
+    private readonly ILogger<DeleteMessageJobLogic> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly TelegramConfigLoader _configLoader = configLoader;
 
     /// <summary>
     /// Execute delayed message deletion
-    /// Scheduled via TickerQ with configurable delay
     /// </summary>
-    [TickerFunction(functionName: "DeleteMessage")]
-    public async Task ExecuteAsync(TickerFunctionContext<DeleteMessagePayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(DeleteMessagePayload payload, CancellationToken cancellationToken)
     {
         const string jobName = "DeleteMessage";
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -36,10 +32,9 @@ public class DeleteMessageJob(
 
         try
         {
-            var payload = context.Request;
             if (payload == null)
             {
-                _logger.LogError("DeleteMessageJob received null payload");
+                _logger.LogError("DeleteMessageJobLogic received null payload");
                 return;
             }
 
@@ -73,9 +68,9 @@ public class DeleteMessageJob(
             _logger.LogError(
                 ex,
                 "Failed to delete message {MessageId} in chat {ChatId}",
-                context.Request?.MessageId,
-                context.Request?.ChatId);
-            throw; // Re-throw to let TickerQ handle retry logic and record exception
+                payload?.MessageId,
+                payload?.ChatId);
+            throw; // Re-throw for retry logic and exception recording
         }
         finally
         {

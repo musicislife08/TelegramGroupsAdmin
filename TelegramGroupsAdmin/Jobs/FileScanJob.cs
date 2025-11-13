@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using TickerQ.Utilities.Base;
-using TickerQ.Utilities.Models;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types.Enums;
@@ -17,7 +15,7 @@ using TelegramGroupsAdmin.Telegram.Services;
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// TickerQ job to scan file attachments for malware using two-tier architecture:
+/// Job logic to scan file attachments for malware using two-tier architecture:
 /// - Tier 1: ClamAV (local, fast, unlimited)
 /// - Tier 2: VirusTotal (cloud, slower, quota-limited)
 ///
@@ -26,8 +24,8 @@ namespace TelegramGroupsAdmin.Jobs;
 /// Provides persistence, retry logic for transient failures (ClamAV restart, VT rate limit)
 /// If infected: Deletes message, DMs user (or fallback to chat reply), logs to audit
 /// </summary>
-public class FileScanJob(
-    ILogger<FileScanJob> logger,
+public class FileScanJobLogic(
+    ILogger<FileScanJobLogic> logger,
     TelegramBotClientFactory botClientFactory,
     IEnumerable<IContentCheck> contentChecks,
     ITelegramUserRepository telegramUserRepository,
@@ -35,7 +33,7 @@ public class FileScanJob(
     IDetectionResultsRepository detectionResultsRepository,
     TelegramConfigLoader configLoader)
 {
-    private readonly ILogger<FileScanJob> _logger = logger;
+    private readonly ILogger<FileScanJobLogic> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly IContentCheck _fileScanningCheck = contentChecks.First(c => c.CheckName == CheckName.FileScanning);
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
@@ -45,10 +43,9 @@ public class FileScanJob(
 
     /// <summary>
     /// Download file, scan for malware, take action if infected
-    /// Scheduled via TickerQ with 0s delay for instant execution
+    /// Scheduled with 0s delay for instant execution
     /// </summary>
-    [TickerFunction(functionName: "FileScan")]
-    public async Task ExecuteAsync(TickerFunctionContext<FileScanJobPayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(FileScanJobPayload payload, CancellationToken cancellationToken)
     {
         const string jobName = "FileScan";
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -56,10 +53,9 @@ public class FileScanJob(
 
         try
         {
-            var payload = context.Request;
             if (payload == null)
             {
-                _logger.LogError("FileScanJob received null payload");
+                _logger.LogError("FileScanJobLogic received null payload");
                 return;
             }
 
@@ -187,11 +183,11 @@ public class FileScanJob(
                 _logger.LogError(
                     ex,
                     "Failed to scan file for message {MessageId} (user {UserId}, chat {ChatId})",
-                    payload.MessageId,
-                    payload.UserId,
-                    payload.ChatId);
+                    payload?.MessageId,
+                    payload?.UserId,
+                    payload?.ChatId);
 
-                // Re-throw to let TickerQ handle retry logic
+                // Re-throw for retry logic and exception recording
                 // Retriable scenarios: ClamAV daemon restart, VirusTotal rate limit, network timeout
                 throw;
             }

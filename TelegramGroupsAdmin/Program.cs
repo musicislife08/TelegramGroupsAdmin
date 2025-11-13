@@ -97,8 +97,6 @@ builder.Host.UseSerilog((context, services, configuration) =>
     }
 });
 
-// Background job system (TickerQ with PostgreSQL backend)
-builder.Services.AddTickerQBackgroundJobs(builder.Environment);
 
 // Telegram services and bot commands
 builder.Services.AddTelegramServices();
@@ -152,10 +150,6 @@ if (!string.IsNullOrEmpty(otlpEndpoint))
 }
 
 var app = builder.Build();
-
-// Explicitly initialize TickerQ functions BEFORE UseTickerQ() is called
-// (required for TickerQ v2.5.3 - source generator needs explicit initialization)
-TelegramGroupsAdmin.TickerQInstanceFactory.Initialize();
 
 // Run database migrations
 await app.RunDatabaseMigrationsAsync(connectionString);

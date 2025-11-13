@@ -2,30 +2,27 @@ using System.Diagnostics;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Services.Backup;
 using TelegramGroupsAdmin.Telegram.Abstractions;
-using TickerQ.Utilities.Base;
-using TickerQ.Utilities.Models;
 
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// Scheduled job to automatically backup database on a cron schedule
+/// Job logic to automatically backup database on a cron schedule
 /// Saves backups to disk and manages retention (deletes old backups)
 /// </summary>
-public class ScheduledBackupJob
+public class ScheduledBackupJobLogic
 {
-    private readonly ILogger<ScheduledBackupJob> _logger;
+    private readonly ILogger<ScheduledBackupJobLogic> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
 
-    public ScheduledBackupJob(
-        ILogger<ScheduledBackupJob> logger,
+    public ScheduledBackupJobLogic(
+        ILogger<ScheduledBackupJobLogic> logger,
         IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
     }
 
-    [TickerFunction("scheduled_backup")]
-    public async Task ExecuteAsync(TickerFunctionContext<ScheduledBackupPayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(ScheduledBackupPayload payload, CancellationToken cancellationToken)
     {
         const string jobName = "ScheduledBackup";
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -35,10 +32,9 @@ public class ScheduledBackupJob
         {
             try
             {
-                var payload = context.Request;
                 if (payload == null)
                 {
-                    _logger.LogError("ScheduledBackupJob received null payload");
+                    _logger.LogError("ScheduledBackupJobLogic received null payload");
                     return;
                 }
 
@@ -79,7 +75,7 @@ public class ScheduledBackupJob
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during scheduled backup");
-                throw; // Re-throw for TickerQ retry logic
+                throw; // Re-throw for retry logic and exception recording
             }
         }
         finally

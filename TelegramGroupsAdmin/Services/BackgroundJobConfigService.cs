@@ -87,12 +87,10 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
             ? new BackgroundJobsConfig()
             : JsonSerializer.Deserialize<BackgroundJobsConfig>(configRecord.BackgroundJobsConfig, JsonOptions) ?? new BackgroundJobsConfig();
 
-        // Check if schedule changed (interval or cron) - if so, clear NextRunAt to reschedule immediately
+        // Check if schedule changed - if so, clear NextRunAt to reschedule immediately
         if (jobsConfig.Jobs.TryGetValue(jobName, out var existingJob))
         {
-            var scheduleChanged = existingJob.ScheduleType != config.ScheduleType ||
-                                  existingJob.IntervalDuration != config.IntervalDuration ||
-                                  existingJob.CronExpression != config.CronExpression;
+            var scheduleChanged = existingJob.CronExpression != config.CronExpression;
 
             if (scheduleChanged)
             {
@@ -162,14 +160,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 var needsRepair = false;
 
                 // Check for invalid schedule configuration
-                if (existingConfig.ScheduleType == "interval" && string.IsNullOrEmpty(existingConfig.IntervalDuration))
-                {
-                    _logger.LogWarning("Repairing invalid IntervalDuration for {JobName} (was null, setting to {Default})",
-                        jobName, defaultConfig.IntervalDuration);
-                    existingConfig.IntervalDuration = defaultConfig.IntervalDuration;
-                    needsRepair = true;
-                }
-                else if (existingConfig.ScheduleType == "cron" && string.IsNullOrEmpty(existingConfig.CronExpression))
+                if (string.IsNullOrEmpty(existingConfig.CronExpression))
                 {
                     _logger.LogWarning("Repairing invalid CronExpression for {JobName} (was null, setting to {Default})",
                         jobName, defaultConfig.CronExpression);
@@ -197,7 +188,6 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "Scheduled Backups",
                 Description = "Automatically backup database on a schedule",
                 Enabled = false, // Disabled by default
-                ScheduleType = "cron",
                 CronExpression = "0 2 * * *", // Daily at 2 AM
                 Settings = new Dictionary<string, object>
                 {
@@ -215,8 +205,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "Message Cleanup",
                 Description = "Delete old messages and their media files based on retention policy",
                 Enabled = true, // Already exists, just adding config
-                ScheduleType = "interval",
-                IntervalDuration = "24h", // Every 24 hours
+                CronExpression = "0 0 * * *", // Daily at midnight
                 Settings = new Dictionary<string, object>
                 {
                     [BackgroundJobSettings.RetentionHours] = 720 // 30 days default
@@ -228,7 +217,6 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "User Photo Refresh",
                 Description = "Refresh user profile photos from Telegram",
                 Enabled = true,
-                ScheduleType = "cron",
                 CronExpression = "0 3 * * *", // Daily at 3 AM
                 Settings = new Dictionary<string, object>
                 {
@@ -241,8 +229,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "URL Blocklist Sync",
                 Description = "Sync URL blocklists from upstream sources",
                 Enabled = true,
-                ScheduleType = "interval",
-                IntervalDuration = "7d", // Weekly (7 days)
+                CronExpression = "0 3 * * 0", // Weekly on Sunday at 3 AM
                 Settings = new Dictionary<string, object>()
             },
             [BackgroundJobNames.DatabaseMaintenance] = new BackgroundJobConfig
@@ -251,7 +238,6 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "Database Maintenance",
                 Description = "Run VACUUM and ANALYZE on PostgreSQL database",
                 Enabled = false, // Stub for future, disabled by default
-                ScheduleType = "cron",
                 CronExpression = "0 4 * * 0", // Weekly on Sunday at 4 AM
                 Settings = new Dictionary<string, object>
                 {
@@ -265,8 +251,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "Chat Health Monitoring",
                 Description = "Monitor chat health, bot permissions, and admin lists",
                 Enabled = true,
-                ScheduleType = "interval",
-                IntervalDuration = "30m", // Every 30 minutes
+                CronExpression = "*/30 * * * *", // Every 30 minutes
                 Settings = new Dictionary<string, object>()
             }
         };

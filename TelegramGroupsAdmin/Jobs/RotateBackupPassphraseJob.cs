@@ -5,29 +5,27 @@ using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Backup;
 using TelegramGroupsAdmin.Telegram.Abstractions.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Models;
-using TickerQ.Utilities.Base;
-using TickerQ.Utilities.Models;
 
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// Background job for rotating backup encryption passphrase.
+/// Job logic for rotating backup encryption passphrase.
 /// Re-encrypts all existing backups with new passphrase using atomic file operations.
 /// </summary>
-public class RotateBackupPassphraseJob
+public class RotateBackupPassphraseJobLogic
 {
     private readonly IBackupEncryptionService _encryptionService;
     private readonly IBackupService _backupService;
     private readonly IPassphraseManagementService _passphraseService;
     private readonly IAuditService _auditService;
-    private readonly ILogger<RotateBackupPassphraseJob> _logger;
+    private readonly ILogger<RotateBackupPassphraseJobLogic> _logger;
 
-    public RotateBackupPassphraseJob(
+    public RotateBackupPassphraseJobLogic(
         IBackupEncryptionService encryptionService,
         IBackupService backupService,
         IPassphraseManagementService passphraseService,
         IAuditService auditService,
-        ILogger<RotateBackupPassphraseJob> logger)
+        ILogger<RotateBackupPassphraseJobLogic> logger)
     {
         _encryptionService = encryptionService;
         _backupService = backupService;
@@ -36,8 +34,7 @@ public class RotateBackupPassphraseJob
         _logger = logger;
     }
 
-    [TickerFunction("rotate_backup_passphrase")]
-    public async Task ExecuteAsync(TickerFunctionContext<RotateBackupPassphrasePayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(RotateBackupPassphrasePayload payload, CancellationToken cancellationToken)
     {
         const string jobName = "RotateBackupPassphrase";
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -45,10 +42,9 @@ public class RotateBackupPassphraseJob
 
         try
         {
-            var payload = context.Request;
             if (payload == null)
             {
-                _logger.LogError("RotateBackupPassphraseJob received null payload");
+                _logger.LogError("RotateBackupPassphraseJobLogic received null payload");
                 return;
             }
             var userId = payload.UserId; // Web user GUID string
@@ -178,7 +174,7 @@ public class RotateBackupPassphraseJob
         catch (Exception ex)
         {
             _logger.LogError(ex, "❌ Passphrase rotation failed");
-            throw; // Re-throw for TickerQ retry logic
+            throw; // Re-throw for retry logic and exception recording
         }
         }
         finally

@@ -62,14 +62,8 @@
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Schedule">
-                        @if (context.ScheduleType == "cron")
-                        {
-                            <MudText Typo="Typo.caption">@FormatCronSchedule(context.CronExpression)</MudText>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.caption">Every @(FormatIntervalDuration(context.IntervalDuration))</MudText>
-                        }
+                        <!-- TODO: Reimplement schedule display with friendly format → cron conversion -->
+                        <MudText Typo="Typo.caption">@FormatCronSchedule(context.CronExpression)</MudText>
                     </MudTd>
                     <MudTd DataLabel="Last Run">
                         @if (context.LastRunAt.HasValue)
@@ -134,53 +128,17 @@
             <MudStack Spacing="3">
                 <MudText Typo="Typo.body2" Color="Color.Secondary">@_editingJob.Description</MudText>
 
-                <!-- Schedule Type Selector -->
-                <MudRadioGroup @bind-Value="_editScheduleType">
-                    <MudRadio Value="@("interval")" Color="Color.Primary">
-                        <MudText Typo="Typo.body2">Simple (Every X hours)</MudText>
-                    </MudRadio>
-                    <MudRadio Value="@("cron")" Color="Color.Primary">
-                        <MudText Typo="Typo.body2">Advanced (Cron Expression)</MudText>
-                    </MudRadio>
-                </MudRadioGroup>
+                <!-- TODO: Reimplement schedule UI with friendly format → cron conversion -->
+                <MudTextField @bind-Value="_editCronExpression"
+                             Label="Cron Expression"
+                             Variant="Variant.Outlined"
+                             ReadOnly="true"
+                             HelperText="Schedule editing temporarily disabled - cron expression shown as readonly"
+                             Placeholder="0 2 * * *" />
 
-                @if (_editScheduleType == "interval")
-                {
-                    <!-- Simple Interval Builder -->
-                    <MudTextField @bind-Value="_editIntervalDuration"
-                                   Label="Run Every"
-                                   Variant="Variant.Outlined"
-                                   HelperText="Examples: 30m, 1h, 6h, 24h, 7d, 1w"
-                                   Placeholder="1h" />
-
-                    <MudAlert Severity="Severity.Info" Dense="true">
-                        @if (TimeSpanUtilities.TryParseDuration(_editIntervalDuration ?? "1h", out var duration))
-                        {
-                            <text>Job will run every <strong>@TimeSpanUtilities.FormatDuration(duration)</strong></text>
-                        }
-                        else
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Warning">Invalid duration format. Use examples like: 30m, 1h, 24h, 7d, 1w</MudText>
-                        }
-                    </MudAlert>
-                }
-                else
-                {
-                    <!-- Cron Expression Builder -->
-                    <MudTextField @bind-Value="_editCronExpression"
-                                Label="Cron Expression"
-                                Variant="Variant.Outlined"
-                                HelperText="Standard cron format: minute hour day month weekday"
-                                Placeholder="0 2 * * *" />
-
-                    <MudAlert Severity="Severity.Info" Dense="true">
-                        <MudText Typo="Typo.body2"><strong>Common Examples:</strong></MudText>
-                        <MudText Typo="Typo.caption">• <code>0 2 * * *</code> - Daily at 2:00 AM</MudText>
-                        <MudText Typo="Typo.caption">• <code>0 3 * * 0</code> - Sundays at 3:00 AM</MudText>
-                        <MudText Typo="Typo.caption">• <code>0 */6 * * *</code> - Every 6 hours</MudText>
-                        <MudText Typo="Typo.caption">• <code>0 0 1 * *</code> - First day of month at midnight</MudText>
-                    </MudAlert>
-                }
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    Schedule editing UI will be reimplemented in a future update with a friendly format that converts to cron expressions.
+                </MudAlert>
 
                 <!-- Job-Specific Settings -->
                 @if (_editingJob.JobName == BackgroundJobNames.ScheduledBackup)
@@ -268,8 +226,6 @@
     // Dialog state
     private bool _showConfigDialog;
     private BackgroundJobConfig? _editingJob;
-    private string _editScheduleType = "interval";
-    private string? _editIntervalDuration = "1h";
     private string? _editCronExpression;
 
     // Granular backup retention settings (5-tier)
@@ -377,8 +333,6 @@
         }
 
         _editingJob = job;
-        _editScheduleType = job.ScheduleType;
-        _editIntervalDuration = job.IntervalDuration ?? "1h";
         _editCronExpression = job.CronExpression;
 
         // Load job-specific settings
@@ -425,29 +379,8 @@
 
         try
         {
-            // Validate interval duration if using interval schedule
-            if (_editScheduleType == "interval")
-            {
-                if (string.IsNullOrWhiteSpace(_editIntervalDuration) ||
-                    !TimeSpanUtilities.TryParseDuration(_editIntervalDuration, out _))
-                {
-                    Snackbar.Add("Invalid duration format. Use examples like: 30m, 1h, 24h, 7d", Severity.Warning);
-                    return;
-                }
-            }
-
-            // Update schedule
-            _editingJob.ScheduleType = _editScheduleType;
-            if (_editScheduleType == "interval")
-            {
-                _editingJob.IntervalDuration = _editIntervalDuration;
-                _editingJob.CronExpression = null;
-            }
-            else
-            {
-                _editingJob.CronExpression = _editCronExpression;
-                _editingJob.IntervalDuration = null;
-            }
+            // TODO: Reimplement schedule validation with friendly format → cron conversion
+            // Schedule editing is currently disabled - cron expression is readonly
 
             // Update job-specific settings
             _editingJob.Settings ??= new Dictionary<string, object>();
@@ -585,16 +518,6 @@
         };
     }
 
-    private static string FormatIntervalDuration(string? duration)
-    {
-        if (string.IsNullOrEmpty(duration))
-            return "Not configured";
-
-        if (TimeSpanUtilities.TryParseDuration(duration, out var timespan))
-            return TimeSpanUtilities.FormatDuration(timespan);
-
-        return duration; // Return raw if can't parse
-    }
 
     public void Dispose()
     {

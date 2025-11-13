@@ -7,30 +7,28 @@ using TelegramGroupsAdmin.Telegram.Abstractions;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
-using TickerQ.Utilities.Base;
-using TickerQ.Utilities.Models;
 
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// TickerQ job for periodic chat health monitoring
+/// Job logic for periodic chat health monitoring
 /// Replaces PeriodicTimer in TelegramAdminBotService (Phase 4: Chat health optimization)
 /// Monitors chat permissions, admin lists, invite links
 /// </summary>
-public class ChatHealthCheckJob
+public class ChatHealthCheckJobLogic
 {
     private readonly ChatManagementService _chatService;
     private readonly TelegramBotClientFactory _botFactory;
     private readonly TelegramConfigLoader _configLoader;
     private readonly IConfigService _configService;
-    private readonly ILogger<ChatHealthCheckJob> _logger;
+    private readonly ILogger<ChatHealthCheckJobLogic> _logger;
 
-    public ChatHealthCheckJob(
+    public ChatHealthCheckJobLogic(
         ChatManagementService chatService,
         TelegramBotClientFactory botFactory,
         TelegramConfigLoader configLoader,
         IConfigService configService,
-        ILogger<ChatHealthCheckJob> logger)
+        ILogger<ChatHealthCheckJobLogic> logger)
     {
         _chatService = chatService;
         _botFactory = botFactory;
@@ -39,9 +37,8 @@ public class ChatHealthCheckJob
         _logger = logger;
     }
 
-    [TickerFunction("chat_health_check")]
     public async Task ExecuteAsync(
-        TickerFunctionContext<ChatHealthCheckPayload> context,
+        ChatHealthCheckPayload payload,
         CancellationToken cancellationToken)
     {
         const string jobName = "ChatHealthCheck";
@@ -52,10 +49,9 @@ public class ChatHealthCheckJob
         {
             try
             {
-                var payload = context.Request;
                 if (payload == null)
                 {
-                    _logger.LogError("ChatHealthCheckJob received null payload");
+                    _logger.LogError("ChatHealthCheckJobLogic received null payload");
                     return;
                 }
 
@@ -93,7 +89,7 @@ public class ChatHealthCheckJob
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Chat health check failed");
-                throw; // Re-throw for TickerQ retry logic
+                throw; // Re-throw for retry logic and exception recording
             }
         }
         finally

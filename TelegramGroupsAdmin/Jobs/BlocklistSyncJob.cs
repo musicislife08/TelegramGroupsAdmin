@@ -2,39 +2,35 @@ using System.Diagnostics;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
-using TickerQ.Utilities.Base;
-using TickerQ.Utilities.Models;
 
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// TickerQ job for syncing external blocklists
+/// Job logic for syncing external blocklists
 /// Phase 4.13: URL Filtering
 /// </summary>
-public class BlocklistSyncJob
+public class BlocklistSyncJobLogic
 {
     private readonly IBlocklistSyncService _syncService;
-    private readonly ILogger<BlocklistSyncJob> _logger;
+    private readonly ILogger<BlocklistSyncJobLogic> _logger;
 
-    public BlocklistSyncJob(
+    public BlocklistSyncJobLogic(
         IBlocklistSyncService syncService,
-        ILogger<BlocklistSyncJob> logger)
+        ILogger<BlocklistSyncJobLogic> logger)
     {
         _syncService = syncService;
         _logger = logger;
     }
 
-    [TickerFunction(functionName: "BlocklistSync")]
-    public async Task ExecuteAsync(TickerFunctionContext<BlocklistSyncJobPayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(BlocklistSyncJobPayload payload, CancellationToken cancellationToken)
     {
         const string jobName = "BlocklistSync";
         var startTimestamp = Stopwatch.GetTimestamp();
         var success = false;
 
-        var payload = context.Request;
         if (payload == null)
         {
-            _logger.LogWarning("BlocklistSyncJob received null payload, skipping");
+            _logger.LogWarning("BlocklistSyncJobLogic received null payload, skipping");
             return;
         }
 
@@ -42,7 +38,7 @@ public class BlocklistSyncJob
         {
             try
             {
-                _logger.LogInformation("BlocklistSyncJob started with payload: SubscriptionId={SubscriptionId}, ChatId={ChatId}, ForceRebuild={ForceRebuild}",
+                _logger.LogInformation("BlocklistSyncJobLogic started with payload: SubscriptionId={SubscriptionId}, ChatId={ChatId}, ForceRebuild={ForceRebuild}",
                     payload.SubscriptionId, payload.ChatId, payload.ForceRebuild);
 
                 if (payload.ForceRebuild)
@@ -61,13 +57,13 @@ public class BlocklistSyncJob
                     await _syncService.SyncAllAsync(cancellationToken);
                 }
 
-                _logger.LogInformation("BlocklistSyncJob completed successfully");
+                _logger.LogInformation("BlocklistSyncJobLogic completed successfully");
                 success = true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "BlocklistSyncJob failed");
-                throw; // Re-throw for TickerQ retry mechanism
+                _logger.LogError(ex, "BlocklistSyncJobLogic failed");
+                throw; // Re-throw for retry logic and exception recording
             }
         }
         finally

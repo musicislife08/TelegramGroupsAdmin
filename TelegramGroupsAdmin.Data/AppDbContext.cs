@@ -1,7 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data.Models;
-using TickerQ.EntityFrameworkCore.Configurations;
-using TickerQ.EntityFrameworkCore.Entities;
 
 namespace TelegramGroupsAdmin.Data;
 
@@ -70,11 +68,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Notification tables
     public DbSet<PendingNotificationRecord> PendingNotifications => Set<PendingNotificationRecord>();
 
-    // TickerQ entities (background job system)
-    public DbSet<TimeTickerEntity> TimeTickers => Set<TimeTickerEntity>();
-    public DbSet<CronTickerEntity> CronTickers => Set<CronTickerEntity>();
-    public DbSet<CronTickerOccurrenceEntity<CronTickerEntity>> CronTickerOccurrences => Set<CronTickerOccurrenceEntity<CronTickerEntity>>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -90,12 +83,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // Configure special entities
         ConfigureSpecialEntities(modelBuilder);
-
-        // Apply TickerQ entity configurations (needed for migrations)
-        // Default schema is "ticker"
-        modelBuilder.ApplyConfiguration(new TimeTickerConfigurations());
-        modelBuilder.ApplyConfiguration(new CronTickerConfigurations());
-        modelBuilder.ApplyConfiguration(new CronTickerOccurrenceConfigurations());
     }
 
     private static void ConfigureRelationships(ModelBuilder modelBuilder)

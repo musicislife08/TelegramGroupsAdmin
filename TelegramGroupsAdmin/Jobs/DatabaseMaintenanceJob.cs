@@ -2,28 +2,25 @@ using System.Diagnostics;
 using Npgsql;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions;
-using TickerQ.Utilities.Base;
-using TickerQ.Utilities.Models;
 
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// Scheduled job to run PostgreSQL database maintenance operations (VACUUM, ANALYZE)
+/// Job logic to run PostgreSQL database maintenance operations (VACUUM, ANALYZE)
 /// Executes VACUUM to reclaim storage and ANALYZE to update query planner statistics
 /// </summary>
-public class DatabaseMaintenanceJob
+public class DatabaseMaintenanceJobLogic
 {
-    private readonly ILogger<DatabaseMaintenanceJob> _logger;
+    private readonly ILogger<DatabaseMaintenanceJobLogic> _logger;
     private readonly IConfiguration _configuration;
 
-    public DatabaseMaintenanceJob(ILogger<DatabaseMaintenanceJob> logger, IConfiguration configuration)
+    public DatabaseMaintenanceJobLogic(ILogger<DatabaseMaintenanceJobLogic> logger, IConfiguration configuration)
     {
         _logger = logger;
         _configuration = configuration;
     }
 
-    [TickerFunction("database_maintenance")]
-    public async Task ExecuteAsync(TickerFunctionContext<DatabaseMaintenancePayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(DatabaseMaintenancePayload payload, CancellationToken cancellationToken)
     {
         const string jobName = "DatabaseMaintenance";
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -33,10 +30,9 @@ public class DatabaseMaintenanceJob
         {
             try
             {
-                var payload = context.Request;
                 if (payload == null)
                 {
-                    _logger.LogError("DatabaseMaintenanceJob received null payload");
+                    _logger.LogError("DatabaseMaintenanceJobLogic received null payload");
                     return;
                 }
 
@@ -86,7 +82,7 @@ public class DatabaseMaintenanceJob
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error during database maintenance");
-                throw; // Re-throw for TickerQ retry logic
+                throw; // Re-throw for retry logic and exception recording
             }
         }
         finally

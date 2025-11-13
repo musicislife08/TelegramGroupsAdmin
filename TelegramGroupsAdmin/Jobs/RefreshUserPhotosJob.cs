@@ -3,30 +3,27 @@ using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Services.Media;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TickerQ.Utilities.Base;
-using TickerQ.Utilities.Models;
 
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// Nightly job to refresh user photos for all active users (seen in last 30 days)
+/// Nightly job logic to refresh user photos for all active users (seen in last 30 days)
 /// Queues refetch requests for smart cache invalidation
 /// </summary>
-public class RefreshUserPhotosJob
+public class RefreshUserPhotosJobLogic
 {
-    private readonly ILogger<RefreshUserPhotosJob> _logger;
+    private readonly ILogger<RefreshUserPhotosJobLogic> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
 
-    public RefreshUserPhotosJob(
-        ILogger<RefreshUserPhotosJob> logger,
+    public RefreshUserPhotosJobLogic(
+        ILogger<RefreshUserPhotosJobLogic> logger,
         IServiceScopeFactory scopeFactory)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
     }
 
-    [TickerFunction(functionName: "refresh_user_photos")]
-    public async Task ExecuteAsync(TickerFunctionContext<RefreshUserPhotosPayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(RefreshUserPhotosPayload payload, CancellationToken cancellationToken)
     {
         const string jobName = "RefreshUserPhotos";
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -36,10 +33,9 @@ public class RefreshUserPhotosJob
         {
             try
             {
-                var payload = context.Request;
                 if (payload == null)
                 {
-                    _logger.LogError("RefreshUserPhotosJob received null payload");
+                    _logger.LogError("RefreshUserPhotosJobLogic received null payload");
                     return;
                 }
 
@@ -71,7 +67,7 @@ public class RefreshUserPhotosJob
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error refreshing user photos");
-                throw; // Re-throw for TickerQ retry logic
+                throw; // Re-throw for retry logic and exception recording
             }
         }
         finally

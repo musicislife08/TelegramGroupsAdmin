@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
-using TickerQ.Utilities.Base;
 using Telegram.Bot;
-using TickerQ.Utilities.Models;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -12,27 +10,26 @@ using TelegramGroupsAdmin.Telegram.Services;
 namespace TelegramGroupsAdmin.Jobs;
 
 /// <summary>
-/// TickerQ job to handle welcome message timeout
+/// Job logic to handle welcome message timeout
 /// Replaces fire-and-forget Task.Run in WelcomeService (C1 critical issue)
 /// Phase 4.4: Welcome system
 /// </summary>
-public class WelcomeTimeoutJob(
-    ILogger<WelcomeTimeoutJob> logger,
+public class WelcomeTimeoutJobLogic(
+    ILogger<WelcomeTimeoutJobLogic> logger,
     IDbContextFactory<AppDbContext> contextFactory,
     TelegramBotClientFactory botClientFactory,
     TelegramConfigLoader configLoader)
 {
-    private readonly ILogger<WelcomeTimeoutJob> _logger = logger;
+    private readonly ILogger<WelcomeTimeoutJobLogic> _logger = logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly TelegramConfigLoader _configLoader = configLoader;
 
     /// <summary>
     /// Execute welcome timeout - kicks user if they haven't responded
-    /// Scheduled via TickerQ with configurable delay (default 60s)
+    /// Scheduled with configurable delay (default 60s)
     /// </summary>
-    [TickerFunction(functionName: "WelcomeTimeout")]
-    public async Task ExecuteAsync(TickerFunctionContext<WelcomeTimeoutPayload> context, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(WelcomeTimeoutPayload payload, CancellationToken cancellationToken)
     {
         const string jobName = "WelcomeTimeout";
         var startTimestamp = Stopwatch.GetTimestamp();
@@ -40,10 +37,9 @@ public class WelcomeTimeoutJob(
 
         try
         {
-            var payload = context.Request;
             if (payload == null)
             {
-                _logger.LogError("WelcomeTimeoutJob received null payload");
+                _logger.LogError("WelcomeTimeoutJobLogic received null payload");
                 return;
             }
 
@@ -141,9 +137,9 @@ public class WelcomeTimeoutJob(
             _logger.LogError(
                 ex,
                 "Failed to process welcome timeout for user {UserId} in chat {ChatId}",
-                context.Request?.UserId,
-                context.Request?.ChatId);
-            throw; // Re-throw to let TickerQ handle retry logic
+                payload?.UserId,
+                payload?.ChatId);
+            throw; // Re-throw for retry logic and exception recording
         }
         finally
         {
