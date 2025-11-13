@@ -21,6 +21,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public class SpamActionService(
     IServiceProvider serviceProvider,
+    ChatManagementService chatManagementService,
     ILogger<SpamActionService> logger)
 {
     // Confidence thresholds for spam detection decisions
@@ -422,16 +423,32 @@ public class SpamActionService(
                 }
             }
 
-            logger.LogInformation(
-                "Executing auto-ban for user {UserId} across {ChatCount} managed chats",
-                message.From.Id,
-                activeChats.Count);
+            // Health gate: Filter for chats where bot has confirmed permissions
+            var healthyChatIds = chatManagementService.FilterHealthyChats(activeChats.Select(c => c.ChatId)).ToHashSet();
+            var actionableChats = activeChats.Where(c => healthyChatIds.Contains(c.ChatId)).ToList();
 
-            // Ban user across all managed chats via Telegram API
+            // Log chats skipped due to health issues
+            var skippedChatIds = activeChats.Select(c => c.ChatId).Except(actionableChats.Select(c => c.ChatId)).ToList();
+            if (skippedChatIds.Count > 0)
+            {
+                logger.LogWarning(
+                    "Skipping {Count} unhealthy chats for auto-ban: {ChatIds}. " +
+                    "Bot lacks required permissions (admin + ban members) in these chats.",
+                    skippedChatIds.Count,
+                    string.Join(", ", skippedChatIds));
+            }
+
+            logger.LogInformation(
+                "Executing auto-ban for user {UserId} across {ChatCount} managed chats ({SkippedCount} skipped due to health)",
+                message.From.Id,
+                actionableChats.Count,
+                skippedChatIds.Count);
+
+            // Ban user across all actionable managed chats via Telegram API
             int successCount = 0;
             int failCount = 0;
 
-            foreach (var chat in activeChats)
+            foreach (var chat in actionableChats)
             {
                 try
                 {
@@ -463,7 +480,7 @@ public class SpamActionService(
                 "Auto-ban complete for user {UserId}: {SuccessCount}/{TotalCount} successful, {FailCount} failed",
                 message.From.Id,
                 successCount,
-                activeChats.Count,
+                actionableChats.Count,
                 failCount);
 
             // FEATURE-4.23: Schedule cross-chat message cleanup job

@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
+using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -35,6 +36,7 @@ public class ModerationActionService
     private readonly IChatInviteLinkService _inviteLinkService;
     private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly BotMessageService _botMessageService;
+    private readonly ChatManagementService _chatManagementService;
     private readonly ILogger<ModerationActionService> _logger;
 
     public ModerationActionService(
@@ -52,6 +54,7 @@ public class ModerationActionService
         IChatInviteLinkService inviteLinkService,
         INotificationOrchestrator notificationOrchestrator,
         BotMessageService botMessageService,
+        ChatManagementService chatManagementService,
         ILogger<ModerationActionService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;
@@ -68,6 +71,7 @@ public class ModerationActionService
         _inviteLinkService = inviteLinkService;
         _notificationOrchestrator = notificationOrchestrator;
         _botMessageService = botMessageService;
+        _chatManagementService = chatManagementService;
         _logger = logger;
     }
 
@@ -264,9 +268,23 @@ public class ModerationActionService
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
+            // Health gate: Filter for chats where bot has confirmed permissions
+            var actionableChatIds = _chatManagementService.FilterHealthyChats(activeChatIds);
+
+            // Log chats skipped due to health issues
+            var skippedChats = activeChatIds.Except(actionableChatIds).ToList();
+            if (skippedChats.Count > 0)
+            {
+                _logger.LogWarning(
+                    "Skipping {Count} unhealthy chats for ban action: {ChatIds}. " +
+                    "Bot lacks required permissions (admin + ban members) in these chats.",
+                    skippedChats.Count,
+                    string.Join(", ", skippedChats));
+            }
+
             // Parallel execution with concurrency limit (respects Telegram rate limits)
             using var semaphore = new SemaphoreSlim(3); // Max 3 concurrent API calls
-            var banTasks = activeChatIds.Select(async chatId =>
+            var banTasks = actionableChatIds.Select(async chatId =>
             {
                 await semaphore.WaitAsync(cancellationToken);
                 try
@@ -363,8 +381,22 @@ public class ModerationActionService
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
+            // Health gate: Filter for chats where bot has confirmed permissions
+            var actionableChatIds = _chatManagementService.FilterHealthyChats(activeChatIds);
+
+            // Log chats skipped due to health issues
+            var skippedChats = activeChatIds.Except(actionableChatIds).ToList();
+            if (skippedChats.Count > 0)
+            {
+                _logger.LogWarning(
+                    "Skipping {Count} unhealthy chats for ban action: {ChatIds}. " +
+                    "Bot lacks required permissions (admin + ban members) in these chats.",
+                    skippedChats.Count,
+                    string.Join(", ", skippedChats));
+            }
+
             using var semaphore = new SemaphoreSlim(3);
-            var banTasks = activeChatIds.Select(async chatId =>
+            var banTasks = actionableChatIds.Select(async chatId =>
             {
                 await semaphore.WaitAsync(cancellationToken);
                 try
@@ -563,8 +595,22 @@ public class ModerationActionService
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
+            // Health gate: Filter for chats where bot has confirmed permissions
+            var actionableChatIds = _chatManagementService.FilterHealthyChats(activeChatIds);
+
+            // Log chats skipped due to health issues
+            var skippedChats = activeChatIds.Except(actionableChatIds).ToList();
+            if (skippedChats.Count > 0)
+            {
+                _logger.LogWarning(
+                    "Skipping {Count} unhealthy chats for unban action: {ChatIds}. " +
+                    "Bot lacks required permissions (admin + ban members) in these chats.",
+                    skippedChats.Count,
+                    string.Join(", ", skippedChats));
+            }
+
             using var semaphore = new SemaphoreSlim(3);
-            var unbanTasks = activeChatIds.Select(async chatId =>
+            var unbanTasks = actionableChatIds.Select(async chatId =>
             {
                 await semaphore.WaitAsync(cancellationToken);
                 try
@@ -732,8 +778,22 @@ public class ModerationActionService
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
+            // Health gate: Filter for chats where bot has confirmed permissions
+            var actionableChatIds = _chatManagementService.FilterHealthyChats(activeChatIds);
+
+            // Log chats skipped due to health issues
+            var skippedChats = activeChatIds.Except(actionableChatIds).ToList();
+            if (skippedChats.Count > 0)
+            {
+                _logger.LogWarning(
+                    "Skipping {Count} unhealthy chats for temp ban action: {ChatIds}. " +
+                    "Bot lacks required permissions (admin + ban members) in these chats.",
+                    skippedChats.Count,
+                    string.Join(", ", skippedChats));
+            }
+
             using var semaphore = new SemaphoreSlim(3);
-            var banTasks = activeChatIds.Select(async chatId =>
+            var banTasks = actionableChatIds.Select(async chatId =>
             {
                 await semaphore.WaitAsync(cancellationToken);
                 try
@@ -864,8 +924,22 @@ public class ModerationActionService
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
+            // Health gate: Filter for chats where bot has confirmed permissions
+            var actionableChatIds = _chatManagementService.FilterHealthyChats(activeChatIds);
+
+            // Log chats skipped due to health issues
+            var skippedChats = activeChatIds.Except(actionableChatIds).ToList();
+            if (skippedChats.Count > 0)
+            {
+                _logger.LogWarning(
+                    "Skipping {Count} unhealthy chats for restrict action: {ChatIds}. " +
+                    "Bot lacks required permissions (admin + ban members) in these chats.",
+                    skippedChats.Count,
+                    string.Join(", ", skippedChats));
+            }
+
             using var semaphore = new SemaphoreSlim(3);
-            var restrictTasks = activeChatIds.Select(async chatId =>
+            var restrictTasks = actionableChatIds.Select(async chatId =>
             {
                 await semaphore.WaitAsync(cancellationToken);
                 try
