@@ -25,6 +25,10 @@ public partial class TokenizerService : ITokenizerService
     [GeneratedRegex(@"\b[\w']+\b", RegexOptions.Compiled)]
     private static partial Regex WordRegex();
 
+    // Regex for cleaning up multiple whitespace characters
+    [GeneratedRegex(@"\s+", RegexOptions.Compiled)]
+    private static partial Regex WhitespaceRegex();
+
     /// <summary>
     /// Remove emojis from text
     /// </summary>
@@ -37,7 +41,7 @@ public partial class TokenizerService : ITokenizerService
         var result = EmojiRegex().Replace(text, " ");
 
         // Clean up multiple spaces
-        result = Regex.Replace(result, @"\s+", " ");
+        result = WhitespaceRegex().Replace(result, " ");
 
         return result.Trim();
     }
