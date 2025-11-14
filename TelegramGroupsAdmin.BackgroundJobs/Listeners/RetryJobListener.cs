@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Listeners;
 
@@ -16,7 +17,6 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
     // Configuration
     private const int MaxRetries = 3;
     private static readonly TimeSpan BaseBackoffInterval = TimeSpan.FromSeconds(10);
-    private const string RetryCountKey = "RetryCount";
 
     public string Name => "RetryJobListener";
 
@@ -41,7 +41,7 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
         if (jobException == null)
         {
             // Job succeeded - clear retry count if it exists
-            if (context.JobDetail.JobDataMap.ContainsKey(RetryCountKey))
+            if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.RetryCount))
             {
                 _logger.LogInformation(
                     "Job {JobName} succeeded after previous retry attempts",
@@ -51,8 +51,8 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
         }
 
         // Get current retry count (defaults to 0 for first failure)
-        var retryCount = context.JobDetail.JobDataMap.ContainsKey(RetryCountKey)
-            ? context.JobDetail.JobDataMap.GetInt(RetryCountKey)
+        var retryCount = context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.RetryCount)
+            ? context.JobDetail.JobDataMap.GetInt(JobDataKeys.RetryCount)
             : 0;
 
         if (retryCount >= MaxRetries)
@@ -81,11 +81,18 @@ public class RetryJobListener(ILogger<RetryJobListener> logger, ISchedulerFactor
         var scheduler = await _schedulerFactory.GetScheduler(cancellationToken);
 
         // Build new job data map with incremented retry count and preserved payload
+        // CRITICAL: Must preserve PayloadJson and PayloadType from original job for ad-hoc jobs
         var retryJobData = new JobDataMap
         {
-            { RetryCountKey, nextRetryCount },
-            { "payload", context.JobDetail.JobDataMap.Get("payload") } // Preserve original payload
+            { JobDataKeys.RetryCount, nextRetryCount }
         };
+
+        // Preserve original payload if present (ad-hoc jobs)
+        if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.PayloadJson))
+        {
+            retryJobData.Put(JobDataKeys.PayloadJson, context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson));
+            retryJobData.Put(JobDataKeys.PayloadType, context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadType));
+        }
 
         var retryTrigger = TriggerBuilder.Create()
             .ForJob(context.JobDetail)

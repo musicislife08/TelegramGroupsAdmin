@@ -91,7 +91,7 @@ public class PassphraseManagementService : IPassphraseManagementService
         var payload = new RotateBackupPassphrasePayload(newPassphrase, backupDirectory, userId);
 
         var jobId = await _jobScheduler.ScheduleJobAsync(
-            "rotate_backup_passphrase",
+            BackgroundJobNames.RotateBackupPassphrase,
             payload,
             delaySeconds: 0); // Execute immediately
 

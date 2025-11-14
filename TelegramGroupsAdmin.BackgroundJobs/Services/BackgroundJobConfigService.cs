@@ -15,6 +15,8 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<BackgroundJobConfigService> _logger;
+    private QuartzSchedulingSyncService? _syncService; // Injected lazily to avoid circular dependency
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -28,6 +30,15 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
     {
         _contextFactory = contextFactory;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Set the sync service reference (called by QuartzSchedulingSyncService after it starts)
+    /// Lazy injection to avoid circular dependency during DI registration
+    /// </summary>
+    public void SetSyncService(QuartzSchedulingSyncService syncService)
+    {
+        _syncService = syncService;
     }
 
     public async Task<BackgroundJobConfig?> GetJobConfigAsync(string jobName, CancellationToken cancellationToken = default)
@@ -110,6 +121,9 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Updated background job config for {JobName}", jobName);
+
+        // Trigger immediate re-sync of Quartz.NET scheduler
+        _syncService?.TriggerResync();
     }
 
     public async Task<bool> IsJobEnabledAsync(string jobName, CancellationToken cancellationToken = default)

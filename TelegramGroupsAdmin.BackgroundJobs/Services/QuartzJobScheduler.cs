@@ -39,8 +39,8 @@ public class QuartzJobScheduler : IJobScheduler
         // Create job detail with payload in JobDataMap
         var job = JobBuilder.Create(GetJobType(jobName))
             .WithIdentity(jobId, "AdHoc")
-            .UsingJobData("PayloadJson", payloadJson)
-            .UsingJobData("PayloadType", typeof(TPayload).AssemblyQualifiedName!)
+            .UsingJobData(JobDataKeys.PayloadJson, payloadJson)
+            .UsingJobData(JobDataKeys.PayloadType, typeof(TPayload).AssemblyQualifiedName!)
             .Build();
 
         // Create trigger with delay
@@ -87,18 +87,19 @@ public class QuartzJobScheduler : IJobScheduler
 
     /// <summary>
     /// Map job name to IJob implementation type
+    /// Uses BackgroundJobNames constants for compile-time safety
     /// </summary>
     private static Type GetJobType(string jobName)
     {
         return jobName switch
         {
-            "DeleteMessage" => typeof(Jobs.DeleteMessageJob),
-            "DeleteUserMessages" => typeof(Jobs.DeleteUserMessagesJob),
-            "FetchUserPhoto" => typeof(Jobs.FetchUserPhotoJob),
-            "FileScan" => typeof(Jobs.FileScanJob),
-            "WelcomeTimeout" => typeof(Jobs.WelcomeTimeoutJob),
-            "TempbanExpiry" => typeof(Jobs.TempbanExpiryJob),
-            "rotate_backup_passphrase" => typeof(Jobs.RotateBackupPassphraseJob),
+            BackgroundJobNames.DeleteMessage => typeof(Jobs.DeleteMessageJob),
+            BackgroundJobNames.DeleteUserMessages => typeof(Jobs.DeleteUserMessagesJob),
+            BackgroundJobNames.FetchUserPhoto => typeof(Jobs.FetchUserPhotoJob),
+            BackgroundJobNames.FileScan => typeof(Jobs.FileScanJob),
+            BackgroundJobNames.WelcomeTimeout => typeof(Jobs.WelcomeTimeoutJob),
+            BackgroundJobNames.TempbanExpiry => typeof(Jobs.TempbanExpiryJob),
+            BackgroundJobNames.RotateBackupPassphrase => typeof(Jobs.RotateBackupPassphraseJob),
             _ => throw new ArgumentException($"Unknown job name: {jobName}", nameof(jobName))
         };
     }

@@ -20,6 +20,7 @@ public class QuartzSchedulingSyncService(
     private readonly IBackgroundJobConfigService _jobConfigService = jobConfigService;
 
     private IScheduler? _scheduler;
+    private readonly SemaphoreSlim _resyncSignal = new(0, 1);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -33,22 +34,66 @@ public class QuartzSchedulingSyncService(
             // Ensure default job configs exist
             await _jobConfigService.EnsureDefaultConfigsAsync(stoppingToken);
 
+            // Register this service with BackgroundJobConfigService for live re-sync notifications
+            if (_jobConfigService is BackgroundJobConfigService configService)
+            {
+                configService.SetSyncService(this);
+                _logger.LogDebug("Registered with BackgroundJobConfigService for live config re-sync");
+            }
+
             // Perform initial sync on startup
             await SyncSchedulesAsync(stoppingToken);
 
             // Update NextRunAt for all jobs after initial sync
             await UpdateNextRunTimesAsync(stoppingToken);
 
-            _logger.LogInformation("QuartzSchedulingSyncService initial sync complete");
+            _logger.LogInformation("QuartzSchedulingSyncService initial sync complete - listening for config changes");
 
-            // TODO: Phase 10 - Add periodic re-sync or config change listener
-            // For now, schedules are only synced on startup
-            // Future: Listen to config changes and re-sync dynamically
+            // Wait for config change notifications (event-driven re-sync)
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    // Block until TriggerResync() is called or cancellation requested
+                    await _resyncSignal.WaitAsync(stoppingToken);
+
+                    _logger.LogInformation("Config change detected - re-syncing job schedules");
+
+                    // Re-sync all schedules
+                    await SyncSchedulesAsync(stoppingToken);
+                    await UpdateNextRunTimesAsync(stoppingToken);
+
+                    _logger.LogInformation("Config re-sync complete");
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error during config re-sync - will retry on next change");
+                }
+            }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "QuartzSchedulingSyncService failed to start");
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Trigger immediate re-sync of job schedules from database
+    /// Called by BackgroundJobConfigService after configuration changes
+    /// </summary>
+    public void TriggerResync()
+    {
+        // Release the semaphore to wake up the monitoring loop
+        // CurrentCount check prevents multiple releases (semaphore has maxCount=1)
+        if (_resyncSignal.CurrentCount == 0)
+        {
+            _resyncSignal.Release();
+            _logger.LogDebug("Config re-sync triggered");
         }
     }
 
