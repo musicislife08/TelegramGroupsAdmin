@@ -6,14 +6,10 @@ using Microsoft.AspNetCore.DataProtection;
 using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
-using TickerQ.DependencyInjection;
-using TickerQ.EntityFrameworkCore.DependencyInjection;
-using TickerQ.Dashboard.DependencyInjection;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Services;
-using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin;
 
@@ -152,18 +148,12 @@ public static class ServiceCollectionExtensions
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
 
             // Media refetch services (Phase 4.X: Re-download missing media after restore)
-            services.AddSingleton<TelegramGroupsAdmin.Services.Media.IMediaNotificationService, TelegramGroupsAdmin.Services.Media.MediaNotificationService>();
-            services.AddSingleton<TelegramGroupsAdmin.Services.Media.IMediaRefetchQueueService, TelegramGroupsAdmin.Services.Media.MediaRefetchQueueService>();
-            services.AddHostedService<TelegramGroupsAdmin.Services.Media.MediaRefetchWorkerService>();
+            services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.Media.IMediaNotificationService, TelegramGroupsAdmin.Telegram.Services.Media.MediaNotificationService>();
+            services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.Media.IMediaRefetchQueueService, TelegramGroupsAdmin.Telegram.Services.Media.MediaRefetchQueueService>();
+            services.AddHostedService<TelegramGroupsAdmin.Telegram.Services.Media.MediaRefetchWorkerService>();
 
             // Runtime logging configuration service (Phase 4.7)
             services.AddSingleton<IRuntimeLoggingService, RuntimeLoggingService>();
-
-            // Background jobs configuration service
-            services.AddScoped<IBackgroundJobConfigService, BackgroundJobConfigService>();
-
-            // Recurring job scheduler (Phase 4.X: Generic TickerQ job scheduler with interval/cron support)
-            services.AddHostedService<Services.BackgroundServices.RecurringJobSchedulerService>();
 
             // API key migration service (one-time migration from env vars to encrypted database storage)
             services.AddScoped<ApiKeyMigrationService>();
@@ -286,53 +276,6 @@ public static class ServiceCollectionExtensions
             return services;
         }
 
-        /// <summary>
-        /// Adds TickerQ background job system with PostgreSQL backend and job registrations
-        /// </summary>
-        public IServiceCollection AddTickerQBackgroundJobs(
-            IHostEnvironment environment)
-        {
-            services.AddTickerQ(options =>
-            {
-                // Max concurrent jobs
-                options.SetMaxConcurrency(4);
-
-                // Polling interval: Check for due jobs every 5 seconds (default is 60s)
-                // For smaller apps like this, faster polling improves responsiveness without significant overhead
-                // File scanning feels more immediate (5s vs 60s delay)
-                options.UpdateMissedJobCheckDelay(TimeSpan.FromSeconds(5));
-
-                // Use EF Core for persistence (PostgreSQL via AppDbContext)
-                options.AddOperationalStore<TelegramGroupsAdmin.Data.AppDbContext>(efOptions =>
-                {
-                    // Only include TickerQ tables during design-time migrations
-                    efOptions.UseModelCustomizerForMigrations();
-                });
-
-                // Dashboard UI at /tickerq-dashboard (development only)
-                if (environment.IsDevelopment())
-                {
-                    options.AddDashboard(dbopt =>
-                    {
-                        dbopt.BasePath = "/tickerq-dashboard";
-                        dbopt.EnableBasicAuth = false;
-                    });
-                }
-            });
-
-            // Register job classes (TickerQ discovers [TickerFunction] methods via source generators)
-            services.AddScoped<Jobs.WelcomeTimeoutJob>();
-            services.AddScoped<Jobs.DeleteMessageJob>();
-            services.AddScoped<Jobs.TempbanExpiryJob>();
-            services.AddScoped<Jobs.BlocklistSyncJob>(); // Phase 4.13: URL Filtering
-            services.AddScoped<Jobs.RefreshUserPhotosJob>(); // Phase 4.X: Nightly user photo refresh
-            services.AddScoped<Jobs.ScheduledBackupJob>(); // Background Jobs Management: Automatic database backups
-            services.AddScoped<Jobs.RotateBackupPassphraseJob>(); // Backup passphrase rotation with re-encryption
-            services.AddScoped<Jobs.DatabaseMaintenanceJob>(); // Background Jobs Management: PostgreSQL maintenance (STUB)
-            services.AddScoped<Jobs.ChatHealthCheckJob>(); // Phase 4.X: Chat health monitoring (replaces PeriodicTimer)
-
-            return services;
-        }
     }
 
     private static void ConfigureDataProtection(IServiceCollection services, string dataProtectionKeysPath)
@@ -389,19 +332,7 @@ public static class BackupServiceCollectionExtensions
         /// </summary>
         public IServiceCollection AddBackupServices()
         {
-            // Core backup services
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupService, TelegramGroupsAdmin.Services.Backup.BackupService>();
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupEncryptionService, TelegramGroupsAdmin.Services.Backup.BackupEncryptionService>();
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.BackupRetentionService>();
-
-            // Backup configuration and passphrase management (REFACTOR-2)
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupConfigurationService, TelegramGroupsAdmin.Services.Backup.BackupConfigurationService>();
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.IPassphraseManagementService, TelegramGroupsAdmin.Services.Backup.PassphraseManagementService>();
-
-            // Backup handlers (REFACTOR-2 - internal implementation details)
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.Handlers.TableDiscoveryService>();
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.Handlers.TableExportService>();
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.Handlers.DependencyResolutionService>();
+            // Note: Backup services are now registered by AddBackgroundJobs() in BackgroundJobs library
 
             return services;
         }

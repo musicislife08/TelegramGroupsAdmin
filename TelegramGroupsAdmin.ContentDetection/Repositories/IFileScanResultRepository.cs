@@ -32,7 +32,7 @@ public interface IFileScanResultRepository
 
     /// <summary>
     /// Cleanup expired scan results (older than 24 hours)
-    /// Should be called periodically via TickerQ background job
+    /// Should be called periodically via Quartz.NET background job
     /// </summary>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Number of records deleted</returns>

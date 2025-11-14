@@ -97,7 +97,7 @@ body:
         - label: ClamAV (file scanning)
         - label: SendGrid (email)
         - label: CAS.chat
-        - label: Background Jobs (TickerQ)
+        - label: Background Jobs (Quartz.NET)
         - label: Not sure / Multiple services
 
   - type: textarea

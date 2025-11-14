@@ -2,7 +2,7 @@ namespace TelegramGroupsAdmin.Telegram.Abstractions;
 
 /// <summary>
 /// Payload for ChatHealthCheckJob
-/// Phase 4: Chat health monitoring optimization (TickerQ migration)
+/// Phase 4: Chat health monitoring optimization (Quartz.NET migration)
 /// </summary>
 public record ChatHealthCheckPayload
 {

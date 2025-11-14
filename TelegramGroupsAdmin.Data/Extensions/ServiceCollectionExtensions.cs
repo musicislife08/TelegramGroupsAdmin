@@ -6,12 +6,10 @@ namespace TelegramGroupsAdmin.Data.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    extension(IServiceCollection services)
-    {
-        /// <summary>
-        /// Adds all data layer services: Dapper (BackupService only), EF Core
-        /// </summary>
-        public IServiceCollection AddDataServices(string connectionString)
+    /// <summary>
+    /// Adds all data layer services: Dapper (BackupService only), EF Core
+    /// </summary>
+    public static IServiceCollection AddDataServices(this IServiceCollection services, string connectionString)
     {
         // Npgsql data source for Dapper (BackupService only - infrastructure exception)
         services.AddNpgsqlDataSource(connectionString);
@@ -32,7 +30,7 @@ public static class ServiceCollectionExtensions
                 })
                 .ConfigureWarnings(w => w
                     .Ignore(RelationalEventId.PendingModelChangesWarning)
-                    .Ignore(RelationalEventId.MultipleCollectionIncludeWarning)), // TickerQ internal queries
+                    .Ignore(RelationalEventId.MultipleCollectionIncludeWarning)), // Quartz.NET internal queries
             contextLifetime: ServiceLifetime.Scoped,
             optionsLifetime: ServiceLifetime.Singleton);
 
@@ -49,9 +47,8 @@ public static class ServiceCollectionExtensions
                 })
                 .ConfigureWarnings(w => w
                     .Ignore(RelationalEventId.PendingModelChangesWarning)
-                    .Ignore(RelationalEventId.MultipleCollectionIncludeWarning))); // TickerQ internal queries
+                    .Ignore(RelationalEventId.MultipleCollectionIncludeWarning))); // Quartz.NET internal queries
 
-            return services;
-        }
+        return services;
     }
 }

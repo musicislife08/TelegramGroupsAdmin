@@ -189,7 +189,7 @@ See [examples/README.md](examples/README.md) for detailed configuration guide in
 │  ├─ TelegramAdminBotService         │ ← Telegram polling (singleton)
 │  ├─ Blazor Server UI                │
 │  ├─ API Endpoints                   │
-│  └─ TickerQ Background Jobs         │
+│  └─ Quartz.NET Background Jobs      │
 └─────────────────────────────────────┘
          ↓
     PostgreSQL
@@ -207,7 +207,7 @@ See [examples/README.md](examples/README.md) for detailed configuration guide in
 
 **Project Structure:**
 
-- **TelegramGroupsAdmin** - Main app, Blazor UI, API endpoints, TickerQ jobs
+- **TelegramGroupsAdmin** - Main app, Blazor UI, API endpoints, Quartz.NET jobs
 - **TelegramGroupsAdmin.Configuration** - IOptions configuration classes
 - **TelegramGroupsAdmin.Data** - EF Core DbContext, migrations, Data Protection
 - **TelegramGroupsAdmin.Telegram** - Bot services, bot commands, repositories
@@ -612,7 +612,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 TelegramGroupsAdmin includes and depends on various open-source libraries and tools. See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for complete licensing information and attributions for:
 
 - **Bundled Components:** FFmpeg (LGPL 2.1+), Tesseract OCR (Apache 2.0), EFF Wordlist (CC/Public Domain)
-- **Major Dependencies:** Telegram.Bot, MudBlazor, Entity Framework Core, TickerQ, and more
+- **Major Dependencies:** Telegram.Bot, MudBlazor, Entity Framework Core, Quartz.NET, and more
 - **External Services:** OpenAI, VirusTotal, CAS.chat, SendGrid
 
 ---
@@ -627,7 +627,7 @@ TelegramGroupsAdmin includes and depends on various open-source libraries and to
 
 - [Telegram Bot API](https://core.telegram.org/bots/api)
 - [MudBlazor](https://mudblazor.com/) - Material Design components for Blazor
-- [TickerQ](https://github.com/Salgat/TickerQ) - PostgreSQL-based background jobs
+- [Quartz.NET](https://www.quartz-scheduler.net/) - PostgreSQL-based background job scheduler
 - [OpenAI](https://platform.openai.com/) - GPT-4 and Vision API
 - [VirusTotal](https://www.virustotal.com/) - File threat intelligence
 - [CAS.chat](https://cas.chat/) - Spam user database

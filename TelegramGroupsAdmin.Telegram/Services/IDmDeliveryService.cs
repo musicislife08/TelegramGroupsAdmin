@@ -13,7 +13,7 @@ public interface IDmDeliveryService
     /// <param name="telegramUserId">Telegram user ID to send DM to</param>
     /// <param name="messageText">Message text to send</param>
     /// <param name="fallbackChatId">Optional chat ID to post fallback message if DM fails (403)</param>
-    /// <param name="autoDeleteSeconds">Optional seconds to auto-delete fallback message (uses TickerQ)</param>
+    /// <param name="autoDeleteSeconds">Optional seconds to auto-delete fallback message (uses Quartz.NET)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Result indicating success, fallback usage, or failure</returns>
     Task<DmDeliveryResult> SendDmAsync(

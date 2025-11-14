@@ -1,5 +1,5 @@
-@using TelegramGroupsAdmin.Services.Backup
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.BackgroundJobs.Services.Backup
+@using TelegramGroupsAdmin.BackgroundJobs.Services
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Core.BackgroundJobs
@@ -197,55 +197,6 @@ else
                                      Placeholder="/data/backups"
                                      Disabled="@_isSavingConfig" />
 
-                        <MudText Typo="Typo.subtitle2">Schedule</MudText>
-                        <MudRadioGroup @bind-Value="_editScheduleType" Disabled="@_isSavingConfig">
-                            <MudRadio Value="@("interval")" Color="Color.Primary">
-                                <MudText Typo="Typo.body2">Simple (Every X hours)</MudText>
-                            </MudRadio>
-                            <MudRadio Value="@("cron")" Color="Color.Primary">
-                                <MudText Typo="Typo.body2">Advanced (Cron Expression)</MudText>
-                            </MudRadio>
-                        </MudRadioGroup>
-
-                        @if (_editScheduleType == "interval")
-                        {
-                            <MudTextField @bind-Value="_editIntervalDuration"
-                                         Label="Run Every"
-                                         Variant="Variant.Outlined"
-                                         HelperText="Examples: 30m, 1h, 6h, 24h, 7d, 1w"
-                                         Placeholder="24h"
-                                         Disabled="@_isSavingConfig" />
-
-                            @if (TimeSpanUtilities.TryParseDuration(_editIntervalDuration ?? "24h", out var duration))
-                            {
-                                <MudAlert Severity="Severity.Info" Dense="true">
-                                    Automated backups will run every <strong>@TimeSpanUtilities.FormatDuration(duration)</strong>
-                                </MudAlert>
-                            }
-                            else
-                            {
-                                <MudAlert Severity="Severity.Warning" Dense="true">
-                                    Invalid duration format. Use examples like: 30m, 1h, 24h, 7d, 1w
-                                </MudAlert>
-                            }
-                        }
-                        else
-                        {
-                            <MudTextField @bind-Value="_editCronExpression"
-                                         Label="Cron Expression"
-                                         Variant="Variant.Outlined"
-                                         HelperText="Standard cron format: minute hour day month weekday"
-                                         Placeholder="0 2 * * *"
-                                         Disabled="@_isSavingConfig" />
-
-                            <MudAlert Severity="Severity.Info" Dense="true">
-                                <MudText Typo="Typo.body2"><strong>Common Examples:</strong></MudText>
-                                <MudText Typo="Typo.caption">• <code>0 2 * * *</code> - Daily at 2:00 AM</MudText>
-                                <MudText Typo="Typo.caption">• <code>0 3 * * 0</code> - Sundays at 3:00 AM</MudText>
-                                <MudText Typo="Typo.caption">• <code>0 */6 * * *</code> - Every 6 hours</MudText>
-                            </MudAlert>
-                        }
-
                         <MudText Typo="Typo.subtitle2">Retention Strategy (Grandfather-Father-Son)</MudText>
                         <MudAlert Severity="Severity.Info" Dense="true">
                             Keeps multiple backup tiers: hourly (short-term), daily, weekly, monthly, yearly (long-term)
@@ -340,9 +291,6 @@ else
     // Backup configuration state
     private BackgroundJobConfig? _backupConfig;
     private bool _isSavingConfig;
-    private string _editScheduleType = "interval";
-    private string? _editIntervalDuration = "24h";
-    private string? _editCronExpression;
     private int _editRetainHourlyBackups = 24;
     private int _editRetainDailyBackups = 7;
     private int _editRetainWeeklyBackups = 4;
@@ -368,11 +316,6 @@ else
 
             if (_backupConfig != null)
             {
-                // Load schedule settings
-                _editScheduleType = _backupConfig.ScheduleType;
-                _editIntervalDuration = _backupConfig.IntervalDuration ?? "24h";
-                _editCronExpression = _backupConfig.CronExpression;
-
                 // Load backup-specific settings
                 if (_backupConfig.Settings != null)
                 {
@@ -410,31 +353,7 @@ else
 
         try
         {
-            // Validate interval duration if using interval schedule
-            if (_editScheduleType == "interval")
-            {
-                if (string.IsNullOrWhiteSpace(_editIntervalDuration) ||
-                    !TimeSpanUtilities.TryParseDuration(_editIntervalDuration, out _))
-                {
-                    Snackbar.Add("Invalid duration format. Use examples like: 30m, 1h, 24h, 7d", Severity.Warning);
-                    return;
-                }
-            }
-
-            // Update schedule
-            _backupConfig.ScheduleType = _editScheduleType;
-            if (_editScheduleType == "interval")
-            {
-                _backupConfig.IntervalDuration = _editIntervalDuration;
-                _backupConfig.CronExpression = null;
-            }
-            else
-            {
-                _backupConfig.CronExpression = _editCronExpression;
-                _backupConfig.IntervalDuration = null;
-            }
-
-            // Update backup-specific settings
+            // Update backup-specific settings (schedule is managed in Background Jobs page)
             _backupConfig.Settings ??= new Dictionary<string, object>();
             _backupConfig.Settings[BackgroundJobSettings.RetainHourlyBackups] = _editRetainHourlyBackups;
             _backupConfig.Settings[BackgroundJobSettings.RetainDailyBackups] = _editRetainDailyBackups;

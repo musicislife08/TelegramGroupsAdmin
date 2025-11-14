@@ -13,14 +13,14 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class FileScanningHandler
 {
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IJobScheduler _jobScheduler;
     private readonly ILogger<FileScanningHandler> _logger;
 
     public FileScanningHandler(
-        IServiceProvider serviceProvider,
+        IJobScheduler jobScheduler,
         ILogger<FileScanningHandler> logger)
     {
-        _serviceProvider = serviceProvider;
+        _jobScheduler = jobScheduler;
         _logger = logger;
     }
 
@@ -40,7 +40,7 @@ public class FileScanningHandler
             return null;
         }
 
-        // Schedule file scan via TickerQ with 0s delay for instant execution
+        // Schedule file scan via Quartz.NET with 0s delay for instant execution
         // Phase 4.14: Downloads file to temp, scans with ClamAV+VirusTotal, deletes if infected
         // Temp file deleted after scan (no persistent storage)
         var scanPayload = new FileScanJobPayload(
@@ -60,13 +60,11 @@ public class FileScanningHandler
             userId,
             chatId);
 
-        await TickerQUtilities.ScheduleJobAsync(
-            _serviceProvider,
-            _logger,
+        await _jobScheduler.ScheduleJobAsync(
             "FileScan",
             scanPayload,
             delaySeconds: 0,
-            retries: 3); // Higher retries than photo fetch (ClamAV restart, VT rate limit scenarios)
+            cancellationToken);
 
         return new FileScanSchedulingResult(
             FileId: detection.FileId,

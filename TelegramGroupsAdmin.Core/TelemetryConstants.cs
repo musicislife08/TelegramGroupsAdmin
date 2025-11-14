@@ -33,7 +33,7 @@ public static class TelemetryConstants
 
     /// <summary>
     /// ActivitySource for background job execution.
-    /// Used to trace TickerQ job lifecycle and execution.
+    /// Used to trace Quartz.NET job lifecycle and execution.
     /// </summary>
     public static readonly ActivitySource BackgroundJobs = new("TelegramGroupsAdmin.BackgroundJobs");
 

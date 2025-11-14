@@ -1,6 +1,6 @@
 @page "/messages"
-@using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Telegram.Services
+@using TelegramGroupsAdmin.Telegram.Services.Media
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
 @inject IMessageHistoryRepository MessageRepository
 @inject IMessageQueryService MessageQueryService
@@ -17,7 +17,7 @@
 @inject NavigationManager NavigationManager
 @inject ILogger<Messages> Logger
 @inject ISnackbar Snackbar
-@inject Services.Media.IMediaRefetchQueueService MediaRefetchQueue
+@inject IMediaRefetchQueueService MediaRefetchQueue
 @inject TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService TranslationService
 @inject IWebBotMessagingService WebBotMessagingService
 @attribute [Authorize]

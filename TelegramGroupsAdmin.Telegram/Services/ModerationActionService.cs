@@ -37,6 +37,7 @@ public class ModerationActionService
     private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly BotMessageService _botMessageService;
     private readonly ChatManagementService _chatManagementService;
+    private readonly IJobScheduler _jobScheduler;
     private readonly ILogger<ModerationActionService> _logger;
 
     public ModerationActionService(
@@ -55,6 +56,7 @@ public class ModerationActionService
         INotificationOrchestrator notificationOrchestrator,
         BotMessageService botMessageService,
         ChatManagementService chatManagementService,
+        IJobScheduler jobScheduler,
         ILogger<ModerationActionService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;
@@ -72,6 +74,7 @@ public class ModerationActionService
         _notificationOrchestrator = notificationOrchestrator;
         _botMessageService = botMessageService;
         _chatManagementService = chatManagementService;
+        _jobScheduler = jobScheduler;
         _logger = logger;
     }
 
@@ -831,7 +834,7 @@ public class ModerationActionService
             );
             await _userActionsRepository.InsertAsync(banAction, cancellationToken);
 
-            // Schedule automatic unrestriction via TickerQ background job
+            // Schedule automatic unrestriction via Quartz.NET background job
             var payload = new TempbanExpiryJobPayload(
                 UserId: userId,
                 Reason: reason,
@@ -839,30 +842,17 @@ public class ModerationActionService
             );
 
             var delaySeconds = (int)(expiresAt - DateTimeOffset.UtcNow).TotalSeconds;
-            var jobId = await TickerQUtilities.ScheduleJobAsync(
-                _serviceProvider,
-                _logger,
+            var jobId = await _jobScheduler.ScheduleJobAsync(
                 "TempbanExpiry",
                 payload,
                 delaySeconds: delaySeconds,
-                retries: 2,
-                retryIntervals: [60, 300]);
+                cancellationToken);
 
-            if (jobId.HasValue)
-            {
-                _logger.LogInformation(
-                    "Successfully scheduled TempbanExpiryJob for user {UserId} (JobId: {JobId}, Expires: {ExpiresAt})",
-                    userId,
-                    jobId,
-                    expiresAt);
-            }
-            else
-            {
-                _logger.LogError(
-                    "Failed to schedule TempbanExpiryJob for user {UserId}. User will need manual unbanning at {ExpiresAt}",
-                    userId,
-                    expiresAt);
-            }
+            _logger.LogInformation(
+                "Successfully scheduled TempbanExpiryJob for user {UserId} (JobId: {JobId}, Expires: {ExpiresAt})",
+                userId,
+                jobId,
+                expiresAt);
 
             // Send DM notification with rejoin links (both UI and bot command)
             await SendTempBanNotificationAsync(botClient, userId, reason, duration, cancellationToken);

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using TelegramGroupsAdmin.Services.Backup;
+using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Data.Constants;
@@ -83,16 +83,27 @@ public class BackupServiceTests
         services.AddSingleton<IDataProtectionService, MockDataProtectionService>();
         services.AddSingleton<INotificationService, MockNotificationService>();
 
-        // Add mock TickerQ service (for passphrase rotation)
-        // Note: Passphrase rotation tests will be skipped for baseline (test isolation - no TickerQ in test env)
-        var mockTickerManager = Substitute.For<TickerQ.Utilities.Interfaces.Managers.ITimeTickerManager<TickerQ.Utilities.Models.Ticker.TimeTicker>>();
-        // Return default TickerResult with IsSucceded property stubbed
-        mockTickerManager.AddAsync(Arg.Any<TickerQ.Utilities.Models.Ticker.TimeTicker>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(default(TickerQ.Utilities.Models.TickerResult<TickerQ.Utilities.Models.Ticker.TimeTicker>)));
-        services.AddScoped(_ => mockTickerManager);
+        // Add IJobScheduler mock (required by PassphraseManagementService)
+        var mockJobScheduler = Substitute.For<TelegramGroupsAdmin.Core.BackgroundJobs.IJobScheduler>();
+        mockJobScheduler.ScheduleJobAsync(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult($"test_job_{Guid.NewGuid():N}"));
+        mockJobScheduler.CancelJobAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        mockJobScheduler.IsScheduledAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+        services.AddSingleton(mockJobScheduler);
 
-        // Add backup services (using shared extension method from main app)
-        services.AddBackupServices();
+        // Add backup services (using shared extension method from BackgroundJobs library)
+        services.AddScoped<IBackupService, BackupService>();
+        services.AddScoped<IBackupEncryptionService, BackupEncryptionService>();
+        services.AddScoped<IBackupConfigurationService, BackupConfigurationService>();
+        services.AddScoped<IPassphraseManagementService, PassphraseManagementService>();
+        services.AddScoped<BackupRetentionService>();
+
+        // Add internal handler services (required by BackupService)
+        services.AddScoped<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers.TableDiscoveryService>();
+        services.AddScoped<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers.TableExportService>();
+        services.AddScoped<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers.DependencyResolutionService>();
 
         _serviceProvider = services.BuildServiceProvider();
         _dataProtectionProvider = _serviceProvider.GetRequiredService<IDataProtectionProvider>();
@@ -556,7 +567,7 @@ public class BackupServiceTests
     }
 
     // Note: RotatePassphraseAsync is not tested in baseline tests
-    // - Requires mocking ITickerQueueManager for job scheduling
+    // - Requires mocking IScheduler for Quartz.NET job scheduling
     // - Should be tested in integration tests
 
     #endregion
