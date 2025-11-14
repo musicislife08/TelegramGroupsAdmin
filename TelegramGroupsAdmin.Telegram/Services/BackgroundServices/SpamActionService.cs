@@ -22,6 +22,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 public class SpamActionService(
     IServiceProvider serviceProvider,
     ChatManagementService chatManagementService,
+    IJobScheduler jobScheduler,
     ILogger<SpamActionService> logger)
 {
     // Confidence thresholds for spam detection decisions
@@ -513,13 +514,10 @@ public class SpamActionService(
                     TelegramUserId = userId
                 };
 
-                await TickerQUtilities.ScheduleJobAsync(
-                    serviceProvider,
-                    logger,
+                await jobScheduler.ScheduleJobAsync(
                     "DeleteUserMessages",
                     deleteMessagesPayload,
-                    delaySeconds: 15, // 15-second delay allows spambot to post across all chats before cleanup
-                    retries: 0); // Best-effort, don't retry (48-hour window limitation)
+                    delaySeconds: 15); // 15-second delay allows spambot to post across all chats before cleanup
 
                 // Track this scheduling to prevent duplicates
                 _recentCleanupJobs[userId] = now;

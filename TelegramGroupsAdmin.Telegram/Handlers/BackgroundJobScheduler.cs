@@ -11,14 +11,14 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class BackgroundJobScheduler
 {
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IJobScheduler _jobScheduler;
     private readonly ILogger<BackgroundJobScheduler> _logger;
 
     public BackgroundJobScheduler(
-        IServiceProvider serviceProvider,
+        IJobScheduler jobScheduler,
         ILogger<BackgroundJobScheduler> logger)
     {
-        _serviceProvider = serviceProvider;
+        _jobScheduler = jobScheduler;
         _logger = logger;
     }
 
@@ -39,13 +39,11 @@ public class BackgroundJobScheduler
             reason
         );
 
-        await TickerQUtilities.ScheduleJobAsync(
-            _serviceProvider,
-            _logger,
+        await _jobScheduler.ScheduleJobAsync(
             "DeleteMessage",
             deletePayload,
             delaySeconds,
-            retries: 0); // No retries for deletions (message may already be gone)
+            cancellationToken);
     }
 
     /// <summary>
@@ -62,12 +60,10 @@ public class BackgroundJobScheduler
             userId
         );
 
-        await TickerQUtilities.ScheduleJobAsync(
-            _serviceProvider,
-            _logger,
+        await _jobScheduler.ScheduleJobAsync(
             "FetchUserPhoto",
             photoPayload,
             delaySeconds: 0,
-            retries: 2); // Retry on transient failures (network issues, Telegram API errors)
+            cancellationToken);
     }
 }

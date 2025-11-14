@@ -80,7 +80,7 @@ public class WelcomeResponsesRepository : IWelcomeResponsesRepository
             dmFallback);
     }
 
-    public async Task SetTimeoutJobIdAsync(long id, Guid? jobId, CancellationToken cancellationToken = default)
+    public async Task SetTimeoutJobIdAsync(long id, string? jobId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 

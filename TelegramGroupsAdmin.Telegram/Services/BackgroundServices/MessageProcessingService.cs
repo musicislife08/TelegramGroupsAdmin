@@ -629,7 +629,7 @@ public partial class MessageProcessingService(
                 }
             }
 
-            // REFACTOR-2: Fetch user profile photo via TickerQ using BackgroundJobScheduler
+            // REFACTOR-2: Fetch user profile photo via Quartz.NET using BackgroundJobScheduler
             if (message.From?.Id != null)
             {
                 var jobScheduler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.BackgroundJobScheduler>();
@@ -701,46 +701,6 @@ public partial class MessageProcessingService(
     //   Phase 1: ImageProcessingHandler, BackgroundJobScheduler
     //   Phase 2: SpamDetectionOrchestrator, LanguageWarningHandler
     //   Phase 3: MessageEditProcessor
-
-    /// <summary>
-    /// Schedule file scanning via TickerQ with 0s delay for instant execution
-    /// Phase 4.14: Downloads file to temp, scans with ClamAV+VirusTotal, deletes if infected
-    /// Temp file deleted after scan (no persistent storage)
-    /// </summary>
-    private async Task ScheduleFileScanJobAsync(
-        long messageId,
-        long chatId,
-        long userId,
-        string fileId,
-        long fileSize,
-        string? fileName,
-        string? contentType,
-        CancellationToken cancellationToken = default)
-    {
-        var scanPayload = new TelegramGroupsAdmin.Telegram.Abstractions.Jobs.FileScanJobPayload(
-            MessageId: messageId,
-            ChatId: chatId,
-            UserId: userId,
-            FileId: fileId,
-            FileSize: fileSize,
-            FileName: fileName,
-            ContentType: contentType
-        );
-
-        logger.LogInformation(
-            "Scheduling file scan for '{FileName}' ({FileSize} bytes) from user {UserId} in chat {ChatId}",
-            fileName ?? "unknown",
-            fileSize,
-            userId,
-            chatId);
-
-        await TickerQUtilities.ScheduleJobAsync(
-            serviceProvider,
-            logger,
-            "FileScan",
-            scanPayload,
-            delaySeconds: 0,
-            retries: 3); // Higher retries than photo fetch (ClamAV restart, VT rate limit scenarios)
-    }
+    //   Phase 4: FileScanningHandler (replaces ScheduleFileScanJobAsync dead code)
 
 }

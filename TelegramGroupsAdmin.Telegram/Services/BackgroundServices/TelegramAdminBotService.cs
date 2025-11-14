@@ -192,8 +192,8 @@ public class TelegramAdminBotService(
         // Perform initial health check for all chats
         await chatManagementService.RefreshAllHealthAsync(botClient);
 
-        // Periodic health checks now handled by ChatHealthCheckJob via TickerQ recurring job scheduler
-        // (see RecurringJobSchedulerService and BackgroundJobConfigService default config)
+        // Periodic health checks now handled by ChatHealthCheckJob via Quartz.NET recurring job scheduler
+        // (see QuartzSchedulingSyncService and BackgroundJobConfigService default config)
 
         logger.LogInformation("Telegram admin bot started listening for messages in all chats");
 

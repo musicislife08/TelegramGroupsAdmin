@@ -83,12 +83,27 @@ public class BackupServiceTests
         services.AddSingleton<IDataProtectionService, MockDataProtectionService>();
         services.AddSingleton<INotificationService, MockNotificationService>();
 
+        // Add IJobScheduler mock (required by PassphraseManagementService)
+        var mockJobScheduler = Substitute.For<TelegramGroupsAdmin.Core.BackgroundJobs.IJobScheduler>();
+        mockJobScheduler.ScheduleJobAsync(Arg.Any<string>(), Arg.Any<object>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult($"test_job_{Guid.NewGuid():N}"));
+        mockJobScheduler.CancelJobAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        mockJobScheduler.IsScheduledAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+        services.AddSingleton(mockJobScheduler);
+
         // Add backup services (using shared extension method from BackgroundJobs library)
         services.AddScoped<IBackupService, BackupService>();
         services.AddScoped<IBackupEncryptionService, BackupEncryptionService>();
         services.AddScoped<IBackupConfigurationService, BackupConfigurationService>();
         services.AddScoped<IPassphraseManagementService, PassphraseManagementService>();
         services.AddScoped<BackupRetentionService>();
+
+        // Add internal handler services (required by BackupService)
+        services.AddScoped<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers.TableDiscoveryService>();
+        services.AddScoped<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers.TableExportService>();
+        services.AddScoped<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers.DependencyResolutionService>();
 
         _serviceProvider = services.BuildServiceProvider();
         _dataProtectionProvider = _serviceProvider.GetRequiredService<IDataProtectionProvider>();

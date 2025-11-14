@@ -9,6 +9,7 @@
 @inject ISpamDetectionConfigRepository SpamConfigRepository
 @inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
 @inject IServiceProvider ServiceProvider
+@inject IJobScheduler JobScheduler
 @inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
@@ -261,21 +262,12 @@
             // Schedule a ChatHealthCheckJob for this specific chat
             var payload = new ChatHealthCheckPayload { ChatId = chatId };
 
-            var jobId = await TickerQUtilities.ScheduleJobAsync(
-                ServiceProvider,
-                Logger,
+            var jobId = await JobScheduler.ScheduleJobAsync(
                 BackgroundJobNames.ChatHealthCheck,
                 payload,
                 delaySeconds: 0); // Run immediately
 
-            if (jobId.HasValue)
-            {
-                Snackbar.Add("Chat health refresh queued", Severity.Success);
-            }
-            else
-            {
-                Snackbar.Add("Failed to queue health refresh", Severity.Warning);
-            }
+            Snackbar.Add("Chat health refresh queued", Severity.Success);
         }
         catch (Exception ex)
         {

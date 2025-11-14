@@ -19,20 +19,20 @@ public class PassphraseManagementService : IPassphraseManagementService
     private readonly NpgsqlDataSource _dataSource;
     private readonly IDataProtectionService _totpProtection;
     private readonly IBackupConfigurationService _configService;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IJobScheduler _jobScheduler;
     private readonly ILogger<PassphraseManagementService> _logger;
 
     public PassphraseManagementService(
         NpgsqlDataSource dataSource,
         IDataProtectionService totpProtection,
         IBackupConfigurationService configService,
-        IServiceProvider serviceProvider,
+        IJobScheduler jobScheduler,
         ILogger<PassphraseManagementService> logger)
     {
         _dataSource = dataSource;
         _totpProtection = totpProtection;
         _configService = configService;
-        _serviceProvider = serviceProvider;
+        _jobScheduler = jobScheduler;
         _logger = logger;
     }
 
@@ -90,19 +90,10 @@ public class PassphraseManagementService : IPassphraseManagementService
         // Queue background job to re-encrypt all backups
         var payload = new RotateBackupPassphrasePayload(newPassphrase, backupDirectory, userId);
 
-        var jobId = await TickerQUtilities.ScheduleJobAsync(
-            _serviceProvider,
-            _logger,
+        var jobId = await _jobScheduler.ScheduleJobAsync(
             "rotate_backup_passphrase",
             payload,
-            delaySeconds: 0, // Execute immediately
-            retries: 1,
-            retryIntervals: [60]); // Retry after 60 seconds if it fails
-
-        if (jobId == null)
-        {
-            throw new InvalidOperationException("Failed to schedule passphrase rotation job");
-        }
+            delaySeconds: 0); // Execute immediately
 
         _logger.LogInformation("Passphrase rotation job queued successfully (JobId: {JobId})", jobId);
 

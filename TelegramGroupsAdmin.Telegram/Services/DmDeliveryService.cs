@@ -20,17 +20,20 @@ public class DmDeliveryService : IDmDeliveryService
     private readonly TelegramBotClientFactory _botClientFactory;
     private readonly IServiceProvider _serviceProvider;
     private readonly TelegramConfigLoader _configLoader;
+    private readonly IJobScheduler _jobScheduler;
 
     public DmDeliveryService(
         ILogger<DmDeliveryService> logger,
         TelegramBotClientFactory botClientFactory,
         IServiceProvider serviceProvider,
-        TelegramConfigLoader configLoader)
+        TelegramConfigLoader configLoader,
+        IJobScheduler jobScheduler)
     {
         _logger = logger;
         _botClientFactory = botClientFactory;
         _serviceProvider = serviceProvider;
         _configLoader = configLoader;
+        _jobScheduler = jobScheduler;
     }
 
     public async Task<DmDeliveryResult> SendDmAsync(
@@ -249,13 +252,11 @@ public class DmDeliveryService : IDmDeliveryService
                     "dm_fallback"
                 );
 
-                await TickerQUtilities.ScheduleJobAsync(
-                    _serviceProvider,
-                    _logger,
+                await _jobScheduler.ScheduleJobAsync(
                     "DeleteMessage",
                     deletePayload,
                     delaySeconds: autoDeleteSeconds.Value,
-                    retries: 0);
+                    cancellationToken);
             }
 
             return new DmDeliveryResult

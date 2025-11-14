@@ -9,13 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Security: Override vulnerable transitive dependencies from TickerQ 2.5.3 -->
-    <PackageReference Include="System.Text.Encodings.Web" Version="10.0.0" />
-
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
   </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\TelegramGroupsAdmin.Data\TelegramGroupsAdmin.Data.csproj" />
   </ItemGroup>
