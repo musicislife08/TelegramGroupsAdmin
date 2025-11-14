@@ -6,7 +6,7 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 
 /// <summary>
 /// Centralized background job scheduling for Telegram message processing.
-/// Encapsulates TickerQ job scheduling with type-safe methods and retry policies.
+/// Encapsulates Quartz.NET job scheduling with type-safe methods and retry policies.
 /// Note: File scanning is handled by FileScanningHandler (separate concern).
 /// </summary>
 public class BackgroundJobScheduler
@@ -23,7 +23,7 @@ public class BackgroundJobScheduler
     }
 
     /// <summary>
-    /// Schedule a message for deletion via TickerQ.
+    /// Schedule a message for deletion via Quartz.NET.
     /// Used for: command cleanup, temporary messages, spam removal.
     /// </summary>
     public async Task ScheduleMessageDeleteAsync(
@@ -49,7 +49,7 @@ public class BackgroundJobScheduler
     }
 
     /// <summary>
-    /// Schedule user photo fetch via TickerQ with 0s delay (instant execution with persistence/retry).
+    /// Schedule user photo fetch via Quartz.NET with 0s delay (instant execution with persistence/retry).
     /// Used to: populate user profile photos for message history UI.
     /// </summary>
     public async Task ScheduleUserPhotoFetchAsync(

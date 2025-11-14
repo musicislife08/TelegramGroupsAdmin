@@ -2,46 +2,45 @@ namespace TelegramGroupsAdmin.Core.BackgroundJobs;
 
 /// <summary>
 /// Centralized constants for background job names
-/// Must match [TickerFunction] attribute names exactly
+/// Must match Quartz.NET job class names exactly
 /// </summary>
 public static class BackgroundJobNames
 {
     /// <summary>
     /// Scheduled database backups with retention management
-    /// TickerFunction: "scheduled_backup"
+    /// Quartz Job: ScheduledBackupJob
     /// </summary>
-    public const string ScheduledBackup = "scheduled_backup";
+    public const string ScheduledBackup = "ScheduledBackupJob";
 
     /// <summary>
-    /// Message cleanup (deletes expired messages and media files)
-    /// Note: This is a BackgroundService, not a TickerQ job (no manual "Run Now")
+    /// Message cleanup (deletes old messages based on retention policy)
+    /// Background Service: CleanupBackgroundService (always running)
     /// </summary>
-    public const string MessageCleanup = "message_cleanup";
+    public const string MessageCleanup = "MessageCleanup";
 
     /// <summary>
     /// User photo refresh (downloads updated profile photos from Telegram)
-    /// TickerFunction: "refresh_user_photos"
+    /// Quartz Job: RefreshUserPhotosJob
     /// </summary>
-    public const string UserPhotoRefresh = "refresh_user_photos";
+    public const string UserPhotoRefresh = "RefreshUserPhotosJob";
 
     /// <summary>
     /// URL blocklist sync (updates blocklists from upstream sources)
-    /// TickerFunction: "BlocklistSync"
+    /// Quartz Job: BlocklistSyncJob
     /// </summary>
-    public const string BlocklistSync = "BlocklistSync";
+    public const string BlocklistSync = "BlocklistSyncJob";
 
     /// <summary>
     /// Database maintenance (VACUUM and ANALYZE operations)
-    /// TickerFunction: "database_maintenance"
+    /// Quartz Job: DatabaseMaintenanceJob
     /// </summary>
-    public const string DatabaseMaintenance = "database_maintenance";
+    public const string DatabaseMaintenance = "DatabaseMaintenanceJob";
 
     /// <summary>
     /// Chat health check (monitors bot permissions and admin lists)
-    /// TickerFunction: "chat_health_check"
-    /// Replaces PeriodicTimer in TelegramAdminBotService
+    /// Quartz Job: ChatHealthCheckJob
     /// </summary>
-    public const string ChatHealthCheck = "chat_health_check";
+    public const string ChatHealthCheck = "ChatHealthCheckJob";
 }
 
 /// <summary>

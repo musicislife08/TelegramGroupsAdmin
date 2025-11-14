@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
-
-using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 

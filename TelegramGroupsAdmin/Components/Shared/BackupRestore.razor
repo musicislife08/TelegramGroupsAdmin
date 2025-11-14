@@ -1,5 +1,5 @@
-@using TelegramGroupsAdmin.Services.Backup
-@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.BackgroundJobs.Services.Backup
+@using TelegramGroupsAdmin.BackgroundJobs.Services
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Core.BackgroundJobs
@@ -197,19 +197,6 @@ else
                                      Placeholder="/data/backups"
                                      Disabled="@_isSavingConfig" />
 
-                        <MudText Typo="Typo.subtitle2">Schedule</MudText>
-                        <!-- TODO: Reimplement schedule UI with friendly format → cron conversion -->
-                        <MudTextField @bind-Value="_editCronExpression"
-                                     Label="Cron Expression"
-                                     Variant="Variant.Outlined"
-                                     ReadOnly="true"
-                                     HelperText="Schedule editing temporarily disabled - cron expression shown as readonly"
-                                     Disabled="@_isSavingConfig" />
-
-                        <MudAlert Severity="Severity.Info" Dense="true">
-                            Schedule editing UI will be reimplemented in a future update with a friendly format that converts to cron expressions.
-                        </MudAlert>
-
                         <MudText Typo="Typo.subtitle2">Retention Strategy (Grandfather-Father-Son)</MudText>
                         <MudAlert Severity="Severity.Info" Dense="true">
                             Keeps multiple backup tiers: hourly (short-term), daily, weekly, monthly, yearly (long-term)
@@ -304,7 +291,6 @@ else
     // Backup configuration state
     private BackgroundJobConfig? _backupConfig;
     private bool _isSavingConfig;
-    private string? _editCronExpression;
     private int _editRetainHourlyBackups = 24;
     private int _editRetainDailyBackups = 7;
     private int _editRetainWeeklyBackups = 4;
@@ -330,9 +316,6 @@ else
 
             if (_backupConfig != null)
             {
-                // Load schedule settings
-                _editCronExpression = _backupConfig.CronExpression;
-
                 // Load backup-specific settings
                 if (_backupConfig.Settings != null)
                 {
@@ -370,10 +353,7 @@ else
 
         try
         {
-            // TODO: Reimplement schedule validation with friendly format → cron conversion
-            // Schedule editing is currently disabled - cron expression is readonly
-
-            // Update backup-specific settings
+            // Update backup-specific settings (schedule is managed in Background Jobs page)
             _backupConfig.Settings ??= new Dictionary<string, object>();
             _backupConfig.Settings[BackgroundJobSettings.RetainHourlyBackups] = _editRetainHourlyBackups;
             _backupConfig.Settings[BackgroundJobSettings.RetainDailyBackups] = _editRetainDailyBackups;

@@ -8,7 +8,7 @@ public interface IBlocklistSyncService
 {
     /// <summary>
     /// Sync all enabled blocklist subscriptions (download, parse, reconcile cache)
-    /// Called by TickerQ job on schedule
+    /// Called by Quartz.NET job on schedule
     /// </summary>
     Task SyncAllAsync(CancellationToken cancellationToken = default);
 

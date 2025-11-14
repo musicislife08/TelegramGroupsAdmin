@@ -52,6 +52,7 @@
         <PackageReference Include="Serilog.Sinks.Seq" Version="9.0.0" />
         <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
         <PackageReference Include="Telegram.Bot" Version="22.7.5" />
+        <PackageReference Include="TimeZoneConverter" Version="7.2.0" />
     </ItemGroup>
 
     <ItemGroup>
@@ -66,11 +67,13 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\TelegramGroupsAdmin.Core\TelegramGroupsAdmin.Core.csproj" />
       <ProjectReference Include="..\TelegramGroupsAdmin.Data\TelegramGroupsAdmin.Data.csproj" />
       <ProjectReference Include="..\TelegramGroupsAdmin.ContentDetection\TelegramGroupsAdmin.ContentDetection.csproj" />
       <ProjectReference Include="..\TelegramGroupsAdmin.Configuration\TelegramGroupsAdmin.Configuration.csproj" />
       <ProjectReference Include="..\TelegramGroupsAdmin.Telegram\TelegramGroupsAdmin.Telegram.csproj" />
       <ProjectReference Include="..\TelegramGroupsAdmin.Telegram.Abstractions\TelegramGroupsAdmin.Telegram.Abstractions.csproj" />
+      <ProjectReference Include="..\TelegramGroupsAdmin.BackgroundJobs\TelegramGroupsAdmin.BackgroundJobs.csproj" />
     </ItemGroup>
 
 </Project>

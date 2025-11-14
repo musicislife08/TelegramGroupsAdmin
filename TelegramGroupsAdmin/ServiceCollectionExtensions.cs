@@ -10,7 +10,6 @@ using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Services;
-using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin;
 
@@ -149,16 +148,12 @@ public static class ServiceCollectionExtensions
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
 
             // Media refetch services (Phase 4.X: Re-download missing media after restore)
-            services.AddSingleton<TelegramGroupsAdmin.Services.Media.IMediaNotificationService, TelegramGroupsAdmin.Services.Media.MediaNotificationService>();
-            services.AddSingleton<TelegramGroupsAdmin.Services.Media.IMediaRefetchQueueService, TelegramGroupsAdmin.Services.Media.MediaRefetchQueueService>();
-            services.AddHostedService<TelegramGroupsAdmin.Services.Media.MediaRefetchWorkerService>();
+            services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.Media.IMediaNotificationService, TelegramGroupsAdmin.Telegram.Services.Media.MediaNotificationService>();
+            services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.Media.IMediaRefetchQueueService, TelegramGroupsAdmin.Telegram.Services.Media.MediaRefetchQueueService>();
+            services.AddHostedService<TelegramGroupsAdmin.Telegram.Services.Media.MediaRefetchWorkerService>();
 
             // Runtime logging configuration service (Phase 4.7)
             services.AddSingleton<IRuntimeLoggingService, RuntimeLoggingService>();
-
-            // Background jobs configuration service
-            services.AddScoped<IBackgroundJobConfigService, BackgroundJobConfigService>();
-
 
             // API key migration service (one-time migration from env vars to encrypted database storage)
             services.AddScoped<ApiKeyMigrationService>();
@@ -337,19 +332,7 @@ public static class BackupServiceCollectionExtensions
         /// </summary>
         public IServiceCollection AddBackupServices()
         {
-            // Core backup services
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupService, TelegramGroupsAdmin.Services.Backup.BackupService>();
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupEncryptionService, TelegramGroupsAdmin.Services.Backup.BackupEncryptionService>();
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.BackupRetentionService>();
-
-            // Backup configuration and passphrase management (REFACTOR-2)
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.IBackupConfigurationService, TelegramGroupsAdmin.Services.Backup.BackupConfigurationService>();
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.IPassphraseManagementService, TelegramGroupsAdmin.Services.Backup.PassphraseManagementService>();
-
-            // Backup handlers (REFACTOR-2 - internal implementation details)
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.Handlers.TableDiscoveryService>();
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.Handlers.TableExportService>();
-            services.AddScoped<TelegramGroupsAdmin.Services.Backup.Handlers.DependencyResolutionService>();
+            // Note: Backup services are now registered by AddBackgroundJobs() in BackgroundJobs library
 
             return services;
         }

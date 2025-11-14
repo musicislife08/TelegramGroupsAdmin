@@ -33,6 +33,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\TelegramGroupsAdmin.BackgroundJobs\TelegramGroupsAdmin.BackgroundJobs.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.Data\TelegramGroupsAdmin.Data.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.ContentDetection\TelegramGroupsAdmin.ContentDetection.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.Telegram\TelegramGroupsAdmin.Telegram.csproj" />

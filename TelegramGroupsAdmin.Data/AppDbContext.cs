@@ -1,3 +1,5 @@
+using AppAny.Quartz.EntityFrameworkCore.Migrations;
+using AppAny.Quartz.EntityFrameworkCore.Migrations.PostgreSQL;
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data.Models;
 
@@ -71,6 +73,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Add Quartz.NET schema (11 tables: qrtz_job_details, qrtz_triggers, etc.)
+        modelBuilder.AddQuartz(builder => builder.UsePostgreSql());
 
         // Configure relationships
         ConfigureRelationships(modelBuilder);

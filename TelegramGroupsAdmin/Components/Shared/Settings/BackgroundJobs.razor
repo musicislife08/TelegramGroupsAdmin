@@ -1,16 +1,19 @@
-@using TelegramGroupsAdmin.Services
-@using TelegramGroupsAdmin.Services.Media
+@using TelegramGroupsAdmin.BackgroundJobs.Services
+@using TelegramGroupsAdmin.Telegram.Services.Media
 @using TelegramGroupsAdmin.Core.BackgroundJobs
 @using TelegramGroupsAdmin.Core.Utilities
 @using TelegramGroupsAdmin.Telegram.Abstractions
 @using TelegramGroupsAdmin.Telegram.Abstractions.Jobs
 @using System.Text.Json
+@using Microsoft.JSInterop
+@using TimeZoneConverter
 @inject IBackgroundJobConfigService JobConfigService
 @inject IMediaRefetchQueueService QueueService
-@inject IServiceProvider ServiceProvider
+@inject IJobTriggerService JobTriggerService
 @inject ISnackbar Snackbar
 @inject ILogger<BackgroundJobs> Logger
 @inject NavigationManager Navigation
+@inject IJSRuntime JsRuntime
 @implements IDisposable
 
 <MudStack Spacing="4">
@@ -128,69 +131,26 @@
             <MudStack Spacing="3">
                 <MudText Typo="Typo.body2" Color="Color.Secondary">@_editingJob.Description</MudText>
 
-                <!-- TODO: Reimplement schedule UI with friendly format → cron conversion -->
-                <MudTextField @bind-Value="_editCronExpression"
-                             Label="Cron Expression"
+                <!-- Schedule Configuration -->
+                <MudTextField @bind-Value="_editScheduleInterval"
+                             Label="Interval"
+                             Variant="Variant.Outlined"
+                             HelperText="Examples: 30m, 1h, 6h, 1d, 1w (minutes/hours/days/weeks)"
+                             Immediate="true" />
+
+                <MudTextField Value="@GetCronPreview()"
+                             Label="Cron Expression (UTC)"
                              Variant="Variant.Outlined"
                              ReadOnly="true"
-                             HelperText="Schedule editing temporarily disabled - cron expression shown as readonly"
-                             Placeholder="0 2 * * *" />
-
-                <MudAlert Severity="Severity.Info" Dense="true">
-                    Schedule editing UI will be reimplemented in a future update with a friendly format that converts to cron expressions.
-                </MudAlert>
+                             HelperText="Generated cron expression (in UTC)" />
 
                 <!-- Job-Specific Settings -->
                 @if (_editingJob.JobName == BackgroundJobNames.ScheduledBackup)
                 {
                     <MudDivider />
-                    <MudText Typo="Typo.subtitle2">Backup Settings</MudText>
-
                     <MudAlert Severity="Severity.Info" Dense="true">
-                        <strong>Grandfather-Father-Son Retention Strategy</strong><br/>
-                        Keeps multiple backup tiers: hourly (short-term), daily, weekly, monthly, yearly (long-term)
+                        <strong>Note:</strong> Backup retention and directory settings are configured in <strong>Settings → System → Backup Configuration</strong>
                     </MudAlert>
-
-                    <MudNumericField @bind-Value="_editRetainHourlyBackups"
-                                   Label="Hourly Backups"
-                                   Variant="Variant.Outlined"
-                                   Min="0"
-                                   Max="168"
-                                   HelperText="Keep last N hourly backups (0-168 = 1 week)" />
-
-                    <MudNumericField @bind-Value="_editRetainDailyBackups"
-                                   Label="Daily Backups"
-                                   Variant="Variant.Outlined"
-                                   Min="0"
-                                   Max="31"
-                                   HelperText="Keep last N daily backups (0-31)" />
-
-                    <MudNumericField @bind-Value="_editRetainWeeklyBackups"
-                                   Label="Weekly Backups"
-                                   Variant="Variant.Outlined"
-                                   Min="0"
-                                   Max="52"
-                                   HelperText="Keep last N weekly backups (0-52)" />
-
-                    <MudNumericField @bind-Value="_editRetainMonthlyBackups"
-                                   Label="Monthly Backups"
-                                   Variant="Variant.Outlined"
-                                   Min="0"
-                                   Max="60"
-                                   HelperText="Keep last N monthly backups (0-60 = 5 years)" />
-
-                    <MudNumericField @bind-Value="_editRetainYearlyBackups"
-                                   Label="Yearly Backups"
-                                   Variant="Variant.Outlined"
-                                   Min="0"
-                                   Max="20"
-                                   HelperText="Keep last N yearly backups (0-20)" />
-
-                    <MudTextField @bind-Value="_editBackupDirectory"
-                                Label="Backup Directory"
-                                Variant="Variant.Outlined"
-                                HelperText="Leave empty for default (/data/backups)"
-                                Placeholder="/data/backups" />
                 }
                 else if (_editingJob.JobName == BackgroundJobNames.DatabaseMaintenance)
                 {
@@ -204,10 +164,6 @@
                     <MudCheckBox @bind-Value="_editRunAnalyze" Color="Color.Primary" Dense="true">
                         Run ANALYZE (update query planner statistics)
                     </MudCheckBox>
-
-                    <MudAlert Severity="Severity.Info" Dense="true">
-                        <strong>Note:</strong> This job is currently a stub. Full implementation requires direct PostgreSQL connection.
-                    </MudAlert>
                 }
             </MudStack>
         }
@@ -228,14 +184,11 @@
     private BackgroundJobConfig? _editingJob;
     private string? _editCronExpression;
 
-    // Granular backup retention settings (5-tier)
-    private int _editRetainHourlyBackups = 24;
-    private int _editRetainDailyBackups = 7;
-    private int _editRetainWeeklyBackups = 4;
-    private int _editRetainMonthlyBackups = 12;
-    private int _editRetainYearlyBackups = 3;
-    private string? _editBackupDirectory;
+    // Schedule editing state
+    private string _editScheduleInterval = "1d"; // Default: daily
+    private string _userTimeZone = "UTC";
 
+    // Database maintenance settings
     private bool _editRunVacuum = true;
     private bool _editRunAnalyze = true;
 
@@ -247,6 +200,16 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Get user's timezone from browser
+        try
+        {
+            _userTimeZone = await JsRuntime.InvokeAsync<string>("getUserTimeZone");
+        }
+        catch
+        {
+            _userTimeZone = "UTC"; // Fallback if JS interop fails
+        }
+
         // Ensure default job configs exist before loading
         await JobConfigService.EnsureDefaultConfigsAsync();
 
@@ -300,61 +263,29 @@
                 _ => new { } // Empty object for jobs without payloads
             };
 
-            // Enqueue job via TickerQ utility
-            var jobId = await TickerQUtilities.ScheduleJobAsync(
-                ServiceProvider,
-                Logger,
-                jobName,
-                payload,
-                delaySeconds: 0); // Run immediately
-
-            if (jobId.HasValue)
-            {
-                Snackbar.Add($"{job.DisplayName} queued for execution", Severity.Success);
-            }
-            else
-            {
-                Snackbar.Add($"Failed to queue {job.DisplayName}", Severity.Warning);
-            }
+            // Trigger job immediately via Quartz.NET
+            var triggerId = await JobTriggerService.TriggerNowAsync(jobName, payload);
+            Snackbar.Add($"{job.DisplayName} queued for execution", Severity.Success);
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to queue job: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Failed to trigger job: {ex.Message}", Severity.Error);
+            Logger.LogError(ex, "Failed to trigger job {JobName}", jobName);
         }
     }
 
     private void OpenConfigDialog(BackgroundJobConfig job)
     {
-        // Redirect to backup page for backup job configuration
-        if (job.JobName == BackgroundJobNames.ScheduledBackup)
-        {
-            Navigation.NavigateTo("/settings/backup");
-            return;
-        }
-
         _editingJob = job;
         _editCronExpression = job.CronExpression;
+
+        // Parse existing cron expression into friendly format
+        ParseCronToFriendlyFormat(job.CronExpression);
 
         // Load job-specific settings
         if (job.Settings != null)
         {
-            if (job.JobName == BackgroundJobNames.ScheduledBackup)
-            {
-                // Load granular retention settings
-                if (job.Settings.TryGetValue(BackgroundJobSettings.RetainHourlyBackups, out var hourly))
-                    _editRetainHourlyBackups = Convert.ToInt32(((JsonElement)hourly).GetInt32());
-                if (job.Settings.TryGetValue(BackgroundJobSettings.RetainDailyBackups, out var daily))
-                    _editRetainDailyBackups = Convert.ToInt32(((JsonElement)daily).GetInt32());
-                if (job.Settings.TryGetValue(BackgroundJobSettings.RetainWeeklyBackups, out var weekly))
-                    _editRetainWeeklyBackups = Convert.ToInt32(((JsonElement)weekly).GetInt32());
-                if (job.Settings.TryGetValue(BackgroundJobSettings.RetainMonthlyBackups, out var monthly))
-                    _editRetainMonthlyBackups = Convert.ToInt32(((JsonElement)monthly).GetInt32());
-                if (job.Settings.TryGetValue(BackgroundJobSettings.RetainYearlyBackups, out var yearly))
-                    _editRetainYearlyBackups = Convert.ToInt32(((JsonElement)yearly).GetInt32());
-                if (job.Settings.TryGetValue(BackgroundJobSettings.BackupDirectory, out var dir))
-                    _editBackupDirectory = ((JsonElement)dir).GetString();
-            }
-            else if (job.JobName == BackgroundJobNames.DatabaseMaintenance)
+            if (job.JobName == BackgroundJobNames.DatabaseMaintenance)
             {
                 if (job.Settings.TryGetValue(BackgroundJobSettings.RunVacuum, out var vacuum))
                     _editRunVacuum = ((JsonElement)vacuum).GetBoolean();
@@ -379,24 +310,20 @@
 
         try
         {
-            // TODO: Reimplement schedule validation with friendly format → cron conversion
-            // Schedule editing is currently disabled - cron expression is readonly
+            // Generate cron expression from friendly UI format (converts to UTC)
+            var newCronExpression = GetCronPreview();
+            if (newCronExpression.StartsWith("Invalid"))
+            {
+                Snackbar.Add("Invalid schedule configuration", Severity.Error);
+                return;
+            }
 
-            // Update job-specific settings
+            _editingJob.CronExpression = newCronExpression;
+
+            // Update job-specific settings (retention/directory for backups managed in Backup Configuration page)
             _editingJob.Settings ??= new Dictionary<string, object>();
 
-            if (_editingJob.JobName == BackgroundJobNames.ScheduledBackup)
-            {
-                // Save granular retention settings
-                _editingJob.Settings[BackgroundJobSettings.RetainHourlyBackups] = _editRetainHourlyBackups;
-                _editingJob.Settings[BackgroundJobSettings.RetainDailyBackups] = _editRetainDailyBackups;
-                _editingJob.Settings[BackgroundJobSettings.RetainWeeklyBackups] = _editRetainWeeklyBackups;
-                _editingJob.Settings[BackgroundJobSettings.RetainMonthlyBackups] = _editRetainMonthlyBackups;
-                _editingJob.Settings[BackgroundJobSettings.RetainYearlyBackups] = _editRetainYearlyBackups;
-                if (!string.IsNullOrWhiteSpace(_editBackupDirectory))
-                    _editingJob.Settings[BackgroundJobSettings.BackupDirectory] = _editBackupDirectory;
-            }
-            else if (_editingJob.JobName == BackgroundJobNames.DatabaseMaintenance)
+            if (_editingJob.JobName == BackgroundJobNames.DatabaseMaintenance)
             {
                 _editingJob.Settings[BackgroundJobSettings.RunVacuum] = _editRunVacuum;
                 _editingJob.Settings[BackgroundJobSettings.RunAnalyze] = _editRunAnalyze;
@@ -502,22 +429,137 @@
         if (string.IsNullOrEmpty(cron))
             return "Not configured";
 
-        // Parse common cron patterns for user-friendly display
+        // Parse common Quartz cron patterns for user-friendly display
+        // Quartz format: second minute hour day month dayOfWeek
         return cron switch
         {
-            "0 2 * * *" => "Daily at 2:00 AM",
-            "0 3 * * *" => "Daily at 3:00 AM",
-            "0 4 * * *" => "Daily at 4:00 AM",
-            "0 0 * * *" => "Daily at midnight",
-            "0 3 * * 0" => "Sundays at 3:00 AM",
-            "0 4 * * 0" => "Sundays at 4:00 AM",
-            "0 */6 * * *" => "Every 6 hours",
-            "0 */12 * * *" => "Every 12 hours",
-            "0 0 1 * *" => "First of month at midnight",
+            "0 0 2 * * ?" => "Daily at 2:00 AM",
+            "0 0 3 * * ?" => "Daily at 3:00 AM",
+            "0 0 4 * * ?" => "Daily at 4:00 AM",
+            "0 0 0 * * ?" => "Daily at midnight",
+            "0 0 3 ? * SUN" => "Sundays at 3:00 AM",
+            "0 0 4 ? * SUN" => "Sundays at 4:00 AM",
+            "0 0 * * * ?" => "Every hour",
+            "0 0 */6 * * ?" => "Every 6 hours",
+            "0 0 */12 * * ?" => "Every 12 hours",
+            "0 0 0 1 * ?" => "First of month at midnight",
+            "0 0/30 * * * ?" => "Every 30 minutes",
             _ => cron
         };
     }
 
+    /// <summary>
+    /// Parse existing Quartz cron expression into friendly interval format (e.g., "30m", "6h", "1d")
+    /// </summary>
+    private void ParseCronToFriendlyFormat(string? cronExpression)
+    {
+        if (string.IsNullOrEmpty(cronExpression))
+        {
+            _editScheduleInterval = "1d";
+            return;
+        }
+
+        // Parse Quartz cron (format: "second minute hour day month dayOfWeek")
+        var parts = cronExpression.Split(' ');
+        if (parts.Length != 6)
+        {
+            _editScheduleInterval = "1d";
+            return;
+        }
+
+        var second = parts[0];
+        var minute = parts[1];
+        var hour = parts[2];
+        var day = parts[3];
+        var month = parts[4];
+        var dayOfWeek = parts[5];
+
+        // Detect interval patterns and convert to friendly format
+        if (minute.StartsWith("*/") || minute.Contains("/"))
+        {
+            // Every N minutes: "0 */30 * * * ?" → "30m"
+            var minuteInterval = minute.Replace("*/", "").Replace("/", "");
+            if (int.TryParse(minuteInterval, out var mins))
+            {
+                _editScheduleInterval = $"{mins}m";
+                return;
+            }
+        }
+
+        if (hour.StartsWith("*/") || hour.Contains("/"))
+        {
+            // Every N hours: "0 0 */6 * * ?" → "6h"
+            var hourInterval = hour.Replace("*/", "").Replace("/", "");
+            if (int.TryParse(hourInterval, out var hrs))
+            {
+                _editScheduleInterval = $"{hrs}h";
+                return;
+            }
+        }
+
+        // Daily: "0 0 2 * * ?" → "1d"
+        if (day == "*" && dayOfWeek == "?")
+        {
+            _editScheduleInterval = "1d";
+            return;
+        }
+
+        // Weekly: "0 0 2 ? * SUN" → "1w"
+        if (dayOfWeek == "SUN" || dayOfWeek == "0")
+        {
+            _editScheduleInterval = "1w";
+            return;
+        }
+
+        // Default
+        _editScheduleInterval = "1d";
+    }
+
+    /// <summary>
+    /// Generate Quartz cron expression from interval string (e.g., "30m", "6h", "1d", "1w")
+    /// </summary>
+    private string GetCronPreview()
+    {
+        if (string.IsNullOrWhiteSpace(_editScheduleInterval))
+            return "Invalid interval";
+
+        // Parse the interval using TimeSpanUtilities
+        if (!TimeSpanUtilities.TryParseDuration(_editScheduleInterval, out var duration))
+        {
+            return "Invalid format (use: 30m, 6h, 1d, 1w)";
+        }
+
+        // Convert TimeSpan to Quartz cron expression
+        // Quartz format: second minute hour day month dayOfWeek
+
+        if (duration.TotalMinutes < 60)
+        {
+            // Minutes: "0 */30 * * * ?" (every 30 minutes)
+            var mins = (int)duration.TotalMinutes;
+            return $"0 */{mins} * * * ?";
+        }
+        else if (duration.TotalHours < 24)
+        {
+            // Hours: "0 0 */6 * * ?" (every 6 hours)
+            var hours = (int)duration.TotalHours;
+            return $"0 0 */{hours} * * ?";
+        }
+        else if (duration.TotalDays < 7)
+        {
+            // Days: "0 0 2 * * ?" (daily at 2 AM UTC)
+            return "0 0 2 * * ?";
+        }
+        else if (duration.TotalDays < 30)
+        {
+            // Weeks: "0 0 2 ? * SUN" (weekly on Sunday at 2 AM UTC)
+            return "0 0 2 ? * SUN";
+        }
+        else
+        {
+            // Monthly or longer: "0 0 2 1 * ?" (monthly on 1st at 2 AM UTC)
+            return "0 0 2 1 * ?";
+        }
+    }
 
     public void Dispose()
     {

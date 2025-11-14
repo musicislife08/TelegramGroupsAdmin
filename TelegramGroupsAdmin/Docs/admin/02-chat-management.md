@@ -390,7 +390,7 @@ In Chat Management → View Details:
 3. **Check invite link valid**:
    - Health check shows invite link status
    - Regenerate in Telegram if expired
-4. **Check TickerQ jobs running**:
+4. **Check Quartz.NET jobs running**:
    - Settings → Background Jobs
    - WelcomeTimeoutJob should be active
 

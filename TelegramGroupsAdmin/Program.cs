@@ -5,7 +5,9 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 using TelegramGroupsAdmin;
+using TelegramGroupsAdmin.BackgroundJobs.Extensions;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data.Extensions;
 using TelegramGroupsAdmin.ContentDetection.Extensions;
@@ -44,6 +46,9 @@ builder.Services.AddHttpClients(builder.Configuration);
 var connectionString = builder.Configuration.GetConnectionString("PostgreSQL")
     ?? throw new InvalidOperationException("PostgreSQL connection string not configured");
 builder.Services.AddDataServices(connectionString);
+
+// Core services (audit, etc.)
+builder.Services.AddCoreServices();
 
 // Register Serilog configuration service (will be configured after app.Build())
 SerilogDynamicConfiguration? serilogConfig = null;
@@ -107,6 +112,9 @@ builder.Services.AddRepositories();
 // Content Detection library
 builder.Services.AddContentDetection();
 
+// Background Jobs (Quartz.NET)
+builder.Services.AddBackgroundJobs(builder.Configuration);
+
 // Health checks for Kubernetes/Docker
 // Liveness: Just checks if the app is responsive (no database checks - app restart won't fix DB issues)
 // Readiness: Checks database connectivity (if DB is down, stop receiving traffic but don't restart)
@@ -161,13 +169,7 @@ if (serilogConfig != null)
     app.Logger.LogInformation("Loaded log configuration from database");
 }
 
-// Ensure default background job configurations exist
-using (var scope = app.Services.CreateScope())
-{
-    var jobConfigService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Services.IBackgroundJobConfigService>();
-    await jobConfigService.EnsureDefaultConfigsAsync();
-    app.Logger.LogInformation("Ensured default background job configurations exist");
-}
+// Note: Default background job configurations are ensured by QuartzSchedulingSyncService on startup
 
 // Check for --migrate-only flag to run migrations and exit
 if (args.Contains("--migrate-only") || args.Contains("--migrate"))
@@ -197,7 +199,7 @@ if (args.Contains("--backup"))
     }
 
     using var scope = app.Services.CreateScope();
-    var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Services.Backup.IBackupService>();
+    var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.IBackupService>();
 
     app.Logger.LogInformation("Creating encrypted backup...");
     var backupBytes = await backupService.ExportAsync(passphrase); // Use passphrase override for CLI
@@ -245,7 +247,7 @@ if (args.Contains("--restore"))
     await Task.Delay(5000);
 
     using var scope = app.Services.CreateScope();
-    var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Services.Backup.IBackupService>();
+    var backupService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.BackgroundJobs.Services.Backup.IBackupService>();
 
     app.Logger.LogInformation("Reading encrypted backup...");
     var backupBytes = await File.ReadAllBytesAsync(restorePath);

@@ -40,7 +40,7 @@ public class FileScanningHandler
             return null;
         }
 
-        // Schedule file scan via TickerQ with 0s delay for instant execution
+        // Schedule file scan via Quartz.NET with 0s delay for instant execution
         // Phase 4.14: Downloads file to temp, scans with ClamAV+VirusTotal, deletes if infected
         // Temp file deleted after scan (no persistent storage)
         var scanPayload = new FileScanJobPayload(

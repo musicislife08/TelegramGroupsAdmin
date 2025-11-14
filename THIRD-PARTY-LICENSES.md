@@ -49,7 +49,7 @@ TelegramGroupsAdmin is built on the shoulders of many excellent open-source proj
 - **Dapper** - Apache License 2.0 - https://github.com/DapperLib/Dapper
 
 ### Background Jobs
-- **TickerQ** - Dual License (MIT or Apache 2.0) - https://github.com/Salgat/TickerQ
+- **Quartz.NET** - Apache License 2.0 - https://www.quartz-scheduler.net/
 
 ### Logging
 - **Serilog.AspNetCore** - Apache License 2.0 - https://github.com/serilog/serilog-aspnetcore

@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="AppAny.Quartz.EntityFrameworkCore.Migrations.PostgreSQL" Version="0.5.1" />
     <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.0" />
     <!-- Force newer versions to fix GHSA-w3q9-fxm7-j8fq vulnerability in EF Core transitive deps -->

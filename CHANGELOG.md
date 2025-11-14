@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Spam detection: Changed 10 routine operation logs from Information → Debug (one final result log per message)
   - Chat health checks: Changed 4 success confirmation logs from Information → Debug (280 logs/day → event-driven only)
   - SimilaritySpamCheck: Cache operations moved to Debug level (eliminates 2,880 logs/day at 5k messages)
-  - Removed TestJob (TickerQ health check) that logged every 5 minutes (288 logs/day eliminated)
+  - Removed TestJob (Quartz.NET health check) that logged every 5 minutes (288 logs/day eliminated)
 - Chat health checks now differentiate between transient network errors (logged as warnings) and real issues (bot kicked/permission loss)
 - Added reverse proxy support with `UseForwardedHeaders` middleware for proper HTTPS detection
 - SendGrid configuration log moved to Debug level to reduce console noise
@@ -280,7 +280,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - .NET 9.0
 - Blazor Server
 - PostgreSQL 17
-- TickerQ background jobs
+- Quartz.NET background job scheduler
 - OpenAI GPT-4 and Vision API
 - VirusTotal integration
 - SendGrid email service
