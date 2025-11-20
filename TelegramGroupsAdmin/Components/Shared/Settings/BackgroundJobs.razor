@@ -317,21 +317,9 @@
             var jobName = _editingJob.JobName;
             await JobConfigService.UpdateJobConfigAsync(jobName, _editingJob);
 
-            // Wait for background sync to populate NextRunAt (max 3 seconds)
-            // UpdateJobConfigAsync triggers async resync, which updates NextRunAt
-            var maxWait = TimeSpan.FromSeconds(3);
-            var pollInterval = TimeSpan.FromMilliseconds(100);
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            while (stopwatch.Elapsed < maxWait)
-            {
-                await LoadJobsAsync();
-                if (_jobs.TryGetValue(jobName, out var refreshedJob) && refreshedJob.NextRunAt.HasValue)
-                {
-                    break; // NextRunAt populated, sync complete
-                }
-                await Task.Delay(pollInterval);
-            }
+            // NextRunAt will be populated by QuartzSchedulingSyncService asynchronously
+            // and will be visible on next page refresh or when the job list reloads
+            await LoadJobsAsync();
 
             Snackbar.Add($"{_editingJob.DisplayName} configuration saved", Severity.Success);
             CloseConfigDialog();
