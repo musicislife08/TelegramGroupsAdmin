@@ -120,17 +120,10 @@ public class RotateBackupPassphraseJob : IJob
                         // Read original backup
                         var originalBytes = await File.ReadAllBytesAsync(backupFile);
 
-                        // Decrypt with old passphrase
-                        byte[] decryptedBytes;
-                        if (_encryptionService.IsEncrypted(originalBytes))
-                        {
-                            decryptedBytes = _encryptionService.DecryptBackup(originalBytes, oldPassphrase);
-                        }
-                        else
-                        {
-                            // Unencrypted backup - just use as-is
-                            decryptedBytes = originalBytes;
-                        }
+                        // Decrypt with old passphrase (or use as-is if unencrypted)
+                        byte[] decryptedBytes = _encryptionService.IsEncrypted(originalBytes)
+                            ? _encryptionService.DecryptBackup(originalBytes, oldPassphrase)
+                            : originalBytes;
 
                         // Encrypt with new passphrase
                         var reencryptedBytes = _encryptionService.EncryptBackup(decryptedBytes, newPassphrase);
@@ -163,7 +156,14 @@ public class RotateBackupPassphraseJob : IJob
                         var tempFile = $"{backupFile}.new";
                         if (File.Exists(tempFile))
                         {
-                            try { File.Delete(tempFile); } catch { }
+                            try
+                            {
+                                File.Delete(tempFile);
+                            }
+                            catch (Exception deleteEx)
+                            {
+                                _logger.LogWarning(deleteEx, "Failed to delete temp file: {TempFile}", tempFile);
+                            }
                         }
                     }
                 }

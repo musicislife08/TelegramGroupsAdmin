@@ -202,12 +202,29 @@
         await LoadJobsAsync();
         UpdateQueueDepth();
 
+        // Subscribe to NextRunAt updates for automatic UI refresh via SignalR
+        JobConfigService.JobNextRunAtUpdated += OnJobNextRunAtUpdated;
+
         // Refresh queue depth every 5 seconds
         _refreshTimer = new Timer(_ =>
         {
             UpdateQueueDepth();
             InvokeAsync(StateHasChanged);
         }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private void OnJobNextRunAtUpdated(string jobName)
+    {
+        // Reload the specific job and refresh UI (runs on SignalR thread, marshal to UI thread)
+        InvokeAsync(async () =>
+        {
+            var updatedJob = await JobConfigService.GetJobConfigAsync(jobName);
+            if (updatedJob != null && _jobs != null)
+            {
+                _jobs[jobName] = updatedJob;
+                StateHasChanged();
+            }
+        });
     }
 
     private async Task LoadJobsAsync()
@@ -427,18 +444,14 @@
         // Validate using converter
         var parseResult = ScheduleConverter.ToQuartzSchedule(_editScheduleInterval);
 
-        if (parseResult is HumanCron.Models.ParseResult<Quartz.IScheduleBuilder>.Error error)
-        {
-            _scheduleValidationError = error.Message;
-        }
-        else
-        {
-            _scheduleValidationError = null;
-        }
+        _scheduleValidationError = parseResult is HumanCron.Models.ParseResult<Quartz.IScheduleBuilder>.Error error
+            ? error.Message
+            : null;
     }
 
     public void Dispose()
     {
+        JobConfigService.JobNextRunAtUpdated -= OnJobNextRunAtUpdated;
         _refreshTimer?.Dispose();
     }
 }

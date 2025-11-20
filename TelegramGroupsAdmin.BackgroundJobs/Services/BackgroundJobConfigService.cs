@@ -20,6 +20,11 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
     private readonly IQuartzScheduleConverter _scheduleConverter;
     private QuartzSchedulingSyncService? _syncService; // Injected lazily to avoid circular dependency
 
+    /// <summary>
+    /// Event fired when a job's NextRunAt is updated (for UI refresh via SignalR)
+    /// </summary>
+    public event Action<string>? JobNextRunAtUpdated;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -106,12 +111,14 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 
         // Track if meaningful fields changed (Schedule or Enabled) - these require re-sync
         var requiresResync = false;
+        var nextRunAtChanged = false;
 
         // Check if schedule or enabled status changed
         if (jobsConfig.Jobs.TryGetValue(jobName, out var existingJob))
         {
             var scheduleChanged = existingJob.Schedule != config.Schedule;
             var enabledChanged = existingJob.Enabled != config.Enabled;
+            nextRunAtChanged = existingJob.NextRunAt != config.NextRunAt;
 
             if (scheduleChanged)
             {
@@ -131,6 +138,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         {
             // New job - requires initial sync
             requiresResync = true;
+            nextRunAtChanged = config.NextRunAt.HasValue;
         }
 
         // Update the specific job
@@ -149,6 +157,12 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         {
             _logger.LogInformation("Triggering Quartz re-sync for {JobName} due to config change", jobName);
             _syncService?.TriggerResync();
+        }
+
+        // Fire event for UI refresh if NextRunAt changed (Blazor Server SignalR push)
+        if (nextRunAtChanged)
+        {
+            JobNextRunAtUpdated?.Invoke(jobName);
         }
     }
 
@@ -237,15 +251,13 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 continue;
             }
 
-            // Skip if already new HumanCron DSL format (starts with "every")
-            if (config.Schedule.StartsWith("every ", StringComparison.OrdinalIgnoreCase))
+            // Skip if already valid natural language format (parse succeeds)
+            // This is more robust than string prefix checking and supports future HumanCron formats
+            var validationResult = _scheduleConverter.CreateTriggerBuilder(config.Schedule);
+            if (validationResult is HumanCron.Models.ParseResult<TriggerBuilder>.Success)
             {
-                continue;
-            }
-
-            // Skip if old NaturalCron DSL (no spaces = simple format like "30m" or "1d")
-            if (!config.Schedule.Contains(' '))
-            {
+                _logger.LogDebug("Job {JobName} already has valid natural language schedule '{Schedule}', skipping migration",
+                    jobName, config.Schedule);
                 continue;
             }
 
