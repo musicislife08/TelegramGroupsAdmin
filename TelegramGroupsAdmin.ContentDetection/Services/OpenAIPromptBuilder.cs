@@ -27,6 +27,8 @@ public static class OpenAIPromptBuilder
         if (history.Any())
         {
             contextBuilder.AppendLine("\nRecent message history for context:");
+            // TODO: Make message history count configurable (currently hardcoded to 3, but 5 messages are fetched)
+            // Add OpenAIConfig.MessageHistoryCount property and use it here instead of Take(3)
             foreach (var msg in history.Take(3))
             {
                 var status = msg.WasSpam ? "[SPAM]" : "[OK]";
