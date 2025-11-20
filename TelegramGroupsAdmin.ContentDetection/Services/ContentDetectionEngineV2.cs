@@ -469,6 +469,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             HasSpamFlags = originalRequest.HasSpamFlags,
             MinMessageLength = config.MinMessageLength,
             CheckShortMessages = config.OpenAI.CheckShortMessages,
+            MessageHistoryCount = config.OpenAI.MessageHistoryCount,
             ApiKey = openAIApiKey ?? "",
             Model = openAIConfig?.Model ?? "gpt-4o-mini",
             MaxTokens = openAIConfig?.MaxTokens ?? 500,

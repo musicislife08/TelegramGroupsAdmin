@@ -39,6 +39,13 @@ public class OpenAIConfig
     public string? SystemPrompt { get; set; }
 
     /// <summary>
+    /// Number of recent messages to include as context for OpenAI analysis
+    /// Provides conversation history to improve spam detection accuracy
+    /// Higher values = more context but increased API costs
+    /// </summary>
+    public int MessageHistoryCount { get; set; } = 3;
+
+    /// <summary>
     /// Confidence threshold for spam classification (0-100)
     /// </summary>
     public int ConfidenceThreshold { get; set; } = 85;

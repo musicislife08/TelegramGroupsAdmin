@@ -105,8 +105,8 @@ public class OpenAIContentCheckV2(
                 };
             }
 
-            // Get message history for context
-            var history = await messageHistoryService.GetRecentMessagesAsync(req.ChatId, 5, req.CancellationToken);
+            // Get message history for context (count from config)
+            var history = await messageHistoryService.GetRecentMessagesAsync(req.ChatId, req.MessageHistoryCount, req.CancellationToken);
 
             // Prepare the API request with history context using static prompt builder
             var apiRequest = OpenAIPromptBuilder.CreateRequest(req, history);
