@@ -76,137 +76,137 @@ public class RotateBackupPassphraseJob : IJob
             _logger.LogInformation("Starting passphrase rotation for user {UserId} in directory {Directory}", userId, backupDirectory);
 
             try
-        {
-            // Get decrypted old passphrase from database
-            var oldPassphrase = await _passphraseService.GetDecryptedPassphraseAsync();
-
-            // Find all backup files
-            if (!Directory.Exists(backupDirectory))
             {
-                _logger.LogWarning("Backup directory {Directory} does not exist, creating it", backupDirectory);
-                Directory.CreateDirectory(backupDirectory);
+                // Get decrypted old passphrase from database
+                var oldPassphrase = await _passphraseService.GetDecryptedPassphraseAsync();
 
-                // No backups to rotate, just update config
-                await UpdateConfigWithNewPassphrase(newPassphrase);
-                _logger.LogInformation("✅ Passphrase rotation complete: No backups found, config updated");
-                return;
-            }
-
-            var backupFiles = Directory.GetFiles(backupDirectory, "*.tar.gz")
-                .Where(f => !f.EndsWith(".new")) // Exclude temporary files
-                .ToList();
-
-            _logger.LogInformation("Found {Count} backup files to re-encrypt", backupFiles.Count);
-
-            if (backupFiles.Count == 0)
-            {
-                // No backups to rotate, just update config
-                await UpdateConfigWithNewPassphrase(newPassphrase);
-                _logger.LogInformation("✅ Passphrase rotation complete: No backups found, config updated");
-                return;
-            }
-
-            int processedCount = 0;
-            int failedCount = 0;
-
-            foreach (var backupFile in backupFiles)
-            {
-                var fileName = Path.GetFileName(backupFile);
-
-                try
+                // Find all backup files
+                if (!Directory.Exists(backupDirectory))
                 {
-                    _logger.LogInformation("Re-encrypting backup: {FileName}", fileName);
+                    _logger.LogWarning("Backup directory {Directory} does not exist, creating it", backupDirectory);
+                    Directory.CreateDirectory(backupDirectory);
 
-                    // Read original backup
-                    var originalBytes = await File.ReadAllBytesAsync(backupFile);
-
-                    // Decrypt with old passphrase
-                    byte[] decryptedBytes;
-                    if (_encryptionService.IsEncrypted(originalBytes))
-                    {
-                        decryptedBytes = _encryptionService.DecryptBackup(originalBytes, oldPassphrase);
-                    }
-                    else
-                    {
-                        // Unencrypted backup - just use as-is
-                        decryptedBytes = originalBytes;
-                    }
-
-                    // Encrypt with new passphrase
-                    var reencryptedBytes = _encryptionService.EncryptBackup(decryptedBytes, newPassphrase);
-
-                    // Atomic file operation: write to .new, validate, swap
-                    var tempFile = $"{backupFile}.new";
-                    await File.WriteAllBytesAsync(tempFile, reencryptedBytes);
-
-                    // Validate new file
-                    var validationBytes = await File.ReadAllBytesAsync(tempFile);
-                    var testDecrypt = _encryptionService.DecryptBackup(validationBytes, newPassphrase);
-
-                    if (testDecrypt.Length != decryptedBytes.Length)
-                    {
-                        throw new InvalidOperationException($"Validation failed: decrypted size mismatch ({testDecrypt.Length} != {decryptedBytes.Length})");
-                    }
-
-                    // Atomic swap
-                    File.Move(tempFile, backupFile, overwrite: true);
-
-                    processedCount++;
-                    _logger.LogInformation("✅ Successfully re-encrypted: {FileName} ({Current}/{Total})", fileName, processedCount, backupFiles.Count);
+                    // No backups to rotate, just update config
+                    await UpdateConfigWithNewPassphrase(newPassphrase);
+                    _logger.LogInformation("✅ Passphrase rotation complete: No backups found, config updated");
+                    return;
                 }
-                catch (Exception ex)
+
+                var backupFiles = Directory.GetFiles(backupDirectory, "*.tar.gz")
+                    .Where(f => !f.EndsWith(".new")) // Exclude temporary files
+                    .ToList();
+
+                _logger.LogInformation("Found {Count} backup files to re-encrypt", backupFiles.Count);
+
+                if (backupFiles.Count == 0)
                 {
-                    failedCount++;
-                    _logger.LogError(ex, "❌ Failed to re-encrypt backup: {FileName}", fileName);
+                    // No backups to rotate, just update config
+                    await UpdateConfigWithNewPassphrase(newPassphrase);
+                    _logger.LogInformation("✅ Passphrase rotation complete: No backups found, config updated");
+                    return;
+                }
 
-                    // Clean up temp file if it exists
-                    var tempFile = $"{backupFile}.new";
-                    if (File.Exists(tempFile))
+                int processedCount = 0;
+                int failedCount = 0;
+
+                foreach (var backupFile in backupFiles)
+                {
+                    var fileName = Path.GetFileName(backupFile);
+
+                    try
                     {
-                        try { File.Delete(tempFile); } catch { }
+                        _logger.LogInformation("Re-encrypting backup: {FileName}", fileName);
+
+                        // Read original backup
+                        var originalBytes = await File.ReadAllBytesAsync(backupFile);
+
+                        // Decrypt with old passphrase
+                        byte[] decryptedBytes;
+                        if (_encryptionService.IsEncrypted(originalBytes))
+                        {
+                            decryptedBytes = _encryptionService.DecryptBackup(originalBytes, oldPassphrase);
+                        }
+                        else
+                        {
+                            // Unencrypted backup - just use as-is
+                            decryptedBytes = originalBytes;
+                        }
+
+                        // Encrypt with new passphrase
+                        var reencryptedBytes = _encryptionService.EncryptBackup(decryptedBytes, newPassphrase);
+
+                        // Atomic file operation: write to .new, validate, swap
+                        var tempFile = $"{backupFile}.new";
+                        await File.WriteAllBytesAsync(tempFile, reencryptedBytes);
+
+                        // Validate new file
+                        var validationBytes = await File.ReadAllBytesAsync(tempFile);
+                        var testDecrypt = _encryptionService.DecryptBackup(validationBytes, newPassphrase);
+
+                        if (testDecrypt.Length != decryptedBytes.Length)
+                        {
+                            throw new InvalidOperationException($"Validation failed: decrypted size mismatch ({testDecrypt.Length} != {decryptedBytes.Length})");
+                        }
+
+                        // Atomic swap
+                        File.Move(tempFile, backupFile, overwrite: true);
+
+                        processedCount++;
+                        _logger.LogInformation("✅ Successfully re-encrypted: {FileName} ({Current}/{Total})", fileName, processedCount, backupFiles.Count);
+                    }
+                    catch (Exception ex)
+                    {
+                        failedCount++;
+                        _logger.LogError(ex, "❌ Failed to re-encrypt backup: {FileName}", fileName);
+
+                        // Clean up temp file if it exists
+                        var tempFile = $"{backupFile}.new";
+                        if (File.Exists(tempFile))
+                        {
+                            try { File.Delete(tempFile); } catch { }
+                        }
                     }
                 }
+
+                // Update config with new passphrase
+                await UpdateConfigWithNewPassphrase(newPassphrase);
+
+                // Log final status
+                if (failedCount > 0)
+                {
+                    _logger.LogWarning("⚠️ Passphrase rotation completed with errors: {Success} successful, {Failed} failed", processedCount, failedCount);
+                }
+                else
+                {
+                    _logger.LogInformation("✅ Passphrase rotation complete: {Count} backups re-encrypted successfully", processedCount);
+                }
+
+                // Audit log the passphrase rotation (uses IServiceScopeFactory to avoid circular dependency)
+                await using var scope = _scopeFactory.CreateAsyncScope();
+                var auditService = scope.ServiceProvider.GetService<TelegramGroupsAdmin.Core.Services.IAuditService>();
+                if (auditService != null)
+                {
+                    await auditService.LogEventAsync(
+                        AuditEventType.BackupPassphraseRotated,
+                        actor: Actor.FromWebUser(userId),
+                        target: null,
+                        value: $"Re-encrypted {processedCount} backup(s) in {backupDirectory}" + (failedCount > 0 ? $" ({failedCount} failed)" : ""),
+                        ct: cancellationToken);
+
+                    _logger.LogInformation("Audit log entry created for passphrase rotation");
+                }
+                else
+                {
+                    _logger.LogWarning("IAuditService not available, skipping audit log");
+                }
+
+                success = true;
             }
-
-            // Update config with new passphrase
-            await UpdateConfigWithNewPassphrase(newPassphrase);
-
-            // Log final status
-            if (failedCount > 0)
+            catch (Exception ex)
             {
-                _logger.LogWarning("⚠️ Passphrase rotation completed with errors: {Success} successful, {Failed} failed", processedCount, failedCount);
+                _logger.LogError(ex, "❌ Passphrase rotation failed");
+                throw; // Re-throw for retry logic and exception recording
             }
-            else
-            {
-                _logger.LogInformation("✅ Passphrase rotation complete: {Count} backups re-encrypted successfully", processedCount);
-            }
-
-            // Audit log the passphrase rotation (uses IServiceScopeFactory to avoid circular dependency)
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var auditService = scope.ServiceProvider.GetService<TelegramGroupsAdmin.Core.Services.IAuditService>();
-            if (auditService != null)
-            {
-                await auditService.LogEventAsync(
-                    AuditEventType.BackupPassphraseRotated,
-                    actor: Actor.FromWebUser(userId),
-                    target: null,
-                    value: $"Re-encrypted {processedCount} backup(s) in {backupDirectory}" + (failedCount > 0 ? $" ({failedCount} failed)" : ""),
-                    ct: cancellationToken);
-
-                _logger.LogInformation("Audit log entry created for passphrase rotation");
-            }
-            else
-            {
-                _logger.LogWarning("IAuditService not available, skipping audit log");
-            }
-
-            success = true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "❌ Passphrase rotation failed");
-            throw; // Re-throw for retry logic and exception recording
-        }
         }
         finally
         {

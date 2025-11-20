@@ -17,12 +17,12 @@ public interface ITagDefinitionsRepository
     /// <summary>
     /// Creates a new tag definition with color preference
     /// </summary>
-    Task<TagDefinition> CreateAsync(string tagName, Models.TagColor color, CancellationToken cancellationToken = default);
+    Task<TagDefinition> CreateAsync(string tagName, TagColor color, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Updates the color for an existing tag definition
     /// </summary>
-    Task<bool> UpdateColorAsync(string tagName, Models.TagColor color, CancellationToken cancellationToken = default);
+    Task<bool> UpdateColorAsync(string tagName, TagColor color, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Deletes a tag definition (only if usage_count is 0)

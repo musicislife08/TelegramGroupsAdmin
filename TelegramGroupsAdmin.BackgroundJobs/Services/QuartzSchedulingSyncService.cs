@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using HumanCron.Quartz.Abstractions;
 using Quartz;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 
@@ -7,17 +8,19 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Services;
 
 /// <summary>
 /// Background service that syncs database job configs to Quartz.NET scheduler
-/// Creates/updates/removes triggers based on BackgroundJobConfig.CronExpression
+/// Creates/updates/removes triggers based on BackgroundJobConfig.Schedule (natural language)
 /// Phase 8: QuartzSchedulingSyncService
 /// </summary>
 public class QuartzSchedulingSyncService(
     ILogger<QuartzSchedulingSyncService> logger,
     ISchedulerFactory schedulerFactory,
-    IBackgroundJobConfigService jobConfigService) : BackgroundService
+    IBackgroundJobConfigService jobConfigService,
+    IQuartzScheduleConverter scheduleConverter) : BackgroundService
 {
     private readonly ILogger<QuartzSchedulingSyncService> _logger = logger;
     private readonly ISchedulerFactory _schedulerFactory = schedulerFactory;
     private readonly IBackgroundJobConfigService _jobConfigService = jobConfigService;
+    private readonly IQuartzScheduleConverter _scheduleConverter = scheduleConverter;
 
     private IScheduler? _scheduler;
     private readonly SemaphoreSlim _resyncSignal = new(0, 1);
@@ -136,7 +139,7 @@ public class QuartzSchedulingSyncService(
                 // Generate trigger key (unique per job)
                 var triggerKey = new TriggerKey($"{jobName}_Trigger", "ScheduledJobs");
 
-                if (config.Enabled && !string.IsNullOrEmpty(config.CronExpression))
+                if (config.Enabled && !string.IsNullOrEmpty(config.Schedule))
                 {
                     // Create or update trigger for enabled job
                     await CreateOrUpdateTriggerAsync(jobKey, triggerKey, config, cancellationToken);
@@ -158,7 +161,8 @@ public class QuartzSchedulingSyncService(
     }
 
     /// <summary>
-    /// Creates or updates a Quartz trigger for the specified job
+    /// Creates or updates a Quartz trigger for the specified job using NaturalCron schedule parsing
+    /// Supports both cron-based (daily, weekly) and calendar interval (every N minutes/hours) schedules
     /// </summary>
     private async Task CreateOrUpdateTriggerAsync(
         JobKey jobKey,
@@ -168,47 +172,65 @@ public class QuartzSchedulingSyncService(
     {
         if (_scheduler == null) return;
 
+        // Create pre-configured trigger builder (schedule + start time already set)
+        var parseResult = _scheduleConverter.CreateTriggerBuilder(config.Schedule);
+
+        if (parseResult is not HumanCron.Models.ParseResult<TriggerBuilder>.Success successResult)
+        {
+            // Parse failed - log error and skip this job
+            var errorMessage = parseResult is HumanCron.Models.ParseResult<TriggerBuilder>.Error errorResult
+                ? errorResult.Message
+                : "Unknown parse error";
+
+            _logger.LogError(
+                "Failed to parse schedule '{Schedule}' for job {JobName}: {Error}. Job will not be scheduled.",
+                config.Schedule,
+                config.JobName,
+                errorMessage);
+            return;
+        }
+
         var existingTrigger = await _scheduler.GetTrigger(triggerKey, cancellationToken);
 
         if (existingTrigger != null)
         {
-            // Check if cron expression changed
-            if (existingTrigger is ICronTrigger cronTrigger &&
-                cronTrigger.CronExpressionString == config.CronExpression)
+            // Check if schedule changed by comparing stored natural language schedule
+            if (existingTrigger.JobDataMap.TryGetString("NaturalLanguageSchedule", out var existingSchedule) &&
+                existingSchedule == config.Schedule)
             {
                 _logger.LogDebug(
-                    "Trigger for {JobName} already exists with same cron expression, skipping",
-                    config.JobName);
+                    "Trigger for {JobName} already exists with same schedule '{Schedule}', skipping",
+                    config.JobName,
+                    config.Schedule);
                 return;
             }
 
-            // Cron expression changed - remove old trigger
+            // Schedule changed - remove old trigger
             _logger.LogInformation(
-                "Cron expression changed for {JobName}, updating trigger",
-                config.JobName);
+                "Schedule changed for {JobName} from '{OldSchedule}' to '{NewSchedule}', updating trigger",
+                config.JobName,
+                existingSchedule ?? "unknown",
+                config.Schedule);
             await _scheduler.UnscheduleJob(triggerKey, cancellationToken);
         }
 
-        // Create new trigger with cron schedule
-        var trigger = TriggerBuilder.Create()
+        // Complete the trigger with job-specific metadata
+        var trigger = successResult.Value
             .WithIdentity(triggerKey)
             .ForJob(jobKey)
-            .WithCronSchedule(config.CronExpression, builder =>
-            {
-                // Configure misfire behavior: fire immediately if missed during downtime
-                builder.WithMisfireHandlingInstructionFireAndProceed();
-            })
             .WithDescription($"Scheduled trigger for {config.DisplayName}")
+            .UsingJobData("NaturalLanguageSchedule", config.Schedule) // Store for change detection
             .Build();
 
         await _scheduler.ScheduleJob(trigger, cancellationToken);
 
         var nextFireTime = trigger.GetNextFireTimeUtc();
+        var nextFireTimeFormatted = FormatNextFireTime(trigger, nextFireTime);
         _logger.LogInformation(
-            "Scheduled {JobName} with cron '{CronExpression}'. Next run: {NextRun}",
+            "Scheduled {JobName} with schedule '{Schedule}'. Next run: {NextRun}",
             config.JobName,
-            config.CronExpression,
-            nextFireTime?.ToString("yyyy-MM-dd HH:mm:ss UTC") ?? "unknown");
+            config.Schedule,
+            nextFireTimeFormatted);
     }
 
     /// <summary>
@@ -258,10 +280,11 @@ public class QuartzSchedulingSyncService(
                         config.NextRunAt = nextFireTime.Value.UtcDateTime;
                         await _jobConfigService.UpdateJobConfigAsync(jobName, config, cancellationToken);
 
+                        var nextFireTimeFormatted = FormatNextFireTime(trigger, nextFireTime);
                         _logger.LogDebug(
                             "Updated NextRunAt for {JobName}: {NextRun}",
                             jobName,
-                            nextFireTime.Value.ToString("yyyy-MM-dd HH:mm:ss UTC"));
+                            nextFireTimeFormatted);
                     }
                 }
             }
@@ -272,6 +295,32 @@ public class QuartzSchedulingSyncService(
         }
 
         _logger.LogInformation("NextRunAt update complete");
+    }
+
+    /// <summary>
+    /// Format next fire time in local timezone for display
+    /// Converts UTC to trigger's timezone if available, otherwise system local time
+    /// </summary>
+    private static string FormatNextFireTime(ITrigger trigger, DateTimeOffset? nextFireTimeUtc)
+    {
+        if (!nextFireTimeUtc.HasValue)
+            return "unknown";
+
+        // Get trigger's timezone if it's a cron or calendar interval trigger
+        TimeZoneInfo? triggerTimeZone = trigger switch
+        {
+            ICronTrigger cronTrigger => cronTrigger.TimeZone,
+            ICalendarIntervalTrigger calendarTrigger => calendarTrigger.TimeZone,
+            _ => null
+        };
+
+        // Convert UTC to trigger's timezone (or local if not specified)
+        var localTime = triggerTimeZone != null
+            ? TimeZoneInfo.ConvertTimeFromUtc(nextFireTimeUtc.Value.UtcDateTime, triggerTimeZone)
+            : nextFireTimeUtc.Value.ToLocalTime();
+
+        // Format with timezone offset
+        return localTime.ToString("yyyy-MM-dd HH:mm:ss zzz");
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

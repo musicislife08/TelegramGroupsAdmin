@@ -27,11 +27,11 @@ public class BackgroundJobConfig
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// Cron expression defining the job schedule
-    /// Example: "0 2 * * *" for daily at 2 AM
-    /// UI converts friendly formats (1h, 1d@02:00) to cron bidirectionally
+    /// Natural language schedule expression (e.g., "1d at 2pm", "2w on sunday", "30m")
+    /// Converted to Quartz CronSchedule or CalendarIntervalSchedule at runtime
+    /// Supports bidirectional conversion via NaturalCron library
     /// </summary>
-    public required string CronExpression { get; set; }
+    public required string Schedule { get; set; }
 
     /// <summary>
     /// Last time this job executed successfully (UTC)

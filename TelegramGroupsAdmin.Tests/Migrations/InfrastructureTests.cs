@@ -61,8 +61,8 @@ public class InfrastructureTests
                 NormalizedEmail = "TEST1@TEST.COM",
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = TelegramGroupsAdmin.Data.Models.PermissionLevel.Owner,
-                Status = TelegramGroupsAdmin.Data.Models.UserStatus.Active,
+                PermissionLevel = Data.Models.PermissionLevel.Owner,
+                Status = Data.Models.UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });
             await context.SaveChangesAsync();
@@ -107,8 +107,8 @@ public class InfrastructureTests
                     NormalizedEmail = "DISPOSE@TEST.COM",
                     PasswordHash = "hash",
                     SecurityStamp = Guid.NewGuid().ToString(),
-                    PermissionLevel = TelegramGroupsAdmin.Data.Models.PermissionLevel.Admin,
-                    Status = TelegramGroupsAdmin.Data.Models.UserStatus.Active,
+                    PermissionLevel = Data.Models.PermissionLevel.Admin,
+                    Status = Data.Models.UserStatus.Active,
                     CreatedAt = DateTimeOffset.UtcNow
                 });
                 await context.SaveChangesAsync();
@@ -138,8 +138,8 @@ public class InfrastructureTests
                 NormalizedEmail = "RAW@TEST.COM",
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = TelegramGroupsAdmin.Data.Models.PermissionLevel.Admin,
-                Status = TelegramGroupsAdmin.Data.Models.UserStatus.Active,
+                PermissionLevel = Data.Models.PermissionLevel.Admin,
+                Status = Data.Models.UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });
             await context.SaveChangesAsync();

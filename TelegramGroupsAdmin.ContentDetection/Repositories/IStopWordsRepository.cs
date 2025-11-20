@@ -13,7 +13,7 @@ public interface IStopWordsRepository
     /// <summary>
     /// Add a new stop word
     /// </summary>
-    Task<long> AddStopWordAsync(TelegramGroupsAdmin.ContentDetection.Models.StopWord stopWord, CancellationToken cancellationToken = default);
+    Task<long> AddStopWordAsync(Models.StopWord stopWord, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Enable or disable a stop word
@@ -28,7 +28,7 @@ public interface IStopWordsRepository
     /// <summary>
     /// Get all stop words (enabled and disabled) with full details
     /// </summary>
-    Task<IEnumerable<TelegramGroupsAdmin.ContentDetection.Models.StopWord>> GetAllStopWordsAsync(CancellationToken cancellationToken = default);
+    Task<IEnumerable<Models.StopWord>> GetAllStopWordsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Update stop word notes

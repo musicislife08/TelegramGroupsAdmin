@@ -312,7 +312,7 @@ public class AnalyticsRepository : IAnalyticsRepository
         return result;
     }
 
-    private List<ContentDetection.Models.CheckResult> ParseCheckResults(string? json)
+    private List<CheckResult> ParseCheckResults(string? json)
     {
         return CheckResultsSerializer.Deserialize(json ?? string.Empty);
     }

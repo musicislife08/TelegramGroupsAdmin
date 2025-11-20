@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using HumanCron.Quartz.Abstractions;
+using Quartz;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
@@ -15,6 +17,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<BackgroundJobConfigService> _logger;
+    private readonly IQuartzScheduleConverter _scheduleConverter;
     private QuartzSchedulingSyncService? _syncService; // Injected lazily to avoid circular dependency
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -26,10 +29,12 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 
     public BackgroundJobConfigService(
         IDbContextFactory<AppDbContext> contextFactory,
-        ILogger<BackgroundJobConfigService> logger)
+        ILogger<BackgroundJobConfigService> logger,
+        IQuartzScheduleConverter scheduleConverter)
     {
         _contextFactory = contextFactory;
         _logger = logger;
+        _scheduleConverter = scheduleConverter;
     }
 
     /// <summary>
@@ -99,16 +104,33 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
             ? new BackgroundJobsConfig()
             : JsonSerializer.Deserialize<BackgroundJobsConfig>(configRecord.BackgroundJobsConfig, JsonOptions) ?? new BackgroundJobsConfig();
 
-        // Check if schedule changed - if so, clear NextRunAt to reschedule immediately
+        // Track if meaningful fields changed (Schedule or Enabled) - these require re-sync
+        var requiresResync = false;
+
+        // Check if schedule or enabled status changed
         if (jobsConfig.Jobs.TryGetValue(jobName, out var existingJob))
         {
-            var scheduleChanged = existingJob.CronExpression != config.CronExpression;
+            var scheduleChanged = existingJob.Schedule != config.Schedule;
+            var enabledChanged = existingJob.Enabled != config.Enabled;
 
             if (scheduleChanged)
             {
                 config.NextRunAt = null; // Clear scheduled time - will be recalculated on next scheduler run
                 _logger.LogInformation("Schedule changed for {JobName}, clearing NextRunAt for immediate reschedule", jobName);
+                requiresResync = true;
             }
+
+            if (enabledChanged)
+            {
+                _logger.LogInformation("Enabled status changed for {JobName} from {Old} to {New}",
+                    jobName, existingJob.Enabled, config.Enabled);
+                requiresResync = true;
+            }
+        }
+        else
+        {
+            // New job - requires initial sync
+            requiresResync = true;
         }
 
         // Update the specific job
@@ -122,8 +144,12 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
 
         _logger.LogInformation("Updated background job config for {JobName}", jobName);
 
-        // Trigger immediate re-sync of Quartz.NET scheduler
-        _syncService?.TriggerResync();
+        // Only trigger re-sync if Schedule or Enabled changed (not for timestamp updates)
+        if (requiresResync)
+        {
+            _logger.LogInformation("Triggering Quartz re-sync for {JobName} due to config change", jobName);
+            _syncService?.TriggerResync();
+        }
     }
 
     public async Task<bool> IsJobEnabledAsync(string jobName, CancellationToken cancellationToken = default)
@@ -175,11 +201,11 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 var needsRepair = false;
 
                 // Check for invalid schedule configuration
-                if (string.IsNullOrEmpty(existingConfig.CronExpression))
+                if (string.IsNullOrEmpty(existingConfig.Schedule))
                 {
-                    _logger.LogWarning("Repairing invalid CronExpression for {JobName} (was null, setting to {Default})",
-                        jobName, defaultConfig.CronExpression);
-                    existingConfig.CronExpression = defaultConfig.CronExpression;
+                    _logger.LogWarning("Repairing invalid Schedule for {JobName} (was null, setting to {Default})",
+                        jobName, defaultConfig.Schedule);
+                    existingConfig.Schedule = defaultConfig.Schedule;
                     needsRepair = true;
                 }
 
@@ -193,6 +219,85 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
         }
     }
 
+    /// <summary>
+    /// TODO: Remove after all instances have migrated (safe to delete after first deploy with this code)
+    /// One-time migration: Convert legacy Quartz cron expressions to natural language DSL
+    /// Detects cron format (6 space-separated parts) and converts to natural language
+    /// </summary>
+    public async Task MigrateLegacyCronExpressionsAsync(CancellationToken cancellationToken = default)
+    {
+        var allJobs = await GetAllJobsAsync(cancellationToken);
+        var migratedCount = 0;
+
+        foreach (var (jobName, config) in allJobs)
+        {
+            // Skip if empty
+            if (string.IsNullOrEmpty(config.Schedule))
+            {
+                continue;
+            }
+
+            // Skip if already new HumanCron DSL format (starts with "every")
+            if (config.Schedule.StartsWith("every ", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // Skip if old NaturalCron DSL (no spaces = simple format like "30m" or "1d")
+            if (!config.Schedule.Contains(' '))
+            {
+                continue;
+            }
+
+            // Detect Quartz cron format (6 space-separated parts)
+            var parts = config.Schedule.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 6)
+            {
+                continue; // Not a cron expression
+            }
+
+            try
+            {
+                // Attempt to convert cron back to natural language using NaturalCron library
+                var cronScheduleBuilder = CronScheduleBuilder.CronSchedule(config.Schedule);
+                var parseResult = _scheduleConverter.ToNaturalLanguage(cronScheduleBuilder);
+
+                if (parseResult is HumanCron.Models.ParseResult<string>.Success success)
+                {
+                    var naturalLanguage = success.Value;
+                    _logger.LogInformation(
+                        "Migrating job {JobName} from cron '{Cron}' to natural language '{NaturalLanguage}'",
+                        jobName, config.Schedule, naturalLanguage);
+
+                    config.Schedule = naturalLanguage;
+                    await UpdateJobConfigAsync(jobName, config, cancellationToken);
+                    migratedCount++;
+                }
+                else if (parseResult is HumanCron.Models.ParseResult<string>.Error error)
+                {
+                    _logger.LogWarning(
+                        "Could not convert cron '{Cron}' to natural language for job {JobName}: {Error}. Leaving as-is.",
+                        config.Schedule, jobName, error.Message);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to migrate schedule '{Schedule}' for job {JobName}. Leaving as-is.",
+                    config.Schedule, jobName);
+            }
+        }
+
+        if (migratedCount > 0)
+        {
+            _logger.LogInformation("Migrated {Count} job schedules from cron to natural language", migratedCount);
+        }
+        else
+        {
+            _logger.LogDebug("No legacy cron expressions found to migrate");
+        }
+    }
+
     private static Dictionary<string, BackgroundJobConfig> GetDefaultJobConfigs()
     {
         return new Dictionary<string, BackgroundJobConfig>
@@ -203,7 +308,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "Scheduled Backups",
                 Description = "Automatically backup database on a schedule",
                 Enabled = false, // Disabled by default
-                CronExpression = "0 0 2 * * ?", // Daily at 2 AM (Quartz format: sec min hour day month dow)
+                Schedule = "every day at 2am", // Daily at 2 AM (natural language)
                 Settings = new Dictionary<string, object>
                 {
                     [BackgroundJobSettings.RetainHourlyBackups] = 24,  // Last 24 hours
@@ -220,7 +325,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "Message Cleanup",
                 Description = "Delete old messages and their media files based on retention policy",
                 Enabled = true, // Already exists, just adding config
-                CronExpression = "0 0 0 * * ?", // Daily at midnight (Quartz format: sec min hour day month dow)
+                Schedule = "every day", // Daily at midnight (natural language)
                 Settings = new Dictionary<string, object>
                 {
                     [BackgroundJobSettings.RetentionHours] = 720 // 30 days default
@@ -232,7 +337,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "User Photo Refresh",
                 Description = "Refresh user profile photos from Telegram",
                 Enabled = true,
-                CronExpression = "0 0 3 * * ?", // Daily at 3 AM (Quartz format: sec min hour day month dow)
+                Schedule = "every day at 3am", // Daily at 3 AM (natural language)
                 Settings = new Dictionary<string, object>
                 {
                     [BackgroundJobSettings.DaysBack] = 7 // Refresh photos for users active in last 7 days
@@ -244,7 +349,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "URL Blocklist Sync",
                 Description = "Sync URL blocklists from upstream sources",
                 Enabled = true,
-                CronExpression = "0 0 3 ? * SUN", // Weekly on Sunday at 3 AM (Quartz format)
+                Schedule = "every week on sunday at 3am", // Weekly on Sunday at 3 AM (natural language)
                 Settings = new Dictionary<string, object>()
             },
             [BackgroundJobNames.DatabaseMaintenance] = new BackgroundJobConfig
@@ -253,7 +358,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "Database Maintenance",
                 Description = "Run VACUUM and ANALYZE on PostgreSQL database",
                 Enabled = false, // Disabled by default - user must enable
-                CronExpression = "0 0 4 ? * SUN", // Weekly on Sunday at 4 AM (Quartz format)
+                Schedule = "every week on sunday at 4am", // Weekly on Sunday at 4 AM (natural language)
                 Settings = new Dictionary<string, object>
                 {
                     [BackgroundJobSettings.RunVacuum] = true,
@@ -266,7 +371,7 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 DisplayName = "Chat Health Monitoring",
                 Description = "Monitor chat health, bot permissions, and admin lists",
                 Enabled = true,
-                CronExpression = "0 0/30 * * * ?", // Every 30 minutes (Quartz format: 0 seconds, every 30 minutes)
+                Schedule = "every 30 minutes", // Every 30 minutes (natural language)
                 Settings = new Dictionary<string, object>()
             }
         };

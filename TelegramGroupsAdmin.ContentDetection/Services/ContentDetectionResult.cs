@@ -57,5 +57,5 @@ public record ContentDetectionResult
     /// Phase 4.13: Hard block result if URL pre-filter blocked the message
     /// Non-null indicates instant ban without OpenAI veto
     /// </summary>
-    public Models.HardBlockResult? HardBlock { get; init; }
+    public HardBlockResult? HardBlock { get; init; }
 }

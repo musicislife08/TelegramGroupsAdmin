@@ -43,7 +43,7 @@ public class NotificationService : INotificationService
 
     public async Task<Dictionary<string, bool>> SendChatNotificationAsync(
         long chatId,
-        CoreModels.NotificationEventType eventType,
+        NotificationEventType eventType,
         string subject,
         string message,
         CancellationToken ct = default)
@@ -102,7 +102,7 @@ public class NotificationService : INotificationService
     }
 
     public async Task<Dictionary<string, bool>> SendSystemNotificationAsync(
-        CoreModels.NotificationEventType eventType,
+        NotificationEventType eventType,
         string subject,
         string message,
         CancellationToken ct = default)
@@ -111,7 +111,7 @@ public class NotificationService : INotificationService
         {
             // Get all users with Owner permission level (PermissionLevel = 2)
             var allUsers = await _userRepo.GetAllAsync(ct);
-            var ownerUsers = allUsers.Where(u => u.PermissionLevel == CoreModels.PermissionLevel.Owner).ToList();
+            var ownerUsers = allUsers.Where(u => u.PermissionLevel == PermissionLevel.Owner).ToList();
 
             if (!ownerUsers.Any())
             {
@@ -142,7 +142,7 @@ public class NotificationService : INotificationService
 
     public async Task<bool> SendNotificationAsync(
         string userId,
-        CoreModels.NotificationEventType eventType,
+        NotificationEventType eventType,
         string subject,
         string message,
         CancellationToken ct = default)
@@ -201,7 +201,7 @@ public class NotificationService : INotificationService
 
     public async Task<Dictionary<string, bool>> SendNotificationToMultipleAsync(
         IEnumerable<string> userIds,
-        CoreModels.NotificationEventType eventType,
+        NotificationEventType eventType,
         string subject,
         string message,
         CancellationToken ct = default)

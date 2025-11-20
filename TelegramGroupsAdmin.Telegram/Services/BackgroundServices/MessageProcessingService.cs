@@ -43,12 +43,12 @@ public partial class MessageProcessingService(
     // Events for real-time UI updates
     public event Action<MessageRecord>? OnNewMessage;
     public event Action<MessageEditRecord>? OnMessageEdited;
-    public event Action<long, TelegramGroupsAdmin.Telegram.Models.MediaType>? OnMediaUpdated;
+    public event Action<long, MediaType>? OnMediaUpdated;
 
     /// <summary>
     /// Raises the OnMediaUpdated event (called by MediaRefetchWorkerService)
     /// </summary>
-    public void RaiseMediaUpdated(long messageId, TelegramGroupsAdmin.Telegram.Models.MediaType mediaType)
+    public void RaiseMediaUpdated(long messageId, MediaType mediaType)
     {
         OnMediaUpdated?.Invoke(messageId, mediaType);
     }
@@ -262,7 +262,7 @@ public partial class MessageProcessingService(
                             // REFACTOR-2: Schedule auto-delete if requested using BackgroundJobScheduler
                             if (commandResult.DeleteResponseAfterSeconds.HasValue)
                             {
-                                var jobScheduler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.BackgroundJobScheduler>();
+                                var jobScheduler = scope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
                                 await jobScheduler.ScheduleMessageDeleteAsync(
                                     message.Chat.Id,
                                     responseMessage.MessageId,
@@ -315,7 +315,7 @@ public partial class MessageProcessingService(
             string? photoLocalPath = null;
             string? photoThumbnailPath = null;
 
-            var imageHandler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.ImageProcessingHandler>();
+            var imageHandler = scope.ServiceProvider.GetRequiredService<Handlers.ImageProcessingHandler>();
             var imageResult = await imageHandler.ProcessImageAsync(
                 botClient,
                 message,
@@ -340,7 +340,7 @@ public partial class MessageProcessingService(
             string? mediaLocalPath = null;
             int? mediaDuration = null;
 
-            var mediaHandler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.MediaProcessingHandler>();
+            var mediaHandler = scope.ServiceProvider.GetRequiredService<Handlers.MediaProcessingHandler>();
             var mediaResult = await mediaHandler.ProcessMediaAsync(
                 message,
                 message.Chat.Id,
@@ -359,7 +359,7 @@ public partial class MessageProcessingService(
             }
 
             // REFACTOR-1: Use FileScanningHandler for document scanning
-            var fileScanHandler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.FileScanningHandler>();
+            var fileScanHandler = scope.ServiceProvider.GetRequiredService<Handlers.FileScanningHandler>();
             await fileScanHandler.ProcessFileScanningAsync(
                 message,
                 message.Chat.Id,
@@ -379,7 +379,7 @@ public partial class MessageProcessingService(
             MessageTranslation? translation = null;
             if (!string.IsNullOrWhiteSpace(text))
             {
-                var translationHandler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.TranslationHandler>();
+                var translationHandler = scope.ServiceProvider.GetRequiredService<Handlers.TranslationHandler>();
                 var translationResult = await translationHandler.ProcessTranslationAsync(
                     text,
                     message.MessageId,
@@ -530,7 +530,7 @@ public partial class MessageProcessingService(
 
             // Upsert user into telegram_users table (centralized user tracking)
             var telegramUserRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-            var telegramUser = new TelegramGroupsAdmin.Telegram.Models.TelegramUser(
+            var telegramUser = new TelegramUser(
                 TelegramUserId: message.From!.Id,
                 Username: message.From.Username,
                 FirstName: message.From.FirstName,
@@ -632,7 +632,7 @@ public partial class MessageProcessingService(
             // REFACTOR-2: Fetch user profile photo via Quartz.NET using BackgroundJobScheduler
             if (message.From?.Id != null)
             {
-                var jobScheduler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.BackgroundJobScheduler>();
+                var jobScheduler = scope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
                 await jobScheduler.ScheduleUserPhotoFetchAsync(message.MessageId, message.From.Id, cancellationToken);
             }
 
@@ -642,7 +642,7 @@ public partial class MessageProcessingService(
             if (commandResult == null && (!string.IsNullOrWhiteSpace(text) || photoLocalPath != null))
             {
                 using var detectionScope = serviceProvider.CreateScope();
-                var contentOrchestrator = detectionScope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.ContentDetectionOrchestrator>();
+                var contentOrchestrator = detectionScope.ServiceProvider.GetRequiredService<Handlers.ContentDetectionOrchestrator>();
 
                 // Use translated text if available (avoids double translation in ContentDetectionEngine)
                 var textForDetection = translation?.TranslatedText ?? text;
@@ -679,7 +679,7 @@ public partial class MessageProcessingService(
         try
         {
             using var scope = _scopeFactory.CreateScope();
-            var editProcessor = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.MessageEditProcessor>();
+            var editProcessor = scope.ServiceProvider.GetRequiredService<Handlers.MessageEditProcessor>();
 
             var editRecord = await editProcessor.ProcessEditAsync(botClient, editedMessage, scope, cancellationToken);
 

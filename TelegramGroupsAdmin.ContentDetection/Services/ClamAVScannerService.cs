@@ -293,7 +293,7 @@ public class ClamAVScannerService : IFileScannerService
     {
         // Network errors that indicate temporary connectivity issues
         return ex is System.Net.Sockets.SocketException
-            || ex is System.IO.IOException
+            || ex is IOException
             || ex is TimeoutException
             || (ex.InnerException != null && IsTransientClamAVError(ex.InnerException));
     }

@@ -961,7 +961,7 @@ internal class NotMappedPropertiesIgnoringResolver : System.Text.Json.Serializat
 
             foreach (var property in propertiesToRemove)
             {
-                ((System.Collections.Generic.IList<System.Text.Json.Serialization.Metadata.JsonPropertyInfo>)jsonTypeInfo.Properties).Remove(property);
+                ((IList<System.Text.Json.Serialization.Metadata.JsonPropertyInfo>)jsonTypeInfo.Properties).Remove(property);
             }
         }
 

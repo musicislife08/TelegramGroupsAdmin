@@ -200,7 +200,7 @@ public class TotpService(
     {
         // Verify admin is Owner
         var admin = await userRepository.GetByIdAsync(adminUserId, ct);
-        if (admin is null || admin.PermissionLevelInt != (int)Core.Models.PermissionLevel.Owner)
+        if (admin is null || admin.PermissionLevelInt != (int)PermissionLevel.Owner)
         {
             logger.LogWarning("Non-Owner user {AdminUserId} attempted to admin-disable TOTP for user {TargetUserId}", adminUserId, targetUserId);
             return false;
@@ -235,7 +235,7 @@ public class TotpService(
     {
         // Verify admin is Owner
         var admin = await userRepository.GetByIdAsync(adminUserId, ct);
-        if (admin is null || admin.PermissionLevelInt != (int)Core.Models.PermissionLevel.Owner)
+        if (admin is null || admin.PermissionLevelInt != (int)PermissionLevel.Owner)
         {
             logger.LogWarning("Non-Owner user {AdminUserId} attempted to admin-enable TOTP for user {TargetUserId}", adminUserId, targetUserId);
             return false;
@@ -270,7 +270,7 @@ public class TotpService(
     {
         // Verify admin is Owner
         var admin = await userRepository.GetByIdAsync(adminUserId, ct);
-        if (admin is null || admin.PermissionLevelInt != (int)Core.Models.PermissionLevel.Owner)
+        if (admin is null || admin.PermissionLevelInt != (int)PermissionLevel.Owner)
         {
             logger.LogWarning("Non-Owner user {AdminUserId} attempted to reset TOTP for user {TargetUserId}", adminUserId, targetUserId);
             return false;
