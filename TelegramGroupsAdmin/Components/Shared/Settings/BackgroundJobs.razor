@@ -6,10 +6,11 @@
 @using TelegramGroupsAdmin.Telegram.Abstractions.Jobs
 @using System.Text.Json
 @using Microsoft.JSInterop
-@using TimeZoneConverter
+@using HumanCron.Quartz.Abstractions
 @inject IBackgroundJobConfigService JobConfigService
 @inject IMediaRefetchQueueService QueueService
 @inject IJobTriggerService JobTriggerService
+@inject IQuartzScheduleConverter ScheduleConverter
 @inject ISnackbar Snackbar
 @inject ILogger<BackgroundJobs> Logger
 @inject NavigationManager Navigation
@@ -65,8 +66,7 @@
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Schedule">
-                        <!-- TODO: Reimplement schedule display with friendly format → cron conversion -->
-                        <MudText Typo="Typo.caption">@FormatCronSchedule(context.CronExpression)</MudText>
+                        <MudText Typo="Typo.caption">@(context.Schedule ?? "Not configured")</MudText>
                     </MudTd>
                     <MudTd DataLabel="Last Run">
                         @if (context.LastRunAt.HasValue)
@@ -133,16 +133,13 @@
 
                 <!-- Schedule Configuration -->
                 <MudTextField @bind-Value="_editScheduleInterval"
-                             Label="Interval"
+                             Label="Schedule"
                              Variant="Variant.Outlined"
-                             HelperText="Examples: 30m, 1h, 6h, 1d, 1w (minutes/hours/days/weeks)"
-                             Immediate="true" />
-
-                <MudTextField Value="@GetCronPreview()"
-                             Label="Cron Expression (UTC)"
-                             Variant="Variant.Outlined"
-                             ReadOnly="true"
-                             HelperText="Generated cron expression (in UTC)" />
+                             HelperText="Examples: every 30 minutes, every 6 hours, every day at 2pm, every week on sunday, every 2 weeks on monday at 9am"
+                             Immediate="true"
+                             Error="@(!string.IsNullOrEmpty(_scheduleValidationError))"
+                             ErrorText="@_scheduleValidationError"
+                             OnBlur="ValidateSchedule" />
 
                 <!-- Job-Specific Settings -->
                 @if (_editingJob.JobName == BackgroundJobNames.ScheduledBackup)
@@ -182,11 +179,10 @@
     // Dialog state
     private bool _showConfigDialog;
     private BackgroundJobConfig? _editingJob;
-    private string? _editCronExpression;
 
     // Schedule editing state
     private string _editScheduleInterval = "1d"; // Default: daily
-    private string _userTimeZone = "UTC";
+    private string? _scheduleValidationError;
 
     // Database maintenance settings
     private bool _editRunVacuum = true;
@@ -200,21 +196,14 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Get user's timezone from browser
-        try
-        {
-            _userTimeZone = await JsRuntime.InvokeAsync<string>("getUserTimeZone");
-        }
-        catch
-        {
-            _userTimeZone = "UTC"; // Fallback if JS interop fails
-        }
-
         // Ensure default job configs exist before loading
         await JobConfigService.EnsureDefaultConfigsAsync();
 
         await LoadJobsAsync();
         UpdateQueueDepth();
+
+        // Subscribe to NextRunAt updates for automatic UI refresh via SignalR
+        JobConfigService.JobNextRunAtUpdated += OnJobNextRunAtUpdated;
 
         // Refresh queue depth every 5 seconds
         _refreshTimer = new Timer(_ =>
@@ -222,6 +211,20 @@
             UpdateQueueDepth();
             InvokeAsync(StateHasChanged);
         }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private void OnJobNextRunAtUpdated(string jobName)
+    {
+        // Reload the specific job and refresh UI (runs on SignalR thread, marshal to UI thread)
+        InvokeAsync(async () =>
+        {
+            var updatedJob = await JobConfigService.GetJobConfigAsync(jobName);
+            if (updatedJob != null && _jobs != null)
+            {
+                _jobs[jobName] = updatedJob;
+                StateHasChanged();
+            }
+        });
     }
 
     private async Task LoadJobsAsync()
@@ -277,10 +280,7 @@
     private void OpenConfigDialog(BackgroundJobConfig job)
     {
         _editingJob = job;
-        _editCronExpression = job.CronExpression;
-
-        // Parse existing cron expression into friendly format
-        ParseCronToFriendlyFormat(job.CronExpression);
+        _editScheduleInterval = job.Schedule ?? "1d"; // Default to daily if not set
 
         // Load job-specific settings
         if (job.Settings != null)
@@ -310,15 +310,17 @@
 
         try
         {
-            // Generate cron expression from friendly UI format (converts to UTC)
-            var newCronExpression = GetCronPreview();
-            if (newCronExpression.StartsWith("Invalid"))
+            // Validate schedule using NaturalCron converter
+            var parseResult = ScheduleConverter.ToQuartzSchedule(_editScheduleInterval);
+
+            if (parseResult is HumanCron.Models.ParseResult<Quartz.IScheduleBuilder>.Error error)
             {
-                Snackbar.Add("Invalid schedule configuration", Severity.Error);
+                Snackbar.Add($"Invalid schedule: {error.Message}", Severity.Error);
                 return;
             }
 
-            _editingJob.CronExpression = newCronExpression;
+            // Store natural language schedule directly
+            _editingJob.Schedule = _editScheduleInterval;
 
             // Update job-specific settings (retention/directory for backups managed in Backup Configuration page)
             _editingJob.Settings ??= new Dictionary<string, object>();
@@ -329,8 +331,12 @@
                 _editingJob.Settings[BackgroundJobSettings.RunAnalyze] = _editRunAnalyze;
             }
 
-            await JobConfigService.UpdateJobConfigAsync(_editingJob.JobName, _editingJob);
-            await LoadJobsAsync(); // Refresh
+            var jobName = _editingJob.JobName;
+            await JobConfigService.UpdateJobConfigAsync(jobName, _editingJob);
+
+            // NextRunAt will be populated by QuartzSchedulingSyncService asynchronously
+            // and will be visible on next page refresh or when the job list reloads
+            await LoadJobsAsync();
 
             Snackbar.Add($"{_editingJob.DisplayName} configuration saved", Severity.Success);
             CloseConfigDialog();
@@ -424,145 +430,28 @@
         );
     }
 
-    private static string FormatCronSchedule(string? cron)
-    {
-        if (string.IsNullOrEmpty(cron))
-            return "Not configured";
-
-        // Parse common Quartz cron patterns for user-friendly display
-        // Quartz format: second minute hour day month dayOfWeek
-        return cron switch
-        {
-            "0 0 2 * * ?" => "Daily at 2:00 AM",
-            "0 0 3 * * ?" => "Daily at 3:00 AM",
-            "0 0 4 * * ?" => "Daily at 4:00 AM",
-            "0 0 0 * * ?" => "Daily at midnight",
-            "0 0 3 ? * SUN" => "Sundays at 3:00 AM",
-            "0 0 4 ? * SUN" => "Sundays at 4:00 AM",
-            "0 0 * * * ?" => "Every hour",
-            "0 0 */6 * * ?" => "Every 6 hours",
-            "0 0 */12 * * ?" => "Every 12 hours",
-            "0 0 0 1 * ?" => "First of month at midnight",
-            "0 0/30 * * * ?" => "Every 30 minutes",
-            _ => cron
-        };
-    }
-
     /// <summary>
-    /// Parse existing Quartz cron expression into friendly interval format (e.g., "30m", "6h", "1d")
+    /// Validate natural language schedule
     /// </summary>
-    private void ParseCronToFriendlyFormat(string? cronExpression)
-    {
-        if (string.IsNullOrEmpty(cronExpression))
-        {
-            _editScheduleInterval = "1d";
-            return;
-        }
-
-        // Parse Quartz cron (format: "second minute hour day month dayOfWeek")
-        var parts = cronExpression.Split(' ');
-        if (parts.Length != 6)
-        {
-            _editScheduleInterval = "1d";
-            return;
-        }
-
-        var second = parts[0];
-        var minute = parts[1];
-        var hour = parts[2];
-        var day = parts[3];
-        var month = parts[4];
-        var dayOfWeek = parts[5];
-
-        // Detect interval patterns and convert to friendly format
-        if (minute.StartsWith("*/") || minute.Contains("/"))
-        {
-            // Every N minutes: "0 */30 * * * ?" → "30m"
-            var minuteInterval = minute.Replace("*/", "").Replace("/", "");
-            if (int.TryParse(minuteInterval, out var mins))
-            {
-                _editScheduleInterval = $"{mins}m";
-                return;
-            }
-        }
-
-        if (hour.StartsWith("*/") || hour.Contains("/"))
-        {
-            // Every N hours: "0 0 */6 * * ?" → "6h"
-            var hourInterval = hour.Replace("*/", "").Replace("/", "");
-            if (int.TryParse(hourInterval, out var hrs))
-            {
-                _editScheduleInterval = $"{hrs}h";
-                return;
-            }
-        }
-
-        // Daily: "0 0 2 * * ?" → "1d"
-        if (day == "*" && dayOfWeek == "?")
-        {
-            _editScheduleInterval = "1d";
-            return;
-        }
-
-        // Weekly: "0 0 2 ? * SUN" → "1w"
-        if (dayOfWeek == "SUN" || dayOfWeek == "0")
-        {
-            _editScheduleInterval = "1w";
-            return;
-        }
-
-        // Default
-        _editScheduleInterval = "1d";
-    }
-
-    /// <summary>
-    /// Generate Quartz cron expression from interval string (e.g., "30m", "6h", "1d", "1w")
-    /// </summary>
-    private string GetCronPreview()
+    private void ValidateSchedule()
     {
         if (string.IsNullOrWhiteSpace(_editScheduleInterval))
-            return "Invalid interval";
-
-        // Parse the interval using TimeSpanUtilities
-        if (!TimeSpanUtilities.TryParseDuration(_editScheduleInterval, out var duration))
         {
-            return "Invalid format (use: 30m, 6h, 1d, 1w)";
+            _scheduleValidationError = null;
+            return;
         }
 
-        // Convert TimeSpan to Quartz cron expression
-        // Quartz format: second minute hour day month dayOfWeek
+        // Validate using converter
+        var parseResult = ScheduleConverter.ToQuartzSchedule(_editScheduleInterval);
 
-        if (duration.TotalMinutes < 60)
-        {
-            // Minutes: "0 */30 * * * ?" (every 30 minutes)
-            var mins = (int)duration.TotalMinutes;
-            return $"0 */{mins} * * * ?";
-        }
-        else if (duration.TotalHours < 24)
-        {
-            // Hours: "0 0 */6 * * ?" (every 6 hours)
-            var hours = (int)duration.TotalHours;
-            return $"0 0 */{hours} * * ?";
-        }
-        else if (duration.TotalDays < 7)
-        {
-            // Days: "0 0 2 * * ?" (daily at 2 AM UTC)
-            return "0 0 2 * * ?";
-        }
-        else if (duration.TotalDays < 30)
-        {
-            // Weeks: "0 0 2 ? * SUN" (weekly on Sunday at 2 AM UTC)
-            return "0 0 2 ? * SUN";
-        }
-        else
-        {
-            // Monthly or longer: "0 0 2 1 * ?" (monthly on 1st at 2 AM UTC)
-            return "0 0 2 1 * ?";
-        }
+        _scheduleValidationError = parseResult is HumanCron.Models.ParseResult<Quartz.IScheduleBuilder>.Error error
+            ? error.Message
+            : null;
     }
 
     public void Dispose()
     {
+        JobConfigService.JobNextRunAtUpdated -= OnJobNextRunAtUpdated;
         _refreshTimer?.Dispose();
     }
 }

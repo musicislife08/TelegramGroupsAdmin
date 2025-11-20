@@ -92,7 +92,7 @@ public static class ServiceCollectionExtensions
         q.AddJob<WelcomeTimeoutJob>(opts => opts.WithIdentity("WelcomeTimeoutJob").StoreDurably());
 
         // Note: Triggers will be created dynamically by QuartzSchedulingSyncService
-        // based on database configuration (BackgroundJobConfig.CronExpression)
+        // based on database configuration (BackgroundJobConfig.Schedule)
     }
 
     private static IServiceCollection AddBackupServices(this IServiceCollection services)

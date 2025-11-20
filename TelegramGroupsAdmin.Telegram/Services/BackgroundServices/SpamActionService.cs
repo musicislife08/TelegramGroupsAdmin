@@ -93,7 +93,7 @@ public class SpamActionService(
 
             // Phase 4.13: Check for hard block or malware (different handling than spam)
             var hardBlockResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.UrlBlocklist);
-            var malwareResult = spamResult.CheckResults.FirstOrDefault(c => c.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Malware);
+            var malwareResult = spamResult.CheckResults.FirstOrDefault(c => c.Result == ContentDetection.Models.CheckResultType.Malware);
 
             if (hardBlockResult != null)
             {
@@ -179,7 +179,7 @@ public class SpamActionService(
 
             // Decision logic based on net confidence and OpenAI involvement
             // Phase 4.5: Skip auto-ban if OpenAI flagged for review
-            if (openAIResult?.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Review)
+            if (openAIResult?.Result == ContentDetection.Models.CheckResultType.Review)
             {
                 // OpenAI uncertain - send to admin review instead of auto-ban
                 await CreateBorderlineReportAsync(
@@ -201,7 +201,7 @@ public class SpamActionService(
                 return; // Early return - don't auto-ban
             }
 
-            if (spamResult.NetConfidence > AutoBanNetConfidenceThreshold && openAIConfident && openAIResult!.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Spam)
+            if (spamResult.NetConfidence > AutoBanNetConfidenceThreshold && openAIConfident && openAIResult!.Result == ContentDetection.Models.CheckResultType.Spam)
             {
                 // High confidence + OpenAI confirmed = auto-ban across all managed chats
                 logger.LogInformation(
@@ -706,7 +706,7 @@ public class SpamActionService(
 
                 // Add triggered checks (top 3 by confidence)
                 var topChecks = spamResult.CheckResults
-                    .Where(c => c.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Spam)
+                    .Where(c => c.Result == ContentDetection.Models.CheckResultType.Spam)
                     .OrderByDescending(c => c.Confidence)
                     .Take(3);
 
@@ -754,8 +754,8 @@ public class SpamActionService(
                         logger.LogDebug("Found photo path for spam notification: {PhotoPath}", photoPath);
                     }
                     // Videos/Animations are stored in MediaLocalPath
-                    else if (messageRecord.MediaType is TelegramGroupsAdmin.Telegram.Models.MediaType.Video
-                        or TelegramGroupsAdmin.Telegram.Models.MediaType.Animation
+                    else if (messageRecord.MediaType is MediaType.Video
+                        or MediaType.Animation
                         && !string.IsNullOrEmpty(messageRecord.MediaLocalPath))
                     {
                         videoPath = messageRecord.MediaLocalPath;

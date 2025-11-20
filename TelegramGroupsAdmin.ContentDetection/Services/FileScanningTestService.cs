@@ -41,32 +41,32 @@ public class FileScanningTestService : IFileScanningTestService
             // Run Tier 1 scan
             var tier1Result = await _tier1Coordinator.ScanFileAsync(tempFilePath, fileBytes.Length, fileName, cancellationToken);
 
-        // Map to UI-friendly result
-        var result = new FileScanTestResult
-        {
-            FileHash = fileHash,
-            IsInfected = tier1Result.ThreatDetected,
-            IsClean = tier1Result.IsClean,
-            PrimaryThreatName = tier1Result.ThreatNames?.FirstOrDefault(),
-            ThreatNames = tier1Result.ThreatNames ?? [],
-            DetectedBy = tier1Result.DetectedBy ?? [],
-            ScannerResults = tier1Result.ScannerResults
-                .Select(sr => new ScannerResultDetail
-                {
-                    ScannerName = sr.Scanner,
-                    ResultType = sr.ResultType,
-                    IsClean = sr.IsClean,
-                    ThreatName = sr.ThreatName,
-                    ScanDurationMs = sr.ScanDurationMs,
-                    ErrorMessage = sr.ErrorMessage,
-                    Metadata = sr.Metadata
-                })
-                .ToList(),
-            TotalDurationMs = tier1Result.TotalDurationMs,
-            WasSkipped = !string.IsNullOrEmpty(tier1Result.SkippedReason),
-            SkipReason = tier1Result.SkippedReason,
-            AllScannersErrored = tier1Result.AllScannersErrored
-        };
+            // Map to UI-friendly result
+            var result = new FileScanTestResult
+            {
+                FileHash = fileHash,
+                IsInfected = tier1Result.ThreatDetected,
+                IsClean = tier1Result.IsClean,
+                PrimaryThreatName = tier1Result.ThreatNames?.FirstOrDefault(),
+                ThreatNames = tier1Result.ThreatNames ?? [],
+                DetectedBy = tier1Result.DetectedBy ?? [],
+                ScannerResults = tier1Result.ScannerResults
+                    .Select(sr => new ScannerResultDetail
+                    {
+                        ScannerName = sr.Scanner,
+                        ResultType = sr.ResultType,
+                        IsClean = sr.IsClean,
+                        ThreatName = sr.ThreatName,
+                        ScanDurationMs = sr.ScanDurationMs,
+                        ErrorMessage = sr.ErrorMessage,
+                        Metadata = sr.Metadata
+                    })
+                    .ToList(),
+                TotalDurationMs = tier1Result.TotalDurationMs,
+                WasSkipped = !string.IsNullOrEmpty(tier1Result.SkippedReason),
+                SkipReason = tier1Result.SkippedReason,
+                AllScannersErrored = tier1Result.AllScannersErrored
+            };
 
             _logger.LogInformation(
                 "File scan test complete: {FileName} - {Result} (hash: {Hash}, duration: {Duration}ms)",

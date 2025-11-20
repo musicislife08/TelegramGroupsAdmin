@@ -9,6 +9,11 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Services;
 public interface IBackgroundJobConfigService
 {
     /// <summary>
+    /// Event fired when a job's NextRunAt is updated (for UI refresh)
+    /// </summary>
+    event Action<string>? JobNextRunAtUpdated;
+
+    /// <summary>
     /// Gets configuration for a specific job
     /// </summary>
     Task<BackgroundJobConfig?> GetJobConfigAsync(string jobName, CancellationToken cancellationToken = default);
@@ -37,4 +42,10 @@ public interface IBackgroundJobConfigService
     /// Initializes default job configurations if they don't exist
     /// </summary>
     Task EnsureDefaultConfigsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// One-time migration: Convert legacy Quartz cron expressions to natural language DSL
+    /// Called after EF Core migration renames CronExpression → Schedule column
+    /// </summary>
+    Task MigrateLegacyCronExpressionsAsync(CancellationToken cancellationToken = default);
 }

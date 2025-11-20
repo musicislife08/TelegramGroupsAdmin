@@ -61,7 +61,7 @@ public class ReportActionsService : IReportActionsService
         var botClient = _botFactory.GetOrCreate(botToken);
 
         // Create executor actor from web user
-        var executor = Core.Models.Actor.FromWebUser(reviewerId);
+        var executor = Actor.FromWebUser(reviewerId);
 
         // Execute spam + ban action via ModerationActionService
         var result = await _moderationService.MarkAsSpamAndBanAsync(
@@ -118,7 +118,7 @@ public class ReportActionsService : IReportActionsService
         var botClient = _botFactory.GetOrCreate(botToken);
 
         // Create executor actor from web user
-        var executor = Core.Models.Actor.FromWebUser(reviewerId);
+        var executor = Actor.FromWebUser(reviewerId);
 
         // Execute ban action via ModerationActionService
         var result = await _moderationService.BanUserAsync(
@@ -187,7 +187,7 @@ public class ReportActionsService : IReportActionsService
         }
 
         // Create executor actor from web user
-        var executor = Core.Models.Actor.FromWebUser(reviewerId);
+        var executor = Actor.FromWebUser(reviewerId);
 
         // Execute warn action via ModerationActionService
         var result = await _moderationService.WarnUserAsync(

@@ -91,108 +91,108 @@ public class FileScanJob(
             string? tempFilePath = null;
 
             try
-        {
-            // Step 1: Download file from Telegram to temporary location
-            tempFilePath = Path.Combine(Path.GetTempPath(), $"tg_scan_{Guid.NewGuid():N}_{payload.FileName ?? "file"}");
-
-            _logger.LogDebug("Downloading file {FileId} to {TempPath}", payload.FileId, tempFilePath);
-
-            // First get file info to get the file path
-            var fileInfo = await botClient.GetFile(payload.FileId, cancellationToken);
-
-            if (fileInfo.FilePath == null)
             {
-                _logger.LogError("File path is null for file ID {FileId}", payload.FileId);
-                return; // Can't download without file path
+                // Step 1: Download file from Telegram to temporary location
+                tempFilePath = Path.Combine(Path.GetTempPath(), $"tg_scan_{Guid.NewGuid():N}_{payload.FileName ?? "file"}");
+
+                _logger.LogDebug("Downloading file {FileId} to {TempPath}", payload.FileId, tempFilePath);
+
+                // First get file info to get the file path
+                var fileInfo = await botClient.GetFile(payload.FileId, cancellationToken);
+
+                if (fileInfo.FilePath == null)
+                {
+                    _logger.LogError("File path is null for file ID {FileId}", payload.FileId);
+                    return; // Can't download without file path
+                }
+
+                // Download file to temp location
+                await using (var fileStream = File.Create(tempFilePath))
+                {
+                    await botClient.DownloadFile(fileInfo.FilePath, fileStream, cancellationToken);
+                }
+
+                // Step 2: Calculate SHA256 hash for cache lookup and audit trail
+                string fileHash;
+                await using (var fileStream = File.OpenRead(tempFilePath))
+                {
+                    fileHash = await HashUtilities.ComputeSHA256Async(fileStream, cancellationToken);
+                }
+
+                _logger.LogDebug("File hash: {FileHash}", fileHash);
+
+                // Step 3: Get user info for request
+                var user = await _telegramUserRepository.GetByTelegramIdAsync(payload.UserId, cancellationToken);
+
+                // Step 4: Create scan request and execute
+                // Phase 6: Pass file path instead of loading entire file into memory
+                // Scanners will open their own streams to enable parallel scanning without memory duplication
+                var scanRequest = new FileScanCheckRequest
+                {
+                    Message = $"File attachment: {payload.FileName ?? "unknown"}",
+                    UserId = payload.UserId,
+                    UserName = user?.Username,
+                    ChatId = payload.ChatId,
+                    FilePath = tempFilePath,
+                    FileName = payload.FileName ?? "unknown",
+                    FileSize = payload.FileSize,
+                    FileHash = fileHash,
+                    CancellationToken = cancellationToken
+                };
+
+                var scanResult = await _fileScanningCheck.CheckAsync(scanRequest);
+
+                _logger.LogInformation(
+                    "File scan complete for message {MessageId}: Result={Result}, Confidence={Confidence}, Details={Details}",
+                    payload.MessageId,
+                    scanResult.Result,
+                    scanResult.Confidence,
+                    scanResult.Details);
+
+                // Step 5: Save detection history (for both clean and infected files)
+                var detectionRecord = new Telegram.Models.DetectionResultRecord
+                {
+                    MessageId = payload.MessageId,
+                    UserId = payload.UserId,
+                    DetectedAt = DateTimeOffset.UtcNow,
+                    DetectionSource = "file_scan", // Phase 4.14
+                    DetectionMethod = "FileScanningCheck",
+                    IsSpam = scanResult.Result == CheckResultType.Spam,
+                    Confidence = scanResult.Confidence,
+                    Reason = scanResult.Details,
+                    NetConfidence = scanResult.Result == CheckResultType.Spam ? scanResult.Confidence : -scanResult.Confidence,
+                    CheckResultsJson = null, // File scanning is a single check, no aggregation
+                    UsedForTraining = false, // File scans don't train spam detection
+                    MessageText = $"File: {payload.FileName ?? "unknown"} ({payload.FileSize} bytes)",
+                    AddedBy = Core.Models.Actor.FileScanner
+                };
+
+                await _detectionResultsRepository.InsertAsync(detectionRecord, cancellationToken);
+
+                _logger.LogInformation(
+                    "Created detection history record for file scan: message {MessageId}, result={Result}",
+                    payload.MessageId,
+                    scanResult.Result);
+
+                // Step 6: Take action if file is infected
+                if (scanResult.Result == CheckResultType.Spam) // "Spam" = Infected for file scanning
+                {
+                    await HandleInfectedFileAsync(botClient, payload, scanResult, cancellationToken);
+                }
             }
-
-            // Download file to temp location
-            await using (var fileStream = File.Create(tempFilePath))
+            catch (ApiRequestException ex) when (ex.Message.Contains("file is too big"))
             {
-                await botClient.DownloadFile(fileInfo.FilePath, fileStream, cancellationToken);
+                _logger.LogWarning(
+                    "Skipping file scan for message {MessageId}: File '{FileName}' exceeds Telegram Bot API 20MB limit. " +
+                    "File ID: {FileId}, Size: {FileSize} bytes. " +
+                    "To scan files >20MB, configure self-hosted Bot API server (Settings → Telegram Bot → API Server URL).",
+                    payload.MessageId,
+                    payload.FileName ?? "unknown",
+                    payload.FileId,
+                    payload.FileSize);
+                // Return without re-throwing - file scan skipped gracefully
+                return;
             }
-
-            // Step 2: Calculate SHA256 hash for cache lookup and audit trail
-            string fileHash;
-            await using (var fileStream = File.OpenRead(tempFilePath))
-            {
-                fileHash = await HashUtilities.ComputeSHA256Async(fileStream, cancellationToken);
-            }
-
-            _logger.LogDebug("File hash: {FileHash}", fileHash);
-
-            // Step 3: Get user info for request
-            var user = await _telegramUserRepository.GetByTelegramIdAsync(payload.UserId, cancellationToken);
-
-            // Step 4: Create scan request and execute
-            // Phase 6: Pass file path instead of loading entire file into memory
-            // Scanners will open their own streams to enable parallel scanning without memory duplication
-            var scanRequest = new FileScanCheckRequest
-            {
-                Message = $"File attachment: {payload.FileName ?? "unknown"}",
-                UserId = payload.UserId,
-                UserName = user?.Username,
-                ChatId = payload.ChatId,
-                FilePath = tempFilePath,
-                FileName = payload.FileName ?? "unknown",
-                FileSize = payload.FileSize,
-                FileHash = fileHash,
-                CancellationToken = cancellationToken
-            };
-
-            var scanResult = await _fileScanningCheck.CheckAsync(scanRequest);
-
-            _logger.LogInformation(
-                "File scan complete for message {MessageId}: Result={Result}, Confidence={Confidence}, Details={Details}",
-                payload.MessageId,
-                scanResult.Result,
-                scanResult.Confidence,
-                scanResult.Details);
-
-            // Step 5: Save detection history (for both clean and infected files)
-            var detectionRecord = new Telegram.Models.DetectionResultRecord
-            {
-                MessageId = payload.MessageId,
-                UserId = payload.UserId,
-                DetectedAt = DateTimeOffset.UtcNow,
-                DetectionSource = "file_scan", // Phase 4.14
-                DetectionMethod = "FileScanningCheck",
-                IsSpam = scanResult.Result == CheckResultType.Spam,
-                Confidence = scanResult.Confidence,
-                Reason = scanResult.Details,
-                NetConfidence = scanResult.Result == CheckResultType.Spam ? scanResult.Confidence : -scanResult.Confidence,
-                CheckResultsJson = null, // File scanning is a single check, no aggregation
-                UsedForTraining = false, // File scans don't train spam detection
-                MessageText = $"File: {payload.FileName ?? "unknown"} ({payload.FileSize} bytes)",
-                AddedBy = Core.Models.Actor.FileScanner
-            };
-
-            await _detectionResultsRepository.InsertAsync(detectionRecord, cancellationToken);
-
-            _logger.LogInformation(
-                "Created detection history record for file scan: message {MessageId}, result={Result}",
-                payload.MessageId,
-                scanResult.Result);
-
-            // Step 6: Take action if file is infected
-            if (scanResult.Result == CheckResultType.Spam) // "Spam" = Infected for file scanning
-            {
-                await HandleInfectedFileAsync(botClient, payload, scanResult, cancellationToken);
-            }
-        }
-        catch (ApiRequestException ex) when (ex.Message.Contains("file is too big"))
-        {
-            _logger.LogWarning(
-                "Skipping file scan for message {MessageId}: File '{FileName}' exceeds Telegram Bot API 20MB limit. " +
-                "File ID: {FileId}, Size: {FileSize} bytes. " +
-                "To scan files >20MB, configure self-hosted Bot API server (Settings → Telegram Bot → API Server URL).",
-                payload.MessageId,
-                payload.FileName ?? "unknown",
-                payload.FileId,
-                payload.FileSize);
-            // Return without re-throwing - file scan skipped gracefully
-            return;
-        }
             catch (Exception ex)
             {
                 _logger.LogError(

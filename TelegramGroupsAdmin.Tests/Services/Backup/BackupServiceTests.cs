@@ -63,7 +63,7 @@ public class BackupServiceTests
         services.AddSingleton(dataSourceBuilder.Build());
 
         // Add DbContext
-        services.AddDbContext<TelegramGroupsAdmin.Data.AppDbContext>((serviceProvider, options) =>
+        services.AddDbContext<Data.AppDbContext>((serviceProvider, options) =>
         {
             options.UseNpgsql(_testHelper.ConnectionString);
         });

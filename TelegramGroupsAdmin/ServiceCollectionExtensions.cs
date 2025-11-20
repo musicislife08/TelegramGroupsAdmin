@@ -133,13 +133,13 @@ public static class ServiceCollectionExtensions
             services.AddScoped<BlazorAuthHelper>(); // Authentication context extraction helper for UI components
 
             // Prompt builder service (Phase 4.X: AI-powered prompt generation)
-            services.AddScoped<TelegramGroupsAdmin.Services.PromptBuilder.IPromptBuilderService, TelegramGroupsAdmin.Services.PromptBuilder.PromptBuilderService>();
+            services.AddScoped<Services.PromptBuilder.IPromptBuilderService, Services.PromptBuilder.PromptBuilderService>();
 
             // Backup services (replaces old UserDataExportService)
             services.AddBackupServices();
 
             // Email service (SendGrid)
-            services.AddScoped<TelegramGroupsAdmin.Services.Email.IEmailService, TelegramGroupsAdmin.Services.Email.SendGridEmailService>();
+            services.AddScoped<Services.Email.IEmailService, Services.Email.SendGridEmailService>();
 
             // Notification service (Phase 5.1: User notification preferences with Telegram DM + Email channels)
             services.AddScoped<INotificationService, NotificationService>();
@@ -224,7 +224,7 @@ public static class ServiceCollectionExtensions
                 {
                     client.BaseAddress = new Uri("https://www.virustotal.com/api/v3/");
                 })
-                .AddHttpMessageHandler(sp => new Services.ApiKeyDelegatingHandler(
+                .AddHttpMessageHandler(sp => new ApiKeyDelegatingHandler(
                     sp,
                     configuration,
                     serviceName: "VirusTotal",

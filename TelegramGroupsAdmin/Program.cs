@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Reflection;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -8,11 +7,11 @@ using TelegramGroupsAdmin;
 using TelegramGroupsAdmin.BackgroundJobs.Extensions;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Extensions;
-using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data.Extensions;
 using TelegramGroupsAdmin.ContentDetection.Extensions;
 using TelegramGroupsAdmin.Telegram.Extensions;
 using TelegramGroupsAdmin.Services;
+using HumanCron;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -112,6 +111,9 @@ builder.Services.AddRepositories();
 // Content Detection library
 builder.Services.AddContentDetection();
 
+// Natural Cron Parser (for background job scheduling)
+builder.Services.AddHumanCron();
+
 // Background Jobs (Quartz.NET)
 builder.Services.AddBackgroundJobs(builder.Configuration);
 
@@ -161,6 +163,14 @@ var app = builder.Build();
 
 // Run database migrations
 await app.RunDatabaseMigrationsAsync(connectionString);
+
+// Migrate legacy cron expressions to natural language DSL (one-time data migration)
+// TODO: Remove this after all instances have migrated (safe to delete after first deploy)
+using (var scope = app.Services.CreateScope())
+{
+    var jobConfigService = scope.ServiceProvider.GetRequiredService<IBackgroundJobConfigService>();
+    await jobConfigService.MigrateLegacyCronExpressionsAsync();
+}
 
 // Initialize Serilog configuration from database (now that migrations have run)
 if (serilogConfig != null)
