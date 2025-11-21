@@ -41,7 +41,24 @@ public class BayesSpamCheckV2(
 
     public bool ShouldExecute(ContentCheckRequest request)
     {
-        return !string.IsNullOrWhiteSpace(request.Message);
+        // Skip empty messages
+        if (string.IsNullOrWhiteSpace(request.Message))
+        {
+            return false;
+        }
+
+        // PERF-3 Option B: Skip expensive Bayes training/classification for trusted/admin users
+        // Bayes is not a critical check - it's very expensive (~500ms) and should skip for trusted users
+        if (request.IsUserTrusted || request.IsUserAdmin)
+        {
+            logger.LogDebug(
+                "Skipping Bayes check for user {UserId}: User is {UserType}",
+                request.UserId,
+                request.IsUserTrusted ? "trusted" : "admin");
+            return false;
+        }
+
+        return true;
     }
 
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
