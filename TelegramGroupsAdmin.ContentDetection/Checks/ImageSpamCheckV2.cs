@@ -235,17 +235,7 @@ public class ImageSpamCheckV2(
             }
 
             // ML-5 Layer 3: OpenAI Vision fallback
-            if (string.IsNullOrEmpty(req.ApiKey))
-            {
-                logger.LogWarning("OpenAI API key not configured for image spam detection, abstaining");
-                return new ContentCheckResponseV2
-                {
-                    CheckName = CheckName,
-                    Score = 0.0,
-                    Abstained = true,
-                    Details = "OpenAI API key not configured"
-                };
-            }
+            // Note: API key is injected via ApiKeyDelegatingHandler on the named "OpenAI" HttpClient
 
             // Build image URL - either use provided PhotoUrl, construct from PhotoFileId, or convert PhotoLocalPath
             string imageUrl;

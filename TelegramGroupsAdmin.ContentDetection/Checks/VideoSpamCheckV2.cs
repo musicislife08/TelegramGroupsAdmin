@@ -414,18 +414,7 @@ public class VideoSpamCheckV2(
     {
         try
         {
-            if (string.IsNullOrEmpty(req.ApiKey))
-            {
-                logger.LogWarning("OpenAI API key not configured for video spam detection");
-                return new ContentCheckResponseV2
-                {
-                    CheckName = CheckName,
-                    Score = 0.0,
-                    Abstained = true,
-                    Details = "OpenAI API key not configured",
-                    Error = new InvalidOperationException("OpenAI API key not configured")
-                };
-            }
+            // Note: API key is injected via ApiKeyDelegatingHandler on the named "OpenAI" HttpClient
 
             // Select best representative frame (prefer non-black frames, middle frame)
             var representativeFrame = frames

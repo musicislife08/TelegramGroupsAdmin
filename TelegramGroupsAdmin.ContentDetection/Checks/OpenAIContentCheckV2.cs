@@ -92,18 +92,7 @@ public class OpenAIContentCheckV2(
                 return ParseOpenAIResponse(cachedResponse, fromCache: true);
             }
 
-            // Check API key
-            if (string.IsNullOrEmpty(req.ApiKey))
-            {
-                logger.LogWarning("OpenAI API key not configured, abstaining");
-                return new ContentCheckResponseV2
-                {
-                    CheckName = CheckName,
-                    Score = 0.0,
-                    Abstained = true,
-                    Details = "OpenAI API key not configured"
-                };
-            }
+            // Note: API key is injected via ApiKeyDelegatingHandler on the named "OpenAI" HttpClient
 
             // Get message history for context (count from config)
             var history = await messageHistoryService.GetRecentMessagesAsync(req.ChatId, req.MessageHistoryCount, req.CancellationToken);

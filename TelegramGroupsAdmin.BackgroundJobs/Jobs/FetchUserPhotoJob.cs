@@ -1,11 +1,14 @@
 using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Quartz;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Telemetry;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
+using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -24,7 +27,8 @@ public class FetchUserPhotoJob(
     TelegramPhotoService photoService,
     ITelegramUserRepository telegramUserRepository,
     IPhotoHashService photoHashService,
-    TelegramConfigLoader configLoader) : IJob
+    TelegramConfigLoader configLoader,
+    IOptions<MessageHistoryOptions> historyOptions) : IJob
 {
     private readonly ILogger<FetchUserPhotoJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
@@ -32,6 +36,7 @@ public class FetchUserPhotoJob(
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly IPhotoHashService _photoHashService = photoHashService;
     private readonly TelegramConfigLoader _configLoader = configLoader;
+    private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
 
     public async Task Execute(IJobExecutionContext context)
     {
@@ -79,7 +84,9 @@ public class FetchUserPhotoJob(
                     string? photoHashBase64 = null;
                     try
                     {
-                        var photoHashBytes = await _photoHashService.ComputePhotoHashAsync(userPhotoPath);
+                        // Resolve relative path to absolute for disk operations
+                        var absolutePath = MediaPathUtilities.ToAbsolutePath(userPhotoPath, _historyOptions.ImageStoragePath);
+                        var photoHashBytes = await _photoHashService.ComputePhotoHashAsync(absolutePath);
                         if (photoHashBytes != null)
                         {
                             photoHashBase64 = Convert.ToBase64String(photoHashBytes);

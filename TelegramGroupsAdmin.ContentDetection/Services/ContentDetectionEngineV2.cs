@@ -143,38 +143,11 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             var openAICheckV2 = _spamChecksV2.FirstOrDefault(check => check.CheckName == CheckName.OpenAI);
             if (openAICheckV2 != null)
             {
-                // Load API key
-                var apiKeys = await _fileScanningConfigRepo.GetApiKeysAsync(cancellationToken);
-                var openAIApiKey = apiKeys?.OpenAI;
-
-                // Info logging to diagnose API key loading
-                _logger.LogInformation("[V2 DEBUG] OpenAI veto check: apiKeys={ApiKeysNull}, openAIApiKey={KeyNull}, keyLength={KeyLength}",
-                    apiKeys == null ? "null" : "loaded",
-                    openAIApiKey == null ? "null" : "set",
-                    openAIApiKey?.Length ?? 0);
-
-                // Skip OpenAI veto if API key not configured
-                if (string.IsNullOrWhiteSpace(openAIApiKey))
-                {
-                    _logger.LogWarning("[V2] OpenAI veto skipped for user {UserId}: API key not configured (apiKeys={ApiKeysNull})",
-                        request.UserId, apiKeys == null ? "null" : "loaded but empty");
-                    RecordDetectionMetrics(startTimestamp, nonOpenAIResult, activity);
-                    return nonOpenAIResult;
-                }
-
-                _logger.LogInformation("[V2] Running OpenAI veto check for user {UserId} with API key", request.UserId);
+                // Note: API key is injected via ApiKeyDelegatingHandler on the named "OpenAI" HttpClient
+                _logger.LogInformation("[V2] Running OpenAI veto check for user {UserId}", request.UserId);
 
                 var vetoRequest = request with { HasSpamFlags = true };
-
-                var checkRequest = BuildOpenAIRequest(vetoRequest, config, openAIConfig, openAIApiKey, cancellationToken);
-
-                // Debug: Log the request details
-                if (checkRequest is OpenAICheckRequest openAIReq)
-                {
-                    _logger.LogInformation("[V2 DEBUG] OpenAI request built: ApiKey={KeyLength} chars, VetoMode={VetoMode}, HasSpamFlags={HasSpamFlags}",
-                        openAIReq.ApiKey?.Length ?? 0, openAIReq.VetoMode, openAIReq.HasSpamFlags);
-                }
-
+                var checkRequest = BuildOpenAIRequest(vetoRequest, config, openAIConfig, cancellationToken);
                 var vetoResultV2 = await openAICheckV2.CheckAsync(checkRequest);
 
                 // Convert V2 response to ContentCheckResponse
@@ -442,7 +415,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 PhotoLocalPath = originalRequest.PhotoLocalPath,
                 CustomPrompt = null,
                 ConfidenceThreshold = 80,
-                ApiKey = "", // Will be loaded by check
                 CancellationToken = cancellationToken
             },
 
@@ -455,7 +427,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 VideoLocalPath = originalRequest.VideoLocalPath ?? "",
                 CustomPrompt = null,
                 ConfidenceThreshold = 80,
-                ApiKey = "", // Will be loaded by check
                 CancellationToken = cancellationToken
             },
 
@@ -467,7 +438,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         ContentCheckRequest originalRequest,
         SpamDetectionConfig config,
         OpenAIConfigDb? openAIConfig,
-        string? openAIApiKey,
         CancellationToken cancellationToken)
     {
         return new OpenAICheckRequest
@@ -482,7 +452,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             MinMessageLength = config.MinMessageLength,
             CheckShortMessages = config.OpenAI.CheckShortMessages,
             MessageHistoryCount = config.OpenAI.MessageHistoryCount,
-            ApiKey = openAIApiKey ?? "",
             Model = openAIConfig?.Model ?? "gpt-4o-mini",
             MaxTokens = openAIConfig?.MaxTokens ?? 500,
             CancellationToken = cancellationToken
