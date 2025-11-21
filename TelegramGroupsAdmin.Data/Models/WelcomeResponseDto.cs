@@ -53,8 +53,8 @@ public class WelcomeResponseDto
     public DateTimeOffset CreatedAt { get; set; }
 
     /// <summary>
-    /// TickerQ job ID for the timeout job (null if job completed/cancelled)
+    /// Quartz.NET job ID for the timeout job (null if job completed/cancelled)
     /// </summary>
     [Column("timeout_job_id")]
-    public Guid? TimeoutJobId { get; set; }
+    public string? TimeoutJobId { get; set; }
 }

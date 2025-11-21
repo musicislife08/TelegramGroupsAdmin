@@ -121,7 +121,7 @@
     private bool _notFound;
     private bool _showNav = false;
     private List<DocNavItem> _navTree = new();
-    private List<MudBlazor.BreadcrumbItem> _mudBreadcrumbs = new();
+    private List<BreadcrumbItem> _mudBreadcrumbs = new();
 
     protected override void OnParametersSet()
     {
@@ -166,7 +166,7 @@
         {
             // Convert breadcrumbs to MudBlazor format
             _mudBreadcrumbs = _document.Breadcrumbs
-                .Select(b => new MudBlazor.BreadcrumbItem(b.Text, b.Href, b.Disabled))
+                .Select(b => new BreadcrumbItem(b.Text, b.Href, b.Disabled))
                 .ToList();
         }
     }

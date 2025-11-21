@@ -43,12 +43,12 @@ public partial class MessageProcessingService(
     // Events for real-time UI updates
     public event Action<MessageRecord>? OnNewMessage;
     public event Action<MessageEditRecord>? OnMessageEdited;
-    public event Action<long, TelegramGroupsAdmin.Telegram.Models.MediaType>? OnMediaUpdated;
+    public event Action<long, MediaType>? OnMediaUpdated;
 
     /// <summary>
     /// Raises the OnMediaUpdated event (called by MediaRefetchWorkerService)
     /// </summary>
-    public void RaiseMediaUpdated(long messageId, TelegramGroupsAdmin.Telegram.Models.MediaType mediaType)
+    public void RaiseMediaUpdated(long messageId, MediaType mediaType)
     {
         OnMediaUpdated?.Invoke(messageId, mediaType);
     }
@@ -262,7 +262,7 @@ public partial class MessageProcessingService(
                             // REFACTOR-2: Schedule auto-delete if requested using BackgroundJobScheduler
                             if (commandResult.DeleteResponseAfterSeconds.HasValue)
                             {
-                                var jobScheduler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.BackgroundJobScheduler>();
+                                var jobScheduler = scope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
                                 await jobScheduler.ScheduleMessageDeleteAsync(
                                     message.Chat.Id,
                                     responseMessage.MessageId,
@@ -315,7 +315,7 @@ public partial class MessageProcessingService(
             string? photoLocalPath = null;
             string? photoThumbnailPath = null;
 
-            var imageHandler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.ImageProcessingHandler>();
+            var imageHandler = scope.ServiceProvider.GetRequiredService<Handlers.ImageProcessingHandler>();
             var imageResult = await imageHandler.ProcessImageAsync(
                 botClient,
                 message,
@@ -340,7 +340,7 @@ public partial class MessageProcessingService(
             string? mediaLocalPath = null;
             int? mediaDuration = null;
 
-            var mediaHandler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.MediaProcessingHandler>();
+            var mediaHandler = scope.ServiceProvider.GetRequiredService<Handlers.MediaProcessingHandler>();
             var mediaResult = await mediaHandler.ProcessMediaAsync(
                 message,
                 message.Chat.Id,
@@ -358,14 +358,6 @@ public partial class MessageProcessingService(
                 mediaLocalPath = mediaResult.LocalPath; // Null for Documents (metadata-only)
             }
 
-            // REFACTOR-1: Use FileScanningHandler for document scanning
-            var fileScanHandler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.FileScanningHandler>();
-            await fileScanHandler.ProcessFileScanningAsync(
-                message,
-                message.Chat.Id,
-                message.From!.Id,
-                cancellationToken);
-
             // Calculate content hash for spam correlation
             var urlsJson = urls != null ? JsonSerializer.Serialize(urls) : "";
             var contentHash = HashUtilities.ComputeContentHash(text ?? "", urlsJson);
@@ -376,20 +368,12 @@ public partial class MessageProcessingService(
             var chatIconPath = File.Exists(chatIconCachedPath) ? $"chat_icons/{chatIconFileName}" : null;
 
             // REFACTOR-1: Use TranslationHandler for translation detection and processing
-            MessageTranslation? translation = null;
-            if (!string.IsNullOrWhiteSpace(text))
-            {
-                var translationHandler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.TranslationHandler>();
-                var translationResult = await translationHandler.ProcessTranslationAsync(
-                    text,
-                    message.MessageId,
-                    cancellationToken);
-
-                if (translationResult != null)
-                {
-                    translation = translationResult.Translation;
-                }
-            }
+            var translationHandler = scope.ServiceProvider.GetRequiredService<Handlers.TranslationHandler>();
+            var translationForDetection = await translationHandler.GetTextForDetectionAsync(
+                text,
+                message.MessageId,
+                cancellationToken);
+            var translation = translationForDetection.Translation;
 
             // Determine spam check skip reason (before saving message)
             // Check if user is trusted or admin to set appropriate skip reason
@@ -465,6 +449,14 @@ public partial class MessageProcessingService(
             var repository = messageScope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
             await repository.InsertMessageAsync(messageRecord, cancellationToken);
 
+            // Schedule file scan AFTER message is persisted (FK constraint requires message to exist)
+            var fileScanHandler = scope.ServiceProvider.GetRequiredService<Handlers.FileScanningHandler>();
+            await fileScanHandler.ProcessFileScanningAsync(
+                message,
+                message.Chat.Id,
+                message.From!.Id,
+                cancellationToken);
+
             // CRITICAL: Check if user was banned while this message was being processed
             // Handles race condition where multiple messages arrive simultaneously:
             // - Message 1 triggers spam detection → user banned
@@ -530,7 +522,7 @@ public partial class MessageProcessingService(
 
             // Upsert user into telegram_users table (centralized user tracking)
             var telegramUserRepo = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
-            var telegramUser = new TelegramGroupsAdmin.Telegram.Models.TelegramUser(
+            var telegramUser = new TelegramUser(
                 TelegramUserId: message.From!.Id,
                 Username: message.From.Username,
                 FirstName: message.From.FirstName,
@@ -629,10 +621,10 @@ public partial class MessageProcessingService(
                 }
             }
 
-            // REFACTOR-2: Fetch user profile photo via TickerQ using BackgroundJobScheduler
+            // REFACTOR-2: Fetch user profile photo via Quartz.NET using BackgroundJobScheduler
             if (message.From?.Id != null)
             {
-                var jobScheduler = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.BackgroundJobScheduler>();
+                var jobScheduler = scope.ServiceProvider.GetRequiredService<Handlers.BackgroundJobScheduler>();
                 await jobScheduler.ScheduleUserPhotoFetchAsync(message.MessageId, message.From.Id, cancellationToken);
             }
 
@@ -642,15 +634,13 @@ public partial class MessageProcessingService(
             if (commandResult == null && (!string.IsNullOrWhiteSpace(text) || photoLocalPath != null))
             {
                 using var detectionScope = serviceProvider.CreateScope();
-                var contentOrchestrator = detectionScope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.ContentDetectionOrchestrator>();
+                var contentOrchestrator = detectionScope.ServiceProvider.GetRequiredService<Handlers.ContentDetectionOrchestrator>();
 
                 // Use translated text if available (avoids double translation in ContentDetectionEngine)
-                var textForDetection = translation?.TranslatedText ?? text;
-
                 await contentOrchestrator.RunDetectionAsync(
                     botClient,
                     message,
-                    textForDetection,
+                    translationForDetection.TextForDetection,
                     photoLocalPath,
                     editVersion: 0,
                     cancellationToken);
@@ -679,7 +669,7 @@ public partial class MessageProcessingService(
         try
         {
             using var scope = _scopeFactory.CreateScope();
-            var editProcessor = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.Telegram.Handlers.MessageEditProcessor>();
+            var editProcessor = scope.ServiceProvider.GetRequiredService<Handlers.MessageEditProcessor>();
 
             var editRecord = await editProcessor.ProcessEditAsync(botClient, editedMessage, scope, cancellationToken);
 
@@ -701,46 +691,6 @@ public partial class MessageProcessingService(
     //   Phase 1: ImageProcessingHandler, BackgroundJobScheduler
     //   Phase 2: SpamDetectionOrchestrator, LanguageWarningHandler
     //   Phase 3: MessageEditProcessor
-
-    /// <summary>
-    /// Schedule file scanning via TickerQ with 0s delay for instant execution
-    /// Phase 4.14: Downloads file to temp, scans with ClamAV+VirusTotal, deletes if infected
-    /// Temp file deleted after scan (no persistent storage)
-    /// </summary>
-    private async Task ScheduleFileScanJobAsync(
-        long messageId,
-        long chatId,
-        long userId,
-        string fileId,
-        long fileSize,
-        string? fileName,
-        string? contentType,
-        CancellationToken cancellationToken = default)
-    {
-        var scanPayload = new TelegramGroupsAdmin.Telegram.Abstractions.Jobs.FileScanJobPayload(
-            MessageId: messageId,
-            ChatId: chatId,
-            UserId: userId,
-            FileId: fileId,
-            FileSize: fileSize,
-            FileName: fileName,
-            ContentType: contentType
-        );
-
-        logger.LogInformation(
-            "Scheduling file scan for '{FileName}' ({FileSize} bytes) from user {UserId} in chat {ChatId}",
-            fileName ?? "unknown",
-            fileSize,
-            userId,
-            chatId);
-
-        await TickerQUtilities.ScheduleJobAsync(
-            serviceProvider,
-            logger,
-            "FileScan",
-            scanPayload,
-            delaySeconds: 0,
-            retries: 3); // Higher retries than photo fetch (ClamAV restart, VT rate limit scenarios)
-    }
+    //   Phase 4: FileScanningHandler (replaces ScheduleFileScanJobAsync dead code)
 
 }

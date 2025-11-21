@@ -76,6 +76,14 @@
                       Color="Color.Primary"
                       Disabled="@openAiReadOnly" />
 
+            <FieldWithHelp HelpText="Number of recent messages to include as context for OpenAI analysis. Higher values provide more conversation context but increase API costs. 0 = no history, 3-5 recommended for most groups.">
+                <MudNumericField @bind-Value="openAiConfig.MessageHistoryCount"
+                                Label="Message History Count"
+                                Min="0" Max="10"
+                                Disabled="@openAiReadOnly"
+                                HelperText="@(openAiReadOnly ? $"Using global value: {openAiConfig.MessageHistoryCount}" : "Recent messages sent to OpenAI for context (0-10)")" />
+            </FieldWithHelp>
+
             <MudTextField @bind-Value="openAiConfig.SystemPrompt"
                          Label="Custom System Prompt (Optional)"
                          Lines="5"

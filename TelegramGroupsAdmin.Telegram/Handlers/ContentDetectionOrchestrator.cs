@@ -60,7 +60,7 @@ public class ContentDetectionOrchestrator
             using var scope = _serviceProvider.CreateScope();
             var coordinator = scope.ServiceProvider.GetRequiredService<IContentCheckCoordinator>();
             var detectionResultsRepo = scope.ServiceProvider.GetRequiredService<IDetectionResultsRepository>();
-            var historyOptions = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TelegramGroupsAdmin.Configuration.MessageHistoryOptions>>();
+            var historyOptions = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Configuration.MessageHistoryOptions>>();
 
             // Build spam detection request with photo local path if available
             // Note: ImageSpamCheck uses PhotoLocalPath for all 3 layers (hash, OCR, Vision)

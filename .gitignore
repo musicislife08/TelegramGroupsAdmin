@@ -10,6 +10,12 @@ compose/*
 # Tesseract language data (large binary files - baked into Docker image instead)
 tessdata/
 
+# FastText language models (large binary files - baked into Docker image instead)
+**/lang-models/
+
+# Runtime data files (backups, media, etc.)
+**/*.tar.gz
+
 # === SECURITY: Dotnet Secret Files ===
 # Never commit these - they contain API keys, tokens, connection strings
 

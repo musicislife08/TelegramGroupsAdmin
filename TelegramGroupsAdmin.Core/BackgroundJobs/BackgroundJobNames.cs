@@ -2,46 +2,91 @@ namespace TelegramGroupsAdmin.Core.BackgroundJobs;
 
 /// <summary>
 /// Centralized constants for background job names
-/// Must match [TickerFunction] attribute names exactly
+/// Must match Quartz.NET job class names exactly
 /// </summary>
 public static class BackgroundJobNames
 {
     /// <summary>
     /// Scheduled database backups with retention management
-    /// TickerFunction: "scheduled_backup"
+    /// Quartz Job: ScheduledBackupJob
     /// </summary>
-    public const string ScheduledBackup = "scheduled_backup";
+    public const string ScheduledBackup = "ScheduledBackupJob";
 
     /// <summary>
-    /// Message cleanup (deletes expired messages and media files)
-    /// Note: This is a BackgroundService, not a TickerQ job (no manual "Run Now")
+    /// Message cleanup (deletes old messages based on retention policy)
+    /// Background Service: CleanupBackgroundService (always running)
     /// </summary>
-    public const string MessageCleanup = "message_cleanup";
+    public const string MessageCleanup = "MessageCleanup";
 
     /// <summary>
     /// User photo refresh (downloads updated profile photos from Telegram)
-    /// TickerFunction: "refresh_user_photos"
+    /// Quartz Job: RefreshUserPhotosJob
     /// </summary>
-    public const string UserPhotoRefresh = "refresh_user_photos";
+    public const string UserPhotoRefresh = "RefreshUserPhotosJob";
 
     /// <summary>
     /// URL blocklist sync (updates blocklists from upstream sources)
-    /// TickerFunction: "BlocklistSync"
+    /// Quartz Job: BlocklistSyncJob
     /// </summary>
-    public const string BlocklistSync = "BlocklistSync";
+    public const string BlocklistSync = "BlocklistSyncJob";
 
     /// <summary>
     /// Database maintenance (VACUUM and ANALYZE operations)
-    /// TickerFunction: "database_maintenance"
+    /// Quartz Job: DatabaseMaintenanceJob
     /// </summary>
-    public const string DatabaseMaintenance = "database_maintenance";
+    public const string DatabaseMaintenance = "DatabaseMaintenanceJob";
 
     /// <summary>
     /// Chat health check (monitors bot permissions and admin lists)
-    /// TickerFunction: "chat_health_check"
-    /// Replaces PeriodicTimer in TelegramAdminBotService
+    /// Quartz Job: ChatHealthCheckJob
     /// </summary>
-    public const string ChatHealthCheck = "chat_health_check";
+    public const string ChatHealthCheck = "ChatHealthCheckJob";
+
+    // ============================================
+    // Ad-Hoc Jobs (one-time delayed execution)
+    // ============================================
+
+    /// <summary>
+    /// Delete a single message (auto-delete fallback messages)
+    /// Quartz Job: DeleteMessageJob
+    /// </summary>
+    public const string DeleteMessage = "DeleteMessage";
+
+    /// <summary>
+    /// Delete all messages from a user across chats (spambot cleanup)
+    /// Quartz Job: DeleteUserMessagesJob
+    /// </summary>
+    public const string DeleteUserMessages = "DeleteUserMessages";
+
+    /// <summary>
+    /// Fetch user profile photo from Telegram (on-demand caching)
+    /// Quartz Job: FetchUserPhotoJob
+    /// </summary>
+    public const string FetchUserPhoto = "FetchUserPhoto";
+
+    /// <summary>
+    /// Scan file for malware (ClamAV + VirusTotal)
+    /// Quartz Job: FileScanJob
+    /// </summary>
+    public const string FileScan = "FileScan";
+
+    /// <summary>
+    /// Rotate backup encryption passphrase (scheduled key rotation)
+    /// Quartz Job: RotateBackupPassphraseJob
+    /// </summary>
+    public const string RotateBackupPassphrase = "RotateBackupPassphrase";
+
+    /// <summary>
+    /// Expire temporary ban (automatic unban after duration)
+    /// Quartz Job: TempbanExpiryJob
+    /// </summary>
+    public const string TempbanExpiry = "TempbanExpiry";
+
+    /// <summary>
+    /// Welcome message timeout (kick user if they don't accept rules)
+    /// Quartz Job: WelcomeTimeoutJob
+    /// </summary>
+    public const string WelcomeTimeout = "WelcomeTimeout";
 }
 
 /// <summary>

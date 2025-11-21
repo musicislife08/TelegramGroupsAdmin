@@ -21,6 +21,21 @@ public class SpamDetectionConfig
     public int FirstMessagesCount { get; set; } = 3;
 
     /// <summary>
+    /// Minimum message length for messages to count toward auto-trust.
+    /// Prevents trust gaming with short agreeable replies ("wow", "yeah", "amazing").
+    /// Default: 20 chars (same as spam detection minimum)
+    /// </summary>
+    public int AutoTrustMinMessageLength { get; set; } = 20;
+
+    /// <summary>
+    /// Minimum account age (hours since first_seen) before auto-trust can activate.
+    /// Prevents quick hit-and-run spam attacks. Default: 24 hours.
+    /// Both this AND message count must be satisfied.
+    /// Set to 0 to disable the account age check entirely.
+    /// </summary>
+    public int AutoTrustMinAccountAgeHours { get; set; } = 24;
+
+    /// <summary>
     /// Minimum message length to trigger expensive checks (similarity, Bayes)
     /// </summary>
     public int MinMessageLength { get; set; } = 10;

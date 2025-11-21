@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using TickerQ.DependencyInjection;
 using TelegramGroupsAdmin.Components;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
@@ -49,9 +48,6 @@ public static class WebApplicationExtensions
 
             // Configure static file serving for images
             ConfigureImageStaticFiles(app);
-
-            // TickerQ background job processor (dashboard configured in AddTickerQBackgroundJobs())
-            app.UseTickerQ();
 
             app.UseAuthentication();
             app.UseAuthorization();

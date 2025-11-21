@@ -2,7 +2,7 @@
 
 ## Stack
 
-.NET 10.0 (10.0.100), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 9.0, TickerQ 2.5.3, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
+.NET 10.0 (10.0.100), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 9.0, Quartz.NET 3.15.1, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
 
 ## Git Workflow (CRITICAL - FOLLOW EVERY TIME)
 
@@ -129,7 +129,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 │  ├─ TelegramAdminBotService         │ ← Telegram polling (SINGLETON enforced by API)
 │  ├─ Blazor Server UI                │
 │  ├─ API Endpoints                   │
-│  └─ TickerQ Background Jobs         │
+│  └─ Quartz.NET Background Jobs      │
 └─────────────────────────────────────┘
          ↓
     PostgreSQL 17
@@ -141,7 +141,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 - **In-memory caching** - No Redis/distributed cache (unnecessary for single instance)
 - **Local file storage** - /data/media on filesystem (no S3/blob storage complexity)
-- **TickerQ PostgreSQL backend** - No separate message queue dependency
+- **Quartz.NET PostgreSQL backend** - No separate message queue dependency
 - **Direct database access** - No service mesh or API gateway layers
 - **Embedded background jobs** - Jobs run in main process (no separate worker containers)
 
@@ -151,7 +151,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 
 ## Projects
 
-- **TelegramGroupsAdmin**: Main app, Blazor+API, TickerQ jobs
+- **TelegramGroupsAdmin**: Main app, Blazor+API, Quartz.NET jobs
 - **TelegramGroupsAdmin.Core**: Shared models, enums, interfaces (breaks circular dependencies between projects)
 - **TelegramGroupsAdmin.Configuration**: Config IOptions classes, AddApplicationConfiguration()
 - **TelegramGroupsAdmin.Data**: EF Core DbContext, migrations, Data Protection (DB-internal models)
@@ -224,7 +224,7 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 **File Scanning Streaming Architecture**: FileScanJob passes file paths (not loaded into memory). ClamAVScannerService validates size <20MB, VirusTotalScannerService uses StreamContent. Supports files up to 20MB with minimal memory.
 
-**TickerQ Job Architecture**: Jobs in main app (for source generator), payloads in Abstractions (breaks circular deps). Jobs re-throw exceptions for retry/logging. Polling interval: 5s (default 60s override).
+**Quartz.NET Job Architecture**: Jobs in BackgroundJobs project, payloads in Abstractions (breaks circular deps). Jobs re-throw exceptions for retry/logging. Job configs stored in database (configs.background_jobs_config JSONB column).
 
 **Translation Storage**: Exclusive arc pattern (message_id XOR edit_id) in message_translations table. MessageProcessingService translates before save (≥10 chars, <80% Latin script). Reused by spam detection.
 
@@ -246,14 +246,14 @@ When `SEQ_URL` is configured, the application automatically enables:
 - Rate limits: Check logs for VirusTotalService/OpenAIVisionSpamDetectionService warnings
 - Testing: Always use `--migrate-only` flag, never run app in normal mode (only one instance allowed)
 
-### TickerQ Background Jobs
+### Quartz.NET Background Jobs
 
-**Dashboard**: `/tickerq-dashboard` (development mode only)
+**Dashboard**: Settings → Background Jobs page (always available)
 
 **Common Issues**:
-- **0 Active Functions**: Source generator not discovering jobs. Check: (1) Explicit analyzer reference in .csproj, (2) `TickerQInstanceFactory.Initialize()` called BEFORE `app.UseTickerQ()` in Program.cs (timing critical)
-- **0 Active Threads**: Workers not starting. Check: (1) Initialize() timing, (2) Debug logging for "TickerQ" messages, (3) Tables exist in `ticker` schema (NOT public)
-- **Job Syntax**: Use `TickerQ.Utilities.Base.TickerFunctionAttribute` and `TickerFunctionContext<T>`. Reference existing jobs for patterns.
+- **Job not running**: Check: (1) Job enabled in database (configs.background_jobs_config), (2) Valid cron expression (6-part Quartz format), (3) QuartzSchedulingSyncService running
+- **Schedule not updating**: Check NextRunAt field cleared when cron changes (BackgroundJobConfigService.UpdateJobConfigAsync)
+- **Job Syntax**: Implement `IJob` interface, use `[DisallowConcurrentExecution]` for jobs that shouldn't overlap. Reference existing jobs in BackgroundJobs project for patterns.
 
 ### Observability (Seq + OpenTelemetry)
 

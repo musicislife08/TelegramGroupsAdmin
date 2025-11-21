@@ -107,13 +107,13 @@ public class ImageProcessingHandler
             var tempPath = Path.GetTempFileName();
             try
             {
-                await using (var fileStream = System.IO.File.Create(tempPath))
+                await using (var fileStream = File.Create(tempPath))
                 {
                     await botClient.DownloadFile(file.FilePath, fileStream, cancellationToken);
                 }
 
                 // Copy to full image location
-                System.IO.File.Copy(tempPath, fullPath, overwrite: true);
+                File.Copy(tempPath, fullPath, overwrite: true);
 
                 // Generate thumbnail using ImageSharp
                 using (var image = await Image.LoadAsync(tempPath, cancellationToken))
@@ -138,8 +138,8 @@ public class ImageProcessingHandler
             finally
             {
                 // Clean up temp file
-                if (System.IO.File.Exists(tempPath))
-                    System.IO.File.Delete(tempPath);
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
             }
         }
         catch (IOException ioEx)

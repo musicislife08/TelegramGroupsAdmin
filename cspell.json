@@ -2,6 +2,7 @@
   "version": "0.2",
   "language": "en",
   "words": [
+    "OTEL",
     "supergroup",
     "supergroups",
     "Supergroup",
@@ -23,7 +24,6 @@
     "chatid",
     "Sendgrid",
     "TOTP",
-    "TickerQ",
     "virusinfo",
     "spamcheck",
     "stopwords",

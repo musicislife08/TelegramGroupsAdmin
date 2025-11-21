@@ -114,7 +114,7 @@ public class InviteService : IInviteService
         // Audit log
         await _auditService.LogEventAsync(
             AuditEventType.UserInviteCreated,
-            actor: Core.Models.Actor.FromWebUser(createdBy),
+            actor: Actor.FromWebUser(createdBy),
             target: null,
             value: $"Invite expires in {validDays} days, permission: {permissionName}",
             ct: ct);
@@ -149,7 +149,7 @@ public class InviteService : IInviteService
             // Audit log
             await _auditService.LogEventAsync(
                 AuditEventType.UserInviteRevoked,
-                actor: Core.Models.Actor.FromWebUser(revokedBy),
+                actor: Actor.FromWebUser(revokedBy),
                 target: null,
                 value: $"Revoked invite (permission: {invite?.PermissionLevel ?? 0})",
                 ct: ct);

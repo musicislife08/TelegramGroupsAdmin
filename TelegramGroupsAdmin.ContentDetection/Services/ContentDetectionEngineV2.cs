@@ -25,7 +25,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly IFileScanningConfigRepository _fileScanningConfigRepo;
     private readonly IEnumerable<IContentCheckV2> _spamChecksV2;
-    private readonly IEnumerable<IContentCheck> _spamChecksV1; // For OpenAI veto only
     private readonly IOpenAITranslationService _translationService;
     private readonly IUrlPreFilterService _preFilterService;
     private readonly SpamDetectionOptions _spamDetectionOptions;
@@ -40,7 +39,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         ISpamDetectionConfigRepository configRepository,
         IFileScanningConfigRepository fileScanningConfigRepo,
         IEnumerable<IContentCheckV2> spamChecksV2,
-        IEnumerable<IContentCheck> spamChecksV1,
         IOpenAITranslationService translationService,
         IUrlPreFilterService preFilterService,
         IOptions<SpamDetectionOptions> spamDetectionOptions)
@@ -49,7 +47,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         _configRepository = configRepository;
         _fileScanningConfigRepo = fileScanningConfigRepo;
         _spamChecksV2 = spamChecksV2;
-        _spamChecksV1 = spamChecksV1;
         _translationService = translationService;
         _preFilterService = preFilterService;
         _spamDetectionOptions = spamDetectionOptions.Value;
@@ -142,99 +139,73 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
 
         if (shouldRunOpenAI)
         {
-            // OpenAI veto uses V1 check implementation (unchanged)
-            var openAICheck = _spamChecksV1.FirstOrDefault(check => check.CheckName == CheckName.OpenAI);
-            if (openAICheck != null)
+            // OpenAI veto using V2 check with proper scoring
+            var openAICheckV2 = _spamChecksV2.FirstOrDefault(check => check.CheckName == CheckName.OpenAI);
+            if (openAICheckV2 != null)
             {
-                // Load API key
-                var apiKeys = await _fileScanningConfigRepo.GetApiKeysAsync(cancellationToken);
-                var openAIApiKey = apiKeys?.OpenAI;
-
-                // Info logging to diagnose API key loading
-                _logger.LogInformation("[V2 DEBUG] OpenAI veto check: apiKeys={ApiKeysNull}, openAIApiKey={KeyNull}, keyLength={KeyLength}",
-                    apiKeys == null ? "null" : "loaded",
-                    openAIApiKey == null ? "null" : "set",
-                    openAIApiKey?.Length ?? 0);
-
-                // Skip OpenAI veto if API key not configured
-                if (string.IsNullOrWhiteSpace(openAIApiKey))
-                {
-                    _logger.LogWarning("[V2] OpenAI veto skipped for user {UserId}: API key not configured (apiKeys={ApiKeysNull})",
-                        request.UserId, apiKeys == null ? "null" : "loaded but empty");
-                    RecordDetectionMetrics(startTimestamp, nonOpenAIResult, activity);
-                    return nonOpenAIResult;
-                }
-
-                _logger.LogInformation("[V2] Running OpenAI veto check for user {UserId} with API key", request.UserId);
+                // Note: API key is injected via ApiKeyDelegatingHandler on the named "OpenAI" HttpClient
+                _logger.LogInformation("[V2] Running OpenAI veto check for user {UserId}", request.UserId);
 
                 var vetoRequest = request with { HasSpamFlags = true };
+                var checkRequest = BuildOpenAIRequest(vetoRequest, config, openAIConfig, cancellationToken);
+                var vetoResultV2 = await openAICheckV2.CheckAsync(checkRequest);
 
-                var checkRequest = BuildOpenAIRequest(vetoRequest, config, openAIConfig, openAIApiKey, cancellationToken);
-
-                // Debug: Log the request details
-                if (checkRequest is OpenAICheckRequest openAIReq)
-                {
-                    _logger.LogInformation("[V2 DEBUG] OpenAI request built: ApiKey={KeyLength} chars, VetoMode={VetoMode}, HasSpamFlags={HasSpamFlags}",
-                        openAIReq.ApiKey?.Length ?? 0, openAIReq.VetoMode, openAIReq.HasSpamFlags);
-                }
-
-                var vetoResult = await openAICheck.CheckAsync(checkRequest);
-
-                // Convert V1 response to include in final result
+                // Convert V2 response to ContentCheckResponse
                 var vetoCheckResult = new ContentCheckResponse
                 {
                     CheckName = CheckName.OpenAI,
-                    Result = vetoResult.Result,
-                    Confidence = vetoResult.Confidence,
-                    Details = vetoResult.Details
+                    Result = vetoResultV2.Score == 0.0 || vetoResultV2.Abstained
+                        ? CheckResultType.Clean
+                        : CheckResultType.Spam,
+                    Confidence = (int)(vetoResultV2.Score * 20), // V2 score (0-5) → confidence (0-100)
+                    Details = vetoResultV2.Details
                 };
 
                 var updatedCheckResults = nonOpenAIResult.CheckResults.Append(vetoCheckResult).ToList();
 
-                if (vetoResult.Result == CheckResultType.Clean)
+                // OpenAI abstained (API error, timeout, rate limit) - defer to pipeline verdict
+                if (vetoResultV2.Abstained)
                 {
-                    _logger.LogInformation("OpenAI vetoed spam detection for user {UserId} with {Confidence}% confidence",
-                        request.UserId, vetoResult.Confidence);
-                    var vetoedResult = CreateVetoedResult(updatedCheckResults, vetoResult);
+                    _logger.LogWarning("OpenAI veto abstained for user {UserId} ({Details}), deferring to pipeline verdict (NetConf={NetConf})",
+                        request.UserId, vetoResultV2.Details, nonOpenAIResult.NetConfidence);
+
+                    // Return nonOpenAIResult with OpenAI check appended for visibility
+                    var deferredResult = nonOpenAIResult with { CheckResults = updatedCheckResults };
+                    RecordDetectionMetrics(startTimestamp, deferredResult, activity);
+                    return deferredResult;
+                }
+
+                // OpenAI ran successfully and returned clean (score = 0.0, not abstained) - veto the spam detection
+                if (vetoResultV2.Score == 0.0)
+                {
+                    _logger.LogInformation("OpenAI vetoed spam detection for user {UserId} (clean result with 0.0 score)",
+                        request.UserId);
+                    var vetoedResult = CreateVetoedResult(updatedCheckResults, vetoCheckResult);
                     RecordDetectionMetrics(startTimestamp, vetoedResult, activity);
                     return vetoedResult;
                 }
-                else if (vetoResult.Result == CheckResultType.Review)
+
+                // OpenAI confirmed spam - add score to total
+                _logger.LogInformation("OpenAI confirmed spam for user {UserId} with score {Score}",
+                    request.UserId, vetoResultV2.Score);
+
+                var newTotalScore = (nonOpenAIResult.NetConfidence / 20.0) + vetoResultV2.Score;
+
+                var confirmedResult = nonOpenAIResult with
                 {
-                    _logger.LogInformation("OpenAI flagged message for human review for user {UserId}", request.UserId);
-                    var reviewResult = CreateReviewResult(updatedCheckResults, vetoResult);
-                    RecordDetectionMetrics(startTimestamp, reviewResult, activity);
-                    return reviewResult;
-                }
-                else if (vetoResult.Result == CheckResultType.Spam)
-                {
-                    // OpenAI CONFIRMED spam - recalculate with OpenAI's score added
-                    _logger.LogInformation("OpenAI confirmed spam for user {UserId} with {Confidence}% confidence",
-                        request.UserId, vetoResult.Confidence);
+                    CheckResults = updatedCheckResults,
+                    IsSpam = true,
+                    NetConfidence = (int)(newTotalScore * 20),
+                    MaxConfidence = Math.Max(nonOpenAIResult.MaxConfidence, vetoCheckResult.Confidence),
+                    AvgConfidence = (nonOpenAIResult.AvgConfidence + vetoCheckResult.Confidence) / 2,
+                    SpamFlags = nonOpenAIResult.SpamFlags + 1,
+                    PrimaryReason = $"OpenAI confirmed spam: {vetoResultV2.Details} (total score: {newTotalScore:F1})",
+                    RecommendedAction = newTotalScore >= 5.0 ? SpamAction.AutoBan : SpamAction.ReviewQueue,
+                    ShouldVeto = false
+                };
 
-                    // Map OpenAI confidence to V2 score (95% = 5.0 points, 80% = 4.0, etc.)
-                    var openAIScore = vetoResult.Confidence / 20.0; // 95% → 4.75 points
-                    var newTotalScore = (nonOpenAIResult.NetConfidence / 20.0) + openAIScore; // Add to existing
-
-                    var confirmedResult = nonOpenAIResult with
-                    {
-                        CheckResults = updatedCheckResults,
-                        IsSpam = true, // OpenAI confirmed = definitely spam
-                        NetConfidence = (int)(newTotalScore * 20), // Recalculate with OpenAI
-                        MaxConfidence = Math.Max(nonOpenAIResult.MaxConfidence, vetoResult.Confidence),
-                        AvgConfidence = (nonOpenAIResult.AvgConfidence + vetoResult.Confidence) / 2,
-                        SpamFlags = nonOpenAIResult.SpamFlags + 1,
-                        PrimaryReason = $"OpenAI confirmed spam: {vetoResult.Details} (total score: {newTotalScore:F1})",
-                        RecommendedAction = newTotalScore >= 5.0 ? SpamAction.AutoBan : SpamAction.ReviewQueue,
-                        ShouldVeto = false // Veto completed, confirmed spam
-                    };
-
-                    RecordDetectionMetrics(startTimestamp, confirmedResult, activity);
-                    return confirmedResult;
-                }
-
-                // Fallback: OpenAI returned unknown result, continue with original
-                nonOpenAIResult = nonOpenAIResult with { CheckResults = updatedCheckResults };
+                RecordDetectionMetrics(startTimestamp, confirmedResult, activity);
+                return confirmedResult;
             }
         }
 
@@ -444,7 +415,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 PhotoLocalPath = originalRequest.PhotoLocalPath,
                 CustomPrompt = null,
                 ConfidenceThreshold = 80,
-                ApiKey = "", // Will be loaded by check
                 CancellationToken = cancellationToken
             },
 
@@ -457,7 +427,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 VideoLocalPath = originalRequest.VideoLocalPath ?? "",
                 CustomPrompt = null,
                 ConfidenceThreshold = 80,
-                ApiKey = "", // Will be loaded by check
                 CancellationToken = cancellationToken
             },
 
@@ -469,7 +438,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         ContentCheckRequest originalRequest,
         SpamDetectionConfig config,
         OpenAIConfigDb? openAIConfig,
-        string? openAIApiKey,
         CancellationToken cancellationToken)
     {
         return new OpenAICheckRequest
@@ -483,7 +451,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             HasSpamFlags = originalRequest.HasSpamFlags,
             MinMessageLength = config.MinMessageLength,
             CheckShortMessages = config.OpenAI.CheckShortMessages,
-            ApiKey = openAIApiKey ?? "",
+            MessageHistoryCount = config.OpenAI.MessageHistoryCount,
             Model = openAIConfig?.Model ?? "gpt-4o-mini",
             MaxTokens = openAIConfig?.MaxTokens ?? 500,
             CancellationToken = cancellationToken

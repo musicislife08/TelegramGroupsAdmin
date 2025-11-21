@@ -10,5 +10,4 @@ public sealed class ImageCheckRequest : ContentCheckRequestBase
     public string? PhotoLocalPath { get; init; } // ML-5: Local file path for OCR (optional)
     public required string? CustomPrompt { get; init; }
     public required int ConfidenceThreshold { get; init; }
-    public required string ApiKey { get; init; }
 }

@@ -44,8 +44,8 @@ public class SequenceIntegrityTests
                 NormalizedEmail = "TEST1@TEST.COM",
                 PasswordHash = "hash",
                 SecurityStamp = Guid.NewGuid().ToString(),
-                PermissionLevel = TelegramGroupsAdmin.Data.Models.PermissionLevel.Owner,
-                Status = TelegramGroupsAdmin.Data.Models.UserStatus.Active,
+                PermissionLevel = Data.Models.PermissionLevel.Owner,
+                Status = Data.Models.UserStatus.Active,
                 CreatedAt = DateTimeOffset.UtcNow
             });
 
@@ -53,13 +53,13 @@ public class SequenceIntegrityTests
             context.AuditLogs.AddRange(
                 new TelegramGroupsAdmin.Data.Models.AuditLogRecordDto
                 {
-                    EventType = TelegramGroupsAdmin.Data.Models.AuditEventType.UserRegistered,
+                    EventType = Data.Models.AuditEventType.UserRegistered,
                     ActorWebUserId = "test-user-1",
                     Timestamp = DateTimeOffset.UtcNow
                 },
                 new TelegramGroupsAdmin.Data.Models.AuditLogRecordDto
                 {
-                    EventType = TelegramGroupsAdmin.Data.Models.AuditEventType.UserLogin,
+                    EventType = Data.Models.AuditEventType.UserLogin,
                     ActorWebUserId = "test-user-1",
                     Timestamp = DateTimeOffset.UtcNow
                 }

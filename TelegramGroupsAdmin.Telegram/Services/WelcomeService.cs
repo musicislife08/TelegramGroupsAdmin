@@ -19,6 +19,7 @@ public class WelcomeService : IWelcomeService
     private readonly IServiceProvider _serviceProvider;
     private readonly IBotProtectionService _botProtectionService;
     private readonly IDmDeliveryService _dmDeliveryService;
+    private readonly IJobScheduler _jobScheduler;
 
     /// <summary>
     /// Static restricted permissions (all false) for new users awaiting welcome acceptance.
@@ -68,12 +69,14 @@ public class WelcomeService : IWelcomeService
         ILogger<WelcomeService> logger,
         IServiceProvider serviceProvider,
         IBotProtectionService botProtectionService,
-        IDmDeliveryService dmDeliveryService)
+        IDmDeliveryService dmDeliveryService,
+        IJobScheduler jobScheduler)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _botProtectionService = botProtectionService;
         _dmDeliveryService = dmDeliveryService;
+        _jobScheduler = jobScheduler;
     }
 
     private async Task<T> WithRepositoryAsync<T>(Func<IWelcomeResponsesRepository, CancellationToken, Task<T>> action, CancellationToken cancellationToken = default)
@@ -258,34 +261,28 @@ public class WelcomeService : IWelcomeService
 
             var responseId = await WithRepositoryAsync((repo, ct) => repo.InsertAsync(welcomeResponse, ct), cancellationToken);
 
-            // Step 4: Schedule timeout via TickerQ (replaces fire-and-forget Task.Run)
+            // Step 4: Schedule timeout via Quartz.NET (replaces fire-and-forget Task.Run)
             var payload = new WelcomeTimeoutPayload(
                 chatMemberUpdate.Chat.Id,
                 user.Id,
                 welcomeMessage.MessageId
             );
 
-            var jobId = await TickerQUtilities.ScheduleJobAsync(
-                _serviceProvider,
-                _logger,
+            var jobId = await _jobScheduler.ScheduleJobAsync(
                 "WelcomeTimeout",
                 payload,
                 delaySeconds: config.TimeoutSeconds,
-                retries: 1,
-                retryIntervals: [30]);
+                cancellationToken);
 
-            if (jobId.HasValue)
-            {
-                // Store the job ID in the welcome response record
-                await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(responseId, jobId, ct), cancellationToken);
+            // Store the job ID in the welcome response record
+            await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(responseId, jobId, ct), cancellationToken);
 
-                _logger.LogInformation(
-                    "Successfully scheduled welcome timeout for user {UserId} in chat {ChatId} (timeout: {Timeout}s, JobId: {JobId})",
-                    user.Id,
-                    chatMemberUpdate.Chat.Id,
-                    config.TimeoutSeconds,
-                    jobId);
-            }
+            _logger.LogInformation(
+                "Successfully scheduled welcome timeout for user {UserId} in chat {ChatId} (timeout: {Timeout}s, JobId: {JobId})",
+                user.Id,
+                chatMemberUpdate.Chat.Id,
+                config.TimeoutSeconds,
+                jobId);
         }
         catch (Exception ex)
         {
@@ -389,20 +386,18 @@ public class WelcomeService : IWelcomeService
                     replyParameters: new ReplyParameters { MessageId = message.MessageId },
                     cancellationToken: cancellationToken);
 
-                // Delete warning after 10 seconds via TickerQ
+                // Delete warning after 10 seconds via Quartz.NET
                 var deletePayload = new DeleteMessagePayload(
                     chatId,
                     warningMsg.MessageId,
                     "wrong_user_warning"
                 );
 
-                await TickerQUtilities.ScheduleJobAsync(
-                    _serviceProvider,
-                    _logger,
+                await _jobScheduler.ScheduleJobAsync(
                     "DeleteMessage",
                     deletePayload,
                     delaySeconds: 10,
-                    retries: 0);
+                    cancellationToken);
             }
             catch (Exception ex)
             {
@@ -655,9 +650,9 @@ public class WelcomeService : IWelcomeService
         var existingResponse = await WithRepositoryAsync((repo, ct) => repo.GetByUserAndChatAsync(user.Id, chatId, ct), cancellationToken);
 
         // Step 2: Cancel timeout job if it exists
-        if (existingResponse?.TimeoutJobId.HasValue == true)
+        if (existingResponse?.TimeoutJobId != null)
         {
-            if (await TickerQUtilities.CancelJobAsync(_serviceProvider, _logger, existingResponse.TimeoutJobId.Value))
+            if (await _jobScheduler.CancelJobAsync(existingResponse.TimeoutJobId, cancellationToken))
             {
                 // Clear the job ID since it's been cancelled
                 await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(existingResponse.Id, null, ct), cancellationToken);
@@ -728,9 +723,9 @@ public class WelcomeService : IWelcomeService
 
         // Step 1: Cancel timeout job if it exists
         var existingResponse = await WithRepositoryAsync((repo, ct) => repo.GetByUserAndChatAsync(user.Id, chatId, ct), cancellationToken);
-        if (existingResponse?.TimeoutJobId.HasValue == true)
+        if (existingResponse?.TimeoutJobId != null)
         {
-            if (await TickerQUtilities.CancelJobAsync(_serviceProvider, _logger, existingResponse.TimeoutJobId.Value))
+            if (await _jobScheduler.CancelJobAsync(existingResponse.TimeoutJobId, cancellationToken))
             {
                 await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(existingResponse.Id, null, ct), cancellationToken);
             }
@@ -828,9 +823,9 @@ public class WelcomeService : IWelcomeService
         }
 
         // Step 3: Cancel timeout job if it exists
-        if (welcomeResponse.TimeoutJobId.HasValue)
+        if (welcomeResponse.TimeoutJobId != null)
         {
-            if (await TickerQUtilities.CancelJobAsync(_serviceProvider, _logger, welcomeResponse.TimeoutJobId.Value))
+            if (await _jobScheduler.CancelJobAsync(welcomeResponse.TimeoutJobId, cancellationToken))
             {
                 await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(welcomeResponse.Id, null, ct), cancellationToken);
             }
@@ -945,7 +940,7 @@ public class WelcomeService : IWelcomeService
         }
 
         // Note: Timeout job will automatically skip when it sees response != "pending"
-        // No need to explicitly cancel - TickerQ job checks database state first
+        // No need to explicitly cancel - Quartz.NET job checks database state first
     }
 
     private async Task<string> GetChatNameAsync(ITelegramBotClient botClient, long chatId, CancellationToken cancellationToken = default)
@@ -1021,9 +1016,9 @@ public class WelcomeService : IWelcomeService
             }
 
             // Cancel timeout job if it exists
-            if (response.TimeoutJobId.HasValue)
+            if (response.TimeoutJobId != null)
             {
-                if (await TickerQUtilities.CancelJobAsync(_serviceProvider, _logger, response.TimeoutJobId.Value))
+                if (await _jobScheduler.CancelJobAsync(response.TimeoutJobId, cancellationToken))
                 {
                     await WithRepositoryAsync((repo, ct) => repo.SetTimeoutJobIdAsync(response.Id, null, ct), cancellationToken);
                 }

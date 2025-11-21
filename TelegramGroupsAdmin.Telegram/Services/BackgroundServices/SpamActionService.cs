@@ -21,6 +21,8 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public class SpamActionService(
     IServiceProvider serviceProvider,
+    ChatManagementService chatManagementService,
+    IJobScheduler jobScheduler,
     ILogger<SpamActionService> logger)
 {
     // Confidence thresholds for spam detection decisions
@@ -91,7 +93,7 @@ public class SpamActionService(
 
             // Phase 4.13: Check for hard block or malware (different handling than spam)
             var hardBlockResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.UrlBlocklist);
-            var malwareResult = spamResult.CheckResults.FirstOrDefault(c => c.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Malware);
+            var malwareResult = spamResult.CheckResults.FirstOrDefault(c => c.Result == ContentDetection.Models.CheckResultType.Malware);
 
             if (hardBlockResult != null)
             {
@@ -177,7 +179,7 @@ public class SpamActionService(
 
             // Decision logic based on net confidence and OpenAI involvement
             // Phase 4.5: Skip auto-ban if OpenAI flagged for review
-            if (openAIResult?.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Review)
+            if (openAIResult?.Result == ContentDetection.Models.CheckResultType.Review)
             {
                 // OpenAI uncertain - send to admin review instead of auto-ban
                 await CreateBorderlineReportAsync(
@@ -199,7 +201,7 @@ public class SpamActionService(
                 return; // Early return - don't auto-ban
             }
 
-            if (spamResult.NetConfidence > AutoBanNetConfidenceThreshold && openAIConfident && openAIResult!.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Spam)
+            if (spamResult.NetConfidence > AutoBanNetConfidenceThreshold && openAIConfident && openAIResult!.Result == ContentDetection.Models.CheckResultType.Spam)
             {
                 // High confidence + OpenAI confirmed = auto-ban across all managed chats
                 logger.LogInformation(
@@ -422,16 +424,32 @@ public class SpamActionService(
                 }
             }
 
-            logger.LogInformation(
-                "Executing auto-ban for user {UserId} across {ChatCount} managed chats",
-                message.From.Id,
-                activeChats.Count);
+            // Health gate: Filter for chats where bot has confirmed permissions
+            var healthyChatIds = chatManagementService.FilterHealthyChats(activeChats.Select(c => c.ChatId)).ToHashSet();
+            var actionableChats = activeChats.Where(c => healthyChatIds.Contains(c.ChatId)).ToList();
 
-            // Ban user across all managed chats via Telegram API
+            // Log chats skipped due to health issues
+            var skippedChatIds = activeChats.Select(c => c.ChatId).Except(actionableChats.Select(c => c.ChatId)).ToList();
+            if (skippedChatIds.Count > 0)
+            {
+                logger.LogWarning(
+                    "Skipping {Count} unhealthy chats for auto-ban: {ChatIds}. " +
+                    "Bot lacks required permissions (admin + ban members) in these chats.",
+                    skippedChatIds.Count,
+                    string.Join(", ", skippedChatIds));
+            }
+
+            logger.LogInformation(
+                "Executing auto-ban for user {UserId} across {ChatCount} managed chats ({SkippedCount} skipped due to health)",
+                message.From.Id,
+                actionableChats.Count,
+                skippedChatIds.Count);
+
+            // Ban user across all actionable managed chats via Telegram API
             int successCount = 0;
             int failCount = 0;
 
-            foreach (var chat in activeChats)
+            foreach (var chat in actionableChats)
             {
                 try
                 {
@@ -463,7 +481,7 @@ public class SpamActionService(
                 "Auto-ban complete for user {UserId}: {SuccessCount}/{TotalCount} successful, {FailCount} failed",
                 message.From.Id,
                 successCount,
-                activeChats.Count,
+                actionableChats.Count,
                 failCount);
 
             // FEATURE-4.23: Schedule cross-chat message cleanup job
@@ -496,13 +514,10 @@ public class SpamActionService(
                     TelegramUserId = userId
                 };
 
-                await TickerQUtilities.ScheduleJobAsync(
-                    serviceProvider,
-                    logger,
+                await jobScheduler.ScheduleJobAsync(
                     "DeleteUserMessages",
                     deleteMessagesPayload,
-                    delaySeconds: 15, // 15-second delay allows spambot to post across all chats before cleanup
-                    retries: 0); // Best-effort, don't retry (48-hour window limitation)
+                    delaySeconds: 15); // 15-second delay allows spambot to post across all chats before cleanup
 
                 // Track this scheduling to prevent duplicates
                 _recentCleanupJobs[userId] = now;
@@ -691,7 +706,7 @@ public class SpamActionService(
 
                 // Add triggered checks (top 3 by confidence)
                 var topChecks = spamResult.CheckResults
-                    .Where(c => c.Result == TelegramGroupsAdmin.ContentDetection.Models.CheckResultType.Spam)
+                    .Where(c => c.Result == ContentDetection.Models.CheckResultType.Spam)
                     .OrderByDescending(c => c.Confidence)
                     .Take(3);
 
@@ -739,8 +754,8 @@ public class SpamActionService(
                         logger.LogDebug("Found photo path for spam notification: {PhotoPath}", photoPath);
                     }
                     // Videos/Animations are stored in MediaLocalPath
-                    else if (messageRecord.MediaType is TelegramGroupsAdmin.Telegram.Models.MediaType.Video
-                        or TelegramGroupsAdmin.Telegram.Models.MediaType.Animation
+                    else if (messageRecord.MediaType is MediaType.Video
+                        or MediaType.Animation
                         && !string.IsNullOrEmpty(messageRecord.MediaLocalPath))
                     {
                         videoPath = messageRecord.MediaLocalPath;

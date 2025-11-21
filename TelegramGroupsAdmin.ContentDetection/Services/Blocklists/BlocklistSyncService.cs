@@ -51,9 +51,12 @@ public class BlocklistSyncService : IBlocklistSyncService
 
         _logger.LogInformation("Found {Count} enabled subscriptions to sync", enabledSubscriptionIds.Count);
 
-        // Sync each subscription in parallel, each with its own scope
-        var syncTasks = enabledSubscriptionIds.Select(id => SyncSubscriptionAsync(id, cancellationToken));
-        await Task.WhenAll(syncTasks);
+        // Sync each subscription sequentially to avoid database deadlocks
+        // (parallel execution causes deadlocks on unique index: domain, block_mode, chat_id)
+        foreach (var subscriptionId in enabledSubscriptionIds)
+        {
+            await SyncSubscriptionAsync(subscriptionId, cancellationToken);
+        }
 
         _logger.LogInformation("Completed blocklist sync for all subscriptions");
     }

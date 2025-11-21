@@ -24,9 +24,8 @@ public class VirusTotalScannerService : ICloudScannerService
 
     public string ServiceName => "VirusTotal";
 
-    // IsEnabled will be checked by loading config at scan time
-    // TODO: Replace with IOptionsSnapshot when switching to provider pattern
-    public bool IsEnabled => true;  // Actual check happens in methods after loading config
+    // IsEnabled checked by loading config from database at scan time (database-first pattern)
+    public bool IsEnabled => true;  // Actual enabled check happens in LookupHashAsync/ScanFileAsync after loading config
 
     public VirusTotalScannerService(
         ILogger<VirusTotalScannerService> logger,

@@ -70,8 +70,8 @@ public static class EmailVerificationEndpoints
         // Audit log
         await auditLog.LogEventAsync(
             AuditEventType.UserEmailVerified,
-            actor: Core.Models.Actor.FromWebUser(user.Id),
-            target: Core.Models.Actor.FromWebUser(user.Id),
+            actor: Actor.FromWebUser(user.Id),
+            target: Actor.FromWebUser(user.Id),
             value: user.Email,
             ct: ct);
 

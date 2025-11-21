@@ -34,6 +34,7 @@
             </MudStack>
 
             <MudGrid>
+                @* Row 1: Feature Toggles *@
                 <MudItem xs="12" md="6">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <MudSwitch T="bool" @bind-Value="_config.TrainingMode"
@@ -56,47 +57,83 @@
                 <MudItem xs="12" md="6">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <MudSwitch T="bool" @bind-Value="_config.FirstMessageOnly"
-                                  Label="Check First Messages Only"
+                                  Label="Auto-Trust After First Messages"
                                   Color="Color.Primary" />
-                        <HelpTooltip Text="Only run spam checks on the first N messages from each user, then trust them. Reduces processing for established users. Recommended for active communities." />
+                        <HelpTooltip Text="Only run spam checks on the first N messages from each user, then automatically trust them. Reduces processing for established users." />
                     </MudStack>
-                    @if (_config.FirstMessageOnly)
-                    {
-                        <MudNumericField @bind-Value="_config.FirstMessagesCount"
-                                        Label="First Messages Count"
-                                        Min="1" Max="10"
-                                        Class="mt-2"
-                                        helperText="Number of first messages to check from each user" />
-                    }
+                    <MudText Typo="Typo.caption" Class="ml-8 mud-text-secondary">
+                        @if (_config.FirstMessageOnly)
+                        {
+                            <text>✓ Users trusted after passing spam checks</text>
+                        }
+                        else
+                        {
+                            <text>All messages from all users are checked</text>
+                        }
+                    </MudText>
                 </MudItem>
 
-                <MudItem xs="12" md="6">
-                    <FieldWithHelp HelpText="Messages with confidence ≥ this value (0-100) will be automatically deleted and the user banned. Default: 85. Set higher (90-95) for strict false-positive prevention.">
+                @* Row 2: Thresholds *@
+                <MudItem xs="12" md="4">
+                    <FieldWithHelp HelpText="Messages with confidence ≥ this value will be automatically deleted and the user banned.">
                         <MudNumericField @bind-Value="_config.AutoBanThreshold"
                                         Label="Auto-Ban Threshold"
                                         Min="50" Max="100"
                                         Disabled="@_config.TrainingMode"
-                                        HelperText="@(_config.TrainingMode ? "Disabled in training mode" : "Confidence >= this value triggers automatic ban")" />
+                                        HelperText="@(_config.TrainingMode ? "Disabled in training mode" : "Confidence >= triggers ban")" />
                     </FieldWithHelp>
                 </MudItem>
 
-                <MudItem xs="12" md="6">
-                    <FieldWithHelp HelpText="Messages with confidence ≥ this value but below auto-ban threshold go to the review queue for manual moderation. Default: 70.">
+                <MudItem xs="12" md="4">
+                    <FieldWithHelp HelpText="Messages with confidence ≥ this value but below auto-ban go to review queue.">
                         <MudNumericField @bind-Value="_config.ReviewQueueThreshold"
                                         Label="Review Queue Threshold"
                                         Min="20" Max="80"
-                                        HelperText="Confidence >= this value goes to review queue" />
+                                        HelperText="Confidence >= goes to review" />
                     </FieldWithHelp>
                 </MudItem>
 
-                <MudItem xs="12" md="6">
-                    <FieldWithHelp HelpText="Skip expensive checks (OpenAI, similarity analysis) for very short messages. Most spam is longer than 10 characters. Improves performance.">
+                <MudItem xs="12" md="4">
+                    <FieldWithHelp HelpText="Skip expensive checks (similarity, Bayes) for very short messages.">
                         <MudNumericField @bind-Value="_config.MinMessageLength"
-                                        Label="Minimum Message Length"
-                                        Min="10" Max="1000"
-                                        helperText="Skip expensive checks for messages shorter than this" />
+                                        Label="Min Message Length"
+                                        Min="5" Max="100"
+                                        HelperText="Skip checks for shorter messages" />
                     </FieldWithHelp>
                 </MudItem>
+
+                @* Row 3: Trust Gaming Protection (conditional) *@
+                @if (_config.FirstMessageOnly)
+                {
+                    <MudItem xs="12">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Security" Size="Size.Small" Color="Color.Primary" />
+                            <MudText Typo="Typo.subtitle1" Color="Color.Primary">Trust Gaming Protection</MudText>
+                            <HelpTooltip Text="Prevents spammers from gaming auto-trust by posting short agreeable messages like 'wow', 'yeah', 'amazing' to quickly reach the trust threshold." />
+                        </MudStack>
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField @bind-Value="_config.FirstMessagesCount"
+                                        Label="Messages Required"
+                                        Min="1" Max="10"
+                                        HelperText="Non-spam messages needed for trust" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField @bind-Value="_config.AutoTrustMinMessageLength"
+                                        Label="Min Message Length"
+                                        Min="0" Max="100"
+                                        HelperText="Short messages don't count (0 = any)" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="4">
+                        <MudNumericField @bind-Value="_config.AutoTrustMinAccountAgeHours"
+                                        Label="Min Account Age (Hours)"
+                                        Min="0" Max="168"
+                                        HelperText="Must wait before trust (0 = disabled)" />
+                    </MudItem>
+                }
             </MudGrid>
         </MudStack>
     </MudPaper>

@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
-
-using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -61,20 +61,47 @@ public class UserAutoTrustService
                 return;
             }
 
+            // Check account age requirement (prevents quick hit-and-run attacks)
+            // Skip check entirely if AutoTrustMinAccountAgeHours = 0 (disabled)
+            if (config.AutoTrustMinAccountAgeHours > 0)
+            {
+                var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+                if (user == null)
+                {
+                    _logger.LogDebug("User {UserId} not found in telegram_users, skipping auto-trust", userId);
+                    return;
+                }
+
+                var accountAge = DateTimeOffset.UtcNow - user.FirstSeenAt;
+                var requiredAge = TimeSpan.FromHours(config.AutoTrustMinAccountAgeHours);
+                if (accountAge < requiredAge)
+                {
+                    _logger.LogDebug(
+                        "User {UserId} account age {AgeHours:F1}h < required {RequiredHours}h, not yet eligible for auto-trust",
+                        userId,
+                        accountAge.TotalHours,
+                        config.AutoTrustMinAccountAgeHours);
+                    return;
+                }
+            }
+
             // Get last N non-spam detection results for this user (global, across all chats)
+            // Filter by minimum message length to prevent trust gaming with short replies
             var recentResults = await _detectionResultsRepository.GetRecentNonSpamResultsForUserAsync(
                 userId,
                 limit: config.FirstMessagesCount,
+                minMessageLength: config.AutoTrustMinMessageLength,
                 cancellationToken);
 
-            // Not enough non-spam messages yet
+            // Not enough qualifying non-spam messages yet
             if (recentResults.Count < config.FirstMessagesCount)
             {
                 _logger.LogDebug(
-                    "User {UserId} has {Count}/{Threshold} non-spam messages, not yet eligible for auto-trust",
+                    "User {UserId} has {Count}/{Threshold} qualifying messages (min {MinLength} chars), not yet eligible for auto-trust",
                     userId,
                     recentResults.Count,
-                    config.FirstMessagesCount);
+                    config.FirstMessagesCount,
+                    config.AutoTrustMinMessageLength);
                 return;
             }
 
@@ -105,8 +132,8 @@ public class UserAutoTrustService
             // Log to audit log (Telegram user as target)
             await _auditLogRepository.LogEventAsync(
                 Data.Models.AuditEventType.UserAutoWhitelisted,
-                Core.Models.Actor.AutoTrust,  // System actor - shows "SYSTEM" chip in Audit UI
-                Core.Models.Actor.FromTelegramUser(userId), // Telegram user as target
+                Actor.AutoTrust,  // System actor - shows "SYSTEM" chip in Audit UI
+                Actor.FromTelegramUser(userId), // Telegram user as target
                 value: $"Auto-trusted after {config.FirstMessagesCount} non-spam messages",
                 cancellationToken);
         }

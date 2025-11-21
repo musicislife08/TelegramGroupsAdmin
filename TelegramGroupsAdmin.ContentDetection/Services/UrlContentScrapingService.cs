@@ -31,6 +31,24 @@ public partial class UrlContentScrapingService(
     private static partial Regex PureNumericRegex();
 
     /// <summary>
+    /// Combined technical content pattern regex for high-performance filtering.
+    /// Matches common technical metadata that should be excluded from preview content.
+    ///
+    /// Pattern components:
+    /// - Viewport settings: width=, initial-scale=, maximum-scale=, user-scalable=, viewport-fit=
+    /// - Character encoding: charset=, text/html;\s*charset=
+    /// - Browser compatibility: IE=
+    /// - MIME types: application/, image/
+    /// - Cache control: no-cache, max-age=
+    /// - CSS colors: rgb(a)(...), hsl(a)(...), #hex
+    /// - Refresh redirects: digits;\s*url=
+    ///
+    /// Uses alternation for single-pass matching (hot path optimization for URL scraping).
+    /// </summary>
+    [GeneratedRegex(@"^(?:width=|initial-scale=|maximum-scale=|user-scalable=|viewport-fit=|charset=|IE=|text/html;\s*charset=|application/|image/|no-cache|max-age=|\d+;\s*url=|rgba?\s*\(|hsla?\s*\(|#[0-9a-fA-F]{3,8}$)", RegexOptions.IgnoreCase)]
+    private static partial Regex TechnicalContentRegex();
+
+    /// <summary>
     /// Enriches message text by scraping all URLs and appending preview metadata.
     /// </summary>
     public async Task<string> EnrichMessageWithUrlPreviewsAsync(string messageText, CancellationToken cancellationToken = default)
@@ -235,48 +253,19 @@ public partial class UrlContentScrapingService(
             return true; // More than 80% digits = likely an ID or technical value
         }
 
-        // Common technical meta patterns to exclude
-        var technicalPatterns = new[]
-        {
-            @"^width=",                           // viewport: width=device-width
-            @"^initial-scale=",                   // viewport: initial-scale=1
-            @"^maximum-scale=",                   // viewport: maximum-scale=1
-            @"^user-scalable=",                   // viewport: user-scalable=0
-            @"^viewport-fit=",                    // viewport: viewport-fit=cover
-            @"^charset=",                         // charset=utf-8
-            @"^IE=",                              // IE=edge
-            @"^text/html;\s*charset=",           // content-type
-            @"^application/",                     // application mime types
-            @"^image/",                           // image mime types
-            @"^no-cache",                         // cache control
-            @"^max-age=",                         // cache control
-            @"^\d+;\s*url=",                      // refresh redirects
-            @"^rgba?\s*\(",                       // CSS colors: rgb(255, 255, 255) or rgba(255, 255, 255, 0.98)
-            @"^hsla?\s*\(",                       // CSS colors: hsl() or hsla()
-            @"^#[0-9a-fA-F]{3,8}$",              // CSS hex colors: #fff or #ffffff
-        };
-
-        foreach (var pattern in technicalPatterns)
-        {
-            if (Regex.IsMatch(content, pattern, RegexOptions.IgnoreCase))
-            {
-                return true;
-            }
-        }
+        // Check if content matches common technical patterns (viewport, MIME types, cache, CSS)
+        // Single optimized regex check for hot path performance
+        if (TechnicalContentRegex().IsMatch(content))
+            return true;
 
         // Check if content is mostly technical syntax (lots of equals signs, commas, hyphens but few spaces)
         var techChars = content.Count(c => c is '=' or ',' or ';' or '-');
         var spaces = content.Count(c => c == ' ');
 
         // If more than 30% technical characters and fewer than 10% spaces, likely technical
-        if (content.Length > 0 &&
-            (float)techChars / content.Length > 0.3 &&
-            (float)spaces / content.Length < 0.1)
-        {
-            return true;
-        }
-
-        return false;
+        return content.Length > 0 &&
+               (float)techChars / content.Length > 0.3 &&
+               (float)spaces / content.Length < 0.1;
     }
 }
 

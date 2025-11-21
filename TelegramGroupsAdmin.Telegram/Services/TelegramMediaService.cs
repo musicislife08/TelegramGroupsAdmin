@@ -71,7 +71,7 @@ public class TelegramMediaService(
             var localFilePath = Path.Combine(mediaDir, uniqueFileName);
 
             // Download file from Telegram
-            await using (var fileStream = System.IO.File.Create(localFilePath))
+            await using (var fileStream = File.Create(localFilePath))
             {
                 await botClient.DownloadFile(file.FilePath, fileStream, cancellationToken);
             }

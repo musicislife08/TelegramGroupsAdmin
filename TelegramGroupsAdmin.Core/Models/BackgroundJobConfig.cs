@@ -27,22 +27,11 @@ public class BackgroundJobConfig
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// Schedule type: "cron" or "interval"
+    /// Natural language schedule expression (e.g., "1d at 2pm", "2w on sunday", "30m")
+    /// Converted to Quartz CronSchedule or CalendarIntervalSchedule at runtime
+    /// Supports bidirectional conversion via NaturalCron library
     /// </summary>
-    public required string ScheduleType { get; set; }
-
-    /// <summary>
-    /// Cron expression (if ScheduleType = "cron")
-    /// Example: "0 2 * * *" for daily at 2 AM
-    /// </summary>
-    public string? CronExpression { get; set; }
-
-    /// <summary>
-    /// Interval as friendly duration string (if ScheduleType = "interval")
-    /// Examples: "30m", "1h", "24h", "7d"
-    /// Parsed via TimeSpanUtilities.TryParseDuration()
-    /// </summary>
-    public string? IntervalDuration { get; set; }
+    public required string Schedule { get; set; }
 
     /// <summary>
     /// Last time this job executed successfully (UTC)

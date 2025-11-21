@@ -55,7 +55,11 @@ public interface IDetectionResultsRepository
     /// Get recent non-spam detection results for a user (global, not per-chat)
     /// Used for auto-whitelisting after N consecutive non-spam messages
     /// </summary>
-    Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit = 3, CancellationToken cancellationToken = default);
+    /// <param name="userId">Telegram user ID</param>
+    /// <param name="limit">Max results to return (from config.FirstMessagesCount)</param>
+    /// <param name="minMessageLength">Only count messages with at least this many characters (prevents trust gaming)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit, int minMessageLength, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get detection statistics

@@ -69,9 +69,9 @@ public class VideoTrainingSamplesRepository : IVideoTrainingSamplesRepository
 
             // Check if message has a video with local path
             // Videos can be: Video, Animation (GIF), VideoNote (round video)
-            var isVideo = message.MediaType is Data.Models.MediaType.Video
-                or Data.Models.MediaType.Animation
-                or Data.Models.MediaType.VideoNote;
+            var isVideo = message.MediaType is MediaType.Video
+                or MediaType.Animation
+                or MediaType.VideoNote;
 
             if (!isVideo || string.IsNullOrEmpty(message.MediaLocalPath))
             {

@@ -1,8 +1,11 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -118,8 +121,12 @@ public class StartCommand : IBotCommand
                 DeleteResponseAfterSeconds);
         }
 
-        // Get welcome config (using default for now - TODO: load from database)
-        var config = WelcomeConfig.Default;
+        // Load welcome config from database (chat-specific or global fallback)
+        // Must create scope because StartCommand is scoped but IConfigService is also scoped
+        using var scope = _serviceProvider.CreateScope();
+        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId)
+                     ?? WelcomeConfig.Default;
 
         // Send main welcome message in DM
         var chatName = chat.Title ?? "the chat";
