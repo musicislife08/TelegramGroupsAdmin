@@ -57,6 +57,12 @@ RUN wget -q https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.trainedd
     -O /deps/eng.traineddata && \
     echo "Downloaded eng.traineddata: $(du -h /deps/eng.traineddata | cut -f1)"
 
+# Download FastText language identification model (architecture-independent)
+# 176-language model for translation pre-filtering
+RUN wget -q https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz \
+    -O /deps/lid.176.ftz && \
+    echo "Downloaded lid.176.ftz: $(du -h /deps/lid.176.ftz | cut -f1)"
+
 # -----------------------------------------------------------------------------
 # Stage 2: Tesseract Build Environment
 # Install Tesseract OCR with all dependencies for target architecture
@@ -191,6 +197,10 @@ COPY --from=tesseract-env /usr/lib/*/lib*.so.* /usr/lib/
 # Copy Tesseract language data from dependencies stage (ML-5: OCR spam detection)
 # 14.7MB - tessdata_best for better accuracy on compressed spam images
 COPY --from=dependencies --chown=$PUID:$PGID /deps/eng.traineddata /tessdata/eng.traineddata
+
+# Copy FastText language identification model from dependencies stage
+# 917KB - 176-language model for translation pre-filtering
+COPY --from=dependencies --chown=$PUID:$PGID /deps/lid.176.ftz /data/models/lid.176.ftz
 
 # Copy FFmpeg static binaries from dependencies stage (ML-6: Video frame extraction)
 # Static builds = no library dependencies, works in Chiseled runtime

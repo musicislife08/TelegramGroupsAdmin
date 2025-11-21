@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
             // Register core services
             services.AddScoped<ITokenizerService, TokenizerService>();
             services.AddScoped<IOpenAITranslationService, OpenAITranslationService>();
+            services.AddSingleton<ILanguageDetectionService, FastTextLanguageDetectionService>(); // FastText language detection (Singleton: model loaded once, thread-safe)
             services.AddScoped<IUrlContentScrapingService, UrlContentScrapingService>();
             services.AddSingleton<IImageTextExtractionService, ImageTextExtractionService>(); // ML-5: OCR service (Singleton: binary path lookup happens once)
             services.AddSingleton<IVideoFrameExtractionService, VideoFrameExtractionService>(); // ML-6: FFmpeg frame extraction (Singleton: binary path lookup happens once)

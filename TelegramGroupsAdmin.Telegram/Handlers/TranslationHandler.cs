@@ -7,22 +7,27 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 
 /// <summary>
 /// Handles translation detection and processing for non-English messages.
-/// Calculates Latin script ratio to determine if translation is needed,
-/// then coordinates translation via OpenAITranslationService.
+/// Uses three-tier strategy:
+/// 1. Latin script ratio for obvious non-Latin (Cyrillic, Chinese, Arabic)
+/// 2. FastText language detection for Latin-script languages (English vs Dutch/German/French/Spanish)
+/// 3. OpenAI translation for all non-English or low-confidence detections
 /// </summary>
 public class TranslationHandler
 {
     private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly IOpenAITranslationService _translationService;
+    private readonly ILanguageDetectionService _languageDetectionService;
     private readonly ILogger<TranslationHandler> _logger;
 
     public TranslationHandler(
         ISpamDetectionConfigRepository configRepository,
         IOpenAITranslationService translationService,
+        ILanguageDetectionService languageDetectionService,
         ILogger<TranslationHandler> logger)
     {
         _configRepository = configRepository;
         _translationService = translationService;
+        _languageDetectionService = languageDetectionService;
         _logger = logger;
     }
 
@@ -51,15 +56,56 @@ public class TranslationHandler
             return null;
         }
 
-        // Check if text is likely non-Latin script (non-English)
+        // Three-tier translation detection strategy:
+        // Tier 1: Latin script ratio for obvious non-Latin scripts (Cyrillic, Chinese, Arabic)
         var latinRatio = CalculateLatinScriptRatio(text);
-        if (latinRatio >= spamConfig.Translation.LatinScriptThreshold)
+
+        if (latinRatio < 0.3)
         {
-            // Text is already Latin script (likely English), skip translation
-            return null;
+            // Definitely non-Latin script (e.g., Russian, Chinese, Arabic, Hebrew)
+            // Skip language detection, proceed directly to translation
+            _logger.LogDebug(
+                "Non-Latin script detected (ratio: {LatinRatio:F2}), translating via OpenAI",
+                latinRatio);
+        }
+        else
+        {
+            // Latin script detected (could be English, Dutch, German, French, Spanish, etc.)
+            // Tier 2: Use FastText to distinguish English from other Latin-script languages
+            var detectionResult = _languageDetectionService.DetectLanguage(text);
+
+            if (detectionResult.HasValue)
+            {
+                var (languageCode, confidence) = detectionResult.Value;
+                var confidenceThreshold = spamConfig.Translation.LanguageDetectionConfidenceThreshold;
+
+                _logger.LogDebug(
+                    "FastText detected language: {Language} (confidence: {Confidence:F2}, threshold: {Threshold:F2})",
+                    languageCode, confidence, confidenceThreshold);
+
+                // High confidence English detection - skip translation
+                if (confidence >= confidenceThreshold && languageCode == "en")
+                {
+                    _logger.LogDebug(
+                        "High-confidence English detected ({Confidence:F2} >= {Threshold:F2}), skipping translation",
+                        confidence, confidenceThreshold);
+                    return null;
+                }
+
+                // Non-English or low confidence - proceed to translation
+                _logger.LogDebug(
+                    "Non-English language detected ({Language}) or low confidence ({Confidence:F2} < {Threshold:F2}), translating",
+                    languageCode, confidence, confidenceThreshold);
+            }
+            else
+            {
+                // FastText detection failed (model not loaded, text too short, etc.)
+                // Fall back to OpenAI translation (it will detect language and skip if English)
+                _logger.LogDebug("FastText detection unavailable, falling back to OpenAI");
+            }
         }
 
-        // Translate message
+        // Tier 3: Translate via OpenAI (handles language detection + translation)
         var translationResult = await _translationService.TranslateToEnglishAsync(text, cancellationToken);
 
         if (translationResult == null || !translationResult.WasTranslated)
