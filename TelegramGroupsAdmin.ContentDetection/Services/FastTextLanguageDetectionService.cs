@@ -81,7 +81,7 @@ public class FastTextLanguageDetectionService : ILanguageDetectionService, IDisp
             // Predict language with top-1 result
             var prediction = _detector.Predict(text, 1);
 
-            if (prediction == null || prediction.Count() == 0)
+            if (prediction == null || !prediction.Any())
             {
                 _logger.LogWarning("FastText returned no predictions for text: {TextPreview}",
                     text.Length > 50 ? text[..50] + "..." : text);
