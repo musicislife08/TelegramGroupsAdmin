@@ -7,6 +7,10 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 /// FastText-based language detection service using Facebook's 176-language model.
 /// Thread-safe singleton implementation.
 /// Gracefully degrades if model file not found (returns null, logs warning).
+///
+/// Memory footprint: Model file is 916 KB on disk, approximately 30-50 MB in memory when loaded.
+/// Loaded once at startup (singleton) and reused for all language detection requests.
+/// Acceptable for homelab deployment with typical available memory (2-8 GB).
 /// </summary>
 public class FastTextLanguageDetectionService : ILanguageDetectionService, IDisposable
 {

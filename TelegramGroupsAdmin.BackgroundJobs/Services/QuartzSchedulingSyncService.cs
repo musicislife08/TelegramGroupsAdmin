@@ -92,11 +92,16 @@ public class QuartzSchedulingSyncService(
     public void TriggerResync()
     {
         // Release the semaphore to wake up the monitoring loop
-        // CurrentCount check prevents multiple releases (semaphore has maxCount=1)
-        if (_resyncSignal.CurrentCount == 0)
+        // Try-catch handles concurrent calls (semaphore maxCount=1)
+        try
         {
             _resyncSignal.Release();
             _logger.LogDebug("Config re-sync triggered");
+        }
+        catch (SemaphoreFullException)
+        {
+            // Resync already pending, no action needed
+            _logger.LogDebug("Resync already pending, ignoring duplicate trigger");
         }
     }
 

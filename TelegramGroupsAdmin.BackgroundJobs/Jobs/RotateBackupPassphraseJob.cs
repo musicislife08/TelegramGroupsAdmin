@@ -165,17 +165,17 @@ public class RotateBackupPassphraseJob : IJob
                     }
                 }
 
-                // Update config with new passphrase
-                await UpdateConfigWithNewPassphrase(newPassphrase);
-
-                // Log final status
-                if (failedCount > 0)
+                // Update config with new passphrase ONLY if all backups succeeded
+                // Fail-fast: preserve old passphrase in DB if any backup failed
+                if (failedCount == 0)
                 {
-                    _logger.LogWarning("⚠️ Passphrase rotation completed with errors: {Success} successful, {Failed} failed", processedCount, failedCount);
+                    await UpdateConfigWithNewPassphrase(newPassphrase);
+                    _logger.LogInformation("✅ Passphrase rotation complete: {Count} backups re-encrypted successfully", processedCount);
                 }
                 else
                 {
-                    _logger.LogInformation("✅ Passphrase rotation complete: {Count} backups re-encrypted successfully", processedCount);
+                    _logger.LogError("❌ Passphrase rotation failed: {Success} successful, {Failed} failed - keeping old passphrase in database", processedCount, failedCount);
+                    throw new InvalidOperationException($"Failed to re-encrypt {failedCount} backup file(s). Old passphrase preserved in database. Resolve underlying issues and retry the job.");
                 }
 
                 // Audit log the passphrase rotation (uses IServiceScopeFactory to avoid circular dependency)
