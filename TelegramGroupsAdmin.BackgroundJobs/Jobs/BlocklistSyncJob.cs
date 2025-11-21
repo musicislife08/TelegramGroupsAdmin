@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
@@ -35,10 +36,10 @@ public class BlocklistSyncJob : IJob
         // Scheduled triggers don't have payloads, manual triggers do
         BlocklistSyncJobPayload payload;
 
-        if (context.JobDetail.JobDataMap.ContainsKey("payload"))
+        if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.PayloadJson))
         {
             // Manual trigger - deserialize provided payload
-            var payloadJson = context.JobDetail.JobDataMap.GetString("payload")!;
+            var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)!;
             payload = JsonSerializer.Deserialize<BlocklistSyncJobPayload>(payloadJson)
                 ?? throw new InvalidOperationException("Failed to deserialize BlocklistSyncJobPayload");
         }

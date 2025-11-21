@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Quartz;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 
@@ -30,10 +31,10 @@ public class DatabaseMaintenanceJob : IJob
         // Scheduled triggers don't have payloads, manual triggers do
         DatabaseMaintenancePayload payload;
 
-        if (context.JobDetail.JobDataMap.ContainsKey("payload"))
+        if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.PayloadJson))
         {
             // Manual trigger - deserialize provided payload
-            var payloadJson = context.JobDetail.JobDataMap.GetString("payload")!;
+            var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)!;
             payload = JsonSerializer.Deserialize<DatabaseMaintenancePayload>(payloadJson)
                 ?? throw new InvalidOperationException("Failed to deserialize DatabaseMaintenancePayload");
         }

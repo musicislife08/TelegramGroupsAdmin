@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
@@ -44,7 +45,7 @@ public class RotateBackupPassphraseJob : IJob
     public async Task Execute(IJobExecutionContext context)
     {
         // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString("payload")
+        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
             ?? throw new InvalidOperationException("payload not found in job data");
 
         var payload = JsonSerializer.Deserialize<RotateBackupPassphrasePayload>(payloadJson)

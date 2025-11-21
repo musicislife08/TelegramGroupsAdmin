@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 
@@ -32,10 +33,10 @@ public class ScheduledBackupJob : IJob
         // Scheduled triggers don't have payloads, manual triggers do
         ScheduledBackupPayload payload;
 
-        if (context.JobDetail.JobDataMap.ContainsKey("payload"))
+        if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.PayloadJson))
         {
             // Manual trigger - deserialize provided payload
-            var payloadJson = context.JobDetail.JobDataMap.GetString("payload")!;
+            var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)!;
             payload = JsonSerializer.Deserialize<ScheduledBackupPayload>(payloadJson)
                 ?? throw new InvalidOperationException("Failed to deserialize ScheduledBackupPayload");
         }

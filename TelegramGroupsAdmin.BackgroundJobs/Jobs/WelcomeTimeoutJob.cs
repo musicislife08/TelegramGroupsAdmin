@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using Telegram.Bot;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -34,7 +35,7 @@ public class WelcomeTimeoutJob(
     public async Task Execute(IJobExecutionContext context)
     {
         // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString("payload")
+        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
             ?? throw new InvalidOperationException("payload not found in job data");
 
         var payload = JsonSerializer.Deserialize<WelcomeTimeoutPayload>(payloadJson)

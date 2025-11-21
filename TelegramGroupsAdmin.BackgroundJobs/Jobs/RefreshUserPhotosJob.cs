@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Services.Media;
 using TelegramGroupsAdmin.Telegram.Abstractions;
@@ -36,10 +37,10 @@ public class RefreshUserPhotosJob : IJob
         // Scheduled triggers don't have payloads, manual triggers do
         RefreshUserPhotosPayload payload;
 
-        if (context.JobDetail.JobDataMap.ContainsKey("payload"))
+        if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.PayloadJson))
         {
             // Manual trigger - deserialize provided payload
-            var payloadJson = context.JobDetail.JobDataMap.GetString("payload")!;
+            var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)!;
             payload = JsonSerializer.Deserialize<RefreshUserPhotosPayload>(payloadJson)
                 ?? throw new InvalidOperationException("Failed to deserialize RefreshUserPhotosPayload");
         }

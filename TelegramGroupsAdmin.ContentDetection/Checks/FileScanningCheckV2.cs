@@ -48,9 +48,9 @@ public class FileScanningCheckV2 : IContentCheckV2
 
     public bool ShouldExecute(ContentCheckRequest request)
     {
-        // Skip for now - this check will be called directly with FileScanCheckRequest
-        // when MessageProcessingService detects a file attachment
-        // TODO: Integrate with ContentDetectionEngine for automatic file detection
+        // This check is called directly with FileScanCheckRequest by FileScanJob
+        // when MessageProcessingService → FileScanningHandler detects a file attachment
+        // Not integrated with ContentDetectionEngine (uses separate path for async file download)
         return false;
     }
 
