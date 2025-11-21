@@ -62,23 +62,27 @@ public class UserAutoTrustService
             }
 
             // Check account age requirement (prevents quick hit-and-run attacks)
-            var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
-            if (user == null)
+            // Skip check entirely if AutoTrustMinAccountAgeHours = 0 (disabled)
+            if (config.AutoTrustMinAccountAgeHours > 0)
             {
-                _logger.LogDebug("User {UserId} not found in telegram_users, skipping auto-trust", userId);
-                return;
-            }
+                var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+                if (user == null)
+                {
+                    _logger.LogDebug("User {UserId} not found in telegram_users, skipping auto-trust", userId);
+                    return;
+                }
 
-            var accountAge = DateTimeOffset.UtcNow - user.FirstSeenAt;
-            var requiredAge = TimeSpan.FromHours(config.AutoTrustMinAccountAgeHours);
-            if (accountAge < requiredAge)
-            {
-                _logger.LogDebug(
-                    "User {UserId} account age {AgeHours:F1}h < required {RequiredHours}h, not yet eligible for auto-trust",
-                    userId,
-                    accountAge.TotalHours,
-                    config.AutoTrustMinAccountAgeHours);
-                return;
+                var accountAge = DateTimeOffset.UtcNow - user.FirstSeenAt;
+                var requiredAge = TimeSpan.FromHours(config.AutoTrustMinAccountAgeHours);
+                if (accountAge < requiredAge)
+                {
+                    _logger.LogDebug(
+                        "User {UserId} account age {AgeHours:F1}h < required {RequiredHours}h, not yet eligible for auto-trust",
+                        userId,
+                        accountAge.TotalHours,
+                        config.AutoTrustMinAccountAgeHours);
+                    return;
+                }
             }
 
             // Get last N non-spam detection results for this user (global, across all chats)
@@ -93,10 +97,11 @@ public class UserAutoTrustService
             if (recentResults.Count < config.FirstMessagesCount)
             {
                 _logger.LogDebug(
-                    "User {UserId} has {Count}/{Threshold} non-spam messages, not yet eligible for auto-trust",
+                    "User {UserId} has {Count}/{Threshold} qualifying messages (min {MinLength} chars), not yet eligible for auto-trust",
                     userId,
                     recentResults.Count,
-                    config.FirstMessagesCount);
+                    config.FirstMessagesCount,
+                    config.AutoTrustMinMessageLength);
                 return;
             }
 

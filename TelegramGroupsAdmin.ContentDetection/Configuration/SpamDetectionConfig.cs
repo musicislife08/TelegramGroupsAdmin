@@ -31,6 +31,7 @@ public class SpamDetectionConfig
     /// Minimum account age (hours since first_seen) before auto-trust can activate.
     /// Prevents quick hit-and-run spam attacks. Default: 24 hours.
     /// Both this AND message count must be satisfied.
+    /// Set to 0 to disable the account age check entirely.
     /// </summary>
     public int AutoTrustMinAccountAgeHours { get; set; } = 24;
 
