@@ -83,13 +83,13 @@ public class TableDiscoveryService
         var pascalName = ToPascalCase(tableName);
 
         // Try common DTO naming patterns
-        var candidates = new[]
-        {
+        string[] candidates =
+        [
             $"{pascalName}Dto",
             $"{pascalName}RecordDto",
             $"{Singularize(pascalName)}Dto",
             $"{Singularize(pascalName)}RecordDto"
-        };
+        ];
 
         return dtoTypes.FirstOrDefault(dto =>
             candidates.Any(c => dto.Name.Equals(c, StringComparison.OrdinalIgnoreCase)));

@@ -272,7 +272,7 @@
                         </tr>
                         <tr>
                             <td><strong>Created At:</strong></td>
-                            <td>@DateTimeOffset.FromUnixTimeSeconds(_viewingMetadata.CreatedAt).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td><span class="local-timestamp" data-utc="@_viewingMetadata.CreatedAt.ToString("o")">@_viewingMetadata.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></td>
                         </tr>
                         <tr>
                             <td><strong>App Version:</strong></td>

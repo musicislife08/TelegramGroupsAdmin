@@ -193,9 +193,10 @@ public class BackupServiceTests
         Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount),
             $"Expected {GoldenDataset.TotalTableCount} tables in backup (excluding system tables)");
 
-        // Verify metadata contains timestamp (Unix timestamp in seconds)
-        Assert.That(metadata.CreatedAt, Is.GreaterThan(0));
-        Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+        // Verify metadata contains recent timestamp
+        var now = DateTimeOffset.UtcNow;
+        Assert.That(metadata.CreatedAt, Is.GreaterThan(now.AddMinutes(-5)));
+        Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(now));
     }
 
     [Test]
@@ -469,7 +470,7 @@ public class BackupServiceTests
         Assert.That(metadata, Is.Not.Null);
         Assert.That(metadata.Version, Is.EqualTo("2.1"));
         Assert.That(metadata.TableCount, Is.EqualTo(GoldenDataset.TotalTableCount));
-        Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+        Assert.That(metadata.CreatedAt, Is.LessThanOrEqualTo(DateTimeOffset.UtcNow));
     }
 
     [Test]

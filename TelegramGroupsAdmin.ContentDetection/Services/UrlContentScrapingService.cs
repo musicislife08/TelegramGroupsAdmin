@@ -48,6 +48,84 @@ public partial class UrlContentScrapingService(
     [GeneratedRegex(@"^(?:width=|initial-scale=|maximum-scale=|user-scalable=|viewport-fit=|charset=|IE=|text/html;\s*charset=|application/|image/|no-cache|max-age=|\d+;\s*url=|rgba?\s*\(|hsla?\s*\(|#[0-9a-fA-F]{3,8}$)", RegexOptions.IgnoreCase)]
     private static partial Regex TechnicalContentRegex();
 
+    // ========== Source-Generated Regex for "description" Meta Tag ==========
+
+    /// <summary>
+    /// Matches: meta name="description" ... content="X"
+    /// </summary>
+    [GeneratedRegex(@"<meta\s+name\s*=\s*[""']description[""'][^>]*content\s*=\s*[""']([^""']*)[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex DescriptionNameFirstRegex();
+
+    /// <summary>
+    /// Matches: meta property="description" ... content="X"
+    /// </summary>
+    [GeneratedRegex(@"<meta\s+property\s*=\s*[""']description[""'][^>]*content\s*=\s*[""']([^""']*)[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex DescriptionPropertyFirstRegex();
+
+    /// <summary>
+    /// Matches: meta content="X" ... name="description"
+    /// </summary>
+    [GeneratedRegex(@"<meta\s+content\s*=\s*[""']([^""']*)[""'][^>]*name\s*=\s*[""']description[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex DescriptionNameLastRegex();
+
+    /// <summary>
+    /// Matches: meta content="X" ... property="description"
+    /// </summary>
+    [GeneratedRegex(@"<meta\s+content\s*=\s*[""']([^""']*)[""'][^>]*property\s*=\s*[""']description[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex DescriptionPropertyLastRegex();
+
+    // ========== Source-Generated Regex for "og:title" Meta Tag ==========
+
+    /// <summary>
+    /// Matches: meta name="og:title" ... content="X"
+    /// </summary>
+    [GeneratedRegex(@"<meta\s+name\s*=\s*[""']og:title[""'][^>]*content\s*=\s*[""']([^""']*)[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex OgTitleNameFirstRegex();
+
+    /// <summary>
+    /// Matches: meta property="og:title" ... content="X"
+    /// </summary>
+    [GeneratedRegex(@"<meta\s+property\s*=\s*[""']og:title[""'][^>]*content\s*=\s*[""']([^""']*)[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex OgTitlePropertyFirstRegex();
+
+    /// <summary>
+    /// Matches: meta content="X" ... name="og:title"
+    /// </summary>
+    [GeneratedRegex(@"<meta\s+content\s*=\s*[""']([^""']*)[""'][^>]*name\s*=\s*[""']og:title[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex OgTitleNameLastRegex();
+
+    /// <summary>
+    /// Matches: meta content="X" ... property="og:title"
+    /// </summary>
+    [GeneratedRegex(@"<meta\s+content\s*=\s*[""']([^""']*)[""'][^>]*property\s*=\s*[""']og:title[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex OgTitlePropertyLastRegex();
+
+    // ========== Source-Generated Regex for "og:description" Meta Tag ==========
+
+    /// <summary>
+    /// Matches: meta name="og:description" ... content="X"
+    /// </summary>
+    [GeneratedRegex(@"<meta\s+name\s*=\s*[""']og:description[""'][^>]*content\s*=\s*[""']([^""']*)[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex OgDescriptionNameFirstRegex();
+
+    /// <summary>
+    /// Matches: meta property="og:description" ... content="X"
+    /// </summary>
+    [GeneratedRegex(@"<meta\s+property\s*=\s*[""']og:description[""'][^>]*content\s*=\s*[""']([^""']*)[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex OgDescriptionPropertyFirstRegex();
+
+    /// <summary>
+    /// Matches: meta content="X" ... name="og:description"
+    /// </summary>
+    [GeneratedRegex(@"<meta\s+content\s*=\s*[""']([^""']*)[""'][^>]*name\s*=\s*[""']og:description[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex OgDescriptionNameLastRegex();
+
+    /// <summary>
+    /// Matches: meta content="X" ... property="og:description"
+    /// </summary>
+    [GeneratedRegex(@"<meta\s+content\s*=\s*[""']([^""']*)[""'][^>]*property\s*=\s*[""']og:description[""']", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex OgDescriptionPropertyLastRegex();
+
     /// <summary>
     /// Enriches message text by scraping all URLs and appending preview metadata.
     /// </summary>
@@ -92,13 +170,13 @@ public partial class UrlContentScrapingService(
             // Deduplicate content - collect unique non-empty values
             // Priority order: og:description > description > og:title > title
             var seenContent = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var contentPriority = new[]
-            {
+            string?[] contentPriority =
+            [
                 preview.OgDescription,
                 preview.Description,
                 preview.OgTitle,
                 preview.Title
-            };
+            ];
 
             foreach (var content in contentPriority)
             {
@@ -192,24 +270,43 @@ public partial class UrlContentScrapingService(
     }
 
     /// <summary>
-    /// Extract meta tag content using regex.
+    /// Extract meta tag content using source-generated regex.
     /// Supports both name= and property= attributes in any order.
     /// Filters out technical metadata like viewport settings.
     /// Decodes HTML entities (e.g., &#39; → ', &amp; → &).
     /// </summary>
     private static string? ExtractMetaContent(string html, string nameOrProperty)
     {
-        var patterns = new[]
+        // Select the appropriate set of generated regex patterns based on the meta tag name
+        Regex[] patterns = nameOrProperty switch
         {
-            $@"<meta\s+name\s*=\s*[""{Regex.Escape(nameOrProperty)}""'][^>]*content\s*=\s*[""']([^""']*)[""']",
-            $@"<meta\s+property\s*=\s*[""{Regex.Escape(nameOrProperty)}""'][^>]*content\s*=\s*[""']([^""']*)[""']",
-            $@"<meta\s+content\s*=\s*[""']([^""']*)[""'][^>]*name\s*=\s*[""{Regex.Escape(nameOrProperty)}""']",
-            $@"<meta\s+content\s*=\s*[""']([^""']*)[""'][^>]*property\s*=\s*[""{Regex.Escape(nameOrProperty)}""']"
+            "description" =>
+            [
+                DescriptionNameFirstRegex(),
+                DescriptionPropertyFirstRegex(),
+                DescriptionNameLastRegex(),
+                DescriptionPropertyLastRegex()
+            ],
+            "og:title" =>
+            [
+                OgTitleNameFirstRegex(),
+                OgTitlePropertyFirstRegex(),
+                OgTitleNameLastRegex(),
+                OgTitlePropertyLastRegex()
+            ],
+            "og:description" =>
+            [
+                OgDescriptionNameFirstRegex(),
+                OgDescriptionPropertyFirstRegex(),
+                OgDescriptionNameLastRegex(),
+                OgDescriptionPropertyLastRegex()
+            ],
+            _ => throw new ArgumentException($"Unsupported meta tag: {nameOrProperty}", nameof(nameOrProperty))
         };
 
-        foreach (var pattern in patterns)
+        foreach (var regex in patterns)
         {
-            var match = Regex.Match(html, pattern, RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            var match = regex.Match(html);
             if (match.Success)
             {
                 var content = match.Groups[1].Value.Trim();

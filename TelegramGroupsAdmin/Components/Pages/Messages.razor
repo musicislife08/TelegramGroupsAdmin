@@ -327,7 +327,7 @@
                         }
 
                         // Load metadata for this message
-                        var messageIds = new[] { targetMessageId };
+                        long[] messageIds = [targetMessageId];
                         var spamChecks = await MessageQueryService.GetSpamChecksForMessagesAsync(messageIds);
                         var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
 
@@ -390,7 +390,7 @@
                 _allMessages.Insert(0, new MessageWithDetectionHistory { Message = message });
 
                 // Load spam check for this new message if it exists
-                var messageIds = new[] { message.MessageId };
+                long[] messageIds = [message.MessageId];
                 var newSpamChecks = await MessageQueryService.GetSpamChecksForMessagesAsync(messageIds);
                 foreach (var kvp in newSpamChecks)
                 {

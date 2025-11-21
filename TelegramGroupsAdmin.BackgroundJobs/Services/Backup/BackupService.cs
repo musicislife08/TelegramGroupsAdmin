@@ -107,7 +107,7 @@ public class BackupService : IBackupService
             Metadata = new BackupMetadata
             {
                 Version = CurrentVersion,
-                CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                CreatedAt = DateTimeOffset.UtcNow,
                 AppVersion = "1.0.0"
             }
         };
@@ -348,7 +348,7 @@ public class BackupService : IBackupService
         }
 
         _logger.LogInformation("Backup metadata: version={Version}, created={CreatedAt}, tables={TableCount}",
-            backup.Metadata.Version, DateTimeOffset.FromUnixTimeSeconds(backup.Metadata.CreatedAt), backup.Metadata.TableCount);
+            backup.Metadata.Version, backup.Metadata.CreatedAt, backup.Metadata.TableCount);
 
         // Apply version-specific migrations to backup data before restore
         ApplyBackupMigrations(backup);

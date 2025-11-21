@@ -29,10 +29,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     private readonly IUrlPreFilterService _preFilterService;
     private readonly SpamDetectionOptions _spamDetectionOptions;
 
-    // SpamAssassin-style thresholds (point-based, not confidence percentage)
-    private const double SpamThreshold = 5.0;      // ≥5.0 points = spam
-    private const double ReviewThreshold = 3.0;    // 3.0-5.0 points = review queue
-    // <3.0 points = allow
+    // SpamAssassin-style thresholds defined in SpamDetectionConstants
+    // ≥5.0 points = spam, 3.0-5.0 = review queue, <3.0 = allow
 
     public ContentDetectionEngineV2(
         ILogger<ContentDetectionEngineV2> logger,
@@ -161,7 +159,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                     Details = vetoResultV2.Details
                 };
 
-                var updatedCheckResults = nonOpenAIResult.CheckResults.Append(vetoCheckResult).ToList();
+                List<ContentCheckResponse> updatedCheckResults = [..nonOpenAIResult.CheckResults, vetoCheckResult];
 
                 // OpenAI abstained (API error, timeout, rate limit) - defer to pipeline verdict
                 if (vetoResultV2.Abstained)
@@ -252,15 +250,15 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         var checkResultsV1 = ConvertV2ResponsesToV1(checkResponsesV2, totalScore);
 
         // Determine action based on total score (SpamAssassin-style thresholds)
-        var isSpam = totalScore >= ReviewThreshold; // ≥3.0 is spam (may need review)
+        var isSpam = totalScore >= SpamDetectionConstants.ReviewThreshold; // ≥3.0 is spam (may need review)
         var recommendedAction = DetermineActionFromScore(totalScore);
 
         // Veto mode: Run OpenAI to confirm ANY spam detection (even low confidence)
         // This reduces false positives by having AI double-check all spam signals
         var shouldVeto = totalScore > 0 && config.OpenAI.VetoMode;
 
-        var primaryReason = totalScore >= ReviewThreshold
-            ? $"Additive score: {totalScore:F1} points (threshold: {SpamThreshold:F1})"
+        var primaryReason = totalScore >= SpamDetectionConstants.ReviewThreshold
+            ? $"Additive score: {totalScore:F1} points (threshold: {SpamDetectionConstants.SpamThreshold:F1})"
             : "No spam detected";
 
         // Map to V1 result format for backward compatibility
@@ -515,10 +513,10 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
 
     private SpamAction DetermineActionFromScore(double totalScore)
     {
-        if (totalScore >= SpamThreshold)
+        if (totalScore >= SpamDetectionConstants.SpamThreshold)
             return SpamAction.AutoBan; // ≥5.0 points
 
-        if (totalScore >= ReviewThreshold)
+        if (totalScore >= SpamDetectionConstants.ReviewThreshold)
             return SpamAction.ReviewQueue; // 3.0-5.0 points
 
         return SpamAction.Allow; // <3.0 points
