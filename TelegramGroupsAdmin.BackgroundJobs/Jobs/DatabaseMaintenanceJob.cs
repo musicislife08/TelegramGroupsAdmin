@@ -14,6 +14,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Job logic to run PostgreSQL database maintenance operations (VACUUM, ANALYZE)
 /// Executes VACUUM to reclaim storage and ANALYZE to update query planner statistics
 /// </summary>
+[DisallowConcurrentExecution]
 public class DatabaseMaintenanceJob : IJob
 {
     private readonly ILogger<DatabaseMaintenanceJob> _logger;
@@ -62,12 +63,6 @@ public class DatabaseMaintenanceJob : IJob
         {
             try
             {
-                if (payload == null)
-                {
-                    _logger.LogError("DatabaseMaintenanceJobLogic received null payload");
-                    return;
-                }
-
                 var connectionString = _configuration.GetConnectionString("PostgreSQL");
                 if (string.IsNullOrEmpty(connectionString))
                 {

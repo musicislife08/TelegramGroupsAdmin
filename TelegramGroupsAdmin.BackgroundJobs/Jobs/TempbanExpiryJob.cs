@@ -55,12 +55,6 @@ public class TempbanExpiryJob(
 
         try
         {
-            if (payload == null)
-            {
-                _logger.LogError("TempbanExpiryJob received null payload");
-                return;
-            }
-
             _logger.LogInformation(
                 "Processing tempban expiry for user {UserId}. Reason: {Reason}, Expired at: {ExpiresAt}",
                 payload.UserId,

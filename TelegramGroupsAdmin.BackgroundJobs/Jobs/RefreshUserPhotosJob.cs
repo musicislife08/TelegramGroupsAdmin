@@ -15,6 +15,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Nightly job to refresh user photos for all active users (seen in last 30 days)
 /// Queues refetch requests for smart cache invalidation
 /// </summary>
+[DisallowConcurrentExecution]
 public class RefreshUserPhotosJob : IJob
 {
     private readonly ILogger<RefreshUserPhotosJob> _logger;
@@ -66,12 +67,6 @@ public class RefreshUserPhotosJob : IJob
         {
             try
             {
-                if (payload == null)
-                {
-                    _logger.LogError("RefreshUserPhotosJob received null payload");
-                    return;
-                }
-
                 _logger.LogInformation("Starting user photo refresh for users active in last {Days} days", payload.DaysBack);
 
                 using var scope = _scopeFactory.CreateScope();

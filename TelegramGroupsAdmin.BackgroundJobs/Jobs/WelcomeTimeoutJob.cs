@@ -56,12 +56,6 @@ public class WelcomeTimeoutJob(
 
         try
         {
-            if (payload == null)
-            {
-                _logger.LogError("WelcomeTimeoutJob received null payload");
-                return;
-            }
-
             _logger.LogInformation(
                 "Processing welcome timeout for user {UserId} in chat {ChatId}",
                 payload.UserId,

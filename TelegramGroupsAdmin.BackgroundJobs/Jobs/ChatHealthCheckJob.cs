@@ -19,6 +19,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Replaces PeriodicTimer in TelegramAdminBotService (Phase 4: Chat health optimization)
 /// Monitors chat permissions, admin lists, invite links
 /// </summary>
+[DisallowConcurrentExecution]
 public class ChatHealthCheckJob : IJob
 {
     private readonly ChatManagementService _chatService;

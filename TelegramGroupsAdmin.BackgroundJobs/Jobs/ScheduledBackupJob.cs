@@ -14,6 +14,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Job logic to automatically backup database on a cron schedule
 /// Saves backups to disk and manages retention (deletes old backups)
 /// </summary>
+[DisallowConcurrentExecution]
 public class ScheduledBackupJob : IJob
 {
     private readonly ILogger<ScheduledBackupJob> _logger;
@@ -67,12 +68,6 @@ public class ScheduledBackupJob : IJob
         {
             try
             {
-                if (payload == null)
-                {
-                    _logger.LogError("ScheduledBackupJob received null payload");
-                    return;
-                }
-
                 _logger.LogInformation("Starting scheduled backup (retention: {Hourly}h/{Daily}d/{Weekly}w/{Monthly}m/{Yearly}y)",
                     payload.RetainHourlyBackups, payload.RetainDailyBackups, payload.RetainWeeklyBackups,
                     payload.RetainMonthlyBackups, payload.RetainYearlyBackups);

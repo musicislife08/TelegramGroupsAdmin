@@ -69,12 +69,6 @@ public class FileScanJob(
 
         try
         {
-            if (payload == null)
-            {
-                _logger.LogError("FileScanJob received null payload");
-                return;
-            }
-
             _logger.LogInformation(
                 "Scanning file '{FileName}' ({FileSize} bytes) from user {UserId} in chat {ChatId} (message {MessageId})",
                 payload.FileName ?? "unknown",

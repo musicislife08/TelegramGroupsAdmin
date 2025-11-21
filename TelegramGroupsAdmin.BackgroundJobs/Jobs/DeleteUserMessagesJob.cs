@@ -52,12 +52,6 @@ public class DeleteUserMessagesJob(
 
         try
         {
-            if (payload == null)
-            {
-                _logger.LogError("DeleteUserMessagesJobLogic received null payload");
-                return;
-            }
-
             _logger.LogInformation(
                 "Starting cross-chat message cleanup for user {UserId}",
                 payload.TelegramUserId);

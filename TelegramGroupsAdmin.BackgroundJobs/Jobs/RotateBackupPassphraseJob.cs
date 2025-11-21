@@ -17,6 +17,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Job for rotating backup encryption passphrase.
 /// Re-encrypts all existing backups with new passphrase using atomic file operations.
 /// </summary>
+[DisallowConcurrentExecution]
 public class RotateBackupPassphraseJob : IJob
 {
     private readonly IBackupEncryptionService _encryptionService;
@@ -65,11 +66,6 @@ public class RotateBackupPassphraseJob : IJob
 
         try
         {
-            if (payload == null)
-            {
-                _logger.LogError("RotateBackupPassphraseJob received null payload");
-                return;
-            }
             var userId = payload.UserId; // Web user GUID string
             var newPassphrase = payload.NewPassphrase;
             var backupDirectory = payload.BackupDirectory;

@@ -51,12 +51,6 @@ public class DeleteMessageJob(
 
         try
         {
-            if (payload == null)
-            {
-                _logger.LogError("DeleteMessageJobLogic received null payload");
-                return;
-            }
-
             _logger.LogDebug(
                 "Deleting message {MessageId} in chat {ChatId} (reason: {Reason})",
                 payload.MessageId,

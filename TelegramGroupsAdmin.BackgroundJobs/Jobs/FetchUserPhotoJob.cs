@@ -57,12 +57,6 @@ public class FetchUserPhotoJob(
 
         try
         {
-            if (payload == null)
-            {
-                _logger.LogError("FetchUserPhotoJob received null payload");
-                return;
-            }
-
             _logger.LogDebug(
                 "Fetching user photo for user {UserId} (message {MessageId})",
                 payload.UserId,
