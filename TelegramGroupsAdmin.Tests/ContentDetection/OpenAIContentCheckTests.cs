@@ -176,7 +176,6 @@ public class OpenAIContentCheckTests
             MinMessageLength = 10,
             CheckShortMessages = false,
             MessageHistoryCount = 3,
-            ApiKey = "test-key",
             Model = "gpt-4",
             MaxTokens = 500,
             CancellationToken = CancellationToken.None
@@ -210,7 +209,6 @@ public class OpenAIContentCheckTests
             MinMessageLength = 10,
             CheckShortMessages = true,
             MessageHistoryCount = 3,
-            ApiKey = "test-key",
             Model = "gpt-4",
             MaxTokens = 500,
             CancellationToken = CancellationToken.None
@@ -244,7 +242,6 @@ public class OpenAIContentCheckTests
             MinMessageLength = 10,
             CheckShortMessages = false,
             MessageHistoryCount = 3,
-            ApiKey = "test-key",
             Model = "gpt-4",
             MaxTokens = 500,
             CancellationToken = CancellationToken.None
@@ -278,7 +275,6 @@ public class OpenAIContentCheckTests
             MinMessageLength = 10,
             CheckShortMessages = false,
             MessageHistoryCount = 3,
-            ApiKey = "test-key",
             Model = "gpt-4",
             MaxTokens = 500,
             CancellationToken = CancellationToken.None
@@ -295,29 +291,15 @@ public class OpenAIContentCheckTests
 
     #endregion
 
-    #region CheckAsync - Missing API Key Tests
+    #region CheckAsync - Missing/Invalid API Key Tests
 
     [Test]
-    public async Task CheckAsync_MissingApiKey_Abstains()
+    public async Task CheckAsync_UnauthorizedResponse_Abstains()
     {
-        // Arrange
-        var request = new OpenAICheckRequest
-        {
-            Message = "This is a test message",
-            UserId = 123,
-            UserName = "testuser",
-            ChatId = 456,
-            VetoMode = false,
-            SystemPrompt = null,
-            HasSpamFlags = false,
-            MinMessageLength = 10,
-            CheckShortMessages = false,
-            MessageHistoryCount = 3,
-            ApiKey = "",
-            Model = "gpt-4",
-            MaxTokens = 500,
-            CancellationToken = CancellationToken.None
-        };
+        // Arrange - Simulates missing or invalid API key (delegating handler injects key)
+        SetupHttpClientError(HttpStatusCode.Unauthorized, "Invalid API key");
+
+        var request = CreateValidRequest();
 
         // Act
         var response = await _check.CheckAsync(request);
@@ -325,7 +307,7 @@ public class OpenAIContentCheckTests
         // Assert
         Assert.That(response.Score, Is.EqualTo(0.0));
         Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("API key not configured"));
+        Assert.That(response.Details, Does.Contain("API error"));
     }
 
     #endregion
@@ -714,7 +696,6 @@ public class OpenAIContentCheckTests
             MinMessageLength = 10,
             CheckShortMessages = false,
             MessageHistoryCount = 3,
-            ApiKey = "test-api-key",
             Model = "gpt-4",
             MaxTokens = 500,
             CancellationToken = CancellationToken.None

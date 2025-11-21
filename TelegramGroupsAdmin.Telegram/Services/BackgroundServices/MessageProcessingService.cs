@@ -358,14 +358,6 @@ public partial class MessageProcessingService(
                 mediaLocalPath = mediaResult.LocalPath; // Null for Documents (metadata-only)
             }
 
-            // REFACTOR-1: Use FileScanningHandler for document scanning
-            var fileScanHandler = scope.ServiceProvider.GetRequiredService<Handlers.FileScanningHandler>();
-            await fileScanHandler.ProcessFileScanningAsync(
-                message,
-                message.Chat.Id,
-                message.From!.Id,
-                cancellationToken);
-
             // Calculate content hash for spam correlation
             var urlsJson = urls != null ? JsonSerializer.Serialize(urls) : "";
             var contentHash = HashUtilities.ComputeContentHash(text ?? "", urlsJson);
@@ -456,6 +448,14 @@ public partial class MessageProcessingService(
             using var messageScope = _scopeFactory.CreateScope();
             var repository = messageScope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
             await repository.InsertMessageAsync(messageRecord, cancellationToken);
+
+            // Schedule file scan AFTER message is persisted (FK constraint requires message to exist)
+            var fileScanHandler = scope.ServiceProvider.GetRequiredService<Handlers.FileScanningHandler>();
+            await fileScanHandler.ProcessFileScanningAsync(
+                message,
+                message.Chat.Id,
+                message.From!.Id,
+                cancellationToken);
 
             // CRITICAL: Check if user was banned while this message was being processed
             // Handles race condition where multiple messages arrive simultaneously:

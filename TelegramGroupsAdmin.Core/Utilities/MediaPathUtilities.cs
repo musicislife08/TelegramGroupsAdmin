@@ -51,4 +51,13 @@ public static class MediaPathUtilities
         var subDir = GetMediaSubdirectory(mediaType);
         return $"/media/{subDir}/{filename}";
     }
+
+    /// <summary>
+    /// Resolve a relative path to an absolute path for disk operations
+    /// </summary>
+    /// <param name="relativePath">Relative path (e.g., "user_photos/123.jpg")</param>
+    /// <param name="basePath">Base storage path (e.g., "/data")</param>
+    /// <returns>Absolute path (e.g., "/data/media/user_photos/123.jpg")</returns>
+    public static string ToAbsolutePath(string relativePath, string basePath)
+        => Path.Combine(basePath, "media", relativePath);
 }
