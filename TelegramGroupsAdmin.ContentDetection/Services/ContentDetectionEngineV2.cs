@@ -190,11 +190,23 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
 
                 var updatedCheckResults = nonOpenAIResult.CheckResults.Append(vetoCheckResult).ToList();
 
-                // Veto Logic: Score 0 or abstained = veto (override to clean)
-                if (vetoResultV2.Score == 0.0 || vetoResultV2.Abstained)
+                // OpenAI abstained (API error, timeout, rate limit) - defer to pipeline verdict
+                if (vetoResultV2.Abstained)
                 {
-                    _logger.LogInformation("OpenAI vetoed spam detection for user {UserId} (score: {Score}, abstained: {Abstained})",
-                        request.UserId, vetoResultV2.Score, vetoResultV2.Abstained);
+                    _logger.LogWarning("OpenAI veto abstained for user {UserId} ({Details}), deferring to pipeline verdict (NetConf={NetConf})",
+                        request.UserId, vetoResultV2.Details, nonOpenAIResult.NetConfidence);
+
+                    // Return nonOpenAIResult with OpenAI check appended for visibility
+                    var deferredResult = nonOpenAIResult with { CheckResults = updatedCheckResults };
+                    RecordDetectionMetrics(startTimestamp, deferredResult, activity);
+                    return deferredResult;
+                }
+
+                // OpenAI ran successfully and returned clean (score = 0.0, not abstained) - veto the spam detection
+                if (vetoResultV2.Score == 0.0)
+                {
+                    _logger.LogInformation("OpenAI vetoed spam detection for user {UserId} (clean result with 0.0 score)",
+                        request.UserId);
                     var vetoedResult = CreateVetoedResult(updatedCheckResults, vetoCheckResult);
                     RecordDetectionMetrics(startTimestamp, vetoedResult, activity);
                     return vetoedResult;

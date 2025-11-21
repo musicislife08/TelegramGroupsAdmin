@@ -376,20 +376,12 @@ public partial class MessageProcessingService(
             var chatIconPath = File.Exists(chatIconCachedPath) ? $"chat_icons/{chatIconFileName}" : null;
 
             // REFACTOR-1: Use TranslationHandler for translation detection and processing
-            MessageTranslation? translation = null;
-            if (!string.IsNullOrWhiteSpace(text))
-            {
-                var translationHandler = scope.ServiceProvider.GetRequiredService<Handlers.TranslationHandler>();
-                var translationResult = await translationHandler.ProcessTranslationAsync(
-                    text,
-                    message.MessageId,
-                    cancellationToken);
-
-                if (translationResult != null)
-                {
-                    translation = translationResult.Translation;
-                }
-            }
+            var translationHandler = scope.ServiceProvider.GetRequiredService<Handlers.TranslationHandler>();
+            var translationForDetection = await translationHandler.GetTextForDetectionAsync(
+                text,
+                message.MessageId,
+                cancellationToken);
+            var translation = translationForDetection.Translation;
 
             // Determine spam check skip reason (before saving message)
             // Check if user is trusted or admin to set appropriate skip reason
@@ -645,12 +637,10 @@ public partial class MessageProcessingService(
                 var contentOrchestrator = detectionScope.ServiceProvider.GetRequiredService<Handlers.ContentDetectionOrchestrator>();
 
                 // Use translated text if available (avoids double translation in ContentDetectionEngine)
-                var textForDetection = translation?.TranslatedText ?? text;
-
                 await contentOrchestrator.RunDetectionAsync(
                     botClient,
                     message,
-                    textForDetection,
+                    translationForDetection.TextForDetection,
                     photoLocalPath,
                     editVersion: 0,
                     cancellationToken);
