@@ -240,24 +240,35 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return isTrusted;
     }
 
-    public async Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit = 3, CancellationToken cancellationToken = default)
+    public async Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit, int minMessageLength, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Get last N non-spam detection results for this user (global, not per-chat)
         // Used for auto-whitelisting: if user has N consecutive non-spam messages, trust them
-        var results = await WithActorJoins(
+        // Optionally filter by minimum message length to prevent trust gaming with short replies
+        var query = WithActorJoins(
                 context.DetectionResults.AsNoTracking(),
                 context)
-            .Where(x => x.UserId == userId && !x.IsSpam)
+            .Where(x => x.UserId == userId && !x.IsSpam);
+
+        // Filter by minimum message length if specified (prevents trust gaming)
+        if (minMessageLength > 0)
+        {
+            query = query.Where(x => x.MessageText != null &&
+                                     x.MessageText.Length >= minMessageLength);
+        }
+
+        var results = await query
             .OrderByDescending(x => x.DetectedAt)
             .Take(limit)
             .ToListAsync(cancellationToken);
 
         _logger.LogDebug(
-            "Retrieved {Count} recent non-spam results for user {UserId} (limit: {Limit})",
+            "Retrieved {Count} recent non-spam results for user {UserId} (limit: {Limit}, minLength: {MinLength})",
             results.Count,
             userId,
-            limit);
+            limit,
+            minMessageLength);
 
         return results;
     }
