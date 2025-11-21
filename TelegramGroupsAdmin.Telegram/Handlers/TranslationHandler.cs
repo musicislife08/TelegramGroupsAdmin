@@ -65,7 +65,7 @@ public class TranslationHandler
             // Definitely non-Latin script (e.g., Russian, Chinese, Arabic, Hebrew)
             // Skip language detection, proceed directly to translation
             _logger.LogDebug(
-                "Non-Latin script detected (ratio: {LatinRatio:F2}), translating via OpenAI",
+                "Non-Latin script detected ({LatinRatio:P0} Latin), will translate to English",
                 latinRatio);
         }
         else
@@ -79,29 +79,24 @@ public class TranslationHandler
                 var (languageCode, confidence) = detectionResult.Value;
                 var confidenceThreshold = spamConfig.Translation.LanguageDetectionConfidenceThreshold;
 
-                _logger.LogDebug(
-                    "FastText detected language: {Language} (confidence: {Confidence:F2}, threshold: {Threshold:F2})",
-                    languageCode, confidence, confidenceThreshold);
-
                 // High confidence English detection - skip translation
                 if (confidence >= confidenceThreshold && languageCode == "en")
                 {
                     _logger.LogDebug(
-                        "High-confidence English detected ({Confidence:F2} >= {Threshold:F2}), skipping translation",
+                        "FastText: English detected ({Confidence:P0} >= {Threshold:P0}), skipping translation",
                         confidence, confidenceThreshold);
                     return null;
                 }
 
                 // Non-English or low confidence - proceed to translation
                 _logger.LogDebug(
-                    "Non-English language detected ({Language}) or low confidence ({Confidence:F2} < {Threshold:F2}), translating",
-                    languageCode, confidence, confidenceThreshold);
+                    "FastText: {Language} detected ({Confidence:P0}), will translate",
+                    languageCode, confidence);
             }
             else
             {
                 // FastText detection failed (model not loaded, text too short, etc.)
-                // Fall back to OpenAI translation (it will detect language and skip if English)
-                _logger.LogDebug("FastText detection unavailable, falling back to OpenAI");
+                _logger.LogDebug("FastText unavailable, falling back to OpenAI");
             }
         }
 
@@ -134,6 +129,33 @@ public class TranslationHandler
             LatinScriptRatio: latinRatio,
             WasTranslated: true
         );
+    }
+
+    /// <summary>
+    /// Get text ready for content detection, translating if needed.
+    /// Shared by MessageProcessingService and ContentTester for DRY.
+    /// </summary>
+    public async Task<TranslationForDetectionResult> GetTextForDetectionAsync(
+        string? text,
+        int messageId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return new TranslationForDetectionResult(text ?? string.Empty, null, null);
+        }
+
+        var result = await ProcessTranslationAsync(text, messageId, cancellationToken);
+
+        if (result is { WasTranslated: true })
+        {
+            return new TranslationForDetectionResult(
+                result.Translation.TranslatedText,
+                result.Translation,
+                result.Translation.DetectedLanguage);
+        }
+
+        return new TranslationForDetectionResult(text, null, null);
     }
 
     /// <summary>
@@ -181,4 +203,13 @@ public record TranslationProcessingResult(
     MessageTranslation Translation,
     double LatinScriptRatio,
     bool WasTranslated
+);
+
+/// <summary>
+/// Result for content detection - provides text to use and optional translation metadata
+/// </summary>
+public record TranslationForDetectionResult(
+    string TextForDetection,
+    MessageTranslation? Translation,
+    string? DetectedLanguage
 );

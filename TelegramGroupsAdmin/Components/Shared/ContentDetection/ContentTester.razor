@@ -2,8 +2,10 @@
 @using TelegramGroupsAdmin.ContentDetection.Abstractions
 @using TelegramGroupsAdmin.ContentDetection.Constants
 @using TelegramGroupsAdmin.Core.Utilities
+@using TelegramGroupsAdmin.Telegram.Handlers
 @inject IContentCheckCoordinator ContentCheckCoordinator
 @inject IManagedChatsRepository ManagedChatsRepository
+@inject TranslationHandler TranslationHandler
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
 @inject IEnumerable<IContentCheck> ContentChecks
@@ -542,10 +544,22 @@
             // Extract URLs from text (simple regex)
             var urls = ExtractUrls(_messageText);
 
+            // Run translation detection (same as real pipeline)
+            // Uses three-tier strategy: Latin ratio → FastText → OpenAI
+            var translationResult = await TranslationHandler.GetTextForDetectionAsync(
+                _messageText,
+                messageId: 0, // Test message, no real ID
+                CancellationToken.None);
+
+            if (translationResult.DetectedLanguage != null)
+            {
+                Console.WriteLine($"[ContentTester] Translated from {translationResult.DetectedLanguage}: {_messageText[..Math.Min(50, _messageText.Length)]}... → {translationResult.TextForDetection[..Math.Min(50, translationResult.TextForDetection.Length)]}...");
+            }
+
             // Build request - same structure as MessageProcessingService uses
             var request = new ContentCheckRequest
             {
-                Message = _messageText, // Empty string for media-only tests
+                Message = translationResult.TextForDetection, // Use translated text if available
                 UserId = string.IsNullOrWhiteSpace(_userId) ? 0 : long.Parse(_userId),
                 UserName = _userName,
                 ChatId = _selectedChatId ?? 0, // 0 = global config
