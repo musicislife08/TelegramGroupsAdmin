@@ -11,7 +11,7 @@ compose/*
 tessdata/
 
 # FastText language models (large binary files - baked into Docker image instead)
-data/models/
+**/lang-models/
 
 # Runtime data files (backups, media, etc.)
 **/*.tar.gz
@@ -55,4 +55,3 @@ compose.override.yml
 **/*.p12
 **/*.key
 **/*.pem
-TelegramGroupsAdmin/Data/models/

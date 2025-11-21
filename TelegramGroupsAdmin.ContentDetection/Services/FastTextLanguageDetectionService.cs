@@ -18,11 +18,12 @@ public class FastTextLanguageDetectionService : ILanguageDetectionService, IDisp
     {
         _logger = logger;
 
-        // Try to load model from /data/models (Docker) or data/models (local dev)
+        // Try to load model from /lang-models (Docker) or TelegramGroupsAdmin/lang-models (local dev)
+        // Same pattern as tessdata: baked into image, not in /data volume
         var modelPaths = new[]
         {
-            "/data/models/lid.176.ftz",  // Docker production path
-            "data/models/lid.176.ftz"     // Local development path
+            "/lang-models/lid.176.ftz",                    // Docker production path (baked into image)
+            "TelegramGroupsAdmin/lang-models/lid.176.ftz"  // Local development path
         };
 
         foreach (var modelPath in modelPaths)

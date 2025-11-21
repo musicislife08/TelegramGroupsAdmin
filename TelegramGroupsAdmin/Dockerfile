@@ -200,7 +200,8 @@ COPY --from=dependencies --chown=$PUID:$PGID /deps/eng.traineddata /tessdata/eng
 
 # Copy FastText language identification model from dependencies stage
 # 917KB - 176-language model for translation pre-filtering
-COPY --from=dependencies --chown=$PUID:$PGID /deps/lid.176.ftz /data/models/lid.176.ftz
+# Uses /lang-models (baked into image) - same pattern as /tessdata
+COPY --from=dependencies --chown=$PUID:$PGID /deps/lid.176.ftz /lang-models/lid.176.ftz
 
 # Copy FFmpeg static binaries from dependencies stage (ML-6: Video frame extraction)
 # Static builds = no library dependencies, works in Chiseled runtime
