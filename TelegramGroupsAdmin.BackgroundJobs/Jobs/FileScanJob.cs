@@ -8,6 +8,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
@@ -30,7 +31,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class FileScanJob(
     ILogger<FileScanJob> logger,
     TelegramBotClientFactory botClientFactory,
-    IEnumerable<IContentCheck> contentChecks,
+    IEnumerable<IContentCheckV2> contentChecks,
     ITelegramUserRepository telegramUserRepository,
     IMessageHistoryRepository messageHistoryRepository,
     IDetectionResultsRepository detectionResultsRepository,
@@ -38,7 +39,7 @@ public class FileScanJob(
 {
     private readonly ILogger<FileScanJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly IContentCheck _fileScanningCheck = contentChecks.First(c => c.CheckName == CheckName.FileScanning);
+    private readonly IContentCheckV2 _fileScanningCheck = contentChecks.First(c => c.CheckName == CheckName.FileScanning);
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
     private readonly IDetectionResultsRepository _detectionResultsRepository = detectionResultsRepository;
@@ -47,7 +48,7 @@ public class FileScanJob(
     public async Task Execute(IJobExecutionContext context)
     {
         // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString("payload")
+        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
             ?? throw new InvalidOperationException("payload not found in job data");
 
         var payload = JsonSerializer.Deserialize<FileScanJobPayload>(payloadJson)
@@ -68,12 +69,6 @@ public class FileScanJob(
 
         try
         {
-            if (payload == null)
-            {
-                _logger.LogError("FileScanJob received null payload");
-                return;
-            }
-
             _logger.LogInformation(
                 "Scanning file '{FileName}' ({FileSize} bytes) from user {UserId} in chat {ChatId} (message {MessageId})",
                 payload.FileName ?? "unknown",
@@ -142,11 +137,17 @@ public class FileScanJob(
 
                 var scanResult = await _fileScanningCheck.CheckAsync(scanRequest);
 
+                // V2 scoring: 5.0 = malware detected, 0.0 = clean/abstained
+                // Map to V1 concepts: Score >= 4.0 = Infected, < 4.0 = Clean
+                bool isInfected = !scanResult.Abstained && scanResult.Score >= 4.0;
+                int confidenceV1 = (int)(scanResult.Score * 20); // Map 0-5.0 to 0-100
+
                 _logger.LogInformation(
-                    "File scan complete for message {MessageId}: Result={Result}, Confidence={Confidence}, Details={Details}",
+                    "File scan complete for message {MessageId}: Score={Score}, Abstained={Abstained}, Infected={Infected}, Details={Details}",
                     payload.MessageId,
-                    scanResult.Result,
-                    scanResult.Confidence,
+                    scanResult.Score,
+                    scanResult.Abstained,
+                    isInfected,
                     scanResult.Details);
 
                 // Step 5: Save detection history (for both clean and infected files)
@@ -157,10 +158,10 @@ public class FileScanJob(
                     DetectedAt = DateTimeOffset.UtcNow,
                     DetectionSource = "file_scan", // Phase 4.14
                     DetectionMethod = "FileScanningCheck",
-                    IsSpam = scanResult.Result == CheckResultType.Spam,
-                    Confidence = scanResult.Confidence,
+                    IsSpam = isInfected,
+                    Confidence = confidenceV1,
                     Reason = scanResult.Details,
-                    NetConfidence = scanResult.Result == CheckResultType.Spam ? scanResult.Confidence : -scanResult.Confidence,
+                    NetConfidence = isInfected ? confidenceV1 : -confidenceV1,
                     CheckResultsJson = null, // File scanning is a single check, no aggregation
                     UsedForTraining = false, // File scans don't train spam detection
                     MessageText = $"File: {payload.FileName ?? "unknown"} ({payload.FileSize} bytes)",
@@ -170,12 +171,12 @@ public class FileScanJob(
                 await _detectionResultsRepository.InsertAsync(detectionRecord, cancellationToken);
 
                 _logger.LogInformation(
-                    "Created detection history record for file scan: message {MessageId}, result={Result}",
+                    "Created detection history record for file scan: message {MessageId}, infected={Infected}",
                     payload.MessageId,
-                    scanResult.Result);
+                    isInfected);
 
                 // Step 6: Take action if file is infected
-                if (scanResult.Result == CheckResultType.Spam) // "Spam" = Infected for file scanning
+                if (isInfected)
                 {
                     await HandleInfectedFileAsync(botClient, payload, scanResult, cancellationToken);
                 }
@@ -249,7 +250,7 @@ public class FileScanJob(
     private async Task HandleInfectedFileAsync(
         ITelegramBotClient botClient,
         FileScanJobPayload payload,
-        ContentCheckResponse scanResult,
+        ContentCheckResponseV2 scanResult,
         CancellationToken cancellationToken)
     {
         _logger.LogWarning(
@@ -295,7 +296,7 @@ public class FileScanJob(
     private async Task NotifyUserAsync(
         ITelegramBotClient botClient,
         FileScanJobPayload payload,
-        ContentCheckResponse scanResult,
+        ContentCheckResponseV2 scanResult,
         CancellationToken cancellationToken)
     {
         var notificationText = $"⚠️ **Malware Detected**\n\n" +

@@ -10,15 +10,21 @@ using TelegramGroupsAdmin.ContentDetection.Services;
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
 /// <summary>
-/// File scanning check using two-tier architecture:
+/// V2 file scanning check with proper scoring (0.0-5.0 points)
+/// Uses two-tier architecture:
 /// - Tier 1: Local scanners (ClamAV) run in parallel with OR voting
 /// - Tier 2: Cloud services (e.g., VirusTotal) run sequentially in priority order (only if Tier 1 reports clean)
 /// Phase 4.17 - always_run=true (bypasses trust/admin exemptions)
 /// Implements hash-based caching with 24-hour TTL
+///
+/// V2 Scoring:
+/// - Malware detected → 5.0 points (definitive threat)
+/// - Clean → 0.0 points, abstained (no evidence of threat)
+/// - Error/size limit → 0.0 points, abstained (fail-open)
 /// </summary>
-public class FileScanningCheck : IContentCheck
+public class FileScanningCheckV2 : IContentCheckV2
 {
-    private readonly ILogger<FileScanningCheck> _logger;
+    private readonly ILogger<FileScanningCheckV2> _logger;
     private readonly FileScanningConfig _config;
     private readonly Tier1VotingCoordinator _tier1Coordinator;
     private readonly Tier2QueueCoordinator _tier2Coordinator;
@@ -26,8 +32,8 @@ public class FileScanningCheck : IContentCheck
 
     public CheckName CheckName => CheckName.FileScanning;
 
-    public FileScanningCheck(
-        ILogger<FileScanningCheck> logger,
+    public FileScanningCheckV2(
+        ILogger<FileScanningCheckV2> logger,
         IOptions<FileScanningConfig> config,
         Tier1VotingCoordinator tier1Coordinator,
         Tier2QueueCoordinator tier2Coordinator,
@@ -42,13 +48,13 @@ public class FileScanningCheck : IContentCheck
 
     public bool ShouldExecute(ContentCheckRequest request)
     {
-        // Skip for now - this check will be called directly with FileScanCheckRequest
-        // when MessageProcessingService detects a file attachment
-        // TODO: Integrate with ContentDetectionEngine for automatic file detection
+        // This check is called directly with FileScanCheckRequest by FileScanJob
+        // when MessageProcessingService → FileScanningHandler detects a file attachment
+        // Not integrated with ContentDetectionEngine (uses separate path for async file download)
         return false;
     }
 
-    public async ValueTask<ContentCheckResponse> CheckAsync(ContentCheckRequestBase request)
+    public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
         var req = (FileScanCheckRequest)request;
 
@@ -60,12 +66,12 @@ public class FileScanningCheck : IContentCheck
                 _logger.LogWarning("File exceeds size limit for user {UserId}: {Size} > {Limit} bytes",
                     req.UserId, req.FileSize, _config.General.MaxFileSizeBytes);
 
-                return new ContentCheckResponse
+                return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
-                    Result = CheckResultType.Clean,  // Fail-open for oversized files
-                    Details = $"File size {req.FileSize} exceeds limit {_config.General.MaxFileSizeBytes} (fail-open)",
-                    Confidence = 0  // No confidence - file not scanned
+                    Score = 0.0,
+                    Abstained = true,
+                    Details = $"File size {req.FileSize} exceeds limit {_config.General.MaxFileSizeBytes} (fail-open)"
                 };
             }
 
@@ -89,22 +95,22 @@ public class FileScanningCheck : IContentCheck
                         .Select(r => $"{r.Scanner}:{r.ThreatName}")
                         .ToList();
 
-                    return new ContentCheckResponse
+                    return new ContentCheckResponseV2
                     {
                         CheckName = CheckName,
-                        Result = CheckResultType.Spam,  // Infected file = spam
-                        Details = $"Malware detected (cached): {string.Join(", ", threats)} | Hash: {req.FileHash}",
-                        Confidence = 100  // Virus scanner results are definitive
+                        Score = 5.0,
+                        Abstained = false,
+                        Details = $"Malware detected (cached): {string.Join(", ", threats)} | Hash: {req.FileHash}"
                     };
                 }
 
                 // All cached results were clean
-                return new ContentCheckResponse
+                return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
-                    Result = CheckResultType.Clean,
-                    Details = $"File clean (cached) | Hash: {req.FileHash}",
-                    Confidence = 100  // Virus scanner results are definitive
+                    Score = 0.0,
+                    Abstained = true,
+                    Details = $"File clean (cached) | Hash: {req.FileHash}"
                 };
             }
 
@@ -148,12 +154,12 @@ public class FileScanningCheck : IContentCheck
                     string.Join(", ", threats),
                     string.Join(", ", detectedBy));
 
-                return new ContentCheckResponse
+                return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
-                    Result = CheckResultType.Spam,  // Infected file = spam
-                    Details = $"Malware detected: {string.Join(", ", threats)} by {string.Join("+", detectedBy)} (Tier 1, {tier1Result.TotalDurationMs}ms)",
-                    Confidence = 100  // Virus scanner results are definitive
+                    Score = 5.0,
+                    Abstained = false,
+                    Details = $"Malware detected: {string.Join(", ", threats)} by {string.Join("+", detectedBy)} (Tier 1, {tier1Result.TotalDurationMs}ms)"
                 };
             }
 
@@ -217,12 +223,12 @@ public class FileScanningCheck : IContentCheck
                     string.Join(", ", threats),
                     string.Join(", ", detectedBy));
 
-                return new ContentCheckResponse
+                return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
-                    Result = CheckResultType.Spam,  // Infected file = spam
-                    Details = $"Malware detected: {string.Join(", ", threats)} by {string.Join("+", detectedBy)} (Tier 2, {tier2Result.TotalDurationMs}ms)",
-                    Confidence = 100  // Virus scanner results are definitive
+                    Score = 5.0,
+                    Abstained = false,
+                    Details = $"Malware detected: {string.Join(", ", threats)} by {string.Join("+", detectedBy)} (Tier 2, {tier2Result.TotalDurationMs}ms)"
                 };
             }
 
@@ -231,25 +237,26 @@ public class FileScanningCheck : IContentCheck
             _logger.LogInformation("File scanning CLEAN for user {UserId} (Tier 1 + Tier 2, total: {Duration}ms)",
                 req.UserId, totalDuration);
 
-            return new ContentCheckResponse
+            return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
-                Result = CheckResultType.Clean,
-                Details = $"File clean | Tier 1: {tier1Result.ScannerResults.Count} scanner(s), Tier 2: {tier2Result.CloudScanResults.Count} service(s) ({totalDuration}ms)",
-                Confidence = 100  // Virus scanner results are definitive
+                Score = 0.0,
+                Abstained = true,
+                Details = $"File clean | Tier 1: {tier1Result.ScannerResults.Count} scanner(s), Tier 2: {tier2Result.CloudScanResults.Count} service(s) ({totalDuration}ms)"
             };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Exception during file scanning for user {UserId}", req.UserId);
 
-            // Fail-open: allow file through on infrastructure errors
-            return new ContentCheckResponse
+            // Fail-open: abstain on infrastructure errors
+            return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
-                Result = CheckResultType.Clean,  // Fail-open - no Error type available
+                Score = 0.0,
+                Abstained = true,
                 Details = $"Scan error (fail-open): {ex.Message}",
-                Confidence = 0  // No confidence - scan failed
+                Error = ex
             };
         }
     }

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Quartz;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 
@@ -13,6 +14,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Job logic to run PostgreSQL database maintenance operations (VACUUM, ANALYZE)
 /// Executes VACUUM to reclaim storage and ANALYZE to update query planner statistics
 /// </summary>
+[DisallowConcurrentExecution]
 public class DatabaseMaintenanceJob : IJob
 {
     private readonly ILogger<DatabaseMaintenanceJob> _logger;
@@ -30,10 +32,10 @@ public class DatabaseMaintenanceJob : IJob
         // Scheduled triggers don't have payloads, manual triggers do
         DatabaseMaintenancePayload payload;
 
-        if (context.JobDetail.JobDataMap.ContainsKey("payload"))
+        if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.PayloadJson))
         {
             // Manual trigger - deserialize provided payload
-            var payloadJson = context.JobDetail.JobDataMap.GetString("payload")!;
+            var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)!;
             payload = JsonSerializer.Deserialize<DatabaseMaintenancePayload>(payloadJson)
                 ?? throw new InvalidOperationException("Failed to deserialize DatabaseMaintenancePayload");
         }
@@ -61,12 +63,6 @@ public class DatabaseMaintenanceJob : IJob
         {
             try
             {
-                if (payload == null)
-                {
-                    _logger.LogError("DatabaseMaintenanceJobLogic received null payload");
-                    return;
-                }
-
                 var connectionString = _configuration.GetConnectionString("PostgreSQL");
                 if (string.IsNullOrEmpty(connectionString))
                 {

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 
@@ -13,6 +14,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Job logic to automatically backup database on a cron schedule
 /// Saves backups to disk and manages retention (deletes old backups)
 /// </summary>
+[DisallowConcurrentExecution]
 public class ScheduledBackupJob : IJob
 {
     private readonly ILogger<ScheduledBackupJob> _logger;
@@ -32,10 +34,10 @@ public class ScheduledBackupJob : IJob
         // Scheduled triggers don't have payloads, manual triggers do
         ScheduledBackupPayload payload;
 
-        if (context.JobDetail.JobDataMap.ContainsKey("payload"))
+        if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.PayloadJson))
         {
             // Manual trigger - deserialize provided payload
-            var payloadJson = context.JobDetail.JobDataMap.GetString("payload")!;
+            var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)!;
             payload = JsonSerializer.Deserialize<ScheduledBackupPayload>(payloadJson)
                 ?? throw new InvalidOperationException("Failed to deserialize ScheduledBackupPayload");
         }
@@ -66,12 +68,6 @@ public class ScheduledBackupJob : IJob
         {
             try
             {
-                if (payload == null)
-                {
-                    _logger.LogError("ScheduledBackupJob received null payload");
-                    return;
-                }
-
                 _logger.LogInformation("Starting scheduled backup (retention: {Hourly}h/{Daily}d/{Weekly}w/{Monthly}m/{Yearly}y)",
                     payload.RetainHourlyBackups, payload.RetainDailyBackups, payload.RetainWeeklyBackups,
                     payload.RetainMonthlyBackups, payload.RetainYearlyBackups);

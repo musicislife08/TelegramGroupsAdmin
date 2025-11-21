@@ -56,10 +56,8 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
             return globalConfig ?? new FileScanningConfig();
         }
 
-        // Merge: chat config overrides global
-        // For now, we'll just return the chat config if it exists
-        // TODO: Implement sophisticated merging logic if needed
-        return chatConfig;
+        // Merge: chat config overrides global defaults (deep merge of nested objects)
+        return MergeConfigs(globalConfig ?? new FileScanningConfig(), chatConfig);
     }
 
     public async Task SaveAsync(FileScanningConfig config, long? chatId = null, CancellationToken cancellationToken = default)
@@ -348,5 +346,83 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("SendGrid configuration saved successfully");
+    }
+
+    /// <summary>
+    /// Deep merge chat config onto global config
+    /// Chat values override global defaults for all properties
+    /// </summary>
+    private static FileScanningConfig MergeConfigs(FileScanningConfig globalConfig, FileScanningConfig chatConfig)
+    {
+        return new FileScanningConfig
+        {
+            // Merge Tier1 config
+            Tier1 = new Tier1Config
+            {
+                ClamAV = new ClamAVConfig
+                {
+                    Enabled = chatConfig.Tier1.ClamAV.Enabled != globalConfig.Tier1.ClamAV.Enabled
+                        ? chatConfig.Tier1.ClamAV.Enabled
+                        : globalConfig.Tier1.ClamAV.Enabled,
+                    Host = chatConfig.Tier1.ClamAV.Host != new ClamAVConfig().Host
+                        ? chatConfig.Tier1.ClamAV.Host
+                        : globalConfig.Tier1.ClamAV.Host,
+                    Port = chatConfig.Tier1.ClamAV.Port != new ClamAVConfig().Port
+                        ? chatConfig.Tier1.ClamAV.Port
+                        : globalConfig.Tier1.ClamAV.Port,
+                    TimeoutSeconds = chatConfig.Tier1.ClamAV.TimeoutSeconds != new ClamAVConfig().TimeoutSeconds
+                        ? chatConfig.Tier1.ClamAV.TimeoutSeconds
+                        : globalConfig.Tier1.ClamAV.TimeoutSeconds
+                }
+            },
+
+            // Merge Tier2 config
+            Tier2 = new Tier2Config
+            {
+                CloudQueuePriority = chatConfig.Tier2.CloudQueuePriority.SequenceEqual(new Tier2Config().CloudQueuePriority)
+                    ? globalConfig.Tier2.CloudQueuePriority
+                    : chatConfig.Tier2.CloudQueuePriority,
+                VirusTotal = new VirusTotalConfig
+                {
+                    Enabled = chatConfig.Tier2.VirusTotal.Enabled != globalConfig.Tier2.VirusTotal.Enabled
+                        ? chatConfig.Tier2.VirusTotal.Enabled
+                        : globalConfig.Tier2.VirusTotal.Enabled,
+                    DailyLimit = chatConfig.Tier2.VirusTotal.DailyLimit != new VirusTotalConfig().DailyLimit
+                        ? chatConfig.Tier2.VirusTotal.DailyLimit
+                        : globalConfig.Tier2.VirusTotal.DailyLimit,
+                    PerMinuteLimit = chatConfig.Tier2.VirusTotal.PerMinuteLimit != new VirusTotalConfig().PerMinuteLimit
+                        ? chatConfig.Tier2.VirusTotal.PerMinuteLimit
+                        : globalConfig.Tier2.VirusTotal.PerMinuteLimit
+                },
+                FailOpenWhenExhausted = chatConfig.Tier2.FailOpenWhenExhausted != new Tier2Config().FailOpenWhenExhausted
+                    ? chatConfig.Tier2.FailOpenWhenExhausted
+                    : globalConfig.Tier2.FailOpenWhenExhausted
+            },
+
+            // Merge General config
+            General = new GeneralConfig
+            {
+                CacheEnabled = chatConfig.General.CacheEnabled != new GeneralConfig().CacheEnabled
+                    ? chatConfig.General.CacheEnabled
+                    : globalConfig.General.CacheEnabled,
+                CacheTtlHours = chatConfig.General.CacheTtlHours != new GeneralConfig().CacheTtlHours
+                    ? chatConfig.General.CacheTtlHours
+                    : globalConfig.General.CacheTtlHours,
+                ScanFileTypes = chatConfig.General.ScanFileTypes.SequenceEqual(new GeneralConfig().ScanFileTypes)
+                    ? globalConfig.General.ScanFileTypes
+                    : chatConfig.General.ScanFileTypes,
+                MaxFileSizeBytes = chatConfig.General.MaxFileSizeBytes != new GeneralConfig().MaxFileSizeBytes
+                    ? chatConfig.General.MaxFileSizeBytes
+                    : globalConfig.General.MaxFileSizeBytes,
+                AlwaysRunForAllUsers = chatConfig.General.AlwaysRunForAllUsers != new GeneralConfig().AlwaysRunForAllUsers
+                    ? chatConfig.General.AlwaysRunForAllUsers
+                    : globalConfig.General.AlwaysRunForAllUsers
+            },
+
+            // Use chat LastModified if present, otherwise global
+            LastModified = chatConfig.LastModified > globalConfig.LastModified
+                ? chatConfig.LastModified
+                : globalConfig.LastModified
+        };
     }
 }

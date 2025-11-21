@@ -164,14 +164,6 @@ var app = builder.Build();
 // Run database migrations
 await app.RunDatabaseMigrationsAsync(connectionString);
 
-// Migrate legacy cron expressions to natural language DSL (one-time data migration)
-// TODO: Remove this after all instances have migrated (safe to delete after first deploy)
-using (var scope = app.Services.CreateScope())
-{
-    var jobConfigService = scope.ServiceProvider.GetRequiredService<IBackgroundJobConfigService>();
-    await jobConfigService.MigrateLegacyCronExpressionsAsync();
-}
-
 // Initialize Serilog configuration from database (now that migrations have run)
 if (serilogConfig != null)
 {

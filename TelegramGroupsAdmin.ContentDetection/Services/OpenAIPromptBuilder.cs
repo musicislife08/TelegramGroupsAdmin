@@ -27,7 +27,8 @@ public static class OpenAIPromptBuilder
         if (history.Any())
         {
             contextBuilder.AppendLine("\nRecent message history for context:");
-            foreach (var msg in history.Take(3))
+            // Use all history messages passed in (count controlled by MessageHistoryCount config)
+            foreach (var msg in history)
             {
                 var status = msg.WasSpam ? "[SPAM]" : "[OK]";
                 contextBuilder.AppendLine($"{status} {msg.UserName}: {msg.Message.Substring(0, Math.Min(100, msg.Message.Length))}");

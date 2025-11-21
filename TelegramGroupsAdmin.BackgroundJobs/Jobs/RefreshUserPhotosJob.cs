@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Services.Media;
 using TelegramGroupsAdmin.Telegram.Abstractions;
@@ -14,6 +15,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Nightly job to refresh user photos for all active users (seen in last 30 days)
 /// Queues refetch requests for smart cache invalidation
 /// </summary>
+[DisallowConcurrentExecution]
 public class RefreshUserPhotosJob : IJob
 {
     private readonly ILogger<RefreshUserPhotosJob> _logger;
@@ -36,10 +38,10 @@ public class RefreshUserPhotosJob : IJob
         // Scheduled triggers don't have payloads, manual triggers do
         RefreshUserPhotosPayload payload;
 
-        if (context.JobDetail.JobDataMap.ContainsKey("payload"))
+        if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.PayloadJson))
         {
             // Manual trigger - deserialize provided payload
-            var payloadJson = context.JobDetail.JobDataMap.GetString("payload")!;
+            var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)!;
             payload = JsonSerializer.Deserialize<RefreshUserPhotosPayload>(payloadJson)
                 ?? throw new InvalidOperationException("Failed to deserialize RefreshUserPhotosPayload");
         }
@@ -65,12 +67,6 @@ public class RefreshUserPhotosJob : IJob
         {
             try
             {
-                if (payload == null)
-                {
-                    _logger.LogError("RefreshUserPhotosJob received null payload");
-                    return;
-                }
-
                 _logger.LogInformation("Starting user photo refresh for users active in last {Days} days", payload.DaysBack);
 
                 using var scope = _scopeFactory.CreateScope();

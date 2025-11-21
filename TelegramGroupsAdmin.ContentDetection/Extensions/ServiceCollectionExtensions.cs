@@ -75,21 +75,6 @@ public static class ServiceCollectionExtensions
             // Register stop words repository
             services.AddScoped<IStopWordsRepository, StopWordsRepository>();
 
-            // Register V1 content checks (original implementation with voting)
-            // NOTE: Translation happens in ContentDetectionEngine preprocessing, not as a content check
-            services.AddScoped<IContentCheck, Checks.InvisibleCharsSpamCheck>();  // Runs FIRST on original message
-            services.AddScoped<IContentCheck, Checks.StopWordsSpamCheck>();
-            services.AddScoped<IContentCheck, Checks.CasSpamCheck>();
-            services.AddScoped<IContentCheck, Checks.SimilaritySpamCheck>();
-            services.AddScoped<IContentCheck, Checks.BayesSpamCheck>();
-            services.AddScoped<IContentCheck, Checks.SpacingSpamCheck>();
-            services.AddScoped<IContentCheck, Checks.OpenAIContentCheck>();
-            services.AddScoped<IContentCheck, Checks.UrlBlocklistSpamCheck>();
-            services.AddScoped<IContentCheck, Checks.ThreatIntelSpamCheck>();
-            services.AddScoped<IContentCheck, Checks.ImageSpamCheck>();
-            services.AddScoped<IContentCheck, Checks.VideoSpamCheck>();  // ML-6: Video spam detection
-            services.AddScoped<IContentCheck, Checks.FileScanningCheck>();  // Phase 4.17: File scanning (always_run=true)
-
             // Register V2 spam detection engine (SpamAssassin-style additive scoring)
             // Fixes critical bug where abstentions voted "Clean" and cancelled spam signals
             services.AddScoped<ContentDetectionEngineV2>();
@@ -102,10 +87,12 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IContentCheckV2, Checks.SimilaritySpamCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.BayesSpamCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.SpacingSpamCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.OpenAIContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.UrlBlocklistSpamCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.ThreatIntelSpamCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.ImageSpamCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.VideoSpamCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.FileScanningCheckV2>();  // Phase 4.17: File scanning (always_run=true)
 
             // Register HTTP client for external API calls
             services.AddHttpClient();

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using Telegram.Bot;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions;
@@ -30,7 +31,7 @@ public class DeleteUserMessagesJob(
     public async Task Execute(IJobExecutionContext context)
     {
         // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString("payload")
+        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
             ?? throw new InvalidOperationException("payload not found in job data");
 
         var payload = JsonSerializer.Deserialize<DeleteUserMessagesPayload>(payloadJson)
@@ -51,12 +52,6 @@ public class DeleteUserMessagesJob(
 
         try
         {
-            if (payload == null)
-            {
-                _logger.LogError("DeleteUserMessagesJobLogic received null payload");
-                return;
-            }
-
             _logger.LogInformation(
                 "Starting cross-chat message cleanup for user {UserId}",
                 payload.TelegramUserId);

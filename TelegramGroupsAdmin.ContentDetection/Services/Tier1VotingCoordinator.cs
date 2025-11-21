@@ -64,12 +64,6 @@ public class Tier1VotingCoordinator
             scanTasks.Add(_clamAvScanner.ScanFileAsync(filePath, fileName, cancellationToken));
         }
 
-        // TODO: Add Windows AMSI scanner when implemented (Phase 3)
-        // if (_config.Tier1.WindowsAmsi.Enabled)
-        // {
-        //     scanTasks.Add(_windowsAmsiScanner.ScanFileAsync(fileBytes, fileName, cancellationToken));
-        // }
-
         if (!scanTasks.Any())
         {
             _logger.LogWarning("No Tier 1 scanners are enabled!");

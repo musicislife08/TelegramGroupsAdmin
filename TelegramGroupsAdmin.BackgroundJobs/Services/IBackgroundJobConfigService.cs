@@ -42,10 +42,4 @@ public interface IBackgroundJobConfigService
     /// Initializes default job configurations if they don't exist
     /// </summary>
     Task EnsureDefaultConfigsAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// One-time migration: Convert legacy Quartz cron expressions to natural language DSL
-    /// Called after EF Core migration renames CronExpression → Schedule column
-    /// </summary>
-    Task MigrateLegacyCronExpressionsAsync(CancellationToken cancellationToken = default);
 }

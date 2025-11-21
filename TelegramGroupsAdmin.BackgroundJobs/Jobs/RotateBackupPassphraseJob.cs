@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
@@ -16,6 +17,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Job for rotating backup encryption passphrase.
 /// Re-encrypts all existing backups with new passphrase using atomic file operations.
 /// </summary>
+[DisallowConcurrentExecution]
 public class RotateBackupPassphraseJob : IJob
 {
     private readonly IBackupEncryptionService _encryptionService;
@@ -44,7 +46,7 @@ public class RotateBackupPassphraseJob : IJob
     public async Task Execute(IJobExecutionContext context)
     {
         // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString("payload")
+        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
             ?? throw new InvalidOperationException("payload not found in job data");
 
         var payload = JsonSerializer.Deserialize<RotateBackupPassphrasePayload>(payloadJson)
@@ -64,11 +66,6 @@ public class RotateBackupPassphraseJob : IJob
 
         try
         {
-            if (payload == null)
-            {
-                _logger.LogError("RotateBackupPassphraseJob received null payload");
-                return;
-            }
             var userId = payload.UserId; // Web user GUID string
             var newPassphrase = payload.NewPassphrase;
             var backupDirectory = payload.BackupDirectory;

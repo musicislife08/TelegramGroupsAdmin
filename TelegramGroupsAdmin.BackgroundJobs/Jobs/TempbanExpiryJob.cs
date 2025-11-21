@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using Telegram.Bot;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -32,7 +33,7 @@ public class TempbanExpiryJob(
     public async Task Execute(IJobExecutionContext context)
     {
         // Extract payload from job data map (deserialize from JSON string)
-        var payloadJson = context.JobDetail.JobDataMap.GetString("payload")
+        var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)
             ?? throw new InvalidOperationException("payload not found in job data");
 
         var payload = JsonSerializer.Deserialize<TempbanExpiryJobPayload>(payloadJson)
@@ -54,12 +55,6 @@ public class TempbanExpiryJob(
 
         try
         {
-            if (payload == null)
-            {
-                _logger.LogError("TempbanExpiryJob received null payload");
-                return;
-            }
-
             _logger.LogInformation(
                 "Processing tempban expiry for user {UserId}. Reason: {Reason}, Expired at: {ExpiresAt}",
                 payload.UserId,

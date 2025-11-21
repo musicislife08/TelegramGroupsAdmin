@@ -5,6 +5,7 @@ using Quartz;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Abstractions;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -18,6 +19,7 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// Replaces PeriodicTimer in TelegramAdminBotService (Phase 4: Chat health optimization)
 /// Monitors chat permissions, admin lists, invite links
 /// </summary>
+[DisallowConcurrentExecution]
 public class ChatHealthCheckJob : IJob
 {
     private readonly ChatManagementService _chatService;
@@ -49,10 +51,10 @@ public class ChatHealthCheckJob : IJob
         // Scheduled triggers don't have payloads, manual triggers do
         ChatHealthCheckPayload payload;
 
-        if (context.JobDetail.JobDataMap.ContainsKey("payload"))
+        if (context.JobDetail.JobDataMap.ContainsKey(JobDataKeys.PayloadJson))
         {
             // Manual trigger - deserialize provided payload
-            var payloadJson = context.JobDetail.JobDataMap.GetString("payload")!;
+            var payloadJson = context.JobDetail.JobDataMap.GetString(JobDataKeys.PayloadJson)!;
             payload = JsonSerializer.Deserialize<ChatHealthCheckPayload>(payloadJson)
                 ?? throw new InvalidOperationException("Failed to deserialize ChatHealthCheckPayload");
         }
