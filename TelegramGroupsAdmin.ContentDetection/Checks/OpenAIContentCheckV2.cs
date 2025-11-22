@@ -247,13 +247,13 @@ public class OpenAIContentCheckV2(
             }
 
             // Map confidence (0.0-1.0) to V2 score (0.0-5.0)
-            var confidence = jsonResponse.Confidence ?? 0.8;
+            var confidence = jsonResponse.Confidence ?? SpamDetectionConstants.DefaultOpenAIConfidence;
             var score = confidence * 5.0;
 
-            // Review = medium score (3.0 points for 60% confidence)
+            // Review = medium score (capped at review threshold)
             if (isReview)
             {
-                score = Math.Min(score, 3.0); // Cap review at 3.0 points
+                score = Math.Min(score, SpamDetectionConstants.ReviewThreshold); // Cap review at review threshold
             }
 
             var spamDetails = $"OpenAI: {(isReview ? "Review" : "Spam")} - {jsonResponse.Reason}";

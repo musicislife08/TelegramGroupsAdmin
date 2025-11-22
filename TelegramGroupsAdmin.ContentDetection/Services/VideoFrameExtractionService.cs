@@ -128,7 +128,7 @@ public class VideoFrameExtractionService : IVideoFrameExtractionService
 
             // Smart frame selection for longer videos: beginning (10%) + middle (50%)
             // Skip beginning if black frame
-            var positionsToTry = new[] { 0.10, 0.20, 0.30 }; // Try multiple positions for beginning
+            double[] positionsToTry = [0.10, 0.20, 0.30]; // Try multiple positions for beginning
             var middlePosition = 0.50;
 
             // Try to extract beginning frame (skip black frames)
@@ -445,9 +445,9 @@ public class VideoFrameExtractionService : IVideoFrameExtractionService
     /// </summary>
     private string? FindBinary(string binaryName)
     {
-        var binaryNames = OperatingSystem.IsWindows()
-            ? new[] { $"{binaryName}.exe" }
-            : new[] { binaryName };
+        string[] binaryNames = OperatingSystem.IsWindows()
+            ? [$"{binaryName}.exe"]
+            : [binaryName];
 
         foreach (var name in binaryNames)
         {
@@ -465,11 +465,11 @@ public class VideoFrameExtractionService : IVideoFrameExtractionService
             }
 
             // Priority 3: Check common install locations (fallback if not in PATH)
-            var commonPaths = OperatingSystem.IsMacOS()
+            string[] commonPaths = OperatingSystem.IsMacOS()
                 ? [$"/opt/homebrew/bin/{name}", $"/usr/local/bin/{name}"]
                 : OperatingSystem.IsLinux()
-                    ? new[] { $"/usr/local/bin/{name}", $"/usr/bin/{name}" }
-                    : new[] { @$"C:\Program Files\ffmpeg\bin\{name}" };
+                    ? [$"/usr/local/bin/{name}", $"/usr/bin/{name}"]
+                    : [@$"C:\Program Files\ffmpeg\bin\{name}"];
 
             foreach (var commonPath in commonPaths)
             {

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
@@ -10,7 +11,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Key fix: Abstain when no invisible chars (not Clean 20%)
 /// Scoring: 1.5 points when found (research guidance)
 /// </summary>
-public class InvisibleCharsSpamCheckV2 : IContentCheckV2
+public class InvisibleCharsSpamCheckV2(ILogger<InvisibleCharsSpamCheckV2> logger) : IContentCheckV2
 {
     private const double ScoreInvisibleChars = 1.5; // Research: heuristics = 1.5 points
 
@@ -18,7 +19,24 @@ public class InvisibleCharsSpamCheckV2 : IContentCheckV2
 
     public bool ShouldExecute(ContentCheckRequest request)
     {
-        return !string.IsNullOrWhiteSpace(request.Message);
+        // Skip empty messages
+        if (string.IsNullOrWhiteSpace(request.Message))
+        {
+            return false;
+        }
+
+        // PERF-3 Option B: Skip text analysis for trusted/admin users
+        // InvisibleChars is not a critical check - it's a heuristic and should skip for trusted users
+        if (request.IsUserTrusted || request.IsUserAdmin)
+        {
+            logger.LogDebug(
+                "Skipping InvisibleChars check for user {UserId}: User is {UserType}",
+                request.UserId,
+                request.IsUserTrusted ? "trusted" : "admin");
+            return false;
+        }
+
+        return true;
     }
 
     public ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)

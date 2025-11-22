@@ -28,7 +28,24 @@ public class CasSpamCheckV2(
 
     public bool ShouldExecute(ContentCheckRequest request)
     {
-        return request.UserId != 0;
+        // Skip if no user ID
+        if (request.UserId == 0)
+        {
+            return false;
+        }
+
+        // PERF-3 Option B: Skip expensive CAS API calls for trusted/admin users
+        // CAS is not a critical check - it requires external API calls and should skip for trusted users
+        if (request.IsUserTrusted || request.IsUserAdmin)
+        {
+            logger.LogDebug(
+                "Skipping CAS check for user {UserId}: User is {UserType}",
+                request.UserId,
+                request.IsUserTrusted ? "trusted" : "admin");
+            return false;
+        }
+
+        return true;
     }
 
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)

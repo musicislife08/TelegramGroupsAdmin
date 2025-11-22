@@ -27,7 +27,24 @@ public class SimilaritySpamCheckV2(
 
     public bool ShouldExecute(ContentCheckRequest request)
     {
-        return !string.IsNullOrWhiteSpace(request.Message);
+        // Skip empty messages
+        if (string.IsNullOrWhiteSpace(request.Message))
+        {
+            return false;
+        }
+
+        // PERF-3 Option B: Skip expensive database queries for trusted/admin users
+        // Similarity is not a critical check - it requires database queries and should skip for trusted users
+        if (request.IsUserTrusted || request.IsUserAdmin)
+        {
+            logger.LogDebug(
+                "Skipping Similarity check for user {UserId}: User is {UserType}",
+                request.UserId,
+                request.IsUserTrusted ? "trusted" : "admin");
+            return false;
+        }
+
+        return true;
     }
 
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)

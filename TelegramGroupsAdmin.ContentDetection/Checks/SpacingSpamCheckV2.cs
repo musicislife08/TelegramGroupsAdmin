@@ -18,7 +18,24 @@ public class SpacingSpamCheckV2(ILogger<SpacingSpamCheckV2> logger) : IContentCh
 
     public bool ShouldExecute(ContentCheckRequest request)
     {
-        return !string.IsNullOrWhiteSpace(request.Message);
+        // Skip empty messages
+        if (string.IsNullOrWhiteSpace(request.Message))
+        {
+            return false;
+        }
+
+        // PERF-3 Option B: Skip text analysis for trusted/admin users
+        // Spacing is not a critical check - it's a heuristic and should skip for trusted users
+        if (request.IsUserTrusted || request.IsUserAdmin)
+        {
+            logger.LogDebug(
+                "Skipping Spacing check for user {UserId}: User is {UserType}",
+                request.UserId,
+                request.IsUserTrusted ? "trusted" : "admin");
+            return false;
+        }
+
+        return true;
     }
 
     public ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)

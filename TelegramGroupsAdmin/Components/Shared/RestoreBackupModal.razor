@@ -19,7 +19,7 @@
         {
             <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
                 <MudText Typo="Typo.subtitle2" Class="mb-2">Backup Information</MudText>
-                <MudText Typo="Typo.body2"><strong>Created:</strong> @DateTimeOffset.FromUnixTimeSeconds(_metadata.CreatedAt).ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudText>
+                <MudText Typo="Typo.body2"><strong>Created:</strong> <span class="local-timestamp" data-utc="@_metadata.CreatedAt.ToString("o")">@_metadata.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></MudText>
                 <MudText Typo="Typo.body2"><strong>Version:</strong> @_metadata.Version | <strong>Tables:</strong> @_metadata.TableCount</MudText>
                 <MudText Typo="Typo.body2"><strong>App Version:</strong> @_metadata.AppVersion</MudText>
             </MudPaper>

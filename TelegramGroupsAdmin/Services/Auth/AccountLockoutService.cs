@@ -18,13 +18,13 @@ public class AccountLockoutService : IAccountLockoutService
 
     // Lockout configuration
     private const int MaxFailedAttempts = 5;
-    private static readonly TimeSpan[] LockoutDurations = new[]
-    {
+    private static readonly TimeSpan[] LockoutDurations =
+    [
         TimeSpan.FromMinutes(1),   // 1st lockout
         TimeSpan.FromMinutes(10),  // 2nd lockout
         TimeSpan.FromMinutes(30),  // 3rd lockout
         TimeSpan.FromMinutes(120)  // 4th+ lockouts
-    };
+    ];
 
     public AccountLockoutService(
         IUserRepository userRepository,
