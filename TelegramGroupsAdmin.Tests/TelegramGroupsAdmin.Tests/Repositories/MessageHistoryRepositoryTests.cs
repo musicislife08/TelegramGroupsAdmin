@@ -100,6 +100,7 @@ public class MessageHistoryRepositoryTests
         // Register MessageHistoryRepository and extracted services (REFACTOR-3)
         services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
         services.AddScoped<IMessageQueryService, MessageQueryService>();
+        services.AddScoped<ITelegramUserRepository, TelegramUserRepository>(); // Required by MessageStatsService (UX-2.1)
         services.AddScoped<IMessageStatsService, MessageStatsService>();
         services.AddScoped<IMessageTranslationService, MessageTranslationService>();
         services.AddScoped<IMessageEditService, MessageEditService>();
