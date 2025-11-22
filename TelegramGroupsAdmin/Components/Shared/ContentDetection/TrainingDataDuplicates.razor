@@ -105,35 +105,74 @@
                                     Remove Duplicates
                                 </MudButton>
                             </MudStack>
-                            <MudText Typo="Typo.body1" Style="max-width: 800px; word-wrap: break-word;">
-                                "@group.MessageText[..Math.Min(200, group.MessageText.Length)]@(group.MessageText.Length > 200 ? "..." : "")"
-                            </MudText>
-                            <MudDivider />
+                            @if (_selectedView == "exact")
+                            {
+                                <MudText Typo="Typo.body1" Style="max-width: 800px; word-wrap: break-word;">
+                                    "@group.MessageText[..Math.Min(200, group.MessageText.Length)]@(group.MessageText.Length > 200 ? "..." : "")"
+                                </MudText>
+                                <MudDivider />
+                            }
                             @foreach (var sample in group.Samples)
                             {
-                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                                        <MudChip T="string" Size="Size.Small" Color="@(sample.IsSpam ? Color.Error : Color.Success)">
-                                            @(sample.IsSpam ? "SPAM" : "HAM")
-                                        </MudChip>
-                                        @if (sample.Id == group.RecommendedKeep?.Id)
+                                @if (_selectedView != "exact")
+                                {
+                                    <MudPaper Class="pa-3 mb-2" Elevation="0" Style="background-color: var(--mud-palette-background-grey);">
+                                        <MudStack Spacing="2">
+                                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                                    <MudChip T="string" Size="Size.Small" Color="@(sample.IsSpam ? Color.Error : Color.Success)">
+                                                        @(sample.IsSpam ? "SPAM" : "HAM")
+                                                    </MudChip>
+                                                    @if (sample.Id == group.RecommendedKeep?.Id)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">✓ Recommended Keep</MudChip>
+                                                    }
+                                                    <MudText Typo="Typo.body2">
+                                                        @sample.DetectionSource · @sample.Confidence% · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
+                                                    </MudText>
+                                                </MudStack>
+                                                @if (sample.Id != group.RecommendedKeep?.Id)
+                                                {
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                  Color="Color.Error"
+                                                                  Size="Size.Small"
+                                                                  OnClick="@(() => RemoveSample(sample))"
+                                                                  Disabled="@_processing"
+                                                                  title="Remove from training" />
+                                                }
+                                            </MudStack>
+                                            <MudText Typo="Typo.body2" Style="white-space: pre-wrap; word-wrap: break-word;">
+                                                @sample.MessageText
+                                            </MudText>
+                                        </MudStack>
+                                    </MudPaper>
+                                }
+                                else
+                                {
+                                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                            <MudChip T="string" Size="Size.Small" Color="@(sample.IsSpam ? Color.Error : Color.Success)">
+                                                @(sample.IsSpam ? "SPAM" : "HAM")
+                                            </MudChip>
+                                            @if (sample.Id == group.RecommendedKeep?.Id)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Primary">✓ Recommended Keep</MudChip>
+                                            }
+                                            <MudText Typo="Typo.body2">
+                                                @sample.DetectionSource · @sample.Confidence% · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
+                                            </MudText>
+                                        </MudStack>
+                                        @if (sample.Id != group.RecommendedKeep?.Id)
                                         {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary">✓ Recommended Keep</MudChip>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                          Color="Color.Error"
+                                                          Size="Size.Small"
+                                                          OnClick="@(() => RemoveSample(sample))"
+                                                          Disabled="@_processing"
+                                                          title="Remove from training" />
                                         }
-                                        <MudText Typo="Typo.body2">
-                                            @sample.DetectionSource · @sample.Confidence% · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
-                                        </MudText>
                                     </MudStack>
-                                    @if (sample.Id != group.RecommendedKeep?.Id)
-                                    {
-                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                                      Color="Color.Error"
-                                                      Size="Size.Small"
-                                                      OnClick="@(() => RemoveSample(sample))"
-                                                      Disabled="@_processing"
-                                                      title="Remove from training" />
-                                    }
-                                </MudStack>
+                                }
                             }
                         </MudStack>
                     </MudPaper>
