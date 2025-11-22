@@ -12,6 +12,12 @@ public class TopActiveUser
     public string? FirstName { get; set; }
     public string? UserPhotoPath { get; set; }
     public int MessageCount { get; set; }
+
+    /// <summary>
+    /// Percentage of total messages in the selected period (UX-2.1)
+    /// </summary>
+    public double Percentage { get; set; }
+
     public string DisplayName
     {
         get
