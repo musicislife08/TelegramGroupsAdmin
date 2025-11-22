@@ -1,0 +1,139 @@
+@using TelegramGroupsAdmin.Telegram.Services
+@using TelegramGroupsAdmin.Telegram.Models
+@inject TrainingDataDeduplicationService DeduplicationService
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudStack Spacing="4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h4">Training Data Deduplication</MudText>
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Refresh"
+                      OnClick="@AnalyzeTrainingData"
+                      Disabled="@_loading">
+                Analyze Duplicates
+            </MudButton>
+        </MudStack>
+
+        @if (_loading)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+        }
+
+        @if (_result != null)
+        {
+            <!-- Statistics Cards -->
+            <MudGrid>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Large" Color="Color.Error" />
+                            <MudText Typo="Typo.h6">@_result.ExactDuplicates.Count</MudText>
+                            <MudText Typo="Typo.body2" Align="Align.Center">Exact Duplicates</MudText>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.CompareArrows" Size="Size.Large" Color="Color.Warning" />
+                            <MudText Typo="Typo.h6">@_result.VerySimilar.Count</MudText>
+                            <MudText Typo="Typo.body2" Align="Align.Center">Very Similar (95-99%)</MudText>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Compare" Size="Size.Large" Color="Color.Info" />
+                            <MudText Typo="Typo.h6">@_result.Similar.Count</MudText>
+                            <MudText Typo="Typo.body2" Align="Align.Center">Similar (90-94%)</MudText>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingDown" Size="Size.Large" Color="Color.Success" />
+                            <MudText Typo="Typo.h6">@_result.PotentialReduction</MudText>
+                            <MudText Typo="Typo.body2" Align="Align.Center">Potential Reduction</MudText>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+
+            <!-- Duplicate Groups -->
+            @if (_result.ExactDuplicates.Any())
+            {
+                <MudText Typo="Typo.h5" Class="mt-4">Exact Duplicates (100% Match)</MudText>
+                @foreach (var group in _result.ExactDuplicates)
+                {
+                    <MudPaper Class="pa-4" Elevation="1">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudChip T="string" Size="Size.Small" Color="@(group.IsSameClass ? Color.Info : Color.Error)">
+                                    @(group.IsSameClass ? "Same Class" : "⚠️ CROSS-CLASS CONFLICT")
+                                </MudChip>
+                                <MudText Typo="Typo.body2">@group.DuplicateCount duplicates · Avg confidence: @group.AverageConfidence.ToString("F0")%</MudText>
+                            </MudStack>
+                            <MudText Typo="Typo.body1" Style="max-width: 800px; word-wrap: break-word;">
+                                "@group.MessageText[..Math.Min(200, group.MessageText.Length)]@(group.MessageText.Length > 200 ? "..." : "")"
+                            </MudText>
+                            <MudDivider />
+                            @foreach (var sample in group.Samples)
+                            {
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudChip T="string" Size="Size.Small" Color="@(sample.IsSpam ? Color.Error : Color.Success)">
+                                        @(sample.IsSpam ? "SPAM" : "HAM")
+                                    </MudChip>
+                                    @if (sample.Id == group.RecommendedKeep?.Id)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">✓ Recommended Keep</MudChip>
+                                    }
+                                    <MudText Typo="Typo.body2">
+                                        @sample.DetectionSource · @sample.Confidence% · @sample.DetectedAt.ToString("yyyy-MM-dd HH:mm")
+                                    </MudText>
+                                </MudStack>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                }
+            }
+
+            <!-- Summary -->
+            <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+                <MudText Typo="Typo.body1">
+                    <strong>Analysis Complete:</strong> Found @_result.TotalDuplicateSamples duplicate samples across @(_result.ExactDuplicates.Count + _result.VerySimilar.Count + _result.Similar.Count) groups.
+                    After deduplication, training data would reduce from @_result.TotalDuplicateSamples to @_result.SamplesAfterDeduplication samples.
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mt-2">
+                    Use the Training Data page to manually remove duplicates using the delete button (soft-delete preserves history).
+                </MudText>
+            </MudAlert>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private DuplicateAnalysisResult? _result;
+    private bool _loading;
+
+    private async Task AnalyzeTrainingData()
+    {
+        _loading = true;
+        try
+        {
+            _result = await DeduplicationService.AnalyzeTrainingDataAsync();
+            Snackbar.Add("Training data analysis complete", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error analyzing training data: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

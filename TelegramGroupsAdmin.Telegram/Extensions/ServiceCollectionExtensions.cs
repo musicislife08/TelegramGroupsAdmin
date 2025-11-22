@@ -94,6 +94,10 @@ public static class ServiceCollectionExtensions
             services.AddScoped<BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
 
+            // Training data quality services
+            services.AddScoped<TextSimilarityService>();
+            services.AddScoped<TrainingDataDeduplicationService>();
+
             // Phase 4.10: Anti-Impersonation Detection
             services.AddSingleton<IPhotoHashService, PhotoHashService>();
             services.AddScoped<IImpersonationDetectionService, ImpersonationDetectionService>();
