@@ -8,31 +8,20 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// Service for analyzing and deduplicating training data
 /// Identifies exact duplicates, similar messages, and cross-class conflicts
 /// </summary>
-public class TrainingDataDeduplicationService
+public class TrainingDataDeduplicationService(
+    IDetectionResultsRepository detectionResultsRepository,
+    TextSimilarityService similarityService,
+    ILogger<TrainingDataDeduplicationService> logger)
 {
-    private readonly IDetectionResultsRepository _detectionResultsRepository;
-    private readonly TextSimilarityService _similarityService;
-    private readonly ILogger<TrainingDataDeduplicationService> _logger;
-
-    public TrainingDataDeduplicationService(
-        IDetectionResultsRepository detectionResultsRepository,
-        TextSimilarityService similarityService,
-        ILogger<TrainingDataDeduplicationService> logger)
-    {
-        _detectionResultsRepository = detectionResultsRepository;
-        _similarityService = similarityService;
-        _logger = logger;
-    }
-
     /// <summary>
     /// Analyze all training data for duplicates and return tiered results
     /// </summary>
     public async Task<DuplicateAnalysisResult> AnalyzeTrainingDataAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Starting training data deduplication analysis");
+        logger.LogInformation("Starting training data deduplication analysis");
 
         // Load all training samples (TODO: Add repository method)
-        var samples = await _detectionResultsRepository.GetAllTrainingDataAsync(cancellationToken);
+        var samples = await detectionResultsRepository.GetAllTrainingDataAsync(cancellationToken);
 
         var trainingSamples = samples
             .Where(s => s.MessageText != null)
@@ -50,7 +39,7 @@ public class TrainingDataDeduplicationService
             })
             .ToList();
 
-        _logger.LogInformation("Loaded {Count} training samples for analysis", trainingSamples.Count);
+        logger.LogInformation("Loaded {Count} training samples for analysis", trainingSamples.Count);
 
         var result = new DuplicateAnalysisResult();
 
@@ -72,7 +61,7 @@ public class TrainingDataDeduplicationService
             .Where(g => g.HasCrossClassConflict)
             .ToList();
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Deduplication analysis complete: {ExactCount} exact duplicate groups, {VerySimilarCount} very similar groups, {SimilarCount} similar groups, {ConflictCount} cross-class conflicts",
             result.ExactDuplicates.Count,
             result.VerySimilar.Count,
@@ -104,7 +93,7 @@ public class TrainingDataDeduplicationService
             .OrderByDescending(g => g.DuplicateCount)
             .ToList();
 
-        _logger.LogDebug("Found {Count} exact duplicate groups", groups.Count);
+        logger.LogDebug("Found {Count} exact duplicate groups", groups.Count);
         return groups;
     }
 
@@ -133,7 +122,7 @@ public class TrainingDataDeduplicationService
                 if (processedSamples.Contains(samples[j].Id))
                     continue;
 
-                var similarity = _similarityService.CalculateSimilarity(
+                var similarity = similarityService.CalculateSimilarity(
                     samples[i].MessageText,
                     samples[j].MessageText);
 
@@ -165,7 +154,7 @@ public class TrainingDataDeduplicationService
             }
         }
 
-        _logger.LogDebug(
+        logger.LogDebug(
             "Found {Count} similar groups ({MinSimilarity:P0}-{MaxSimilarity:P0} similarity)",
             groups.Count, minSimilarity, maxSimilarity);
 
