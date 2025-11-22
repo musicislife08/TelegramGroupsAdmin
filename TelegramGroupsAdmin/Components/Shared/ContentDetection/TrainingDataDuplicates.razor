@@ -26,10 +26,12 @@
 
         @if (_result != null)
         {
-            <!-- Statistics Cards -->
+            <!-- Statistics Cards (Clickable Filters) -->
             <MudGrid>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudPaper Class="pa-4" Elevation="2">
+                    <MudPaper Class="pa-4" Elevation="@(_selectedView == "exact" ? 4 : 2)"
+                             Style="@(_selectedView == "exact" ? "border: 2px solid var(--mud-palette-error);" : "cursor: pointer;")"
+                             @onclick="@(() => _selectedView = "exact")">
                         <MudStack AlignItems="AlignItems.Center" Spacing="2">
                             <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Large" Color="Color.Error" />
                             <MudText Typo="Typo.h6">@_result.ExactDuplicates.Count</MudText>
@@ -38,7 +40,9 @@
                     </MudPaper>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudPaper Class="pa-4" Elevation="2">
+                    <MudPaper Class="pa-4" Elevation="@(_selectedView == "very-similar" ? 4 : 2)"
+                             Style="@(_selectedView == "very-similar" ? "border: 2px solid var(--mud-palette-warning);" : "cursor: pointer;")"
+                             @onclick="@(() => _selectedView = "very-similar")">
                         <MudStack AlignItems="AlignItems.Center" Spacing="2">
                             <MudIcon Icon="@Icons.Material.Filled.CompareArrows" Size="Size.Large" Color="Color.Warning" />
                             <MudText Typo="Typo.h6">@_result.VerySimilar.Count</MudText>
@@ -47,7 +51,9 @@
                     </MudPaper>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudPaper Class="pa-4" Elevation="2">
+                    <MudPaper Class="pa-4" Elevation="@(_selectedView == "similar" ? 4 : 2)"
+                             Style="@(_selectedView == "similar" ? "border: 2px solid var(--mud-palette-info);" : "cursor: pointer;")"
+                             @onclick="@(() => _selectedView = "similar")">
                         <MudStack AlignItems="AlignItems.Center" Spacing="2">
                             <MudIcon Icon="@Icons.Material.Filled.Compare" Size="Size.Large" Color="Color.Info" />
                             <MudText Typo="Typo.h6">@_result.Similar.Count</MudText>
@@ -67,19 +73,19 @@
             </MudGrid>
 
             <!-- Duplicate Groups -->
-            @if (_result.ExactDuplicates.Any())
+            @if (GetCurrentGroups().Any())
             {
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-4">
-                    <MudText Typo="Typo.h5">Exact Duplicates (100% Match)</MudText>
+                    <MudText Typo="Typo.h5">@GetViewTitle()</MudText>
                     <MudButton Variant="Variant.Filled"
                               Color="Color.Warning"
                               StartIcon="@Icons.Material.Filled.DeleteSweep"
-                              OnClick="@RemoveAllDuplicates"
+                              OnClick="@(() => RemoveAllDuplicatesInView(GetCurrentGroups()))"
                               Disabled="@_processing">
                         Remove All Duplicates (Keep Recommended)
                     </MudButton>
                 </MudStack>
-                @foreach (var group in _result.ExactDuplicates)
+                @foreach (var group in GetCurrentGroups())
                 {
                     <MudPaper Class="pa-4" Elevation="1">
                         <MudStack Spacing="2">
@@ -133,17 +139,12 @@
                     </MudPaper>
                 }
             }
-
-            <!-- Summary -->
-            <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
-                <MudText Typo="Typo.body1">
-                    <strong>Analysis Complete:</strong> Found @_result.TotalDuplicateSamples duplicate samples across @(_result.ExactDuplicates.Count + _result.VerySimilar.Count + _result.Similar.Count) groups.
-                    After deduplication, training data would reduce from @_result.TotalDuplicateSamples to @_result.SamplesAfterDeduplication samples.
-                </MudText>
-                <MudText Typo="Typo.body2" Class="mt-2">
-                    Use the Training Data page to manually remove duplicates using the delete button (soft-delete preserves history).
-                </MudText>
-            </MudAlert>
+            else
+            {
+                <MudAlert Severity="Severity.Success" Class="mt-4">
+                    No @GetViewTitle().ToLower() found in training data.
+                </MudAlert>
+            }
         }
     </MudStack>
 </MudContainer>
@@ -152,6 +153,31 @@
     private DuplicateAnalysisResult? _result;
     private bool _loading;
     private bool _processing;
+    private string _selectedView = "exact";
+
+    private List<DuplicateGroup> GetCurrentGroups()
+    {
+        if (_result == null) return new List<DuplicateGroup>();
+
+        return _selectedView switch
+        {
+            "exact" => _result.ExactDuplicates,
+            "very-similar" => _result.VerySimilar,
+            "similar" => _result.Similar,
+            _ => _result.ExactDuplicates
+        };
+    }
+
+    private string GetViewTitle()
+    {
+        return _selectedView switch
+        {
+            "exact" => "Exact Duplicates (100% Match)",
+            "very-similar" => "Very Similar (95-99% Match)",
+            "similar" => "Similar (90-94% Match)",
+            _ => "Exact Duplicates (100% Match)"
+        };
+    }
 
     private async Task AnalyzeTrainingData()
     {
@@ -243,14 +269,14 @@
         }
     }
 
-    private async Task RemoveAllDuplicates()
+    private async Task RemoveAllDuplicatesInView(List<DuplicateGroup> groups)
     {
         if (_result == null) return;
 
-        var totalDuplicates = _result.ExactDuplicates.Sum(g => g.Samples.Count(s => s.Id != g.RecommendedKeep?.Id));
+        var totalDuplicates = groups.Sum(g => g.Samples.Count(s => s.Id != g.RecommendedKeep?.Id));
         var confirmed = await DialogService.ShowMessageBox(
             "Remove All Duplicates",
-            $"Remove {totalDuplicates} duplicate sample(s) across {_result.ExactDuplicates.Count} groups?\n\nFor each group, the recommended sample (highest confidence, most recent) will be kept.\n\nThis preserves detection history but excludes duplicates from Bayes training.",
+            $"Remove {totalDuplicates} duplicate sample(s) across {groups.Count} groups?\n\nFor each group, the recommended sample (highest confidence, most recent) will be kept.\n\nThis preserves detection history but excludes duplicates from Bayes training.",
             yesText: "Remove All Duplicates", cancelText: "Cancel");
 
         if (confirmed == true)
@@ -259,7 +285,7 @@
             try
             {
                 var removed = 0;
-                foreach (var group in _result.ExactDuplicates)
+                foreach (var group in groups)
                 {
                     foreach (var sample in group.Samples.Where(s => s.Id != group.RecommendedKeep?.Id))
                     {
