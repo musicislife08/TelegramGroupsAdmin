@@ -100,6 +100,12 @@ public interface IDetectionResultsRepository
     Task DeleteDetectionResultAsync(long id, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Invalidate all training data for a specific message (set used_for_training = false).
+    /// Used before manual reclassification to prevent cross-class conflicts in Bayes training.
+    /// </summary>
+    Task InvalidateTrainingDataForMessageAsync(long messageId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Add a manual training sample (creates message with chat_id=0, user_id=0 + detection_result)
     /// Phase 4.20+: Supports optional translation data for non-English samples
     /// Returns the ID of the created detection_result

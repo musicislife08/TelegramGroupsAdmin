@@ -423,6 +423,28 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         _logger.LogWarning("Deleted detection result {Id}", id);
     }
 
+    /// <summary>
+    /// Invalidate all training data for a specific message (set used_for_training = false).
+    /// Used before manual reclassification to prevent cross-class conflicts in Bayes training.
+    /// </summary>
+    public async Task InvalidateTrainingDataForMessageAsync(long messageId, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var affectedRecords = await context.DetectionResults
+            .Where(dr => dr.MessageId == messageId && dr.UsedForTraining)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(dr => dr.UsedForTraining, false),
+                cancellationToken);
+
+        if (affectedRecords > 0)
+        {
+            _logger.LogInformation(
+                "Invalidated {Count} training data record(s) for message {MessageId}",
+                affectedRecords, messageId);
+        }
+    }
+
     public async Task<long> AddManualTrainingSampleAsync(
         string messageText,
         bool isSpam,

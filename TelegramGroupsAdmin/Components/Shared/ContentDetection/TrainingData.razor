@@ -62,6 +62,15 @@
                         </MudStack>
                     </MudPaper>
                 </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudPaper Class="pa-4" Elevation="2">
+                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="@(_conflictedMessageIds.Count > 0 ? Color.Error : Color.Success)" />
+                            <MudText Typo="Typo.h6">@_conflictedMessageIds.Count</MudText>
+                            <MudText Typo="Typo.body2" Align="Align.Center">Cross-Class Conflicts</MudText>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
             </MudGrid>
         }
 
@@ -81,6 +90,9 @@
                         <MudSelectItem Value="@("all")">All</MudSelectItem>
                         <MudSelectItem Value="@("spam")">Spam Only</MudSelectItem>
                         <MudSelectItem Value="@("ham")">Ham Only</MudSelectItem>
+                        <MudSelectItem Value="@("conflicts")">
+                            <span style="color: var(--mud-palette-error);">⚠️ Conflicts Only</span>
+                        </MudSelectItem>
                     </MudSelect>
 
                     <MudSelect T="string" @bind-Value="_sourceFilter" Label="Source Filter" Style="max-width: 150px;">
@@ -114,9 +126,17 @@
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Type">
-                            <MudChip T="string" Size="Size.Small" Color="@(context.IsSpam ? Color.Error : Color.Success)">
-                                @(context.IsSpam ? "SPAM" : "HAM")
-                            </MudChip>
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                <MudChip T="string" Size="Size.Small" Color="@(context.IsSpam ? Color.Error : Color.Success)">
+                                    @(context.IsSpam ? "SPAM" : "HAM")
+                                </MudChip>
+                                @if (context.MessageId > 0 && _conflictedMessageIds.Contains(context.MessageId))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" title="This message has both SPAM and HAM training samples">
+                                        ⚠️ CONFLICT
+                                    </MudChip>
+                                }
+                            </MudStack>
                         </MudTd>
                         <MudTd DataLabel="Message Text">
                             <div style="display: flex; flex-direction: column; gap: 4px;">
@@ -168,7 +188,7 @@
                                              Color="Color.Error"
                                              Size="Size.Small"
                                              OnClick="@(() => DeleteTrainingSample(context))"
-                                             title="Delete" />
+                                             title="Remove from training (preserves history)" />
                             </MudStack>
                         </MudTd>
                     </RowTemplate>
@@ -199,6 +219,7 @@
     private string _typeFilter = "all";
     private string _sourceFilter = "all";
     private string? _currentUserId;
+    private HashSet<long> _conflictedMessageIds = [];
 
     // Translation toggle state per sample (Phase 4.20+: Show translations in training samples)
     private readonly Dictionary<long, bool> _showTranslationState = new();
@@ -246,6 +267,16 @@
 
             _allSamples = (await samplesTask).ToList();
             _stats = await statsTask;
+
+            // Identify cross-class conflicts: message_ids with both spam and ham training samples
+            // Only check positive message_ids (actual messages, not manual samples with negative IDs)
+            _conflictedMessageIds = _allSamples
+                .Where(s => s.MessageId > 0)
+                .GroupBy(s => s.MessageId)
+                .Where(g => g.Select(s => s.IsSpam).Distinct().Count() > 1) // Has both true and false
+                .Select(g => g.Key)
+                .ToHashSet();
+
             FilterSamples();
         }
         catch (Exception ex)
@@ -276,6 +307,7 @@
         {
             "spam" => filtered.Where(s => s.IsSpam),
             "ham" => filtered.Where(s => !s.IsSpam),
+            "conflicts" => filtered.Where(s => s.MessageId > 0 && _conflictedMessageIds.Contains(s.MessageId)),
             _ => filtered
         };
 
@@ -355,21 +387,28 @@
     {
         var messagePreview = sample.MessageText ?? "";
         var confirmed = await DialogService.ShowMessageBox(
-            "Confirm Delete",
-            $"Are you sure you want to delete this {(sample.IsSpam ? "SPAM" : "HAM")} training sample?\n\n\"{messagePreview[..Math.Min(messagePreview.Length, 100)]}{(messagePreview.Length > 100 ? "..." : "")}\"",
-            yesText: "Delete", cancelText: "Cancel");
+            "Remove from Training Data",
+            $"Remove this {(sample.IsSpam ? "SPAM" : "HAM")} sample from training data?\n\n" +
+            $"\"{messagePreview[..Math.Min(messagePreview.Length, 100)]}{(messagePreview.Length > 100 ? "..." : "")}\"\n\n" +
+            $"Note: This preserves detection history but excludes the sample from future Bayes training.",
+            yesText: "Remove", cancelText: "Cancel");
 
         if (confirmed == true)
         {
             try
             {
-                await DetectionResultsRepository.DeleteDetectionResultAsync(sample.Id);
-                Snackbar.Add("Training sample deleted successfully", Severity.Success);
+                // Soft delete: Mark as not used for training (preserves detection history)
+                await DetectionResultsRepository.UpdateDetectionResultAsync(
+                    sample.Id,
+                    sample.IsSpam,
+                    usedForTraining: false);
+
+                Snackbar.Add("Training sample removed (detection history preserved)", Severity.Success);
                 await LoadData();
             }
             catch (Exception ex)
             {
-                Snackbar.Add($"Error deleting training sample: {ex.Message}", Severity.Error);
+                Snackbar.Add($"Error removing training sample: {ex.Message}", Severity.Error);
             }
         }
     }

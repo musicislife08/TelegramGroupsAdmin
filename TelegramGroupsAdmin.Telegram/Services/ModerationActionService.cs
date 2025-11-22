@@ -145,6 +145,11 @@ public class ModerationActionService
 
             if (message != null)
             {
+                // 3.5. CRITICAL: Invalidate old training data to prevent cross-class conflicts
+                await _detectionResultsRepository.InvalidateTrainingDataForMessageAsync(
+                    messageId,
+                    cancellationToken);
+
                 // 4. Create detection result (manual spam classification) - message exists in DB
                 var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
                 var detectionResult = new DetectionResultRecord
@@ -218,6 +223,11 @@ public class ModerationActionService
                         );
 
                         await _messageHistoryRepository.InsertMessageAsync(messageRecord, cancellationToken);
+
+                        // Invalidate any existing training data (shouldn't exist for backfill, but be safe)
+                        await _detectionResultsRepository.InvalidateTrainingDataForMessageAsync(
+                            messageId,
+                            cancellationToken);
 
                         // Now create the detection result with the real message_id
                         var detectionResult = new DetectionResultRecord
