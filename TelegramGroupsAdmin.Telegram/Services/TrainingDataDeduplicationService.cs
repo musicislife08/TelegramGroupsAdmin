@@ -14,8 +14,33 @@ public class TrainingDataDeduplicationService(
     ILogger<TrainingDataDeduplicationService> logger)
 {
     /// <summary>
+    /// Minimum similarity threshold for "Very Similar" classification (95%)
+    /// </summary>
+    private const double VerySimilarMinThreshold = 0.95;
+
+    /// <summary>
+    /// Maximum similarity threshold for "Very Similar" classification (99%)
+    /// </summary>
+    private const double VerySimilarMaxThreshold = 0.99;
+
+    /// <summary>
+    /// Minimum similarity threshold for "Similar" classification (90%)
+    /// </summary>
+    private const double SimilarMinThreshold = 0.90;
+
+    /// <summary>
+    /// Maximum similarity threshold for "Similar" classification (94%)
+    /// </summary>
+    private const double SimilarMaxThreshold = 0.94;
+
+    /// <summary>
     /// Analyze all training data for duplicates and return tiered results
     /// </summary>
+    /// <remarks>
+    /// This method loads all training samples into memory for analysis. Designed for homelab scale
+    /// (400-5,000 samples). For larger datasets (>10k samples), consider implementing streaming
+    /// or database-level similarity search to reduce memory pressure.
+    /// </remarks>
     public async Task<DuplicateAnalysisResult> AnalyzeTrainingDataAsync(CancellationToken cancellationToken = default)
     {
         logger.LogInformation("Starting training data deduplication analysis");
@@ -49,11 +74,11 @@ public class TrainingDataDeduplicationService(
         result.ExactDuplicates = exactDuplicates;
 
         // 2. Find very similar samples (95-99% Jaccard similarity)
-        var verySimilar = FindSimilarSamples(trainingSamples, 0.95, 0.99);
+        var verySimilar = FindSimilarSamples(trainingSamples, VerySimilarMinThreshold, VerySimilarMaxThreshold);
         result.VerySimilar = verySimilar;
 
         // 3. Find similar samples (90-94% Jaccard similarity)
-        var similar = FindSimilarSamples(trainingSamples, 0.90, 0.94);
+        var similar = FindSimilarSamples(trainingSamples, SimilarMinThreshold, SimilarMaxThreshold);
         result.Similar = similar;
 
         // 4. Extract cross-class conflicts from exact duplicates
