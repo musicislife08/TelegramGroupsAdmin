@@ -8,7 +8,32 @@
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <MudStack Spacing="4">
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-            <MudText Typo="Typo.h4">Training Data Management</MudText>
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.h4">Training Data</MudText>
+                @if (_stats != null)
+                {
+                    <MudStack Row="true" Spacing="3">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Icon="@Icons.Material.Filled.Dataset">
+                            @_stats.TotalSamples total
+                        </MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">
+                            @_stats.SpamSamples spam
+                        </MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">
+                            @_stats.HamSamples ham
+                        </MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="@(_stats.SpamPercentage > 60 ? Color.Warning : Color.Info)" Icon="@Icons.Material.Filled.Percent">
+                            @_stats.SpamPercentage.ToString("F1")% spam ratio
+                        </MudChip>
+                        @if (_conflictedMessageIds.Count > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">
+                                @_conflictedMessageIds.Count conflicts
+                            </MudChip>
+                        }
+                    </MudStack>
+                }
+            </MudStack>
             <MudButton Variant="Variant.Filled"
                       Color="Color.Primary"
                       StartIcon="@Icons.Material.Filled.Add"
@@ -20,58 +45,6 @@
         @if (_loading)
         {
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
-        }
-
-        <!-- Statistics Cards -->
-        @if (_stats != null)
-        {
-            <MudGrid>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudPaper Class="pa-4" Elevation="2">
-                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Dataset" Size="Size.Large" Color="Color.Primary" />
-                            <MudText Typo="Typo.h6">@_stats.TotalSamples</MudText>
-                            <MudText Typo="Typo.body2" Align="Align.Center">Total Samples</MudText>
-                        </MudStack>
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudPaper Class="pa-4" Elevation="2">
-                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="Color.Error" />
-                            <MudText Typo="Typo.h6">@_stats.SpamSamples</MudText>
-                            <MudText Typo="Typo.body2" Align="Align.Center">Spam Samples</MudText>
-                        </MudStack>
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudPaper Class="pa-4" Elevation="2">
-                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Large" Color="Color.Success" />
-                            <MudText Typo="Typo.h6">@_stats.HamSamples</MudText>
-                            <MudText Typo="Typo.body2" Align="Align.Center">Ham Samples</MudText>
-                        </MudStack>
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudPaper Class="pa-4" Elevation="2">
-                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Percent" Size="Size.Large" Color="@(_stats.SpamPercentage > 60 ? Color.Warning : Color.Info)" />
-                            <MudText Typo="Typo.h6">@_stats.SpamPercentage.ToString("F1")%</MudText>
-                            <MudText Typo="Typo.body2" Align="Align.Center">Spam Ratio</MudText>
-                        </MudStack>
-                    </MudPaper>
-                </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudPaper Class="pa-4" Elevation="2">
-                        <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Large" Color="@(_conflictedMessageIds.Count > 0 ? Color.Error : Color.Success)" />
-                            <MudText Typo="Typo.h6">@_conflictedMessageIds.Count</MudText>
-                            <MudText Typo="Typo.body2" Align="Align.Center">Cross-Class Conflicts</MudText>
-                        </MudStack>
-                    </MudPaper>
-                </MudItem>
-            </MudGrid>
         }
 
         <!-- Main Data Table -->
