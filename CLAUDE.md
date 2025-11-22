@@ -269,8 +269,9 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 ## Documentation
 
-**BACKLOG.md**: Contains **pending work only** (features, bugs, refactoring). Do not add "Completed Work" sections - use `git log` for history.
+**GitHub Issues**: All pending work tracked as GitHub issues (features, bugs, refactoring, tech debt). Issues are categorized with labels and milestones.
 **Commit Messages**: All completed work documented with full technical details. Single source of truth for project history.
+**PR Descriptions**: Link related issues using closing keywords (`Closes #123`) at the top of the PR body to auto-close issues when merged.
 
 ## Testing
 
@@ -295,4 +296,4 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 ### Documentation
 
-- Never include time estimates in documentation or backlog items
+- Never include time estimates in documentation or GitHub issues

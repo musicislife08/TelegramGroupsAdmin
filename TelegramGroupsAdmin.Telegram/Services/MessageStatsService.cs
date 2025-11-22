@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -12,10 +13,14 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class MessageStatsService : IMessageStatsService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly ITelegramUserRepository _userRepository;
 
-    public MessageStatsService(IDbContextFactory<AppDbContext> contextFactory)
+    public MessageStatsService(
+        IDbContextFactory<AppDbContext> contextFactory,
+        ITelegramUserRepository userRepository)
     {
         _contextFactory = contextFactory;
+        _userRepository = userRepository;
     }
 
     public async Task<UiModels.HistoryStats> GetStatsAsync(CancellationToken cancellationToken = default)
@@ -239,8 +244,238 @@ public class MessageStatsService : IMessageStatsService
             .OrderByDescending(c => c.Count)
             .ToListAsync(cancellationToken);
 
+        // === NEW AGGREGATIONS (UX-2.1) ===
+
+        // 1. Peak Activity Summary (all messages, hourly + daily)
+        UiModels.PeakActivitySummary? peakActivity = null;
+        if (totalMessages > 0)
+        {
+            // Hourly activity (always available)
+            var hourlyActivity = volumeData
+                .GroupBy(m =>
+                {
+                    var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
+                    return localTime.Hour;
+                })
+                .Select(g => (hour: g.Key, count: g.Count()))
+                .ToList();
+
+            var peakHourRange = DetectHourlyRange(hourlyActivity);
+
+            // Daily activity (only if >= 7 days of data)
+            string? peakDayRange = null;
+            var hasEnoughDataForWeekly = daysDiff >= 7;
+            if (hasEnoughDataForWeekly)
+            {
+                var dailyActivity = volumeData
+                    .GroupBy(m =>
+                    {
+                        var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
+                        return localTime.DayOfWeek;
+                    })
+                    .Select(g => (day: g.Key, count: g.Count()))
+                    .ToList();
+
+                peakDayRange = DetectDayRange(dailyActivity);
+            }
+
+            peakActivity = new UiModels.PeakActivitySummary
+            {
+                PeakHourRange = peakHourRange,
+                PeakDayRange = peakDayRange,
+                HasEnoughDataForWeekly = hasEnoughDataForWeekly
+            };
+        }
+
+        // 2. Spam Seasonality Summary (spam only, hourly + daily + monthly)
+        UiModels.SpamSeasonalitySummary? spamSeasonality = null;
+        if (spamData.Count > 0)
+        {
+            // Hourly spam pattern (always available)
+            var hourlySpam = spamData
+                .GroupBy(m =>
+                {
+                    var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
+                    return localTime.Hour;
+                })
+                .Select(g => (hour: g.Key, count: g.Count()))
+                .ToList();
+
+            var hourlyPattern = DetectHourlyRange(hourlySpam);
+
+            // Weekly spam pattern (only if >= 7 days)
+            string? weeklyPattern = null;
+            var hasWeeklyData = daysDiff >= 7;
+            if (hasWeeklyData)
+            {
+                var dailySpamPattern = spamData
+                    .GroupBy(m =>
+                    {
+                        var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
+                        return localTime.DayOfWeek;
+                    })
+                    .Select(g => (day: g.Key, count: g.Count()))
+                    .ToList();
+
+                weeklyPattern = DetectDayRange(dailySpamPattern);
+            }
+
+            // Monthly spam pattern (only if >= 60 days and spans multiple months)
+            string? monthlyPattern = null;
+            var spanMonths = startDate.Month != endDate.Month || startDate.Year != endDate.Year;
+            var hasMonthlyData = daysDiff >= 60 && spanMonths;
+            if (hasMonthlyData)
+            {
+                var monthlySpamPattern = spamData
+                    .GroupBy(m =>
+                    {
+                        var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
+                        return localTime.Month;
+                    })
+                    .Select(g => (month: g.Key, count: g.Count()))
+                    .ToList();
+
+                monthlyPattern = DetectMonthRange(monthlySpamPattern);
+            }
+
+            spamSeasonality = new UiModels.SpamSeasonalitySummary
+            {
+                HourlyPattern = hourlyPattern,
+                WeeklyPattern = weeklyPattern,
+                MonthlyPattern = monthlyPattern,
+                HasWeeklyData = hasWeeklyData,
+                HasMonthlyData = hasMonthlyData
+            };
+        }
+
+        // 3. Week-over-Week Growth (only if >= 14 days)
+        UiModels.WeekOverWeekGrowth? weekOverWeekGrowth = null;
+        var hasPreviousPeriod = daysDiff >= 14;
+        if (hasPreviousPeriod)
+        {
+            // Split date range into current week (last 7 days) and previous week (7-14 days ago)
+            var currentWeekStart = endDate.AddDays(-7);
+            var previousWeekStart = endDate.AddDays(-14);
+            var previousWeekEnd = currentWeekStart;
+
+            // Current week metrics
+            var currentWeekMessages = await baseQuery
+                .Where(m => m.Timestamp >= currentWeekStart)
+                .CountAsync(cancellationToken);
+            var currentWeekUsers = await baseQuery
+                .Where(m => m.Timestamp >= currentWeekStart)
+                .Select(m => m.UserId)
+                .Distinct()
+                .CountAsync(cancellationToken);
+            var currentWeekSpam = await (
+                from m in baseQuery
+                join dr in context.DetectionResults on m.MessageId equals dr.MessageId
+                where dr.IsSpam && m.Timestamp >= currentWeekStart
+                select m.MessageId
+            ).Distinct().CountAsync(cancellationToken);
+            var currentWeekSpamPct = currentWeekMessages > 0
+                ? (currentWeekSpam / (double)currentWeekMessages * 100.0)
+                : 0;
+
+            // Previous week metrics
+            var previousWeekMessages = await baseQuery
+                .Where(m => m.Timestamp >= previousWeekStart && m.Timestamp < previousWeekEnd)
+                .CountAsync(cancellationToken);
+            var previousWeekUsers = await baseQuery
+                .Where(m => m.Timestamp >= previousWeekStart && m.Timestamp < previousWeekEnd)
+                .Select(m => m.UserId)
+                .Distinct()
+                .CountAsync(cancellationToken);
+            var previousWeekSpam = await (
+                from m in baseQuery
+                join dr in context.DetectionResults on m.MessageId equals dr.MessageId
+                where dr.IsSpam && m.Timestamp >= previousWeekStart && m.Timestamp < previousWeekEnd
+                select m.MessageId
+            ).Distinct().CountAsync(cancellationToken);
+            var previousWeekSpamPct = previousWeekMessages > 0
+                ? (previousWeekSpam / (double)previousWeekMessages * 100.0)
+                : 0;
+
+            // Calculate percentage growth
+            var messageGrowth = previousWeekMessages > 0
+                ? ((currentWeekMessages - previousWeekMessages) / (double)previousWeekMessages * 100.0)
+                : 0;
+            var userGrowth = previousWeekUsers > 0
+                ? ((currentWeekUsers - previousWeekUsers) / (double)previousWeekUsers * 100.0)
+                : 0;
+            var spamGrowth = previousWeekSpamPct > 0
+                ? ((currentWeekSpamPct - previousWeekSpamPct) / previousWeekSpamPct * 100.0)
+                : 0;
+
+            weekOverWeekGrowth = new UiModels.WeekOverWeekGrowth
+            {
+                MessageGrowthPercent = messageGrowth,
+                UserGrowthPercent = userGrowth,
+                SpamGrowthPercent = spamGrowth,
+                HasPreviousPeriod = true
+            };
+        }
+
+        // 4. Top Active Users (top 5)
+        var topActiveUsers = await _userRepository.GetTopActiveUsersAsync(
+            limit: 5,
+            startDate: startDate,
+            endDate: endDate,
+            chatIds: chatIds.Count > 0 ? chatIds : null,
+            ct: cancellationToken);
+
+        // 5. Trusted User Breakdown (by spam_check_skip_reason)
+        UiModels.TrustedUserBreakdown? trustedBreakdown = null;
+        if (totalMessages > 0)
+        {
+            var breakdownData = await baseQuery
+                .GroupBy(m => m.SpamCheckSkipReason)
+                .Select(g => new { Reason = g.Key, Count = g.Count() })
+                .ToListAsync(cancellationToken);
+
+            var trustedCount = breakdownData
+                .Where(x => x.Reason == Data.Models.SpamCheckSkipReason.UserTrusted)
+                .Sum(x => x.Count);
+            var adminCount = breakdownData
+                .Where(x => x.Reason == Data.Models.SpamCheckSkipReason.UserAdmin)
+                .Sum(x => x.Count);
+            var untrustedCount = breakdownData
+                .Where(x => x.Reason == Data.Models.SpamCheckSkipReason.NotSkipped)
+                .Sum(x => x.Count);
+
+            trustedBreakdown = new UiModels.TrustedUserBreakdown
+            {
+                TrustedMessages = trustedCount,
+                UntrustedMessages = untrustedCount,
+                AdminMessages = adminCount,
+                TrustedPercentage = (trustedCount / (double)totalMessages * 100.0),
+                UntrustedPercentage = (untrustedCount / (double)totalMessages * 100.0),
+                AdminPercentage = (adminCount / (double)totalMessages * 100.0)
+            };
+        }
+
+        // 6. Daily Active Users (unique users per day)
+        var dailyActiveUsersData = await baseQuery
+            .Select(m => new { m.Timestamp, m.UserId })
+            .ToListAsync(cancellationToken);
+
+        var dailyActiveUsers = dailyActiveUsersData
+            .GroupBy(m =>
+            {
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
+                return DateOnly.FromDateTime(localTime);
+            })
+            .Select(g => new UiModels.DailyActiveUsersData
+            {
+                Date = g.Key,
+                UniqueUsers = g.Select(x => x.UserId).Distinct().Count()
+            })
+            .OrderBy(d => d.Date)
+            .ToList();
+
         return new UiModels.MessageTrendsData
         {
+            // Existing metrics (UX-2)
             TotalMessages = totalMessages,
             DailyAverage = dailyAverage,
             UniqueUsers = uniqueUsers,
@@ -248,7 +483,229 @@ public class MessageStatsService : IMessageStatsService
             DailyVolume = dailyVolume,
             DailySpam = dailySpam,
             DailyHam = dailyHam,
-            PerChatVolume = perChatVolume
+            PerChatVolume = perChatVolume,
+
+            // New metrics (UX-2.1)
+            PeakActivity = peakActivity,
+            SpamSeasonality = spamSeasonality,
+            WeekOverWeekGrowth = weekOverWeekGrowth,
+            TopActiveUsers = topActiveUsers,
+            TrustedUserBreakdown = trustedBreakdown,
+            DailyActiveUsers = dailyActiveUsers
         };
     }
+
+    #region Smart Range Detection Helpers (UX-2.1)
+
+    /// <summary>
+    /// Detect hourly activity ranges from message counts
+    /// Returns formatted string like "7am-11am, 5pm-8pm" or "3am, 7pm"
+    /// </summary>
+    private static string DetectHourlyRange(List<(int hour, int count)> hourlyData, int topN = 5)
+    {
+        if (hourlyData.Count == 0)
+            return "No data";
+
+        // Take top N hours by count
+        var topHours = hourlyData
+            .OrderByDescending(x => x.count)
+            .Take(topN)
+            .Select(x => x.hour)
+            .OrderBy(h => h)
+            .ToList();
+
+        if (topHours.Count == 0)
+            return "No data";
+
+        // Find consecutive ranges
+        var ranges = new List<string>();
+        var rangeStart = topHours[0];
+        var rangeEnd = topHours[0];
+
+        for (int i = 1; i < topHours.Count; i++)
+        {
+            if (topHours[i] == rangeEnd + 1)
+            {
+                // Consecutive hour, extend range
+                rangeEnd = topHours[i];
+            }
+            else
+            {
+                // Gap found, save current range and start new one
+                ranges.Add(FormatHourRange(rangeStart, rangeEnd));
+                rangeStart = topHours[i];
+                rangeEnd = topHours[i];
+            }
+        }
+
+        // Add final range
+        ranges.Add(FormatHourRange(rangeStart, rangeEnd));
+
+        return string.Join(", ", ranges);
+    }
+
+    /// <summary>
+    /// Format hour or hour range for display
+    /// </summary>
+    private static string FormatHourRange(int start, int end)
+    {
+        if (start == end)
+        {
+            // Single hour
+            return FormatHour(start);
+        }
+        else
+        {
+            // Range
+            return $"{FormatHour(start)}-{FormatHour(end)}";
+        }
+    }
+
+    /// <summary>
+    /// Format hour as 12-hour time (e.g., "3am", "11pm")
+    /// </summary>
+    private static string FormatHour(int hour)
+    {
+        if (hour == 0) return "12am";
+        if (hour < 12) return $"{hour}am";
+        if (hour == 12) return "12pm";
+        return $"{hour - 12}pm";
+    }
+
+    /// <summary>
+    /// Detect day-of-week activity ranges
+    /// Returns formatted string like "Mon-Wed" or "Saturday"
+    /// </summary>
+    private static string DetectDayRange(List<(DayOfWeek day, int count)> dailyData, int topN = 3)
+    {
+        if (dailyData.Count == 0)
+            return "No data";
+
+        // Take top N days by count
+        var topDays = dailyData
+            .OrderByDescending(x => x.count)
+            .Take(topN)
+            .Select(x => (int)x.day) // Convert to int for consecutive checking
+            .OrderBy(d => d)
+            .ToList();
+
+        if (topDays.Count == 0)
+            return "No data";
+
+        // Find consecutive ranges
+        var ranges = new List<string>();
+        var rangeStart = topDays[0];
+        var rangeEnd = topDays[0];
+
+        for (int i = 1; i < topDays.Count; i++)
+        {
+            if (topDays[i] == rangeEnd + 1)
+            {
+                // Consecutive day, extend range
+                rangeEnd = topDays[i];
+            }
+            else
+            {
+                // Gap found, save current range and start new one
+                ranges.Add(FormatDayRange(rangeStart, rangeEnd));
+                rangeStart = topDays[i];
+                rangeEnd = topDays[i];
+            }
+        }
+
+        // Add final range
+        ranges.Add(FormatDayRange(rangeStart, rangeEnd));
+
+        return string.Join(", ", ranges);
+    }
+
+    /// <summary>
+    /// Format day or day range for display
+    /// </summary>
+    private static string FormatDayRange(int start, int end)
+    {
+        if (start == end)
+        {
+            // Single day
+            return ((DayOfWeek)start).ToString();
+        }
+        else if (end - start == 1)
+        {
+            // Two consecutive days - show both
+            return $"{((DayOfWeek)start).ToString()[..3]}-{((DayOfWeek)end).ToString()[..3]}";
+        }
+        else
+        {
+            // Range of 3+ days
+            return $"{((DayOfWeek)start).ToString()[..3]}-{((DayOfWeek)end).ToString()[..3]}";
+        }
+    }
+
+    /// <summary>
+    /// Detect monthly activity ranges
+    /// Returns formatted string like "November" or "Nov-Dec"
+    /// </summary>
+    private static string DetectMonthRange(List<(int month, int count)> monthlyData, int topN = 3)
+    {
+        if (monthlyData.Count == 0)
+            return "No data";
+
+        // Take top N months by count
+        var topMonths = monthlyData
+            .OrderByDescending(x => x.count)
+            .Take(topN)
+            .Select(x => x.month)
+            .OrderBy(m => m)
+            .ToList();
+
+        if (topMonths.Count == 0)
+            return "No data";
+
+        // Find consecutive ranges
+        var ranges = new List<string>();
+        var rangeStart = topMonths[0];
+        var rangeEnd = topMonths[0];
+
+        for (int i = 1; i < topMonths.Count; i++)
+        {
+            if (topMonths[i] == rangeEnd + 1)
+            {
+                // Consecutive month, extend range
+                rangeEnd = topMonths[i];
+            }
+            else
+            {
+                // Gap found, save current range and start new one
+                ranges.Add(FormatMonthRange(rangeStart, rangeEnd));
+                rangeStart = topMonths[i];
+                rangeEnd = topMonths[i];
+            }
+        }
+
+        // Add final range
+        ranges.Add(FormatMonthRange(rangeStart, rangeEnd));
+
+        return string.Join(", ", ranges);
+    }
+
+    /// <summary>
+    /// Format month or month range for display
+    /// </summary>
+    private static string FormatMonthRange(int start, int end)
+    {
+        var monthNames = new[] { "", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+        if (start == end)
+        {
+            // Single month - show full name
+            return new DateTime(2000, start, 1).ToString("MMMM");
+        }
+        else
+        {
+            // Range - show abbreviated
+            return $"{monthNames[start]}-{monthNames[end]}";
+        }
+    }
+
+    #endregion
 }

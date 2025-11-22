@@ -1,4 +1,5 @@
 @using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Telegram.Models
 @using ApexCharts
 @inject IMessageStatsService MessageStatsService
 @inject IManagedChatsRepository ChatsRepository
@@ -69,6 +70,12 @@
                             <MudIcon Icon="@Icons.Material.Filled.Message" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Primary" />
                             <MudText Typo="Typo.h3">@_trendsData.TotalMessages</MudText>
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Total Messages</MudText>
+                            @if (_trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
+                            {
+                                <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(_trendsData.WeekOverWeekGrowth.MessageGrowthPercent)" Variant="Variant.Text">
+                                    @FormatGrowth(_trendsData.WeekOverWeekGrowth.MessageGrowthPercent)
+                                </MudChip>
+                            }
                         </MudStack>
                     </MudCardContent>
                 </MudCard>
@@ -81,6 +88,12 @@
                             <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Success" />
                             <MudText Typo="Typo.h3">@_trendsData.DailyAverage.ToString("F0")</MudText>
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Daily Average</MudText>
+                            @if (_trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
+                            {
+                                <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(_trendsData.WeekOverWeekGrowth.MessageGrowthPercent)" Variant="Variant.Text">
+                                    @FormatGrowth(_trendsData.WeekOverWeekGrowth.MessageGrowthPercent)
+                                </MudChip>
+                            }
                         </MudStack>
                     </MudCardContent>
                 </MudCard>
@@ -93,6 +106,12 @@
                             <MudIcon Icon="@Icons.Material.Filled.People" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Info" />
                             <MudText Typo="Typo.h3">@_trendsData.UniqueUsers</MudText>
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Active Users</MudText>
+                            @if (_trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
+                            {
+                                <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(_trendsData.WeekOverWeekGrowth.UserGrowthPercent)" Variant="Variant.Text">
+                                    @FormatGrowth(_trendsData.WeekOverWeekGrowth.UserGrowthPercent)
+                                </MudChip>
+                            }
                         </MudStack>
                     </MudCardContent>
                 </MudCard>
@@ -105,10 +124,84 @@
                             <MudIcon Icon="@Icons.Material.Filled.Shield" Size="MudBlazor.Size.Large" Color="@(_trendsData.SpamPercentage > 5 ? MudBlazor.Color.Error : MudBlazor.Color.Success)" />
                             <MudText Typo="Typo.h3">@_trendsData.SpamPercentage.ToString("F1")%</MudText>
                             <MudText Typo="Typo.body1" Align="MudBlazor.Align.Center">Spam Rate</MudText>
+                            @if (_trendsData.WeekOverWeekGrowth?.HasPreviousPeriod == true)
+                            {
+                                <MudChip T="string" Size="MudBlazor.Size.Small" Color="@GetGrowthColor(-_trendsData.WeekOverWeekGrowth.SpamGrowthPercent)" Variant="Variant.Text">
+                                    @FormatGrowth(_trendsData.WeekOverWeekGrowth.SpamGrowthPercent)
+                                </MudChip>
+                            }
                         </MudStack>
                     </MudCardContent>
                 </MudCard>
             </MudItem>
+        </MudGrid>
+
+        @* New Metrics Cards (UX-2.1) *@
+        <MudGrid Class="mt-2">
+            @* Peak Activity Summary *@
+            @if (_trendsData.PeakActivity != null)
+            {
+                <MudItem xs="12" md="4">
+                    <MudCard Style="height: 100%">
+                        <MudCardContent>
+                            <MudStack AlignItems="AlignItems.Center" Spacing="2" Style="min-height: 160px" Justify="Justify.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Info" />
+                                <MudText Typo="Typo.h6" Align="MudBlazor.Align.Center">Peak Activity</MudText>
+                                <MudText Typo="Typo.body2" Align="MudBlazor.Align.Center">@_trendsData.PeakActivity.PeakHourRange</MudText>
+                                @if (_trendsData.PeakActivity.HasEnoughDataForWeekly && !string.IsNullOrEmpty(_trendsData.PeakActivity.PeakDayRange))
+                                {
+                                    <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary">@_trendsData.PeakActivity.PeakDayRange</MudText>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+
+            @* Spam Seasonality *@
+            @if (_trendsData.SpamSeasonality != null)
+            {
+                <MudItem xs="12" md="4">
+                    <MudCard Style="height: 100%">
+                        <MudCardContent>
+                            <MudStack Spacing="1" Style="min-height: 160px" Justify="Justify.Center">
+                                <MudStack Row="true" Justify="Justify.Center" AlignItems="AlignItems.Center" Class="mb-2">
+                                    <MudIcon Icon="@Icons.Material.Filled.Warning" Color="MudBlazor.Color.Warning" />
+                                    <MudText Typo="Typo.h6">Peak Spam Patterns</MudText>
+                                </MudStack>
+                                <MudText Typo="Typo.body2" Align="MudBlazor.Align.Center"><strong>Daily:</strong> @_trendsData.SpamSeasonality.HourlyPattern</MudText>
+                                @if (_trendsData.SpamSeasonality.HasWeeklyData && !string.IsNullOrEmpty(_trendsData.SpamSeasonality.WeeklyPattern))
+                                {
+                                    <MudText Typo="Typo.body2" Align="MudBlazor.Align.Center"><strong>Weekly:</strong> @_trendsData.SpamSeasonality.WeeklyPattern</MudText>
+                                }
+                                @if (_trendsData.SpamSeasonality.HasMonthlyData && !string.IsNullOrEmpty(_trendsData.SpamSeasonality.MonthlyPattern))
+                                {
+                                    <MudText Typo="Typo.body2" Align="MudBlazor.Align.Center"><strong>Yearly:</strong> @_trendsData.SpamSeasonality.MonthlyPattern</MudText>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+
+            @* Trusted User Breakdown *@
+            @if (_trendsData.TrustedUserBreakdown != null)
+            {
+                <MudItem xs="12" md="4">
+                    <MudCard Style="height: 100%">
+                        <MudCardContent>
+                            <MudStack AlignItems="AlignItems.Center" Spacing="2" Style="min-height: 160px" Justify="Justify.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="MudBlazor.Size.Large" Color="MudBlazor.Color.Success" />
+                                <MudText Typo="Typo.h6" Align="MudBlazor.Align.Center">Message Trust Level</MudText>
+                                <MudText Typo="Typo.h4" Color="MudBlazor.Color.Success">@_trendsData.TrustedUserBreakdown.TrustedPercentage.ToString("F1")%</MudText>
+                                <MudText Typo="Typo.caption" Color="MudBlazor.Color.Secondary" Align="MudBlazor.Align.Center">
+                                    @_trendsData.TrustedUserBreakdown.UntrustedPercentage.ToString("F1")% Untrusted, @_trendsData.TrustedUserBreakdown.AdminPercentage.ToString("F1")% Admins
+                                </MudText>
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
         </MudGrid>
 
         @* Daily Volume Chart *@
@@ -130,6 +223,26 @@
                 </ApexChart>
             }
         </MudPaper>
+
+        @* Daily Active Users Chart (UX-2.1) *@
+        @if (_trendsData.DailyActiveUsers.Any() && _dailyActiveUsersChart != null)
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-4">Daily Active Users</MudText>
+                <ApexChart TItem="DailyActiveUsersData"
+                          Title=""
+                          Options="_dailyActiveUsersChart"
+                          Height="250">
+                    <ApexPointSeries TItem="DailyActiveUsersData"
+                                    Items="_trendsData.DailyActiveUsers"
+                                    Name="Active Users"
+                                    SeriesType="SeriesType.Line"
+                                    XValue="@(e => DateToUnixMs(e.Date))"
+                                    YAggregate="@(e => e.Sum(x => x.UniqueUsers))"
+                                    OrderBy="e => e.X" />
+                </ApexChart>
+            </MudPaper>
+        }
 
         @* Spam vs Ham Trend *@
         <MudPaper Class="pa-4" Elevation="2">
@@ -157,6 +270,28 @@
                 </ApexChart>
             }
         </MudPaper>
+
+        @* Top 5 Active Users (UX-2.1) *@
+        @if (_trendsData.TopActiveUsers.Any())
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" Class="mb-4">Most Active Users</MudText>
+                <MudTable Items="@_trendsData.TopActiveUsers" Dense="true" Hover="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>Rank</MudTh>
+                        <MudTh>User</MudTh>
+                        <MudTh Style="text-align: right">Messages</MudTh>
+                        <MudTh Style="text-align: right">Percentage</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Rank">@(context == _trendsData.TopActiveUsers.First() ? "🥇" : context == _trendsData.TopActiveUsers.Skip(1).FirstOrDefault() ? "🥈" : context == _trendsData.TopActiveUsers.Skip(2).FirstOrDefault() ? "🥉" : (_trendsData.TopActiveUsers.IndexOf(context) + 1).ToString())</MudTd>
+                        <MudTd DataLabel="User">@context.DisplayName</MudTd>
+                        <MudTd DataLabel="Messages" Style="text-align: right">@context.MessageCount</MudTd>
+                        <MudTd DataLabel="Percentage" Style="text-align: right">@context.Percentage.ToString("F1")%</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
 
         @* Per-Chat Breakdown (only if multiple chats) *@
         @if (_trendsData.PerChatVolume.Count > 1)
@@ -203,10 +338,34 @@
     private ApexChartOptions<DailyVolumeData>? _dailyVolumeChart;
     private ApexChartOptions<DailyVolumeData>? _spamHamChart;
     private ApexChartOptions<ChatVolumeData>? _perChatChart;
+    private ApexChartOptions<DailyActiveUsersData>? _dailyActiveUsersChart;
 
     // Helper to convert DateOnly to Unix timestamp (milliseconds) for ApexCharts
     private static long DateToUnixMs(DateOnly date) =>
         new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+    // Helper to get color for growth indicators (UX-2.1)
+    private static MudBlazor.Color GetGrowthColor(double growthPercent)
+    {
+        return growthPercent switch
+        {
+            > 0 => MudBlazor.Color.Success,
+            < 0 => MudBlazor.Color.Error,
+            _ => MudBlazor.Color.Default
+        };
+    }
+
+    // Helper to format growth percentage with arrow (UX-2.1)
+    private static string FormatGrowth(double growthPercent)
+    {
+        var arrow = growthPercent switch
+        {
+            > 0 => "↑",
+            < 0 => "↓",
+            _ => "→"
+        };
+        return $"{arrow} {Math.Abs(growthPercent):F1}%";
+    }
 
     private async Task OnChatSelectionChanged(long newChatId)
     {
@@ -287,6 +446,7 @@
         _dailyVolumeChart = null;
         _spamHamChart = null;
         _perChatChart = null;
+        _dailyActiveUsersChart = null;
         StateHasChanged(); // Clear old charts first
 
         try
@@ -370,6 +530,24 @@
             },
             Xaxis = new XAxis { Title = new AxisTitle { Text = "Messages" } },
             Yaxis = [new YAxis { Title = new AxisTitle { Text = "Chat" } }]
+        };
+
+        // Daily active users chart (UX-2.1)
+        _dailyActiveUsersChart = new ApexChartOptions<DailyActiveUsersData>
+        {
+            Chart = new Chart
+            {
+                Toolbar = new Toolbar { Show = false },
+                Zoom = new Zoom { Enabled = false }
+            },
+            Stroke = new Stroke { Curve = Curve.Smooth, Width = 3 },
+            Colors = ["#9C27B0"],
+            Xaxis = new XAxis
+            {
+                Type = XAxisType.Datetime,
+                Labels = new XAxisLabels { Format = "MMM dd" }
+            },
+            Yaxis = [new YAxis { Title = new AxisTitle { Text = "Users" } }]
         };
     }
 
