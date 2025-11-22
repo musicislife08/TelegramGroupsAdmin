@@ -139,101 +139,30 @@ public class MessageStatsService : IMessageStatsService
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Base query filtered by date and chats
-        var baseQuery = context.Messages
-            .Where(m => m.Timestamp >= startDate && m.Timestamp <= endDate)
-            .Where(m => chatIds.Count == 0 || chatIds.Contains(m.ChatId));
-
-        // Total messages
-        var totalMessages = await baseQuery.CountAsync(cancellationToken);
-
-        // Unique users
-        var uniqueUsers = await baseQuery
-            .Select(m => m.UserId)
-            .Distinct()
-            .CountAsync(cancellationToken);
-
-        // Daily average
-        var daysDiff = (endDate - startDate).TotalDays;
-        var dailyAverage = daysDiff > 0 ? totalMessages / daysDiff : 0;
-
-        // Spam percentage (messages with spam detection results)
-        var spamCount = await (
-            from m in baseQuery
-            join dr in context.DetectionResults on m.MessageId equals dr.MessageId
-            where dr.IsSpam
-            select m.MessageId
-        ).Distinct().CountAsync(cancellationToken);
-
-        var spamPercentage = totalMessages > 0 ? (spamCount / (double)totalMessages * 100.0) : 0;
-
-        // Daily volume - fetch data and group by user's local date
-        var volumeData = await baseQuery
-            .Select(m => new { m.Timestamp })
-            .ToListAsync(cancellationToken);
-
-        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-        var dailyVolume = volumeData
-            .GroupBy(m =>
+        // === CONSOLIDATED QUERY 1: Fetch all message data with spam flag in single query ===
+        // Uses LEFT JOIN to include all messages, marking spam where detection results exist
+        var allMessageData = await (
+            from m in context.Messages
+            where m.Timestamp >= startDate && m.Timestamp <= endDate
+            where chatIds.Count == 0 || chatIds.Contains(m.ChatId)
+            join dr in context.DetectionResults on m.MessageId equals dr.MessageId into detections
+            from dr in detections.DefaultIfEmpty()
+            select new
             {
-                var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
-                return DateOnly.FromDateTime(localTime);
-            })
-            .Select(g => new UiModels.DailyVolumeData
-            {
-                Date = g.Key,
-                Count = g.Count()
-            })
-            .OrderBy(d => d.Date)
-            .ToList();
+                m.MessageId,
+                m.UserId,
+                m.Timestamp,
+                m.ChatId,
+                m.SpamCheckSkipReason,
+                IsSpam = dr != null && dr.IsSpam
+            }
+        ).AsNoTracking().ToListAsync(cancellationToken);
 
-        // Daily spam - fetch spam message data and group by user's local date
-        var spamData = await (
-            from m in baseQuery
-            join dr in context.DetectionResults on m.MessageId equals dr.MessageId
-            where dr.IsSpam
-            select new { m.Timestamp, m.MessageId })
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        var dailySpam = spamData
-            .GroupBy(m =>
-            {
-                var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
-                return DateOnly.FromDateTime(localTime);
-            })
-            .Select(g => new UiModels.DailyVolumeData
-            {
-                Date = g.Key,
-                Count = g.Count()
-            })
-            .OrderBy(d => d.Date)
-            .ToList();
-
-        // Daily ham - fetch non-spam message data and group by user's local date
-        var hamData = await (
-            from m in baseQuery
-            where !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.IsSpam)
-            select new { m.Timestamp })
-            .ToListAsync(cancellationToken);
-
-        var dailyHam = hamData
-            .GroupBy(m =>
-            {
-                var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
-                return DateOnly.FromDateTime(localTime);
-            })
-            .Select(g => new UiModels.DailyVolumeData
-            {
-                Date = g.Key,
-                Count = g.Count()
-            })
-            .OrderBy(d => d.Date)
-            .ToList();
-
-        // Per-chat breakdown (only if no specific chats selected)
+        // === CONSOLIDATED QUERY 2: Per-chat breakdown with managed chat names ===
         var perChatVolume = await (
-            from m in baseQuery
+            from m in context.Messages
+            where m.Timestamp >= startDate && m.Timestamp <= endDate
+            where chatIds.Count == 0 || chatIds.Contains(m.ChatId)
             join c in context.ManagedChats on m.ChatId equals c.ChatId
             group m by new { c.ChatId, c.ChatName } into g
             select new UiModels.ChatVolumeData
@@ -242,7 +171,68 @@ public class MessageStatsService : IMessageStatsService
                 Count = g.Count()
             })
             .OrderByDescending(c => c.Count)
+            .AsNoTracking()
             .ToListAsync(cancellationToken);
+
+        // === ALL REMAINING CALCULATIONS DONE IN-MEMORY ===
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        var daysDiff = (endDate - startDate).TotalDays;
+
+        // Basic metrics
+        var totalMessages = allMessageData.Count;
+        var uniqueUsers = allMessageData.Select(m => m.UserId).Distinct().Count();
+        var dailyAverage = daysDiff > 0 ? totalMessages / daysDiff : 0;
+
+        // Spam metrics
+        var spamMessages = allMessageData.Where(m => m.IsSpam).ToList();
+        var spamCount = spamMessages.Select(m => m.MessageId).Distinct().Count();
+        var spamPercentage = totalMessages > 0 ? (spamCount / (double)totalMessages * 100.0) : 0;
+
+        // Daily volume - all messages grouped by local date
+        var dailyVolume = allMessageData
+            .GroupBy(m =>
+            {
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
+                return DateOnly.FromDateTime(localTime);
+            })
+            .Select(g => new UiModels.DailyVolumeData
+            {
+                Date = g.Key,
+                Count = g.Count()
+            })
+            .OrderBy(d => d.Date)
+            .ToList();
+
+        // Daily spam - spam messages grouped by local date
+        var dailySpam = spamMessages
+            .GroupBy(m =>
+            {
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
+                return DateOnly.FromDateTime(localTime);
+            })
+            .Select(g => new UiModels.DailyVolumeData
+            {
+                Date = g.Key,
+                Count = g.Select(x => x.MessageId).Distinct().Count()
+            })
+            .OrderBy(d => d.Date)
+            .ToList();
+
+        // Daily ham - non-spam messages grouped by local date
+        var hamMessages = allMessageData.Where(m => !m.IsSpam).ToList();
+        var dailyHam = hamMessages
+            .GroupBy(m =>
+            {
+                var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
+                return DateOnly.FromDateTime(localTime);
+            })
+            .Select(g => new UiModels.DailyVolumeData
+            {
+                Date = g.Key,
+                Count = g.Count()
+            })
+            .OrderBy(d => d.Date)
+            .ToList();
 
         // === NEW AGGREGATIONS (UX-2.1) ===
 
@@ -251,7 +241,7 @@ public class MessageStatsService : IMessageStatsService
         if (totalMessages > 0)
         {
             // Hourly activity (always available)
-            var hourlyActivity = volumeData
+            var hourlyActivity = allMessageData
                 .GroupBy(m =>
                 {
                     var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
@@ -267,7 +257,7 @@ public class MessageStatsService : IMessageStatsService
             var hasEnoughDataForWeekly = daysDiff >= 7;
             if (hasEnoughDataForWeekly)
             {
-                var dailyActivity = volumeData
+                var dailyActivity = allMessageData
                     .GroupBy(m =>
                     {
                         var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
@@ -289,10 +279,10 @@ public class MessageStatsService : IMessageStatsService
 
         // 2. Spam Seasonality Summary (spam only, hourly + daily + monthly)
         UiModels.SpamSeasonalitySummary? spamSeasonality = null;
-        if (spamData.Count > 0)
+        if (spamMessages.Count > 0)
         {
             // Hourly spam pattern (always available)
-            var hourlySpam = spamData
+            var hourlySpam = spamMessages
                 .GroupBy(m =>
                 {
                     var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
@@ -308,7 +298,7 @@ public class MessageStatsService : IMessageStatsService
             var hasWeeklyData = daysDiff >= 7;
             if (hasWeeklyData)
             {
-                var dailySpamPattern = spamData
+                var dailySpamPattern = spamMessages
                     .GroupBy(m =>
                     {
                         var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
@@ -326,7 +316,7 @@ public class MessageStatsService : IMessageStatsService
             var hasMonthlyData = daysDiff >= 60 && spanMonths;
             if (hasMonthlyData)
             {
-                var monthlySpamPattern = spamData
+                var monthlySpamPattern = spamMessages
                     .GroupBy(m =>
                     {
                         var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
@@ -348,7 +338,7 @@ public class MessageStatsService : IMessageStatsService
             };
         }
 
-        // 3. Week-over-Week Growth (only if >= 14 days)
+        // 3. Week-over-Week Growth (only if >= 14 days) - all in-memory calculations
         UiModels.WeekOverWeekGrowth? weekOverWeekGrowth = null;
         var hasPreviousPeriod = daysDiff >= 14;
         if (hasPreviousPeriod)
@@ -358,40 +348,22 @@ public class MessageStatsService : IMessageStatsService
             var previousWeekStart = endDate.AddDays(-14);
             var previousWeekEnd = currentWeekStart;
 
-            // Current week metrics
-            var currentWeekMessages = await baseQuery
-                .Where(m => m.Timestamp >= currentWeekStart)
-                .CountAsync(cancellationToken);
-            var currentWeekUsers = await baseQuery
-                .Where(m => m.Timestamp >= currentWeekStart)
-                .Select(m => m.UserId)
-                .Distinct()
-                .CountAsync(cancellationToken);
-            var currentWeekSpam = await (
-                from m in baseQuery
-                join dr in context.DetectionResults on m.MessageId equals dr.MessageId
-                where dr.IsSpam && m.Timestamp >= currentWeekStart
-                select m.MessageId
-            ).Distinct().CountAsync(cancellationToken);
+            // Current week metrics - in-memory filtering
+            var currentWeekData = allMessageData.Where(m => m.Timestamp >= currentWeekStart).ToList();
+            var currentWeekMessages = currentWeekData.Count;
+            var currentWeekUsers = currentWeekData.Select(m => m.UserId).Distinct().Count();
+            var currentWeekSpam = currentWeekData.Where(m => m.IsSpam).Select(m => m.MessageId).Distinct().Count();
             var currentWeekSpamPct = currentWeekMessages > 0
                 ? (currentWeekSpam / (double)currentWeekMessages * 100.0)
                 : 0;
 
-            // Previous week metrics
-            var previousWeekMessages = await baseQuery
+            // Previous week metrics - in-memory filtering
+            var previousWeekData = allMessageData
                 .Where(m => m.Timestamp >= previousWeekStart && m.Timestamp < previousWeekEnd)
-                .CountAsync(cancellationToken);
-            var previousWeekUsers = await baseQuery
-                .Where(m => m.Timestamp >= previousWeekStart && m.Timestamp < previousWeekEnd)
-                .Select(m => m.UserId)
-                .Distinct()
-                .CountAsync(cancellationToken);
-            var previousWeekSpam = await (
-                from m in baseQuery
-                join dr in context.DetectionResults on m.MessageId equals dr.MessageId
-                where dr.IsSpam && m.Timestamp >= previousWeekStart && m.Timestamp < previousWeekEnd
-                select m.MessageId
-            ).Distinct().CountAsync(cancellationToken);
+                .ToList();
+            var previousWeekMessages = previousWeekData.Count;
+            var previousWeekUsers = previousWeekData.Select(m => m.UserId).Distinct().Count();
+            var previousWeekSpam = previousWeekData.Where(m => m.IsSpam).Select(m => m.MessageId).Distinct().Count();
             var previousWeekSpamPct = previousWeekMessages > 0
                 ? (previousWeekSpam / (double)previousWeekMessages * 100.0)
                 : 0;
@@ -424,14 +396,14 @@ public class MessageStatsService : IMessageStatsService
             chatIds: chatIds.Count > 0 ? chatIds : null,
             ct: cancellationToken);
 
-        // 5. Trusted User Breakdown (by spam_check_skip_reason)
+        // 5. Trusted User Breakdown (by spam_check_skip_reason) - in-memory grouping
         UiModels.TrustedUserBreakdown? trustedBreakdown = null;
         if (totalMessages > 0)
         {
-            var breakdownData = await baseQuery
+            var breakdownData = allMessageData
                 .GroupBy(m => m.SpamCheckSkipReason)
                 .Select(g => new { Reason = g.Key, Count = g.Count() })
-                .ToListAsync(cancellationToken);
+                .ToList();
 
             var trustedCount = breakdownData
                 .Where(x => x.Reason == Data.Models.SpamCheckSkipReason.UserTrusted)
@@ -454,12 +426,8 @@ public class MessageStatsService : IMessageStatsService
             };
         }
 
-        // 6. Daily Active Users (unique users per day)
-        var dailyActiveUsersData = await baseQuery
-            .Select(m => new { m.Timestamp, m.UserId })
-            .ToListAsync(cancellationToken);
-
-        var dailyActiveUsers = dailyActiveUsersData
+        // 6. Daily Active Users (unique users per day) - in-memory grouping
+        var dailyActiveUsers = allMessageData
             .GroupBy(m =>
             {
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
