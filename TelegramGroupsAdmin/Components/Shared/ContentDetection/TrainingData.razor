@@ -86,7 +86,7 @@
                                  OnKeyUp="@OnSearchChanged"
                                  Style="max-width: 300px;" />
 
-                    <MudSelect T="string" @bind-Value="_typeFilter" Label="Type Filter" Style="max-width: 150px;">
+                    <MudSelect T="string" Value="_typeFilter" ValueChanged="OnTypeFilterChanged" Label="Type Filter" Style="max-width: 150px;">
                         <MudSelectItem Value="@("all")">All</MudSelectItem>
                         <MudSelectItem Value="@("spam")">Spam Only</MudSelectItem>
                         <MudSelectItem Value="@("ham")">Ham Only</MudSelectItem>
@@ -95,7 +95,7 @@
                         </MudSelectItem>
                     </MudSelect>
 
-                    <MudSelect T="string" @bind-Value="_sourceFilter" Label="Source Filter" Style="max-width: 150px;">
+                    <MudSelect T="string" Value="_sourceFilter" ValueChanged="OnSourceFilterChanged" Label="Source Filter" Style="max-width: 150px;">
                         <MudSelectItem Value="@("all")">All Sources</MudSelectItem>
                         @foreach (var source in _stats?.SamplesBySource.Keys ?? Enumerable.Empty<string>())
                         {
@@ -322,6 +322,18 @@
 
     private void OnSearchChanged()
     {
+        FilterSamples();
+    }
+
+    private void OnTypeFilterChanged(string value)
+    {
+        _typeFilter = value;
+        FilterSamples();
+    }
+
+    private void OnSourceFilterChanged(string value)
+    {
+        _sourceFilter = value;
         FilterSamples();
     }
 
