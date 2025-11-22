@@ -158,6 +158,14 @@ public class MessageStatsService : IMessageStatsService
             }
         ).AsNoTracking().ToListAsync(cancellationToken);
 
+        // === DE-DUPLICATE MESSAGES ===
+        // LEFT JOIN can produce duplicate rows if a message has multiple detection results
+        // De-duplicate by MessageId to ensure accurate counts
+        var distinctMessages = allMessageData
+            .GroupBy(m => m.MessageId)
+            .Select(g => g.First()) // Take first occurrence of each message
+            .ToList();
+
         // === CONSOLIDATED QUERY 2: Per-chat breakdown with managed chat names ===
         var perChatVolume = await (
             from m in context.Messages
@@ -178,18 +186,18 @@ public class MessageStatsService : IMessageStatsService
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         var daysDiff = (endDate - startDate).TotalDays;
 
-        // Basic metrics
-        var totalMessages = allMessageData.Count;
-        var uniqueUsers = allMessageData.Select(m => m.UserId).Distinct().Count();
+        // Basic metrics (use distinctMessages to avoid duplication)
+        var totalMessages = distinctMessages.Count;
+        var uniqueUsers = distinctMessages.Select(m => m.UserId).Distinct().Count();
         var dailyAverage = daysDiff > 0 ? totalMessages / daysDiff : 0;
 
         // Spam metrics
-        var spamMessages = allMessageData.Where(m => m.IsSpam).ToList();
-        var spamCount = spamMessages.Select(m => m.MessageId).Distinct().Count();
+        var spamMessages = distinctMessages.Where(m => m.IsSpam).ToList();
+        var spamCount = spamMessages.Count; // Already distinct after de-duplication
         var spamPercentage = totalMessages > 0 ? (spamCount / (double)totalMessages * 100.0) : 0;
 
         // Daily volume - all messages grouped by local date
-        var dailyVolume = allMessageData
+        var dailyVolume = distinctMessages
             .GroupBy(m =>
             {
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
@@ -213,13 +221,13 @@ public class MessageStatsService : IMessageStatsService
             .Select(g => new UiModels.DailyVolumeData
             {
                 Date = g.Key,
-                Count = g.Select(x => x.MessageId).Distinct().Count()
+                Count = g.Count() // Already distinct after de-duplication
             })
             .OrderBy(d => d.Date)
             .ToList();
 
         // Daily ham - non-spam messages grouped by local date
-        var hamMessages = allMessageData.Where(m => !m.IsSpam).ToList();
+        var hamMessages = distinctMessages.Where(m => !m.IsSpam).ToList();
         var dailyHam = hamMessages
             .GroupBy(m =>
             {
@@ -241,7 +249,7 @@ public class MessageStatsService : IMessageStatsService
         if (totalMessages > 0)
         {
             // Hourly activity (always available)
-            var hourlyActivity = allMessageData
+            var hourlyActivity = distinctMessages
                 .GroupBy(m =>
                 {
                     var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
@@ -257,7 +265,7 @@ public class MessageStatsService : IMessageStatsService
             var hasEnoughDataForWeekly = daysDiff >= 7;
             if (hasEnoughDataForWeekly)
             {
-                var dailyActivity = allMessageData
+                var dailyActivity = distinctMessages
                     .GroupBy(m =>
                     {
                         var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);
@@ -349,21 +357,21 @@ public class MessageStatsService : IMessageStatsService
             var previousWeekEnd = currentWeekStart;
 
             // Current week metrics - in-memory filtering
-            var currentWeekData = allMessageData.Where(m => m.Timestamp >= currentWeekStart).ToList();
+            var currentWeekData = distinctMessages.Where(m => m.Timestamp >= currentWeekStart).ToList();
             var currentWeekMessages = currentWeekData.Count;
             var currentWeekUsers = currentWeekData.Select(m => m.UserId).Distinct().Count();
-            var currentWeekSpam = currentWeekData.Where(m => m.IsSpam).Select(m => m.MessageId).Distinct().Count();
+            var currentWeekSpam = currentWeekData.Where(m => m.IsSpam).Count();
             var currentWeekSpamPct = currentWeekMessages > 0
                 ? (currentWeekSpam / (double)currentWeekMessages * 100.0)
                 : 0;
 
             // Previous week metrics - in-memory filtering
-            var previousWeekData = allMessageData
+            var previousWeekData = distinctMessages
                 .Where(m => m.Timestamp >= previousWeekStart && m.Timestamp < previousWeekEnd)
                 .ToList();
             var previousWeekMessages = previousWeekData.Count;
             var previousWeekUsers = previousWeekData.Select(m => m.UserId).Distinct().Count();
-            var previousWeekSpam = previousWeekData.Where(m => m.IsSpam).Select(m => m.MessageId).Distinct().Count();
+            var previousWeekSpam = previousWeekData.Where(m => m.IsSpam).Count();
             var previousWeekSpamPct = previousWeekMessages > 0
                 ? (previousWeekSpam / (double)previousWeekMessages * 100.0)
                 : 0;
@@ -400,7 +408,7 @@ public class MessageStatsService : IMessageStatsService
         UiModels.TrustedUserBreakdown? trustedBreakdown = null;
         if (totalMessages > 0)
         {
-            var breakdownData = allMessageData
+            var breakdownData = distinctMessages
                 .GroupBy(m => m.SpamCheckSkipReason)
                 .Select(g => new { Reason = g.Key, Count = g.Count() })
                 .ToList();
@@ -427,7 +435,7 @@ public class MessageStatsService : IMessageStatsService
         }
 
         // 6. Daily Active Users (unique users per day) - in-memory grouping
-        var dailyActiveUsers = allMessageData
+        var dailyActiveUsers = distinctMessages
             .GroupBy(m =>
             {
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(m.Timestamp.UtcDateTime, timeZone);

@@ -284,7 +284,17 @@
                         <MudTh Style="text-align: right">Percentage</MudTh>
                     </HeaderContent>
                     <RowTemplate>
-                        <MudTd DataLabel="Rank">@(context == _trendsData.TopActiveUsers.First() ? "🥇" : context == _trendsData.TopActiveUsers.Skip(1).FirstOrDefault() ? "🥈" : context == _trendsData.TopActiveUsers.Skip(2).FirstOrDefault() ? "🥉" : (_trendsData.TopActiveUsers.IndexOf(context) + 1).ToString())</MudTd>
+                        @{
+                            var rank = _trendsData.TopActiveUsers.IndexOf(context) + 1;
+                            var rankDisplay = rank switch
+                            {
+                                1 => "🥇",
+                                2 => "🥈",
+                                3 => "🥉",
+                                _ => rank.ToString()
+                            };
+                        }
+                        <MudTd DataLabel="Rank">@rankDisplay</MudTd>
                         <MudTd DataLabel="User">@context.DisplayName</MudTd>
                         <MudTd DataLabel="Messages" Style="text-align: right">@context.MessageCount</MudTd>
                         <MudTd DataLabel="Percentage" Style="text-align: right">@context.Percentage.ToString("F1")%</MudTd>
