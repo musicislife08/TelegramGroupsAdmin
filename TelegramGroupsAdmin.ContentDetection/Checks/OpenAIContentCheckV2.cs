@@ -230,9 +230,10 @@ public class OpenAIContentCheckV2(
             // Parse result: "spam", "clean", or "review"
             var isSpam = jsonResponse.Result?.ToLowerInvariant() == "spam";
             var isReview = jsonResponse.Result?.ToLowerInvariant() == "review";
+            var isClean = jsonResponse.Result?.ToLowerInvariant() == "clean";
 
-            // Clean result = abstain (0 points)
-            if (!isSpam && !isReview)
+            // Clean result = definitive verdict (0 points, veto spam detection)
+            if (isClean)
             {
                 var details = $"OpenAI: Clean - {jsonResponse.Reason}";
                 if (fromCache) details += " (cached)";
@@ -241,8 +242,21 @@ public class OpenAIContentCheckV2(
                 {
                     CheckName = CheckName,
                     Score = 0.0,
-                    Abstained = true,
+                    Abstained = false, // Clean is a verdict, not an abstention - triggers veto in engine
                     Details = details
+                };
+            }
+
+            // Unknown/unparseable result - abstain
+            if (!isSpam && !isReview)
+            {
+                logger.LogWarning("OpenAI returned unknown result: {Result}", jsonResponse.Result);
+                return new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = 0.0,
+                    Abstained = true, // Unknown result - can't interpret, defer to pipeline
+                    Details = $"Unknown OpenAI result: {jsonResponse.Result}"
                 };
             }
 
