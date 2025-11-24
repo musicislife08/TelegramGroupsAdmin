@@ -231,7 +231,7 @@ public class OpenAIContentCheckV2(
             var isSpam = jsonResponse.Result?.ToLowerInvariant() == "spam";
             var isReview = jsonResponse.Result?.ToLowerInvariant() == "review";
 
-            // Clean result = abstain (0 points)
+            // Clean result = definitive verdict (0 points, veto spam detection)
             if (!isSpam && !isReview)
             {
                 var details = $"OpenAI: Clean - {jsonResponse.Reason}";
@@ -241,7 +241,7 @@ public class OpenAIContentCheckV2(
                 {
                     CheckName = CheckName,
                     Score = 0.0,
-                    Abstained = true,
+                    Abstained = false, // Clean is a verdict, not an abstention - triggers veto in engine
                     Details = details
                 };
             }
