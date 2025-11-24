@@ -2,7 +2,7 @@
 
 ## Stack
 
-.NET 10.0 (10.0.100), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 9.0, Quartz.NET 3.15.1, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
+.NET 10.0 (10.0.100), Blazor Server, MudBlazor 8.15.0, PostgreSQL 17, EF Core 10.0, Npgsql 10.0.0, Quartz.NET 3.15.1, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
 
 ## Git Workflow (CRITICAL - FOLLOW EVERY TIME)
 
