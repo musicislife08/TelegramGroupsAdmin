@@ -1,7 +1,7 @@
 # TelegramGroupsAdmin
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![.NET 9.0](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet)
+![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)
 
 **AI-powered Telegram group moderation with advanced spam detection, content filtering, and comprehensive analytics.**
 
@@ -103,7 +103,7 @@ A self-hosted Blazor Server application designed for homelab deployment, combini
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/weekenders/TelegramGroupsAdmin.git
+   git clone https://github.com/musicislife08/TelegramGroupsAdmin.git
    cd TelegramGroupsAdmin
    ```
 
@@ -220,7 +220,7 @@ See [examples/README.md](examples/README.md) for detailed configuration guide in
 
 ```bash
 # Clone repository
-git clone https://github.com/weekenders/TelegramGroupsAdmin.git
+git clone https://github.com/musicislife08/TelegramGroupsAdmin.git
 cd TelegramGroupsAdmin
 
 # Restore dependencies
@@ -636,9 +636,5 @@ TelegramGroupsAdmin includes and depends on various open-source libraries and to
 
 ## Support
 
-- **Issues:** [GitHub Issues](https://github.com/weekenders/TelegramGroupsAdmin/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/weekenders/TelegramGroupsAdmin/discussions)
-
----
-
-Built with love by Weekenders
+- **Issues:** [GitHub Issues](https://github.com/musicislife08/TelegramGroupsAdmin/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/musicislife08/TelegramGroupsAdmin/discussions)
