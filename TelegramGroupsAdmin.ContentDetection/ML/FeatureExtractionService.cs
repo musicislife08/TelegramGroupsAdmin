@@ -84,7 +84,7 @@ public class FeatureExtractionService
 
                 // Message metadata
                 MessageLength = messageLength,
-                HasUrls = 0f,  // TODO: Extract from message metadata if needed
+                HasUrls = 0f,  // Not used - model trained with this feature always 0
                 IsMultiLanguage = algorithmScores.ContainsKey("MultiLanguage") &&
                                   algorithmScores["MultiLanguage"].result == "spam" ? 1f : 0f,
 

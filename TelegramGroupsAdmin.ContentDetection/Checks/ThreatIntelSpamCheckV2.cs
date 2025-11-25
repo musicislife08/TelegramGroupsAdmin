@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// <summary>
 /// Spam check that validates URLs/files against threat intelligence services
 /// Currently supports VirusTotal (disabled by default for URLs due to 15s latency)
-/// TODO: Add ClamAV for local virus scanning (files/images)
+/// Note: ClamAV virus scanning is handled separately by FileScanJob
 /// </summary>
 public partial class ThreatIntelSpamCheckV2(
     ILogger<ThreatIntelSpamCheckV2> logger,

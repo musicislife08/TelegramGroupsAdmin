@@ -765,7 +765,6 @@ public class SpamActionService(
 
                 // Send DM notification with media support (Phase 5.2)
                 // Note: Bypasses NotificationService to enable media support
-                // TODO: Extend INotificationService with media support in future
                 var chatAdminsRepo = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
                 var telegramMappingRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserMappingRepository>();
                 var dmDeliveryService = scope.ServiceProvider.GetRequiredService<IDmDeliveryService>();
