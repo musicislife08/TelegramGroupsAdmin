@@ -89,6 +89,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 EditVersion = x.dr.EditVersion,
                 UserId = x.m.UserId,
                 MessageText = x.m.MessageText,
+                ContentHash = x.m.ContentHash,
                 Translation = x.translation != null ? MessageTranslationMappings.ToModel(x.translation) : null
             });
     }

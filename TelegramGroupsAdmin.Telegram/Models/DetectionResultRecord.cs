@@ -23,6 +23,7 @@ public class DetectionResultRecord
 
     public long UserId { get; set; }
     public string? MessageText { get; set; }
+    public string? ContentHash { get; set; }
     public bool UsedForTraining { get; set; } = true;
     public int NetConfidence { get; set; }  // Required: computed column is_spam derives from this
     public string? CheckResultsJson { get; set; }  // Phase 2.6: JSON string with all check results

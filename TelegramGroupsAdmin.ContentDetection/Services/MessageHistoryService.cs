@@ -25,14 +25,22 @@ public class MessageHistoryService : IMessageHistoryService
     {
         try
         {
-            // Assuming message history database structure exists
+            // Join with detection_results to determine if message was flagged as spam
             const string sql = @"
-                SELECT user_id, user_name, message_text, timestamp
-                FROM messages
-                WHERE chat_id = @ChatId
-                  AND message_text IS NOT NULL
-                  AND message_text != ''
-                ORDER BY timestamp DESC
+                SELECT
+                    m.message_id,
+                    m.user_id,
+                    m.user_name,
+                    m.message_text,
+                    m.timestamp,
+                    COALESCE(bool_or(dr.is_spam), false) AS was_spam
+                FROM messages m
+                LEFT JOIN detection_results dr ON m.message_id = dr.message_id
+                WHERE m.chat_id = @ChatId
+                  AND m.message_text IS NOT NULL
+                  AND m.message_text != ''
+                GROUP BY m.message_id, m.user_id, m.user_name, m.message_text, m.timestamp
+                ORDER BY m.timestamp DESC
                 LIMIT @Count";
 
             var messages = await _connection.QueryAsync<HistoryMessageDto>(sql, new { ChatId = chatId, Count = count });
@@ -43,7 +51,7 @@ public class MessageHistoryService : IMessageHistoryService
                 UserName = m.UserName ?? string.Empty,
                 Message = m.MessageText ?? string.Empty,
                 Timestamp = DateTimeOffset.FromUnixTimeSeconds(m.Timestamp).DateTime,
-                WasSpam = false // TODO: Link with spam_checks table to determine if message was detected as spam
+                WasSpam = m.WasSpam
             });
         }
         catch (Exception ex)
@@ -62,5 +70,6 @@ public class MessageHistoryService : IMessageHistoryService
         public string? UserName { get; init; }
         public string? MessageText { get; init; }
         public long Timestamp { get; init; }
+        public bool WasSpam { get; init; }
     }
 }
