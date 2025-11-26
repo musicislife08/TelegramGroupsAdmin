@@ -373,13 +373,13 @@ public class MessageQueryService : IMessageQueryService
             replyToText: x.ReplyToText)).ToList();
     }
 
-    public async Task<Dictionary<long, UiModels.SpamCheckRecord>> GetSpamChecksForMessagesAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<long, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(IEnumerable<long> messageIds, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var messageIdArray = messageIds.ToArray();
 
         // Query detection_results table (spam_checks table was dropped in normalized schema)
-        // Map detection_results fields to SpamCheckRecord for backward compatibility
+        // Map detection_results fields to ContentCheckRecord for backward compatibility
         // Note: Returns only the LATEST detection result per message for quick display
         // Full detection history is available via GetByMessageIdAsync in DetectionResultsRepository
         var results = await context.DetectionResults
@@ -426,7 +426,7 @@ public class MessageQueryService : IMessageQueryService
 
         // Build final result with absolute net_confidence as display confidence
         return latestResults
-            .Select(r => new UiModels.SpamCheckRecord(
+            .Select(r => new UiModels.ContentCheckRecord(
                 Id: r.Id,
                 CheckTimestamp: r.CheckTimestamp,
                 UserId: r.UserId,

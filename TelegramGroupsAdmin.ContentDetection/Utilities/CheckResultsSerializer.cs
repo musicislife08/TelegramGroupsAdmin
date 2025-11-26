@@ -23,7 +23,8 @@ public static class CheckResultsSerializer
                 CheckName = c.CheckName,
                 Result = c.Result,
                 Confidence = c.Confidence,
-                Reason = c.Details
+                Reason = c.Details,
+                ProcessingTimeMs = c.ProcessingTimeMs
             }).ToList()
         };
 

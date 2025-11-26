@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TelegramGroupsAdmin.Data;
@@ -11,9 +12,11 @@ using TelegramGroupsAdmin.Data;
 namespace TelegramGroupsAdmin.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251126022902_NormalizeCheckNamesToIntegers")]
+    partial class NormalizeCheckNamesToIntegers
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -926,53 +929,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.ToTable("configs");
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ContentCheckConfigRecordDto", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<bool>("AlwaysRun")
-                        .HasColumnType("boolean")
-                        .HasColumnName("always_run");
-
-                    b.Property<long>("ChatId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("chat_id");
-
-                    b.Property<string>("CheckName")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("check_name");
-
-                    b.Property<int?>("ConfidenceThreshold")
-                        .HasColumnType("integer")
-                        .HasColumnName("confidence_threshold");
-
-                    b.Property<string>("ConfigurationJson")
-                        .HasColumnType("text")
-                        .HasColumnName("configuration_json");
-
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("enabled");
-
-                    b.Property<string>("ModifiedBy")
-                        .HasColumnType("text")
-                        .HasColumnName("modified_by");
-
-                    b.Property<DateTimeOffset>("ModifiedDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("modified_date");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("content_check_configs");
-                });
-
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.DetectionResultRecordDto", b =>
                 {
                     b.Property<long>("Id")
@@ -1553,10 +1509,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("chat_id");
 
-                    b.Property<int>("ContentCheckSkipReason")
-                        .HasColumnType("integer")
-                        .HasColumnName("spam_check_skip_reason");
-
                     b.Property<string>("ContentHash")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
@@ -1629,6 +1581,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<long?>("ReplyToMessageId")
                         .HasColumnType("bigint")
                         .HasColumnName("reply_to_message_id");
+
+                    b.Property<int>("SpamCheckSkipReason")
+                        .HasColumnType("integer")
+                        .HasColumnName("spam_check_skip_reason");
 
                     b.Property<DateTimeOffset>("Timestamp")
                         .HasColumnType("timestamp with time zone")
@@ -1952,6 +1908,53 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasFilter("status = 0");
 
                     b.ToTable("reports");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.SpamCheckConfigRecordDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("AlwaysRun")
+                        .HasColumnType("boolean")
+                        .HasColumnName("always_run");
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<string>("CheckName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("check_name");
+
+                    b.Property<int?>("ConfidenceThreshold")
+                        .HasColumnType("integer")
+                        .HasColumnName("confidence_threshold");
+
+                    b.Property<string>("ConfigurationJson")
+                        .HasColumnType("text")
+                        .HasColumnName("configuration_json");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("modified_by");
+
+                    b.Property<DateTimeOffset>("ModifiedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_date");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("spam_check_configs");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.SpamDetectionConfigRecordDto", b =>

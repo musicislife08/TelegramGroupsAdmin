@@ -78,7 +78,7 @@ public record VetoedMessage
     /// <summary>
     /// Names of algorithms that flagged this message as spam
     /// </summary>
-    public List<string> SpamCheckNames { get; init; } = [];
+    public List<string> ContentCheckNames { get; init; } = [];
 
     /// <summary>
     /// OpenAI's confidence level when vetoing (0-100)

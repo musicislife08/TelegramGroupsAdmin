@@ -35,7 +35,7 @@
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudIcon Icon="@Icons.Material.Filled.Dataset" Color="Color.Primary" />
                     <MudText Typo="Typo.body1" Style="flex: 1;">Total Checks</MudText>
-                    <MudText Typo="Typo.h6">@_totalSpamChecks</MudText>
+                    <MudText Typo="Typo.h6">@_totalContentChecks</MudText>
                 </MudStack>
 
                 <MudDivider />
@@ -126,13 +126,13 @@
 
 
         <!-- Recent Activity -->
-        @if (_recentSpamChecks?.Any() == true)
+        @if (_recentContentChecks?.Any() == true)
         {
             <MudPaper Class="pa-4" Elevation="2">
                 <MudStack Spacing="3">
                     <MudText Typo="Typo.h6" Color="Color.Primary">Recent Spam Checks</MudText>
 
-                    <MudTable Items="@_recentSpamChecks" Dense="true" Hover="true">
+                    <MudTable Items="@_recentContentChecks" Dense="true" Hover="true">
                         <HeaderContent>
                             <MudTh>Timestamp</MudTh>
                             <MudTh>Result</MudTh>
@@ -319,13 +319,13 @@
                                                 </td>
                                                 <td>
                                                     <MudStack Row="true" Spacing="1">
-                                                        @foreach (var check in msg.SpamCheckNames.Take(3))
+                                                        @foreach (var check in msg.ContentCheckNames.Take(3))
                                                         {
                                                             <MudChip T="string" Size="Size.Small" Color="Color.Warning">@check</MudChip>
                                                         }
-                                                        @if (msg.SpamCheckNames.Count > 3)
+                                                        @if (msg.ContentCheckNames.Count > 3)
                                                         {
-                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default">+@(msg.SpamCheckNames.Count - 3) more</MudChip>
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Default">+@(msg.ContentCheckNames.Count - 3) more</MudChip>
                                                         }
                                                     </MudStack>
                                                 </td>
@@ -357,7 +357,7 @@
     private bool _loading = true;
 
     // Overview statistics
-    private int _totalSpamChecks;
+    private int _totalContentChecks;
     private int _spamDetected;
     private double _spamPercentage;
     private int _totalStopWords;
@@ -367,7 +367,7 @@
     private double _spamDetectionRate;
 
     // Detailed data
-    private List<SpamCheckRecord>? _recentSpamChecks;
+    private List<ContentCheckRecord>? _recentContentChecks;
 
     // OpenAI veto analytics
     private OpenAIVetoAnalytics? _vetoAnalytics;
@@ -391,10 +391,10 @@
             // Load all data in parallel
             var stopWordsTask = LoadStopWordsStats();
             var trainingCountTask = LoadTrainingCount();
-            var spamChecksTask = LoadSpamCheckStats();
+            var contentChecksTask = LoadContentCheckStats();
             var vetoAnalyticsTask = LoadVetoAnalytics();
 
-            await Task.WhenAll(stopWordsTask, trainingCountTask, spamChecksTask, vetoAnalyticsTask);
+            await Task.WhenAll(stopWordsTask, trainingCountTask, contentChecksTask, vetoAnalyticsTask);
         }
         catch (Exception ex)
         {
@@ -442,13 +442,13 @@
         }
     }
 
-    private async Task LoadSpamCheckStats()
+    private async Task LoadContentCheckStats()
     {
         try
         {
             // Query detection_results table instead of obsolete spam_checks table
             var recentDetections = await MessageStatsService.GetRecentDetectionsAsync();
-            _recentSpamChecks = recentDetections.Take(20).Select(d => new SpamCheckRecord(
+            _recentContentChecks = recentDetections.Take(20).Select(d => new ContentCheckRecord(
                 Id: d.Id,
                 CheckTimestamp: d.DetectedAt,
                 UserId: d.UserId,
@@ -461,7 +461,7 @@
             )).ToList();
 
             var stats = await MessageStatsService.GetDetectionStatsAsync();
-            _totalSpamChecks = stats.TotalDetections;
+            _totalContentChecks = stats.TotalDetections;
             _spamDetected = stats.SpamDetected;
             _spamPercentage = stats.SpamPercentage;
             _spamDetectionRate = stats.Last24hSpamPercentage;
@@ -481,8 +481,8 @@
 
     private double GetTrainingPercentage()
     {
-        return _totalSpamChecks > 0
-            ? (_totalTrainingSamples / (double)_totalSpamChecks * 100.0)
+        return _totalContentChecks > 0
+            ? (_totalTrainingSamples / (double)_totalContentChecks * 100.0)
             : 0;
     }
 

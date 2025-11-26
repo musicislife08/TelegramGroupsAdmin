@@ -182,8 +182,8 @@ public class VideoSpamCheckV2(
     {
         try
         {
-            // Compute hashes for all extracted frames
-            var frameHashes = new List<byte[]>();
+            // Compute hashes for all extracted frames (pre-allocate capacity to avoid resizing)
+            var frameHashes = new List<byte[]>(frames.Count);
             foreach (var frame in frames)
             {
                 var hash = await photoHashService.ComputePhotoHashAsync(frame.FramePath);

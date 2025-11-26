@@ -1,9 +1,9 @@
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
-/// Spam check record for UI display
+/// Content check record for UI display
 /// </summary>
-public record SpamCheckRecord(
+public record ContentCheckRecord(
     long Id,
     DateTimeOffset CheckTimestamp,
     long UserId,

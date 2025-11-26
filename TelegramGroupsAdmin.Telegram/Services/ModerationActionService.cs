@@ -219,7 +219,7 @@ public class ModerationActionService
                             MediaLocalPath: null,
                             MediaDuration: null,
                             Translation: null,
-                            SpamCheckSkipReason: SpamCheckSkipReason.NotSkipped
+                            ContentCheckSkipReason: ContentCheckSkipReason.NotSkipped
                         );
 
                         await _messageHistoryRepository.InsertMessageAsync(messageRecord, cancellationToken);

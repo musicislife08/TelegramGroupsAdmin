@@ -710,7 +710,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
 
                 var openAICheck = checks.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
 
-                var spamChecks = checks
+                var contentChecks = checks
                     .Where(c => c.CheckName != CheckName.OpenAI && c.Result == CheckResultType.Spam)
                     .Select(c => c.CheckName.ToString())
                     .ToList();
@@ -718,7 +718,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 // Only include if OpenAI vetoed (clean) and other checks flagged spam
                 if (openAICheck != null &&
                     openAICheck.Result == CheckResultType.Clean &&
-                    spamChecks.Any())
+                    contentChecks.Any())
                 {
                     vetoedMessages.Add(new VetoedMessage
                     {
@@ -727,7 +727,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                         MessagePreview = detection.MessageText?.Length > 100
                             ? detection.MessageText.Substring(0, 100) + "..."
                             : detection.MessageText,
-                        SpamCheckNames = spamChecks,
+                        ContentCheckNames = contentChecks,
                         OpenAIConfidence = openAICheck.Confidence,
                         OpenAIReason = openAICheck.Reason
                     });

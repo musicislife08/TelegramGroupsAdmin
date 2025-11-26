@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
@@ -13,10 +14,14 @@ namespace TelegramGroupsAdmin.Telegram.Repositories;
 public class AnalyticsRepository : IAnalyticsRepository
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly ILogger<AnalyticsRepository> _logger;
 
-    public AnalyticsRepository(IDbContextFactory<AppDbContext> contextFactory)
+    public AnalyticsRepository(
+        IDbContextFactory<AppDbContext> contextFactory,
+        ILogger<AnalyticsRepository> logger)
     {
         _contextFactory = contextFactory;
+        _logger = logger;
     }
 
     public async Task<DetectionAccuracyStats> GetDetectionAccuracyStatsAsync(
@@ -27,43 +32,9 @@ public class AnalyticsRepository : IAnalyticsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // False positive = message initially detected as spam, then manually marked as ham
-        // Strategy: Find spam detections that were later overridden by manual ham detection
-        var falsePositives = await context.DetectionResults
-            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .Where(dr => dr.IsSpam && dr.DetectionSource != "manual") // Initial spam detection
-            .Where(dr => context.DetectionResults.Any(correction =>
-                correction.MessageId == dr.MessageId &&
-                correction.DetectionSource == "manual" &&
-                !correction.IsSpam &&
-                correction.DetectedAt > dr.DetectedAt)) // Later corrected to ham
-            .Select(dr => new
-            {
-                dr.MessageId,
-                dr.DetectedAt
-            })
-            .Distinct()
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        // False negative = message initially detected as ham, then manually marked as spam
-        // Strategy: Find ham detections that were later overridden by manual spam detection
-        var falseNegatives = await context.DetectionResults
-            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .Where(dr => !dr.IsSpam && dr.DetectionSource != "manual") // Initial ham detection
-            .Where(dr => context.DetectionResults.Any(correction =>
-                correction.MessageId == dr.MessageId &&
-                correction.DetectionSource == "manual" &&
-                correction.IsSpam &&
-                correction.DetectedAt > dr.DetectedAt)) // Later corrected to spam
-            .Select(dr => new
-            {
-                dr.MessageId,
-                dr.DetectedAt
-            })
-            .Distinct()
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        // Get false positive and false negative message IDs using helper methods
+        var fpMessageIds = await GetFalsePositiveMessageIdsAsync(context, startDate, endDate, cancellationToken);
+        var fnMessageIds = await GetFalseNegativeMessageIdsAsync(context, startDate, endDate, cancellationToken);
 
         var totalDetections = await context.DetectionResults
             .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
@@ -77,10 +48,6 @@ public class AnalyticsRepository : IAnalyticsRepository
             .Select(dr => new { dr.DetectedAt, dr.IsSpam, dr.MessageId })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
-
-        // Get false positive and false negative message IDs (for lookup)
-        var fpMessageIds = falsePositives.Select(fp => fp.MessageId).ToHashSet();
-        var fnMessageIds = falseNegatives.Select(fn => fn.MessageId).ToHashSet();
 
         // Group by user's local date (C# server-side grouping)
         var timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
@@ -121,14 +88,14 @@ public class AnalyticsRepository : IAnalyticsRepository
         return new DetectionAccuracyStats
         {
             DailyBreakdown = dailyBreakdownMapped,
-            TotalFalsePositives = falsePositives.Count,
-            TotalFalseNegatives = falseNegatives.Count,
+            TotalFalsePositives = fpMessageIds.Count,
+            TotalFalseNegatives = fnMessageIds.Count,
             TotalDetections = totalDetections,
             FalsePositivePercentage = totalDetections > 0
-                ? (falsePositives.Count / (double)totalDetections * 100.0)
+                ? (fpMessageIds.Count / (double)totalDetections * 100.0)
                 : 0,
             FalseNegativePercentage = totalDetections > 0
-                ? (falseNegatives.Count / (double)totalDetections * 100.0)
+                ? (fnMessageIds.Count / (double)totalDetections * 100.0)
                 : 0
         };
     }
@@ -226,34 +193,9 @@ public class AnalyticsRepository : IAnalyticsRepository
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        // Get false positive message IDs (system said spam → user corrected to ham)
-        var fpMessageIds = await context.DetectionResults
-            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .Where(dr => dr.IsSpam && dr.DetectionSource != "manual")
-            .Where(dr => context.DetectionResults.Any(correction =>
-                correction.MessageId == dr.MessageId &&
-                correction.DetectionSource == "manual" &&
-                !correction.IsSpam &&
-                correction.DetectedAt > dr.DetectedAt))
-            .Select(dr => dr.MessageId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        // Get false negative message IDs (system said ham → user corrected to spam)
-        var fnMessageIds = await context.DetectionResults
-            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
-            .Where(dr => !dr.IsSpam && dr.DetectionSource != "manual")
-            .Where(dr => context.DetectionResults.Any(correction =>
-                correction.MessageId == dr.MessageId &&
-                correction.DetectionSource == "manual" &&
-                correction.IsSpam &&
-                correction.DetectedAt > dr.DetectedAt))
-            .Select(dr => dr.MessageId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        var fpSet = fpMessageIds.ToHashSet();
-        var fnSet = fnMessageIds.ToHashSet();
+        // Get false positive/negative message IDs using helper methods
+        var fpSet = await GetFalsePositiveMessageIdsAsync(context, startDate, endDate, cancellationToken);
+        var fnSet = await GetFalseNegativeMessageIdsAsync(context, startDate, endDate, cancellationToken);
 
         // Parse JSON and aggregate per-algorithm stats
         var algorithmStats = new Dictionary<string, AlgorithmStatsAccumulator>();
@@ -562,35 +504,135 @@ public class AnalyticsRepository : IAnalyticsRepository
         string timeZoneId,
         CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        try
+        {
+            await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Query check_results_json JSONB column to extract ProcessingTimeMs for each algorithm
-        // Uses jsonb_array_elements to expand Checks array, then aggregates by CheckName
-        var sql = @"
-            SELECT
-                check_elem->>'CheckName' AS CheckName,
-                COUNT(*) AS TotalExecutions,
-                ROUND(AVG((check_elem->>'ProcessingTimeMs')::float)::numeric, 2) AS AverageMs,
-                ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY (check_elem->>'ProcessingTimeMs')::float)::numeric, 2) AS P95Ms,
-                ROUND(MAX((check_elem->>'ProcessingTimeMs')::float)::numeric, 2) AS MaxMs,
-                ROUND(MIN((check_elem->>'ProcessingTimeMs')::float)::numeric, 2) AS MinMs,
-                ROUND((AVG((check_elem->>'ProcessingTimeMs')::float) * COUNT(*))::numeric, 2) AS TotalTimeContribution
-            FROM detection_results dr,
-                 jsonb_array_elements(dr.check_results_json::jsonb->'Checks') AS check_elem
-            WHERE dr.detected_at >= @StartDate
-              AND dr.detected_at <= @EndDate
-              AND (check_elem->>'ProcessingTimeMs')::float > 0
-            GROUP BY check_elem->>'CheckName'
-            ORDER BY TotalTimeContribution DESC";
+            // Query check_results_json JSONB column to extract ProcessingTimeMs for each algorithm
+            // Uses CTE to extract and cast JSONB values once, then aggregates for better performance
+            // GIN index on check_results_json enables efficient JSONB path queries
+            // CheckName stored as integer enum value (normalized by migration 20251126022902)
+            // Execute raw SQL with integer CheckNameEnum, then map to enum names in C# for compile-time safety
+            _logger.LogDebug("Fetching algorithm performance stats from {StartDate} to {EndDate}", startDate, endDate);
 
-        // Execute raw SQL and map to AlgorithmPerformanceStats
-        var results = await context.Database
-            .SqlQueryRaw<AlgorithmPerformanceStats>(
-                sql,
-                new Npgsql.NpgsqlParameter("@StartDate", startDate.UtcDateTime),
-                new Npgsql.NpgsqlParameter("@EndDate", endDate.UtcDateTime))
+            // Execute raw SQL and map manually (EF Core SqlQuery requires configured entity types)
+            var sql = @"
+                WITH extracted_checks AS (
+                    SELECT
+                        (check_elem->>'CheckName')::int AS check_name_enum,
+                        (check_elem->>'ProcessingTimeMs')::float AS processing_time_ms
+                    FROM detection_results dr,
+                         jsonb_array_elements(dr.check_results_json->'Checks') AS check_elem
+                    WHERE dr.detected_at >= @p0
+                      AND dr.detected_at <= @p1
+                      AND (check_elem->>'ProcessingTimeMs')::float > 0
+                )
+                SELECT
+                    check_name_enum AS CheckNameEnum,
+                    COUNT(*)::int AS TotalExecutions,
+                    AVG(processing_time_ms) AS AverageMs,
+                    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY processing_time_ms) AS P95Ms,
+                    MAX(processing_time_ms) AS MaxMs,
+                    MIN(processing_time_ms) AS MinMs,
+                    (AVG(processing_time_ms) * COUNT(*)) AS TotalTimeContribution
+                FROM extracted_checks
+                GROUP BY check_name_enum
+                ORDER BY TotalTimeContribution DESC";
+
+            var connection = context.Database.GetDbConnection();
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            command.Parameters.Add(new Npgsql.NpgsqlParameter("p0", startDate.UtcDateTime));
+            command.Parameters.Add(new Npgsql.NpgsqlParameter("p1", endDate.UtcDateTime));
+
+            if (connection.State != System.Data.ConnectionState.Open)
+                await connection.OpenAsync(cancellationToken);
+
+            var rawResults = new List<RawAlgorithmPerformanceStats>();
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                rawResults.Add(new RawAlgorithmPerformanceStats
+                {
+                    CheckNameEnum = reader.GetInt32(0),
+                    TotalExecutions = reader.GetInt32(1),
+                    AverageMs = reader.GetDouble(2),
+                    P95Ms = reader.GetDouble(3),
+                    MaxMs = reader.GetDouble(4),
+                    MinMs = reader.GetDouble(5),
+                    TotalTimeContribution = reader.GetDouble(6)
+                });
+            }
+
+            _logger.LogDebug("Retrieved {Count} raw algorithm performance results", rawResults.Count);
+
+            // Map integer enum values to string names in C# (compile-time safe!)
+            var results = rawResults.Select(r => new AlgorithmPerformanceStats
+            {
+                CheckName = ((ContentDetection.Constants.CheckName)r.CheckNameEnum).ToString(),
+                TotalExecutions = r.TotalExecutions,
+                AverageMs = r.AverageMs,
+                P95Ms = r.P95Ms,
+                MaxMs = r.MaxMs,
+                MinMs = r.MinMs,
+                TotalTimeContribution = r.TotalTimeContribution
+            }).ToList();
+
+            return results;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch algorithm performance stats from {StartDate} to {EndDate}", startDate, endDate);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Get message IDs for false positives (system said spam → user corrected to ham)
+    /// </summary>
+    private static async Task<HashSet<long>> GetFalsePositiveMessageIdsAsync(
+        AppDbContext context,
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        CancellationToken cancellationToken)
+    {
+        var messageIds = await context.DetectionResults
+            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
+            .Where(dr => dr.IsSpam && dr.DetectionSource != "manual")
+            .Where(dr => context.DetectionResults.Any(correction =>
+                correction.MessageId == dr.MessageId &&
+                correction.DetectionSource == "manual" &&
+                !correction.IsSpam &&
+                correction.DetectedAt > dr.DetectedAt))
+            .Select(dr => dr.MessageId)
+            .Distinct()
             .ToListAsync(cancellationToken);
 
-        return results;
+        return messageIds.ToHashSet();
+    }
+
+    /// <summary>
+    /// Get message IDs for false negatives (system said ham → user corrected to spam)
+    /// </summary>
+    private static async Task<HashSet<long>> GetFalseNegativeMessageIdsAsync(
+        AppDbContext context,
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        CancellationToken cancellationToken)
+    {
+        var messageIds = await context.DetectionResults
+            .Where(dr => dr.DetectedAt >= startDate && dr.DetectedAt <= endDate)
+            .Where(dr => !dr.IsSpam && dr.DetectionSource != "manual")
+            .Where(dr => context.DetectionResults.Any(correction =>
+                correction.MessageId == dr.MessageId &&
+                correction.DetectionSource == "manual" &&
+                correction.IsSpam &&
+                correction.DetectedAt > dr.DetectedAt))
+            .Select(dr => dr.MessageId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return messageIds.ToHashSet();
     }
 }

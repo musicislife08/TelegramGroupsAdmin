@@ -4,11 +4,11 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// EF Core entity for spam_check_configs table
-/// Per-chat configuration for individual spam check algorithms
+/// EF Core entity for content_check_configs table
+/// Per-chat configuration for individual content check algorithms
 /// </summary>
-[Table("spam_check_configs")]
-public class SpamCheckConfigRecordDto
+[Table("content_check_configs")]
+public class ContentCheckConfigRecordDto
 {
     [Key]
     [Column("id")]

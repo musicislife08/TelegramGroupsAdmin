@@ -1,11 +1,10 @@
-namespace TelegramGroupsAdmin.Telegram.Models;
+namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
-/// Reason why spam detection was skipped for a message (Telegram layer)
-/// Maps to Data.Models.SpamCheckSkipReason via ModelMappings
-/// Set by ContentCheckCoordinator based on user trust/admin status
+/// Reason why content detection was skipped for a message (database layer)
+/// Maps to Telegram.Models.ContentCheckSkipReason via ModelMappings
 /// </summary>
-public enum SpamCheckSkipReason
+public enum ContentCheckSkipReason
 {
     /// <summary>
     /// Spam check ran normally (not skipped)

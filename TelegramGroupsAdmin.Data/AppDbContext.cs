@@ -41,7 +41,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<StopWordDto> StopWords => Set<StopWordDto>();
     // NOTE: TrainingSamples removed in Phase 2.2 - training data comes from detection_results.used_for_training
     public DbSet<SpamDetectionConfigRecordDto> SpamDetectionConfigs => Set<SpamDetectionConfigRecordDto>();
-    public DbSet<SpamCheckConfigRecordDto> SpamCheckConfigs => Set<SpamCheckConfigRecordDto>();
+    public DbSet<ContentCheckConfigRecordDto> ContentCheckConfigs => Set<ContentCheckConfigRecordDto>();
     public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
     public DbSet<ThresholdRecommendationDto> ThresholdRecommendations => Set<ThresholdRecommendationDto>();
     public DbSet<ImageTrainingSampleDto> ImageTrainingSamples => Set<ImageTrainingSampleDto>();

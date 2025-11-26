@@ -153,7 +153,7 @@ public class MessageStatsService : IMessageStatsService
                 m.UserId,
                 m.Timestamp,
                 m.ChatId,
-                m.SpamCheckSkipReason,
+                m.ContentCheckSkipReason,
                 IsSpam = dr != null && dr.IsSpam
             }
         ).AsNoTracking().ToListAsync(cancellationToken);
@@ -404,23 +404,23 @@ public class MessageStatsService : IMessageStatsService
             chatIds: chatIds.Count > 0 ? chatIds : null,
             ct: cancellationToken);
 
-        // 5. Trusted User Breakdown (by spam_check_skip_reason) - in-memory grouping
+        // 5. Trusted User Breakdown (by content_check_skip_reason) - in-memory grouping
         UiModels.TrustedUserBreakdown? trustedBreakdown = null;
         if (totalMessages > 0)
         {
             var breakdownData = distinctMessages
-                .GroupBy(m => m.SpamCheckSkipReason)
+                .GroupBy(m => m.ContentCheckSkipReason)
                 .Select(g => new { Reason = g.Key, Count = g.Count() })
                 .ToList();
 
             var trustedCount = breakdownData
-                .Where(x => x.Reason == Data.Models.SpamCheckSkipReason.UserTrusted)
+                .Where(x => x.Reason == Data.Models.ContentCheckSkipReason.UserTrusted)
                 .Sum(x => x.Count);
             var adminCount = breakdownData
-                .Where(x => x.Reason == Data.Models.SpamCheckSkipReason.UserAdmin)
+                .Where(x => x.Reason == Data.Models.ContentCheckSkipReason.UserAdmin)
                 .Sum(x => x.Count);
             var untrustedCount = breakdownData
-                .Where(x => x.Reason == Data.Models.SpamCheckSkipReason.NotSkipped)
+                .Where(x => x.Reason == Data.Models.ContentCheckSkipReason.NotSkipped)
                 .Sum(x => x.Count);
 
             trustedBreakdown = new UiModels.TrustedUserBreakdown
