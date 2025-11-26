@@ -509,8 +509,9 @@ public class StopWordRecommendationService : IStopWordRecommendationService
     /// Returns null if no data available
     /// </summary>
     /// <remarks>
-    /// TODO (ML-5): Implement ProcessingTimeMs tracking in check_results_json
-    /// Performance cleanup recommendations will remain empty until ML-5 is completed.
+    /// ProcessingTimeMs is now tracked in check_results_json JSONB column.
+    /// Query implementation pending - will calculate average execution time for StopWords check.
+    /// Performance cleanup recommendations will remain empty until query is implemented.
     /// This is acceptable - the service still provides addition/removal recommendations.
     /// </remarks>
     private async Task<decimal?> GetAverageStopWordsExecutionTimeAsync(
@@ -519,9 +520,9 @@ public class StopWordRecommendationService : IStopWordRecommendationService
     {
         await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // Performance tracking not yet implemented - deferred to ML-5
-        // When implemented, this should parse check_results_json JSONB column to extract
-        // ProcessingTimeMs for StopWords check and calculate average over the time period
+        // TODO: Implement JSONB query to extract ProcessingTimeMs for StopWords check
+        // Query pattern: Parse check_results_json -> filter by CheckName='StopWords' -> AVG(ProcessingTimeMs)
+        // Will use GIN index on check_results_json for efficient querying
         return null;
     }
 }

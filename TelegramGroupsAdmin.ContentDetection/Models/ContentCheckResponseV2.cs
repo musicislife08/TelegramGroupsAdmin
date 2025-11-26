@@ -39,5 +39,5 @@ public record ContentCheckResponseV2
     /// <summary>
     /// Time spent executing this check in milliseconds
     /// </summary>
-    public long ProcessingTimeMs { get; init; }
+    public double ProcessingTimeMs { get; init; }
 }

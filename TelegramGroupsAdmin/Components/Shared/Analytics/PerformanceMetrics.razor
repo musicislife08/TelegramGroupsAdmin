@@ -1,6 +1,7 @@
 @using ApexCharts
 @using MudColor = MudBlazor.Color
 @using MudSize = MudBlazor.Size
+@using TelegramGroupsAdmin.Telegram.Models
 @inject IAnalyticsRepository AnalyticsRepository
 @inject ISnackbar Snackbar
 @inject IJSRuntime JsRuntime
@@ -187,6 +188,54 @@
             </MudPaper>
         }
 
+        @* Algorithm Performance Breakdown (ML-5) *@
+        @if (_algorithmPerformanceStats?.Any() == true)
+        {
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.h6" GutterBottom="true" Color="MudColor.Primary">Algorithm Performance Breakdown</MudText>
+                <MudText Typo="Typo.body2" Class="mb-3" Color="MudColor.Secondary">
+                    Execution time metrics for each spam detection algorithm (ML-5)
+                </MudText>
+
+                <MudTable Items="@_algorithmPerformanceStats" Dense="true" Hover="true" Striped="true">
+                    <HeaderContent>
+                        <MudTh>Algorithm</MudTh>
+                        <MudTh><MudTableSortLabel T="AlgorithmPerformanceStats" SortBy="x => x.TotalExecutions">Executions</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="AlgorithmPerformanceStats" SortBy="x => x.AverageMs">Avg Time</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="AlgorithmPerformanceStats" SortBy="x => x.P95Ms">P95 Time</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="AlgorithmPerformanceStats" SortBy="x => x.MinMs">Min</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="AlgorithmPerformanceStats" SortBy="x => x.MaxMs">Max</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel T="AlgorithmPerformanceStats" SortBy="x => x.TotalTimeContribution">Total Contribution</MudTableSortLabel></MudTh>
+                        <MudTh>Rating</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Algorithm">
+                            <MudChip T="string" Size="MudSize.Small" Color="MudColor.Default">@context.CheckName</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Executions">@context.TotalExecutions.ToString("N0")</MudTd>
+                        <MudTd DataLabel="Avg Time">
+                            <MudChip T="string" Size="MudSize.Small" Color="@GetPerformanceColor(context.AverageMs)">
+                                @FormatMs(context.AverageMs)
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="P95 Time">@FormatMs(context.P95Ms)</MudTd>
+                        <MudTd DataLabel="Min">@FormatMs(context.MinMs)</MudTd>
+                        <MudTd DataLabel="Max">@FormatMs(context.MaxMs)</MudTd>
+                        <MudTd DataLabel="Total Contribution">
+                            <MudText Typo="Typo.body2" Color="MudColor.Secondary">
+                                @FormatMs(context.TotalTimeContribution)
+                            </MudText>
+                        </MudTd>
+                        <MudTd DataLabel="Rating">
+                            <MudChip T="string" Size="MudSize.Small" Color="@GetPerformanceColor(context.AverageMs)" Variant="Variant.Outlined">
+                                @context.PerformanceRating
+                            </MudChip>
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+
         @* Daily Trends Chart *@
         @if (_dailyTrends?.Any() == true && _dailyTrendsChart != null)
         {
@@ -262,6 +311,7 @@
     private ResponseTimeStats? _responseTimeStats;
     private List<DetectionMethodStats>? _methodStats;
     private List<DailyDetectionTrend>? _dailyTrends;
+    private List<AlgorithmPerformanceStats>? _algorithmPerformanceStats;
 
     // Chart options (ApexCharts)
     private ApexChartOptions<DailyDetectionTrend>? _dailyTrendsChart;
@@ -321,13 +371,15 @@
             var responseTimeTask = AnalyticsRepository.GetResponseTimeStatsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
             var methodComparisonTask = AnalyticsRepository.GetDetectionMethodComparisonAsync(_startDate.Value, _endDate.Value, _userTimeZone);
             var dailyTrendsTask = AnalyticsRepository.GetDailyDetectionTrendsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
+            var algorithmPerformanceTask = AnalyticsRepository.GetAlgorithmPerformanceStatsAsync(_startDate.Value, _endDate.Value, _userTimeZone);
 
-            await Task.WhenAll(accuracyTask, responseTimeTask, methodComparisonTask, dailyTrendsTask);
+            await Task.WhenAll(accuracyTask, responseTimeTask, methodComparisonTask, dailyTrendsTask, algorithmPerformanceTask);
 
             _accuracyStats = await accuracyTask;
             _responseTimeStats = await responseTimeTask;
             _methodStats = await methodComparisonTask;
             _dailyTrends = await dailyTrendsTask;
+            _algorithmPerformanceStats = await algorithmPerformanceTask;
 
             PrepareCharts();
             _dataLoaded = true;
@@ -455,5 +507,19 @@
         if (confidence >= 80) return MudColor.Success;
         if (confidence >= 60) return MudColor.Warning;
         return MudColor.Error;
+    }
+
+    private string FormatMs(double ms)
+    {
+        if (ms < 1) return $"{ms:F2} ms";
+        if (ms < 1000) return $"{ms:F1} ms";
+        return $"{ms / 1000:F2} sec";
+    }
+
+    private MudColor GetPerformanceColor(double avgMs)
+    {
+        if (avgMs < 100) return MudColor.Success;    // Fast
+        if (avgMs < 500) return MudColor.Warning;    // Medium
+        return MudColor.Error;                        // Slow
     }
 }

@@ -471,6 +471,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(dr => dr.DetectionSource)
             .HasDatabaseName("ix_detection_results_detection_source");
 
+        // GIN index for JSONB check_results_json column (ML-5 performance analytics)
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .HasIndex(dr => dr.CheckResultsJson)
+            .HasMethod("gin")
+            .HasDatabaseName("ix_detection_results_check_results_json_gin");
+
         // UserActions indexes
         modelBuilder.Entity<UserActionRecordDto>()
             .HasIndex(ua => ua.UserId);

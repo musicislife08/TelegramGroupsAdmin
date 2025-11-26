@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -44,6 +45,7 @@ public partial class UrlBlocklistSpamCheckV2(
     /// </summary>
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var req = (UrlBlocklistCheckRequest)request;
 
         try
@@ -59,7 +61,8 @@ public partial class UrlBlocklistSpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "No URLs found in message"
+                    Details = "No URLs found in message",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -103,7 +106,8 @@ public partial class UrlBlocklistSpamCheckV2(
                         CheckName = CheckName,
                         Score = 2.0,
                         Abstained = false,
-                        Details = $"Domain '{normalized}' on soft block list (source: {source})"
+                        Details = $"Domain '{normalized}' on soft block list (source: {source})",
+                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                     };
                 }
             }
@@ -116,7 +120,8 @@ public partial class UrlBlocklistSpamCheckV2(
                 CheckName = CheckName,
                 Score = 0.0,
                 Abstained = true,
-                Details = $"No filter matches for {domains.Count} domains"
+                Details = $"No filter matches for {domains.Count} domains",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
         catch (Exception ex)
@@ -128,7 +133,8 @@ public partial class UrlBlocklistSpamCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = $"Error: {ex.Message}",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }

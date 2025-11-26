@@ -83,4 +83,14 @@ public interface IAnalyticsRepository
         DateTimeOffset endDate,
         string timeZoneId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get algorithm performance timing statistics from check_results_json JSONB column.
+    /// ML-5: Per-algorithm execution time metrics (average, P95, min, max, total contribution)
+    /// </summary>
+    Task<List<AlgorithmPerformanceStats>> GetAlgorithmPerformanceStatsAsync(
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        string timeZoneId,
+        CancellationToken cancellationToken = default);
 }

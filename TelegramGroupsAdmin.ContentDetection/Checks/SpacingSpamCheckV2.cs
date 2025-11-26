@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
@@ -40,6 +41,7 @@ public class SpacingSpamCheckV2(ILogger<SpacingSpamCheckV2> logger) : IContentCh
 
     public ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var req = (SpacingCheckRequest)request;
 
         try
@@ -53,7 +55,8 @@ public class SpacingSpamCheckV2(ILogger<SpacingSpamCheckV2> logger) : IContentCh
                     CheckName = CheckName,
                     Score = ScoreFormattingAnomaly,
                     Abstained = false,
-                    Details = details
+                    Details = details,
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 });
             }
 
@@ -62,7 +65,8 @@ public class SpacingSpamCheckV2(ILogger<SpacingSpamCheckV2> logger) : IContentCh
                 CheckName = CheckName,
                 Score = 0.0,
                 Abstained = true,
-                Details = "No suspicious spacing patterns detected"
+                Details = "No suspicious spacing patterns detected",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             });
         }
         catch (Exception ex)
@@ -74,7 +78,8 @@ public class SpacingSpamCheckV2(ILogger<SpacingSpamCheckV2> logger) : IContentCh
                 Score = 0.0,
                 Abstained = true,
                 Details = $"Error: {ex.Message}",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             });
         }
     }

@@ -555,4 +555,42 @@ public class AnalyticsRepository : IAnalyticsRepository
 
         return result;
     }
+
+    public async Task<List<AlgorithmPerformanceStats>> GetAlgorithmPerformanceStatsAsync(
+        DateTimeOffset startDate,
+        DateTimeOffset endDate,
+        string timeZoneId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Query check_results_json JSONB column to extract ProcessingTimeMs for each algorithm
+        // Uses jsonb_array_elements to expand Checks array, then aggregates by CheckName
+        var sql = @"
+            SELECT
+                check_elem->>'CheckName' AS CheckName,
+                COUNT(*) AS TotalExecutions,
+                ROUND(AVG((check_elem->>'ProcessingTimeMs')::float)::numeric, 2) AS AverageMs,
+                ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY (check_elem->>'ProcessingTimeMs')::float)::numeric, 2) AS P95Ms,
+                ROUND(MAX((check_elem->>'ProcessingTimeMs')::float)::numeric, 2) AS MaxMs,
+                ROUND(MIN((check_elem->>'ProcessingTimeMs')::float)::numeric, 2) AS MinMs,
+                ROUND((AVG((check_elem->>'ProcessingTimeMs')::float) * COUNT(*))::numeric, 2) AS TotalTimeContribution
+            FROM detection_results dr,
+                 jsonb_array_elements(dr.check_results_json::jsonb->'Checks') AS check_elem
+            WHERE dr.detected_at >= @StartDate
+              AND dr.detected_at <= @EndDate
+              AND (check_elem->>'ProcessingTimeMs')::float > 0
+            GROUP BY check_elem->>'CheckName'
+            ORDER BY TotalTimeContribution DESC";
+
+        // Execute raw SQL and map to AlgorithmPerformanceStats
+        var results = await context.Database
+            .SqlQueryRaw<AlgorithmPerformanceStats>(
+                sql,
+                new Npgsql.NpgsqlParameter("@StartDate", startDate.UtcDateTime),
+                new Npgsql.NpgsqlParameter("@EndDate", endDate.UtcDateTime))
+            .ToListAsync(cancellationToken);
+
+        return results;
+    }
 }

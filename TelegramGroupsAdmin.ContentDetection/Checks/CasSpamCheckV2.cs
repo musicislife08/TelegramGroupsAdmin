@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -50,6 +51,7 @@ public class CasSpamCheckV2(
 
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var req = (CasCheckRequest)request;
 
         try
@@ -60,7 +62,7 @@ public class CasSpamCheckV2(
             if (cache.TryGetValue(cacheKey, out CasResponse? cachedResponse) && cachedResponse != null)
             {
                 logger.LogDebug("CAS V2 check for user {UserId}: Using cached result", req.UserId);
-                return CreateResponse(cachedResponse, fromCache: true);
+                return CreateResponse(cachedResponse, fromCache: true, startTimestamp);
             }
 
             // Make API request
@@ -82,7 +84,7 @@ public class CasSpamCheckV2(
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogWarning("CAS API returned {StatusCode} for user {UserId}", response.StatusCode, req.UserId);
-                return CreateFailResponse("CAS API error");
+                return CreateFailResponse("CAS API error", startTimestamp);
             }
 
             var jsonContent = await response.Content.ReadAsStringAsync(req.CancellationToken);
@@ -94,13 +96,13 @@ public class CasSpamCheckV2(
             if (casResponse == null)
             {
                 logger.LogWarning("Failed to parse CAS API response for user {UserId}", req.UserId);
-                return CreateFailResponse("Failed to parse CAS response");
+                return CreateFailResponse("Failed to parse CAS response", startTimestamp);
             }
 
             // Cache for 1 hour
             cache.Set(cacheKey, casResponse, TimeSpan.FromHours(1));
 
-            return CreateResponse(casResponse, fromCache: false);
+            return CreateResponse(casResponse, fromCache: false, startTimestamp);
         }
         catch (Exception ex)
         {
@@ -111,12 +113,13 @@ public class CasSpamCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = $"Error: {ex.Message}",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }
 
-    private ContentCheckResponseV2 CreateResponse(CasResponse casResponse, bool fromCache)
+    private ContentCheckResponseV2 CreateResponse(CasResponse casResponse, bool fromCache, long startTimestamp)
     {
         var isBanned = casResponse.Ok && casResponse.Result?.IsBanned == true;
 
@@ -128,7 +131,8 @@ public class CasSpamCheckV2(
                 CheckName = CheckName,
                 Score = ScoreCasBanned,
                 Abstained = false,
-                Details = $"User banned in CAS database{(fromCache ? " (cached)" : "")}"
+                Details = $"User banned in CAS database{(fromCache ? " (cached)" : "")}",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
 
@@ -138,11 +142,12 @@ public class CasSpamCheckV2(
             CheckName = CheckName,
             Score = 0.0,
             Abstained = true,
-            Details = $"User not found in CAS database{(fromCache ? " (cached)" : "")}"
+            Details = $"User not found in CAS database{(fromCache ? " (cached)" : "")}",
+            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
         };
     }
 
-    private ContentCheckResponseV2 CreateFailResponse(string details, Exception? error = null)
+    private ContentCheckResponseV2 CreateFailResponse(string details, long startTimestamp, Exception? error = null)
     {
         // V2: Fail open = abstain
         return new ContentCheckResponseV2
@@ -151,7 +156,8 @@ public class CasSpamCheckV2(
             Score = 0.0,
             Abstained = true,
             Details = details,
-            Error = error
+            Error = error,
+            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
         };
     }
 
