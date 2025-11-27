@@ -2,8 +2,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 

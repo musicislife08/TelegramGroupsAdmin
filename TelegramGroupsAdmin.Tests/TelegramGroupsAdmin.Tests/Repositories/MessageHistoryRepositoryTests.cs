@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -372,7 +373,7 @@ public class MessageHistoryRepositoryTests
         await _repository!.InsertMessageAsync(message);
 
         // Insert a translation for the message (message_id NOT NULL, edit_id NULL)
-        var messageTranslation = new UiModels.MessageTranslation(
+        var messageTranslation = new MessageTranslation(
             Id: 0,
             MessageId: 999010,
             EditId: null,
@@ -400,7 +401,7 @@ public class MessageHistoryRepositoryTests
         var createdEdit = edits.First(e => e.NewText == "Edited text");
 
         // Insert a translation for the edit (message_id NULL, edit_id NOT NULL)
-        var editTranslation = new UiModels.MessageTranslation(
+        var editTranslation = new MessageTranslation(
             Id: 0,
             MessageId: null,
             EditId: createdEdit.Id,
@@ -437,7 +438,7 @@ public class MessageHistoryRepositoryTests
         var messages = await _queryService!.GetRecentMessagesAsync(limit: 10);
         var messageId = messages.First().MessageId;
 
-        var translation = new UiModels.MessageTranslation(
+        var translation = new MessageTranslation(
             Id: 0, // Will be set by INSERT
             MessageId: messageId,
             EditId: null, // Message translation (exclusive arc)
@@ -490,7 +491,7 @@ public class MessageHistoryRepositoryTests
         await _repository!.InsertMessageAsync(message);
 
         // Insert first translation
-        var firstTranslation = new UiModels.MessageTranslation(
+        var firstTranslation = new MessageTranslation(
             Id: 0,
             MessageId: 999030,
             EditId: null,
@@ -507,7 +508,7 @@ public class MessageHistoryRepositoryTests
         Assert.That(retrievedFirst!.TranslatedText, Is.EqualTo("First translation text"));
 
         // Act - Insert second translation for the SAME message (should update, not duplicate)
-        var secondTranslation = new UiModels.MessageTranslation(
+        var secondTranslation = new MessageTranslation(
             Id: 0,
             MessageId: 999030,
             EditId: null,

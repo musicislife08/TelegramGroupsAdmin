@@ -1,4 +1,5 @@
 using DataModels = TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Core.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
@@ -19,7 +20,7 @@ public static class MessageMappings
             string? userPhotoPath,
             string? replyToUser,
             string? replyToText,
-            UiModels.MessageTranslation? translation = null) => new(
+            MessageTranslation? translation = null) => new(
             MessageId: data.MessageId,
             UserId: data.UserId,
             UserName: userName,

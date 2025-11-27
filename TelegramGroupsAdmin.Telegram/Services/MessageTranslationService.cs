@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
@@ -19,7 +20,7 @@ public class MessageTranslationService : IMessageTranslationService
         _contextFactory = contextFactory;
     }
 
-    public async Task<UiModels.MessageTranslation?> GetTranslationForMessageAsync(long messageId, CancellationToken cancellationToken = default)
+    public async Task<MessageTranslation?> GetTranslationForMessageAsync(long messageId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var translation = await context.MessageTranslations
@@ -30,7 +31,7 @@ public class MessageTranslationService : IMessageTranslationService
         return translation?.ToModel();
     }
 
-    public async Task<UiModels.MessageTranslation?> GetTranslationForEditAsync(long editId, CancellationToken cancellationToken = default)
+    public async Task<MessageTranslation?> GetTranslationForEditAsync(long editId, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var translation = await context.MessageTranslations
@@ -41,7 +42,7 @@ public class MessageTranslationService : IMessageTranslationService
         return translation?.ToModel();
     }
 
-    public async Task InsertTranslationAsync(UiModels.MessageTranslation translation, CancellationToken cancellationToken = default)
+    public async Task InsertTranslationAsync(MessageTranslation translation, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
