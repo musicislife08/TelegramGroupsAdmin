@@ -21,8 +21,8 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Layer 3: OpenAI Vision fallback (slow, expensive, comprehensive)
 /// Scoring: Maps confidence (0-100%) to points (0.0-5.0)
 /// </summary>
-public class ImageSpamCheckV2(
-    ILogger<ImageSpamCheckV2> logger,
+public class ImageContentCheckV2(
+    ILogger<ImageContentCheckV2> logger,
     IHttpClientFactory httpClientFactory,
     IImageTextExtractionService imageTextExtractionService,
     IServiceProvider serviceProvider,

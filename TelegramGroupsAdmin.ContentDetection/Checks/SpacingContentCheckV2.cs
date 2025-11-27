@@ -8,15 +8,14 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
 /// <summary>
-/// V2 invisible chars check with proper abstention
-/// Key fix: Abstain when no invisible chars (not Clean 20%)
-/// Scoring: 1.5 points when found (research guidance)
+/// V2 spacing check with proper abstention
+/// Scoring: 0.8 points when patterns found (research: formatting anomaly = 0.8)
 /// </summary>
-public class InvisibleCharsSpamCheckV2(ILogger<InvisibleCharsSpamCheckV2> logger) : IContentCheckV2
+public class SpacingContentCheckV2(ILogger<SpacingContentCheckV2> logger) : IContentCheckV2
 {
-    private const double ScoreInvisibleChars = 1.5; // Research: heuristics = 1.5 points
+    private const double ScoreFormattingAnomaly = 0.8;
 
-    public CheckName CheckName => CheckName.InvisibleChars;
+    public CheckName CheckName => CheckName.Spacing;
 
     public bool ShouldExecute(ContentCheckRequest request)
     {
@@ -27,11 +26,11 @@ public class InvisibleCharsSpamCheckV2(ILogger<InvisibleCharsSpamCheckV2> logger
         }
 
         // PERF-3 Option B: Skip text analysis for trusted/admin users
-        // InvisibleChars is not a critical check - it's a heuristic and should skip for trusted users
+        // Spacing is not a critical check - it's a heuristic and should skip for trusted users
         if (request.IsUserTrusted || request.IsUserAdmin)
         {
             logger.LogDebug(
-                "Skipping InvisibleChars check for user {UserId}: User is {UserType}",
+                "Skipping Spacing check for user {UserId}: User is {UserType}",
                 request.UserId,
                 request.IsUserTrusted ? "trusted" : "admin");
             return false;
@@ -43,36 +42,36 @@ public class InvisibleCharsSpamCheckV2(ILogger<InvisibleCharsSpamCheckV2> logger
     public ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
         var startTimestamp = Stopwatch.GetTimestamp();
-        var req = (InvisibleCharsCheckRequest)request;
+        var req = (SpacingCheckRequest)request;
 
         try
         {
-            var (hasInvisibleChars, count) = CheckForInvisibleCharacters(req.Message);
+            var (hasSuspiciousSpacing, details) = CheckForSuspiciousSpacing(req.Message, req.SuspiciousRatioThreshold);
 
-            if (hasInvisibleChars)
+            if (hasSuspiciousSpacing)
             {
                 return ValueTask.FromResult(new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
-                    Score = ScoreInvisibleChars,
+                    Score = ScoreFormattingAnomaly,
                     Abstained = false,
-                    Details = $"Contains {count} invisible/hidden characters",
+                    Details = details,
                     ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 });
             }
 
-            // V2 FIX: Abstain when no invisible chars (not Clean 20%)
             return ValueTask.FromResult(new ContentCheckResponseV2
             {
                 CheckName = CheckName,
                 Score = 0.0,
                 Abstained = true,
-                Details = "No invisible characters detected",
+                Details = "No suspicious spacing patterns detected",
                 ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             });
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "Error in SpacingSpamCheckV2");
             return ValueTask.FromResult(new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -85,10 +84,18 @@ public class InvisibleCharsSpamCheckV2(ILogger<InvisibleCharsSpamCheckV2> logger
         }
     }
 
-    private static (bool hasInvisibleChars, int count) CheckForInvisibleCharacters(string message)
+    private static (bool hasSuspiciousSpacing, string details) CheckForSuspiciousSpacing(string message, double threshold)
     {
-        // Check for invisible/zero-width characters
-        var count = message.Count(c => c == '\u200B' || c == '\u200C' || c == '\u200D' || c == '\uFEFF');
-        return (count > 0, count);
+        // Simplified spacing check - count short words
+        var words = message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var shortWords = words.Count(w => w.Length <= 2);
+        var suspiciousRatio = words.Length > 0 ? (double)shortWords / words.Length : 0;
+
+        if (suspiciousRatio > threshold)
+        {
+            return (true, $"Suspicious short word ratio: {suspiciousRatio:P0}");
+        }
+
+        return (false, "No suspicious spacing detected");
     }
 }

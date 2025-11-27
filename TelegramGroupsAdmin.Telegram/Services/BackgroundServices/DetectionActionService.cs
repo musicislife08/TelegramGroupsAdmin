@@ -18,14 +18,14 @@ using TelegramGroupsAdmin.Core.BackgroundJobs;
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 /// <summary>
-/// Handles spam detection actions: auto-ban and borderline report creation
-/// Phase 5.1: Sends notifications to admins for spam events
+/// Handles content detection actions: auto-ban and borderline report creation
+/// Phase 5.1: Sends notifications to admins for detection events
 /// </summary>
-public class SpamActionService(
+public class DetectionActionService(
     IServiceProvider serviceProvider,
     ChatManagementService chatManagementService,
     IJobScheduler jobScheduler,
-    ILogger<SpamActionService> logger)
+    ILogger<DetectionActionService> logger)
 {
     // Confidence thresholds for spam detection decisions
     private const int AutoBanNetConfidenceThreshold = 50;

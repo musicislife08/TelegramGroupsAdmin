@@ -15,8 +15,8 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// - Return 5.0 points when banned (user requested - very strong signal)
 /// - Abstain on failure (fail open)
 /// </summary>
-public class CasSpamCheckV2(
-    ILogger<CasSpamCheckV2> logger,
+public class CasContentCheckV2(
+    ILogger<CasContentCheckV2> logger,
     IHttpClientFactory httpClientFactory,
     IMemoryCache cache) : IContentCheckV2
 {

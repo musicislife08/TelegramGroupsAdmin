@@ -17,8 +17,8 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// - Abstain when uncertain (40-60% probability)
 /// - Map probability to points: 99%=5.0, 95%=3.5, 80%=2.0
 /// </summary>
-public class BayesSpamCheckV2(
-    ILogger<BayesSpamCheckV2> logger,
+public class BayesContentCheckV2(
+    ILogger<BayesContentCheckV2> logger,
     IDbContextFactory<AppDbContext> dbContextFactory,
     ITokenizerService tokenizerService) : IContentCheckV2
 {

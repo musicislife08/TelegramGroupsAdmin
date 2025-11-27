@@ -16,8 +16,8 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Phase 4.13: URL Filtering
 /// V2: Scores 2.0 points for blocklisted domains, abstains when no matches
 /// </summary>
-public partial class UrlBlocklistSpamCheckV2(
-    ILogger<UrlBlocklistSpamCheckV2> logger,
+public partial class UrlBlocklistContentCheckV2(
+    ILogger<UrlBlocklistContentCheckV2> logger,
     ICachedBlockedDomainsRepository cacheRepo,
     IDomainFiltersRepository filtersRepo) : IContentCheckV2
 {

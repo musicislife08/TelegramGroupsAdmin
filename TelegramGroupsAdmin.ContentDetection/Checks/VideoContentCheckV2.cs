@@ -21,8 +21,8 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Layer 2: OCR on frames + text spam checks (fast, cheap, good for text-heavy videos)
 /// Layer 3: OpenAI Vision on frames fallback (slow, expensive, comprehensive)
 /// </summary>
-public class VideoSpamCheckV2(
-    ILogger<VideoSpamCheckV2> logger,
+public class VideoContentCheckV2(
+    ILogger<VideoContentCheckV2> logger,
     IHttpClientFactory httpClientFactory,
     IVideoFrameExtractionService frameExtractionService,
     IImageTextExtractionService imageTextExtractionService,

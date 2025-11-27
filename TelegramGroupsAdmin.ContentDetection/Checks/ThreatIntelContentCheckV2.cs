@@ -15,8 +15,8 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Currently supports VirusTotal (disabled by default for URLs due to 15s latency)
 /// Note: ClamAV virus scanning is handled separately by FileScanJob
 /// </summary>
-public partial class ThreatIntelSpamCheckV2(
-    ILogger<ThreatIntelSpamCheckV2> logger,
+public partial class ThreatIntelContentCheckV2(
+    ILogger<ThreatIntelContentCheckV2> logger,
     IHttpClientFactory httpClientFactory) : IContentCheckV2
 {
     private static readonly Regex UrlRegex = CompiledUrlRegex();
