@@ -203,6 +203,11 @@
     private IJSObjectReference? _infiniteScrollModule;
     private bool _isAutoScrolling; // Prevent infinite scroll from triggering during auto-scroll
     private bool _highlightMessageEnsured; // Track if we've already loaded the highlighted message
+    private DotNetObjectReference<Messages>? _dotNetObjectRef; // Reusable reference for JS interop
+
+    // Scroll animation timing - CSS smooth scroll takes 1000-1500ms depending on distance,
+    // plus intersection observer delay. Must wait for full animation before re-enabling infinite scroll.
+    private const int ScrollAnimationTimeoutMs = 2000;
 
     protected override async Task OnInitializedAsync()
     {
@@ -250,8 +255,9 @@
         MessageHistoryService.OnNewMessage -= HandleNewMessage;
         MessageHistoryService.OnMediaUpdated -= HandleMediaUpdated;
 
-        // Dispose JavaScript module
+        // Dispose JavaScript interop resources
         _infiniteScrollModule?.DisposeAsync();
+        _dotNetObjectRef?.Dispose();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -263,6 +269,7 @@
             try
             {
                 _infiniteScrollModule = await Js.InvokeAsync<IJSObjectReference>("import", "./js/infinite-scroll.js");
+                _dotNetObjectRef = DotNetObjectReference.Create(this);
             }
             catch (Exception ex)
             {
@@ -271,13 +278,13 @@
         }
 
         // (Re)initialize observer when needed (chat loaded with _hasMore = true)
-        if (_needsObserverInit && _infiniteScrollModule != null && _selectedChatId.HasValue && _hasMore)
+        if (_needsObserverInit && _infiniteScrollModule != null && _dotNetObjectRef != null && _selectedChatId.HasValue && _hasMore)
         {
             try
             {
                 await _infiniteScrollModule.InvokeVoidAsync("initializeIntersectionObserver",
                     _scrollSentinel,
-                    DotNetObjectReference.Create(this));
+                    _dotNetObjectRef);
                 _needsObserverInit = false;
                 Logger.LogDebug("Infinite scroll observer initialized for chat {ChatId}", _selectedChatId);
             }
@@ -311,16 +318,17 @@
                 else
                 {
                     Logger.LogWarning("Highlighted message {MessageId} not found in filtered messages", targetMessageId);
+                    Snackbar.Add($"Message {targetMessageId} not found in current view", Severity.Warning);
                 }
 
                 // Wait for scroll animation to complete, then re-enable infinite scroll
-                // Smooth scroll can take 1000-1500ms depending on distance, plus intersection observer delay
-                await Task.Delay(2000);
+                await Task.Delay(ScrollAnimationTimeoutMs);
                 _isAutoScrolling = false;
             }
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Failed to auto-scroll to highlighted message");
+                Snackbar.Add("Could not scroll to message", Severity.Error);
                 _highlightMessageId = null;
                 _isAutoScrolling = false;
             }
@@ -351,6 +359,7 @@
                 if (message == null)
                 {
                     Logger.LogWarning("Highlighted message {MessageId} not found in database", targetMessageId);
+                    Snackbar.Add($"Message {targetMessageId} not found", Severity.Warning);
                     _highlightMessageId = null; // Clear since it doesn't exist
                     return;
                 }
@@ -397,7 +406,8 @@
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to ensure highlighted message {MessageId} is loaded", targetMessageId);
+            Logger.LogError(ex, "Failed to load highlighted message {MessageId}", targetMessageId);
+            Snackbar.Add($"Could not load message {targetMessageId}", Severity.Error);
             _highlightMessageId = null; // Clear on error to prevent infinite retry
             _highlightMessageEnsured = true; // Prevent retry
         }
@@ -1073,8 +1083,8 @@
 
     private void HandleFilterByUser(long userId)
     {
-        // TODO: Change this to display user detail dialog (like Users page)
-        // Currently disabled - filtering by username is broken
+        // TODO: Display user detail dialog (see issue #107)
+        // Currently disabled - filtering by username was broken
         return;
 
         // Old filtering code (broken):
