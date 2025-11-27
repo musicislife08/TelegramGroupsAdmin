@@ -246,6 +246,25 @@ if (document.body) {
     });
 }
 
+// Scroll messages container to approximate position of message
+// This triggers MudVirtualize to render items that are currently outside viewport
+window.scrollMessageContainer = (messageIndex, totalCount) => {
+    const container = document.querySelector('.messages-container');
+    if (!container) {
+        console.warn('Messages container not found');
+        return;
+    }
+
+    // Messages are displayed in reverse order (newest first at bottom)
+    // So index 0 is at the bottom, and index N is at the top
+    // Calculate approximate scroll position
+    const estimatedItemHeight = 100; // Approximate message bubble height
+    const scrollHeight = estimatedItemHeight * messageIndex;
+
+    // Scroll from bottom (messages are flex-reversed)
+    container.scrollTop = container.scrollHeight - scrollHeight - container.clientHeight / 2;
+};
+
 // Scroll to a specific message and highlight it
 window.scrollToMessage = (messageId) => {
     // Find the message element by data-message-id attribute

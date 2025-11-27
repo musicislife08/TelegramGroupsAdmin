@@ -134,7 +134,7 @@
         var user = authState.User;
         if (user.Identity?.IsAuthenticated == true)
         {
-            var userIdClaim = user.FindFirst("sub");
+            var userIdClaim = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
             if (userIdClaim != null)
             {
                 _currentUserId = userIdClaim.Value;
