@@ -249,48 +249,31 @@ if (document.body) {
 // Scroll messages container to approximate position of message
 // This triggers MudVirtualize to render items that are currently outside viewport
 window.scrollMessageContainer = (messageIndex, totalCount) => {
-    console.log(`[scrollMessageContainer] START - messageIndex=${messageIndex}, totalCount=${totalCount}`);
-
     const container = document.querySelector('.messages-container');
     if (!container) {
-        console.warn('[scrollMessageContainer] Messages container not found');
+        console.warn('Messages container not found');
         return;
     }
-
-    const beforeScrollTop = container.scrollTop;
-    const beforeScrollHeight = container.scrollHeight;
 
     // Messages are displayed in reverse order (newest first at bottom)
     // So index 0 is at the bottom, and index N is at the top
     // Calculate approximate scroll position
-    // The container height / total items gives us average item height
     const estimatedItemHeight = 100; // Approximate message bubble height
     const scrollHeight = estimatedItemHeight * messageIndex;
 
     // Scroll from bottom (messages are flex-reversed)
     container.scrollTop = container.scrollHeight - scrollHeight - container.clientHeight / 2;
-
-    const afterScrollTop = container.scrollTop;
-    console.log(`[scrollMessageContainer] END - scrollTop changed from ${beforeScrollTop} to ${afterScrollTop} (scrollHeight=${beforeScrollHeight})`);
 };
 
 // Scroll to a specific message and highlight it
 window.scrollToMessage = (messageId) => {
-    console.log(`[scrollToMessage] START - messageId=${messageId}`);
-
     // Find the message element by data-message-id attribute
     const element = document.querySelector(`[data-message-id="${messageId}"]`);
 
     if (!element) {
-        console.warn(`[scrollToMessage] Message element with ID ${messageId} not found in DOM`);
-        console.log(`[scrollToMessage] Available message elements:`,
-            Array.from(document.querySelectorAll('[data-message-id]'))
-                .map(el => el.getAttribute('data-message-id'))
-                .slice(0, 10));
+        console.warn(`Message element with ID ${messageId} not found`);
         return;
     }
-
-    console.log(`[scrollToMessage] Found element, scrolling into view`);
 
     // Scroll to the element with smooth animation
     element.scrollIntoView({
@@ -301,15 +284,11 @@ window.scrollToMessage = (messageId) => {
 
     // Add highlight animation class
     element.classList.add('message-highlight');
-    console.log(`[scrollToMessage] Added highlight class to element`);
 
     // Remove the highlight class after animation completes (2 seconds)
     setTimeout(() => {
         element.classList.remove('message-highlight');
-        console.log(`[scrollToMessage] Removed highlight class from element`);
     }, 2000);
-
-    console.log(`[scrollToMessage] END`);
 }
 
 // Insert text at cursor position in a specific input/textarea element
