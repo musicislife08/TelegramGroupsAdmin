@@ -15,7 +15,6 @@ using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
-using TelegramImageRepo = TelegramGroupsAdmin.Telegram.Repositories.IImageTrainingSamplesRepository;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -30,7 +29,7 @@ public class ModerationActionService
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IManagedChatsRepository _managedChatsRepository;
     private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
-    private readonly TelegramImageRepo _imageTrainingSamplesRepository;
+    private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository;
     private readonly TelegramBotClientFactory _botClientFactory;
     private readonly TelegramConfigLoader _configLoader;
     private readonly IConfigService _configService;
@@ -49,7 +48,7 @@ public class ModerationActionService
         IMessageHistoryRepository messageHistoryRepository,
         IManagedChatsRepository managedChatsRepository,
         ITelegramUserMappingRepository telegramUserMappingRepository,
-        TelegramImageRepo imageTrainingSamplesRepository,
+        IImageTrainingSamplesRepository imageTrainingSamplesRepository,
         TelegramBotClientFactory botClientFactory,
         TelegramConfigLoader configLoader,
         IConfigService configService,
