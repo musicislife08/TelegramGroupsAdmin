@@ -1,4 +1,5 @@
 using DataModels = TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Core.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
@@ -19,7 +20,7 @@ public static class MessageMappings
             string? userPhotoPath,
             string? replyToUser,
             string? replyToText,
-            UiModels.MessageTranslation? translation = null) => new(
+            MessageTranslation? translation = null) => new(
             MessageId: data.MessageId,
             UserId: data.UserId,
             UserName: userName,
@@ -52,8 +53,8 @@ public static class MessageMappings
             MediaDuration: data.MediaDuration,
             // Translation (Phase 4.20) - passed from repository query with LEFT JOIN
             Translation: translation,
-            // Spam check skip reason - convert Data enum to UI enum
-            SpamCheckSkipReason: data.SpamCheckSkipReason.ToTelegramModel()
+            // Content check skip reason - convert Data enum to UI enum
+            ContentCheckSkipReason: data.ContentCheckSkipReason.ToTelegramModel()
         );
     }
 
@@ -84,8 +85,8 @@ public static class MessageMappings
             MediaMimeType = ui.MediaMimeType,
             MediaLocalPath = ui.MediaLocalPath,
             MediaDuration = ui.MediaDuration,
-            // Spam check skip reason - convert UI enum to Data enum
-            SpamCheckSkipReason = ui.SpamCheckSkipReason.ToDataModel()
+            // Content check skip reason - convert UI enum to Data enum
+            ContentCheckSkipReason = ui.ContentCheckSkipReason.ToDataModel()
         };
     }
 }

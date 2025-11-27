@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.Core.Models;

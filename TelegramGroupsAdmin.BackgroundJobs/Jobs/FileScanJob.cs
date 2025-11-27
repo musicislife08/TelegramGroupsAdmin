@@ -8,6 +8,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -151,7 +152,7 @@ public class FileScanJob(
                     scanResult.Details);
 
                 // Step 5: Save detection history (for both clean and infected files)
-                var detectionRecord = new Telegram.Models.DetectionResultRecord
+                var detectionRecord = new DetectionResultRecord
                 {
                     MessageId = payload.MessageId,
                     UserId = payload.UserId,

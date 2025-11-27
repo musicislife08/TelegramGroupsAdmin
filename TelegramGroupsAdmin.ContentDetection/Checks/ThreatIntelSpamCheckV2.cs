@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -12,7 +13,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// <summary>
 /// Spam check that validates URLs/files against threat intelligence services
 /// Currently supports VirusTotal (disabled by default for URLs due to 15s latency)
-/// TODO: Add ClamAV for local virus scanning (files/images)
+/// Note: ClamAV virus scanning is handled separately by FileScanJob
 /// </summary>
 public partial class ThreatIntelSpamCheckV2(
     ILogger<ThreatIntelSpamCheckV2> logger,
@@ -42,6 +43,7 @@ public partial class ThreatIntelSpamCheckV2(
     /// </summary>
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var req = (ThreatIntelCheckRequest)request;
 
         try
@@ -62,7 +64,8 @@ public partial class ThreatIntelSpamCheckV2(
                             CheckName = CheckName,
                             Score = 3.0,
                             Abstained = false,
-                            Details = $"VirusTotal flagged URL as malicious: {url}"
+                            Details = $"VirusTotal flagged URL as malicious: {url}",
+                            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                         };
                     }
                 }
@@ -76,7 +79,8 @@ public partial class ThreatIntelSpamCheckV2(
                 CheckName = CheckName,
                 Score = 0.0,
                 Abstained = true,
-                Details = $"No threats detected for {req.Urls.Count} URLs"
+                Details = $"No threats detected for {req.Urls.Count} URLs",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
         catch (Exception ex)
@@ -88,7 +92,8 @@ public partial class ThreatIntelSpamCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = "Threat intelligence check failed",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }

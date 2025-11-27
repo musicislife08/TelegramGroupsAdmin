@@ -110,7 +110,7 @@
                     </MudText>
 
                     <MudGrid>
-                        @foreach (var check in _spamChecks)
+                        @foreach (var check in _contentChecks)
                         {
                             <MudItem xs="12" sm="6" md="4">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -183,7 +183,7 @@
     private bool _canEdit;
     private List<CheckViewModel> _securityChecks = [];
     private List<CheckViewModel> _malwareChecks = [];
-    private List<CheckViewModel> _spamChecks = [];
+    private List<CheckViewModel> _contentChecks = [];
     private bool HasDisabledCriticalChecks => _securityChecks.Any(c => !c.AlwaysRun) || _malwareChecks.Any(c => !c.AlwaysRun);
 
     protected override async Task OnInitializedAsync()
@@ -253,7 +253,7 @@
 
             _securityChecks = viewModels.Where(vm => vm.Category == "Security").ToList();
             _malwareChecks = viewModels.Where(vm => vm.Category == "Malware").ToList();
-            _spamChecks = viewModels.Where(vm => vm.Category == "Spam").ToList();
+            _contentChecks = viewModels.Where(vm => vm.Category == "Spam").ToList();
         }
         catch (Exception ex)
         {
@@ -284,7 +284,7 @@
             var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "system";
 
             // Save all checks
-            var allChecks = _securityChecks.Concat(_malwareChecks).Concat(_spamChecks);
+            var allChecks = _securityChecks.Concat(_malwareChecks).Concat(_contentChecks);
             foreach (var check in allChecks)
             {
                 await CheckConfigRepository.SetAlwaysRunAsync(

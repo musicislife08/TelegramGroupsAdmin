@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -55,6 +56,7 @@ public class OpenAIContentCheckV2(
     /// </summary>
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var req = (OpenAICheckRequest)request;
 
         try
@@ -67,7 +69,8 @@ public class OpenAIContentCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"Message too short (< {req.MinMessageLength} chars)"
+                    Details = $"Message too short (< {req.MinMessageLength} chars)",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -80,7 +83,8 @@ public class OpenAIContentCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "Veto mode: no spam flags from other checks"
+                    Details = "Veto mode: no spam flags from other checks",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -89,7 +93,7 @@ public class OpenAIContentCheckV2(
             if (cache.TryGetValue(cacheKey, out OpenAIResponse? cachedResponse) && cachedResponse != null)
             {
                 logger.LogDebug("OpenAI V2 check for user {UserId}: Using cached result", req.UserId);
-                return ParseOpenAIResponse(cachedResponse, fromCache: true);
+                return ParseOpenAIResponse(cachedResponse, fromCache: true, startTimestamp);
             }
 
             // Note: API key is injected via ApiKeyDelegatingHandler on the named "OpenAI" HttpClient
@@ -127,7 +131,8 @@ public class OpenAIContentCheckV2(
                         CheckName = CheckName,
                         Score = 0.0,
                         Abstained = true,
-                        Details = "OpenAI API rate limited - abstaining"
+                        Details = "OpenAI API rate limited - abstaining",
+                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                     };
                 }
 
@@ -136,7 +141,8 @@ public class OpenAIContentCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"OpenAI API error: {response.StatusCode}"
+                    Details = $"OpenAI API error: {response.StatusCode}",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -154,14 +160,15 @@ public class OpenAIContentCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "Invalid OpenAI response"
+                    Details = "Invalid OpenAI response",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
             // Cache the result for 1 hour
             cache.Set(cacheKey, openaiResponse, TimeSpan.FromHours(1));
 
-            return ParseOpenAIResponse(openaiResponse, fromCache: false);
+            return ParseOpenAIResponse(openaiResponse, fromCache: false, startTimestamp);
         }
         catch (TaskCanceledException)
         {
@@ -171,7 +178,8 @@ public class OpenAIContentCheckV2(
                 CheckName = CheckName,
                 Score = 0.0,
                 Abstained = true,
-                Details = "OpenAI check timed out - abstaining"
+                Details = "OpenAI check timed out - abstaining",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
         catch (Exception ex)
@@ -183,7 +191,8 @@ public class OpenAIContentCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = $"Error: {ex.Message}",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }
@@ -191,7 +200,7 @@ public class OpenAIContentCheckV2(
     /// <summary>
     /// Parse OpenAI response and return V2 score
     /// </summary>
-    private ContentCheckResponseV2 ParseOpenAIResponse(OpenAIResponse response, bool fromCache)
+    private ContentCheckResponseV2 ParseOpenAIResponse(OpenAIResponse response, bool fromCache, long startTimestamp)
     {
         var content = response.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
 
@@ -203,7 +212,8 @@ public class OpenAIContentCheckV2(
                 CheckName = CheckName,
                 Score = 0.0,
                 Abstained = true,
-                Details = "Empty OpenAI response"
+                Details = "Empty OpenAI response",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
 
@@ -223,7 +233,8 @@ public class OpenAIContentCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "Invalid JSON response"
+                    Details = "Invalid JSON response",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -243,7 +254,8 @@ public class OpenAIContentCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = false, // Clean is a verdict, not an abstention - triggers veto in engine
-                    Details = details
+                    Details = details,
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -256,7 +268,8 @@ public class OpenAIContentCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true, // Unknown result - can't interpret, defer to pipeline
-                    Details = $"Unknown OpenAI result: {jsonResponse.Result}"
+                    Details = $"Unknown OpenAI result: {jsonResponse.Result}",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -278,7 +291,8 @@ public class OpenAIContentCheckV2(
                 CheckName = CheckName,
                 Score = score,
                 Abstained = false,
-                Details = spamDetails
+                Details = spamDetails,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
         catch (JsonException ex)
@@ -290,7 +304,8 @@ public class OpenAIContentCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = "Failed to parse OpenAI response",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }

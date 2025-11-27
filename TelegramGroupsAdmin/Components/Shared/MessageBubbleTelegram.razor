@@ -69,10 +69,10 @@
                 {
                     <span class="tg-edited">edited</span>
                 }
-                @if (SpamCheck != null)
+                @if (ContentCheck != null)
                 {
-                    <span class="tg-badge tg-badge-@(SpamCheck.IsSpam ? "spam" : "ham")" title="@_cachedTooltip">
-                        @(SpamCheck.IsSpam ? "spam" : "ham") @SpamCheck.Confidence%
+                    <span class="tg-badge tg-badge-@(ContentCheck.IsSpam ? "spam" : "ham")" title="@_cachedTooltip">
+                        @(ContentCheck.IsSpam ? "spam" : "ham") @ContentCheck.Confidence%
                         @if (!string.IsNullOrEmpty(_cachedContributingFactors))
                         {
                             <span style="font-weight: normal; opacity: 0.9;"> • @_cachedContributingFactors</span>
@@ -322,7 +322,7 @@
                                 </MudMenuItem>
                             }
 
-                            @if (SpamCheck?.IsSpam != true && !IsCurrentUser)
+                            @if (ContentCheck?.IsSpam != true && !IsCurrentUser)
                             {
                                 <MudMenuItem OnClick="@(async () => { _popoverOpen = false; await OnMarkAsSpam.InvokeAsync(Message); })" Disabled="@_actionInProgress">
                                     <div class="tg-menu-item tg-menu-item-danger">
@@ -384,7 +384,7 @@
     public MessageRecord Message { get; set; } = null!;
 
     [Parameter]
-    public SpamCheckRecord? SpamCheck { get; set; }
+    public ContentCheckRecord? ContentCheck { get; set; }
 
     [Parameter]
     public int EditCount { get; set; }
@@ -505,9 +505,9 @@
         var baseClass = "tg-message";
 
         // Add spam/ham/neutral class
-        if (SpamCheck != null)
+        if (ContentCheck != null)
         {
-            if (SpamCheck.IsSpam)
+            if (ContentCheck.IsSpam)
                 baseClass += " tg-message-spam";
             else
                 baseClass += " tg-message-ham";
@@ -680,7 +680,7 @@
     {
         base.OnParametersSet();
 
-        if (SpamCheck != null && DetectionHistory?.Any() == true)
+        if (ContentCheck != null && DetectionHistory?.Any() == true)
         {
             var contributingFactors = GetContributingFactors();
             _cachedContributingFactors = contributingFactors?.Any() == true
@@ -691,7 +691,7 @@
         else
         {
             _cachedContributingFactors = null;
-            _cachedTooltip = SpamCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
+            _cachedTooltip = ContentCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
         }
     }
 
@@ -737,7 +737,7 @@
     {
         var latest = GetLatestDetection();
         if (latest == null)
-            return SpamCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
+            return ContentCheck?.IsSpam == true ? "Marked as spam" : "Marked as ham";
 
         var tooltip = $"{(latest.IsSpam ? "SPAM" : "HAM")} - {latest.NetConfidence}% confidence\n";
         tooltip += $"Detection: {latest.DetectionMethod}\n";

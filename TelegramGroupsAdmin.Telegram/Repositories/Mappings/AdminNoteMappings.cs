@@ -1,5 +1,6 @@
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Repositories.Mappings;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 

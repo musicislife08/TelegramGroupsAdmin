@@ -32,7 +32,7 @@ internal static class ModelMappings
 
     // ContentCheckConfig mappings (Phase 4.14: Critical Checks Infrastructure)
 
-    public static DomainModels.ContentCheckConfig ToModel(this DataModels.SpamCheckConfigRecordDto dto)
+    public static DomainModels.ContentCheckConfig ToModel(this DataModels.ContentCheckConfigRecordDto dto)
     {
         return new DomainModels.ContentCheckConfig(
             Id: dto.Id,
@@ -47,7 +47,7 @@ internal static class ModelMappings
         );
     }
 
-    public static DataModels.SpamCheckConfigRecordDto ToDto(this DomainModels.ContentCheckConfig model)
+    public static DataModels.ContentCheckConfigRecordDto ToDto(this DomainModels.ContentCheckConfig model)
     {
         return new()
         {

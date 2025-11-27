@@ -377,7 +377,7 @@ public partial class MessageProcessingService(
 
             // Determine spam check skip reason (before saving message)
             // Check if user is trusted or admin to set appropriate skip reason
-            var spamCheckSkipReason = SpamCheckSkipReason.NotSkipped; // Default: spam checks will run
+            var contentCheckSkipReason = ContentCheckSkipReason.NotSkipped; // Default: content checks will run
 
             if (message.From?.Id != null)
             {
@@ -389,7 +389,7 @@ public partial class MessageProcessingService(
                 bool isUserAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, message.From.Id, cancellationToken);
                 if (isUserAdmin)
                 {
-                    spamCheckSkipReason = SpamCheckSkipReason.UserAdmin;
+                    contentCheckSkipReason = ContentCheckSkipReason.UserAdmin;
                 }
                 else
                 {
@@ -401,7 +401,7 @@ public partial class MessageProcessingService(
 
                     if (isUserTrusted)
                     {
-                        spamCheckSkipReason = SpamCheckSkipReason.UserTrusted;
+                        contentCheckSkipReason = ContentCheckSkipReason.UserTrusted;
                     }
                 }
             }
@@ -441,7 +441,7 @@ public partial class MessageProcessingService(
                 // Translation (Phase 4.20)
                 Translation: translation,
                 // Spam check skip reason
-                SpamCheckSkipReason: spamCheckSkipReason
+                ContentCheckSkipReason: contentCheckSkipReason
             );
 
             // Save message to database using a scoped repository

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;

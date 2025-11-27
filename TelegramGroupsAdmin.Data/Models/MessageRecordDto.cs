@@ -83,13 +83,13 @@ public class MessageRecordDto
     public int? MediaDuration { get; set; }  // Duration in seconds (for audio/video files)
 
     /// <summary>
-    /// Reason why spam detection was skipped for this message
-    /// 0 = NotSkipped (spam check ran)
+    /// Reason why content detection was skipped for this message
+    /// 0 = NotSkipped (content check ran)
     /// 1 = UserTrusted (user is trusted)
     /// 2 = UserAdmin (user is chat admin)
     /// </summary>
     [Column("spam_check_skip_reason")]
-    public SpamCheckSkipReason SpamCheckSkipReason { get; set; } = SpamCheckSkipReason.NotSkipped;
+    public ContentCheckSkipReason ContentCheckSkipReason { get; set; } = ContentCheckSkipReason.NotSkipped;
 
     // Navigation properties
     public virtual ICollection<DetectionResultRecordDto> DetectionResults { get; set; } = [];

@@ -49,9 +49,9 @@ public interface IMessageQueryService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Get spam checks for multiple messages (latest detection per message)
+    /// Get content checks for multiple messages (latest detection per message)
     /// </summary>
-    Task<Dictionary<long, UiModels.SpamCheckRecord>> GetSpamChecksForMessagesAsync(
+    Task<Dictionary<long, UiModels.ContentCheckRecord>> GetContentChecksForMessagesAsync(
         IEnumerable<long> messageIds,
         CancellationToken cancellationToken = default);
 

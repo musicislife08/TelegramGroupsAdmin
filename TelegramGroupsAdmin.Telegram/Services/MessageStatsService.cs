@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
+using TelegramGroupsAdmin.Core.Repositories.Mappings;
+using TelegramGroupsAdmin.Core.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -49,7 +51,7 @@ public class MessageStatsService : IMessageStatsService
         return result;
     }
 
-    public async Task<UiModels.DetectionStats> GetDetectionStatsAsync(CancellationToken cancellationToken = default)
+    public async Task<DetectionStats> GetDetectionStatsAsync(CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Overall stats from detection_results
@@ -75,7 +77,7 @@ public class MessageStatsService : IMessageStatsService
         var recentTotal = recentDetections.Count;
         var recentSpam = recentDetections.Count(s => s);
 
-        return new UiModels.DetectionStats
+        return new DetectionStats
         {
             TotalDetections = total,
             SpamDetected = spam,
@@ -87,7 +89,7 @@ public class MessageStatsService : IMessageStatsService
         };
     }
 
-    public async Task<List<UiModels.DetectionResultRecord>> GetRecentDetectionsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    public async Task<List<DetectionResultRecord>> GetRecentDetectionsAsync(int limit = 100, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Join with messages, users, and telegram_users to get actor display names (Phase 4.19)
@@ -107,7 +109,7 @@ public class MessageStatsService : IMessageStatsService
             })
             .OrderByDescending(x => x.dr.DetectedAt)
             .Take(limit)
-            .Select(x => new UiModels.DetectionResultRecord
+            .Select(x => new DetectionResultRecord
             {
                 Id = x.dr.Id,
                 MessageId = x.dr.MessageId,
@@ -153,7 +155,7 @@ public class MessageStatsService : IMessageStatsService
                 m.UserId,
                 m.Timestamp,
                 m.ChatId,
-                m.SpamCheckSkipReason,
+                m.ContentCheckSkipReason,
                 IsSpam = dr != null && dr.IsSpam
             }
         ).AsNoTracking().ToListAsync(cancellationToken);
@@ -404,23 +406,23 @@ public class MessageStatsService : IMessageStatsService
             chatIds: chatIds.Count > 0 ? chatIds : null,
             ct: cancellationToken);
 
-        // 5. Trusted User Breakdown (by spam_check_skip_reason) - in-memory grouping
+        // 5. Trusted User Breakdown (by content_check_skip_reason) - in-memory grouping
         UiModels.TrustedUserBreakdown? trustedBreakdown = null;
         if (totalMessages > 0)
         {
             var breakdownData = distinctMessages
-                .GroupBy(m => m.SpamCheckSkipReason)
+                .GroupBy(m => m.ContentCheckSkipReason)
                 .Select(g => new { Reason = g.Key, Count = g.Count() })
                 .ToList();
 
             var trustedCount = breakdownData
-                .Where(x => x.Reason == Data.Models.SpamCheckSkipReason.UserTrusted)
+                .Where(x => x.Reason == Data.Models.ContentCheckSkipReason.UserTrusted)
                 .Sum(x => x.Count);
             var adminCount = breakdownData
-                .Where(x => x.Reason == Data.Models.SpamCheckSkipReason.UserAdmin)
+                .Where(x => x.Reason == Data.Models.ContentCheckSkipReason.UserAdmin)
                 .Sum(x => x.Count);
             var untrustedCount = breakdownData
-                .Where(x => x.Reason == Data.Models.SpamCheckSkipReason.NotSkipped)
+                .Where(x => x.Reason == Data.Models.ContentCheckSkipReason.NotSkipped)
                 .Sum(x => x.Count);
 
             trustedBreakdown = new UiModels.TrustedUserBreakdown

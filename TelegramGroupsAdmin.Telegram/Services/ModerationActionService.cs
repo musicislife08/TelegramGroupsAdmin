@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core;
@@ -219,7 +221,7 @@ public class ModerationActionService
                             MediaLocalPath: null,
                             MediaDuration: null,
                             Translation: null,
-                            SpamCheckSkipReason: SpamCheckSkipReason.NotSkipped
+                            ContentCheckSkipReason: ContentCheckSkipReason.NotSkipped
                         );
 
                         await _messageHistoryRepository.InsertMessageAsync(messageRecord, cancellationToken);

@@ -1,3 +1,6 @@
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Models;
+
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
@@ -37,6 +40,6 @@ public record MessageRecord(
     int? MediaDuration,         // Duration in seconds (for audio/video)
                                 // Translation fields (Phase 4.20)
     MessageTranslation? Translation, // Translation of message text (if foreign language detected)
-                                     // Spam check tracking
-    SpamCheckSkipReason SpamCheckSkipReason // Reason spam check was skipped (NotSkipped, UserTrusted, UserAdmin)
+                                     // Content check tracking
+    ContentCheckSkipReason ContentCheckSkipReason // Reason content check was skipped (NotSkipped, UserTrusted, UserAdmin)
 );

@@ -31,7 +31,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
         try
         {
             // Get chat-specific critical checks, fall back to global (chatId=0) if none found
-            var chatConfigs = await context.SpamCheckConfigs
+            var chatConfigs = await context.ContentCheckConfigs
                 .AsNoTracking()
                 .Where(c => c.ChatId == chatId && c.AlwaysRun)
                 .ToListAsync(cancellationToken);
@@ -39,7 +39,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
             // If chat has no specific critical checks, use global configs
             if (!chatConfigs.Any())
             {
-                chatConfigs = await context.SpamCheckConfigs
+                chatConfigs = await context.ContentCheckConfigs
                     .AsNoTracking()
                     .Where(c => c.ChatId == 0 && c.AlwaysRun)
                     .ToListAsync(cancellationToken);
@@ -64,14 +64,14 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
         try
         {
             // Try chat-specific config first
-            var config = await context.SpamCheckConfigs
+            var config = await context.ContentCheckConfigs
                 .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.ChatId == chatId && c.CheckName == checkName, cancellationToken);
 
             // Fall back to global config if no chat-specific config
             if (config == null)
             {
-                config = await context.SpamCheckConfigs
+                config = await context.ContentCheckConfigs
                     .AsNoTracking()
                     .FirstOrDefaultAsync(c => c.ChatId == 0 && c.CheckName == checkName, cancellationToken);
             }
@@ -95,7 +95,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
         try
         {
             // Get both global and chat-specific configs
-            var allConfigs = await context.SpamCheckConfigs
+            var allConfigs = await context.ContentCheckConfigs
                 .AsNoTracking()
                 .Where(c => c.ChatId == 0 || c.ChatId == chatId)
                 .OrderBy(c => c.CheckName)
@@ -124,7 +124,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var existing = await context.SpamCheckConfigs
+            var existing = await context.ContentCheckConfigs
                 .FirstOrDefaultAsync(c => c.ChatId == config.ChatId && c.CheckName == config.CheckName, cancellationToken);
 
             if (existing != null)
@@ -142,7 +142,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
                 // Insert new
                 var dto = config.ToDto();
                 dto.ModifiedDate = DateTimeOffset.UtcNow;
-                context.SpamCheckConfigs.Add(dto);
+                context.ContentCheckConfigs.Add(dto);
                 existing = dto;
             }
 
@@ -167,13 +167,13 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var config = await context.SpamCheckConfigs
+            var config = await context.ContentCheckConfigs
                 .FirstOrDefaultAsync(c => c.ChatId == 0 && c.CheckName == checkName, cancellationToken);
 
             if (config == null)
             {
                 // Create global config if it doesn't exist
-                config = new Data.Models.SpamCheckConfigRecordDto
+                config = new Data.Models.ContentCheckConfigRecordDto
                 {
                     ChatId = 0,
                     CheckName = checkName,
@@ -182,7 +182,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
                     ModifiedDate = DateTimeOffset.UtcNow,
                     ModifiedBy = modifiedBy
                 };
-                context.SpamCheckConfigs.Add(config);
+                context.ContentCheckConfigs.Add(config);
             }
             else
             {
@@ -212,7 +212,7 @@ public class ContentCheckConfigRepository : IContentCheckConfigRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         try
         {
-            var configs = await context.SpamCheckConfigs
+            var configs = await context.ContentCheckConfigs
                 .AsNoTracking()
                 .Where(c => c.ChatId == 0)
                 .OrderBy(c => c.CheckName)

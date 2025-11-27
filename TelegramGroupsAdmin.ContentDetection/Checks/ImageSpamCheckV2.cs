@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -55,6 +56,7 @@ public class ImageSpamCheckV2(
     /// </summary>
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var req = (ImageCheckRequest)request;
 
         try
@@ -110,7 +112,8 @@ public class ImageSpamCheckV2(
                                     CheckName = CheckName,
                                     Score = 0.0,
                                     Abstained = true,
-                                    Details = $"Image hash {bestSimilarity:P0} similar to known ham sample (abstaining)"
+                                    Details = $"Image hash {bestSimilarity:P0} similar to known ham sample (abstaining)",
+                                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                                 };
                             }
 
@@ -123,7 +126,8 @@ public class ImageSpamCheckV2(
                                 CheckName = CheckName,
                                 Score = score,
                                 Abstained = false,
-                                Details = $"Image hash {bestSimilarity:P0} similar to known spam sample"
+                                Details = $"Image hash {bestSimilarity:P0} similar to known spam sample",
+                                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                             };
                         }
 
@@ -200,7 +204,8 @@ public class ImageSpamCheckV2(
                                 CheckName = CheckName,
                                 Score = 0.0,
                                 Abstained = true,
-                                Details = "OCR detected text analyzed as clean, abstaining"
+                                Details = "OCR detected text analyzed as clean, abstaining",
+                                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                             };
                         }
 
@@ -218,7 +223,8 @@ public class ImageSpamCheckV2(
                             CheckName = CheckName,
                             Score = score,
                             Abstained = false,
-                            Details = $"OCR detected spam text analyzed by {flaggedChecks.Count} checks: {string.Join(", ", flaggedChecks)}"
+                            Details = $"OCR detected spam text analyzed by {flaggedChecks.Count} checks: {string.Join(", ", flaggedChecks)}",
+                            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                         };
                     }
 
@@ -259,7 +265,8 @@ public class ImageSpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "No image URL provided"
+                    Details = "No image URL provided",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
             else
@@ -269,7 +276,8 @@ public class ImageSpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "No image data provided"
+                    Details = "No image data provided",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -323,7 +331,8 @@ public class ImageSpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"OpenAI rate limited, retry after {retryAfter}s"
+                    Details = $"OpenAI rate limited, retry after {retryAfter}s",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -337,7 +346,8 @@ public class ImageSpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"OpenAI API error: {response.StatusCode}"
+                    Details = $"OpenAI API error: {response.StatusCode}",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -352,11 +362,12 @@ public class ImageSpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "Empty OpenAI response"
+                    Details = "Empty OpenAI response",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
-            return ParseSpamResponse(content, req.UserId);
+            return ParseSpamResponse(content, req.UserId, startTimestamp);
         }
         catch (Exception ex)
         {
@@ -367,7 +378,8 @@ public class ImageSpamCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = $"Error: {ex.Message}",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }
@@ -422,7 +434,7 @@ public class ImageSpamCheckV2(
     /// <summary>
     /// Parse OpenAI Vision response and create V2 spam check result with scoring
     /// </summary>
-    private ContentCheckResponseV2 ParseSpamResponse(string content, long userId)
+    private ContentCheckResponseV2 ParseSpamResponse(string content, long userId, long startTimestamp)
     {
         try
         {
@@ -447,7 +459,8 @@ public class ImageSpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "Failed to parse OpenAI response"
+                    Details = "Failed to parse OpenAI response",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -468,7 +481,8 @@ public class ImageSpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"OpenAI Vision: Clean ({details})"
+                    Details = $"OpenAI Vision: Clean ({details})",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -480,7 +494,8 @@ public class ImageSpamCheckV2(
                 CheckName = CheckName,
                 Score = score,
                 Abstained = false,
-                Details = details
+                Details = details,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
         catch (Exception ex)
@@ -493,7 +508,8 @@ public class ImageSpamCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = "Failed to parse spam analysis",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }

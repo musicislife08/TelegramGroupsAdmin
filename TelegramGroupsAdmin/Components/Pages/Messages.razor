@@ -2,6 +2,8 @@
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Services.Media
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Repositories
 @inject IMessageHistoryRepository MessageRepository
 @inject IMessageQueryService MessageQueryService
 @inject IMessageEditService MessageEditService
@@ -73,7 +75,7 @@
                     {
                         <MudVirtualize Items="_filteredMessages" Context="messageWrapper" OverscanCount="10">
                             <MessageBubbleTelegram Message="messageWrapper.Message"
-                                                   SpamCheck="@GetSpamCheck(messageWrapper.Message.MessageId)"
+                                                   ContentCheck="@GetContentCheck(messageWrapper.Message.MessageId)"
                                                    EditCount="@GetEditCount(messageWrapper.Message.MessageId)"
                                                    ShowSpamActions="@(_userPermissionLevel >= PermissionLevel.GlobalAdmin)"
                                                    DetectionHistory="@messageWrapper.DetectionResults"
@@ -169,7 +171,7 @@
     // Message state (per-chat) - PERF-APP-1: Use composite model with detection history included
     private List<MessageWithDetectionHistory> _allMessages = [];
     private List<MessageWithDetectionHistory> _filteredMessages = [];
-    private Dictionary<long, SpamCheckRecord> _spamChecks = new();
+    private Dictionary<long, ContentCheckRecord> _contentChecks = new();
     private Dictionary<long, int> _editCounts = new();
     private bool _loading;
     private bool _loadingMore;
@@ -328,11 +330,11 @@
 
                         // Load metadata for this message
                         long[] messageIds = [targetMessageId];
-                        var spamChecks = await MessageQueryService.GetSpamChecksForMessagesAsync(messageIds);
+                        var contentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
                         var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
 
-                        foreach (var kvp in spamChecks)
-                            _spamChecks[kvp.Key] = kvp.Value;
+                        foreach (var kvp in contentChecks)
+                            _contentChecks[kvp.Key] = kvp.Value;
                         foreach (var kvp in editCounts)
                             _editCounts[kvp.Key] = kvp.Value;
 
@@ -391,10 +393,10 @@
 
                 // Load spam check for this new message if it exists
                 long[] messageIds = [message.MessageId];
-                var newSpamChecks = await MessageQueryService.GetSpamChecksForMessagesAsync(messageIds);
-                foreach (var kvp in newSpamChecks)
+                var newContentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
+                foreach (var kvp in newContentChecks)
                 {
-                    _spamChecks[kvp.Key] = kvp.Value;
+                    _contentChecks[kvp.Key] = kvp.Value;
                 }
 
                 // Load edit count for this message
@@ -574,7 +576,7 @@
         _loading = true;
         _hasMore = true;
         _allMessages.Clear();
-        _spamChecks.Clear();
+        _contentChecks.Clear();
         _editCounts.Clear();
 
         try
@@ -602,12 +604,12 @@
                 {
                     // Non-admin: Load both edit counts and spam checks in parallel
                     var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(messageIds);
-                    var spamChecksTask = MessageQueryService.GetSpamChecksForMessagesAsync(messageIds);
+                    var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
 
-                    await Task.WhenAll(editCountsTask, spamChecksTask);
+                    await Task.WhenAll(editCountsTask, contentChecksTask);
 
                     _editCounts = await editCountsTask;
-                    _spamChecks = await spamChecksTask;
+                    _contentChecks = await contentChecksTask;
                 }
             }
 
@@ -691,17 +693,17 @@
                 {
                     // Non-admin: Load both edit counts and spam checks in parallel
                     var editCountsTask = MessageEditService.GetEditCountsForMessagesAsync(messageIds);
-                    var spamChecksTask = MessageQueryService.GetSpamChecksForMessagesAsync(messageIds);
+                    var contentChecksTask = MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
 
-                    await Task.WhenAll(editCountsTask, spamChecksTask);
+                    await Task.WhenAll(editCountsTask, contentChecksTask);
 
                     var newEditCounts = await editCountsTask;
                     foreach (var kvp in newEditCounts)
                         _editCounts[kvp.Key] = kvp.Value;
 
-                    var newSpamChecks = await spamChecksTask;
-                    foreach (var kvp in newSpamChecks)
-                        _spamChecks[kvp.Key] = kvp.Value;
+                    var newContentChecks = await contentChecksTask;
+                    foreach (var kvp in newContentChecks)
+                        _contentChecks[kvp.Key] = kvp.Value;
                 }
 
                 // Check if there are more pages
@@ -732,7 +734,7 @@
     private void ApplyFilters()
     {
         _filteredMessages = _allMessages
-            .Where(mw => _filterState.Matches(mw.Message, GetSpamCheck(mw.Message.MessageId)))
+            .Where(mw => _filterState.Matches(mw.Message, GetContentCheck(mw.Message.MessageId)))
             .ToList(); // Keep newest-first order from repo, CSS flex-direction: column-reverse displays newest at bottom
 
         // Additional userId filter from query string (if set and UserName filter is still active)
@@ -751,20 +753,20 @@
         // Note: Callers must call StateHasChanged() after ApplyFilters() to trigger re-render
     }
 
-    private SpamCheckRecord? GetSpamCheck(long messageId)
+    private ContentCheckRecord? GetContentCheck(long messageId)
     {
         // PERF-APP-1: Use detection results already loaded via Include() instead of separate dictionary
         var wrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == messageId);
         if (wrapper?.DetectionResults.Any() != true)
         {
             // Fallback to dictionary for backward compatibility (messages loaded without detection history)
-            _spamChecks.TryGetValue(messageId, out var fallback);
+            _contentChecks.TryGetValue(messageId, out var fallback);
             return fallback;
         }
 
         // Use latest detection result (already ordered DESC by DetectedAt in repository)
         var latest = wrapper.DetectionResults.First();
-        return new SpamCheckRecord(
+        return new ContentCheckRecord(
             Id: latest.Id,
             CheckTimestamp: latest.DetectedAt,
             UserId: latest.UserId,
@@ -862,7 +864,7 @@
                 if (history.Any())
                 {
                     var latest = history.OrderByDescending(h => h.DetectedAt).First();
-                    _spamChecks[message.MessageId] = new SpamCheckRecord(
+                    _contentChecks[message.MessageId] = new ContentCheckRecord(
                         Id: latest.Id,
                         CheckTimestamp: latest.DetectedAt,
                         UserId: message.UserId,
@@ -910,7 +912,7 @@
             }
 
             // Check if this was previously marked as spam (false positive correction scenario)
-            var wasPreviouslySpam = GetSpamCheck(message.MessageId)?.IsSpam == true;
+            var wasPreviouslySpam = GetContentCheck(message.MessageId)?.IsSpam == true;
 
             // 0. CRITICAL: Invalidate old training data to prevent cross-class conflicts
             await DetectionResultsRepository.InvalidateTrainingDataForMessageAsync(
@@ -981,7 +983,7 @@
             if (history.Any())
             {
                 var latest = history.OrderByDescending(h => h.DetectedAt).First();
-                _spamChecks[message.MessageId] = new SpamCheckRecord(
+                _contentChecks[message.MessageId] = new ContentCheckRecord(
                     Id: latest.Id,
                     CheckTimestamp: latest.DetectedAt,
                     UserId: message.UserId,

@@ -273,6 +273,47 @@ When `SEQ_URL` is configured, the application automatically enables:
 **Commit Messages**: All completed work documented with full technical details. Single source of truth for project history.
 **PR Descriptions**: Link related issues using closing keywords (`Closes #123`) at the top of the PR body to auto-close issues when merged.
 
+### GitHub Issue Labels
+
+**Type Labels:**
+- `bug` - Something isn't working
+- `enhancement` - New feature or request
+- `documentation` - Improvements or additions to documentation
+- `refactoring` - Code refactoring
+- `tech-debt` - Technical debt
+- `question` - Further information is requested
+- `duplicate` - This issue or pull request already exists
+- `invalid` - This doesn't seem right
+- `wontfix` - This will not be worked on
+
+**Priority Labels:**
+- `priority-critical` - Critical priority work
+- `priority-high` - High priority work
+- `priority-medium` - Medium priority work
+- `priority-low` - Low priority work
+
+**Effort Labels:**
+- `quick-win` - Can be completed in < 1 hour
+- `small-task` - 1-2 hours of work
+- `medium-task` - 2-4 hours of work
+- `large-task` - 4+ hours of work
+
+**Category Labels:**
+- `ml` - Machine learning features
+- `analytics` - Analytics and reporting
+- `performance` - Performance optimization
+- `deployment` - Deployment and infrastructure
+- `backend` - Backend/API work
+- `database` - Database schema or queries
+- `frontend` - UI/Frontend work
+- `ci-cd` - CI/CD pipeline work
+- `testing` - Test coverage or testing tools
+- `ux` - User experience improvements
+
+**Helper Labels:**
+- `good first issue` - Good for newcomers
+- `help wanted` - Extra attention is needed
+
 ## Testing
 
 **Migration Tests**: NUnit + Testcontainers.PostgreSQL, validates all migrations against real PostgreSQL 17 (tests always passing)

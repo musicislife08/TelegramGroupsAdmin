@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
@@ -63,6 +64,7 @@ public class BayesSpamCheckV2(
 
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var req = (BayesCheckRequest)request;
 
         try
@@ -75,7 +77,8 @@ public class BayesSpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"Message too short (< {req.MinMessageLength} chars)"
+                    Details = $"Message too short (< {req.MinMessageLength} chars)",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -89,7 +92,8 @@ public class BayesSpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "Classifier not trained - insufficient data"
+                    Details = "Classifier not trained - insufficient data",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -106,18 +110,20 @@ public class BayesSpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"Likely ham ({spamProbabilityPercent}% spam probability, certainty: {certainty:F3})"
+                    Details = $"Likely ham ({spamProbabilityPercent}% spam probability, certainty: {certainty:F3})",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
-            if (spamProbabilityPercent >= UncertaintyLowerBound && spamProbabilityPercent <= UncertaintyUpperBound)
+            if (spamProbabilityPercent is >= UncertaintyLowerBound and <= UncertaintyUpperBound)
             {
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"Uncertain ({spamProbabilityPercent}% spam probability, certainty: {certainty:F3})"
+                    Details = $"Uncertain ({spamProbabilityPercent}% spam probability, certainty: {certainty:F3})",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -129,7 +135,8 @@ public class BayesSpamCheckV2(
                 CheckName = CheckName,
                 Score = score,
                 Abstained = false,
-                Details = $"{details} (certainty: {certainty:F3})"
+                Details = $"{details} (certainty: {certainty:F3})",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
         catch (Exception ex)
@@ -141,7 +148,8 @@ public class BayesSpamCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = $"Error: {ex.Message}",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }

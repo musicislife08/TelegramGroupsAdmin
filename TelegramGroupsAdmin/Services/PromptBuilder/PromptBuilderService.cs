@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 
 namespace TelegramGroupsAdmin.Services.PromptBuilder;
 

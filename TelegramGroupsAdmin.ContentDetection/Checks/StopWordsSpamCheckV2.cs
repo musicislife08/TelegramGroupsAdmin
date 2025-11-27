@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
@@ -52,6 +53,7 @@ public class StopWordsSpamCheckV2(
 
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var req = (StopWordsCheckRequest)request;
 
         try
@@ -67,15 +69,14 @@ public class StopWordsSpamCheckV2(
                 .ToListAsync(req.CancellationToken);
 
             if (stopWords.Count == 0)
-            {
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "No stop words configured"
+                    Details = "No stop words configured",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
-            }
 
             var stopWordsSet = new HashSet<string>(stopWords, StringComparer.OrdinalIgnoreCase);
             var foundMatches = new List<string>();
@@ -107,7 +108,8 @@ public class StopWordsSpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "No stop words detected"
+                    Details = "No stop words detected",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -116,13 +118,14 @@ public class StopWordsSpamCheckV2(
 
             var details = $"Found stop words: {string.Join(", ", foundMatches.Take(3))}" +
                          (foundMatches.Count > 3 ? $" (+{foundMatches.Count - 3} more)" : "");
-
+            
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
                 Score = score,
                 Abstained = false,
-                Details = details
+                Details = details,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
         catch (Exception ex)
@@ -134,7 +137,8 @@ public class StopWordsSpamCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = $"Error: {ex.Message}",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }

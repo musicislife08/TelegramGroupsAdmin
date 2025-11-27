@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
@@ -49,6 +50,7 @@ public class SimilaritySpamCheckV2(
 
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var req = (SimilarityCheckRequest)request;
 
         try
@@ -60,7 +62,8 @@ public class SimilaritySpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"Message too short (< {req.MinMessageLength} chars)"
+                    Details = $"Message too short (< {req.MinMessageLength} chars)",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -77,14 +80,15 @@ public class SimilaritySpamCheckV2(
                 select mt != null ? mt.TranslatedText : m.MessageText
             ).AsNoTracking().Take(MAX_SIMILARITY_SAMPLES).ToListAsync(req.CancellationToken);
 
-            if (!spamSamples.Any())
+            if (spamSamples.Count == 0)
             {
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "No spam samples available"
+                    Details = "No spam samples available",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -105,7 +109,8 @@ public class SimilaritySpamCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"Low similarity ({maxSimilarity:P0}) to spam samples"
+                    Details = $"Low similarity ({maxSimilarity:P0}) to spam samples",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -117,13 +122,14 @@ public class SimilaritySpamCheckV2(
                 >= 0.4 => 1.0,
                 _ => 0.5
             };
-
+            
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
                 Score = score,
                 Abstained = false,
-                Details = $"Similarity: {maxSimilarity:P0} to known spam"
+                Details = $"Similarity: {maxSimilarity:P0} to known spam",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
         catch (Exception ex)
@@ -135,7 +141,8 @@ public class SimilaritySpamCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = $"Error: {ex.Message}",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }

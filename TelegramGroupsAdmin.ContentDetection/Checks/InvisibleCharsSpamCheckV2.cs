@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
@@ -41,6 +42,7 @@ public class InvisibleCharsSpamCheckV2(ILogger<InvisibleCharsSpamCheckV2> logger
 
     public ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var req = (InvisibleCharsCheckRequest)request;
 
         try
@@ -54,7 +56,8 @@ public class InvisibleCharsSpamCheckV2(ILogger<InvisibleCharsSpamCheckV2> logger
                     CheckName = CheckName,
                     Score = ScoreInvisibleChars,
                     Abstained = false,
-                    Details = $"Contains {count} invisible/hidden characters"
+                    Details = $"Contains {count} invisible/hidden characters",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 });
             }
 
@@ -64,7 +67,8 @@ public class InvisibleCharsSpamCheckV2(ILogger<InvisibleCharsSpamCheckV2> logger
                 CheckName = CheckName,
                 Score = 0.0,
                 Abstained = true,
-                Details = "No invisible characters detected"
+                Details = "No invisible characters detected",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             });
         }
         catch (Exception ex)
@@ -75,7 +79,8 @@ public class InvisibleCharsSpamCheckV2(ILogger<InvisibleCharsSpamCheckV2> logger
                 Score = 0.0,
                 Abstained = true,
                 Details = $"Error: {ex.Message}",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             });
         }
     }

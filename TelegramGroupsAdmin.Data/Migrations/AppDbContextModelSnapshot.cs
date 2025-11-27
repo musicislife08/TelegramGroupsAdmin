@@ -17,7 +17,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.0-rc.1.25451.107")
+                .HasAnnotation("ProductVersion", "10.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -528,7 +528,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("TelegramUserId");
 
-                    b.ToTable("admin_notes", t =>
+                    b.ToTable("admin_notes", null, t =>
                         {
                             t.HasCheckConstraint("CK_admin_notes_exclusive_actor", "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1");
                         });
@@ -597,7 +597,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("TargetWebUserId");
 
-                    b.ToTable("audit_log", t =>
+                    b.ToTable("audit_log", null, t =>
                         {
                             t.HasCheckConstraint("CK_audit_log_exclusive_actor", "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1");
 
@@ -692,7 +692,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("Url");
 
-                    b.ToTable("blocklist_subscriptions");
+                    b.ToTable("blocklist_subscriptions", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.CachedBlockedDomainDto", b =>
@@ -743,7 +743,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("Domain", "BlockMode", "ChatId")
                         .IsUnique();
 
-                    b.ToTable("cached_blocked_domains");
+                    b.ToTable("cached_blocked_domains", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ChatAdminRecordDto", b =>
@@ -789,7 +789,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("TelegramId");
 
-                    b.ToTable("chat_admins");
+                    b.ToTable("chat_admins", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ChatPromptRecordDto", b =>
@@ -828,7 +828,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("chat_prompts");
+                    b.ToTable("chat_prompts", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ConfigRecordDto", b =>
@@ -923,7 +923,54 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasDatabaseName("idx_configs_chat_specific")
                         .HasFilter("chat_id != 0");
 
-                    b.ToTable("configs");
+                    b.ToTable("configs", (string)null);
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ContentCheckConfigRecordDto", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("AlwaysRun")
+                        .HasColumnType("boolean")
+                        .HasColumnName("always_run");
+
+                    b.Property<long>("ChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("chat_id");
+
+                    b.Property<string>("CheckName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("check_name");
+
+                    b.Property<int?>("ConfidenceThreshold")
+                        .HasColumnType("integer")
+                        .HasColumnName("confidence_threshold");
+
+                    b.Property<string>("ConfigurationJson")
+                        .HasColumnType("text")
+                        .HasColumnName("configuration_json");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("modified_by");
+
+                    b.Property<DateTimeOffset>("ModifiedDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_date");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("content_check_configs", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.DetectionResultRecordDto", b =>
@@ -1000,6 +1047,11 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CheckResultsJson")
+                        .HasDatabaseName("ix_detection_results_check_results_json_gin");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("CheckResultsJson"), "gin");
+
                     b.HasIndex("DetectedAt");
 
                     b.HasIndex("DetectionSource")
@@ -1019,7 +1071,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("IsSpam", "DetectedAt")
                         .HasDatabaseName("ix_detection_results_is_spam_detected_at");
 
-                    b.ToTable("detection_results", t =>
+                    b.ToTable("detection_results", null, t =>
                         {
                             t.HasCheckConstraint("CK_detection_results_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
                         });
@@ -1087,7 +1139,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("FilterType", "BlockMode")
                         .HasFilter("enabled = true");
 
-                    b.ToTable("domain_filters");
+                    b.ToTable("domain_filters", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.FileScanQuotaRecord", b =>
@@ -1138,7 +1190,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("Service", "QuotaType", "QuotaWindowStart")
                         .IsUnique();
 
-                    b.ToTable("file_scan_quota");
+                    b.ToTable("file_scan_quota", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.FileScanResultRecord", b =>
@@ -1191,7 +1243,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("Scanner", "ScannedAt");
 
-                    b.ToTable("file_scan_results");
+                    b.ToTable("file_scan_results", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ImageTrainingSampleDto", b =>
@@ -1343,7 +1395,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("RiskLevel", "DetectedAt")
                         .HasFilter("reviewed_at IS NULL");
 
-                    b.ToTable("impersonation_alerts");
+                    b.ToTable("impersonation_alerts", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.InviteRecordDto", b =>
@@ -1393,7 +1445,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UserRecordDtoId");
 
-                    b.ToTable("invites");
+                    b.ToTable("invites", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ManagedChatRecordDto", b =>
@@ -1443,7 +1495,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasKey("ChatId");
 
-                    b.ToTable("managed_chats");
+                    b.ToTable("managed_chats", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.MessageEditRecordDto", b =>
@@ -1485,7 +1537,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("MessageId");
 
-                    b.ToTable("message_edits");
+                    b.ToTable("message_edits", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.MessageRecordDto", b =>
@@ -1500,6 +1552,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<long>("ChatId")
                         .HasColumnType("bigint")
                         .HasColumnName("chat_id");
+
+                    b.Property<int>("ContentCheckSkipReason")
+                        .HasColumnType("integer")
+                        .HasColumnName("spam_check_skip_reason");
 
                     b.Property<string>("ContentHash")
                         .HasMaxLength(64)
@@ -1574,10 +1630,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("reply_to_message_id");
 
-                    b.Property<int>("SpamCheckSkipReason")
-                        .HasColumnType("integer")
-                        .HasColumnName("spam_check_skip_reason");
-
                     b.Property<DateTimeOffset>("Timestamp")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("timestamp");
@@ -1604,7 +1656,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("Timestamp", "DeletedAt");
 
-                    b.ToTable("messages");
+                    b.ToTable("messages", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.MessageTranslationDto", b =>
@@ -1655,7 +1707,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .IsUnique()
                         .HasFilter("message_id IS NOT NULL");
 
-                    b.ToTable("message_translations", t =>
+                    b.ToTable("message_translations", null, t =>
                         {
                             t.HasCheckConstraint("CK_message_translations_exclusive_source", "(message_id IS NOT NULL)::int + (edit_id IS NOT NULL)::int = 1");
                         });
@@ -1709,7 +1761,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("notification_preferences");
+                    b.ToTable("notification_preferences", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PendingNotificationRecord", b =>
@@ -1756,7 +1808,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("NotificationType", "CreatedAt");
 
-                    b.ToTable("pending_notifications");
+                    b.ToTable("pending_notifications", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PromptVersionDto", b =>
@@ -1800,7 +1852,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("prompt_versions");
+                    b.ToTable("prompt_versions", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.RecoveryCodeRecordDto", b =>
@@ -1830,7 +1882,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("recovery_codes");
+                    b.ToTable("recovery_codes", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ReportDto", b =>
@@ -1899,54 +1951,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasDatabaseName("IX_reports_unique_pending_per_message")
                         .HasFilter("status = 0");
 
-                    b.ToTable("reports");
-                });
-
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.SpamCheckConfigRecordDto", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<bool>("AlwaysRun")
-                        .HasColumnType("boolean")
-                        .HasColumnName("always_run");
-
-                    b.Property<long>("ChatId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("chat_id");
-
-                    b.Property<string>("CheckName")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("check_name");
-
-                    b.Property<int?>("ConfidenceThreshold")
-                        .HasColumnType("integer")
-                        .HasColumnName("confidence_threshold");
-
-                    b.Property<string>("ConfigurationJson")
-                        .HasColumnType("text")
-                        .HasColumnName("configuration_json");
-
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("enabled");
-
-                    b.Property<string>("ModifiedBy")
-                        .HasColumnType("text")
-                        .HasColumnName("modified_by");
-
-                    b.Property<DateTimeOffset>("ModifiedDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("modified_date");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("spam_check_configs");
+                    b.ToTable("reports", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.SpamDetectionConfigRecordDto", b =>
@@ -1977,7 +1982,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("spam_detection_configs");
+                    b.ToTable("spam_detection_configs", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.StopWordDto", b =>
@@ -2026,7 +2031,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("WebUserId");
 
-                    b.ToTable("stop_words", t =>
+                    b.ToTable("stop_words", null, t =>
                         {
                             t.HasCheckConstraint("CK_stop_words_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
                         });
@@ -2055,7 +2060,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UsageCount");
 
-                    b.ToTable("tag_definitions");
+                    b.ToTable("tag_definitions", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramLinkTokenRecordDto", b =>
@@ -2095,7 +2100,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UserRecordDtoId");
 
-                    b.ToTable("telegram_link_tokens");
+                    b.ToTable("telegram_link_tokens", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramUserDto", b =>
@@ -2170,7 +2175,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("Username");
 
-                    b.ToTable("telegram_users");
+                    b.ToTable("telegram_users", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramUserMappingRecordDto", b =>
@@ -2210,7 +2215,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("telegram_user_mappings");
+                    b.ToTable("telegram_user_mappings", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ThresholdRecommendationDto", b =>
@@ -2301,7 +2306,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("AlgorithmName", "Status");
 
-                    b.ToTable("threshold_recommendations");
+                    b.ToTable("threshold_recommendations", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UserActionRecordDto", b =>
@@ -2363,7 +2368,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("WebUserId");
 
-                    b.ToTable("user_actions", t =>
+                    b.ToTable("user_actions", null, t =>
                         {
                             t.HasCheckConstraint("CK_user_actions_exclusive_actor", "(web_user_id IS NOT NULL)::int + (telegram_user_id IS NOT NULL)::int + (system_identifier IS NOT NULL)::int = 1");
                         });
@@ -2482,7 +2487,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("NormalizedEmail")
                         .IsUnique();
 
-                    b.ToTable("users");
+                    b.ToTable("users", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.UserTagDto", b =>
@@ -2552,7 +2557,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("TelegramUserId");
 
-                    b.ToTable("user_tags", t =>
+                    b.ToTable("user_tags", null, t =>
                         {
                             t.HasCheckConstraint("CK_user_tags_exclusive_actor", "(actor_web_user_id IS NOT NULL)::int + (actor_telegram_user_id IS NOT NULL)::int + (actor_system_identifier IS NOT NULL)::int = 1");
                         });
@@ -2604,7 +2609,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("verification_tokens");
+                    b.ToTable("verification_tokens", (string)null);
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.VideoTrainingSampleDto", b =>
@@ -2739,7 +2744,7 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("TimeoutJobId")
                         .HasFilter("timeout_job_id IS NOT NULL");
 
-                    b.ToTable("welcome_responses");
+                    b.ToTable("welcome_responses", (string)null);
                 });
 
             modelBuilder.Entity("AppAny.Quartz.EntityFrameworkCore.Migrations.QuartzBlobTrigger", b =>

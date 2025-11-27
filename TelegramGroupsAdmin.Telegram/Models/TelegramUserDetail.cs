@@ -1,4 +1,6 @@
+using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core;
+using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Models;
 

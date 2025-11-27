@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -30,13 +31,7 @@ public class VideoSpamCheckV2(
     IPhotoHashService photoHashService,
     IVideoTrainingSamplesRepository videoTrainingSamplesRepository) : IContentCheckV2
 {
-    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
-    private readonly IVideoFrameExtractionService _frameExtractionService = frameExtractionService;
-    private readonly IImageTextExtractionService _imageTextExtractionService = imageTextExtractionService;
-    private readonly IServiceProvider _serviceProvider = serviceProvider; // Lazy resolve to break circular dependency
-    private readonly ISpamDetectionConfigRepository _configRepository = configRepository;
-    private readonly IPhotoHashService _photoHashService = photoHashService;
-    private readonly IVideoTrainingSamplesRepository _videoTrainingSamplesRepository = videoTrainingSamplesRepository;
+    // Lazy resolve to break circular dependency
 
     public CheckName CheckName => CheckName.VideoSpam;
 
@@ -57,12 +52,13 @@ public class VideoSpamCheckV2(
     /// </summary>
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var req = (VideoCheckRequest)request;
 
         try
         {
             // Verify FFmpeg is available
-            if (!_frameExtractionService.IsAvailable)
+            if (!frameExtractionService.IsAvailable)
             {
                 logger.LogWarning("FFmpeg not available, cannot analyze video");
                 return new ContentCheckResponseV2
@@ -71,7 +67,8 @@ public class VideoSpamCheckV2(
                     Score = 0.0,
                     Abstained = true,
                     Details = "FFmpeg not available for video analysis",
-                    Error = new InvalidOperationException("FFmpeg not available")
+                    Error = new InvalidOperationException("FFmpeg not available"),
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -85,16 +82,17 @@ public class VideoSpamCheckV2(
                     Score = 0.0,
                     Abstained = true,
                     Details = "Video file not found",
-                    Error = new FileNotFoundException("Video file not found", req.VideoLocalPath)
+                    Error = new FileNotFoundException("Video file not found", req.VideoLocalPath),
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
             // Load config
-            var config = await _configRepository.GetEffectiveConfigAsync(req.ChatId, req.CancellationToken);
+            var config = await configRepository.GetEffectiveConfigAsync(req.ChatId, req.CancellationToken);
             var videoConfig = config.VideoSpam;
 
             // Extract keyframes from video
-            var frames = await _frameExtractionService.ExtractKeyframesAsync(req.VideoLocalPath, req.CancellationToken);
+            var frames = await frameExtractionService.ExtractKeyframesAsync(req.VideoLocalPath, req.CancellationToken);
             if (frames.Count == 0)
             {
                 logger.LogWarning("Failed to extract keyframes from video at {VideoPath}", req.VideoLocalPath);
@@ -104,7 +102,8 @@ public class VideoSpamCheckV2(
                     Score = 0.0,
                     Abstained = true,
                     Details = "Failed to extract video frames",
-                    Error = new InvalidOperationException("Failed to extract video frames")
+                    Error = new InvalidOperationException("Failed to extract video frames"),
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -114,7 +113,7 @@ public class VideoSpamCheckV2(
             // ML-6 Layer 1: Keyframe hash similarity check (fastest - check if we've seen this spam before)
             if (videoConfig.UseHashSimilarity)
             {
-                var layer1Result = await CheckKeyframeHashSimilarityAsync(frames, videoConfig, req.CancellationToken);
+                var layer1Result = await CheckKeyframeHashSimilarityAsync(frames, videoConfig, startTimestamp, req.CancellationToken);
                 if (layer1Result != null)
                 {
                     // Clean up extracted frames
@@ -124,9 +123,9 @@ public class VideoSpamCheckV2(
             }
 
             // ML-6 Layer 2: OCR on frames + text-based spam detection
-            if (videoConfig.UseOCR && _imageTextExtractionService.IsAvailable)
+            if (videoConfig.UseOCR && imageTextExtractionService.IsAvailable)
             {
-                var layer2Result = await CheckFrameOCRAsync(frames, videoConfig, req, req.CancellationToken);
+                var layer2Result = await CheckFrameOCRAsync(frames, videoConfig, req, startTimestamp, req.CancellationToken);
                 if (layer2Result != null)
                 {
                     // Clean up extracted frames
@@ -138,7 +137,7 @@ public class VideoSpamCheckV2(
             // ML-6 Layer 3: OpenAI Vision fallback on representative frame
             if (videoConfig.UseOpenAIVision)
             {
-                var layer3Result = await CheckFrameWithVisionAsync(frames, req, req.CancellationToken);
+                var layer3Result = await CheckFrameWithVisionAsync(frames, req, startTimestamp, req.CancellationToken);
 
                 // Clean up extracted frames
                 CleanupFrames(frames);
@@ -153,7 +152,8 @@ public class VideoSpamCheckV2(
                 CheckName = CheckName,
                 Score = 0.0,
                 Abstained = true,
-                Details = "Video spam detection disabled or all layers failed"
+                Details = "Video spam detection disabled or all layers failed",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
         catch (Exception ex)
@@ -165,7 +165,8 @@ public class VideoSpamCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = "Video spam check failed",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }
@@ -176,15 +177,16 @@ public class VideoSpamCheckV2(
     private async Task<ContentCheckResponseV2?> CheckKeyframeHashSimilarityAsync(
         List<ExtractedFrame> frames,
         VideoSpamConfig config,
+        long startTimestamp,
         CancellationToken cancellationToken)
     {
         try
         {
-            // Compute hashes for all extracted frames
-            var frameHashes = new List<byte[]>();
+            // Compute hashes for all extracted frames (pre-allocate capacity to avoid resizing)
+            var frameHashes = new List<byte[]>(frames.Count);
             foreach (var frame in frames)
             {
-                var hash = await _photoHashService.ComputePhotoHashAsync(frame.FramePath);
+                var hash = await photoHashService.ComputePhotoHashAsync(frame.FramePath);
                 if (hash != null)
                 {
                     frameHashes.Add(hash);
@@ -198,7 +200,7 @@ public class VideoSpamCheckV2(
             }
 
             // Query training samples (limited by config for performance)
-            var trainingSamples = await _videoTrainingSamplesRepository.GetRecentSamplesAsync(
+            var trainingSamples = await videoTrainingSamplesRepository.GetRecentSamplesAsync(
                 config.MaxTrainingSamplesToCompare,
                 cancellationToken);
 
@@ -227,7 +229,7 @@ public class VideoSpamCheckV2(
                     foreach (var keyframeHash in keyframeHashes)
                     {
                         var sampleHash = Convert.FromBase64String(keyframeHash.Hash);
-                        var similarity = _photoHashService.CompareHashes(frameHash, sampleHash);
+                        var similarity = photoHashService.CompareHashes(frameHash, sampleHash);
 
                         if (similarity > bestSimilarity)
                         {
@@ -261,13 +263,14 @@ public class VideoSpamCheckV2(
                     score = 0.0;
                     abstained = true;
                 }
-
+                
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = score,
                     Abstained = abstained,
-                    Details = $"Video keyframe {bestSimilarity:P0} similar to known {(matchedSpamLabel == true ? "spam" : "ham")} sample"
+                    Details = $"Video keyframe {bestSimilarity:P0} similar to known {(matchedSpamLabel == true ? "spam" : "ham")} sample",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -291,6 +294,7 @@ public class VideoSpamCheckV2(
         List<ExtractedFrame> frames,
         VideoSpamConfig config,
         VideoCheckRequest req,
+        long startTimestamp,
         CancellationToken cancellationToken)
     {
         try
@@ -299,7 +303,7 @@ public class VideoSpamCheckV2(
             var combinedText = new List<string>();
             foreach (var frame in frames)
             {
-                var extractedText = await _imageTextExtractionService.ExtractTextAsync(
+                var extractedText = await imageTextExtractionService.ExtractTextAsync(
                     frame.FramePath,
                     cancellationToken);
 
@@ -350,7 +354,7 @@ public class VideoSpamCheckV2(
 
             // Run all text-based spam checks on OCR text (includes OpenAI veto if needed)
             // Lazy-resolve engine to break circular dependency
-            var contentDetectionEngine = _serviceProvider.GetRequiredService<IContentDetectionEngine>();
+            var contentDetectionEngine = serviceProvider.GetRequiredService<IContentDetectionEngine>();
             var ocrResult = await contentDetectionEngine.CheckMessageAsync(ocrRequest, cancellationToken);
 
             // Check if result is confident enough to skip expensive Vision API
@@ -380,13 +384,14 @@ public class VideoSpamCheckV2(
                     score = 0.0;
                     abstained = true;
                 }
-
+                
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = score,
                     Abstained = abstained,
-                    Details = $"OCR from video frames analyzed by {flaggedChecks.Count} checks: {string.Join(", ", flaggedChecks)}"
+                    Details = $"OCR from video frames analyzed by {flaggedChecks.Count} checks: {string.Join(", ", flaggedChecks)}",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -410,6 +415,7 @@ public class VideoSpamCheckV2(
     private async Task<ContentCheckResponseV2> CheckFrameWithVisionAsync(
         List<ExtractedFrame> frames,
         VideoCheckRequest req,
+        long startTimestamp,
         CancellationToken cancellationToken)
     {
         try
@@ -463,7 +469,7 @@ public class VideoSpamCheckV2(
                 req.UserId);
 
             // Use named "OpenAI" HttpClient (configured in ServiceCollectionExtensions)
-            var httpClient = _httpClientFactory.CreateClient("OpenAI");
+            var httpClient = httpClientFactory.CreateClient("OpenAI");
             var response = await httpClient.PostAsJsonAsync(
                 "chat/completions",
                 apiRequest,
@@ -474,14 +480,15 @@ public class VideoSpamCheckV2(
             {
                 var retryAfter = response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 60;
                 logger.LogWarning("OpenAI Vision rate limit hit. Retry after {RetryAfter} seconds", retryAfter);
-
+                
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
                     Details = $"OpenAI rate limited, retry after {retryAfter}s",
-                    Error = new HttpRequestException($"OpenAI API rate limited")
+                    Error = new HttpRequestException($"OpenAI API rate limited"),
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -489,14 +496,15 @@ public class VideoSpamCheckV2(
             {
                 var error = await response.Content.ReadAsStringAsync(cancellationToken);
                 logger.LogError("OpenAI Vision API error: {StatusCode} - {Error}", response.StatusCode, error);
-
+                
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
                     Details = $"OpenAI API error: {response.StatusCode}",
-                    Error = new HttpRequestException($"OpenAI API error: {response.StatusCode}")
+                    Error = new HttpRequestException($"OpenAI API error: {response.StatusCode}"),
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -512,11 +520,12 @@ public class VideoSpamCheckV2(
                     Score = 0.0,
                     Abstained = true,
                     Details = "Empty OpenAI response",
-                    Error = new InvalidOperationException("Empty OpenAI response")
+                    Error = new InvalidOperationException("Empty OpenAI response"),
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
-            return ParseSpamResponse(content, req.UserId);
+            return ParseSpamResponse(content, req.UserId, startTimestamp);
         }
         catch (Exception ex)
         {
@@ -527,7 +536,8 @@ public class VideoSpamCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = "Vision API error",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }
@@ -578,7 +588,7 @@ public class VideoSpamCheckV2(
     /// <summary>
     /// Parse OpenAI Vision response and create spam check result
     /// </summary>
-    private ContentCheckResponseV2 ParseSpamResponse(string content, long userId)
+    private ContentCheckResponseV2 ParseSpamResponse(string content, long userId, long startTimestamp)
     {
         try
         {
@@ -604,7 +614,8 @@ public class VideoSpamCheckV2(
                     Score = 0.0,
                     Abstained = true,
                     Details = "Failed to parse OpenAI response",
-                    Error = new InvalidOperationException("Failed to parse OpenAI response")
+                    Error = new InvalidOperationException("Failed to parse OpenAI response"),
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -632,13 +643,14 @@ public class VideoSpamCheckV2(
                 score = 0.0;
                 abstained = true;
             }
-
+            
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
                 Score = score,
                 Abstained = abstained,
-                Details = details
+                Details = details,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
         catch (Exception ex)
@@ -651,7 +663,8 @@ public class VideoSpamCheckV2(
                 Score = 0.0,
                 Abstained = true,
                 Details = "Failed to parse spam analysis",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }

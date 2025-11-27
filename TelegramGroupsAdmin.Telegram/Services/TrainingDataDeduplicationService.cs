@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -45,7 +46,6 @@ public class TrainingDataDeduplicationService(
     {
         logger.LogInformation("Starting training data deduplication analysis");
 
-        // Load all training samples (TODO: Add repository method)
         var samples = await detectionResultsRepository.GetAllTrainingDataAsync(cancellationToken);
 
         var trainingSamples = samples
@@ -55,7 +55,7 @@ public class TrainingDataDeduplicationService(
                 Id = s.Id,
                 MessageId = s.MessageId,
                 MessageText = s.MessageText ?? string.Empty,
-                ContentHash = null, // Will be populated from messages table
+                ContentHash = s.ContentHash,
                 IsSpam = s.IsSpam,
                 Confidence = s.Confidence,
                 DetectionSource = s.DetectionSource,
@@ -68,20 +68,16 @@ public class TrainingDataDeduplicationService(
 
         var result = new DuplicateAnalysisResult();
 
-        // 1. Find exact duplicates via content_hash (requires JOIN to messages table - TODO)
-        // For now, use text-based exact matching as fallback
         var exactDuplicates = FindExactDuplicates(trainingSamples);
         result.ExactDuplicates = exactDuplicates;
 
-        // 2. Find very similar samples (95-99% Jaccard similarity)
         var verySimilar = FindSimilarSamples(trainingSamples, VerySimilarMinThreshold, VerySimilarMaxThreshold);
         result.VerySimilar = verySimilar;
 
-        // 3. Find similar samples (90-94% Jaccard similarity)
         var similar = FindSimilarSamples(trainingSamples, SimilarMinThreshold, SimilarMaxThreshold);
         result.Similar = similar;
 
-        // 4. Extract cross-class conflicts from exact duplicates
+        // Extract cross-class conflicts from exact duplicates
         result.CrossClassConflicts = exactDuplicates
             .Where(g => g.HasCrossClassConflict)
             .ToList();
@@ -97,13 +93,14 @@ public class TrainingDataDeduplicationService(
     }
 
     /// <summary>
-    /// Find exact duplicate groups based on message text
-    /// Groups samples with identical text and selects recommended sample to keep
+    /// Find exact duplicate groups using content hash when available, falling back to text comparison
+    /// Groups samples with identical content and selects recommended sample to keep
     /// </summary>
     private List<DuplicateGroup> FindExactDuplicates(List<TrainingSampleDto> samples)
     {
+        // Group by content hash when available (more efficient), otherwise by normalized text
         var groups = samples
-            .GroupBy(s => s.MessageText.Trim().ToLowerInvariant())
+            .GroupBy(s => s.ContentHash ?? s.MessageText.Trim().ToLowerInvariant())
             .Where(g => g.Count() > 1) // Only groups with 2+ samples
             .Select(g => new DuplicateGroup
             {

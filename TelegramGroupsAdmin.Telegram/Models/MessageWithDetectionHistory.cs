@@ -1,3 +1,6 @@
+using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.Telegram.Models;
+
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>

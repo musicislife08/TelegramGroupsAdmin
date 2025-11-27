@@ -267,8 +267,8 @@ public static class ServiceCollectionExtensions
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.IStopWordsRepository, TelegramGroupsAdmin.ContentDetection.Repositories.StopWordsRepository>();
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.ISpamDetectionConfigRepository, TelegramGroupsAdmin.ContentDetection.Repositories.SpamDetectionConfigRepository>();
 
-            // Analytics repository (Phase 5: Performance metrics)
-            services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
+            // Analytics repository (Phase 5: Performance metrics, from ContentDetection library)
+            services.AddScoped<TelegramGroupsAdmin.ContentDetection.Repositories.IAnalyticsRepository, TelegramGroupsAdmin.ContentDetection.Repositories.AnalyticsRepository>();
 
             // Report Actions Service (uses repositories from Telegram library)
             services.AddScoped<IReportActionsService, ReportActionsService>();

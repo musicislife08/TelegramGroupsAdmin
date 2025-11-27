@@ -24,7 +24,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     private readonly ILogger<ContentDetectionEngineV2> _logger;
     private readonly ISpamDetectionConfigRepository _configRepository;
     private readonly IFileScanningConfigRepository _fileScanningConfigRepo;
-    private readonly IEnumerable<IContentCheckV2> _spamChecksV2;
+    private readonly IEnumerable<IContentCheckV2> _contentChecksV2;
     private readonly IOpenAITranslationService _translationService;
     private readonly IUrlPreFilterService _preFilterService;
     private readonly SpamDetectionOptions _spamDetectionOptions;
@@ -36,7 +36,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         ILogger<ContentDetectionEngineV2> logger,
         ISpamDetectionConfigRepository configRepository,
         IFileScanningConfigRepository fileScanningConfigRepo,
-        IEnumerable<IContentCheckV2> spamChecksV2,
+        IEnumerable<IContentCheckV2> contentChecksV2,
         IOpenAITranslationService translationService,
         IUrlPreFilterService preFilterService,
         IOptions<SpamDetectionOptions> spamDetectionOptions)
@@ -44,7 +44,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         _logger = logger;
         _configRepository = configRepository;
         _fileScanningConfigRepo = fileScanningConfigRepo;
-        _spamChecksV2 = spamChecksV2;
+        _contentChecksV2 = contentChecksV2;
         _translationService = translationService;
         _preFilterService = preFilterService;
         _spamDetectionOptions = spamDetectionOptions.Value;
@@ -138,7 +138,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         if (shouldRunOpenAI)
         {
             // OpenAI veto using V2 check with proper scoring
-            var openAICheckV2 = _spamChecksV2.FirstOrDefault(check => check.CheckName == CheckName.OpenAI);
+            var openAICheckV2 = _contentChecksV2.FirstOrDefault(check => check.CheckName == CheckName.OpenAI);
             if (openAICheckV2 != null)
             {
                 // Note: API key is injected via ApiKeyDelegatingHandler on the named "OpenAI" HttpClient
@@ -222,7 +222,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         var totalScore = 0.0;
 
         // Run all V2 checks (they return scores, not votes)
-        foreach (var check in _spamChecksV2)
+        foreach (var check in _contentChecksV2)
         {
             if (!ShouldRunCheckV2(check, processedRequest, config))
                 continue;

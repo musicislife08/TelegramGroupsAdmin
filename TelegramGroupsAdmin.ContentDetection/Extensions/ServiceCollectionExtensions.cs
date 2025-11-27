@@ -37,6 +37,9 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ISpamDetectionConfigRepository, SpamDetectionConfigRepository>();
             services.AddScoped<IContentCheckConfigRepository, ContentCheckConfigRepository>(); // Phase 4.14: Critical checks
 
+            // Register detection results repository
+            services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>();
+
             // Register URL filtering repositories (Phase 4.13)
             services.AddScoped<IBlocklistSubscriptionsRepository, BlocklistSubscriptionsRepository>();
             services.AddScoped<IDomainFiltersRepository, DomainFiltersRepository>();
@@ -51,6 +54,18 @@ public static class ServiceCollectionExtensions
 
             // Register video training samples repository (ML-6: Layer 2 hash similarity)
             services.AddScoped<IVideoTrainingSamplesRepository, VideoTrainingSamplesRepository>();
+
+            // Register prompt version repository (Phase 4.X: AI-powered prompt builder)
+            services.AddScoped<IPromptVersionRepository, PromptVersionRepository>();
+
+            // Register threshold recommendations repository (ML.NET threshold optimization)
+            services.AddScoped<IThresholdRecommendationsRepository, ThresholdRecommendationsRepository>();
+
+            // Register reports repository
+            services.AddScoped<IReportsRepository, ReportsRepository>();
+
+            // Register impersonation alerts repository (Phase 4.10: Anti-Impersonation Detection)
+            services.AddScoped<IImpersonationAlertsRepository, ImpersonationAlertsRepository>();
 
             // Register URL filtering services (Phase 4.13)
             services.AddScoped<IBlocklistSyncService, BlocklistSyncService>();
