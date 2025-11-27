@@ -278,7 +278,7 @@ public class CriticalMigrationTests
             await context.SaveChangesAsync();
         }
 
-        // Create messages (using raw SQL since spam_check_skip_reason column doesn't exist yet)
+        // Create messages (using raw SQL since content_check_skip_reason column doesn't exist yet)
         await helper.ExecuteSqlAsync(@"
             -- Message 1: Admin user (should become UserAdmin=2)
             INSERT INTO messages (message_id, user_id, chat_id, timestamp)
@@ -326,6 +326,8 @@ public class CriticalMigrationTests
         await helper.ApplyNextMigrationAsync("20251026043301_AddSpamCheckSkipReasonToMessages");
 
         // Assert - Verify backfill logic correctly classified each message
+        // NOTE: At this point in migration history, column is still named spam_check_skip_reason
+        // (it gets renamed to content_check_skip_reason in a later migration)
 
         // Message 1: Admin only → spam_check_skip_reason = 2 (UserAdmin)
         var msg1Reason = await helper.ExecuteScalarAsync<int>(

@@ -1,6 +1,6 @@
 @using TelegramGroupsAdmin.ContentDetection.Configuration
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@inject ISpamDetectionConfigRepository ConfigRepository
+@inject IContentDetectionConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
 
 <MudDialog>
@@ -69,7 +69,7 @@
                 return;
             }
 
-            var config = getConfigMethod.Invoke(componentInstance, null) as SpamDetectionConfig;
+            var config = getConfigMethod.Invoke(componentInstance, null) as ContentDetectionConfig;
 
             if (config == null)
             {

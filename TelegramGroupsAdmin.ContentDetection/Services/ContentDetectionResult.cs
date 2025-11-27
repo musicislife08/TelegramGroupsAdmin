@@ -46,7 +46,7 @@ public record ContentDetectionResult
     /// <summary>
     /// Recommended action based on confidence thresholds
     /// </summary>
-    public SpamAction RecommendedAction { get; init; }
+    public DetectionAction RecommendedAction { get; init; }
 
     /// <summary>
     /// Whether the message should be submitted to OpenAI for veto

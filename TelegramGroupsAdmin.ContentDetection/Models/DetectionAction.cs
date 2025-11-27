@@ -1,9 +1,9 @@
 namespace TelegramGroupsAdmin.ContentDetection.Models;
 
 /// <summary>
-/// Recommended moderation actions based on spam detection confidence
+/// Recommended moderation actions based on content detection confidence
 /// </summary>
-public enum SpamAction
+public enum DetectionAction
 {
     /// <summary>Allow the message to remain (low confidence spam)</summary>
     Allow = 0,

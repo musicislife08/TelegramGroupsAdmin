@@ -262,7 +262,7 @@ public class ConfigService(
         switch (configType)
         {
             case ConfigType.SpamDetection:
-                record.SpamDetectionConfig = json;
+                record.ContentDetectionConfig = json;
                 break;
             case ConfigType.Welcome:
                 record.WelcomeConfig = json;
@@ -288,7 +288,7 @@ public class ConfigService(
     {
         return configType switch
         {
-            ConfigType.SpamDetection => record.SpamDetectionConfig,
+            ConfigType.SpamDetection => record.ContentDetectionConfig,
             ConfigType.Welcome => record.WelcomeConfig,
             ConfigType.Log => record.LogConfig,
             ConfigType.Moderation => record.ModerationConfig,
@@ -300,7 +300,7 @@ public class ConfigService(
 
     private static bool IsRecordEmpty(ConfigRecordDto record)
     {
-        return string.IsNullOrEmpty(record.SpamDetectionConfig)
+        return string.IsNullOrEmpty(record.ContentDetectionConfig)
             && string.IsNullOrEmpty(record.WelcomeConfig)
             && string.IsNullOrEmpty(record.LogConfig)
             && string.IsNullOrEmpty(record.ModerationConfig)

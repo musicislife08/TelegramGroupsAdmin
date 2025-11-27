@@ -22,24 +22,24 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 public class ContentDetectionEngineV2 : IContentDetectionEngine
 {
     private readonly ILogger<ContentDetectionEngineV2> _logger;
-    private readonly ISpamDetectionConfigRepository _configRepository;
+    private readonly IContentDetectionConfigRepository _configRepository;
     private readonly IFileScanningConfigRepository _fileScanningConfigRepo;
     private readonly IEnumerable<IContentCheckV2> _contentChecksV2;
     private readonly IOpenAITranslationService _translationService;
     private readonly IUrlPreFilterService _preFilterService;
-    private readonly SpamDetectionOptions _spamDetectionOptions;
+    private readonly ContentDetectionOptions _spamDetectionOptions;
 
-    // SpamAssassin-style thresholds defined in SpamDetectionConstants
+    // SpamAssassin-style thresholds defined in ContentDetectionConstants
     // ≥5.0 points = spam, 3.0-5.0 = review queue, <3.0 = allow
 
     public ContentDetectionEngineV2(
         ILogger<ContentDetectionEngineV2> logger,
-        ISpamDetectionConfigRepository configRepository,
+        IContentDetectionConfigRepository configRepository,
         IFileScanningConfigRepository fileScanningConfigRepo,
         IEnumerable<IContentCheckV2> contentChecksV2,
         IOpenAITranslationService translationService,
         IUrlPreFilterService preFilterService,
-        IOptions<SpamDetectionOptions> spamDetectionOptions)
+        IOptions<ContentDetectionOptions> spamDetectionOptions)
     {
         _logger = logger;
         _configRepository = configRepository;
@@ -50,7 +50,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         _spamDetectionOptions = spamDetectionOptions.Value;
     }
 
-    private async Task<SpamDetectionConfig> GetConfigAsync(ContentCheckRequest request, CancellationToken cancellationToken)
+    private async Task<ContentDetectionConfig> GetConfigAsync(ContentCheckRequest request, CancellationToken cancellationToken)
     {
         try
         {
@@ -59,7 +59,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to load spam detection config, using default");
-            return new SpamDetectionConfig();
+            return new ContentDetectionConfig();
         }
     }
 
@@ -95,7 +95,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                     AvgConfidence = 100,
                     SpamFlags = 1,
                     PrimaryReason = hardBlock.Reason ?? "Hard block policy violation",
-                    RecommendedAction = SpamAction.AutoBan,
+                    RecommendedAction = DetectionAction.AutoBan,
                     ShouldVeto = false,
                     CheckResults =
                     [
@@ -198,7 +198,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                     AvgConfidence = (nonOpenAIResult.AvgConfidence + vetoCheckResult.Confidence) / 2,
                     SpamFlags = nonOpenAIResult.SpamFlags + 1,
                     PrimaryReason = $"OpenAI confirmed spam: {vetoResultV2.Details} (total score: {newTotalScore:F1})",
-                    RecommendedAction = newTotalScore >= 5.0 ? SpamAction.AutoBan : SpamAction.ReviewQueue,
+                    RecommendedAction = newTotalScore >= 5.0 ? DetectionAction.AutoBan : DetectionAction.ReviewQueue,
                     ShouldVeto = false
                 };
 
@@ -250,15 +250,15 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         var checkResultsV1 = ConvertV2ResponsesToV1(checkResponsesV2, totalScore);
 
         // Determine action based on total score (SpamAssassin-style thresholds)
-        var isSpam = totalScore >= SpamDetectionConstants.ReviewThreshold; // ≥3.0 is spam (may need review)
+        var isSpam = totalScore >= ContentDetectionConstants.ReviewThreshold; // ≥3.0 is spam (may need review)
         var recommendedAction = DetermineActionFromScore(totalScore);
 
         // Veto mode: Run OpenAI to confirm ANY spam detection (even low confidence)
         // This reduces false positives by having AI double-check all spam signals
         var shouldVeto = totalScore > 0 && config.OpenAI.VetoMode;
 
-        var primaryReason = totalScore >= SpamDetectionConstants.ReviewThreshold
-            ? $"Additive score: {totalScore:F1} points (threshold: {SpamDetectionConstants.SpamThreshold:F1})"
+        var primaryReason = totalScore >= ContentDetectionConstants.ReviewThreshold
+            ? $"Additive score: {totalScore:F1} points (threshold: {ContentDetectionConstants.SpamThreshold:F1})"
             : "No spam detected";
 
         // Map to V1 result format for backward compatibility
@@ -281,7 +281,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         return result;
     }
 
-    private bool ShouldRunCheckV2(IContentCheckV2 check, ContentCheckRequest request, SpamDetectionConfig config)
+    private bool ShouldRunCheckV2(IContentCheckV2 check, ContentCheckRequest request, ContentDetectionConfig config)
     {
         var enabled = check.CheckName switch
         {
@@ -307,7 +307,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     private ContentCheckRequestBase BuildRequestForCheckV2(
         IContentCheckV2 check,
         ContentCheckRequest originalRequest,
-        SpamDetectionConfig config,
+        ContentDetectionConfig config,
         CancellationToken cancellationToken)
     {
         // Reuse V1 request building logic - request types are shared between V1/V2
@@ -434,7 +434,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
 
     private ContentCheckRequestBase BuildOpenAIRequest(
         ContentCheckRequest originalRequest,
-        SpamDetectionConfig config,
+        ContentDetectionConfig config,
         OpenAIConfigDb? openAIConfig,
         CancellationToken cancellationToken)
     {
@@ -511,15 +511,15 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         }).ToList();
     }
 
-    private SpamAction DetermineActionFromScore(double totalScore)
+    private DetectionAction DetermineActionFromScore(double totalScore)
     {
-        if (totalScore >= SpamDetectionConstants.SpamThreshold)
-            return SpamAction.AutoBan; // ≥5.0 points
+        if (totalScore >= ContentDetectionConstants.SpamThreshold)
+            return DetectionAction.AutoBan; // ≥5.0 points
 
-        if (totalScore >= SpamDetectionConstants.ReviewThreshold)
-            return SpamAction.ReviewQueue; // 3.0-5.0 points
+        if (totalScore >= ContentDetectionConstants.ReviewThreshold)
+            return DetectionAction.ReviewQueue; // 3.0-5.0 points
 
-        return SpamAction.Allow; // <3.0 points
+        return DetectionAction.Allow; // <3.0 points
     }
 
     private ContentDetectionResult CreateVetoedResult(List<ContentCheckResponse> checkResults, ContentCheckResponse vetoResult)
@@ -533,7 +533,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             NetConfidence = 0,
             CheckResults = checkResults,
             PrimaryReason = vetoResult.Details,
-            RecommendedAction = SpamAction.Allow,
+            RecommendedAction = DetectionAction.Allow,
             ShouldVeto = false
         };
     }
@@ -549,14 +549,14 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             NetConfidence = 0,
             CheckResults = checkResults,
             PrimaryReason = reviewResult.Details,
-            RecommendedAction = SpamAction.ReviewQueue,
+            RecommendedAction = DetectionAction.ReviewQueue,
             ShouldVeto = false
         };
     }
 
     private async Task<ContentCheckRequest> PreprocessMessageAsync(
         ContentCheckRequest request,
-        SpamDetectionConfig config,
+        ContentDetectionConfig config,
         CancellationToken cancellationToken)
     {
         // Translation handled upstream in MessageProcessingService

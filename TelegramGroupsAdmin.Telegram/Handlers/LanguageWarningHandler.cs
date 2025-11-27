@@ -45,7 +45,7 @@ public class LanguageWarningHandler
                 return;
 
             // Get configuration
-            var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.ISpamDetectionConfigRepository>();
+            var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.IContentDetectionConfigRepository>();
             var spamConfig = await spamConfigRepo.GetGlobalConfigAsync(cancellationToken);
 
             // Check if language warnings are enabled

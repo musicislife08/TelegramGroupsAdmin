@@ -1,6 +1,6 @@
 @using TelegramGroupsAdmin.ContentDetection.Configuration
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@inject ISpamDetectionConfigRepository ConfigRepository
+@inject IContentDetectionConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
 
 <MudPaper Class="pa-4" Elevation="1">
@@ -77,8 +77,8 @@
     [Parameter]
     public long? ChatId { get; set; }
 
-    private SpamDetectionConfig _config = new();
-    private SpamDetectionConfig _globalConfig = new();
+    private ContentDetectionConfig _config = new();
+    private ContentDetectionConfig _globalConfig = new();
     private bool IsGlobalView => ChatId is null or 0;
 
     protected override async Task OnInitializedAsync()
@@ -102,18 +102,18 @@
             {
                 // Load chat-specific config (which may have UseGlobal flags set)
                 var chatConfig = await ConfigRepository.GetByChatIdAsync(ChatId!.Value);
-                _config = chatConfig ?? new SpamDetectionConfig();
+                _config = chatConfig ?? new ContentDetectionConfig();
             }
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
-            _config = new SpamDetectionConfig();
-            _globalConfig = new SpamDetectionConfig();
+            _config = new ContentDetectionConfig();
+            _globalConfig = new ContentDetectionConfig();
         }
     }
 
-    public SpamDetectionConfig GetConfig()
+    public ContentDetectionConfig GetConfig()
     {
         // Ensure global configs always have UseGlobal=true
         if (IsGlobalView)

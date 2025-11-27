@@ -1,9 +1,9 @@
 namespace TelegramGroupsAdmin.ContentDetection.Configuration;
 
 /// <summary>
-/// Configuration for spam detection, based on tg-spam's configuration structure
+/// Configuration for content detection, based on tg-spam's configuration structure
 /// </summary>
-public class SpamDetectionConfig
+public class ContentDetectionConfig
 {
     /// <summary>
     /// Enable auto-whitelisting after users prove themselves with non-spam messages.
@@ -119,12 +119,12 @@ public class SpamDetectionConfig
     public SeoScrapingConfig SeoScraping { get; set; } = new();
 
     /// <summary>
-    /// Image spam detection configuration
+    /// Image content detection configuration
     /// </summary>
-    public ImageSpamConfig ImageSpam { get; set; } = new();
+    public ImageContentConfig ImageSpam { get; set; } = new();
 
     /// <summary>
-    /// Video spam detection configuration (ML-6)
+    /// Video content detection configuration (ML-6)
     /// </summary>
-    public VideoSpamConfig VideoSpam { get; set; } = new();
+    public VideoContentConfig VideoSpam { get; set; } = new();
 }

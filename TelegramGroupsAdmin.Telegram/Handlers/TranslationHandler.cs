@@ -15,13 +15,13 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class TranslationHandler
 {
-    private readonly ISpamDetectionConfigRepository _configRepository;
+    private readonly IContentDetectionConfigRepository _configRepository;
     private readonly IOpenAITranslationService _translationService;
     private readonly ILanguageDetectionService _languageDetectionService;
     private readonly ILogger<TranslationHandler> _logger;
 
     public TranslationHandler(
-        ISpamDetectionConfigRepository configRepository,
+        IContentDetectionConfigRepository configRepository,
         IOpenAITranslationService translationService,
         ILanguageDetectionService languageDetectionService,
         ILogger<TranslationHandler> logger)

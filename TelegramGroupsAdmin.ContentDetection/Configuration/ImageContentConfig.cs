@@ -1,9 +1,9 @@
 namespace TelegramGroupsAdmin.ContentDetection.Configuration;
 
 /// <summary>
-/// Video spam detection configuration (ML-6)
+/// Image content detection configuration
 /// </summary>
-public class VideoSpamConfig
+public class ImageContentConfig
 {
     /// <summary>
     /// Whether to use global configuration instead of chat-specific overrides
@@ -12,17 +12,17 @@ public class VideoSpamConfig
     public bool UseGlobal { get; set; } = true;
 
     /// <summary>
-    /// Whether video spam detection is enabled
+    /// Whether image spam detection is enabled
     /// </summary>
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Whether to use OpenAI Vision for video frame analysis (ML-6 Layer 3)
+    /// Whether to use OpenAI Vision for image analysis
     /// </summary>
     public bool UseOpenAIVision { get; set; } = true;
 
     /// <summary>
-    /// Whether to use OCR text extraction from frames before Vision (ML-6 Layer 2)
+    /// Whether to use OCR text extraction before Vision (ML-5 Layer 1)
     /// </summary>
     public bool UseOCR { get; set; } = true;
 
@@ -40,20 +40,20 @@ public class VideoSpamConfig
     public int MinOcrTextLength { get; set; } = 10;
 
     /// <summary>
-    /// Whether to use keyframe hash similarity matching against training samples (ML-6 Layer 1)
+    /// Whether to use perceptual hash similarity matching against training samples (ML-5 Layer 2)
     /// </summary>
     public bool UseHashSimilarity { get; set; } = true;
 
     /// <summary>
-    /// Minimum keyframe hash similarity score (0.0-1.0) to match against spam training samples
-    /// Default: 0.85 (85% similar = likely the same spam video with minor modifications)
+    /// Minimum hash similarity score (0.0-1.0) to match against spam training samples
+    /// Default: 0.85 (85% similar = likely the same spam image with minor modifications)
     /// Higher values = stricter matching (fewer false positives, more false negatives)
     /// </summary>
     public double HashSimilarityThreshold { get; set; } = 0.85;
 
     /// <summary>
-    /// Confidence level to assign when keyframe matches a training sample (0-100)
-    /// Default: 95 (very confident if we've seen this exact spam video before)
+    /// Confidence level to assign when hash matches a training sample (0-100)
+    /// Default: 95 (very confident if we've seen this exact spam image before)
     /// </summary>
     public int HashMatchConfidence { get; set; } = 95;
 
@@ -65,7 +65,7 @@ public class VideoSpamConfig
     public int MaxTrainingSamplesToCompare { get; set; } = 1000;
 
     /// <summary>
-    /// Timeout for video analysis requests
+    /// Timeout for image analysis requests
     /// </summary>
-    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(60);
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
 }

@@ -1,9 +1,9 @@
 namespace TelegramGroupsAdmin.ContentDetection.Constants;
 
 /// <summary>
-/// Shared constants for spam detection scoring system (SpamAssassin-inspired)
+/// Shared constants for content detection scoring system (SpamAssassin-inspired)
 /// </summary>
-public static class SpamDetectionConstants
+public static class ContentDetectionConstants
 {
     /// <summary>
     /// Threshold for automatic spam action (≥5.0 points = auto-ban)

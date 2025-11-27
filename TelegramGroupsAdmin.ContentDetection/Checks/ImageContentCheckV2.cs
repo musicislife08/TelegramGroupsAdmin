@@ -21,19 +21,19 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Layer 3: OpenAI Vision fallback (slow, expensive, comprehensive)
 /// Scoring: Maps confidence (0-100%) to points (0.0-5.0)
 /// </summary>
-public class ImageSpamCheckV2(
-    ILogger<ImageSpamCheckV2> logger,
+public class ImageContentCheckV2(
+    ILogger<ImageContentCheckV2> logger,
     IHttpClientFactory httpClientFactory,
     IImageTextExtractionService imageTextExtractionService,
     IServiceProvider serviceProvider,
-    ISpamDetectionConfigRepository configRepository,
+    IContentDetectionConfigRepository configRepository,
     IPhotoHashService photoHashService,
     IImageTrainingSamplesRepository imageTrainingSamplesRepository) : IContentCheckV2
 {
     private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
     private readonly IImageTextExtractionService _imageTextExtractionService = imageTextExtractionService;
     private readonly IServiceProvider _serviceProvider = serviceProvider; // Lazy resolve to break circular dependency
-    private readonly ISpamDetectionConfigRepository _configRepository = configRepository;
+    private readonly IContentDetectionConfigRepository _configRepository = configRepository;
     private readonly IPhotoHashService _photoHashService = photoHashService;
     private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
 

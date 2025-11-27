@@ -15,8 +15,8 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Abstain when similarity <0.3 or no samples
 /// </summary>
 #pragma warning disable CS9113 // Parameter is unread (will be used when full implementation added)
-public class SimilaritySpamCheckV2(
-    ILogger<SimilaritySpamCheckV2> logger,
+public class SimilarityContentCheckV2(
+    ILogger<SimilarityContentCheckV2> logger,
     IDbContextFactory<AppDbContext> dbContextFactory,
     ITokenizerService tokenizerService) : IContentCheckV2
 #pragma warning restore CS9113

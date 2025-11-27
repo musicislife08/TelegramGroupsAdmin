@@ -15,8 +15,8 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Key fix: Returns Score=0 (abstain) when 0 matches instead of "Clean 20%" vote
 /// Scoring: 0.5-2.0 points based on match count and severity
 /// </summary>
-public class StopWordsSpamCheckV2(
-    ILogger<StopWordsSpamCheckV2> logger,
+public class StopWordsContentCheckV2(
+    ILogger<StopWordsContentCheckV2> logger,
     IDbContextFactory<AppDbContext> dbContextFactory,
     ITokenizerService tokenizerService) : IContentCheckV2
 {

@@ -7,8 +7,8 @@ namespace TelegramGroupsAdmin.Configuration;
 public enum ConfigType
 {
     /// <summary>
-    /// Spam detection configuration (spam_detection_config column)
-    /// Contains: SpamDetectionConfig model
+    /// Content detection configuration (spam_detection_config column)
+    /// Contains: ContentDetectionConfig model
     /// </summary>
     SpamDetection,
 

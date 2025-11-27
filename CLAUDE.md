@@ -157,8 +157,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - **TelegramGroupsAdmin.Data**: EF Core DbContext, migrations, Data Protection (DB-internal models)
 - **TelegramGroupsAdmin.Telegram**: Bot services, commands, repos, orchestrators, DM notifications, AddTelegramServices()
 - **TelegramGroupsAdmin.Telegram.Abstractions**: TelegramBotClientFactory, job payloads (breaks Telegram → Main circular dep)
-- **TelegramGroupsAdmin.SpamDetection**: 9 spam algorithms, self-contained, database-driven
-- **TelegramGroupsAdmin.ContentDetection**: URL filtering, impersonation detection, file scanning (ClamAV+VirusTotal)
+- **TelegramGroupsAdmin.ContentDetection**: 9 content detection algorithms, URL filtering, impersonation detection, file scanning (ClamAV+VirusTotal), self-contained, database-driven
 - **TelegramGroupsAdmin.Tests**: Migration tests (NUnit + Testcontainers.PostgreSQL), validates against real PostgreSQL 17
 
 ## Architecture Patterns
@@ -188,7 +187,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - Fallback: Env vars used for first-time setup only
 - UI: Settings pages allow live editing without restart
 
-**Background Services**: TelegramAdminBotService (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), SpamActionService (training QC, cross-chat bans), CleanupBackgroundService (retention)
+**Background Services**: TelegramAdminBotService (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), DetectionActionService (training QC, cross-chat bans), CleanupBackgroundService (retention)
 
 ## Configuration
 
@@ -243,7 +242,7 @@ When `SEQ_URL` is configured, the application automatically enables:
 - Bot not caching: Check TELEGRAM__BOTTOKEN, bot in chat, privacy mode off
 - Image spam failing: Check OPENAI__APIKEY, /data mounted
 - DB growing: Check retention (720h default), cleanup running
-- Rate limits: Check logs for VirusTotalService/OpenAIVisionSpamDetectionService warnings
+- Rate limits: Check logs for VirusTotalService warnings
 - Testing: Always use `--migrate-only` flag, never run app in normal mode (only one instance allowed)
 
 ### Quartz.NET Background Jobs

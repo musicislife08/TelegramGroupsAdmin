@@ -88,7 +88,7 @@ public class MessageRecordDto
     /// 1 = UserTrusted (user is trusted)
     /// 2 = UserAdmin (user is chat admin)
     /// </summary>
-    [Column("spam_check_skip_reason")]
+    [Column("content_check_skip_reason")]
     public ContentCheckSkipReason ContentCheckSkipReason { get; set; } = ContentCheckSkipReason.NotSkipped;
 
     // Navigation properties

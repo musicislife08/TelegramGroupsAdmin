@@ -130,7 +130,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<CommandRouter>();
 
             // Background services (refactored into smaller services)
-            services.AddSingleton<SpamActionService>();
+            services.AddSingleton<DetectionActionService>();
             services.AddSingleton<ChatManagementService>();
             services.AddSingleton<MessageProcessingService>();
             services.AddSingleton<TelegramAdminBotService>();

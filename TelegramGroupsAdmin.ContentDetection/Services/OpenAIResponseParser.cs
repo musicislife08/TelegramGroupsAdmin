@@ -51,7 +51,7 @@ public static class OpenAIResponseParser
                 _ => CheckResultType.Clean // Default fail-open for unknown results
             };
 
-            var confidence = (int)Math.Round((jsonResponse.Confidence ?? SpamDetectionConstants.DefaultOpenAIConfidence) * 100);
+            var confidence = (int)Math.Round((jsonResponse.Confidence ?? ContentDetectionConstants.DefaultOpenAIConfidence) * 100);
 
             // Build details message based on result
             var details = result switch

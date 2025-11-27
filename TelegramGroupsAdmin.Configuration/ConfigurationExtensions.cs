@@ -16,7 +16,7 @@ public static class ConfigurationExtensions
         public IServiceCollection AddApplicationConfiguration(IConfiguration configuration)
         {
             services.Configure<AppOptions>(configuration.GetSection("App"));
-            services.Configure<SpamDetectionOptions>(configuration.GetSection("SpamDetection"));
+            services.Configure<ContentDetectionOptions>(configuration.GetSection("SpamDetection"));
 
             // NOTE: OpenAIOptions and SendGridOptions removed - now using database config
             // See OpenAIConfig and SendGridConfig in database (configs table)

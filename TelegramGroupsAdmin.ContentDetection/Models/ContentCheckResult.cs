@@ -23,7 +23,7 @@ public record ContentCheckResult
     /// <summary>
     /// Action to take based on confidence thresholds
     /// </summary>
-    public SpamAction RecommendedAction { get; init; } = SpamAction.Allow;
+    public DetectionAction RecommendedAction { get; init; } = DetectionAction.Allow;
 
     /// <summary>
     /// Summary of the decision for logging/display

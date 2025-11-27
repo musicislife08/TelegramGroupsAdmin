@@ -21,13 +21,13 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// Layer 2: OCR on frames + text spam checks (fast, cheap, good for text-heavy videos)
 /// Layer 3: OpenAI Vision on frames fallback (slow, expensive, comprehensive)
 /// </summary>
-public class VideoSpamCheckV2(
-    ILogger<VideoSpamCheckV2> logger,
+public class VideoContentCheckV2(
+    ILogger<VideoContentCheckV2> logger,
     IHttpClientFactory httpClientFactory,
     IVideoFrameExtractionService frameExtractionService,
     IImageTextExtractionService imageTextExtractionService,
     IServiceProvider serviceProvider,
-    ISpamDetectionConfigRepository configRepository,
+    IContentDetectionConfigRepository configRepository,
     IPhotoHashService photoHashService,
     IVideoTrainingSamplesRepository videoTrainingSamplesRepository) : IContentCheckV2
 {
@@ -176,7 +176,7 @@ public class VideoSpamCheckV2(
     /// </summary>
     private async Task<ContentCheckResponseV2?> CheckKeyframeHashSimilarityAsync(
         List<ExtractedFrame> frames,
-        VideoSpamConfig config,
+        VideoContentConfig config,
         long startTimestamp,
         CancellationToken cancellationToken)
     {
@@ -292,7 +292,7 @@ public class VideoSpamCheckV2(
     /// </summary>
     private async Task<ContentCheckResponseV2?> CheckFrameOCRAsync(
         List<ExtractedFrame> frames,
-        VideoSpamConfig config,
+        VideoContentConfig config,
         VideoCheckRequest req,
         long startTimestamp,
         CancellationToken cancellationToken)
