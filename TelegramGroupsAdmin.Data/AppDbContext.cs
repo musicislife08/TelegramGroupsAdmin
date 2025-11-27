@@ -733,5 +733,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Configure video_training_samples table
         modelBuilder.Entity<VideoTrainingSampleDto>()
             .ToTable("video_training_samples");
+
+        // Configure RawAlgorithmPerformanceStatsDto as keyless entity for SqlQuery support (Phase 5)
+        // This is a query-only DTO for algorithm performance analytics
+        // Not mapped to any table/view - used only for raw SQL query results
+        modelBuilder.Entity<RawAlgorithmPerformanceStatsDto>()
+            .HasNoKey()
+            .ToView(null);
     }
 }

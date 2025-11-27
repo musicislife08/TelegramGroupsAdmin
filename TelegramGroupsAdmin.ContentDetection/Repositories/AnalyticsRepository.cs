@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
+using TelegramGroupsAdmin.ContentDetection.Repositories.Mappings;
+using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 
@@ -511,71 +513,53 @@ public class AnalyticsRepository : IAnalyticsRepository
             // Uses CTE to extract and cast JSONB values once, then aggregates for better performance
             // GIN index on check_results_json enables efficient JSONB path queries
             // CheckName stored as integer enum value (normalized by migration 20251126022902)
-            // Execute raw SQL with integer CheckNameEnum, then map to enum names in C# for compile-time safety
+            // Phase 5: Using EF Core SqlQuery with keyless entity type for type-safe query results
             _logger.LogDebug("Fetching algorithm performance stats from {StartDate} to {EndDate}", startDate, endDate);
 
-            // Execute raw SQL and map manually (EF Core SqlQuery requires configured entity types)
-            var sql = @"
-                WITH extracted_checks AS (
+            // Execute raw SQL using SqlQuery (type-safe with keyless entity configuration)
+            var rawResults = await context.Database
+                .SqlQuery<DataModels.RawAlgorithmPerformanceStatsDto>($@"
+                    WITH extracted_checks AS (
+                        SELECT
+                            (check_elem->>'CheckName')::int AS check_name_enum,
+                            (check_elem->>'ProcessingTimeMs')::float AS processing_time_ms
+                        FROM detection_results dr,
+                             jsonb_array_elements(dr.check_results_json->'Checks') AS check_elem
+                        WHERE dr.detected_at >= {startDate.UtcDateTime}
+                          AND dr.detected_at <= {endDate.UtcDateTime}
+                          AND (check_elem->>'ProcessingTimeMs')::float > 0
+                    )
                     SELECT
-                        (check_elem->>'CheckName')::int AS check_name_enum,
-                        (check_elem->>'ProcessingTimeMs')::float AS processing_time_ms
-                    FROM detection_results dr,
-                         jsonb_array_elements(dr.check_results_json->'Checks') AS check_elem
-                    WHERE dr.detected_at >= @p0
-                      AND dr.detected_at <= @p1
-                      AND (check_elem->>'ProcessingTimeMs')::float > 0
-                )
-                SELECT
-                    check_name_enum AS CheckNameEnum,
-                    COUNT(*)::int AS TotalExecutions,
-                    AVG(processing_time_ms) AS AverageMs,
-                    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY processing_time_ms) AS P95Ms,
-                    MAX(processing_time_ms) AS MaxMs,
-                    MIN(processing_time_ms) AS MinMs,
-                    (AVG(processing_time_ms) * COUNT(*)) AS TotalTimeContribution
-                FROM extracted_checks
-                GROUP BY check_name_enum
-                ORDER BY TotalTimeContribution DESC";
-
-            var connection = context.Database.GetDbConnection();
-            await using var command = connection.CreateCommand();
-            command.CommandText = sql;
-            command.Parameters.Add(new Npgsql.NpgsqlParameter("p0", startDate.UtcDateTime));
-            command.Parameters.Add(new Npgsql.NpgsqlParameter("p1", endDate.UtcDateTime));
-
-            if (connection.State != System.Data.ConnectionState.Open)
-                await connection.OpenAsync(cancellationToken);
-
-            var rawResults = new List<RawAlgorithmPerformanceStats>();
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                rawResults.Add(new RawAlgorithmPerformanceStats
-                {
-                    CheckNameEnum = reader.GetInt32(0),
-                    TotalExecutions = reader.GetInt32(1),
-                    AverageMs = reader.GetDouble(2),
-                    P95Ms = reader.GetDouble(3),
-                    MaxMs = reader.GetDouble(4),
-                    MinMs = reader.GetDouble(5),
-                    TotalTimeContribution = reader.GetDouble(6)
-                });
-            }
+                        check_name_enum AS CheckNameEnum,
+                        COUNT(*)::int AS TotalExecutions,
+                        AVG(processing_time_ms) AS AverageMs,
+                        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY processing_time_ms) AS P95Ms,
+                        MAX(processing_time_ms) AS MaxMs,
+                        MIN(processing_time_ms) AS MinMs,
+                        (AVG(processing_time_ms) * COUNT(*)) AS TotalTimeContribution
+                    FROM extracted_checks
+                    GROUP BY check_name_enum
+                    ORDER BY TotalTimeContribution DESC
+                ")
+                .ToListAsync(cancellationToken);
 
             _logger.LogDebug("Retrieved {Count} raw algorithm performance results", rawResults.Count);
 
-            // Map integer enum values to string names in C# (compile-time safe!)
-            var results = rawResults.Select(r => new AlgorithmPerformanceStats
+            // Map DTO to UI model using standard repository pattern (Phase 5)
+            // Convert integer enum values to string names in C# for compile-time safety
+            var results = rawResults.Select(dto =>
             {
-                CheckName = ((ContentDetection.Constants.CheckName)r.CheckNameEnum).ToString(),
-                TotalExecutions = r.TotalExecutions,
-                AverageMs = r.AverageMs,
-                P95Ms = r.P95Ms,
-                MaxMs = r.MaxMs,
-                MinMs = r.MinMs,
-                TotalTimeContribution = r.TotalTimeContribution
+                var raw = dto.ToModel();
+                return new AlgorithmPerformanceStats
+                {
+                    CheckName = ((ContentDetection.Constants.CheckName)raw.CheckNameEnum).ToString(),
+                    TotalExecutions = raw.TotalExecutions,
+                    AverageMs = raw.AverageMs,
+                    P95Ms = raw.P95Ms,
+                    MaxMs = raw.MaxMs,
+                    MinMs = raw.MinMs,
+                    TotalTimeContribution = raw.TotalTimeContribution
+                };
             }).ToList();
 
             return results;
