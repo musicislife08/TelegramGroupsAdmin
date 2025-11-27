@@ -404,7 +404,7 @@ public class BackupServiceTests
         ");
 
         await _testHelper.ExecuteSqlAsync($@"
-            INSERT INTO messages (user_id, chat_id, timestamp, message_text, spam_check_skip_reason)
+            INSERT INTO messages (user_id, chat_id, timestamp, message_text, content_check_skip_reason)
             VALUES (888888, {GoldenDataset.ManagedChats.MainChat_Id}, NOW(), 'sequence test', 0)
         ");
 

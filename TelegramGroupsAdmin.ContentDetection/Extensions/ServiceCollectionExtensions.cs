@@ -34,7 +34,7 @@ public static class ServiceCollectionExtensions
                                                                                                 // NOTE: IMessageHistoryService is registered by the main app (TelegramAdminBotService implements it)
 
             // Register repositories (needed by engine for config)
-            services.AddScoped<ISpamDetectionConfigRepository, SpamDetectionConfigRepository>();
+            services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
             services.AddScoped<IContentCheckConfigRepository, ContentCheckConfigRepository>(); // Phase 4.14: Critical checks
 
             // Register detection results repository

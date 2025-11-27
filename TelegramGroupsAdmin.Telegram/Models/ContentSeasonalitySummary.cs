@@ -1,9 +1,9 @@
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
-/// Summary of spam activity patterns across different time scales (UX-2.1)
+/// Summary of content detection activity patterns across different time scales (UX-2.1)
 /// </summary>
-public record SpamSeasonalitySummary
+public record ContentSeasonalitySummary
 {
     /// <summary>
     /// Peak hour range(s) for spam activity (e.g., "7am-11am, 5pm-8pm" or "3am")

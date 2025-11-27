@@ -27,10 +27,10 @@ public class ConfigRecordDto
     public long ChatId { get; set; } = 0;
 
     /// <summary>
-    /// Spam detection configuration (JSONB)
+    /// Content detection configuration (JSONB)
     /// </summary>
     [Column("spam_detection_config", TypeName = "jsonb")]
-    public string? SpamDetectionConfig { get; set; }
+    public string? ContentDetectionConfig { get; set; }
 
     /// <summary>
     /// Welcome message configuration (JSONB)

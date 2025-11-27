@@ -385,8 +385,8 @@ public class OpenAIContentCheckTests
         var response = await _check.CheckAsync(request);
 
         // Assert
-        // Review is capped at SpamDetectionConstants.ReviewThreshold even though 0.9 * 5.0 = 4.5
-        Assert.That(response.Score, Is.EqualTo(SpamDetectionConstants.ReviewThreshold).Within(0.01));
+        // Review is capped at ContentDetectionConstants.ReviewThreshold even though 0.9 * 5.0 = 4.5
+        Assert.That(response.Score, Is.EqualTo(ContentDetectionConstants.ReviewThreshold).Within(0.01));
         Assert.That(response.Abstained, Is.False);
         Assert.That(response.Details, Does.Contain("Review"));
     }

@@ -27,7 +27,7 @@ public class VideoContentCheckV2(
     IVideoFrameExtractionService frameExtractionService,
     IImageTextExtractionService imageTextExtractionService,
     IServiceProvider serviceProvider,
-    ISpamDetectionConfigRepository configRepository,
+    IContentDetectionConfigRepository configRepository,
     IPhotoHashService photoHashService,
     IVideoTrainingSamplesRepository videoTrainingSamplesRepository) : IContentCheckV2
 {
@@ -176,7 +176,7 @@ public class VideoContentCheckV2(
     /// </summary>
     private async Task<ContentCheckResponseV2?> CheckKeyframeHashSimilarityAsync(
         List<ExtractedFrame> frames,
-        VideoSpamConfig config,
+        VideoContentConfig config,
         long startTimestamp,
         CancellationToken cancellationToken)
     {
@@ -292,7 +292,7 @@ public class VideoContentCheckV2(
     /// </summary>
     private async Task<ContentCheckResponseV2?> CheckFrameOCRAsync(
         List<ExtractedFrame> frames,
-        VideoSpamConfig config,
+        VideoContentConfig config,
         VideoCheckRequest req,
         long startTimestamp,
         CancellationToken cancellationToken)

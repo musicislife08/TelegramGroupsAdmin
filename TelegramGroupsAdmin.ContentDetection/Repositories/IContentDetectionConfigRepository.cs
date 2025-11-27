@@ -3,35 +3,35 @@ using TelegramGroupsAdmin.ContentDetection.Configuration;
 namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 
 /// <summary>
-/// Repository for managing spam detection configurations
+/// Repository for managing content detection configurations
 /// </summary>
-public interface ISpamDetectionConfigRepository
+public interface IContentDetectionConfigRepository
 {
     /// <summary>
     /// Get the global spam detection configuration
     /// </summary>
-    Task<SpamDetectionConfig> GetGlobalConfigAsync(CancellationToken cancellationToken = default);
+    Task<ContentDetectionConfig> GetGlobalConfigAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Update the global spam detection configuration
     /// </summary>
-    Task<bool> UpdateGlobalConfigAsync(SpamDetectionConfig config, string? updatedBy = null, CancellationToken cancellationToken = default);
+    Task<bool> UpdateGlobalConfigAsync(ContentDetectionConfig config, string? updatedBy = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get the raw chat-specific configuration (without merging with global)
     /// Returns null if no chat-specific config exists
     /// </summary>
-    Task<SpamDetectionConfig?> GetByChatIdAsync(long chatId, CancellationToken cancellationToken = default);
+    Task<ContentDetectionConfig?> GetByChatIdAsync(long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get effective configuration for a specific chat (chat-specific overrides, falls back to global defaults)
     /// </summary>
-    Task<SpamDetectionConfig> GetEffectiveConfigAsync(long chatId, CancellationToken cancellationToken = default);
+    Task<ContentDetectionConfig> GetEffectiveConfigAsync(long chatId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Update configuration for a specific chat
     /// </summary>
-    Task<bool> UpdateChatConfigAsync(long chatId, SpamDetectionConfig config, string? updatedBy = null, CancellationToken cancellationToken = default);
+    Task<bool> UpdateChatConfigAsync(long chatId, ContentDetectionConfig config, string? updatedBy = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get all configured chats

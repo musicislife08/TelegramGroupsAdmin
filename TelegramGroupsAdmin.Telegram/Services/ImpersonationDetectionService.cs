@@ -93,8 +93,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
 
         // 3. Check message count (only check first N messages per chat)
         var messageCount = await _messageHistoryRepository.GetMessageCountAsync(userId, chatId);
-        var config = await _configService.GetEffectiveAsync<SpamDetectionConfig>(ConfigType.SpamDetection, chatId)
-                     ?? new SpamDetectionConfig();
+        var config = await _configService.GetEffectiveAsync<ContentDetectionConfig>(ConfigType.SpamDetection, chatId)
+                     ?? new ContentDetectionConfig();
 
         var threshold = config.FirstMessagesCount;
         if (messageCount >= threshold)

@@ -26,14 +26,14 @@ public class ImageContentCheckV2(
     IHttpClientFactory httpClientFactory,
     IImageTextExtractionService imageTextExtractionService,
     IServiceProvider serviceProvider,
-    ISpamDetectionConfigRepository configRepository,
+    IContentDetectionConfigRepository configRepository,
     IPhotoHashService photoHashService,
     IImageTrainingSamplesRepository imageTrainingSamplesRepository) : IContentCheckV2
 {
     private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
     private readonly IImageTextExtractionService _imageTextExtractionService = imageTextExtractionService;
     private readonly IServiceProvider _serviceProvider = serviceProvider; // Lazy resolve to break circular dependency
-    private readonly ISpamDetectionConfigRepository _configRepository = configRepository;
+    private readonly IContentDetectionConfigRepository _configRepository = configRepository;
     private readonly IPhotoHashService _photoHashService = photoHashService;
     private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
 

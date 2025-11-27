@@ -1,6 +1,6 @@
 namespace TelegramGroupsAdmin.Configuration;
 
-public sealed class SpamDetectionOptions
+public sealed class ContentDetectionOptions
 {
     public int TimeoutSeconds { get; set; } = 30;
     public int ImageLookupRetryDelayMs { get; set; } = 100;

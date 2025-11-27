@@ -6,7 +6,7 @@
 @inject IBlocklistSubscriptionsRepository BlocklistRepo
 @inject IDomainFiltersRepository DomainFiltersRepo
 @inject IBlocklistSyncService BlocklistSync
-@inject ISpamDetectionConfigRepository ConfigRepository
+@inject IContentDetectionConfigRepository ConfigRepository
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthStateProvider
 @implements IDisposable
@@ -275,7 +275,7 @@
 
     // URL Blocklist feature configuration
     private UrlBlocklistConfig _urlBlocklistConfig = new();
-    private SpamDetectionConfig _globalSpamConfig = new();
+    private ContentDetectionConfig _globalSpamConfig = new();
 
     // Hard Block state
     private string _hardBlockCustomUrls = string.Empty;

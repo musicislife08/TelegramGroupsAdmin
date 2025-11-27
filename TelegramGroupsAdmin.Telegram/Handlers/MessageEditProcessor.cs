@@ -134,7 +134,7 @@ public class MessageEditProcessor
         if (savedEdit == null)
             return;
 
-        var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.ISpamDetectionConfigRepository>();
+        var spamConfigRepo = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Repositories.IContentDetectionConfigRepository>();
         var spamConfig = await spamConfigRepo.GetGlobalConfigAsync(cancellationToken);
 
         // Check if translation is enabled and message meets minimum length

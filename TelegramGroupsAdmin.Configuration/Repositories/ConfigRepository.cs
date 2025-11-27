@@ -25,7 +25,7 @@ public class ConfigRepository(AppDbContext context) : IConfigRepository
             // Update existing record - manually copy properties to avoid Id modification error
             // DO NOT use SetValues() - it tries to copy Id which is a key property
             // NOTE: ChatId is NOT copied - we queried by ChatId, so it's already the same value (immutable natural key)
-            existing.SpamDetectionConfig = config.SpamDetectionConfig;
+            existing.ContentDetectionConfig = config.ContentDetectionConfig;
             existing.WelcomeConfig = config.WelcomeConfig;
             existing.LogConfig = config.LogConfig;
             existing.ModerationConfig = config.ModerationConfig;

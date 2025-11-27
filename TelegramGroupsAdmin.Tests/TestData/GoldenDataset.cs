@@ -348,7 +348,7 @@ public static class GoldenDataset
         // 4. Seed messages (use parameters for text to handle special characters)
         await context.Database.ExecuteSqlRawAsync(
             $$"""
-            INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, media_type, spam_check_skip_reason)
+            INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, media_type, content_check_skip_reason)
             VALUES
             ({{Messages.Msg1_Id}}, {{Messages.Msg1_UserId}}, {{Messages.Msg1_ChatId}}, NOW() - INTERVAL '1 hour', {0}, NULL, {{Messages.Msg1_ContentCheckSkipReason}}),
             ({{Messages.Msg2_Id}}, {{Messages.Msg2_UserId}}, {{Messages.Msg2_ChatId}}, NOW() - INTERVAL '2 hours', {1}, NULL, {{Messages.Msg2_ContentCheckSkipReason}}),

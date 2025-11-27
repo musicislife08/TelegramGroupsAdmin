@@ -288,7 +288,7 @@ public class MessageStatsService : IMessageStatsService
         }
 
         // 2. Spam Seasonality Summary (spam only, hourly + daily + monthly)
-        UiModels.SpamSeasonalitySummary? spamSeasonality = null;
+        UiModels.ContentSeasonalitySummary? spamSeasonality = null;
         if (spamMessages.Count > 0)
         {
             // Hourly spam pattern (always available)
@@ -338,7 +338,7 @@ public class MessageStatsService : IMessageStatsService
                 monthlyPattern = DetectMonthRange(monthlySpamPattern);
             }
 
-            spamSeasonality = new UiModels.SpamSeasonalitySummary
+            spamSeasonality = new UiModels.ContentSeasonalitySummary
             {
                 HourlyPattern = hourlyPattern,
                 WeeklyPattern = weeklyPattern,

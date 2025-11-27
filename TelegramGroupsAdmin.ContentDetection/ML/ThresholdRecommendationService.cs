@@ -19,7 +19,7 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 public class ThresholdRecommendationService : IThresholdRecommendationService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
-    private readonly ISpamDetectionConfigRepository _configRepository;
+    private readonly IContentDetectionConfigRepository _configRepository;
     private readonly FeatureExtractionService _featureExtraction;
     private readonly ILogger<ThresholdRecommendationService> _logger;
 
@@ -38,7 +38,7 @@ public class ThresholdRecommendationService : IThresholdRecommendationService
 
     public ThresholdRecommendationService(
         IDbContextFactory<AppDbContext> contextFactory,
-        ISpamDetectionConfigRepository configRepository,
+        IContentDetectionConfigRepository configRepository,
         FeatureExtractionService featureExtraction,
         ILogger<ThresholdRecommendationService> logger)
     {
@@ -346,7 +346,7 @@ public class ThresholdRecommendationService : IThresholdRecommendationService
         };
     }
 
-    private static decimal? GetCurrentThreshold(SpamDetectionConfig config, string algorithmName)
+    private static decimal? GetCurrentThreshold(ContentDetectionConfig config, string algorithmName)
     {
         // Extract threshold from nested config objects
         return algorithmName switch

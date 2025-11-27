@@ -17,7 +17,7 @@ public record MessageTrendsData
 
     // New metrics (UX-2.1)
     public PeakActivitySummary? PeakActivity { get; init; }
-    public SpamSeasonalitySummary? SpamSeasonality { get; init; }
+    public ContentSeasonalitySummary? SpamSeasonality { get; init; }
     public WeekOverWeekGrowth? WeekOverWeekGrowth { get; init; }
     public List<TopActiveUser> TopActiveUsers { get; init; } = [];
     public TrustedUserBreakdown? TrustedUserBreakdown { get; init; }
