@@ -32,6 +32,13 @@ git add .
 git commit -m "feat: add new feature"
 # OR: fix:, refactor:, docs:, test:, ci:, chore:
 
+# AI AGENT NOTE: For complex multi-line commit messages, use properly escaped heredoc:
+# git commit -F- <<'EOF'
+# Multi-line message here
+# Can include quotes, apostrophes, etc.
+# EOF
+# Key: Use -F- (read from stdin) and <<'EOF' (single quotes prevent expansion)
+
 # 4. Push feature branch
 git push -u origin feature/your-feature-name
 

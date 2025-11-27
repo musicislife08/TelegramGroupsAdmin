@@ -194,7 +194,6 @@
 
     private readonly MessageFilterState _filterState = new();
     private long? _highlightMessageId; // Message to scroll to and highlight
-    private bool _firstRenderComplete; // Track if we've done the initial auto-scroll
     private long? _filterByUserId; // Track userId from query string for name lookup after load
     private const int PageSize = 50;
 
@@ -202,6 +201,8 @@
     private ElementReference _messagesContainer;
     private ElementReference _scrollSentinel;
     private IJSObjectReference? _infiniteScrollModule;
+    private bool _isAutoScrolling; // Prevent infinite scroll from triggering during auto-scroll
+    private bool _highlightMessageEnsured; // Track if we've already loaded the highlighted message
 
     protected override async Task OnInitializedAsync()
     {
@@ -255,6 +256,9 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        Logger.LogInformation("[OnAfterRenderAsync] START - firstRender={FirstRender}, loading={Loading}, highlightMessageId={HighlightId}, isAutoScrolling={IsAutoScrolling}, highlightEnsured={HighlightEnsured}",
+            firstRender, _loading, _highlightMessageId, _isAutoScrolling, _highlightMessageEnsured);
+
         // Initialize IntersectionObserver for infinite scroll
         // Import module on first render, but re-initialize observer whenever a chat is loaded with more pages
         if (firstRender)
@@ -262,6 +266,7 @@
             try
             {
                 _infiniteScrollModule = await Js.InvokeAsync<IJSObjectReference>("import", "./js/infinite-scroll.js");
+                Logger.LogInformation("[OnAfterRenderAsync] Imported infinite scroll module");
             }
             catch (Exception ex)
             {
@@ -278,7 +283,7 @@
                     _scrollSentinel,
                     DotNetObjectReference.Create(this));
                 _needsObserverInit = false;
-                Logger.LogDebug("Infinite scroll observer initialized for chat {ChatId}", _selectedChatId);
+                Logger.LogInformation("[OnAfterRenderAsync] Initialized intersection observer for chat {ChatId}", _selectedChatId);
             }
             catch (Exception ex)
             {
@@ -286,87 +291,161 @@
             }
         }
 
-        // Only run once after the first render, and only if we have a highlight target
-        if (firstRender && _highlightMessageId.HasValue && !_firstRenderComplete)
+        // Handle auto-scroll to highlighted message (must be done in OnAfterRenderAsync for JS interop)
+        if (_highlightMessageId.HasValue && !_loading && _isAutoScrolling)
         {
-            _firstRenderComplete = true;
-
             try
             {
                 var targetMessageId = _highlightMessageId.Value;
-                Logger.LogDebug("Auto-scrolling to highlighted message: {MessageId}", targetMessageId);
 
-                // Check if target message is in the filtered list
-                var targetMessage = _filteredMessages.FirstOrDefault(mw => mw.Message.MessageId == targetMessageId);
+                // Clear immediately to prevent re-entry if StateHasChanged() is called during scroll
+                _highlightMessageId = null;
 
-                if (targetMessage == null)
+                Logger.LogInformation("[OnAfterRenderAsync] SCROLLING - Starting scroll to message {MessageId}, filteredCount={FilteredCount}",
+                    targetMessageId, _filteredMessages.Count);
+
+                // Find the index of the message in filtered list
+                var messageIndex = _filteredMessages.FindIndex(mw => mw.Message.MessageId == targetMessageId);
+                Logger.LogInformation("[OnAfterRenderAsync] Message index in filtered list: {Index} of {Total}", messageIndex, _filteredMessages.Count);
+
+                if (messageIndex >= 0)
                 {
-                    // Message not loaded yet, try to load it
-                    Logger.LogInformation("Highlighted message {MessageId} not in current view, loading...", targetMessageId);
+                    // Scroll container to approximate position to trigger MudVirtualize rendering
+                    Logger.LogInformation("[OnAfterRenderAsync] Calling scrollMessageContainer({Index}, {Total})", messageIndex, _filteredMessages.Count);
+                    await Js.InvokeVoidAsync("scrollMessageContainer", messageIndex, _filteredMessages.Count);
 
-                    // Load the message from repository
-                    var message = await MessageRepository.GetMessageAsync(targetMessageId);
-                    if (message == null)
-                    {
-                        Logger.LogWarning("Highlighted message {MessageId} not found in database", targetMessageId);
-                        return;
-                    }
+                    Logger.LogInformation("[OnAfterRenderAsync] Waiting 200ms for MudVirtualize to render");
+                    await Task.Delay(200);
 
-                    // Add to the list if not already there (wrapped in MessageWithDetectionHistory)
-                    if (_allMessages.All(mw => mw.Message.MessageId != targetMessageId))
-                    {
-                        var messageWrapper = new MessageWithDetectionHistory { Message = message };
+                    Logger.LogInformation("[OnAfterRenderAsync] Calling scrollToMessage({MessageId})", targetMessageId);
+                    await Js.InvokeVoidAsync("scrollToMessage", targetMessageId);
 
-                        // Insert in chronological order (messages are sorted newest-first)
-                        var insertIndex = _allMessages.FindIndex(mw => mw.Message.Timestamp < message.Timestamp);
-                        if (insertIndex >= 0)
-                        {
-                            _allMessages.Insert(insertIndex, messageWrapper);
-                        }
-                        else
-                        {
-                            _allMessages.Add(messageWrapper);
-                        }
-
-                        // Load metadata for this message
-                        long[] messageIds = [targetMessageId];
-                        var contentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
-                        var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
-
-                        foreach (var kvp in contentChecks)
-                            _contentChecks[kvp.Key] = kvp.Value;
-                        foreach (var kvp in editCounts)
-                            _editCounts[kvp.Key] = kvp.Value;
-
-                        // Load detection history for Admin+ users (now included in wrapper)
-                        if (_userPermissionLevel >= PermissionLevel.GlobalAdmin)
-                        {
-                            var history = await DetectionResultsRepository.GetByMessageIdAsync(targetMessageId);
-                            messageWrapper.DetectionResults.AddRange(history);
-                        }
-
-                        ApplyFilters();
-                        StateHasChanged();
-                    }
+                    Logger.LogInformation("[OnAfterRenderAsync] Successfully scrolled to highlighted message: {MessageId}", targetMessageId);
+                }
+                else
+                {
+                    Logger.LogWarning("[OnAfterRenderAsync] Highlighted message {MessageId} not found in filtered messages (count={Count})",
+                        targetMessageId, _filteredMessages.Count);
                 }
 
-                // Use JavaScript to scroll to and highlight the message
-                await Js.InvokeVoidAsync("scrollToMessage", targetMessageId);
+                // Wait for scroll animation to complete, then re-enable infinite scroll
+                // Smooth scroll can take 1000-1500ms depending on distance, plus intersection observer delay
+                Logger.LogInformation("[OnAfterRenderAsync] Waiting 2000ms before re-enabling infinite scroll");
+                await Task.Delay(2000);
 
-                Logger.LogInformation("Successfully scrolled to highlighted message: {MessageId}", targetMessageId);
+                Logger.LogInformation("[OnAfterRenderAsync] Re-enabling infinite scroll (setting isAutoScrolling=false)");
+                _isAutoScrolling = false;
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "Failed to auto-scroll to highlighted message {MessageId}", _highlightMessageId);
-            }
-            finally
-            {
-                // Clear the highlight flag to prevent repeated scrolling
+                Logger.LogError(ex, "[OnAfterRenderAsync] Failed to auto-scroll to highlighted message");
                 _highlightMessageId = null;
+                _isAutoScrolling = false;
             }
         }
+        else
+        {
+            Logger.LogDebug("[OnAfterRenderAsync] Skipping scroll - highlightMessageId={HighlightId}, loading={Loading}, isAutoScrolling={IsAutoScrolling}",
+                _highlightMessageId, _loading, _isAutoScrolling);
+        }
 
+        Logger.LogInformation("[OnAfterRenderAsync] END");
         await base.OnAfterRenderAsync(firstRender);
+    }
+
+    /// <summary>
+    /// Ensures the highlighted message is loaded in the current view (loads from DB if needed)
+    /// Does NOT perform scrolling - that happens in OnAfterRenderAsync where JS interop is allowed
+    /// </summary>
+    private async Task EnsureHighlightedMessageLoadedAsync(long targetMessageId)
+    {
+        Logger.LogInformation("[EnsureHighlighted] START - targetMessageId={MessageId}, highlightEnsured={HighlightEnsured}, filteredCount={FilteredCount}",
+            targetMessageId, _highlightMessageEnsured, _filteredMessages.Count);
+
+        // Prevent duplicate calls (e.g., from Blazor prerendering)
+        if (_highlightMessageEnsured)
+        {
+            Logger.LogInformation("[EnsureHighlighted] Already ensured, skipping");
+            return;
+        }
+
+        try
+        {
+            // Check if target message is in the filtered list
+            var targetMessage = _filteredMessages.FirstOrDefault(mw => mw.Message.MessageId == targetMessageId);
+
+            if (targetMessage == null)
+            {
+                // Message not loaded yet, try to load it
+                Logger.LogInformation("[EnsureHighlighted] Message not in filtered list, loading from database...");
+
+                // Load the message from repository
+                var message = await MessageRepository.GetMessageAsync(targetMessageId);
+                if (message == null)
+                {
+                    Logger.LogWarning("[EnsureHighlighted] Message {MessageId} not found in database", targetMessageId);
+                    _highlightMessageId = null; // Clear since it doesn't exist
+                    return;
+                }
+
+                Logger.LogInformation("[EnsureHighlighted] Loaded message {MessageId} from database, inserting into list", targetMessageId);
+
+                // Add to the list if not already there (wrapped in MessageWithDetectionHistory)
+                if (_allMessages.All(mw => mw.Message.MessageId != targetMessageId))
+                {
+                    var messageWrapper = new MessageWithDetectionHistory { Message = message };
+
+                    // Insert in chronological order (messages are sorted newest-first)
+                    var insertIndex = _allMessages.FindIndex(mw => mw.Message.Timestamp < message.Timestamp);
+                    if (insertIndex >= 0)
+                    {
+                        _allMessages.Insert(insertIndex, messageWrapper);
+                    }
+                    else
+                    {
+                        _allMessages.Add(messageWrapper);
+                    }
+
+                    // Load metadata for this message
+                    long[] messageIds = [targetMessageId];
+                    var contentChecks = await MessageQueryService.GetContentChecksForMessagesAsync(messageIds);
+                    var editCounts = await MessageEditService.GetEditCountsForMessagesAsync(messageIds);
+
+                    foreach (var kvp in contentChecks)
+                        _contentChecks[kvp.Key] = kvp.Value;
+                    foreach (var kvp in editCounts)
+                        _editCounts[kvp.Key] = kvp.Value;
+
+                    // Load detection history for Admin+ users (now included in wrapper)
+                    if (_userPermissionLevel >= PermissionLevel.GlobalAdmin)
+                    {
+                        var history = await DetectionResultsRepository.GetByMessageIdAsync(targetMessageId);
+                        messageWrapper.DetectionResults.AddRange(history);
+                    }
+
+                    ApplyFilters();
+                    Logger.LogInformation("[EnsureHighlighted] Applied filters, new filteredCount={FilteredCount}", _filteredMessages.Count);
+                }
+                else
+                {
+                    Logger.LogInformation("[EnsureHighlighted] Message {MessageId} already in _allMessages", targetMessageId);
+                }
+            }
+            else
+            {
+                Logger.LogInformation("[EnsureHighlighted] Message {MessageId} already in filtered view", targetMessageId);
+            }
+
+            // Mark as ensured to prevent duplicate calls
+            _highlightMessageEnsured = true;
+            Logger.LogInformation("[EnsureHighlighted] END - Set highlightEnsured=true");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "[EnsureHighlighted] Failed to ensure highlighted message {MessageId} is loaded", targetMessageId);
+            _highlightMessageId = null; // Clear on error to prevent infinite retry
+            _highlightMessageEnsured = true; // Prevent retry
+        }
     }
 
     // ReSharper disable once AsyncVoidMethod
@@ -578,6 +657,7 @@
         _allMessages.Clear();
         _contentChecks.Clear();
         _editCounts.Clear();
+        _highlightMessageEnsured = false; // Reset highlight state for new chat
 
         try
         {
@@ -631,9 +711,29 @@
         }
         finally
         {
+            Logger.LogInformation("[LoadChatMessages] FINALLY - highlightMessageId={HighlightId}, allMessagesCount={AllCount}, filteredCount={FilteredCount}",
+                _highlightMessageId, _allMessages.Count, _filteredMessages.Count);
+
             // PERF-APP-3: Single render after all data loaded
             _loading = false;
+
+            // Set auto-scroll flag BEFORE StateHasChanged to prevent intersection observer from triggering
+            if (_highlightMessageId.HasValue)
+            {
+                Logger.LogInformation("[LoadChatMessages] Setting isAutoScrolling=true BEFORE StateHasChanged");
+                _isAutoScrolling = true;
+
+                // Ensure the message is loaded (if not in current view, fetch from DB)
+                // Actual scrolling happens in OnAfterRenderAsync where JS interop is allowed
+                await EnsureHighlightedMessageLoadedAsync(_highlightMessageId.Value);
+
+                Logger.LogInformation("[LoadChatMessages] After EnsureHighlighted - highlightMessageId={HighlightId}, isAutoScrolling={IsAutoScrolling}",
+                    _highlightMessageId, _isAutoScrolling);
+            }
+
+            Logger.LogInformation("[LoadChatMessages] Calling StateHasChanged()");
             StateHasChanged();
+            Logger.LogInformation("[LoadChatMessages] END finally block");
         }
     }
 
@@ -646,8 +746,35 @@
     [JSInvokable]
     public async Task LoadOlderMessagesAsync()
     {
-        if (_loadingMore || !_hasMore || !_selectedChatId.HasValue)
+        Logger.LogInformation("[LoadOlderMessages] CALLED - isAutoScrolling={IsAutoScrolling}, loadingMore={LoadingMore}, hasMore={HasMore}, selectedChatId={ChatId}",
+            _isAutoScrolling, _loadingMore, _hasMore, _selectedChatId);
+
+        // Don't trigger infinite scroll during auto-scroll to highlighted message
+        if (_isAutoScrolling)
+        {
+            Logger.LogInformation("[LoadOlderMessages] BLOCKED by isAutoScrolling guard, returning");
             return;
+        }
+
+        if (_loadingMore)
+        {
+            Logger.LogDebug("[LoadOlderMessages] Already loading more, returning");
+            return;
+        }
+
+        if (!_hasMore)
+        {
+            Logger.LogDebug("[LoadOlderMessages] No more messages, returning");
+            return;
+        }
+
+        if (!_selectedChatId.HasValue)
+        {
+            Logger.LogDebug("[LoadOlderMessages] No chat selected, returning");
+            return;
+        }
+
+        Logger.LogInformation("[LoadOlderMessages] PROCEEDING to load more messages");
 
         // PERF-APP-3: Set loading state without intermediate render
         _loadingMore = true;
@@ -1027,14 +1154,18 @@
 
     private void HandleFilterByUser(long userId)
     {
-        // Set user filter
-        var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.UserId == userId);
-        if (messageWrapper != null)
-        {
-            _filterState.UserName = messageWrapper.Message.UserName ?? $"User {userId}";
-            ApplyFilters();
-            StateHasChanged();
-        }
+        // TODO: Change this to display user detail dialog (like Users page)
+        // Currently disabled - filtering by username is broken
+        return;
+
+        // Old filtering code (broken):
+        // var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.UserId == userId);
+        // if (messageWrapper != null)
+        // {
+        //     _filterState.UserName = messageWrapper.Message.UserName ?? $"User {userId}";
+        //     ApplyFilters();
+        //     StateHasChanged();
+        // }
     }
 
     private void HandleFilterByChat(long chatId)
