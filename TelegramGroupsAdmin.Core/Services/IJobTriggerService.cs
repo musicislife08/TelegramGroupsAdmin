@@ -1,9 +1,8 @@
-namespace TelegramGroupsAdmin.BackgroundJobs.Services;
+namespace TelegramGroupsAdmin.Core.Services;
 
 /// <summary>
 /// Service for manually triggering background jobs
 /// Supports immediate execution and scheduled one-time execution
-/// Phase 9: Manual trigger API
 /// </summary>
 public interface IJobTriggerService
 {

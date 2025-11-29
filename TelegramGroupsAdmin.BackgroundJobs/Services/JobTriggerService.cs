@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Quartz;
 using System.Text.Json;
+using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Services;
 

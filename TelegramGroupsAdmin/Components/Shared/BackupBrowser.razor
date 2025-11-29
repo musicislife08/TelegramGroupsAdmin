@@ -1,8 +1,14 @@
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.BackgroundJobs.Services.Backup
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Core.Services
 @inject IBackupService BackupService
 @inject BackupRetentionService RetentionService
 @inject ISnackbar Snackbar
 @inject IJSRuntime Js
+@inject IAuditService AuditService
+@inject AuthenticationStateProvider AuthStateProvider
 
 <MudPaper Class="pa-4" Elevation="0" Outlined="true">
     <MudStack Spacing="3">
@@ -415,6 +421,16 @@
             var bytes = await File.ReadAllBytesAsync(backup.FilePath);
             await Js.InvokeVoidAsync("downloadFile", backup.FileName, Convert.ToBase64String(bytes));
             Snackbar.Add($"Downloading {backup.FileName}", Severity.Success);
+
+            // Audit log the backup download (security-sensitive action)
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var userId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            await AuditService.LogEventAsync(
+                AuditEventType.DataExported,
+                actor: userId != null ? Actor.FromWebUser(userId) : Actor.Unknown,
+                target: null,
+                value: $"Downloaded backup: {backup.FileName} ({FormatBytes(backup.FileSizeBytes)})");
         }
         catch (Exception ex)
         {

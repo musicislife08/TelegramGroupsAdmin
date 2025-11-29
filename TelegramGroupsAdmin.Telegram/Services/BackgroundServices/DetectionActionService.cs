@@ -5,15 +5,14 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
-using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using DataModels = TelegramGroupsAdmin.Data.Models;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Abstractions;
-using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Repositories;
+using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -83,10 +82,8 @@ public class DetectionActionService(
             }
 
             using var scope = serviceProvider.CreateScope();
-            var reportsRepo = scope.ServiceProvider.GetRequiredService<IReportsRepository>();
+            var reportService = scope.ServiceProvider.GetRequiredService<IReportService>();
             var moderationActionService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
-            var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-            var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
             var botFactory = scope.ServiceProvider.GetRequiredService<TelegramBotClientFactory>();
             var configLoader = scope.ServiceProvider.GetRequiredService<TelegramConfigLoader>();
             var botToken = await configLoader.LoadConfigAsync();
@@ -147,16 +144,16 @@ public class DetectionActionService(
                     cancellationToken: cancellationToken);
 
                 // Create critical alert for admin review
-                await CreateBorderlineReportAsync(
-                    reportsRepo,
-                    chatAdminsRepository,
-                    messagingService,
-                    botFactory,
-                    botToken,
+                var malwareReport = BuildAutoDetectionReport(
                     message,
                     spamResult,
                     detectionResult,
-                    $"MALWARE DETECTED: {malwareResult.Details}",
+                    $"MALWARE DETECTED: {malwareResult.Details}");
+
+                await reportService.CreateReportAsync(
+                    malwareReport,
+                    message,
+                    isAutomated: true,
                     cancellationToken);
 
                 // Notify chat admins about malware detection (Phase 5.1)
@@ -184,16 +181,16 @@ public class DetectionActionService(
             if (openAIResult?.Result == ContentDetection.Models.CheckResultType.Review)
             {
                 // OpenAI uncertain - send to admin review instead of auto-ban
-                await CreateBorderlineReportAsync(
-                    reportsRepo,
-                    chatAdminsRepository,
-                    messagingService,
-                    botFactory,
-                    botToken,
+                var reviewReport = BuildAutoDetectionReport(
                     message,
                     spamResult,
                     detectionResult,
-                    $"OpenAI flagged for review - Net: {spamResult.NetConfidence}",
+                    $"OpenAI flagged for review - Net: {spamResult.NetConfidence}");
+
+                await reportService.CreateReportAsync(
+                    reviewReport,
+                    message,
+                    isAutomated: true,
                     cancellationToken);
 
                 logger.LogInformation(
@@ -266,16 +263,16 @@ public class DetectionActionService(
                     ? $"OpenAI uncertain (<{OpenAIConfidentThreshold}%) - Net: {spamResult.NetConfidence}, OpenAI: {openAIResult?.Confidence ?? 0}%"
                     : $"Borderline detection - Net: {spamResult.NetConfidence}";
 
-                await CreateBorderlineReportAsync(
-                    reportsRepo,
-                    chatAdminsRepository,
-                    messagingService,
-                    botFactory,
-                    botToken,
+                var borderlineReport = BuildAutoDetectionReport(
                     message,
                     spamResult,
                     detectionResult,
-                    reason,
+                    reason);
+
+                await reportService.CreateReportAsync(
+                    borderlineReport,
+                    message,
+                    isAutomated: true,
                     cancellationToken);
 
                 logger.LogInformation(
@@ -294,24 +291,17 @@ public class DetectionActionService(
     }
 
     /// <summary>
-    /// Create a report for borderline spam detections
-    /// Phase 5.1: Sends DM notifications to admins
+    /// Build a Report record for auto-detected content with admin notes containing detection details
     /// </summary>
-    private async Task CreateBorderlineReportAsync(
-        IReportsRepository reportsRepo,
-        IChatAdminsRepository chatAdminsRepository,
-        IUserMessagingService messagingService,
-        TelegramBotClientFactory botFactory,
-        string botToken,
+    private static Report BuildAutoDetectionReport(
         Message message,
         TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
         DetectionResultRecord detectionResult,
-        string reason,
-        CancellationToken cancellationToken = default)
+        string reason)
     {
-        var report = new Report(
+        return new Report(
             Id: 0, // Will be assigned by database
-            MessageId: (int)message.MessageId, // Convert to int (Telegram message IDs fit in int32)
+            MessageId: message.MessageId,
             ChatId: message.Chat.Id,
             ReportCommandMessageId: null, // Auto-generated report (not from /report command)
             ReportedByUserId: null, // System-generated (not user-reported)
@@ -332,46 +322,6 @@ public class DetectionActionService(
                 """,
             WebUserId: null // System-generated
         );
-
-        var reportId = await reportsRepo.InsertAsync(report, cancellationToken);
-
-        // Send DM notifications to admins (same pattern as ReportCommand)
-        var admins = await chatAdminsRepository.GetChatAdminsAsync(message.Chat.Id, cancellationToken);
-        var adminUserIds = admins.Select(a => a.TelegramId).ToList();
-
-        if (adminUserIds.Any())
-        {
-            var chatName = message.Chat.Title ?? message.Chat.Username ?? "this chat";
-            var reportedUser = message.From;
-            var messagePreview = message.Text?.Length > 100
-                ? message.Text.Substring(0, 100) + "..."
-                : message.Text ?? "[Media message]";
-
-            var reportNotification = $"🚨 **New Auto-Detected Report #{reportId}**\n\n" +
-                                    $"**Chat:** {chatName}\n" +
-                                    $"**Reported by:** Auto-Detection System\n" +
-                                    $"**Reported user:** @{reportedUser?.Username ?? reportedUser?.FirstName ?? reportedUser?.Id.ToString() ?? "Unknown"}\n" +
-                                    $"**Message:** {messagePreview}\n" +
-                                    $"**Confidence:** Net {spamResult.NetConfidence}% / Max {spamResult.MaxConfidence}%\n\n" +
-                                    $"[Jump to message](https://t.me/c/{Math.Abs(message.Chat.Id).ToString().TrimStart('-')}/{message.MessageId})\n\n" +
-                                    $"Review in the Reports tab or use moderation commands.";
-
-            var botClient = botFactory.GetOrCreate(botToken);
-            var results = await messagingService.SendToMultipleUsersAsync(
-                botClient,
-                userIds: adminUserIds,
-                chatId: message.Chat.Id,
-                messageText: reportNotification,
-                replyToMessageId: message.MessageId,
-                cancellationToken);
-
-            var dmCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.PrivateDm);
-            var mentionCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.ChatMention);
-
-            logger.LogInformation(
-                "Auto-detection report {ReportId} notification sent to {TotalAdmins} admins ({DmCount} via DM, {MentionCount} via chat mention)",
-                reportId, results.Count, dmCount, mentionCount);
-        }
     }
 
     /// <summary>
