@@ -25,18 +25,15 @@ public static class ServiceCollectionExtensions
         public IServiceCollection AddTelegramServices()
         {
             // Telegram repositories
-            services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>();
             services.AddScoped<IUserActionsRepository, UserActionsRepository>();
             services.AddScoped<IManagedChatsRepository, ManagedChatsRepository>();
             services.AddScoped<ITelegramUserMappingRepository, TelegramUserMappingRepository>();
             services.AddScoped<ITelegramLinkTokenRepository, TelegramLinkTokenRepository>();
             services.AddScoped<IChatAdminsRepository, ChatAdminsRepository>();
-            services.AddScoped<IReportsRepository, ReportsRepository>();
             services.AddScoped<IWelcomeResponsesRepository, WelcomeResponsesRepository>();
             services.AddScoped<IAdminNotesRepository, AdminNotesRepository>(); // Phase 4.12
             services.AddScoped<IUserTagsRepository, UserTagsRepository>(); // Phase 4.12
             services.AddScoped<ITagDefinitionsRepository, TagDefinitionsRepository>(); // Phase 4.12
-            services.AddScoped<IImpersonationAlertsRepository, ImpersonationAlertsRepository>(); // Phase 4.10
             services.AddScoped<IPendingNotificationsRepository, PendingNotificationsRepository>(); // DM notification system
             services.AddScoped<IAuditLogRepository, AuditLogRepository>();
             services.AddScoped<IUserRepository, UserRepository>();
@@ -47,10 +44,6 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IMessageTranslationService, MessageTranslationService>();
             services.AddScoped<IMessageEditService, MessageEditService>();
             services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
-            services.AddScoped<IPromptVersionRepository, PromptVersionRepository>(); // Phase 4.X: AI-powered prompt builder
-            services.AddScoped<IThresholdRecommendationsRepository, ThresholdRecommendationsRepository>(); // ML.NET threshold optimization
-            services.AddScoped<IImageTrainingSamplesRepository, ImageTrainingSamplesRepository>(); // ML-5: Image spam training samples
-            services.AddScoped<IVideoTrainingSamplesRepository, VideoTrainingSamplesRepository>(); // ML-6: Video spam training samples
 
             // Telegram infrastructure
             services.AddSingleton<TelegramBotClientFactory>();
@@ -94,6 +87,10 @@ public static class ServiceCollectionExtensions
             services.AddScoped<BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
 
+            // Training data quality services
+            services.AddScoped<TextSimilarityService>();
+            services.AddScoped<TrainingDataDeduplicationService>();
+
             // Phase 4.10: Anti-Impersonation Detection
             services.AddSingleton<IPhotoHashService, PhotoHashService>();
             services.AddScoped<IImpersonationDetectionService, ImpersonationDetectionService>();
@@ -133,7 +130,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<CommandRouter>();
 
             // Background services (refactored into smaller services)
-            services.AddSingleton<SpamActionService>();
+            services.AddSingleton<DetectionActionService>();
             services.AddSingleton<ChatManagementService>();
             services.AddSingleton<MessageProcessingService>();
             services.AddSingleton<TelegramAdminBotService>();

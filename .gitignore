@@ -55,3 +55,4 @@ compose.override.yml
 **/*.p12
 **/*.key
 **/*.pem
+tmp/

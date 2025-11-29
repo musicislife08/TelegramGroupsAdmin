@@ -285,7 +285,7 @@ public class OpenAIContentCheckTests
 
         // Assert
         Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
+        Assert.That(response.Abstained, Is.False); // Veto returns clean verdict, not abstention
         Assert.That(response.Details, Does.Contain("Clean"));
     }
 
@@ -385,8 +385,8 @@ public class OpenAIContentCheckTests
         var response = await _check.CheckAsync(request);
 
         // Assert
-        // Review is capped at 3.0 even though 0.9 * 5.0 = 4.5
-        Assert.That(response.Score, Is.EqualTo(3.0).Within(0.01));
+        // Review is capped at ContentDetectionConstants.ReviewThreshold even though 0.9 * 5.0 = 4.5
+        Assert.That(response.Score, Is.EqualTo(ContentDetectionConstants.ReviewThreshold).Within(0.01));
         Assert.That(response.Abstained, Is.False);
         Assert.That(response.Details, Does.Contain("Review"));
     }
@@ -413,7 +413,7 @@ public class OpenAIContentCheckTests
     #region CheckAsync - Clean Detection Tests
 
     [Test]
-    public async Task CheckAsync_CleanResult_Abstains()
+    public async Task CheckAsync_CleanResult_ReturnsCleanVerdict()
     {
         // Arrange
         var apiResponse = CreateCleanResponse("This is a legitimate message", 0.85);
@@ -426,7 +426,7 @@ public class OpenAIContentCheckTests
 
         // Assert
         Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
+        Assert.That(response.Abstained, Is.False); // Clean is a verdict, not an abstention
         Assert.That(response.Details, Does.Contain("Clean"));
         Assert.That(response.Details, Does.Contain("legitimate message"));
     }
@@ -675,7 +675,7 @@ public class OpenAIContentCheckTests
 
         // Assert
         Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
+        Assert.That(response.Abstained, Is.True); // Unknown result should abstain (unparseable)
     }
 
     #endregion

@@ -29,17 +29,17 @@
         <PackageReference Include="Microsoft.Build.Utilities.Core" Version="18.0.2" />
         <!-- WORKAROUND: Force newer versions to fix GHSA-w3q9-fxm7-j8fq vulnerability in Microsoft.EntityFrameworkCore.Design transitive deps
              Remove when Microsoft.EntityFrameworkCore.Design updates to 17.14.28+ (Oct 2025) -->
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0-rc.1.25451.107">
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
           <PrivateAssets>all</PrivateAssets>
         </PackageReference>
         <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.0.0" />
         <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
-        <PackageReference Include="MudBlazor" Version="8.14.0" />
-        <PackageReference Include="Npgsql" Version="10.0.0-rc.1" />
-        <PackageReference Include="Npgsql.DependencyInjection" Version="10.0.0-rc.1" />
-        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0-rc.1" />
-        <PackageReference Include="Npgsql.OpenTelemetry" Version="10.0.0-rc.1" />
+        <PackageReference Include="MudBlazor" Version="8.15.0" />
+        <PackageReference Include="Npgsql" Version="10.0.0" />
+        <PackageReference Include="Npgsql.DependencyInjection" Version="10.0.0" />
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+        <PackageReference Include="Npgsql.OpenTelemetry" Version="10.0.0" />
         <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.14.0" />
         <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.11.0-beta.1" />
         <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.14.0" />

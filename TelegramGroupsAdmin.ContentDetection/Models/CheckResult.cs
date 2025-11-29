@@ -12,6 +12,7 @@ public record CheckResult
     public CheckResultType Result { get; init; }
     public int Confidence { get; init; }
     public string Reason { get; init; } = string.Empty;
+    public double ProcessingTimeMs { get; init; }
 }
 
 /// <summary>

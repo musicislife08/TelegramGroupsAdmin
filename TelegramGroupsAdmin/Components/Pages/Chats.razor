@@ -6,7 +6,7 @@
 @using TelegramGroupsAdmin.Telegram.Abstractions
 @inject TelegramAdminBotService BotService
 @inject IManagedChatsRepository ManagedChatsRepository
-@inject ISpamDetectionConfigRepository SpamConfigRepository
+@inject IContentDetectionConfigRepository SpamConfigRepository
 @inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
 @inject IServiceProvider ServiceProvider
 @inject IJobScheduler JobScheduler
@@ -120,7 +120,7 @@
                 </MudTd>
             </RowTemplate>
             <PagerContent>
-                <MudTablePager PageSizeOptions="new[] { 10, 25, 50, 100 }" />
+                <MudTablePager PageSizeOptions="[10, 25, 50, 100]" />
             </PagerContent>
         </MudTable>
     }

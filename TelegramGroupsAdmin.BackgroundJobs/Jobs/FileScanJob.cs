@@ -8,6 +8,7 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.Utilities;
@@ -151,7 +152,7 @@ public class FileScanJob(
                     scanResult.Details);
 
                 // Step 5: Save detection history (for both clean and infected files)
-                var detectionRecord = new Telegram.Models.DetectionResultRecord
+                var detectionRecord = new DetectionResultRecord
                 {
                     MessageId = payload.MessageId,
                     UserId = payload.UserId,
@@ -276,11 +277,31 @@ public class FileScanJob(
                 "file_scan_infected",
                 cancellationToken);
         }
+        catch (Exception ex) when (
+            ex.Message.Contains("message to delete not found") ||
+            ex.Message.Contains("message can't be deleted") ||
+            ex.Message.Contains("MESSAGE_DELETE_FORBIDDEN") ||
+            ex.Message.Contains("Bad Request"))
+        {
+            // Expected errors: message already deleted by user/admin, or bot lacks permissions
+            _logger.LogDebug(
+                "Skipped deletion of message {MessageId} in chat {ChatId} (likely already deleted): {Reason}",
+                payload.MessageId,
+                payload.ChatId,
+                ex.Message);
+
+            // Still mark as deleted in DB for audit trail
+            await _messageHistoryRepository.MarkMessageAsDeletedAsync(
+                payload.MessageId,
+                "file_scan_infected_already_deleted",
+                cancellationToken);
+        }
         catch (Exception ex)
         {
+            // Unexpected error - log and continue (detection record is accurate, user will be notified)
             _logger.LogError(
                 ex,
-                "Failed to delete infected file message {MessageId} in chat {ChatId}",
+                "Unexpected error deleting infected file message {MessageId} in chat {ChatId}",
                 payload.MessageId,
                 payload.ChatId);
         }

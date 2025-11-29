@@ -28,17 +28,17 @@ public class MessageHistoryAdapter : ContentDetectionServices.IMessageHistorySer
     {
         try
         {
-            // Get recent messages from query service (filtered by chat_id in query)
-            var messages = await _queryService.GetMessagesByChatIdAsync(chatId, count);
+            // Get recent messages with detection history to determine spam status
+            var messages = await _queryService.GetMessagesWithDetectionHistoryAsync(chatId, count, cancellationToken: cancellationToken);
 
             // Convert to spam library's HistoryMessage format
             return messages.Select(m => new ContentDetectionServices.HistoryMessage
             {
-                UserId = m.UserId.ToString(),
-                UserName = m.UserName ?? "Unknown",
-                Message = m.MessageText ?? string.Empty,
-                Timestamp = m.Timestamp.UtcDateTime,
-                WasSpam = false // TODO: Join with detection_results table to populate this
+                UserId = m.Message.UserId.ToString(),
+                UserName = m.Message.UserName ?? "Unknown",
+                Message = m.Message.MessageText ?? string.Empty,
+                Timestamp = m.Message.Timestamp.UtcDateTime,
+                WasSpam = m.DetectionResults.Any(dr => dr.IsSpam)
             }).ToList();
         }
         catch (Exception ex)

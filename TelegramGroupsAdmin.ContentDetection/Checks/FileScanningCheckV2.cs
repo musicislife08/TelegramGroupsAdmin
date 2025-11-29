@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration.Models;
@@ -56,6 +57,7 @@ public class FileScanningCheckV2 : IContentCheckV2
 
     public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
     {
+        var startTimestamp = Stopwatch.GetTimestamp();
         var req = (FileScanCheckRequest)request;
 
         try
@@ -65,13 +67,14 @@ public class FileScanningCheckV2 : IContentCheckV2
             {
                 _logger.LogWarning("File exceeds size limit for user {UserId}: {Size} > {Limit} bytes",
                     req.UserId, req.FileSize, _config.General.MaxFileSizeBytes);
-
+                
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"File size {req.FileSize} exceeds limit {_config.General.MaxFileSizeBytes} (fail-open)"
+                    Details = $"File size {req.FileSize} exceeds limit {_config.General.MaxFileSizeBytes} (fail-open)",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -94,13 +97,14 @@ public class FileScanningCheckV2 : IContentCheckV2
                         .Where(r => r.Result == "Infected")
                         .Select(r => $"{r.Scanner}:{r.ThreatName}")
                         .ToList();
-
+                    
                     return new ContentCheckResponseV2
                     {
                         CheckName = CheckName,
                         Score = 5.0,
                         Abstained = false,
-                        Details = $"Malware detected (cached): {string.Join(", ", threats)} | Hash: {req.FileHash}"
+                        Details = $"Malware detected (cached): {string.Join(", ", threats)} | Hash: {req.FileHash}",
+                        ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                     };
                 }
 
@@ -110,7 +114,8 @@ public class FileScanningCheckV2 : IContentCheckV2
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"File clean (cached) | Hash: {req.FileHash}"
+                    Details = $"File clean (cached) | Hash: {req.FileHash}",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -153,13 +158,14 @@ public class FileScanningCheckV2 : IContentCheckV2
                     req.UserId,
                     string.Join(", ", threats),
                     string.Join(", ", detectedBy));
-
+                
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = 5.0,
                     Abstained = false,
-                    Details = $"Malware detected: {string.Join(", ", threats)} by {string.Join("+", detectedBy)} (Tier 1, {tier1Result.TotalDurationMs}ms)"
+                    Details = $"Malware detected: {string.Join(", ", threats)} by {string.Join("+", detectedBy)} (Tier 1, {tier1Result.TotalDurationMs}ms)",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -228,7 +234,8 @@ public class FileScanningCheckV2 : IContentCheckV2
                     CheckName = CheckName,
                     Score = 5.0,
                     Abstained = false,
-                    Details = $"Malware detected: {string.Join(", ", threats)} by {string.Join("+", detectedBy)} (Tier 2, {tier2Result.TotalDurationMs}ms)"
+                    Details = $"Malware detected: {string.Join(", ", threats)} by {string.Join("+", detectedBy)} (Tier 2, {tier2Result.TotalDurationMs}ms)",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
@@ -242,7 +249,8 @@ public class FileScanningCheckV2 : IContentCheckV2
                 CheckName = CheckName,
                 Score = 0.0,
                 Abstained = true,
-                Details = $"File clean | Tier 1: {tier1Result.ScannerResults.Count} scanner(s), Tier 2: {tier2Result.CloudScanResults.Count} service(s) ({totalDuration}ms)"
+                Details = $"File clean | Tier 1: {tier1Result.ScannerResults.Count} scanner(s), Tier 2: {tier2Result.CloudScanResults.Count} service(s) ({totalDuration}ms)",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
         catch (Exception ex)
@@ -256,7 +264,8 @@ public class FileScanningCheckV2 : IContentCheckV2
                 Score = 0.0,
                 Abstained = true,
                 Details = $"Scan error (fail-open): {ex.Message}",
-                Error = ex
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
             };
         }
     }

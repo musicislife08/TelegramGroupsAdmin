@@ -286,7 +286,7 @@
         public bool? HasLinks { get; set; }
         public bool? HasEdits { get; set; }
 
-        public bool Matches(MessageRecord message, SpamCheckRecord? spamCheck)
+        public bool Matches(MessageRecord message, ContentCheckRecord? contentCheck)
         {
             // Text search
             if (!string.IsNullOrEmpty(SearchText))
@@ -315,15 +315,15 @@
             // Spam filter
             if (SpamFilter != SpamFilterOption.All)
             {
-                var hasCheck = spamCheck != null;
+                var hasCheck = contentCheck != null;
                 switch (SpamFilter)
                 {
                     case SpamFilterOption.SpamOnly:
-                        if (!hasCheck || !spamCheck!.IsSpam)
+                        if (!hasCheck || !contentCheck!.IsSpam)
                             return false;
                         break;
                     case SpamFilterOption.CleanOnly:
-                        if (!hasCheck || spamCheck!.IsSpam)
+                        if (!hasCheck || contentCheck!.IsSpam)
                             return false;
                         break;
                     case SpamFilterOption.Unchecked:

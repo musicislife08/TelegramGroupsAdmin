@@ -23,7 +23,7 @@ public record ContentCheckResult
     /// <summary>
     /// Action to take based on confidence thresholds
     /// </summary>
-    public SpamAction RecommendedAction { get; init; } = SpamAction.Allow;
+    public DetectionAction RecommendedAction { get; init; } = DetectionAction.Allow;
 
     /// <summary>
     /// Summary of the decision for logging/display
@@ -33,7 +33,7 @@ public record ContentCheckResult
     /// <summary>
     /// Total processing time for all checks in milliseconds
     /// </summary>
-    public long TotalProcessingTimeMs { get; init; } = 0;
+    public double TotalProcessingTimeMs { get; init; } = 0;
 
     /// <summary>
     /// All extra message IDs to delete (combined from all checks)

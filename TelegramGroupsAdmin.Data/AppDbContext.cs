@@ -40,8 +40,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Spam detection tables
     public DbSet<StopWordDto> StopWords => Set<StopWordDto>();
     // NOTE: TrainingSamples removed in Phase 2.2 - training data comes from detection_results.used_for_training
-    public DbSet<SpamDetectionConfigRecordDto> SpamDetectionConfigs => Set<SpamDetectionConfigRecordDto>();
-    public DbSet<SpamCheckConfigRecordDto> SpamCheckConfigs => Set<SpamCheckConfigRecordDto>();
+    public DbSet<ContentDetectionConfigRecordDto> ContentDetectionConfigs => Set<ContentDetectionConfigRecordDto>();
+    public DbSet<ContentCheckConfigRecordDto> ContentCheckConfigs => Set<ContentCheckConfigRecordDto>();
     public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
     public DbSet<ThresholdRecommendationDto> ThresholdRecommendations => Set<ThresholdRecommendationDto>();
     public DbSet<ImageTrainingSampleDto> ImageTrainingSamples => Set<ImageTrainingSampleDto>();
@@ -471,6 +471,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(dr => dr.DetectionSource)
             .HasDatabaseName("ix_detection_results_detection_source");
 
+        // GIN index for JSONB check_results_json column (ML-5 performance analytics)
+        modelBuilder.Entity<DetectionResultRecordDto>()
+            .HasIndex(dr => dr.CheckResultsJson)
+            .HasMethod("gin")
+            .HasDatabaseName("ix_detection_results_check_results_json_gin");
+
         // UserActions indexes
         modelBuilder.Entity<UserActionRecordDto>()
             .HasIndex(ua => ua.UserId);
@@ -727,5 +733,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // Configure video_training_samples table
         modelBuilder.Entity<VideoTrainingSampleDto>()
             .ToTable("video_training_samples");
+
+        // Configure RawAlgorithmPerformanceStatsDto as keyless entity for SqlQuery support (Phase 5)
+        // This is a query-only DTO for algorithm performance analytics
+        // Not mapped to any table/view - used only for raw SQL query results
+        modelBuilder.Entity<RawAlgorithmPerformanceStatsDto>()
+            .HasNoKey()
+            .ToView(null);
     }
 }

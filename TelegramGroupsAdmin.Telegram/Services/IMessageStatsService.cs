@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.ContentDetection.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -16,12 +17,12 @@ public interface IMessageStatsService
     /// <summary>
     /// Get spam detection statistics
     /// </summary>
-    Task<UiModels.DetectionStats> GetDetectionStatsAsync(CancellationToken cancellationToken = default);
+    Task<DetectionStats> GetDetectionStatsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get recent spam detections with actor information
     /// </summary>
-    Task<List<UiModels.DetectionResultRecord>> GetRecentDetectionsAsync(int limit = 100, CancellationToken cancellationToken = default);
+    Task<List<DetectionResultRecord>> GetRecentDetectionsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get message trends over a date range with timezone conversion

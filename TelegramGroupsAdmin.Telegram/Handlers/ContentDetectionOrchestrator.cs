@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.Core.Models;
@@ -20,12 +21,12 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 public class ContentDetectionOrchestrator
 {
     private readonly IServiceProvider _serviceProvider;
-    private readonly SpamActionService _spamActionService;
+    private readonly DetectionActionService _spamActionService;
     private readonly ILogger<ContentDetectionOrchestrator> _logger;
 
     public ContentDetectionOrchestrator(
         IServiceProvider serviceProvider,
-        SpamActionService spamActionService,
+        DetectionActionService spamActionService,
         ILogger<ContentDetectionOrchestrator> logger)
     {
         _serviceProvider = serviceProvider;
@@ -97,7 +98,7 @@ public class ContentDetectionOrchestrator
                     message.From?.Id,
                     string.Join("; ", result.CriticalCheckViolations));
 
-                // Use SpamActionService to handle critical violations
+                // Use DetectionActionService to handle critical violations
                 // Policy: Delete + DM notice, NO ban/warn for trusted/admin users
                 await _spamActionService.HandleCriticalCheckViolationAsync(
                     botClient,
@@ -175,7 +176,7 @@ public class ContentDetectionOrchestrator
             Confidence = spamResult.MaxConfidence,
             Reason = $"{reasonPrefix}{spamResult.PrimaryReason}",
             AddedBy = Actor.AutoDetection, // Phase 4.19: Actor system
-            UsedForTraining = SpamActionService.DetermineIfTrainingWorthy(spamResult),
+            UsedForTraining = DetectionActionService.DetermineIfTrainingWorthy(spamResult),
             NetConfidence = spamResult.NetConfidence,
             CheckResultsJson = CheckResultsSerializer.Serialize(spamResult.CheckResults),
             EditVersion = editVersion

@@ -2,7 +2,7 @@
 
 ## Stack
 
-.NET 10.0 (10.0.100), Blazor Server, MudBlazor 8.13.0, PostgreSQL 17, EF Core 9.0, Quartz.NET 3.15.1, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
+.NET 10.0 (10.0.100), Blazor Server, MudBlazor 8.15.0, PostgreSQL 17, EF Core 10.0, Npgsql 10.0.0, Quartz.NET 3.15.1, OpenAI API, VirusTotal, SendGrid, Seq (datalust/seq:latest), OpenTelemetry
 
 ## Git Workflow (CRITICAL - FOLLOW EVERY TIME)
 
@@ -31,6 +31,13 @@ git checkout -b feature/your-feature-name
 git add .
 git commit -m "feat: add new feature"
 # OR: fix:, refactor:, docs:, test:, ci:, chore:
+
+# AI AGENT NOTE: For complex multi-line commit messages, use properly escaped heredoc:
+# git commit -F- <<'EOF'
+# Multi-line message here
+# Can include quotes, apostrophes, etc.
+# EOF
+# Key: Use -F- (read from stdin) and <<'EOF' (single quotes prevent expansion)
 
 # 4. Push feature branch
 git push -u origin feature/your-feature-name
@@ -157,8 +164,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - **TelegramGroupsAdmin.Data**: EF Core DbContext, migrations, Data Protection (DB-internal models)
 - **TelegramGroupsAdmin.Telegram**: Bot services, commands, repos, orchestrators, DM notifications, AddTelegramServices()
 - **TelegramGroupsAdmin.Telegram.Abstractions**: TelegramBotClientFactory, job payloads (breaks Telegram → Main circular dep)
-- **TelegramGroupsAdmin.SpamDetection**: 9 spam algorithms, self-contained, database-driven
-- **TelegramGroupsAdmin.ContentDetection**: URL filtering, impersonation detection, file scanning (ClamAV+VirusTotal)
+- **TelegramGroupsAdmin.ContentDetection**: 9 content detection algorithms, URL filtering, impersonation detection, file scanning (ClamAV+VirusTotal), self-contained, database-driven
 - **TelegramGroupsAdmin.Tests**: Migration tests (NUnit + Testcontainers.PostgreSQL), validates against real PostgreSQL 17
 
 ## Architecture Patterns
@@ -188,7 +194,7 @@ The Telegram Bot API enforces **one active connection per bot token** (webhook O
 - Fallback: Env vars used for first-time setup only
 - UI: Settings pages allow live editing without restart
 
-**Background Services**: TelegramAdminBotService (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), SpamActionService (training QC, cross-chat bans), CleanupBackgroundService (retention)
+**Background Services**: TelegramAdminBotService (bot polling), MessageProcessingService (messages/edits/spam), ChatManagementService (admin cache), DetectionActionService (training QC, cross-chat bans), CleanupBackgroundService (retention)
 
 ## Configuration
 
@@ -243,7 +249,7 @@ When `SEQ_URL` is configured, the application automatically enables:
 - Bot not caching: Check TELEGRAM__BOTTOKEN, bot in chat, privacy mode off
 - Image spam failing: Check OPENAI__APIKEY, /data mounted
 - DB growing: Check retention (720h default), cleanup running
-- Rate limits: Check logs for VirusTotalService/OpenAIVisionSpamDetectionService warnings
+- Rate limits: Check logs for VirusTotalService warnings
 - Testing: Always use `--migrate-only` flag, never run app in normal mode (only one instance allowed)
 
 ### Quartz.NET Background Jobs
@@ -269,8 +275,50 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 ## Documentation
 
-**BACKLOG.md**: Contains **pending work only** (features, bugs, refactoring). Do not add "Completed Work" sections - use `git log` for history.
+**GitHub Issues**: All pending work tracked as GitHub issues (features, bugs, refactoring, tech debt). Issues are categorized with labels and milestones.
 **Commit Messages**: All completed work documented with full technical details. Single source of truth for project history.
+**PR Descriptions**: Link related issues using closing keywords (`Closes #123`) at the top of the PR body to auto-close issues when merged.
+
+### GitHub Issue Labels
+
+**Type Labels:**
+- `bug` - Something isn't working
+- `enhancement` - New feature or request
+- `documentation` - Improvements or additions to documentation
+- `refactoring` - Code refactoring
+- `tech-debt` - Technical debt
+- `question` - Further information is requested
+- `duplicate` - This issue or pull request already exists
+- `invalid` - This doesn't seem right
+- `wontfix` - This will not be worked on
+
+**Priority Labels:**
+- `priority-critical` - Critical priority work
+- `priority-high` - High priority work
+- `priority-medium` - Medium priority work
+- `priority-low` - Low priority work
+
+**Effort Labels:**
+- `quick-win` - Can be completed in < 1 hour
+- `small-task` - 1-2 hours of work
+- `medium-task` - 2-4 hours of work
+- `large-task` - 4+ hours of work
+
+**Category Labels:**
+- `ml` - Machine learning features
+- `analytics` - Analytics and reporting
+- `performance` - Performance optimization
+- `deployment` - Deployment and infrastructure
+- `backend` - Backend/API work
+- `database` - Database schema or queries
+- `frontend` - UI/Frontend work
+- `ci-cd` - CI/CD pipeline work
+- `testing` - Test coverage or testing tools
+- `ux` - User experience improvements
+
+**Helper Labels:**
+- `good first issue` - Good for newcomers
+- `help wanted` - Extra attention is needed
 
 ## Testing
 
@@ -295,4 +343,4 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 ### Documentation
 
-- Never include time estimates in documentation or backlog items
+- Never include time estimates in documentation or GitHub issues

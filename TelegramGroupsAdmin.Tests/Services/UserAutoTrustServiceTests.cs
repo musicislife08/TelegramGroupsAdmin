@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using TelegramGroupsAdmin.ContentDetection.Configuration;
+using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -18,7 +19,7 @@ public class UserAutoTrustServiceTests
 {
     private IDetectionResultsRepository _detectionResultsRepo = null!;
     private IUserActionsRepository _userActionsRepo = null!;
-    private ISpamDetectionConfigRepository _configRepo = null!;
+    private IContentDetectionConfigRepository _configRepo = null!;
     private IAuditLogRepository _auditLogRepo = null!;
     private ITelegramUserRepository _userRepo = null!;
     private ILogger<UserAutoTrustService> _logger = null!;
@@ -32,7 +33,7 @@ public class UserAutoTrustServiceTests
     {
         _detectionResultsRepo = Substitute.For<IDetectionResultsRepository>();
         _userActionsRepo = Substitute.For<IUserActionsRepository>();
-        _configRepo = Substitute.For<ISpamDetectionConfigRepository>();
+        _configRepo = Substitute.For<IContentDetectionConfigRepository>();
         _auditLogRepo = Substitute.For<IAuditLogRepository>();
         _userRepo = Substitute.For<ITelegramUserRepository>();
         _logger = Substitute.For<ILogger<UserAutoTrustService>>();
@@ -50,7 +51,7 @@ public class UserAutoTrustServiceTests
     public async Task CheckAndApplyAutoTrust_FeatureDisabled_DoesNotTrust()
     {
         // Arrange
-        var config = new SpamDetectionConfig { FirstMessageOnly = false };
+        var config = new ContentDetectionConfig { FirstMessageOnly = false };
         _configRepo.GetEffectiveConfigAsync(TestChatId, Arg.Any<CancellationToken>())
             .Returns(config);
 
@@ -66,7 +67,7 @@ public class UserAutoTrustServiceTests
     public async Task CheckAndApplyAutoTrust_UserNotFound_DoesNotTrust()
     {
         // Arrange
-        var config = new SpamDetectionConfig { FirstMessageOnly = true };
+        var config = new ContentDetectionConfig { FirstMessageOnly = true };
         _configRepo.GetEffectiveConfigAsync(TestChatId, Arg.Any<CancellationToken>())
             .Returns(config);
         _userRepo.GetByIdAsync(TestUserId, Arg.Any<CancellationToken>())
@@ -83,7 +84,7 @@ public class UserAutoTrustServiceTests
     public async Task CheckAndApplyAutoTrust_AccountTooYoung_DoesNotTrust()
     {
         // Arrange - account is 1 hour old, requirement is 24 hours
-        var config = new SpamDetectionConfig
+        var config = new ContentDetectionConfig
         {
             FirstMessageOnly = true,
             AutoTrustMinAccountAgeHours = 24,
@@ -110,7 +111,7 @@ public class UserAutoTrustServiceTests
     public async Task CheckAndApplyAutoTrust_AccountOldEnough_NotEnoughMessages_DoesNotTrust()
     {
         // Arrange - account is 48 hours old (passes), but only 2 qualifying messages (need 3)
-        var config = new SpamDetectionConfig
+        var config = new ContentDetectionConfig
         {
             FirstMessageOnly = true,
             AutoTrustMinAccountAgeHours = 24,
@@ -139,7 +140,7 @@ public class UserAutoTrustServiceTests
     public async Task CheckAndApplyAutoTrust_BothConditionsMet_TrustsUser()
     {
         // Arrange - account is 48 hours old AND has 3 qualifying messages
-        var config = new SpamDetectionConfig
+        var config = new ContentDetectionConfig
         {
             FirstMessageOnly = true,
             AutoTrustMinAccountAgeHours = 24,
@@ -174,7 +175,7 @@ public class UserAutoTrustServiceTests
     public async Task CheckAndApplyAutoTrust_ZeroAccountAgeRequired_SkipsAgeCheck()
     {
         // Arrange - AutoTrustMinAccountAgeHours = 0 means skip age check
-        var config = new SpamDetectionConfig
+        var config = new ContentDetectionConfig
         {
             FirstMessageOnly = true,
             AutoTrustMinAccountAgeHours = 0, // Disabled

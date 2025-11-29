@@ -1,0 +1,94 @@
+using System.Diagnostics;
+using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
+using TelegramGroupsAdmin.ContentDetection.Models;
+
+namespace TelegramGroupsAdmin.ContentDetection.Checks;
+
+/// <summary>
+/// V2 invisible chars check with proper abstention
+/// Key fix: Abstain when no invisible chars (not Clean 20%)
+/// Scoring: 1.5 points when found (research guidance)
+/// </summary>
+public class InvisibleCharsContentCheckV2(ILogger<InvisibleCharsContentCheckV2> logger) : IContentCheckV2
+{
+    private const double ScoreInvisibleChars = 1.5; // Research: heuristics = 1.5 points
+
+    public CheckName CheckName => CheckName.InvisibleChars;
+
+    public bool ShouldExecute(ContentCheckRequest request)
+    {
+        // Skip empty messages
+        if (string.IsNullOrWhiteSpace(request.Message))
+        {
+            return false;
+        }
+
+        // PERF-3 Option B: Skip text analysis for trusted/admin users
+        // InvisibleChars is not a critical check - it's a heuristic and should skip for trusted users
+        if (request.IsUserTrusted || request.IsUserAdmin)
+        {
+            logger.LogDebug(
+                "Skipping InvisibleChars check for user {UserId}: User is {UserType}",
+                request.UserId,
+                request.IsUserTrusted ? "trusted" : "admin");
+            return false;
+        }
+
+        return true;
+    }
+
+    public ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
+    {
+        var startTimestamp = Stopwatch.GetTimestamp();
+        var req = (InvisibleCharsCheckRequest)request;
+
+        try
+        {
+            var (hasInvisibleChars, count) = CheckForInvisibleCharacters(req.Message);
+
+            if (hasInvisibleChars)
+            {
+                return ValueTask.FromResult(new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = ScoreInvisibleChars,
+                    Abstained = false,
+                    Details = $"Contains {count} invisible/hidden characters",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                });
+            }
+
+            // V2 FIX: Abstain when no invisible chars (not Clean 20%)
+            return ValueTask.FromResult(new ContentCheckResponseV2
+            {
+                CheckName = CheckName,
+                Score = 0.0,
+                Abstained = true,
+                Details = "No invisible characters detected",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+            });
+        }
+        catch (Exception ex)
+        {
+            return ValueTask.FromResult(new ContentCheckResponseV2
+            {
+                CheckName = CheckName,
+                Score = 0.0,
+                Abstained = true,
+                Details = $"Error: {ex.Message}",
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+            });
+        }
+    }
+
+    private static (bool hasInvisibleChars, int count) CheckForInvisibleCharacters(string message)
+    {
+        // Check for invisible/zero-width characters
+        var count = message.Count(c => c == '\u200B' || c == '\u200C' || c == '\u200D' || c == '\uFEFF');
+        return (count > 0, count);
+    }
+}

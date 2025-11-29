@@ -218,9 +218,9 @@ public class ImageTextExtractionService : IImageTextExtractionService
         }
 
         // Priority 2: Try common binary names
-        var binaryNames = OperatingSystem.IsWindows()
-            ? new[] { "tesseract.exe" }
-            : new[] { "tesseract" };
+        string[] binaryNames = OperatingSystem.IsWindows()
+            ? ["tesseract.exe"]
+            : ["tesseract"];
 
         foreach (var binaryName in binaryNames)
         {
@@ -238,11 +238,11 @@ public class ImageTextExtractionService : IImageTextExtractionService
             }
 
             // Priority 4: Check common install locations (fallback if not in PATH)
-            var commonPaths = OperatingSystem.IsMacOS()
+            string[] commonPaths = OperatingSystem.IsMacOS()
                 ? ["/opt/homebrew/bin/tesseract", "/usr/local/bin/tesseract"]
                 : OperatingSystem.IsLinux()
-                    ? new[] { "/usr/bin/tesseract", "/usr/local/bin/tesseract" }
-                    : new[] { @"C:\Program Files\Tesseract-OCR\tesseract.exe" };
+                    ? ["/usr/bin/tesseract", "/usr/local/bin/tesseract"]
+                    : [@"C:\Program Files\Tesseract-OCR\tesseract.exe"];
 
             foreach (var commonPath in commonPaths)
             {

@@ -155,31 +155,31 @@ public static class GoldenDataset
         public const long Msg1_UserId = TelegramUsers.User2_TelegramUserId;
         public const long Msg1_ChatId = ManagedChats.MainChat_Id;
         public const string Msg1_Text = "Fair enough";
-        public const int Msg1_SpamCheckSkipReason = 2;
+        public const int Msg1_ContentCheckSkipReason = 2;
 
         public const long Msg2_Id = 82618;
         public const long Msg2_UserId = 1232994248; // Additional user
         public const long Msg2_ChatId = ManagedChats.MainChat_Id;
         public const string Msg2_Text = "He was old and crusty 20yrs ago 😂.  I'm guessing he's had enough.";
-        public const int Msg2_SpamCheckSkipReason = 2;
+        public const int Msg2_ContentCheckSkipReason = 2;
 
         public const long Msg3_Id = 82617;
         public const long Msg3_UserId = TelegramUsers.User2_TelegramUserId;
         public const long Msg3_ChatId = ManagedChats.MainChat_Id;
         public const string Msg3_Text = "Get while the getting's good?";
-        public const int Msg3_SpamCheckSkipReason = 2;
+        public const int Msg3_ContentCheckSkipReason = 2;
 
         public const long Msg4_Id = 82616;
         public const long Msg4_UserId = TelegramUsers.User2_TelegramUserId;
         public const long Msg4_ChatId = ManagedChats.MainChat_Id;
         public const string Msg4_Text = "Sounds like he may wanna do it again at some point. I know looking at the state of things I might want to be in it while watching whatever is gonna go down in the economy";
-        public const int Msg4_SpamCheckSkipReason = 2;
+        public const int Msg4_ContentCheckSkipReason = 2;
 
         public const long Msg5_Id = 82615;
         public const long Msg5_UserId = 1232994248;
         public const long Msg5_ChatId = ManagedChats.MainChat_Id;
         public const string Msg5_Text = "Sad to see him ride out, he definitely knows how to run an org.";
-        public const int Msg5_SpamCheckSkipReason = 2;
+        public const int Msg5_ContentCheckSkipReason = 2;
 
         // Message with media
         public const long Msg6_Id = 82612;
@@ -187,42 +187,42 @@ public static class GoldenDataset
         public const long Msg6_ChatId = ManagedChats.MainChat_Id;
         public const string? Msg6_Text = null; // Media only
         public const int Msg6_MediaType = 1; // Photo
-        public const int Msg6_SpamCheckSkipReason = 2;
+        public const int Msg6_ContentCheckSkipReason = 2;
 
         // Longer message
         public const long Msg7_Id = 82603;
         public const long Msg7_UserId = TelegramUsers.User2_TelegramUserId;
         public const long Msg7_ChatId = ManagedChats.MainChat_Id;
         public const string Msg7_Text = "OK, I feel as though I can now say this from a position of competency, trial and error success.\n\nJust pay the feckin $20.\n\nEven with a used car value worth of GPUs, there is not a single sumbitchin local LLM to approach the effectiveness of even the $20 Claude models with Code CLI.\n\nI feel like I have a very expensive chat bot that feeds me a chain of errors to correct in my shed.";
-        public const int Msg7_SpamCheckSkipReason = 2;
+        public const int Msg7_ContentCheckSkipReason = 2;
 
         // Professional conversation
         public const long Msg8_Id = 82606;
         public const long Msg8_UserId = 934156131;
         public const long Msg8_ChatId = ManagedChats.MainChat_Id;
         public const string Msg8_Text = "I've been active with the American Institute of Architects large firm Roundtable for years. We have an email list. I emailed every single General Counsel at the top 20 architectural firms, and that's how I got this job and why I'm talking to the other firm too.";
-        public const int Msg8_SpamCheckSkipReason = 1;
+        public const int Msg8_ContentCheckSkipReason = 1;
 
         // Healthcare tech discussion
         public const long Msg9_Id = 82596;
         public const long Msg9_UserId = 468009795;
         public const long Msg9_ChatId = ManagedChats.MainChat_Id;
         public const string Msg9_Text = "I have close to 8 years of experience in Healthcare tech. So I have that momentum.";
-        public const int Msg9_SpamCheckSkipReason = 2;
+        public const int Msg9_ContentCheckSkipReason = 2;
 
         // Software engineering context
         public const long Msg10_Id = 82594;
         public const long Msg10_UserId = 468009795;
         public const long Msg10_ChatId = ManagedChats.MainChat_Id;
         public const string Msg10_Text = "I'm a software engineering manager.  Like I'm the boss of people who write the code.";
-        public const int Msg10_SpamCheckSkipReason = 2;
+        public const int Msg10_ContentCheckSkipReason = 2;
 
         // Message for Result2
         public const long Msg11_Id = 82581;
         public const long Msg11_UserId = TelegramUsers.User1_TelegramUserId;
         public const long Msg11_ChatId = ManagedChats.MainChat_Id;
         public const string Msg11_Text = "I hit 30 last summer.";
-        public const int Msg11_SpamCheckSkipReason = 0; // Actually checked
+        public const int Msg11_ContentCheckSkipReason = 0; // Actually checked
     }
 
     /// <summary>
@@ -348,19 +348,19 @@ public static class GoldenDataset
         // 4. Seed messages (use parameters for text to handle special characters)
         await context.Database.ExecuteSqlRawAsync(
             $$"""
-            INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, media_type, spam_check_skip_reason)
+            INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, media_type, content_check_skip_reason)
             VALUES
-            ({{Messages.Msg1_Id}}, {{Messages.Msg1_UserId}}, {{Messages.Msg1_ChatId}}, NOW() - INTERVAL '1 hour', {0}, NULL, {{Messages.Msg1_SpamCheckSkipReason}}),
-            ({{Messages.Msg2_Id}}, {{Messages.Msg2_UserId}}, {{Messages.Msg2_ChatId}}, NOW() - INTERVAL '2 hours', {1}, NULL, {{Messages.Msg2_SpamCheckSkipReason}}),
-            ({{Messages.Msg3_Id}}, {{Messages.Msg3_UserId}}, {{Messages.Msg3_ChatId}}, NOW() - INTERVAL '3 hours', {2}, NULL, {{Messages.Msg3_SpamCheckSkipReason}}),
-            ({{Messages.Msg4_Id}}, {{Messages.Msg4_UserId}}, {{Messages.Msg4_ChatId}}, NOW() - INTERVAL '4 hours', {3}, NULL, {{Messages.Msg4_SpamCheckSkipReason}}),
-            ({{Messages.Msg5_Id}}, {{Messages.Msg5_UserId}}, {{Messages.Msg5_ChatId}}, NOW() - INTERVAL '5 hours', {4}, NULL, {{Messages.Msg5_SpamCheckSkipReason}}),
-            ({{Messages.Msg6_Id}}, {{Messages.Msg6_UserId}}, {{Messages.Msg6_ChatId}}, NOW() - INTERVAL '6 hours', NULL, {{Messages.Msg6_MediaType}}, {{Messages.Msg6_SpamCheckSkipReason}}),
-            ({{Messages.Msg7_Id}}, {{Messages.Msg7_UserId}}, {{Messages.Msg7_ChatId}}, NOW() - INTERVAL '7 hours', {5}, NULL, {{Messages.Msg7_SpamCheckSkipReason}}),
-            ({{Messages.Msg8_Id}}, {{Messages.Msg8_UserId}}, {{Messages.Msg8_ChatId}}, NOW() - INTERVAL '8 hours', {6}, NULL, {{Messages.Msg8_SpamCheckSkipReason}}),
-            ({{Messages.Msg9_Id}}, {{Messages.Msg9_UserId}}, {{Messages.Msg9_ChatId}}, NOW() - INTERVAL '9 hours', {7}, NULL, {{Messages.Msg9_SpamCheckSkipReason}}),
-            ({{Messages.Msg10_Id}}, {{Messages.Msg10_UserId}}, {{Messages.Msg10_ChatId}}, NOW() - INTERVAL '10 hours', {8}, NULL, {{Messages.Msg10_SpamCheckSkipReason}}),
-            ({{Messages.Msg11_Id}}, {{Messages.Msg11_UserId}}, {{Messages.Msg11_ChatId}}, NOW() - INTERVAL '11 hours', {9}, NULL, {{Messages.Msg11_SpamCheckSkipReason}})
+            ({{Messages.Msg1_Id}}, {{Messages.Msg1_UserId}}, {{Messages.Msg1_ChatId}}, NOW() - INTERVAL '1 hour', {0}, NULL, {{Messages.Msg1_ContentCheckSkipReason}}),
+            ({{Messages.Msg2_Id}}, {{Messages.Msg2_UserId}}, {{Messages.Msg2_ChatId}}, NOW() - INTERVAL '2 hours', {1}, NULL, {{Messages.Msg2_ContentCheckSkipReason}}),
+            ({{Messages.Msg3_Id}}, {{Messages.Msg3_UserId}}, {{Messages.Msg3_ChatId}}, NOW() - INTERVAL '3 hours', {2}, NULL, {{Messages.Msg3_ContentCheckSkipReason}}),
+            ({{Messages.Msg4_Id}}, {{Messages.Msg4_UserId}}, {{Messages.Msg4_ChatId}}, NOW() - INTERVAL '4 hours', {3}, NULL, {{Messages.Msg4_ContentCheckSkipReason}}),
+            ({{Messages.Msg5_Id}}, {{Messages.Msg5_UserId}}, {{Messages.Msg5_ChatId}}, NOW() - INTERVAL '5 hours', {4}, NULL, {{Messages.Msg5_ContentCheckSkipReason}}),
+            ({{Messages.Msg6_Id}}, {{Messages.Msg6_UserId}}, {{Messages.Msg6_ChatId}}, NOW() - INTERVAL '6 hours', NULL, {{Messages.Msg6_MediaType}}, {{Messages.Msg6_ContentCheckSkipReason}}),
+            ({{Messages.Msg7_Id}}, {{Messages.Msg7_UserId}}, {{Messages.Msg7_ChatId}}, NOW() - INTERVAL '7 hours', {5}, NULL, {{Messages.Msg7_ContentCheckSkipReason}}),
+            ({{Messages.Msg8_Id}}, {{Messages.Msg8_UserId}}, {{Messages.Msg8_ChatId}}, NOW() - INTERVAL '8 hours', {6}, NULL, {{Messages.Msg8_ContentCheckSkipReason}}),
+            ({{Messages.Msg9_Id}}, {{Messages.Msg9_UserId}}, {{Messages.Msg9_ChatId}}, NOW() - INTERVAL '9 hours', {7}, NULL, {{Messages.Msg9_ContentCheckSkipReason}}),
+            ({{Messages.Msg10_Id}}, {{Messages.Msg10_UserId}}, {{Messages.Msg10_ChatId}}, NOW() - INTERVAL '10 hours', {8}, NULL, {{Messages.Msg10_ContentCheckSkipReason}}),
+            ({{Messages.Msg11_Id}}, {{Messages.Msg11_UserId}}, {{Messages.Msg11_ChatId}}, NOW() - INTERVAL '11 hours', {9}, NULL, {{Messages.Msg11_ContentCheckSkipReason}})
             """,
             Messages.Msg1_Text, Messages.Msg2_Text, Messages.Msg3_Text, Messages.Msg4_Text, Messages.Msg5_Text,
             Messages.Msg7_Text, Messages.Msg8_Text, Messages.Msg9_Text, Messages.Msg10_Text, Messages.Msg11_Text

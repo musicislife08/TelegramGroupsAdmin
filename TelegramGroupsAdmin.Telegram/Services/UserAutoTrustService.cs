@@ -15,7 +15,7 @@ public class UserAutoTrustService
 {
     private readonly IDetectionResultsRepository _detectionResultsRepository;
     private readonly IUserActionsRepository _userActionsRepository;
-    private readonly ISpamDetectionConfigRepository _spamDetectionConfigRepository;
+    private readonly IContentDetectionConfigRepository _contentDetectionConfigRepository;
     private readonly IAuditLogRepository _auditLogRepository;
     private readonly ITelegramUserRepository _userRepository;
     private readonly ILogger<UserAutoTrustService> _logger;
@@ -23,14 +23,14 @@ public class UserAutoTrustService
     public UserAutoTrustService(
         IDetectionResultsRepository detectionResultsRepository,
         IUserActionsRepository userActionsRepository,
-        ISpamDetectionConfigRepository spamDetectionConfigRepository,
+        IContentDetectionConfigRepository contentDetectionConfigRepository,
         IAuditLogRepository auditLogRepository,
         ITelegramUserRepository userRepository,
         ILogger<UserAutoTrustService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;
         _userActionsRepository = userActionsRepository;
-        _spamDetectionConfigRepository = spamDetectionConfigRepository;
+        _contentDetectionConfigRepository = contentDetectionConfigRepository;
         _auditLogRepository = auditLogRepository;
         _userRepository = userRepository;
         _logger = logger;
@@ -49,7 +49,7 @@ public class UserAutoTrustService
         try
         {
             // Get effective config (chat-specific overrides, global defaults)
-            var config = await _spamDetectionConfigRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
+            var config = await _contentDetectionConfigRepository.GetEffectiveConfigAsync(chatId, cancellationToken);
 
             // Feature disabled - skip
             if (!config.FirstMessageOnly)

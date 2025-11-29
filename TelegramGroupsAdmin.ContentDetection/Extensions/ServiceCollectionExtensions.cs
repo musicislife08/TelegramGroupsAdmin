@@ -34,8 +34,11 @@ public static class ServiceCollectionExtensions
                                                                                                 // NOTE: IMessageHistoryService is registered by the main app (TelegramAdminBotService implements it)
 
             // Register repositories (needed by engine for config)
-            services.AddScoped<ISpamDetectionConfigRepository, SpamDetectionConfigRepository>();
+            services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();
             services.AddScoped<IContentCheckConfigRepository, ContentCheckConfigRepository>(); // Phase 4.14: Critical checks
+
+            // Register detection results repository
+            services.AddScoped<IDetectionResultsRepository, DetectionResultsRepository>();
 
             // Register URL filtering repositories (Phase 4.13)
             services.AddScoped<IBlocklistSubscriptionsRepository, BlocklistSubscriptionsRepository>();
@@ -51,6 +54,18 @@ public static class ServiceCollectionExtensions
 
             // Register video training samples repository (ML-6: Layer 2 hash similarity)
             services.AddScoped<IVideoTrainingSamplesRepository, VideoTrainingSamplesRepository>();
+
+            // Register prompt version repository (Phase 4.X: AI-powered prompt builder)
+            services.AddScoped<IPromptVersionRepository, PromptVersionRepository>();
+
+            // Register threshold recommendations repository (ML.NET threshold optimization)
+            services.AddScoped<IThresholdRecommendationsRepository, ThresholdRecommendationsRepository>();
+
+            // Register reports repository
+            services.AddScoped<IReportsRepository, ReportsRepository>();
+
+            // Register impersonation alerts repository (Phase 4.10: Anti-Impersonation Detection)
+            services.AddScoped<IImpersonationAlertsRepository, ImpersonationAlertsRepository>();
 
             // Register URL filtering services (Phase 4.13)
             services.AddScoped<IBlocklistSyncService, BlocklistSyncService>();
@@ -82,17 +97,17 @@ public static class ServiceCollectionExtensions
 
             // Register V2 content checks (proper abstention support)
             // Key fix: Return Score=0 when finding nothing (not "Clean 20%")
-            services.AddScoped<IContentCheckV2, Checks.InvisibleCharsSpamCheckV2>();
-            services.AddScoped<IContentCheckV2, Checks.StopWordsSpamCheckV2>();
-            services.AddScoped<IContentCheckV2, Checks.CasSpamCheckV2>();
-            services.AddScoped<IContentCheckV2, Checks.SimilaritySpamCheckV2>();
-            services.AddScoped<IContentCheckV2, Checks.BayesSpamCheckV2>();
-            services.AddScoped<IContentCheckV2, Checks.SpacingSpamCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.InvisibleCharsContentCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.StopWordsContentCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.CasContentCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.SimilarityContentCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.BayesContentCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.SpacingContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.OpenAIContentCheckV2>();
-            services.AddScoped<IContentCheckV2, Checks.UrlBlocklistSpamCheckV2>();
-            services.AddScoped<IContentCheckV2, Checks.ThreatIntelSpamCheckV2>();
-            services.AddScoped<IContentCheckV2, Checks.ImageSpamCheckV2>();
-            services.AddScoped<IContentCheckV2, Checks.VideoSpamCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.UrlBlocklistContentCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.ThreatIntelContentCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.ImageContentCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.VideoContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.FileScanningCheckV2>();  // Phase 4.17: File scanning (always_run=true)
 
             // Register HTTP client for external API calls

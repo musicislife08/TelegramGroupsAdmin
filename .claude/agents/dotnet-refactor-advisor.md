@@ -17,7 +17,7 @@ Examples:
 - **.NET 10** and **C# 14** latest features (when they improve readability)
 - **C# 13** features (params collections, new lock semantics, ref struct interfaces)
 - Modern C# patterns (records, pattern matching, ranges, init-only properties)
-- SOLID principles and clean architecture
+- SOLID, Dry principles and clean architecture
 - Performance optimization (Span<T>, Memory<T>, ValueTask, stack allocation, escape analysis)
 - Async/await best practices (IAsyncEnumerable<T>, streaming, ConfigureAwait)
 - Dependency injection patterns

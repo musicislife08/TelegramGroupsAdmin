@@ -89,7 +89,7 @@ public class TelegramUserManagementService
     /// </summary>
     public Task<List<TopActiveUser>> GetTopActiveUsersAsync(int limit = 3, CancellationToken ct = default)
     {
-        return _userRepository.GetTopActiveUsersAsync(limit, ct);
+        return _userRepository.GetTopActiveUsersAsync(limit: limit, ct: ct);
     }
 
     /// <summary>

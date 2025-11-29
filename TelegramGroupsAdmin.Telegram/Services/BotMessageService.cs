@@ -120,7 +120,7 @@ public class BotMessageService
             MediaLocalPath: null,
             MediaDuration: null,
             Translation: null,
-            SpamCheckSkipReason: SpamCheckSkipReason.UserAdmin // Bot messages skip spam checks
+            ContentCheckSkipReason: ContentCheckSkipReason.UserAdmin // Bot messages skip content checks
         );
 
         await _messageRepo.InsertMessageAsync(messageRecord, cancellationToken);

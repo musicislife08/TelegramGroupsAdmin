@@ -32,7 +32,7 @@ public class MessageExportService(AuthenticationStateProvider authStateProvider)
             throw new UnauthorizedAccessException("Export feature requires Admin or Owner permission level.");
         }
     }
-    public async Task<byte[]> ExportToCsvAsync(IEnumerable<MessageRecord> messages, Dictionary<long, SpamCheckRecord?> spamChecks)
+    public async Task<byte[]> ExportToCsvAsync(IEnumerable<MessageRecord> messages, Dictionary<long, ContentCheckRecord?> contentChecks)
     {
         // Validate permission (Admin+ required)
         await ValidateExportPermissionAsync();
@@ -65,7 +65,7 @@ public class MessageExportService(AuthenticationStateProvider authStateProvider)
         // Write data
         foreach (var message in messages)
         {
-            var spamCheck = spamChecks.GetValueOrDefault(message.MessageId);
+            var contentCheck = contentChecks.GetValueOrDefault(message.MessageId);
             var timestamp = message.Timestamp;
 
             csv.WriteField(message.MessageId);
@@ -82,10 +82,10 @@ public class MessageExportService(AuthenticationStateProvider authStateProvider)
             csv.WriteField(message.EditDate?.ToString() ?? string.Empty);
             csv.WriteField(message.EditDate.HasValue);
             csv.WriteField(message.ContentHash ?? string.Empty);
-            csv.WriteField(spamCheck?.IsSpam.ToString() ?? "Not Checked");
-            csv.WriteField(spamCheck?.Confidence.ToString() ?? string.Empty);
-            csv.WriteField(spamCheck?.Reason ?? string.Empty);
-            csv.WriteField(spamCheck?.CheckType ?? string.Empty);
+            csv.WriteField(contentCheck?.IsSpam.ToString() ?? "Not Checked");
+            csv.WriteField(contentCheck?.Confidence.ToString() ?? string.Empty);
+            csv.WriteField(contentCheck?.Reason ?? string.Empty);
+            csv.WriteField(contentCheck?.CheckType ?? string.Empty);
             await csv.NextRecordAsync();
         }
 
@@ -93,14 +93,14 @@ public class MessageExportService(AuthenticationStateProvider authStateProvider)
         return memoryStream.ToArray();
     }
 
-    public async Task<byte[]> ExportToJsonAsync(IEnumerable<MessageRecord> messages, Dictionary<long, SpamCheckRecord?> spamChecks)
+    public async Task<byte[]> ExportToJsonAsync(IEnumerable<MessageRecord> messages, Dictionary<long, ContentCheckRecord?> contentChecks)
     {
         // Validate permission (Admin+ required)
         await ValidateExportPermissionAsync();
 
         var exportData = messages.Select(message =>
         {
-            var spamCheck = spamChecks.GetValueOrDefault(message.MessageId);
+            var contentCheck = contentChecks.GetValueOrDefault(message.MessageId);
             var timestamp = message.Timestamp;
 
             return new
@@ -122,13 +122,13 @@ public class MessageExportService(AuthenticationStateProvider authStateProvider)
                 EditDate = message.EditDate,
                 IsEdited = message.EditDate.HasValue,
                 ContentHash = message.ContentHash,
-                SpamCheck = spamCheck != null ? new
+                ContentCheck = contentCheck != null ? new
                 {
-                    IsSpam = spamCheck.IsSpam,
-                    Confidence = spamCheck.Confidence,
-                    Reason = spamCheck.Reason,
-                    CheckType = spamCheck.CheckType,
-                    CheckTimestamp = spamCheck.CheckTimestamp
+                    IsSpam = contentCheck.IsSpam,
+                    Confidence = contentCheck.Confidence,
+                    Reason = contentCheck.Reason,
+                    CheckType = contentCheck.CheckType,
+                    CheckTimestamp = contentCheck.CheckTimestamp
                 } : null
             };
         }).ToList();

@@ -1,5 +1,7 @@
 @page "/reports"
 @using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.ContentDetection.Models
+@using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Components.Reports
 @inject IReportsRepository ReportsRepository
@@ -132,7 +134,7 @@
         var user = authState.User;
         if (user.Identity?.IsAuthenticated == true)
         {
-            var userIdClaim = user.FindFirst("sub");
+            var userIdClaim = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier);
             if (userIdClaim != null)
             {
                 _currentUserId = userIdClaim.Value;

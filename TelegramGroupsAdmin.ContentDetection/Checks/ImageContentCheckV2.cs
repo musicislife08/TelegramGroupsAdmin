@@ -1,0 +1,547 @@
+using System.Diagnostics;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Abstractions;
+using TelegramGroupsAdmin.ContentDetection.Constants;
+using TelegramGroupsAdmin.ContentDetection.Helpers;
+using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Services;
+
+namespace TelegramGroupsAdmin.ContentDetection.Checks;
+
+/// <summary>
+/// V2 image spam check with 3-layer detection strategy and proper scoring
+/// Layer 1: Hash similarity (fastest, cheapest, most reliable for known spam)
+/// Layer 2: OCR + text spam checks (fast, cheap, good for text-heavy images)
+/// Layer 3: OpenAI Vision fallback (slow, expensive, comprehensive)
+/// Scoring: Maps confidence (0-100%) to points (0.0-5.0)
+/// </summary>
+public class ImageContentCheckV2(
+    ILogger<ImageContentCheckV2> logger,
+    IHttpClientFactory httpClientFactory,
+    IImageTextExtractionService imageTextExtractionService,
+    IServiceProvider serviceProvider,
+    IContentDetectionConfigRepository configRepository,
+    IPhotoHashService photoHashService,
+    IImageTrainingSamplesRepository imageTrainingSamplesRepository) : IContentCheckV2
+{
+    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
+    private readonly IImageTextExtractionService _imageTextExtractionService = imageTextExtractionService;
+    private readonly IServiceProvider _serviceProvider = serviceProvider; // Lazy resolve to break circular dependency
+    private readonly IContentDetectionConfigRepository _configRepository = configRepository;
+    private readonly IPhotoHashService _photoHashService = photoHashService;
+    private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
+
+    public CheckName CheckName => CheckName.ImageSpam;
+
+    /// <summary>
+    /// Check if image spam check should be executed
+    /// </summary>
+    public bool ShouldExecute(ContentCheckRequest request)
+    {
+        // Run if any image source is provided
+        return request.ImageData != null ||
+               !string.IsNullOrEmpty(request.PhotoFileId) ||
+               !string.IsNullOrEmpty(request.PhotoLocalPath);
+    }
+
+    /// <summary>
+    /// Execute image spam check using 3-layer strategy
+    /// Returns score 0.0-5.0 based on confidence
+    /// </summary>
+    public async ValueTask<ContentCheckResponseV2> CheckAsync(ContentCheckRequestBase request)
+    {
+        var startTimestamp = Stopwatch.GetTimestamp();
+        var req = (ImageCheckRequest)request;
+
+        try
+        {
+            // Load config
+            var config = await _configRepository.GetEffectiveConfigAsync(req.ChatId, req.CancellationToken);
+            var imageConfig = config.ImageSpam;
+
+            // ML-5 Layer 1: Hash similarity check (fastest - check if we've seen this spam before)
+            if (imageConfig.UseHashSimilarity &&
+                !string.IsNullOrEmpty(req.PhotoLocalPath) &&
+                File.Exists(req.PhotoLocalPath))
+            {
+                var photoHash = await _photoHashService.ComputePhotoHashAsync(req.PhotoLocalPath);
+                if (photoHash != null)
+                {
+                    // Query training samples (limited by config for performance)
+                    var trainingSamples = await _imageTrainingSamplesRepository.GetRecentSamplesAsync(
+                        imageConfig.MaxTrainingSamplesToCompare,
+                        req.CancellationToken);
+
+                    if (trainingSamples.Count > 0)
+                    {
+                        // Find best match by comparing hash similarity
+                        double bestSimilarity = 0.0;
+                        bool? matchedSpamLabel = null;
+
+                        foreach (var (sampleHash, isSpam) in trainingSamples)
+                        {
+                            var similarity = _photoHashService.CompareHashes(photoHash, sampleHash);
+                            if (similarity > bestSimilarity)
+                            {
+                                bestSimilarity = similarity;
+                                matchedSpamLabel = isSpam;
+                            }
+                        }
+
+                        // Check if similarity meets threshold
+                        if (bestSimilarity >= imageConfig.HashSimilarityThreshold)
+                        {
+                            // Map confidence to score: 95% default → 4.75 points
+                            var score = (imageConfig.HashMatchConfidence / 100.0) * 5.0;
+
+                            // If matched HAM (not spam), abstain (don't give negative signal in V2)
+                            if (matchedSpamLabel == false)
+                            {
+                                logger.LogInformation(
+                                    "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%) but matched HAM sample, abstaining",
+                                    bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100);
+
+                                return new ContentCheckResponseV2
+                                {
+                                    CheckName = CheckName,
+                                    Score = 0.0,
+                                    Abstained = true,
+                                    Details = $"Image hash {bestSimilarity:P0} similar to known ham sample (abstaining)",
+                                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                                };
+                            }
+
+                            logger.LogInformation(
+                                "ImageSpam V2 Layer 1: Hash match found ({Similarity:F2}% >= {Threshold:F2}%). Returning {Score:F2} points",
+                                bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100, score);
+
+                            return new ContentCheckResponseV2
+                            {
+                                CheckName = CheckName,
+                                Score = score,
+                                Abstained = false,
+                                Details = $"Image hash {bestSimilarity:P0} similar to known spam sample",
+                                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                            };
+                        }
+
+                        logger.LogDebug(
+                            "ImageSpam V2 Layer 1: Best hash similarity {Similarity:F2}% below threshold {Threshold:F2}%, proceeding to OCR",
+                            bestSimilarity * 100, imageConfig.HashSimilarityThreshold * 100);
+                    }
+                    else
+                    {
+                        logger.LogDebug("ImageSpam V2 Layer 1: No training samples available for hash comparison");
+                    }
+                }
+                else
+                {
+                    logger.LogWarning("Failed to compute photo hash for {PhotoPath}", req.PhotoLocalPath);
+                }
+            }
+
+            // ML-5 Layer 2: OCR + text-based spam detection
+            if (imageConfig.UseOCR &&
+                !string.IsNullOrEmpty(req.PhotoLocalPath) &&
+                File.Exists(req.PhotoLocalPath))
+            {
+                var extractedText = await _imageTextExtractionService.ExtractTextAsync(
+                    req.PhotoLocalPath,
+                    req.CancellationToken);
+
+                if (!string.IsNullOrWhiteSpace(extractedText) &&
+                    extractedText.Length >= imageConfig.MinOcrTextLength)
+                {
+                    logger.LogDebug(
+                        "ImageSpam V2 Layer 2: OCR extracted {CharCount} characters from {PhotoPath}, running text-based spam checks",
+                        extractedText.Length, Path.GetFileName(req.PhotoLocalPath));
+
+                    // Create text-only request (no ImageData = ImageSpamCheck won't re-execute)
+                    var ocrRequest = new ContentCheckRequest
+                    {
+                        Message = extractedText,
+                        UserId = req.UserId,
+                        UserName = req.UserName,
+                        ChatId = req.ChatId,
+                        Metadata = new ContentCheckMetadata(),
+                        CheckOnly = false,
+                        HasSpamFlags = false,
+                        IsUserTrusted = false,
+                        IsUserAdmin = false,
+                        ImageData = null,  // ← Key: No image = ImageSpamCheck won't run
+                        PhotoFileId = null,
+                        PhotoUrl = null,
+                        PhotoLocalPath = null,
+                        Urls = []
+                    };
+
+                    // Run all text-based spam checks on OCR text
+                    // Lazy-resolve engine to break circular dependency
+                    var contentDetectionEngine = _serviceProvider.GetRequiredService<IContentDetectionEngine>();
+                    var ocrResult = await contentDetectionEngine.CheckMessageAsync(ocrRequest, req.CancellationToken);
+
+                    // Check if result is confident enough to skip expensive Vision API
+                    if (ocrResult.MaxConfidence >= imageConfig.OcrConfidenceThreshold)
+                    {
+                        // Map OCR text check confidence to score
+                        var score = ocrResult.IsSpam ? (ocrResult.MaxConfidence / 100.0) * 5.0 : 0.0;
+
+                        // V2: Only return score if spam detected, otherwise abstain
+                        if (!ocrResult.IsSpam)
+                        {
+                            logger.LogDebug(
+                                "ImageSpam V2 Layer 2: OCR text checks returned clean ({Confidence}%), abstaining",
+                                ocrResult.MaxConfidence);
+
+                            return new ContentCheckResponseV2
+                            {
+                                CheckName = CheckName,
+                                Score = 0.0,
+                                Abstained = true,
+                                Details = "OCR detected text analyzed as clean, abstaining",
+                                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                            };
+                        }
+
+                        var flaggedChecks = ocrResult.CheckResults
+                            .Where(c => c.Result == CheckResultType.Spam)
+                            .Select(c => c.CheckName)
+                            .ToList();
+
+                        logger.LogInformation(
+                            "ImageSpam V2 Layer 2: OCR text checks confident ({Confidence}% >= {Threshold}%), returning {Score:F2} points",
+                            ocrResult.MaxConfidence, imageConfig.OcrConfidenceThreshold, score);
+
+                        return new ContentCheckResponseV2
+                        {
+                            CheckName = CheckName,
+                            Score = score,
+                            Abstained = false,
+                            Details = $"OCR detected spam text analyzed by {flaggedChecks.Count} checks: {string.Join(", ", flaggedChecks)}",
+                            ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                        };
+                    }
+
+                    // OCR checks uncertain - proceed to Vision (Layer 3)
+                    logger.LogDebug(
+                        "ImageSpam V2 Layer 2: OCR text checks uncertain (confidence {Confidence}% < {Threshold}%), proceeding to Vision",
+                        ocrResult.MaxConfidence, imageConfig.OcrConfidenceThreshold);
+                }
+                else if (!string.IsNullOrWhiteSpace(extractedText))
+                {
+                    logger.LogDebug("ImageSpam V2 Layer 2: OCR extracted only {CharCount} characters (< {MinLength}), too short for text analysis",
+                        extractedText.Length, imageConfig.MinOcrTextLength);
+                }
+            }
+
+            // ML-5 Layer 3: OpenAI Vision fallback
+            // Note: API key is injected via ApiKeyDelegatingHandler on the named "OpenAI" HttpClient
+
+            // Build image URL - either use provided PhotoUrl, construct from PhotoFileId, or convert PhotoLocalPath
+            string imageUrl;
+            if (!string.IsNullOrEmpty(req.PhotoUrl))
+            {
+                imageUrl = req.PhotoUrl;
+            }
+            else if (!string.IsNullOrEmpty(req.PhotoLocalPath) && File.Exists(req.PhotoLocalPath))
+            {
+                // Convert local file to base64 data URI for OpenAI Vision API
+                var imageBytes = await File.ReadAllBytesAsync(req.PhotoLocalPath, req.CancellationToken);
+                var base64 = Convert.ToBase64String(imageBytes);
+                var mimeType = req.PhotoLocalPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? "image/png" : "image/jpeg";
+                imageUrl = $"data:{mimeType};base64,{base64}";
+            }
+            else if (!string.IsNullOrEmpty(req.PhotoFileId))
+            {
+                logger.LogWarning("PhotoFileId provided but no PhotoUrl - image cannot be processed, abstaining");
+                return new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = 0.0,
+                    Abstained = true,
+                    Details = "No image URL provided",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                };
+            }
+            else
+            {
+                return new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = 0.0,
+                    Abstained = true,
+                    Details = "No image data provided",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                };
+            }
+
+            var prompt = BuildPrompt(req.Message, req.CustomPrompt);
+
+            var apiRequest = new
+            {
+                model = "gpt-4o-mini",
+                messages = new[]
+                {
+                    new
+                    {
+                        role = "user",
+                        content = new object[]
+                        {
+                            new { type = "text", text = prompt },
+                            new
+                            {
+                                type = "image_url",
+                                image_url = new
+                                {
+                                    url = imageUrl,
+                                    detail = "high"
+                                }
+                            }
+                        }
+                    }
+                },
+                max_tokens = 300,
+                temperature = 0.1
+            };
+
+            logger.LogDebug("ImageSpam V2 check for user {UserId}: Calling OpenAI Vision API",
+                req.UserId);
+
+            // Use named "OpenAI" HttpClient (configured in ServiceCollectionExtensions)
+            var httpClient = _httpClientFactory.CreateClient("OpenAI");
+            var response = await httpClient.PostAsJsonAsync(
+                "chat/completions",
+                apiRequest,
+                req.CancellationToken);
+
+            // Handle rate limiting
+            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            {
+                var retryAfter = response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 60;
+                logger.LogWarning("OpenAI Vision rate limit hit. Retry after {RetryAfter} seconds, abstaining", retryAfter);
+
+                return new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = 0.0,
+                    Abstained = true,
+                    Details = $"OpenAI rate limited, retry after {retryAfter}s",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                };
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync(req.CancellationToken);
+                logger.LogError("OpenAI Vision API error: {StatusCode} - {Error}, abstaining", response.StatusCode, error);
+
+                return new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = 0.0,
+                    Abstained = true,
+                    Details = $"OpenAI API error: {response.StatusCode}",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                };
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<OpenAIVisionApiResponse>(cancellationToken: req.CancellationToken);
+            var content = result?.Choices?[0]?.Message?.Content;
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                logger.LogWarning("Empty response from OpenAI Vision for user {UserId}, abstaining", req.UserId);
+                return new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = 0.0,
+                    Abstained = true,
+                    Details = "Empty OpenAI response",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                };
+            }
+
+            return ParseSpamResponse(content, req.UserId, startTimestamp);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error in ImageSpamCheckV2 for user {UserId}, abstaining", req.UserId);
+            return new ContentCheckResponseV2
+            {
+                CheckName = CheckName,
+                Score = 0.0,
+                Abstained = true,
+                Details = $"Error: {ex.Message}",
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+            };
+        }
+    }
+
+    /// <summary>
+    /// Build prompt for OpenAI Vision analysis
+    /// Uses configurable system prompt if provided, otherwise uses default
+    /// </summary>
+    private static string BuildPrompt(string? messageText, string? customPrompt)
+    {
+        // Use custom prompt if provided, otherwise use default
+        var systemPrompt = customPrompt ?? GetDefaultImagePrompt();
+
+        var messageContext = messageText != null
+            ? $"Message text: \"{messageText}\""
+            : "No message text provided.";
+
+        return $$"""
+            {{systemPrompt}}
+
+            {{messageContext}}
+
+            Respond ONLY with valid JSON (no markdown, no code blocks):
+            {
+              "spam": true or false,
+              "confidence": 1-100,
+              "reason": "specific explanation",
+              "patterns_detected": ["list", "of", "patterns"]
+            }
+            """;
+    }
+
+    /// <summary>
+    /// Get default image spam detection prompt (used when SystemPrompt is not configured)
+    /// </summary>
+    private static string GetDefaultImagePrompt() => """
+        You are a spam detection system for Telegram. Analyze this image and determine if it's spam/scam.
+
+        Common Telegram spam patterns:
+        1. Crypto airdrop scams (fake celebrity accounts, "send X get Y back", urgent claims)
+        2. Phishing - fake wallet UIs, transaction confirmations, login screens
+        3. Airdrop scams with urgent language ("claim now", "limited time") + ticker symbols ($TOKEN, $COIN)
+        4. Impersonation - fake verified accounts, customer support
+        5. Get-rich-quick schemes ("earn daily", "passive income", guaranteed profits)
+        6. Screenshots of fake transactions or social media posts
+        7. Referral spam with voucher codes or suspicious links
+
+        IMPORTANT: Legitimate crypto trading news (market analysis, price movements, trading volume) is NOT spam.
+        Only flag content that is clearly attempting to scam users or steal money.
+        """;
+
+    /// <summary>
+    /// Parse OpenAI Vision response and create V2 spam check result with scoring
+    /// </summary>
+    private ContentCheckResponseV2 ParseSpamResponse(string content, long userId, long startTimestamp)
+    {
+        try
+        {
+            // Remove markdown code blocks if present
+            content = content.Trim();
+            if (content.StartsWith("```"))
+            {
+                var lines = content.Split('\n');
+                content = string.Join('\n', lines.Skip(1).SkipLast(1));
+            }
+
+            var response = JsonSerializer.Deserialize<OpenAIVisionResponse>(
+                content,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (response == null)
+            {
+                logger.LogWarning("Failed to deserialize OpenAI Vision response for user {UserId}: {Content}, abstaining",
+                    userId, content);
+                return new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = 0.0,
+                    Abstained = true,
+                    Details = "Failed to parse OpenAI response",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                };
+            }
+
+            logger.LogDebug("OpenAI Vision V2 analysis for user {UserId}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
+                userId, response.Spam, response.Confidence, response.Reason);
+
+            var details = response.Reason ?? "No reason provided";
+            if (response.PatternsDetected?.Length > 0)
+            {
+                details += $" (Patterns: {string.Join(", ", response.PatternsDetected)})";
+            }
+
+            // V2: Only return score if spam detected, otherwise abstain
+            if (!response.Spam)
+            {
+                return new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = 0.0,
+                    Abstained = true,
+                    Details = $"OpenAI Vision: Clean ({details})",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                };
+            }
+
+            // Map confidence to score: 0-100% → 0.0-5.0 points
+            var score = (response.Confidence / 100.0) * 5.0;
+
+            return new ContentCheckResponseV2
+            {
+                CheckName = CheckName,
+                Score = score,
+                Abstained = false,
+                Details = details,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error parsing OpenAI Vision response for user {UserId}: {Content}, abstaining",
+                userId, content);
+            return new ContentCheckResponseV2
+            {
+                CheckName = CheckName,
+                Score = 0.0,
+                Abstained = true,
+                Details = "Failed to parse spam analysis",
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+            };
+        }
+    }
+}
+
+/// <summary>
+/// OpenAI API response structure for Vision
+/// </summary>
+internal record OpenAIVisionApiResponse(
+    [property: JsonPropertyName("choices")] VisionChoice[]? Choices
+);
+
+/// <summary>
+/// OpenAI choice structure for Vision
+/// </summary>
+internal record VisionChoice(
+    [property: JsonPropertyName("message")] VisionMessage? Message
+);
+
+/// <summary>
+/// OpenAI message structure for Vision
+/// </summary>
+internal record VisionMessage(
+    [property: JsonPropertyName("content")] string? Content
+);
+
+/// <summary>
+/// OpenAI Vision response structure
+/// </summary>
+internal record OpenAIVisionResponse(
+    [property: JsonPropertyName("spam")] bool Spam,
+    [property: JsonPropertyName("confidence")] int Confidence,
+    [property: JsonPropertyName("reason")] string? Reason,
+    [property: JsonPropertyName("patterns_detected")] string[]? PatternsDetected
+);

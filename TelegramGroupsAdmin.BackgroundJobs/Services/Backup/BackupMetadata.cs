@@ -10,8 +10,13 @@ public class BackupMetadata
     [JsonPropertyName("version")]
     public string Version { get; set; } = "2.0";
 
+    /// <summary>
+    /// Timestamp when the backup was created. Stored as ISO 8601 string in JSON.
+    /// Backward compatible with legacy Unix timestamp format (long) via BackupMetadataDateTimeConverter.
+    /// </summary>
     [JsonPropertyName("created_at")]
-    public long CreatedAt { get; set; }
+    [JsonConverter(typeof(BackupMetadataDateTimeConverter))]
+    public DateTimeOffset CreatedAt { get; set; }
 
     [JsonPropertyName("app_version")]
     public string AppVersion { get; set; } = "1.0.0";
