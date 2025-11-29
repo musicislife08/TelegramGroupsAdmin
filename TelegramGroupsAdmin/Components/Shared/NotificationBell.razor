@@ -1,0 +1,154 @@
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Models
+@inject NotificationStateService NotificationState
+@implements IDisposable
+
+<MudMenu Icon="@Icons.Material.Filled.Notifications"
+         Color="@(NotificationState.UnreadCount > 0 ? Color.Warning : Color.Inherit)"
+         AnchorOrigin="Origin.BottomRight"
+         TransformOrigin="Origin.TopRight"
+         Dense="true"
+         Class="notification-bell">
+
+    @* Badge overlay for unread count *@
+    <ActivatorContent>
+        <MudBadge Content="@NotificationState.UnreadCount"
+                  Color="Color.Error"
+                  Overlap="true"
+                  Visible="@(NotificationState.UnreadCount > 0)">
+            <MudIconButton Icon="@Icons.Material.Filled.Notifications"
+                           Color="@(NotificationState.UnreadCount > 0 ? Color.Warning : Color.Inherit)"
+                           Size="Size.Medium" />
+        </MudBadge>
+    </ActivatorContent>
+
+    <ChildContent>
+        <MudPaper Width="350px" MaxHeight="400px" Style="overflow-y: auto;">
+            @* Header *@
+            <MudStack Row="true"
+                      Justify="Justify.SpaceBetween"
+                      AlignItems="AlignItems.Center"
+                      Class="px-3 py-2"
+                      Style="border-bottom: 1px solid var(--mud-palette-divider);">
+                <MudText Typo="Typo.subtitle1"><strong>Notifications</strong></MudText>
+                @if (NotificationState.UnreadCount > 0)
+                {
+                    <MudButton Variant="Variant.Text"
+                               Size="Size.Small"
+                               Color="Color.Primary"
+                               OnClick="@MarkAllAsReadAsync">
+                        Mark all read
+                    </MudButton>
+                }
+            </MudStack>
+
+            @* Notification list *@
+            @if (!NotificationState.IsLoaded)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            }
+            else if (!NotificationState.Notifications.Any())
+            {
+                <MudStack AlignItems="AlignItems.Center" Class="pa-4">
+                    <MudIcon Icon="@Icons.Material.Filled.NotificationsNone"
+                             Size="Size.Large"
+                             Color="Color.Default" />
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        No notifications yet
+                    </MudText>
+                </MudStack>
+            }
+            else
+            {
+                <MudList T="WebNotification" Dense="true">
+                    @foreach (var notification in NotificationState.Notifications)
+                    {
+                        <MudListItem OnClick="@(() => HandleNotificationClick(notification))"
+                                     Class="@(notification.IsRead ? "" : "notification-unread")">
+                            <MudStack Spacing="0">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                                    <MudText Typo="Typo.body2">
+                                        <strong>@notification.Subject</strong>
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @FormatTimeAgo(notification.CreatedAt)
+                                    </MudText>
+                                </MudStack>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-truncate">
+                                    @TruncateMessage(notification.Message, 80)
+                                </MudText>
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudPaper>
+    </ChildContent>
+</MudMenu>
+
+<style>
+    .notification-unread {
+        background-color: rgba(var(--mud-palette-primary-rgb), 0.08);
+    }
+
+    .text-truncate {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 300px;
+    }
+</style>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        NotificationState.OnChange += StateHasChangedAsync;
+    }
+
+    private async Task StateHasChangedAsync()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleNotificationClick(WebNotification notification)
+    {
+        if (!notification.IsRead)
+        {
+            await NotificationState.MarkAsReadAsync(notification.Id);
+        }
+    }
+
+    private async Task MarkAllAsReadAsync()
+    {
+        await NotificationState.MarkAllAsReadAsync();
+    }
+
+    private static string FormatTimeAgo(DateTimeOffset timestamp)
+    {
+        var span = DateTimeOffset.UtcNow - timestamp;
+
+        if (span.TotalMinutes < 1)
+            return "just now";
+        if (span.TotalMinutes < 60)
+            return $"{(int)span.TotalMinutes}m ago";
+        if (span.TotalHours < 24)
+            return $"{(int)span.TotalHours}h ago";
+        if (span.TotalDays < 7)
+            return $"{(int)span.TotalDays}d ago";
+
+        return timestamp.ToString("MMM d");
+    }
+
+    private static string TruncateMessage(string message, int maxLength)
+    {
+        if (string.IsNullOrEmpty(message) || message.Length <= maxLength)
+            return message;
+
+        return message[..(maxLength - 3)] + "...";
+    }
+
+    public void Dispose()
+    {
+        NotificationState.OnChange -= StateHasChangedAsync;
+    }
+}

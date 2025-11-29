@@ -145,6 +145,7 @@ public static class ServiceCollectionExtensions
             // Notification services (User notification preferences with Telegram DM, Email, and Web Push channels)
             services.AddScoped<INotificationService, NotificationService>();
             services.AddScoped<IWebPushNotificationService, WebPushNotificationService>();
+            services.AddScoped<NotificationStateService>(); // Blazor state for notification bell
 
             // Message history adapter for spam detection library
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
