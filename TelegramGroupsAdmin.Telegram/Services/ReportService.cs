@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions;
+using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -18,7 +19,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class ReportService(
     IReportsRepository reportsRepository,
-    INotificationService notificationService,
+    IJobTriggerService jobTriggerService,
     IAuditService auditService,
     IUserMessagingService messagingService,
     IChatAdminsRepository chatAdminsRepository,
@@ -76,12 +77,17 @@ public class ReportService(
         var notificationMessage = BuildNotificationMessage(
             reportId, chatName, report.ReportedByUserName, reportedUserName, messagePreview, isAutomated);
 
-        _ = notificationService.SendChatNotificationAsync(
-            chatId: report.ChatId,
-            eventType: NotificationEventType.MessageReported,
-            subject: notificationSubject,
-            message: notificationMessage,
-            ct: cancellationToken);
+        // Send notification via Quartz job (reliable delivery instead of fire-and-forget)
+        var notificationPayload = new SendChatNotificationPayload(
+            ChatId: report.ChatId,
+            EventType: NotificationEventType.MessageReported,
+            Subject: notificationSubject,
+            Message: notificationMessage);
+
+        await jobTriggerService.TriggerNowAsync(
+            "SendChatNotificationJob",
+            notificationPayload,
+            cancellationToken);
 
         // 4. Send direct DM notifications to chat admins (immediate alert fallback)
         var (dmCount, mentionCount) = await SendDirectDmNotificationsAsync(
@@ -123,7 +129,7 @@ public class ReportService(
                 : $"@{report.ReportedByUserName ?? report.ReportedByUserId?.ToString() ?? "Unknown"}";
 
             var jumpLink = originalMessage != null
-                ? $"[Jump to message](https://t.me/c/{Math.Abs(report.ChatId).ToString().TrimStart('-')}/{originalMessage.MessageId})"
+                ? $"[Jump to message](https://t.me/c/{Math.Abs(report.ChatId)}/{originalMessage.MessageId})"
                 : "";
 
             var reportNotification = isAutomated

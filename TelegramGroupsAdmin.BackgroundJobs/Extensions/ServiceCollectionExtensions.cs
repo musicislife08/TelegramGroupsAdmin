@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.BackgroundJobs.Listeners;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup.Handlers;
+using TelegramGroupsAdmin.Core.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Extensions;
 
@@ -88,6 +89,7 @@ public static class ServiceCollectionExtensions
         q.AddJob<RefreshUserPhotosJob>(opts => opts.WithIdentity("RefreshUserPhotosJob").StoreDurably());
         q.AddJob<RotateBackupPassphraseJob>(opts => opts.WithIdentity("RotateBackupPassphraseJob").StoreDurably());
         q.AddJob<ScheduledBackupJob>(opts => opts.WithIdentity("ScheduledBackupJob").StoreDurably());
+        q.AddJob<SendChatNotificationJob>(opts => opts.WithIdentity("SendChatNotificationJob").StoreDurably());
         q.AddJob<TempbanExpiryJob>(opts => opts.WithIdentity("TempbanExpiryJob").StoreDurably());
         q.AddJob<WelcomeTimeoutJob>(opts => opts.WithIdentity("WelcomeTimeoutJob").StoreDurably());
 

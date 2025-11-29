@@ -39,7 +39,10 @@ public class MessageExportService(
         }
         return userId;
     }
-    public async Task<byte[]> ExportToCsvAsync(IEnumerable<MessageRecord> messages, Dictionary<long, ContentCheckRecord?> contentChecks)
+    public async Task<byte[]> ExportToCsvAsync(
+        IEnumerable<MessageRecord> messages,
+        Dictionary<long, ContentCheckRecord?> contentChecks,
+        CancellationToken ct = default)
     {
         // Validate permission (Admin+ required)
         var userId = await ValidateExportPermissionAsync();
@@ -107,12 +110,16 @@ public class MessageExportService(
             AuditEventType.MessageExported,
             actor: userId != null ? Actor.FromWebUser(userId) : Actor.Unknown,
             target: null,
-            value: $"Exported {messageCount} messages to CSV ({result.Length} bytes)");
+            value: $"Exported {messageCount} messages to CSV ({result.Length} bytes)",
+            ct: ct);
 
         return result;
     }
 
-    public async Task<byte[]> ExportToJsonAsync(IEnumerable<MessageRecord> messages, Dictionary<long, ContentCheckRecord?> contentChecks)
+    public async Task<byte[]> ExportToJsonAsync(
+        IEnumerable<MessageRecord> messages,
+        Dictionary<long, ContentCheckRecord?> contentChecks,
+        CancellationToken ct = default)
     {
         // Validate permission (Admin+ required)
         var userId = await ValidateExportPermissionAsync();
@@ -168,7 +175,8 @@ public class MessageExportService(
             AuditEventType.MessageExported,
             actor: userId != null ? Actor.FromWebUser(userId) : Actor.Unknown,
             target: null,
-            value: $"Exported {messageCount} messages to JSON ({result.Length} bytes)");
+            value: $"Exported {messageCount} messages to JSON ({result.Length} bytes)",
+            ct: ct);
 
         return result;
     }
