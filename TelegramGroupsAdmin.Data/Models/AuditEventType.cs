@@ -87,5 +87,9 @@ public enum AuditEventType
     /// <summary>User account locked due to failed login attempts</summary>
     UserAccountLocked = 32,
     /// <summary>User account unlocked by administrator</summary>
-    UserAccountUnlocked = 33
+    UserAccountUnlocked = 33,
+
+    // Report Events
+    /// <summary>Report created (user-submitted or auto-detected)</summary>
+    ReportCreated = 34
 }

@@ -77,6 +77,7 @@ public static class ServiceCollectionExtensions
 
             // Moderation and user management services
             services.AddScoped<ModerationActionService>();
+            services.AddScoped<IReportService, ReportService>(); // Unified report creation + notification
             services.AddScoped<UserAutoTrustService>();
             services.AddScoped<AdminMentionHandler>();
             services.AddScoped<TelegramUserManagementService>(); // Orchestrates Telegram user operations
