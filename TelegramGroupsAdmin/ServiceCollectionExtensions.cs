@@ -30,6 +30,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<Repositories.IInviteRepository, Repositories.InviteRepository>();
             services.AddScoped<Repositories.IVerificationTokenRepository, Repositories.VerificationTokenRepository>();
             services.AddScoped<Core.Repositories.INotificationPreferencesRepository, Core.Repositories.NotificationPreferencesRepository>();
+            services.AddScoped<Core.Repositories.IWebNotificationRepository, Core.Repositories.WebNotificationRepository>();
 
             // Note: UserRepository, AuditLogRepository, IMessageHistoryRepository are registered in TelegramGroupsAdmin.Telegram.Extensions.AddTelegramServices()
 
@@ -141,8 +142,9 @@ public static class ServiceCollectionExtensions
             // Email service (SendGrid)
             services.AddScoped<Services.Email.IEmailService, Services.Email.SendGridEmailService>();
 
-            // Notification service (Phase 5.1: User notification preferences with Telegram DM + Email channels)
+            // Notification services (User notification preferences with Telegram DM, Email, and Web Push channels)
             services.AddScoped<INotificationService, NotificationService>();
+            services.AddScoped<IWebPushNotificationService, WebPushNotificationService>();
 
             // Message history adapter for spam detection library
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();

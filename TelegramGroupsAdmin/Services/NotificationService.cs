@@ -17,6 +17,7 @@ public class NotificationService : INotificationService
     private readonly INotificationPreferencesRepository _preferencesRepo;
     private readonly IEmailService _emailService;
     private readonly IDmDeliveryService _dmDeliveryService;
+    private readonly IWebPushNotificationService _webPushService;
     private readonly ITelegramUserMappingRepository _telegramMappingRepo;
     private readonly IChatAdminsRepository _chatAdminsRepo;
     private readonly IUserRepository _userRepo;
@@ -27,6 +28,7 @@ public class NotificationService : INotificationService
         INotificationPreferencesRepository preferencesRepo,
         IEmailService emailService,
         IDmDeliveryService dmDeliveryService,
+        IWebPushNotificationService webPushService,
         ITelegramUserMappingRepository telegramMappingRepo,
         IChatAdminsRepository chatAdminsRepo,
         IUserRepository userRepo,
@@ -35,6 +37,7 @@ public class NotificationService : INotificationService
         _preferencesRepo = preferencesRepo;
         _emailService = emailService;
         _dmDeliveryService = dmDeliveryService;
+        _webPushService = webPushService;
         _telegramMappingRepo = telegramMappingRepo;
         _chatAdminsRepo = chatAdminsRepo;
         _userRepo = userRepo;
@@ -168,15 +171,21 @@ public class NotificationService : INotificationService
                 deliverySuccess = deliverySuccess || emailSuccess;
             }
 
-            // WebPush channel will be added in Commit 2
+            // WebPush channel (in-app notifications) - check if event is enabled for this channel
+            if (config.IsEnabled(NotificationChannel.WebPush, eventType))
+            {
+                var webPushSuccess = await _webPushService.SendAsync(userId, eventType, subject, message, ct);
+                deliverySuccess = deliverySuccess || webPushSuccess;
+            }
 
             if (!deliverySuccess)
             {
                 // Check if user has any channels configured for this event
                 var hasTelegramEnabled = config.IsEnabled(NotificationChannel.TelegramDm, eventType);
                 var hasEmailEnabled = config.IsEnabled(NotificationChannel.Email, eventType);
+                var hasWebPushEnabled = config.IsEnabled(NotificationChannel.WebPush, eventType);
 
-                if (!hasTelegramEnabled && !hasEmailEnabled)
+                if (!hasTelegramEnabled && !hasEmailEnabled && !hasWebPushEnabled)
                 {
                     _logger.LogDebug("User {UserId} has no channels enabled for event type {EventType}",
                         userId, eventType);

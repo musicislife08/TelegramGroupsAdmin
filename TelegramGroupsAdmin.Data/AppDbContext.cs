@@ -23,6 +23,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<VerificationTokenDto> VerificationTokens => Set<VerificationTokenDto>();
     public DbSet<AuditLogRecordDto> AuditLogs => Set<AuditLogRecordDto>();
     public DbSet<NotificationPreferencesDto> NotificationPreferences => Set<NotificationPreferencesDto>();
+    public DbSet<WebNotificationDto> WebNotifications => Set<WebNotificationDto>();
 
     // Telegram integration tables
     public DbSet<TelegramUserDto> TelegramUsers => Set<TelegramUserDto>();
