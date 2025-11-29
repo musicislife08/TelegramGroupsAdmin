@@ -29,7 +29,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IDataProtectionService, DataProtectionService>();
             services.AddScoped<Repositories.IInviteRepository, Repositories.InviteRepository>();
             services.AddScoped<Repositories.IVerificationTokenRepository, Repositories.VerificationTokenRepository>();
-            services.AddScoped<Repositories.INotificationPreferencesRepository, Repositories.NotificationPreferencesRepository>(); // Phase 5.1
+            services.AddScoped<Core.Repositories.INotificationPreferencesRepository, Core.Repositories.NotificationPreferencesRepository>();
 
             // Note: UserRepository, AuditLogRepository, IMessageHistoryRepository are registered in TelegramGroupsAdmin.Telegram.Extensions.AddTelegramServices()
 

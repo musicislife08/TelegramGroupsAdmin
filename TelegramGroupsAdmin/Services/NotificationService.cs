@@ -1,16 +1,16 @@
-using TelegramGroupsAdmin.Repositories;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Services.Email;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Core.Services;
-using CoreModels = TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Services;
 
 /// <summary>
 /// Service for sending notifications to users through configured channels
 /// Hybrid approach: chat-specific events notify chat admins, system events notify Owners only
-/// Phase 5.1: Initial implementation with Telegram DM and Email channels
+/// Uses Channel×Event matrix for per-channel, per-event configuration
 /// </summary>
 public class NotificationService : INotificationService
 {
@@ -150,42 +150,48 @@ public class NotificationService : INotificationService
         try
         {
             // Get user preferences (creates default if not exists)
-            var preferences = await _preferencesRepo.GetOrCreatePreferencesAsync(userId, ct);
-
-            // Check if user wants notifications for this event type
-            if (!preferences.EventFilters.IsEnabled(eventType))
-            {
-                _logger.LogDebug("User {UserId} has disabled notifications for event type {EventType}",
-                    userId, eventType);
-                return false;
-            }
+            var config = await _preferencesRepo.GetOrCreateAsync(userId, ct);
 
             var deliverySuccess = false;
 
-            // Telegram DM channel
-            if (preferences.TelegramDmEnabled)
+            // Telegram DM channel - check if event is enabled for this channel
+            if (config.IsEnabled(NotificationChannel.TelegramDm, eventType))
             {
                 var telegramSuccess = await SendTelegramDmAsync(userId, subject, message, ct);
                 deliverySuccess = deliverySuccess || telegramSuccess;
             }
 
-            // Email channel
-            if (preferences.EmailEnabled)
+            // Email channel - check if event is enabled for this channel
+            if (config.IsEnabled(NotificationChannel.Email, eventType))
             {
-                var emailSuccess = await SendEmailAsync(userId, preferences, subject, message, ct);
+                var emailSuccess = await SendEmailAsync(userId, subject, message, ct);
                 deliverySuccess = deliverySuccess || emailSuccess;
             }
 
+            // WebPush channel will be added in Commit 2
+
             if (!deliverySuccess)
             {
-                // Throttle logging to once per minute to avoid spam during network outages
-                var now = DateTime.UtcNow;
-                if ((now - _lastDeliveryFailureLog).TotalSeconds >= 60)
+                // Check if user has any channels configured for this event
+                var hasTelegramEnabled = config.IsEnabled(NotificationChannel.TelegramDm, eventType);
+                var hasEmailEnabled = config.IsEnabled(NotificationChannel.Email, eventType);
+
+                if (!hasTelegramEnabled && !hasEmailEnabled)
                 {
-                    _logger.LogWarning(
-                        "Failed to deliver notification to user {UserId} via any enabled channel (TelegramDM={TelegramEnabled}, Email={EmailEnabled})",
-                        userId, preferences.TelegramDmEnabled, preferences.EmailEnabled);
-                    _lastDeliveryFailureLog = now;
+                    _logger.LogDebug("User {UserId} has no channels enabled for event type {EventType}",
+                        userId, eventType);
+                }
+                else
+                {
+                    // Throttle logging to once per minute to avoid spam during network outages
+                    var now = DateTime.UtcNow;
+                    if ((now - _lastDeliveryFailureLog).TotalSeconds >= 60)
+                    {
+                        _logger.LogWarning(
+                            "Failed to deliver notification to user {UserId} via any enabled channel",
+                            userId);
+                        _lastDeliveryFailureLog = now;
+                    }
                 }
             }
 
@@ -278,32 +284,25 @@ public class NotificationService : INotificationService
 
     /// <summary>
     /// Send notification via Email
-    /// Uses user's configured email address (or account email if not specified)
+    /// Uses user's account email (validated)
     /// </summary>
     private async Task<bool> SendEmailAsync(
         string userId,
-        Telegram.Models.NotificationPreferences preferences,
         string subject,
         string message,
         CancellationToken ct)
     {
         try
         {
-            // Determine email address (custom or account email)
-            var emailAddress = preferences.ChannelConfigs.Email?.Address;
-
-            if (string.IsNullOrWhiteSpace(emailAddress))
+            // Get user's account email
+            var user = await _userRepo.GetByIdAsync(userId, ct);
+            if (user == null)
             {
-                // Use account email
-                var user = await _userRepo.GetByIdAsync(userId, ct);
-                if (user == null)
-                {
-                    _logger.LogWarning("User {UserId} not found, cannot send email notification", userId);
-                    return false;
-                }
-
-                emailAddress = user.Email;
+                _logger.LogWarning("User {UserId} not found, cannot send email notification", userId);
+                return false;
             }
+
+            var emailAddress = user.Email;
 
             // Format message as HTML email
             var htmlBody = $@"

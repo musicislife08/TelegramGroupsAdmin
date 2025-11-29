@@ -1,5 +1,8 @@
-@using TelegramGroupsAdmin.Repositories
+@using TelegramGroupsAdmin.Core.Repositories
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Telegram.Repositories
 @inject INotificationPreferencesRepository PreferencesRepo
+@inject ITelegramUserMappingRepository TelegramMappingRepo
 @inject ISnackbar Snackbar
 
 <MudPaper Class="pa-4" Elevation="2">
@@ -12,90 +15,69 @@
     {
         <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
     }
-    else if (_preferences != null)
+    else if (_config != null)
     {
-        <MudStack Spacing="3">
-            <!-- Notification Channels -->
-            <MudText Typo="Typo.subtitle2" Class="mb-2">
-                <strong>Notification Channels</strong>
-            </MudText>
-
-            <MudSwitch @bind-Value="_preferences.TelegramDmEnabled"
-                      Label="Telegram Direct Messages"
-                      Color="Color.Primary"
-                      ThumbIcon="@Icons.Custom.Brands.Telegram" />
-
-            <MudSwitch @bind-Value="_preferences.EmailEnabled"
-                      Label="Email Notifications"
-                      Color="Color.Primary"
-                      ThumbIcon="@Icons.Material.Filled.Email" />
-
-            @if (_preferences.EmailEnabled)
+        <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+            @foreach (var channel in Enum.GetValues<NotificationChannel>())
             {
-                <MudTextField @bind-Value="@_emailAddress"
-                             Label="Email Address (leave blank for account email)"
-                             Variant="Variant.Outlined"
-                             Adornment="Adornment.Start"
-                             AdornmentIcon="@Icons.Material.Filled.Email"
-                             HelperText="Override your account email for notifications" />
+                var isConfigured = IsChannelConfigured(channel);
+                <MudTabPanel Text="@GetChannelDisplayName(channel)"
+                             Icon="@GetChannelIcon(channel)"
+                             Disabled="@(!isConfigured)"
+                             ToolTip="@(isConfigured ? null : GetSetupTooltip(channel))">
+                    @if (!isConfigured)
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mt-2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText>This channel is not configured.</MudText>
+                                <MudLink Href="@GetSetupLink(channel)">Set it up</MudLink>
+                            </MudStack>
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.subtitle2" Class="mb-3">
+                            Select which events should send notifications via @GetChannelDisplayName(channel):
+                        </MudText>
 
-                <MudNumericField @bind-Value="@_digestMinutes"
-                                Label="Email Digest Interval (minutes)"
-                                Variant="Variant.Outlined"
-                                Min="0"
-                                HelperText="0 = send immediately, > 0 = batch notifications" />
+                        <MudStack Spacing="1">
+                            @foreach (var eventType in GetVisibleEventTypes())
+                            {
+                                var channelPref = _config.GetOrCreateChannel(channel);
+                                var isEnabled = channelPref.EnabledEvents.Contains(eventType);
+                                <MudCheckBox T="bool"
+                                             Value="@isEnabled"
+                                             ValueChanged="@(enabled => ToggleEvent(channel, eventType, enabled))"
+                                             Label="@GetEventDisplayName(eventType)"
+                                             Color="@GetEventColor(eventType)"
+                                             Dense="true" />
+                            }
+                        </MudStack>
+
+                        @* Email-specific: digest interval *@
+                        @if (channel == NotificationChannel.Email)
+                        {
+                            <MudDivider Class="my-3" />
+                            <MudNumericField T="int"
+                                             Value="@GetDigestMinutes()"
+                                             ValueChanged="@SetDigestMinutes"
+                                             Label="Digest Interval (minutes)"
+                                             Variant="Variant.Outlined"
+                                             Min="0"
+                                             Max="1440"
+                                             HelperText="0 = send immediately, otherwise batch notifications" />
+                        }
+                    }
+                </MudTabPanel>
             }
+        </MudTabs>
 
-            <MudDivider Class="my-3" />
-
-            <!-- Event Filters -->
-            <MudText Typo="Typo.subtitle2" Class="mb-2">
-                <strong>Which events should trigger notifications?</strong>
-            </MudText>
-
-            <MudStack Spacing="1">
-                <MudCheckBox @bind-Value="_eventFilters.SpamDetected"
-                            Label="Spam Detected"
-                            Color="Color.Warning"
-                            Dense="true" />
-
-                <MudCheckBox @bind-Value="_eventFilters.SpamAutoDeleted"
-                            Label="Spam Auto-Deleted"
-                            Color="Color.Warning"
-                            Dense="true" />
-
-                <MudCheckBox @bind-Value="_eventFilters.UserBanned"
-                            Label="User Banned"
-                            Color="Color.Error"
-                            Dense="true" />
-
-                <MudCheckBox @bind-Value="_eventFilters.MessageReported"
-                            Label="Message Reported"
-                            Color="Color.Info"
-                            Dense="true" />
-
-                <MudCheckBox @bind-Value="_eventFilters.ChatHealthWarning"
-                            Label="Chat Health Warning (Owners only)"
-                            Color="Color.Warning"
-                            Dense="true" />
-
-                <MudCheckBox @bind-Value="_eventFilters.BackupFailed"
-                            Label="Backup Failed (Owners only)"
-                            Color="Color.Error"
-                            Dense="true" />
-
-                <MudCheckBox @bind-Value="_eventFilters.MalwareDetected"
-                            Label="Malware Detected"
-                            Color="Color.Error"
-                            Dense="true" />
-            </MudStack>
-
-            <!-- Save Button -->
+        @* Save Button *@
+        <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-4">
             <MudButton Variant="Variant.Filled"
-                      Color="Color.Primary"
-                      FullWidth="true"
-                      OnClick="@SavePreferences"
-                      Disabled="@_saving">
+                       Color="Color.Primary"
+                       OnClick="@SavePreferences"
+                       Disabled="@_saving">
                 @if (_saving)
                 {
                     <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
@@ -107,13 +89,13 @@
                     <span>Save Preferences</span>
                 }
             </MudButton>
-
-            <!-- Info Alert -->
-            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
-                <strong>Note:</strong> Chat-specific events (spam, bans, reports) notify admins of those specific chats.
-                System events (backup failures, health warnings) notify Owners only.
-            </MudAlert>
         </MudStack>
+
+        @* Info Alert *@
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+            <strong>Note:</strong> Chat-specific events (spam, bans, reports) notify admins of those specific chats.
+            System events (backup failures, health warnings) notify Owners only.
+        </MudAlert>
     }
 </MudPaper>
 
@@ -121,10 +103,11 @@
     [Parameter]
     public string UserId { get; set; } = string.Empty;
 
-    private NotificationPreferences? _preferences;
-    private NotificationEventFilters _eventFilters = new();
-    private string? _emailAddress;
-    private int _digestMinutes;
+    [Parameter]
+    public int UserPermissionLevel { get; set; }
+
+    private NotificationConfig? _config;
+    private bool _hasTelegramLinked;
     private bool _loading = true;
     private bool _saving;
 
@@ -138,14 +121,11 @@
         try
         {
             _loading = true;
-            _preferences = await PreferencesRepo.GetOrCreatePreferencesAsync(UserId);
+            _config = await PreferencesRepo.GetOrCreateAsync(UserId);
 
-            // Load event filters
-            _eventFilters = _preferences.EventFilters;
-
-            // Load channel configs
-            _emailAddress = _preferences.ChannelConfigs.Email?.Address;
-            _digestMinutes = _preferences.ChannelConfigs.Email?.DigestMinutes ?? 0;
+            // Check if user has a linked Telegram account
+            var mappings = await TelegramMappingRepo.GetByUserIdAsync(UserId);
+            _hasTelegramLinked = mappings.Any();
         }
         catch (Exception ex)
         {
@@ -157,28 +137,43 @@
         }
     }
 
+    private void ToggleEvent(NotificationChannel channel, NotificationEventType eventType, bool enabled)
+    {
+        if (_config == null) return;
+
+        var channelPref = _config.GetOrCreateChannel(channel);
+        if (enabled && !channelPref.EnabledEvents.Contains(eventType))
+        {
+            channelPref.EnabledEvents.Add(eventType);
+        }
+        else if (!enabled)
+        {
+            channelPref.EnabledEvents.Remove(eventType);
+        }
+    }
+
+    private int GetDigestMinutes()
+    {
+        if (_config == null) return 0;
+        var emailPref = _config.Channels.FirstOrDefault(c => c.Channel == NotificationChannel.Email);
+        return emailPref?.DigestMinutes ?? 0;
+    }
+
+    private void SetDigestMinutes(int value)
+    {
+        if (_config == null) return;
+        var emailPref = _config.GetOrCreateChannel(NotificationChannel.Email);
+        emailPref.DigestMinutes = value;
+    }
+
     private async Task SavePreferences()
     {
-        if (_preferences == null) return;
+        if (_config == null) return;
 
         try
         {
             _saving = true;
-
-            // Update channel configs
-            _preferences.ChannelConfigs.Email ??= new EmailChannelConfig();
-
-            _preferences.ChannelConfigs.Email.Address = _emailAddress;
-            _preferences.ChannelConfigs.Email.DigestMinutes = _digestMinutes;
-
-            // Update event filters and timestamp
-            _preferences.EventFilters = _eventFilters;
-            _preferences.UpdatedAt = DateTimeOffset.UtcNow;
-
-            var updatedPreferences = _preferences;
-
-            await PreferencesRepo.UpdatePreferencesAsync(updatedPreferences);
-
+            await PreferencesRepo.SaveAsync(UserId, _config);
             Snackbar.Add("Notification preferences saved successfully!", Severity.Success);
         }
         catch (Exception ex)
@@ -190,4 +185,82 @@
             _saving = false;
         }
     }
+
+    private bool IsChannelConfigured(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.TelegramDm => _hasTelegramLinked,
+        NotificationChannel.Email => true,  // Always available (uses account email)
+        NotificationChannel.WebPush => true,  // Always available (in-app)
+        _ => false
+    };
+
+    private string GetSetupLink(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.TelegramDm => "/profile",
+        _ => "#"
+    };
+
+    private string GetSetupTooltip(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.TelegramDm => "Link your Telegram account in Profile to enable",
+        _ => null
+    } ?? "";
+
+    private static string GetChannelDisplayName(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.TelegramDm => "Telegram DM",
+        NotificationChannel.Email => "Email",
+        NotificationChannel.WebPush => "In-App",
+        _ => channel.ToString()
+    };
+
+    private static string GetChannelIcon(NotificationChannel channel) => channel switch
+    {
+        NotificationChannel.TelegramDm => Icons.Custom.Brands.Telegram,
+        NotificationChannel.Email => Icons.Material.Filled.Email,
+        NotificationChannel.WebPush => Icons.Material.Filled.Notifications,
+        _ => Icons.Material.Filled.QuestionMark
+    };
+
+    private IEnumerable<NotificationEventType> GetVisibleEventTypes()
+    {
+        foreach (var eventType in Enum.GetValues<NotificationEventType>())
+        {
+            // Owner-only events hidden for non-owners
+            if (IsOwnerOnlyEvent(eventType) && UserPermissionLevel < 2)
+                continue;
+            yield return eventType;
+        }
+    }
+
+    private static bool IsOwnerOnlyEvent(NotificationEventType eventType)
+        => eventType is NotificationEventType.BackupFailed
+                     or NotificationEventType.ChatHealthWarning
+                     or NotificationEventType.ChatAdminChanged;
+
+    private static string GetEventDisplayName(NotificationEventType eventType) => eventType switch
+    {
+        NotificationEventType.SpamDetected => "Spam Detected",
+        NotificationEventType.SpamAutoDeleted => "Spam Auto-Deleted",
+        NotificationEventType.UserBanned => "User Banned",
+        NotificationEventType.MessageReported => "Message Reported",
+        NotificationEventType.MalwareDetected => "Malware Detected",
+        NotificationEventType.ChatAdminChanged => "Chat Admin Changed (Owners)",
+        NotificationEventType.ChatHealthWarning => "Chat Health Warning (Owners)",
+        NotificationEventType.BackupFailed => "Backup Failed (Owners)",
+        _ => eventType.ToString()
+    };
+
+    private static Color GetEventColor(NotificationEventType eventType) => eventType switch
+    {
+        NotificationEventType.SpamDetected => Color.Warning,
+        NotificationEventType.SpamAutoDeleted => Color.Warning,
+        NotificationEventType.UserBanned => Color.Error,
+        NotificationEventType.MessageReported => Color.Info,
+        NotificationEventType.MalwareDetected => Color.Error,
+        NotificationEventType.ChatAdminChanged => Color.Info,
+        NotificationEventType.ChatHealthWarning => Color.Warning,
+        NotificationEventType.BackupFailed => Color.Error,
+        _ => Color.Default
+    };
 }
