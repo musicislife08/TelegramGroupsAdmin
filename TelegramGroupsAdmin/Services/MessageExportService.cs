@@ -1,41 +1,51 @@
 using System.Globalization;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using CsvHelper;
 using Microsoft.AspNetCore.Components.Authorization;
 using TelegramGroupsAdmin.Auth;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Services;
 
-public class MessageExportService(AuthenticationStateProvider authStateProvider) : IMessageExportService
+public class MessageExportService(
+    AuthenticationStateProvider authStateProvider,
+    IAuditService auditService) : IMessageExportService
 {
-    private async Task<int> GetUserPermissionLevelAsync()
+    private async Task<(int PermissionLevel, string? UserId)> GetUserInfoAsync()
     {
         var authState = await authStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
         if (user.Identity?.IsAuthenticated != true)
-            return -1; // Not authenticated
+            return (-1, null);
 
+        var userId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
-        return permissionClaim != null && int.TryParse(permissionClaim.Value, out var level)
-            ? level
-            : 0;
+        var level = permissionClaim != null && int.TryParse(permissionClaim.Value, out var l) ? l : 0;
+
+        return (level, userId);
     }
 
-    private async Task ValidateExportPermissionAsync()
+    private async Task<string?> ValidateExportPermissionAsync()
     {
-        var permissionLevel = await GetUserPermissionLevelAsync();
+        var (permissionLevel, userId) = await GetUserInfoAsync();
         if (permissionLevel < 1) // Require Admin+ (level >= 1)
         {
             throw new UnauthorizedAccessException("Export feature requires Admin or Owner permission level.");
         }
+        return userId;
     }
     public async Task<byte[]> ExportToCsvAsync(IEnumerable<MessageRecord> messages, Dictionary<long, ContentCheckRecord?> contentChecks)
     {
         // Validate permission (Admin+ required)
-        await ValidateExportPermissionAsync();
+        var userId = await ValidateExportPermissionAsync();
+
+        var messageList = messages.ToList();
+        var messageCount = messageList.Count;
 
         using var memoryStream = new MemoryStream();
         using var writer = new StreamWriter(memoryStream, Encoding.UTF8);
@@ -63,7 +73,7 @@ public class MessageExportService(AuthenticationStateProvider authStateProvider)
         await csv.NextRecordAsync();
 
         // Write data
-        foreach (var message in messages)
+        foreach (var message in messageList)
         {
             var contentCheck = contentChecks.GetValueOrDefault(message.MessageId);
             var timestamp = message.Timestamp;
@@ -90,15 +100,27 @@ public class MessageExportService(AuthenticationStateProvider authStateProvider)
         }
 
         await writer.FlushAsync();
-        return memoryStream.ToArray();
+        var result = memoryStream.ToArray();
+
+        // Audit log the export
+        await auditService.LogEventAsync(
+            AuditEventType.MessageExported,
+            actor: userId != null ? Actor.FromWebUser(userId) : Actor.Unknown,
+            target: null,
+            value: $"Exported {messageCount} messages to CSV ({result.Length} bytes)");
+
+        return result;
     }
 
     public async Task<byte[]> ExportToJsonAsync(IEnumerable<MessageRecord> messages, Dictionary<long, ContentCheckRecord?> contentChecks)
     {
         // Validate permission (Admin+ required)
-        await ValidateExportPermissionAsync();
+        var userId = await ValidateExportPermissionAsync();
 
-        var exportData = messages.Select(message =>
+        var messageList = messages.ToList();
+        var messageCount = messageList.Count;
+
+        var exportData = messageList.Select(message =>
         {
             var contentCheck = contentChecks.GetValueOrDefault(message.MessageId);
             var timestamp = message.Timestamp;
@@ -139,6 +161,15 @@ public class MessageExportService(AuthenticationStateProvider authStateProvider)
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         });
 
-        return Encoding.UTF8.GetBytes(json);
+        var result = Encoding.UTF8.GetBytes(json);
+
+        // Audit log the export
+        await auditService.LogEventAsync(
+            AuditEventType.MessageExported,
+            actor: userId != null ? Actor.FromWebUser(userId) : Actor.Unknown,
+            target: null,
+            value: $"Exported {messageCount} messages to JSON ({result.Length} bytes)");
+
+        return result;
     }
 }
