@@ -60,27 +60,13 @@
             }
             else
             {
-                <MudList T="WebNotification" Dense="true">
+                <MudStack Spacing="1" Class="px-2 pb-2">
                     @foreach (var notification in NotificationState.Notifications)
                     {
-                        <MudListItem OnClick="@(() => HandleNotificationClick(notification))"
-                                     Class="@(notification.IsRead ? "" : "notification-unread")">
-                            <MudStack Spacing="0">
-                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
-                                    <MudText Typo="Typo.body2">
-                                        <strong>@notification.Subject</strong>
-                                    </MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        @FormatTimeAgo(notification.CreatedAt)
-                                    </MudText>
-                                </MudStack>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-truncate">
-                                    @TruncateMessage(notification.Message, 80)
-                                </MudText>
-                            </MudStack>
-                        </MudListItem>
+                        <NotificationItem Notification="@notification"
+                                          OnMarkRead="@(() => HandleNotificationClick(notification))" />
                     }
-                </MudList>
+                </MudStack>
             }
         </MudPaper>
     </ChildContent>
@@ -89,13 +75,12 @@
 <style>
     .notification-unread {
         background-color: rgba(var(--mud-palette-primary-rgb), 0.08);
+        border-radius: 4px;
     }
 
-    .text-truncate {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        max-width: 300px;
+    .notification-item:hover {
+        background-color: rgba(var(--mud-palette-action-default-hover-rgb), 0.08);
+        border-radius: 4px;
     }
 </style>
 
@@ -121,30 +106,6 @@
     private async Task MarkAllAsReadAsync()
     {
         await NotificationState.MarkAllAsReadAsync();
-    }
-
-    private static string FormatTimeAgo(DateTimeOffset timestamp)
-    {
-        var span = DateTimeOffset.UtcNow - timestamp;
-
-        if (span.TotalMinutes < 1)
-            return "just now";
-        if (span.TotalMinutes < 60)
-            return $"{(int)span.TotalMinutes}m ago";
-        if (span.TotalHours < 24)
-            return $"{(int)span.TotalHours}h ago";
-        if (span.TotalDays < 7)
-            return $"{(int)span.TotalDays}d ago";
-
-        return timestamp.ToString("MMM d");
-    }
-
-    private static string TruncateMessage(string message, int maxLength)
-    {
-        if (string.IsNullOrEmpty(message) || message.Length <= maxLength)
-            return message;
-
-        return message[..(maxLength - 3)] + "...";
     }
 
     public void Dispose()

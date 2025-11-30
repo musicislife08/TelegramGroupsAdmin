@@ -207,7 +207,7 @@
 
             <!-- Notification Preferences -->
             <MudItem xs="12">
-                <NotificationPreferencesCard UserId="@_user.Id" />
+                <NotificationPreferencesCard UserId="@_user.Id" UserPermissionLevel="@_user.PermissionLevelInt" />
             </MudItem>
         </MudGrid>
     }

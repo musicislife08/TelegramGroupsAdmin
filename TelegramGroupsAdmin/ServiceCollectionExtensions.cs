@@ -147,6 +147,13 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IWebPushNotificationService, WebPushNotificationService>();
             services.AddScoped<NotificationStateService>(); // Blazor state for notification bell
 
+            // Web Push browser notifications (PushServiceClient + VAPID auto-generation)
+            services.AddHttpClient<Lib.Net.Http.WebPush.PushServiceClient>();
+            services.AddHostedService<VapidKeyGenerationService>(); // Auto-generates VAPID keys on first startup
+
+            // Push subscriptions repository (browser push endpoints)
+            services.AddScoped<Core.Repositories.IPushSubscriptionsRepository, Core.Repositories.PushSubscriptionsRepository>();
+
             // Message history adapter for spam detection library
             services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
 

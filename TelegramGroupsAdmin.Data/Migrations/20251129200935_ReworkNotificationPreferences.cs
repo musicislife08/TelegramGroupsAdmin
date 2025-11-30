@@ -25,8 +25,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
 
             // 2. Migrate existing data: convert old columns to new Channel×Event matrix format
             // NotificationChannel: TelegramDm=0, Email=1, WebPush=2
-            // NotificationEventType: SpamDetected=0, SpamAutoDeleted=1, UserBanned=2, MessageReported=3,
-            //                        MalwareDetected=4, ChatAdminChanged=5, ChatHealthWarning=6, BackupFailed=7
+            // NotificationEventType enum order (must match C# enum exactly):
+            //   SpamDetected=0, SpamAutoDeleted=1, UserBanned=2, MessageReported=3,
+            //   ChatHealthWarning=4, BackupFailed=5, MalwareDetected=6, ChatAdminChanged=7
+            // Note: event_filters may have PascalCase keys (from UI serialization) or snake_case (from DTO default)
             migrationBuilder.Sql("""
                 UPDATE notification_preferences SET config = jsonb_build_object(
                   'channels', jsonb_build_array(
@@ -34,18 +36,28 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     jsonb_build_object(
                       'channel', 0,
                       'enabledEvents', CASE WHEN telegram_dm_enabled THEN COALESCE((
-                        SELECT jsonb_agg(
-                          CASE key
+                        SELECT jsonb_agg(event_id) FILTER (WHERE event_id IS NOT NULL)
+                        FROM (
+                          SELECT CASE lower(key)
+                            WHEN 'spamdetected' THEN 0
                             WHEN 'spam_detected' THEN 0
+                            WHEN 'spamautodeleted' THEN 1
                             WHEN 'spam_auto_deleted' THEN 1
+                            WHEN 'userbanned' THEN 2
                             WHEN 'user_banned' THEN 2
+                            WHEN 'messagereported' THEN 3
                             WHEN 'message_reported' THEN 3
-                            WHEN 'malware_detected' THEN 4
-                            WHEN 'chat_admin_changed' THEN 5
-                            WHEN 'chat_health_warning' THEN 6
-                            WHEN 'backup_failed' THEN 7
-                          END
-                        ) FROM jsonb_each_text(event_filters) WHERE value = 'true'
+                            WHEN 'chathealthwarning' THEN 4
+                            WHEN 'chat_health_warning' THEN 4
+                            WHEN 'backupfailed' THEN 5
+                            WHEN 'backup_failed' THEN 5
+                            WHEN 'malwaredetected' THEN 6
+                            WHEN 'malware_detected' THEN 6
+                            WHEN 'chatadminchanged' THEN 7
+                            WHEN 'chat_admin_changed' THEN 7
+                          END AS event_id
+                          FROM jsonb_each_text(event_filters) WHERE value = 'true'
+                        ) mapped
                       ), '[]'::jsonb) ELSE '[]'::jsonb END,
                       'digestMinutes', 0
                     ),
@@ -53,18 +65,28 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     jsonb_build_object(
                       'channel', 1,
                       'enabledEvents', CASE WHEN email_enabled THEN COALESCE((
-                        SELECT jsonb_agg(
-                          CASE key
+                        SELECT jsonb_agg(event_id) FILTER (WHERE event_id IS NOT NULL)
+                        FROM (
+                          SELECT CASE lower(key)
+                            WHEN 'spamdetected' THEN 0
                             WHEN 'spam_detected' THEN 0
+                            WHEN 'spamautodeleted' THEN 1
                             WHEN 'spam_auto_deleted' THEN 1
+                            WHEN 'userbanned' THEN 2
                             WHEN 'user_banned' THEN 2
+                            WHEN 'messagereported' THEN 3
                             WHEN 'message_reported' THEN 3
-                            WHEN 'malware_detected' THEN 4
-                            WHEN 'chat_admin_changed' THEN 5
-                            WHEN 'chat_health_warning' THEN 6
-                            WHEN 'backup_failed' THEN 7
-                          END
-                        ) FROM jsonb_each_text(event_filters) WHERE value = 'true'
+                            WHEN 'chathealthwarning' THEN 4
+                            WHEN 'chat_health_warning' THEN 4
+                            WHEN 'backupfailed' THEN 5
+                            WHEN 'backup_failed' THEN 5
+                            WHEN 'malwaredetected' THEN 6
+                            WHEN 'malware_detected' THEN 6
+                            WHEN 'chatadminchanged' THEN 7
+                            WHEN 'chat_admin_changed' THEN 7
+                          END AS event_id
+                          FROM jsonb_each_text(event_filters) WHERE value = 'true'
+                        ) mapped
                       ), '[]'::jsonb) ELSE '[]'::jsonb END,
                       'digestMinutes', COALESCE((channel_configs->'email'->>'digestMinutes')::int, 0)
                     ),
@@ -143,6 +165,8 @@ namespace TelegramGroupsAdmin.Data.Migrations
                 defaultValue: "{}");
 
             // 2. Migrate data back (best effort - loses per-channel specificity)
+            // NotificationEventType enum order: SpamDetected=0, SpamAutoDeleted=1, UserBanned=2,
+            //   MessageReported=3, ChatHealthWarning=4, BackupFailed=5, MalwareDetected=6, ChatAdminChanged=7
             migrationBuilder.Sql("""
                 UPDATE notification_preferences SET
                   telegram_dm_enabled = (
@@ -167,14 +191,14 @@ namespace TelegramGroupsAdmin.Data.Migrations
                   event_filters = (
                     SELECT jsonb_object_agg(
                       CASE e
-                        WHEN 0 THEN 'spam_detected'
-                        WHEN 1 THEN 'spam_auto_deleted'
-                        WHEN 2 THEN 'user_banned'
-                        WHEN 3 THEN 'message_reported'
-                        WHEN 4 THEN 'malware_detected'
-                        WHEN 5 THEN 'chat_admin_changed'
-                        WHEN 6 THEN 'chat_health_warning'
-                        WHEN 7 THEN 'backup_failed'
+                        WHEN 0 THEN 'SpamDetected'
+                        WHEN 1 THEN 'SpamAutoDeleted'
+                        WHEN 2 THEN 'UserBanned'
+                        WHEN 3 THEN 'MessageReported'
+                        WHEN 4 THEN 'ChatHealthWarning'
+                        WHEN 5 THEN 'BackupFailed'
+                        WHEN 6 THEN 'MalwareDetected'
+                        WHEN 7 THEN 'ChatAdminChanged'
                       END,
                       'true'
                     )

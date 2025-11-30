@@ -412,4 +412,138 @@ public class DataIntegrityTests
             Is.EqualTo("FK_audit_log_users_actor_web_user_id"),
             "Should mention FK to users table");
     }
+
+    /// <summary>
+    /// Test 13: Push Subscriptions Constraints
+    ///
+    /// **What it tests**: Validates FK and UNIQUE constraints on push_subscriptions table.
+    ///
+    /// **Why it matters**: Push subscriptions must reference valid users, and each user
+    /// can only have one subscription per endpoint (browser/device).
+    ///
+    /// **Coverage**:
+    /// - push_subscriptions: FK to users (user_id)
+    /// - push_subscriptions: UNIQUE on (user_id, endpoint)
+    /// </summary>
+    [Test]
+    public async Task PushSubscriptions_Constraints_ShouldBeEnforced()
+    {
+        // Arrange - Create database and apply migrations
+        using var helper = new MigrationTestHelper();
+        await helper.CreateDatabaseAndApplyMigrationsAsync();
+
+        // Test 1: FK constraint - push_subscriptions.user_id must reference valid user
+        var orphanedUserException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
+        {
+            await helper.ExecuteSqlAsync(@"
+                INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
+                VALUES ('nonexistent-user-id', 'https://push.example.com/sub', 'key', 'auth', NOW());
+            ");
+        });
+
+        Assert.That(orphanedUserException!.SqlState, Is.EqualTo("23503"), // FK violation
+            "Orphaned user_id should violate FK constraint");
+        Assert.That(orphanedUserException.ConstraintName,
+            Is.EqualTo("FK_push_subscriptions_users_user_id"),
+            "Should mention FK to users table");
+
+        // Test 2: UNIQUE constraint - (user_id, endpoint) must be unique
+        // First create a valid user
+        await using (var context = helper.GetDbContext())
+        {
+            context.Users.Add(new UserRecordDto
+            {
+                Id = "push-test-user",
+                Email = "push@test.com",
+                NormalizedEmail = "PUSH@TEST.COM",
+                PasswordHash = "hash",
+                SecurityStamp = Guid.NewGuid().ToString(),
+                PermissionLevel = PermissionLevel.Admin,
+                Status = UserStatus.Active,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // Insert first subscription
+        await helper.ExecuteSqlAsync(@"
+            INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
+            VALUES ('push-test-user', 'https://push.example.com/unique-endpoint', 'key1', 'auth1', NOW());
+        ");
+
+        // Attempt duplicate (same user + endpoint)
+        var duplicateException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
+        {
+            await helper.ExecuteSqlAsync(@"
+                INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
+                VALUES ('push-test-user', 'https://push.example.com/unique-endpoint', 'key2', 'auth2', NOW());
+            ");
+        });
+
+        Assert.That(duplicateException!.SqlState, Is.EqualTo("23505"), // UNIQUE violation
+            "Duplicate (user_id, endpoint) should violate UNIQUE constraint");
+        Assert.That(duplicateException.ConstraintName,
+            Is.EqualTo("IX_push_subscriptions_user_id_endpoint"),
+            "Should mention unique index on (user_id, endpoint)");
+    }
+
+    /// <summary>
+    /// Test 14: Web Notifications Constraints
+    ///
+    /// **What it tests**: Validates FK constraint on web_notifications table.
+    ///
+    /// **Why it matters**: Web notifications must reference valid users.
+    ///
+    /// **Coverage**:
+    /// - web_notifications: FK to users (user_id)
+    /// </summary>
+    [Test]
+    public async Task WebNotifications_Constraints_ShouldBeEnforced()
+    {
+        // Arrange - Create database and apply migrations
+        using var helper = new MigrationTestHelper();
+        await helper.CreateDatabaseAndApplyMigrationsAsync();
+
+        // Test: FK constraint - web_notifications.user_id must reference valid user
+        var orphanedUserException = Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
+        {
+            await helper.ExecuteSqlAsync(@"
+                INSERT INTO web_notifications (user_id, event_type, subject, message, is_read, created_at)
+                VALUES ('nonexistent-user-id', 1, 'Test', 'Test message', false, NOW());
+            ");
+        });
+
+        Assert.That(orphanedUserException!.SqlState, Is.EqualTo("23503"), // FK violation
+            "Orphaned user_id should violate FK constraint");
+        Assert.That(orphanedUserException.ConstraintName,
+            Is.EqualTo("FK_web_notifications_users_user_id"),
+            "Should mention FK to users table");
+
+        // Verify valid insert works
+        await using (var context = helper.GetDbContext())
+        {
+            context.Users.Add(new UserRecordDto
+            {
+                Id = "notification-test-user",
+                Email = "notify@test.com",
+                NormalizedEmail = "NOTIFY@TEST.COM",
+                PasswordHash = "hash",
+                SecurityStamp = Guid.NewGuid().ToString(),
+                PermissionLevel = PermissionLevel.Admin,
+                Status = UserStatus.Active,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        // This should succeed
+        await helper.ExecuteSqlAsync(@"
+            INSERT INTO web_notifications (user_id, event_type, subject, message, is_read, created_at)
+            VALUES ('notification-test-user', 1, 'Valid Notification', 'This should work', false, NOW());
+        ");
+
+        // Verify it was inserted
+        var count = await helper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM web_notifications WHERE user_id = 'notification-test-user'");
+        Assert.That(count, Is.EqualTo(1), "Valid notification should be inserted");
+    }
 }

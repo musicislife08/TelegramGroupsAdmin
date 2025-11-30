@@ -1,11 +1,16 @@
+using System.Text.Json;
+using Lib.Net.Http.WebPush;
+using Lib.Net.Http.WebPush.Authentication;
+using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
+using WebPushSubscription = Lib.Net.Http.WebPush.PushSubscription;
 
 namespace TelegramGroupsAdmin.Services;
 
 /// <summary>
 /// Service for managing Web Push (in-app) notifications
-/// Stores notifications to database and will trigger browser push in future
+/// Stores notifications to database and sends browser push via Web Push Protocol
 /// </summary>
 public interface IWebPushNotificationService
 {
@@ -42,12 +47,44 @@ public interface IWebPushNotificationService
     /// Mark all notifications as read for a user
     /// </summary>
     Task MarkAllAsReadAsync(string userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete old read notifications (for cleanup job)
+    /// </summary>
+    Task<int> DeleteOldReadNotificationsAsync(TimeSpan olderThan, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get VAPID public key for browser subscription (returns null if not configured)
+    /// </summary>
+    Task<string?> GetVapidPublicKeyAsync(CancellationToken ct = default);
 }
 
-public class WebPushNotificationService(
-    IWebNotificationRepository repository,
-    ILogger<WebPushNotificationService> logger) : IWebPushNotificationService
+public class WebPushNotificationService : IWebPushNotificationService
 {
+    private readonly IWebNotificationRepository _notificationRepository;
+    private readonly IPushSubscriptionsRepository _subscriptionRepository;
+    private readonly IFileScanningConfigRepository _configRepository;
+    private readonly PushServiceClient _pushServiceClient;
+    private readonly ILogger<WebPushNotificationService> _logger;
+
+    // Cache VAPID auth to avoid re-creating on every push
+    private VapidAuthentication? _vapidAuth;
+    private string? _cachedPublicKey;
+
+    public WebPushNotificationService(
+        IWebNotificationRepository notificationRepository,
+        IPushSubscriptionsRepository subscriptionRepository,
+        IFileScanningConfigRepository configRepository,
+        PushServiceClient pushServiceClient,
+        ILogger<WebPushNotificationService> logger)
+    {
+        _notificationRepository = notificationRepository;
+        _subscriptionRepository = subscriptionRepository;
+        _configRepository = configRepository;
+        _pushServiceClient = pushServiceClient;
+        _logger = logger;
+    }
+
     public async Task<bool> SendAsync(
         string userId,
         NotificationEventType eventType,
@@ -57,6 +94,7 @@ public class WebPushNotificationService(
     {
         try
         {
+            // 1. Always save to database (for in-app bell)
             var notification = new WebNotification
             {
                 UserId = userId,
@@ -67,20 +105,154 @@ public class WebPushNotificationService(
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
-            await repository.CreateAsync(notification, ct);
+            await _notificationRepository.CreateAsync(notification, ct);
 
-            logger.LogDebug("Created web notification for user {UserId}, event {EventType}",
+            _logger.LogDebug("Created web notification for user {UserId}, event {EventType}",
                 userId, eventType);
 
-            // Future: Trigger browser push notification via Service Worker + VAPID
-            // This will be implemented in Commit 3
+            // 2. Send browser push to all user's subscribed devices (if VAPID configured)
+            await SendBrowserPushAsync(userId, subject, message, ct);
 
             return true;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to create web notification for user {UserId}", userId);
+            _logger.LogError(ex, "Failed to create web notification for user {UserId}", userId);
             return false;
+        }
+    }
+
+    private async Task SendBrowserPushAsync(
+        string userId,
+        string title,
+        string body,
+        CancellationToken ct)
+    {
+        try
+        {
+            // Load VAPID keys from database (cached after first load)
+            var vapidAuth = await GetOrCreateVapidAuthAsync(ct);
+            if (vapidAuth == null)
+            {
+                _logger.LogDebug("VAPID not configured, skipping browser push");
+                return;
+            }
+
+            var subscriptions = await _subscriptionRepository.GetByUserIdAsync(userId, ct);
+
+            if (!subscriptions.Any())
+            {
+                _logger.LogDebug("User {UserId} has no push subscriptions", userId);
+                return;
+            }
+
+            var payload = JsonSerializer.Serialize(new
+            {
+                title,
+                body,
+                icon = "/icon-192.png",
+                tag = $"tga-{DateTime.UtcNow.Ticks}",
+                url = "/"
+            });
+
+            var message = new PushMessage(payload)
+            {
+                Urgency = PushMessageUrgency.Normal
+            };
+
+            foreach (var subscription in subscriptions)
+            {
+                try
+                {
+                    var pushSubscription = new WebPushSubscription
+                    {
+                        Endpoint = subscription.Endpoint,
+                        Keys = new Dictionary<string, string>
+                        {
+                            ["p256dh"] = subscription.P256dh,
+                            ["auth"] = subscription.Auth
+                        }
+                    };
+
+                    _pushServiceClient.DefaultAuthentication = vapidAuth;
+                    await _pushServiceClient.RequestPushMessageDeliveryAsync(
+                        pushSubscription,
+                        message,
+                        ct);
+
+                    _logger.LogDebug("Sent browser push to user {UserId}", userId);
+                }
+                catch (PushServiceClientException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Gone)
+                {
+                    // Subscription expired or unsubscribed - remove it
+                    _logger.LogInformation(
+                        "Push subscription expired for user {UserId}, removing endpoint",
+                        userId);
+                    await _subscriptionRepository.DeleteByEndpointAsync(subscription.Endpoint, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Failed to send browser push to user {UserId}",
+                        userId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send browser push notifications to user {UserId}", userId);
+        }
+    }
+
+    private async Task<VapidAuthentication?> GetOrCreateVapidAuthAsync(CancellationToken ct)
+    {
+        if (_vapidAuth != null)
+            return _vapidAuth;
+
+        try
+        {
+            var apiKeys = await _configRepository.GetApiKeysAsync(ct);
+
+            if (apiKeys?.HasVapidKeys() != true)
+                return null;
+
+            _vapidAuth = new VapidAuthentication(
+                apiKeys.VapidPublicKey!,
+                apiKeys.VapidPrivateKey!)
+            {
+                Subject = "mailto:admin@telegramgroupsadmin.local"
+            };
+
+            _cachedPublicKey = apiKeys.VapidPublicKey;
+
+            return _vapidAuth;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load VAPID configuration");
+            return null;
+        }
+    }
+
+    public async Task<string?> GetVapidPublicKeyAsync(CancellationToken ct = default)
+    {
+        if (_cachedPublicKey != null)
+        {
+            _logger.LogDebug("Returning cached VAPID public key (length: {Length})", _cachedPublicKey.Length);
+            return _cachedPublicKey;
+        }
+
+        try
+        {
+            var apiKeys = await _configRepository.GetApiKeysAsync(ct);
+            _cachedPublicKey = apiKeys?.VapidPublicKey;
+            _logger.LogDebug("Loaded VAPID public key (length: {Length})", _cachedPublicKey?.Length ?? 0);
+            return _cachedPublicKey;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load VAPID public key");
+            return null;
         }
     }
 
@@ -90,21 +262,26 @@ public class WebPushNotificationService(
         int offset = 0,
         CancellationToken ct = default)
     {
-        return repository.GetRecentAsync(userId, limit, offset, ct);
+        return _notificationRepository.GetRecentAsync(userId, limit, offset, ct);
     }
 
     public Task<int> GetUnreadCountAsync(string userId, CancellationToken ct = default)
     {
-        return repository.GetUnreadCountAsync(userId, ct);
+        return _notificationRepository.GetUnreadCountAsync(userId, ct);
     }
 
     public Task MarkAsReadAsync(long notificationId, CancellationToken ct = default)
     {
-        return repository.MarkAsReadAsync(notificationId, ct);
+        return _notificationRepository.MarkAsReadAsync(notificationId, ct);
     }
 
     public Task MarkAllAsReadAsync(string userId, CancellationToken ct = default)
     {
-        return repository.MarkAllAsReadAsync(userId, ct);
+        return _notificationRepository.MarkAllAsReadAsync(userId, ct);
+    }
+
+    public Task<int> DeleteOldReadNotificationsAsync(TimeSpan olderThan, CancellationToken ct = default)
+    {
+        return _notificationRepository.DeleteOldReadNotificationsAsync(olderThan, ct);
     }
 }

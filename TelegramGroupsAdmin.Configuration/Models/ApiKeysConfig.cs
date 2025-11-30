@@ -27,6 +27,18 @@ public class ApiKeysConfig
     public string? SendGrid { get; set; }
 
     /// <summary>
+    /// VAPID public key for Web Push notifications (base64 URL-safe encoded)
+    /// Auto-generated on first startup - do not modify manually
+    /// </summary>
+    public string? VapidPublicKey { get; set; }
+
+    /// <summary>
+    /// VAPID private key for Web Push notifications (base64 URL-safe encoded)
+    /// Auto-generated on first startup - do not modify manually
+    /// </summary>
+    public string? VapidPrivateKey { get; set; }
+
+    /// <summary>
     /// Returns true if at least one API key is configured
     /// </summary>
     public bool HasAnyKey()
@@ -34,5 +46,14 @@ public class ApiKeysConfig
         return !string.IsNullOrWhiteSpace(VirusTotal) ||
                !string.IsNullOrWhiteSpace(OpenAI) ||
                !string.IsNullOrWhiteSpace(SendGrid);
+    }
+
+    /// <summary>
+    /// Returns true if VAPID keys are configured
+    /// </summary>
+    public bool HasVapidKeys()
+    {
+        return !string.IsNullOrWhiteSpace(VapidPublicKey) &&
+               !string.IsNullOrWhiteSpace(VapidPrivateKey);
     }
 }

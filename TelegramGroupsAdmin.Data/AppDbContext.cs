@@ -70,6 +70,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     // Notification tables
     public DbSet<PendingNotificationRecord> PendingNotifications => Set<PendingNotificationRecord>();
+    public DbSet<PushSubscriptionDto> PushSubscriptions => Set<PushSubscriptionDto>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -422,6 +423,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(its => its.MarkedByTelegramUserId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // PushSubscriptions → Users (one-to-many)
+        modelBuilder.Entity<PushSubscriptionDto>()
+            .HasOne<UserRecordDto>()
+            .WithMany()
+            .HasForeignKey(ps => ps.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // WebNotifications → Users (one-to-many)
+        modelBuilder.Entity<WebNotificationDto>()
+            .HasOne<UserRecordDto>()
+            .WithMany()
+            .HasForeignKey(wn => wn.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
@@ -623,6 +638,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(vts => new { vts.IsSpam, vts.MarkedAt });  // Filter spam/ham + sort by date
         // Note: No index on photo_hash - Hamming distance similarity requires full table scan anyway
         // Note: No simple is_spam index - low cardinality boolean, sequential scan is faster
+
+        // PushSubscriptions indexes (Web Push API browser subscriptions)
+        modelBuilder.Entity<PushSubscriptionDto>()
+            .HasIndex(ps => ps.UserId);  // Get all subscriptions for a user
+        modelBuilder.Entity<PushSubscriptionDto>()
+            .HasIndex(ps => new { ps.UserId, ps.Endpoint })
+            .IsUnique();  // Prevent duplicate subscriptions for same endpoint
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)

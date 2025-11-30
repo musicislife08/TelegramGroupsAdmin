@@ -1,8 +1,13 @@
 @using TelegramGroupsAdmin.Core.Repositories
 @using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Services
+@using Microsoft.JSInterop
 @inject INotificationPreferencesRepository PreferencesRepo
 @inject ITelegramUserMappingRepository TelegramMappingRepo
+@inject IPushSubscriptionsRepository PushSubscriptionsRepo
+@inject IWebPushNotificationService WebPushService
+@inject IJSRuntime JS
 @inject ISnackbar Snackbar
 
 <MudPaper Class="pa-4" Elevation="2">
@@ -67,6 +72,63 @@
                                              Max="1440"
                                              HelperText="0 = send immediately, otherwise batch notifications" />
                         }
+
+                        @* WebPush-specific: browser notification subscription *@
+                        @if (channel == NotificationChannel.WebPush)
+                        {
+                            <MudDivider Class="my-3" />
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">Browser Push Notifications</MudText>
+
+                            @if (!_pushSupported)
+                            {
+                                <MudAlert Severity="Severity.Warning" Dense="true">
+                                    Your browser does not support push notifications.
+                                </MudAlert>
+                            }
+                            else if (_pushPermission == "denied")
+                            {
+                                <MudAlert Severity="Severity.Error" Dense="true">
+                                    Push notifications are blocked. Please enable them in your browser settings.
+                                </MudAlert>
+                            }
+                            else if (_pushSubscribed)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                                    <MudText Color="Color.Success">Browser notifications enabled</MudText>
+                                    <MudButton Variant="Variant.Text"
+                                               Color="Color.Error"
+                                               Size="Size.Small"
+                                               OnClick="UnsubscribeFromPushAsync"
+                                               Disabled="_pushLoading">
+                                        Disable
+                                    </MudButton>
+                                </MudStack>
+                            }
+                            else
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.NotificationsActive"
+                                               OnClick="SubscribeToPushAsync"
+                                               Disabled="_pushLoading">
+                                        @if (_pushLoading)
+                                        {
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                            <span>Enabling...</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Enable Browser Notifications</span>
+                                        }
+                                    </MudButton>
+                                </MudStack>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                    Your browser will ask for permission to show notifications.
+                                </MudText>
+                            }
+                        }
                     }
                 </MudTabPanel>
             }
@@ -111,9 +173,48 @@
     private bool _loading = true;
     private bool _saving;
 
+    // WebPush state
+    private IJSObjectReference? _pushModule;
+    private bool _pushSupported;
+    private string _pushPermission = "default";
+    private bool _pushSubscribed;
+    private bool _pushLoading;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadPreferences();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadPushStateAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadPushStateAsync()
+    {
+        try
+        {
+            _pushModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/push-notifications.js");
+            _pushSupported = await _pushModule.InvokeAsync<bool>("isPushSupported");
+            _pushPermission = await _pushModule.InvokeAsync<string>("getPermissionState");
+
+            // Check if we have a saved subscription for this user
+            var endpoint = await _pushModule.InvokeAsync<string?>("getCurrentSubscriptionEndpoint");
+            if (!string.IsNullOrEmpty(endpoint))
+            {
+                var existingSub = await PushSubscriptionsRepo.GetByEndpointAsync(endpoint);
+                _pushSubscribed = existingSub != null && existingSub.UserId == UserId;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load push state: {ex.Message}");
+            _pushSupported = false;
+        }
     }
 
     private async Task LoadPreferences()
@@ -263,4 +364,110 @@
         NotificationEventType.BackupFailed => Color.Error,
         _ => Color.Default
     };
+
+    #region WebPush Subscription
+
+    private async Task SubscribeToPushAsync()
+    {
+        if (_pushModule == null) return;
+
+        try
+        {
+            _pushLoading = true;
+            StateHasChanged();
+
+            // Get VAPID public key from server
+            var vapidPublicKey = await WebPushService.GetVapidPublicKeyAsync();
+            if (string.IsNullOrEmpty(vapidPublicKey))
+            {
+                Snackbar.Add("Push notifications are not configured on the server.", Severity.Warning);
+                return;
+            }
+
+            // Subscribe in browser (will prompt for permission if needed)
+            var subscription = await _pushModule.InvokeAsync<PushSubscriptionData?>("subscribeToPush", vapidPublicKey);
+            if (subscription == null)
+            {
+                _pushPermission = await _pushModule.InvokeAsync<string>("getPermissionState");
+                if (_pushPermission == "denied")
+                {
+                    Snackbar.Add("Push notifications were blocked. Please enable them in your browser settings.", Severity.Warning);
+                }
+                else
+                {
+                    Snackbar.Add("Failed to enable push notifications.", Severity.Error);
+                }
+                return;
+            }
+
+            // Save subscription to database
+            var pushSubscription = new PushSubscription
+            {
+                UserId = UserId,
+                Endpoint = subscription.Endpoint,
+                P256dh = subscription.P256dh,
+                Auth = subscription.Auth,
+                UserAgent = null // Could capture navigator.userAgent if needed
+            };
+
+            await PushSubscriptionsRepo.UpsertAsync(pushSubscription);
+            _pushSubscribed = true;
+            _pushPermission = "granted";
+
+            Snackbar.Add("Browser notifications enabled!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to enable push notifications: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _pushLoading = false;
+        }
+    }
+
+    private async Task UnsubscribeFromPushAsync()
+    {
+        if (_pushModule == null) return;
+
+        try
+        {
+            _pushLoading = true;
+            StateHasChanged();
+
+            // Get current endpoint before unsubscribing
+            var endpoint = await _pushModule.InvokeAsync<string?>("getCurrentSubscriptionEndpoint");
+
+            // Unsubscribe in browser
+            var success = await _pushModule.InvokeAsync<bool>("unsubscribeFromPush");
+            if (!success)
+            {
+                Snackbar.Add("Failed to disable push notifications in browser.", Severity.Warning);
+            }
+
+            // Remove from database if we had the endpoint
+            if (!string.IsNullOrEmpty(endpoint))
+            {
+                await PushSubscriptionsRepo.DeleteByEndpointAsync(endpoint);
+            }
+
+            _pushSubscribed = false;
+            Snackbar.Add("Browser notifications disabled.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to disable push notifications: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _pushLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// DTO for JS interop - matches the object returned by subscribeToPush()
+    /// </summary>
+    private record PushSubscriptionData(string Endpoint, string P256dh, string Auth);
+
+    #endregion
 }
