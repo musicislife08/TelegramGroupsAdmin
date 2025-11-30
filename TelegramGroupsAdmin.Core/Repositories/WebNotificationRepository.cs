@@ -78,4 +78,22 @@ public class WebNotificationRepository(IDbContextFactory<AppDbContext> contextFa
             .Where(n => n.IsRead && n.CreatedAt < cutoff)
             .ExecuteDeleteAsync(ct);
     }
+
+    public async Task DeleteAsync(long notificationId, CancellationToken ct = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+
+        await context.WebNotifications
+            .Where(n => n.Id == notificationId)
+            .ExecuteDeleteAsync(ct);
+    }
+
+    public async Task DeleteAllAsync(string userId, CancellationToken ct = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+
+        await context.WebNotifications
+            .Where(n => n.UserId == userId)
+            .ExecuteDeleteAsync(ct);
+    }
 }

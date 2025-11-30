@@ -31,15 +31,26 @@
                       Class="px-3 py-2"
                       Style="border-bottom: 1px solid var(--mud-palette-divider);">
                 <MudText Typo="Typo.subtitle1"><strong>Notifications</strong></MudText>
-                @if (NotificationState.UnreadCount > 0)
-                {
-                    <MudButton Variant="Variant.Text"
-                               Size="Size.Small"
-                               Color="Color.Primary"
-                               OnClick="@MarkAllAsReadAsync">
-                        Mark all read
-                    </MudButton>
-                }
+                <MudStack Row="true" Spacing="1">
+                    @if (NotificationState.UnreadCount > 0)
+                    {
+                        <MudButton Variant="Variant.Text"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   OnClick="@MarkAllAsReadAsync">
+                            Mark all read
+                        </MudButton>
+                    }
+                    @if (NotificationState.Notifications.Any())
+                    {
+                        <MudButton Variant="Variant.Text"
+                                   Size="Size.Small"
+                                   Color="Color.Error"
+                                   OnClick="@DeleteAllAsync">
+                            Clear all
+                        </MudButton>
+                    }
+                </MudStack>
             </MudStack>
 
             @* Notification list *@
@@ -64,7 +75,8 @@
                     @foreach (var notification in NotificationState.Notifications)
                     {
                         <NotificationItem Notification="@notification"
-                                          OnMarkRead="@(() => HandleNotificationClick(notification))" />
+                                          OnMarkRead="@(() => HandleNotificationClick(notification))"
+                                          OnDelete="@(() => DeleteNotificationAsync(notification.Id))" />
                     }
                 </MudStack>
             }
@@ -106,6 +118,16 @@
     private async Task MarkAllAsReadAsync()
     {
         await NotificationState.MarkAllAsReadAsync();
+    }
+
+    private async Task DeleteNotificationAsync(long notificationId)
+    {
+        await NotificationState.DeleteAsync(notificationId);
+    }
+
+    private async Task DeleteAllAsync()
+    {
+        await NotificationState.DeleteAllAsync();
     }
 
     public void Dispose()

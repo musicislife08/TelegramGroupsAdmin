@@ -122,6 +122,43 @@ public class NotificationStateService : IDisposable
         await NotifyStateChangedAsync();
     }
 
+    /// <summary>
+    /// Delete a single notification
+    /// </summary>
+    public async Task DeleteAsync(long notificationId, CancellationToken ct = default)
+    {
+        await _notificationService.DeleteAsync(notificationId, ct);
+
+        // Update local state
+        var notification = _notifications.FirstOrDefault(n => n.Id == notificationId);
+        if (notification != null)
+        {
+            if (!notification.IsRead)
+            {
+                _unreadCount = Math.Max(0, _unreadCount - 1);
+            }
+            _notifications.Remove(notification);
+            await NotifyStateChangedAsync();
+        }
+    }
+
+    /// <summary>
+    /// Delete all notifications for current user
+    /// </summary>
+    public async Task DeleteAllAsync(CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(_userId))
+            return;
+
+        await _notificationService.DeleteAllAsync(_userId, ct);
+
+        // Update local state
+        _notifications.Clear();
+        _unreadCount = 0;
+
+        await NotifyStateChangedAsync();
+    }
+
     private async Task NotifyStateChangedAsync()
     {
         if (OnChange != null)

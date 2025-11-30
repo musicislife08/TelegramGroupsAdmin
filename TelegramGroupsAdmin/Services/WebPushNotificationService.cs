@@ -54,6 +54,16 @@ public interface IWebPushNotificationService
     Task<int> DeleteOldReadNotificationsAsync(TimeSpan olderThan, CancellationToken ct = default);
 
     /// <summary>
+    /// Delete a single notification
+    /// </summary>
+    Task DeleteAsync(long notificationId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete all notifications for a user
+    /// </summary>
+    Task DeleteAllAsync(string userId, CancellationToken ct = default);
+
+    /// <summary>
     /// Get VAPID public key for browser subscription (returns null if not configured)
     /// </summary>
     Task<string?> GetVapidPublicKeyAsync(CancellationToken ct = default);
@@ -283,5 +293,15 @@ public class WebPushNotificationService : IWebPushNotificationService
     public Task<int> DeleteOldReadNotificationsAsync(TimeSpan olderThan, CancellationToken ct = default)
     {
         return _notificationRepository.DeleteOldReadNotificationsAsync(olderThan, ct);
+    }
+
+    public Task DeleteAsync(long notificationId, CancellationToken ct = default)
+    {
+        return _notificationRepository.DeleteAsync(notificationId, ct);
+    }
+
+    public Task DeleteAllAsync(string userId, CancellationToken ct = default)
+    {
+        return _notificationRepository.DeleteAllAsync(userId, ct);
     }
 }

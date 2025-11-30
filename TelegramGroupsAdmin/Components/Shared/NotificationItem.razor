@@ -8,15 +8,23 @@
             <MudText Typo="Typo.caption" Class="text-truncate-multiline">@TruncateMessage(Notification.Message, 100)</MudText>
             <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatTimeAgo(Notification.CreatedAt)</MudText>
         </MudStack>
-        @if (!Notification.IsRead)
-        {
-            <MudTooltip Text="Mark as read">
-                <MudIconButton Icon="@Icons.Material.Filled.Check"
+        <MudStack Row="true" Spacing="0">
+            @if (!Notification.IsRead)
+            {
+                <MudTooltip Text="Mark as read">
+                    <MudIconButton Icon="@Icons.Material.Filled.Check"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   OnClick="@OnMarkRead" />
+                </MudTooltip>
+            }
+            <MudTooltip Text="Delete">
+                <MudIconButton Icon="@Icons.Material.Filled.Close"
                                Size="Size.Small"
-                               Color="Color.Primary"
-                               OnClick="@OnMarkRead" />
+                               Color="Color.Default"
+                               OnClick="@OnDelete" />
             </MudTooltip>
-        }
+        </MudStack>
     </MudStack>
 </MudPaper>
 
@@ -37,6 +45,9 @@
 
     [Parameter]
     public EventCallback OnMarkRead { get; set; }
+
+    [Parameter]
+    public EventCallback OnDelete { get; set; }
 
     private string GetItemClass()
     {

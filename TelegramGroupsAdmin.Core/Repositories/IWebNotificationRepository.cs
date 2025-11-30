@@ -38,4 +38,14 @@ public interface IWebNotificationRepository
     /// Returns number of deleted notifications
     /// </summary>
     Task<int> DeleteOldReadNotificationsAsync(TimeSpan retention, CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete a single notification
+    /// </summary>
+    Task DeleteAsync(long notificationId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Delete all notifications for a user
+    /// </summary>
+    Task DeleteAllAsync(string userId, CancellationToken ct = default);
 }
