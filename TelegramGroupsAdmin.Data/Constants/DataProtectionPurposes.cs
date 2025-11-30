@@ -21,11 +21,6 @@ public static class DataProtectionPurposes
     public const string TotpSecrets = "TgSpamPreFilter.TotpSecrets";
 
     /// <summary>
-    /// Purpose for encrypting notification secrets (DM tokens) in pending_notifications table
-    /// </summary>
-    public const string NotificationSecrets = "TgSpamPreFilter.NotificationSecrets";
-
-    /// <summary>
     /// Purpose for encrypting backup passphrases in configs.passphrase_encrypted column
     /// </summary>
     public const string BackupPassphrase = "BackupPassphrase";

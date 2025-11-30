@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TelegramGroupsAdmin.Data;
@@ -11,9 +12,11 @@ using TelegramGroupsAdmin.Data;
 namespace TelegramGroupsAdmin.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251129200935_ReworkNotificationPreferences")]
+    partial class ReworkNotificationPreferences
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1868,54 +1871,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.ToTable("prompt_versions");
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PushSubscriptionDto", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("Auth")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("auth");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Endpoint")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("endpoint");
-
-                    b.Property<string>("P256dh")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("p256dh");
-
-                    b.Property<string>("UserAgent")
-                        .HasColumnType("text")
-                        .HasColumnName("user_agent");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("UserId", "Endpoint")
-                        .IsUnique();
-
-                    b.ToTable("push_subscriptions");
-                });
-
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.RawAlgorithmPerformanceStatsDto", b =>
                 {
                     b.Property<double>("AverageMs")
@@ -2748,55 +2703,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         });
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.WebNotificationDto", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<int>("EventType")
-                        .HasColumnType("integer")
-                        .HasColumnName("event_type");
-
-                    b.Property<bool>("IsRead")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_read");
-
-                    b.Property<string>("Message")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("message");
-
-                    b.Property<DateTimeOffset?>("ReadAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("read_at");
-
-                    b.Property<string>("Subject")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("subject");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "CreatedAt")
-                        .HasDatabaseName("ix_web_notifications_user_id_created_at");
-
-                    b.ToTable("web_notifications");
-                });
-
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.WelcomeResponseDto", b =>
                 {
                     b.Property<long>("Id")
@@ -3082,15 +2988,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Navigation("MessageEdit");
                 });
 
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.PushSubscriptionDto", b =>
-                {
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.RecoveryCodeRecordDto", b =>
                 {
                     b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", "User")
@@ -3235,15 +3132,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Message");
-                });
-
-            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.WebNotificationDto", b =>
-                {
-                    b.HasOne("TelegramGroupsAdmin.Data.Models.UserRecordDto", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("AppAny.Quartz.EntityFrameworkCore.Migrations.QuartzJobDetail", b =>

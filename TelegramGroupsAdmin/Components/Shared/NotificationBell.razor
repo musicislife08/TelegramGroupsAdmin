@@ -1,0 +1,137 @@
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Models
+@inject NotificationStateService NotificationState
+@implements IDisposable
+
+<MudMenu Icon="@Icons.Material.Filled.Notifications"
+         Color="@(NotificationState.UnreadCount > 0 ? Color.Warning : Color.Inherit)"
+         AnchorOrigin="Origin.BottomRight"
+         TransformOrigin="Origin.TopRight"
+         Dense="true"
+         Class="notification-bell">
+
+    @* Badge overlay for unread count *@
+    <ActivatorContent>
+        <MudBadge Content="@NotificationState.UnreadCount"
+                  Color="Color.Error"
+                  Overlap="true"
+                  Visible="@(NotificationState.UnreadCount > 0)">
+            <MudIconButton Icon="@Icons.Material.Filled.Notifications"
+                           Color="@(NotificationState.UnreadCount > 0 ? Color.Warning : Color.Inherit)"
+                           Size="Size.Medium" />
+        </MudBadge>
+    </ActivatorContent>
+
+    <ChildContent>
+        <MudPaper Width="350px" MaxHeight="400px" Style="overflow-y: auto;">
+            @* Header *@
+            <MudStack Row="true"
+                      Justify="Justify.SpaceBetween"
+                      AlignItems="AlignItems.Center"
+                      Class="px-3 py-2"
+                      Style="border-bottom: 1px solid var(--mud-palette-divider);">
+                <MudText Typo="Typo.subtitle1"><strong>Notifications</strong></MudText>
+                <MudStack Row="true" Spacing="1">
+                    @if (NotificationState.UnreadCount > 0)
+                    {
+                        <MudButton Variant="Variant.Text"
+                                   Size="Size.Small"
+                                   Color="Color.Primary"
+                                   OnClick="@MarkAllAsReadAsync">
+                            Mark all read
+                        </MudButton>
+                    }
+                    @if (NotificationState.Notifications.Any())
+                    {
+                        <MudButton Variant="Variant.Text"
+                                   Size="Size.Small"
+                                   Color="Color.Error"
+                                   OnClick="@DeleteAllAsync">
+                            Clear all
+                        </MudButton>
+                    }
+                </MudStack>
+            </MudStack>
+
+            @* Notification list *@
+            @if (!NotificationState.IsLoaded)
+            {
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+            }
+            else if (!NotificationState.Notifications.Any())
+            {
+                <MudStack AlignItems="AlignItems.Center" Class="pa-4">
+                    <MudIcon Icon="@Icons.Material.Filled.NotificationsNone"
+                             Size="Size.Large"
+                             Color="Color.Default" />
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        No notifications yet
+                    </MudText>
+                </MudStack>
+            }
+            else
+            {
+                <MudStack Spacing="1" Class="px-2 pb-2">
+                    @foreach (var notification in NotificationState.Notifications)
+                    {
+                        <NotificationItem Notification="@notification"
+                                          OnMarkRead="@(() => HandleNotificationClick(notification))"
+                                          OnDelete="@(() => DeleteNotificationAsync(notification.Id))" />
+                    }
+                </MudStack>
+            }
+        </MudPaper>
+    </ChildContent>
+</MudMenu>
+
+<style>
+    .notification-unread {
+        background-color: rgba(var(--mud-palette-primary-rgb), 0.08);
+        border-radius: 4px;
+    }
+
+    .notification-item:hover {
+        background-color: rgba(var(--mud-palette-action-default-hover-rgb), 0.08);
+        border-radius: 4px;
+    }
+</style>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        NotificationState.OnChange += StateHasChangedAsync;
+    }
+
+    private async Task StateHasChangedAsync()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleNotificationClick(WebNotification notification)
+    {
+        if (!notification.IsRead)
+        {
+            await NotificationState.MarkAsReadAsync(notification.Id);
+        }
+    }
+
+    private async Task MarkAllAsReadAsync()
+    {
+        await NotificationState.MarkAllAsReadAsync();
+    }
+
+    private async Task DeleteNotificationAsync(long notificationId)
+    {
+        await NotificationState.DeleteAsync(notificationId);
+    }
+
+    private async Task DeleteAllAsync()
+    {
+        await NotificationState.DeleteAllAsync();
+    }
+
+    public void Dispose()
+    {
+        NotificationState.OnChange -= StateHasChangedAsync;
+    }
+}

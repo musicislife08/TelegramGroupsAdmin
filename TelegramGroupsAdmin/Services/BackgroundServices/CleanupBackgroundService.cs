@@ -99,6 +99,18 @@ public class CleanupBackgroundService : BackgroundService
                     stats.OldestTimestamp.HasValue
                         ? stats.OldestTimestamp.Value.ToString("g")
                         : "none");
+
+                // Clean up old read web notifications (7 day retention)
+                var webPushService = scope.ServiceProvider.GetRequiredService<IWebPushNotificationService>();
+                var notificationsDeleted = await webPushService.DeleteOldReadNotificationsAsync(
+                    TimeSpan.FromDays(7), stoppingToken);
+
+                if (notificationsDeleted > 0)
+                {
+                    _logger.LogInformation(
+                        "Notification cleanup: {Count} old read notifications deleted",
+                        notificationsDeleted);
+                }
             }
             catch (OperationCanceledException)
             {

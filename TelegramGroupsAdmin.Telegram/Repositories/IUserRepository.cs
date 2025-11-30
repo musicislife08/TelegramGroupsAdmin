@@ -37,4 +37,10 @@ public interface IUserRepository
     Task ResetFailedLoginAttemptsAsync(string userId, CancellationToken ct = default);
     Task LockAccountAsync(string userId, DateTimeOffset lockedUntil, CancellationToken ct = default);
     Task UnlockAccountAsync(string userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get the primary owner's email (first Owner account by created_at)
+    /// Used for VAPID authentication subject in Web Push notifications
+    /// </summary>
+    Task<string?> GetPrimaryOwnerEmailAsync(CancellationToken ct = default);
 }

@@ -1,6 +1,9 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @using Microsoft.AspNetCore.Components.Authorization
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Components.Shared
 @inject AuthenticationStateProvider AuthStateProvider
+@inject NotificationStateService NotificationState
 
 <MudThemeProvider Theme="@_theme" IsDarkMode="true" />
 <MudPopoverProvider />
@@ -12,9 +15,13 @@
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@((_) => DrawerToggle())" />
         <MudText Typo="Typo.h6">Telegram Groups Admin</MudText>
         <MudSpacer />
+        @if (_isAuthenticated)
+        {
+            <NotificationBell />
+        }
         @if (!string.IsNullOrEmpty(_userEmail))
         {
-            <MudText Typo="Typo.body2" Class="mr-4">@_userEmail</MudText>
+            <MudText Typo="Typo.body2" Class="mr-4 ml-2">@_userEmail</MudText>
         }
     </MudAppBar>
     <MudDrawer @bind-Open="@_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
@@ -30,6 +37,8 @@
 @code {
     private bool _drawerOpen = true;
     private string? _userEmail;
+    private string? _userId;
+    private bool _isAuthenticated;
 
     private readonly MudTheme _theme = new()
     {
@@ -55,7 +64,15 @@
 
         if (user.Identity?.IsAuthenticated ?? false)
         {
+            _isAuthenticated = true;
             _userEmail = user.Identity.Name;
+            _userId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            // Initialize notification state for the authenticated user
+            if (!string.IsNullOrEmpty(_userId))
+            {
+                await NotificationState.InitializeAsync(_userId);
+            }
         }
     }
 
