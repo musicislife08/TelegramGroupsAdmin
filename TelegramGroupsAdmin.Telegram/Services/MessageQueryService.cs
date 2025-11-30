@@ -290,7 +290,18 @@ public class MessageQueryService : IMessageQueryService
                 translation: joined.Translation?.ToModel());
 
             // Validate media path exists on filesystem (nulls if missing)
-            messageModel = ValidateMediaPath(messageModel);
+            // REFACTOR-3: Now uses shared utility to avoid duplication with MessageHistoryRepository
+            var validatedPath = MediaPathUtilities.ValidateMediaPath(
+                messageModel.MediaLocalPath,
+                (int?)messageModel.MediaType,
+                _imageStoragePath,
+                out var fullPath);
+
+            if (validatedPath == null && messageModel.MediaLocalPath != null)
+            {
+                _logger.LogDebug("Media file missing for message {MessageId}: {Path}", messageModel.MessageId, fullPath);
+                messageModel = messageModel with { MediaLocalPath = null };
+            }
 
             return new UiModels.MessageWithDetectionHistory
             {
@@ -495,28 +506,5 @@ public class MessageQueryService : IMessageQueryService
             FileId: entity.PhotoFileId!,
             MessageText: entity.MessageText,
             Timestamp: entity.Timestamp);
-    }
-
-    /// <summary>
-    /// Validates that media file exists on filesystem, nulls MediaLocalPath if missing
-    /// This ensures UI shows placeholders for media that needs re-downloading
-    /// </summary>
-    private UiModels.MessageRecord ValidateMediaPath(UiModels.MessageRecord message)
-    {
-        // Skip if no media path set or no media type
-        if (string.IsNullOrEmpty(message.MediaLocalPath) || !message.MediaType.HasValue)
-            return message;
-
-        // Construct full path using MediaPathUtilities (e.g., /data/media/video/animation_123_ABC.mp4)
-        var relativePath = MediaPathUtilities.GetMediaStoragePath(message.MediaLocalPath, (int)message.MediaType.Value);
-        var fullPath = Path.Combine(_imageStoragePath, relativePath);
-
-        if (File.Exists(fullPath))
-            return message; // File exists, return as-is
-
-        // File missing - null the path so UI shows placeholder and requests download
-        _logger.LogDebug("Media file missing for message {MessageId}: {Path}", message.MessageId, fullPath);
-
-        return message with { MediaLocalPath = null };
     }
 }
