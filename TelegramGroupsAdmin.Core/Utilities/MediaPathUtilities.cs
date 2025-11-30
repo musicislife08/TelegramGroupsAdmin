@@ -60,4 +60,40 @@ public static class MediaPathUtilities
     /// <returns>Absolute path (e.g., "/data/media/user_photos/123.jpg")</returns>
     public static string ToAbsolutePath(string relativePath, string basePath)
         => Path.Combine(basePath, "media", relativePath);
+
+    /// <summary>
+    /// Validates that a media file exists on the filesystem.
+    /// REFACTOR-3: Extracted from MessageHistoryRepository and MessageQueryService (DRY).
+    /// </summary>
+    /// <param name="mediaLocalPath">The stored media filename (e.g., "animation_123_ABC.mp4")</param>
+    /// <param name="mediaType">The media type enum value (nullable)</param>
+    /// <param name="imageStoragePath">Base storage path (e.g., "/data")</param>
+    /// <param name="fullPathOut">Output: the full filesystem path that was checked (null if no validation performed)</param>
+    /// <returns>
+    /// <list type="bullet">
+    /// <item><description>Returns <paramref name="mediaLocalPath"/> unchanged if null/empty (passthrough, no validation needed)</description></item>
+    /// <item><description>Returns <paramref name="mediaLocalPath"/> unchanged if <paramref name="mediaType"/> is null (passthrough, can't construct path)</description></item>
+    /// <item><description>Returns <paramref name="mediaLocalPath"/> if file exists on disk (validation passed)</description></item>
+    /// <item><description>Returns null if file does not exist (validation failed - caller should clear the path)</description></item>
+    /// </list>
+    /// </returns>
+    public static string? ValidateMediaPath(
+        string? mediaLocalPath,
+        int? mediaType,
+        string imageStoragePath,
+        out string? fullPathOut)
+    {
+        fullPathOut = null;
+
+        // Skip if no media path set or no media type
+        if (string.IsNullOrEmpty(mediaLocalPath) || !mediaType.HasValue)
+            return mediaLocalPath;
+
+        // Construct full path (e.g., /data/media/video/animation_123_ABC.mp4)
+        var relativePath = GetMediaStoragePath(mediaLocalPath, mediaType.Value);
+        fullPathOut = Path.Combine(imageStoragePath, relativePath);
+
+        // Return path if file exists, null otherwise
+        return File.Exists(fullPathOut) ? mediaLocalPath : null;
+    }
 }

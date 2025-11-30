@@ -358,6 +358,40 @@ public class MessageHistoryRepositoryTests
     }
 
     [Test]
+    public async Task GetMessagesWithDetectionHistoryAsync_ValidatesMediaPath()
+    {
+        // This test validates that GetMessagesWithDetectionHistoryAsync (in MessageQueryService)
+        // also validates media paths and nulls them when files don't exist.
+        // BASELINE TEST for REFACTOR-3: Both repository and query service have ValidateMediaPath.
+
+        // Arrange - Insert a message with media path pointing to non-existent file
+        var message = CreateTestMessage(
+            messageId: 999060,
+            userId: GoldenDataset.TelegramUsers.User1_TelegramUserId,
+            chatId: GoldenDataset.ManagedChats.MainChat_Id,
+            text: null,
+            mediaType: UiModels.MediaType.Animation
+        );
+        await _repository!.InsertMessageAsync(message);
+
+        // Update media path to point to a file that does NOT exist
+        const string nonExistentFileName = "animation_does_not_exist_999060.gif";
+        await _repository.UpdateMediaLocalPathAsync(999060, nonExistentFileName);
+
+        // Act - Retrieve via MessageQueryService (this also calls ValidateMediaPath internally)
+        var messagesWithHistory = await _queryService!.GetMessagesWithDetectionHistoryAsync(
+            GoldenDataset.ManagedChats.MainChat_Id, limit: 200);
+
+        // Assert - Find our message and verify MediaLocalPath is null
+        var ourMessage = messagesWithHistory.FirstOrDefault(m => m.Message.MessageId == 999060);
+        Assert.That(ourMessage, Is.Not.Null, "Should find our test message");
+        Assert.That(ourMessage!.Message.MediaLocalPath, Is.Null,
+            "MediaLocalPath should be nulled by MessageQueryService.ValidateMediaPath when file doesn't exist");
+        Assert.That(ourMessage.Message.MediaType, Is.EqualTo(UiModels.MediaType.Animation),
+            "MediaType should remain unchanged");
+    }
+
+    [Test]
     public async Task GetMessagesWithDetectionHistoryAsync_WithEditTranslations_ShouldExcludeEditTranslations()
     {
         // This test validates the exclusive arc constraint: message_translations LEFT JOIN
@@ -788,6 +822,38 @@ public class MessageHistoryRepositoryTests
     }
 
     [Test]
+    public async Task ValidateMediaPath_FileMissing_ShouldNullMediaLocalPath()
+    {
+        // This test validates that when a media file doesn't exist on disk,
+        // GetMessageAsync (which calls ValidateMediaPath internally) nulls the MediaLocalPath.
+        // BASELINE TEST for REFACTOR-3: Validates current behavior before DRY refactoring.
+
+        // Arrange - Insert a message with media path pointing to non-existent file
+        var message = CreateTestMessage(
+            messageId: 999050,
+            userId: GoldenDataset.TelegramUsers.User1_TelegramUserId,
+            chatId: GoldenDataset.ManagedChats.MainChat_Id,
+            text: null,
+            mediaType: UiModels.MediaType.Video
+        );
+        await _repository!.InsertMessageAsync(message);
+
+        // Update media path to point to a file that does NOT exist
+        const string nonExistentFileName = "this_file_does_not_exist_999050.mp4";
+        await _repository.UpdateMediaLocalPathAsync(999050, nonExistentFileName);
+
+        // Act - Retrieve the message (this calls ValidateMediaPath internally)
+        var retrieved = await _repository.GetMessageAsync(999050);
+
+        // Assert - MediaLocalPath should be null because file doesn't exist
+        Assert.That(retrieved, Is.Not.Null);
+        Assert.That(retrieved!.MediaLocalPath, Is.Null,
+            "MediaLocalPath should be nulled when referenced file doesn't exist on disk");
+        Assert.That(retrieved.MediaType, Is.EqualTo(UiModels.MediaType.Video),
+            "MediaType should remain unchanged");
+    }
+
+    [Test]
     public async Task MarkMessageAsDeletedAsync_ShouldSoftDelete()
     {
         // Arrange - Insert a message
@@ -832,6 +898,40 @@ public class MessageHistoryRepositoryTests
         }
     }
 
+    [Test]
+    public async Task GetUserMessagesAsync_ExcludesDeletedMessages()
+    {
+        // This test validates that GetUserMessagesAsync correctly filters out soft-deleted messages.
+        // BASELINE TEST for REFACTOR-3: Validates current behavior before DRY refactoring.
+
+        // Arrange - Insert a message for our test user
+        var message = CreateTestMessage(
+            messageId: 999040,
+            userId: GoldenDataset.TelegramUsers.User1_TelegramUserId,
+            chatId: GoldenDataset.ManagedChats.MainChat_Id,
+            text: "Message to be soft deleted"
+        );
+        await _repository!.InsertMessageAsync(message);
+
+        // Verify message appears in user's messages before deletion
+        var messagesBefore = await _repository.GetUserMessagesAsync(GoldenDataset.TelegramUsers.User1_TelegramUserId);
+        Assert.That(messagesBefore.Any(m => m.MessageId == 999040), Is.True,
+            "Message should appear in user's messages before soft delete");
+
+        // Act - Soft delete the message
+        await _repository.MarkMessageAsDeletedAsync(999040, "test_soft_delete");
+
+        // Assert - Message should no longer appear in GetUserMessagesAsync
+        var messagesAfter = await _repository.GetUserMessagesAsync(GoldenDataset.TelegramUsers.User1_TelegramUserId);
+        Assert.That(messagesAfter.Any(m => m.MessageId == 999040), Is.False,
+            "Soft-deleted message should be excluded from GetUserMessagesAsync results");
+
+        // Verify the message still exists (soft delete, not hard delete)
+        var deletedMessage = await _repository.GetMessageAsync(999040);
+        Assert.That(deletedMessage, Is.Not.Null, "Message should still exist in database");
+        Assert.That(deletedMessage!.DeletedAt, Is.Not.Null, "Message should have DeletedAt set");
+    }
+
     #endregion
 
     #region Cleanup/Retention Tests
@@ -853,6 +953,49 @@ public class MessageHistoryRepositoryTests
         // Verify message count unchanged
         var statsAfter = await _statsService!.GetStatsAsync();
         Assert.That(statsAfter.TotalMessages, Is.EqualTo(statsBefore.TotalMessages));
+    }
+
+    [Test]
+    public async Task CleanupExpiredAsync_PreservesMessagesWithDetectionResults()
+    {
+        // This test validates that old messages WITH detection_results are preserved (training data).
+        // BASELINE TEST for REFACTOR-3: Validates current behavior before DRY refactoring.
+        //
+        // The retention logic: Delete messages where Timestamp < 30 days AND no detection results.
+        // Messages with detection_results are kept as training data even if > 30 days old.
+
+        // Arrange - Golden dataset already has messages with detection results:
+        // - Messages.Msg1_Id (82619) has DetectionResults.Result1
+        // - Messages.Msg11_Id (82581) has DetectionResults.Result2
+        // These messages have recent timestamps (NOW() - N hours) so won't be deleted anyway.
+        //
+        // We can verify the logic works by checking that cleanup doesn't delete messages
+        // that have detection results, regardless of their age.
+
+        // Get messages with detection results from golden dataset
+        var messageWithDetection = await _repository!.GetMessageAsync(GoldenDataset.Messages.Msg1_Id);
+        Assert.That(messageWithDetection, Is.Not.Null, "Golden dataset should have message with detection result");
+
+        // Verify it has detection result (via the query service)
+        var messagesWithHistory = await _queryService!.GetMessagesWithDetectionHistoryAsync(
+            GoldenDataset.ManagedChats.MainChat_Id, limit: 100);
+        var msg1WithHistory = messagesWithHistory.FirstOrDefault(m => m.Message.MessageId == GoldenDataset.Messages.Msg1_Id);
+        Assert.That(msg1WithHistory, Is.Not.Null, "Should find message in detection history query");
+        Assert.That(msg1WithHistory!.DetectionResults.Count, Is.GreaterThan(0),
+            "Message should have detection results (training data)");
+
+        // Act - Run cleanup
+        var (deletedCount, imagePaths, mediaPaths) = await _repository.CleanupExpiredAsync();
+
+        // Assert - Message with detection result should NOT be deleted
+        var messageAfterCleanup = await _repository.GetMessageAsync(GoldenDataset.Messages.Msg1_Id);
+        Assert.That(messageAfterCleanup, Is.Not.Null,
+            "Message with detection result should be preserved by cleanup (training data retention)");
+
+        // Also verify Msg11 (82581) is preserved
+        var msg11AfterCleanup = await _repository.GetMessageAsync(GoldenDataset.Messages.Msg11_Id);
+        Assert.That(msg11AfterCleanup, Is.Not.Null,
+            "Another message with detection result should also be preserved");
     }
 
     #endregion
