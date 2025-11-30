@@ -389,4 +389,19 @@ public class UserRepository : IUserRepository
         _logger.LogInformation("Unlocked account for user {UserId}", userId);
     }
 
+    public async Task<string?> GetPrimaryOwnerEmailAsync(CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        // Get the first Owner (permission_level=2) by created_at - this is the primary/original owner
+        var email = await context.Users
+            .AsNoTracking()
+            .Where(u => u.PermissionLevel == DataModels.PermissionLevel.Owner
+                     && u.Status == DataModels.UserStatus.Active)
+            .OrderBy(u => u.CreatedAt)
+            .Select(u => u.Email)
+            .FirstOrDefaultAsync(ct);
+
+        return email;
+    }
 }

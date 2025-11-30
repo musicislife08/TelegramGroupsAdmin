@@ -4,6 +4,7 @@ using Lib.Net.Http.WebPush.Authentication;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
+using TelegramGroupsAdmin.Telegram.Repositories;
 using WebPushSubscription = Lib.Net.Http.WebPush.PushSubscription;
 
 namespace TelegramGroupsAdmin.Services;
@@ -74,6 +75,7 @@ public class WebPushNotificationService : IWebPushNotificationService
     private readonly IWebNotificationRepository _notificationRepository;
     private readonly IPushSubscriptionsRepository _subscriptionRepository;
     private readonly IFileScanningConfigRepository _configRepository;
+    private readonly IUserRepository _userRepository;
     private readonly PushServiceClient _pushServiceClient;
     private readonly ILogger<WebPushNotificationService> _logger;
 
@@ -85,12 +87,14 @@ public class WebPushNotificationService : IWebPushNotificationService
         IWebNotificationRepository notificationRepository,
         IPushSubscriptionsRepository subscriptionRepository,
         IFileScanningConfigRepository configRepository,
+        IUserRepository userRepository,
         PushServiceClient pushServiceClient,
         ILogger<WebPushNotificationService> logger)
     {
         _notificationRepository = notificationRepository;
         _subscriptionRepository = subscriptionRepository;
         _configRepository = configRepository;
+        _userRepository = userRepository;
         _pushServiceClient = pushServiceClient;
         _logger = logger;
     }
@@ -226,14 +230,23 @@ public class WebPushNotificationService : IWebPushNotificationService
             if (apiKeys?.HasVapidKeys() != true)
                 return null;
 
+            // Get primary owner's email for VAPID subject (required by Web Push spec)
+            var ownerEmail = await _userRepository.GetPrimaryOwnerEmailAsync(ct);
+            if (string.IsNullOrEmpty(ownerEmail))
+            {
+                _logger.LogWarning("No active Owner account found - Web Push disabled");
+                return null;
+            }
+
             _vapidAuth = new VapidAuthentication(
                 apiKeys.VapidPublicKey!,
                 apiKeys.VapidPrivateKey!)
             {
-                Subject = "mailto:admin@telegramgroupsadmin.local"
+                Subject = $"mailto:{ownerEmail}"
             };
 
             _cachedPublicKey = apiKeys.VapidPublicKey;
+            _logger.LogInformation("VAPID authentication configured with contact: {Email}", ownerEmail);
 
             return _vapidAuth;
         }

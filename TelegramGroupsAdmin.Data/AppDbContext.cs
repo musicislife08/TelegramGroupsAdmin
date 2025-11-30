@@ -645,6 +645,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<PushSubscriptionDto>()
             .HasIndex(ps => new { ps.UserId, ps.Endpoint })
             .IsUnique();  // Prevent duplicate subscriptions for same endpoint
+
+        // WebNotifications indexes (in-app notification bell)
+        modelBuilder.Entity<WebNotificationDto>()
+            .HasIndex(wn => new { wn.UserId, wn.CreatedAt })
+            .HasDatabaseName("ix_web_notifications_user_id_created_at");  // Primary query: recent notifications by user
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)

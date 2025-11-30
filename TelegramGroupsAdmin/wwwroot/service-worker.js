@@ -1,6 +1,12 @@
 // Service Worker for Web Push Notifications
 // This runs in a separate thread and can receive push messages even when the app is not open
 
+// Configuration constants
+const DEFAULT_TITLE = 'TelegramGroupsAdmin';
+const DEFAULT_ICON = '/icon-192.png';
+const BADGE_ICON = '/icon-72.png';
+const VIBRATION_PATTERN = [100, 50, 100];  // Short-pause-short vibration
+
 self.addEventListener('install', event => {
     // Activate immediately without waiting
     self.skipWaiting();
@@ -29,18 +35,16 @@ self.addEventListener('push', event => {
         };
     }
 
-    const title = data.title || 'TelegramGroupsAdmin';
+    const title = data.title || DEFAULT_TITLE;
     const options = {
         body: data.body || '',
-        icon: data.icon || '/icon-192.png',
-        badge: '/icon-72.png',
+        icon: data.icon || DEFAULT_ICON,
+        badge: BADGE_ICON,
         tag: data.tag || 'default',
         data: {
             url: data.url || '/'
         },
-        // Vibration pattern for mobile devices
-        vibrate: [100, 50, 100],
-        // Keep notification visible until user interacts
+        vibrate: VIBRATION_PATTERN,
         requireInteraction: data.requireInteraction || false
     };
 
@@ -49,25 +53,22 @@ self.addEventListener('push', event => {
     );
 });
 
-// Handle notification click
+// Handle notification click - just focus existing window or open app root
+// TODO: Issue #113 - Add context-specific URL navigation per notification type
 self.addEventListener('notificationclick', event => {
     event.notification.close();
 
-    const urlToOpen = event.notification.data?.url || '/';
-
     event.waitUntil(
-        // Check if a window is already open
         self.clients.matchAll({ type: 'window', includeUncontrolled: true })
             .then(windowClients => {
-                // If a window is already open, focus it and navigate
+                // If a window is already open, just focus it (no navigation)
                 for (const client of windowClients) {
-                    if (client.url.includes(self.location.origin)) {
-                        client.focus();
-                        return client.navigate(urlToOpen);
+                    if (client.url && client.url.includes(self.location.origin)) {
+                        return client.focus();
                     }
                 }
-                // Otherwise open a new window
-                return self.clients.openWindow(urlToOpen);
+                // Otherwise open the app root
+                return self.clients.openWindow('/');
             })
     );
 });
