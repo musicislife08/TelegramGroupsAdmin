@@ -63,14 +63,20 @@ public static class MediaPathUtilities
 
     /// <summary>
     /// Validates that a media file exists on the filesystem.
-    /// Returns the mediaLocalPath if file exists, null otherwise.
     /// REFACTOR-3: Extracted from MessageHistoryRepository and MessageQueryService (DRY).
     /// </summary>
     /// <param name="mediaLocalPath">The stored media filename (e.g., "animation_123_ABC.mp4")</param>
     /// <param name="mediaType">The media type enum value (nullable)</param>
     /// <param name="imageStoragePath">Base storage path (e.g., "/data")</param>
-    /// <param name="fullPathOut">Output: the full filesystem path that was checked</param>
-    /// <returns>The mediaLocalPath if file exists, null if file is missing or inputs are invalid</returns>
+    /// <param name="fullPathOut">Output: the full filesystem path that was checked (null if no validation performed)</param>
+    /// <returns>
+    /// <list type="bullet">
+    /// <item><description>Returns <paramref name="mediaLocalPath"/> unchanged if null/empty (passthrough, no validation needed)</description></item>
+    /// <item><description>Returns <paramref name="mediaLocalPath"/> unchanged if <paramref name="mediaType"/> is null (passthrough, can't construct path)</description></item>
+    /// <item><description>Returns <paramref name="mediaLocalPath"/> if file exists on disk (validation passed)</description></item>
+    /// <item><description>Returns null if file does not exist (validation failed - caller should clear the path)</description></item>
+    /// </list>
+    /// </returns>
     public static string? ValidateMediaPath(
         string? mediaLocalPath,
         int? mediaType,
