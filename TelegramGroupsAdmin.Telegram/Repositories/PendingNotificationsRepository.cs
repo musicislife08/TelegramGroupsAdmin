@@ -24,7 +24,7 @@ public class PendingNotificationsRepository : IPendingNotificationsRepository
         CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;
-        var record = new PendingNotificationRecord
+        var record = new PendingNotificationRecordDto
         {
             TelegramUserId = telegramUserId,
             NotificationType = notificationType,

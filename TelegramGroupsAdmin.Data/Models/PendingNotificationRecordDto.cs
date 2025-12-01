@@ -7,7 +7,7 @@ namespace TelegramGroupsAdmin.Data.Models;
 /// Stores notifications that failed to deliver (e.g., DM blocked) for later retry when user enables DMs
 /// </summary>
 [Table("pending_notifications")]
-public class PendingNotificationRecord
+public class PendingNotificationRecordDto
 {
     /// <summary>
     /// Unique identifier for this pending notification

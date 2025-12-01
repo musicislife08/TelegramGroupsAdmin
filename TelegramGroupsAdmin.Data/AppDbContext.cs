@@ -69,7 +69,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<FileScanQuotaRecord> FileScanQuotas => Set<FileScanQuotaRecord>();
 
     // Notification tables
-    public DbSet<PendingNotificationRecord> PendingNotifications => Set<PendingNotificationRecord>();
+    public DbSet<PendingNotificationRecordDto> PendingNotifications => Set<PendingNotificationRecordDto>();
     public DbSet<PushSubscriptionDto> PushSubscriptions => Set<PushSubscriptionDto>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -604,15 +604,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .IsUnique();
 
         // PendingNotifications indexes - lookup by user for delivery
-        modelBuilder.Entity<PendingNotificationRecord>()
+        modelBuilder.Entity<PendingNotificationRecordDto>()
             .HasIndex(pn => pn.TelegramUserId);
 
         // Index for cleanup job (find expired notifications)
-        modelBuilder.Entity<PendingNotificationRecord>()
+        modelBuilder.Entity<PendingNotificationRecordDto>()
             .HasIndex(pn => pn.ExpiresAt);
 
         // Index for analytics (notifications by type)
-        modelBuilder.Entity<PendingNotificationRecord>()
+        modelBuilder.Entity<PendingNotificationRecordDto>()
             .HasIndex(pn => new { pn.NotificationType, pn.CreatedAt });
 
         // ThresholdRecommendations indexes
