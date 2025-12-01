@@ -148,6 +148,27 @@ public class ConfigRecordDto
     public string? SendGridConfig { get; set; }
 
     /// <summary>
+    /// Web Push notification configuration (JSONB)
+    /// Enabled flag, contact email, and VAPID public key (not a secret)
+    /// VAPID private key stored in vapid_private_key_encrypted column (encrypted)
+    /// Only used for global config (chat_id = 0)
+    /// </summary>
+    [Column("web_push_config", TypeName = "jsonb")]
+    public string? WebPushConfig { get; set; }
+
+    /// <summary>
+    /// VAPID private key for Web Push notifications (encrypted TEXT, not JSONB)
+    /// Base64 URL-safe encoded P-256 ECDSA private key
+    /// Encrypted at rest with Data Protection, automatically decrypted during backup export and re-encrypted during restore
+    /// Only used for global config (chat_id = 0)
+    /// Auto-generated on first startup - should never be modified manually
+    /// Note: Uses TEXT not JSONB because encrypted data is base64, not valid JSON
+    /// </summary>
+    [Column("vapid_private_key_encrypted")]
+    [ProtectedData(Purpose = DataProtectionPurposes.VapidPrivateKey)]
+    public string? VapidPrivateKeyEncrypted { get; set; }
+
+    /// <summary>
     /// When this config was created (UTC timestamp)
     /// </summary>
     [Column("created_at")]

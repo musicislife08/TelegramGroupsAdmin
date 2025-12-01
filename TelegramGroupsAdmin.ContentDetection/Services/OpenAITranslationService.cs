@@ -13,12 +13,12 @@ public class OpenAITranslationService : IOpenAITranslationService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<OpenAITranslationService> _logger;
-    private readonly IFileScanningConfigRepository _configRepo;
+    private readonly ISystemConfigRepository _configRepo;
 
     public OpenAITranslationService(
         IHttpClientFactory httpClientFactory,
         ILogger<OpenAITranslationService> logger,
-        IFileScanningConfigRepository configRepo)
+        ISystemConfigRepository configRepo)
     {
         _httpClientFactory = httpClientFactory;
         _logger = logger;

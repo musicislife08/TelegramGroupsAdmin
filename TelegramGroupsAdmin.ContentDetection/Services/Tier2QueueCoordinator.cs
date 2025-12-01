@@ -12,12 +12,12 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 public class Tier2QueueCoordinator
 {
     private readonly ILogger<Tier2QueueCoordinator> _logger;
-    private readonly IFileScanningConfigRepository _configRepository;
+    private readonly ISystemConfigRepository _configRepository;
     private readonly Dictionary<string, ICloudScannerService> _cloudScanners;
 
     public Tier2QueueCoordinator(
         ILogger<Tier2QueueCoordinator> logger,
-        IFileScanningConfigRepository configRepository,
+        ISystemConfigRepository configRepository,
         VirusTotalScannerService virusTotalScanner)
     {
         _logger = logger;

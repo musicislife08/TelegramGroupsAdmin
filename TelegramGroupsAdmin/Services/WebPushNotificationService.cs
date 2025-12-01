@@ -74,7 +74,7 @@ public class WebPushNotificationService : IWebPushNotificationService
 {
     private readonly IWebNotificationRepository _notificationRepository;
     private readonly IPushSubscriptionsRepository _subscriptionRepository;
-    private readonly IFileScanningConfigRepository _configRepository;
+    private readonly ISystemConfigRepository _configRepository;
     private readonly IUserRepository _userRepository;
     private readonly PushServiceClient _pushServiceClient;
     private readonly ILogger<WebPushNotificationService> _logger;
@@ -86,7 +86,7 @@ public class WebPushNotificationService : IWebPushNotificationService
     public WebPushNotificationService(
         IWebNotificationRepository notificationRepository,
         IPushSubscriptionsRepository subscriptionRepository,
-        IFileScanningConfigRepository configRepository,
+        ISystemConfigRepository configRepository,
         IUserRepository userRepository,
         PushServiceClient pushServiceClient,
         ILogger<WebPushNotificationService> logger)
@@ -225,28 +225,52 @@ public class WebPushNotificationService : IWebPushNotificationService
 
         try
         {
-            var apiKeys = await _configRepository.GetApiKeysAsync(ct);
-
-            if (apiKeys?.HasVapidKeys() != true)
-                return null;
-
-            // Get primary owner's email for VAPID subject (required by Web Push spec)
-            var ownerEmail = await _userRepository.GetPrimaryOwnerEmailAsync(ct);
-            if (string.IsNullOrEmpty(ownerEmail))
+            // Check if WebPush is enabled
+            var webPushConfig = await _configRepository.GetWebPushConfigAsync(ct);
+            if (webPushConfig?.Enabled != true)
             {
-                _logger.LogWarning("No active Owner account found - Web Push disabled");
+                _logger.LogDebug("Web Push is disabled in config");
                 return null;
             }
 
-            _vapidAuth = new VapidAuthentication(
-                apiKeys.VapidPublicKey!,
-                apiKeys.VapidPrivateKey!)
+            // Check if VAPID keys exist
+            if (!await _configRepository.HasVapidKeysAsync(ct))
             {
-                Subject = $"mailto:{ownerEmail}"
+                _logger.LogDebug("VAPID keys not configured, Web Push disabled");
+                return null;
+            }
+
+            var publicKey = webPushConfig.VapidPublicKey;
+            var privateKey = await _configRepository.GetVapidPrivateKeyAsync(ct);
+
+            if (string.IsNullOrWhiteSpace(publicKey) || string.IsNullOrWhiteSpace(privateKey))
+            {
+                _logger.LogDebug("VAPID keys incomplete, Web Push disabled");
+                return null;
+            }
+
+            // Determine VAPID subject email (contact for push service)
+            // Priority: 1. WebPushConfig.ContactEmail, 2. Primary Owner's email
+            var contactEmail = webPushConfig.ContactEmail;
+            if (string.IsNullOrEmpty(contactEmail))
+            {
+                contactEmail = await _userRepository.GetPrimaryOwnerEmailAsync(ct);
+            }
+
+            if (string.IsNullOrEmpty(contactEmail))
+            {
+                _logger.LogWarning("No contact email configured for VAPID - Web Push disabled. " +
+                    "Configure in Settings → Notifications → Web Push or ensure an active Owner account exists.");
+                return null;
+            }
+
+            _vapidAuth = new VapidAuthentication(publicKey, privateKey)
+            {
+                Subject = $"mailto:{contactEmail}"
             };
 
-            _cachedPublicKey = apiKeys.VapidPublicKey;
-            _logger.LogInformation("VAPID authentication configured with contact: {Email}", ownerEmail);
+            _cachedPublicKey = publicKey;
+            _logger.LogInformation("VAPID authentication configured with contact: {Email}", contactEmail);
 
             return _vapidAuth;
         }
@@ -267,8 +291,8 @@ public class WebPushNotificationService : IWebPushNotificationService
 
         try
         {
-            var apiKeys = await _configRepository.GetApiKeysAsync(ct);
-            _cachedPublicKey = apiKeys?.VapidPublicKey;
+            var webPushConfig = await _configRepository.GetWebPushConfigAsync(ct);
+            _cachedPublicKey = webPushConfig?.VapidPublicKey;
             _logger.LogDebug("Loaded VAPID public key (length: {Length})", _cachedPublicKey?.Length ?? 0);
             return _cachedPublicKey;
         }

@@ -27,14 +27,18 @@ public class ApiKeysConfig
     public string? SendGrid { get; set; }
 
     /// <summary>
-    /// VAPID public key for Web Push notifications (base64 URL-safe encoded)
-    /// Auto-generated on first startup - do not modify manually
+    /// [DEPRECATED] VAPID public key - migrated to WebPushConfig.VapidPublicKey
+    /// Kept for backwards compatibility during migration.
+    /// VapidKeyMigrationService moves these to new location on startup.
+    /// TODO: Remove after production migration - see GitHub issue #121
     /// </summary>
     public string? VapidPublicKey { get; set; }
 
     /// <summary>
-    /// VAPID private key for Web Push notifications (base64 URL-safe encoded)
-    /// Auto-generated on first startup - do not modify manually
+    /// [DEPRECATED] VAPID private key - migrated to configs.vapid_private_key_encrypted column
+    /// Kept for backwards compatibility during migration.
+    /// VapidKeyMigrationService moves these to new location on startup.
+    /// TODO: Remove after production migration - see GitHub issue #121
     /// </summary>
     public string? VapidPrivateKey { get; set; }
 
@@ -49,7 +53,9 @@ public class ApiKeysConfig
     }
 
     /// <summary>
-    /// Returns true if VAPID keys are configured
+    /// [DEPRECATED] Check if VAPID keys exist in old location (for migration)
+    /// New code should use ISystemConfigRepository.HasVapidKeysAsync()
+    /// TODO: Remove after production migration - see GitHub issue #121
     /// </summary>
     public bool HasVapidKeys()
     {

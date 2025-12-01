@@ -38,11 +38,12 @@ public static class ConfigurationExtensions
             services.AddScoped<IConfigRepository, ConfigRepository>();
             services.AddScoped<IConfigService, ConfigService>();
 
-            // File scanning configuration repository (Phase 4.17)
-            services.AddScoped<IFileScanningConfigRepository, FileScanningConfigRepository>();
+            // System configuration repository (API keys, service settings, per-chat config overrides)
+            services.AddScoped<ISystemConfigRepository, SystemConfigRepository>();
 
-            // Telegram configuration migration service (migrates env vars to database on first startup)
+            // Startup migration services (one-time data migrations on first startup)
             services.AddHostedService<TelegramConfigMigrationService>();
+            services.AddHostedService<VapidKeyMigrationService>();
 
             return services;
         }
