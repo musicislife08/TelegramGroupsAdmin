@@ -577,10 +577,11 @@ public class ModerationActionService
                 ExpiresAt: null,
                 Reason: reason
             );
-            await _userActionsRepository.InsertAsync(trustAction, cancellationToken);
-
-            // Actually set the trust flag in telegram_users table
+            // Set the trust flag first (matches TelegramUserManagementService pattern)
             await _telegramUserRepository.UpdateTrustStatusAsync(userId, isTrusted: true, cancellationToken);
+
+            // Then create the audit record
+            await _userActionsRepository.InsertAsync(trustAction, cancellationToken);
 
             _logger.LogInformation("Trust action completed: User {UserId} trusted globally", userId);
 
