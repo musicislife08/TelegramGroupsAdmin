@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
-namespace TelegramGroupsAdmin.Telegram.Repositories;
+namespace TelegramGroupsAdmin.Repositories;
 
 public class UserRepository : IUserRepository
 {
@@ -72,6 +73,110 @@ public class UserRepository : IUserRepository
         _logger.LogInformation("Created user {Email} with ID {UserId}", user.Email, user.Id);
 
         return user.Id;
+    }
+
+    /// <summary>
+    /// Atomically register a user (create or reactivate) and mark the invite as used in a single transaction.
+    /// - If email doesn't exist: creates new user with generated ID
+    /// - If email exists (deleted user): reactivates with fresh credentials, resets TOTP/verification
+    /// </summary>
+    public async Task<string> RegisterUserWithInviteAsync(
+        string email,
+        string passwordHash,
+        PermissionLevel permissionLevel,
+        string? invitedBy,
+        string inviteToken,
+        CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        var normalizedEmail = email.ToUpperInvariant();
+        var now = DateTimeOffset.UtcNow;
+
+        // Step 1: Check if user exists by email (including deleted users)
+        var existingEntity = await context.Users
+            .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, ct);
+
+        string userId;
+        bool isReactivation = existingEntity != null;
+
+        if (isReactivation)
+        {
+            // Reactivate existing (deleted) user with fresh credentials
+            userId = existingEntity!.Id;
+            existingEntity.Email = email;
+            existingEntity.NormalizedEmail = normalizedEmail;
+            existingEntity.PasswordHash = passwordHash;
+            existingEntity.SecurityStamp = Guid.NewGuid().ToString();
+            existingEntity.PermissionLevel = (DataModels.PermissionLevel)(int)permissionLevel;
+            existingEntity.InvitedBy = invitedBy;
+            existingEntity.Status = DataModels.UserStatus.Active;
+            existingEntity.IsActive = true;
+            // Reset security-sensitive fields
+            existingEntity.TotpSecret = null;
+            existingEntity.TotpEnabled = false;
+            existingEntity.TotpSetupStartedAt = null;
+            existingEntity.EmailVerified = false;
+            existingEntity.EmailVerificationToken = null;
+            existingEntity.EmailVerificationTokenExpiresAt = null;
+            existingEntity.PasswordResetToken = null;
+            existingEntity.PasswordResetTokenExpiresAt = null;
+            existingEntity.FailedLoginAttempts = 0;
+            existingEntity.LockedUntil = null;
+            existingEntity.ModifiedBy = existingEntity.Id;
+            existingEntity.ModifiedAt = now;
+        }
+        else
+        {
+            // Create new user with generated ID
+            userId = Guid.NewGuid().ToString();
+            var newUser = new DataModels.UserRecordDto
+            {
+                Id = userId,
+                Email = email,
+                NormalizedEmail = normalizedEmail,
+                PasswordHash = passwordHash,
+                SecurityStamp = Guid.NewGuid().ToString(),
+                PermissionLevel = (DataModels.PermissionLevel)(int)permissionLevel,
+                InvitedBy = invitedBy,
+                Status = DataModels.UserStatus.Active,
+                IsActive = true,
+                TotpSecret = null,
+                TotpEnabled = false,
+                TotpSetupStartedAt = null,
+                CreatedAt = now,
+                LastLoginAt = null,
+                EmailVerified = false,
+                EmailVerificationToken = null,
+                EmailVerificationTokenExpiresAt = null,
+                PasswordResetToken = null,
+                PasswordResetTokenExpiresAt = null,
+                FailedLoginAttempts = 0,
+                LockedUntil = null,
+                ModifiedBy = null,
+                ModifiedAt = null
+            };
+            context.Users.Add(newUser);
+        }
+
+        // Step 2: Mark invite as used (must exist - was validated by AuthService)
+        var inviteEntity = await context.Invites.FirstOrDefaultAsync(i => i.Token == inviteToken, ct)
+            ?? throw new InvalidOperationException(
+                $"Invite token not found after validation - possible race condition or data integrity issue");
+
+        inviteEntity.UsedBy = userId;
+        inviteEntity.Status = DataModels.InviteStatus.Used;
+        inviteEntity.ModifiedAt = now;
+
+        // Single SaveChangesAsync for both operations (implicit transaction)
+        await context.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Atomically {Action} user {Email} with ID {UserId} and marked invite {Token} as used",
+            isReactivation ? "reactivated" : "created",
+            email, userId, inviteToken);
+
+        return userId;
     }
 
     public async Task UpdateLastLoginAsync(string userId, CancellationToken ct = default)

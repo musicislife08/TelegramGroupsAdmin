@@ -150,12 +150,8 @@ public class ModerationActionService
 
             if (message != null)
             {
-                // 3.5. CRITICAL: Invalidate old training data to prevent cross-class conflicts
-                await _detectionResultsRepository.InvalidateTrainingDataForMessageAsync(
-                    messageId,
-                    cancellationToken);
-
                 // 4. Create detection result (manual spam classification) - message exists in DB
+                // Uses atomic method to invalidate old training data + insert new result in single transaction
                 var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
                 var detectionResult = new DetectionResultRecord
                 {
@@ -173,7 +169,7 @@ public class ModerationActionService
                     CheckResultsJson = null,
                     EditVersion = 0
                 };
-                await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
+                await _detectionResultsRepository.InsertWithTrainingInvalidationAsync(messageId, detectionResult, cancellationToken);
 
                 // 4b. ML-5: Save image training sample if message has a photo
                 await _imageTrainingSamplesRepository.SaveTrainingSampleAsync(
@@ -229,12 +225,8 @@ public class ModerationActionService
 
                         await _messageHistoryRepository.InsertMessageAsync(messageRecord, cancellationToken);
 
-                        // Invalidate any existing training data (shouldn't exist for backfill, but be safe)
-                        await _detectionResultsRepository.InvalidateTrainingDataForMessageAsync(
-                            messageId,
-                            cancellationToken);
-
-                        // Now create the detection result with the real message_id
+                        // Create detection result with atomic training invalidation
+                        // (shouldn't have existing training data for backfill, but be safe)
                         var detectionResult = new DetectionResultRecord
                         {
                             MessageId = messageId,
@@ -250,7 +242,7 @@ public class ModerationActionService
                             CheckResultsJson = null,
                             EditVersion = 0
                         };
-                        await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
+                        await _detectionResultsRepository.InsertWithTrainingInvalidationAsync(messageId, detectionResult, cancellationToken);
 
                         _logger.LogInformation(
                             "Message {MessageId} not in database. Backfilled from Telegram with real data for user {UserId}",
