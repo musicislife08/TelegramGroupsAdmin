@@ -93,13 +93,19 @@ public class UserRepository : IUserRepository
         var normalizedEmail = email.ToUpperInvariant();
         var now = DateTimeOffset.UtcNow;
 
-        // Step 1: Check if user exists by email (including deleted users)
+        // Step 1: Validate invite exists FIRST (fail-fast before modifying user)
+        var inviteEntity = await context.Invites.FirstOrDefaultAsync(i => i.Token == inviteToken, ct)
+            ?? throw new InvalidOperationException(
+                "Invite token not found after validation - possible race condition or data integrity issue");
+
+        // Step 2: Check if user exists by email (including deleted users)
         var existingEntity = await context.Users
             .FirstOrDefaultAsync(u => u.NormalizedEmail == normalizedEmail, ct);
 
         string userId;
         bool isReactivation = existingEntity != null;
 
+        // Step 3: Create or reactivate user
         if (isReactivation)
         {
             // Reactivate existing (deleted) user with fresh credentials
@@ -159,11 +165,7 @@ public class UserRepository : IUserRepository
             context.Users.Add(newUser);
         }
 
-        // Step 2: Mark invite as used (must exist - was validated by AuthService)
-        var inviteEntity = await context.Invites.FirstOrDefaultAsync(i => i.Token == inviteToken, ct)
-            ?? throw new InvalidOperationException(
-                $"Invite token not found after validation - possible race condition or data integrity issue");
-
+        // Step 4: Mark invite as used (already loaded and validated in Step 1)
         inviteEntity.UsedBy = userId;
         inviteEntity.Status = DataModels.InviteStatus.Used;
         inviteEntity.ModifiedAt = now;
