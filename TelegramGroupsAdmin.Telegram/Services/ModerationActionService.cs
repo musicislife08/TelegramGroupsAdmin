@@ -28,6 +28,7 @@ public class ModerationActionService
     private readonly IUserActionsRepository _userActionsRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IManagedChatsRepository _managedChatsRepository;
+    private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
     private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository;
     private readonly TelegramBotClientFactory _botClientFactory;
@@ -47,6 +48,7 @@ public class ModerationActionService
         IUserActionsRepository userActionsRepository,
         IMessageHistoryRepository messageHistoryRepository,
         IManagedChatsRepository managedChatsRepository,
+        ITelegramUserRepository telegramUserRepository,
         ITelegramUserMappingRepository telegramUserMappingRepository,
         IImageTrainingSamplesRepository imageTrainingSamplesRepository,
         TelegramBotClientFactory botClientFactory,
@@ -65,6 +67,7 @@ public class ModerationActionService
         _userActionsRepository = userActionsRepository;
         _messageHistoryRepository = messageHistoryRepository;
         _managedChatsRepository = managedChatsRepository;
+        _telegramUserRepository = telegramUserRepository;
         _telegramUserMappingRepository = telegramUserMappingRepository;
         _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
         _botClientFactory = botClientFactory;
@@ -575,6 +578,9 @@ public class ModerationActionService
                 Reason: reason
             );
             await _userActionsRepository.InsertAsync(trustAction, cancellationToken);
+
+            // Actually set the trust flag in telegram_users table
+            await _telegramUserRepository.UpdateTrustStatusAsync(userId, isTrusted: true, cancellationToken);
 
             _logger.LogInformation("Trust action completed: User {UserId} trusted globally", userId);
 
