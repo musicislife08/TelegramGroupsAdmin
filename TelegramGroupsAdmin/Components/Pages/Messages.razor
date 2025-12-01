@@ -970,12 +970,8 @@
             // Check if this was previously marked as spam (false positive correction scenario)
             var wasPreviouslySpam = GetContentCheck(message.MessageId)?.IsSpam == true;
 
-            // 0. CRITICAL: Invalidate old training data to prevent cross-class conflicts
-            await DetectionResultsRepository.InvalidateTrainingDataForMessageAsync(
-                message.MessageId,
-                CancellationToken.None);
-
             // 1. Create detection result marked as ham (for training data)
+            // Uses atomic method to invalidate old training data + insert new result in single transaction
             var reason = wasPreviouslySpam
                 ? "Manually marked as ham (not spam) by admin - false positive correction"
                 : "Manually added as ham training sample by admin";
@@ -997,7 +993,7 @@
                 EditVersion = 0
             };
 
-            await DetectionResultsRepository.InsertAsync(detectionResult);
+            await DetectionResultsRepository.InsertWithTrainingInvalidationAsync(message.MessageId, detectionResult);
 
             // 2. Only unban and restore trust if this was previously marked as spam (false positive correction)
             if (wasPreviouslySpam)

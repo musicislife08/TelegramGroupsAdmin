@@ -446,6 +446,51 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         }
     }
 
+    /// <summary>
+    /// Atomically invalidate old training data and insert a new detection result.
+    /// This ensures both operations happen in a single transaction - if either fails, both are rolled back.
+    /// Used by ModerationActionService.MarkAsSpamAndBanAsync to prevent ML training data corruption.
+    /// </summary>
+    public async Task InsertWithTrainingInvalidationAsync(long messageId, DetectionResultRecord result, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Step 1: Invalidate old training data for this message
+        // Note: ExecuteUpdateAsync commits immediately, so we need to use tracked entities instead
+        var existingTrainingRecords = await context.DetectionResults
+            .Where(dr => dr.MessageId == messageId && dr.UsedForTraining)
+            .ToListAsync(cancellationToken);
+
+        foreach (var record in existingTrainingRecords)
+        {
+            record.UsedForTraining = false;
+        }
+
+        // Step 2: Add the new detection result
+        var entity = result.ToDto();
+        context.DetectionResults.Add(entity);
+
+        // Single SaveChangesAsync for both operations (implicit transaction)
+        await context.SaveChangesAsync(cancellationToken);
+
+        if (existingTrainingRecords.Count > 0)
+        {
+            _logger.LogInformation(
+                "Atomically invalidated {Count} training record(s) and inserted new detection result for message {MessageId}",
+                existingTrainingRecords.Count, messageId);
+        }
+        else
+        {
+            _logger.LogDebug(
+                "Inserted detection result for message {MessageId}: {IsSpam} (confidence: {Confidence}, net: {NetConfidence}, training: {UsedForTraining})",
+                result.MessageId,
+                result.IsSpam ? "spam" : "ham",
+                result.Confidence,
+                result.NetConfidence,
+                result.UsedForTraining);
+        }
+    }
+
     public async Task<long> AddManualTrainingSampleAsync(
         string messageText,
         bool isSpam,

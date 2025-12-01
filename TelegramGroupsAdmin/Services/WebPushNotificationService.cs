@@ -4,7 +4,7 @@ using Lib.Net.Http.WebPush.Authentication;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
-using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Repositories;
 using WebPushSubscription = Lib.Net.Http.WebPush.PushSubscription;
 
 namespace TelegramGroupsAdmin.Services;
