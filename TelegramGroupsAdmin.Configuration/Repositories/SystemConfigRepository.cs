@@ -439,6 +439,8 @@ public class SystemConfigRepository : ISystemConfigRepository
 
     public async Task SaveVapidPrivateKeyAsync(string privateKey, CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(privateKey);
+
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         _logger.LogInformation("Saving VAPID private key to encrypted database storage");

@@ -295,6 +295,22 @@ public class SystemConfigRepositoryWebPushTests
         Assert.That(webPushConfig.VapidPublicKey, Is.EqualTo("PublicKey123"));
     }
 
+    [Test]
+    public void SaveVapidPrivateKeyAsync_WhenNullOrEmpty_ShouldThrow()
+    {
+        // Act & Assert - null throws ArgumentNullException
+        Assert.ThrowsAsync<ArgumentNullException>(async () =>
+            await _configRepo!.SaveVapidPrivateKeyAsync(null!));
+
+        // Act & Assert - empty string throws ArgumentException
+        Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _configRepo!.SaveVapidPrivateKeyAsync(""));
+
+        // Act & Assert - whitespace throws ArgumentException
+        Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _configRepo!.SaveVapidPrivateKeyAsync("   "));
+    }
+
     #endregion
 
     #region HasVapidKeysAsync Tests

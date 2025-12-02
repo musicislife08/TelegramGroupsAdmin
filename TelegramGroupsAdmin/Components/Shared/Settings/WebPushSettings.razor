@@ -1,3 +1,4 @@
+@using System.ComponentModel.DataAnnotations
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Configuration.Repositories
 @using TelegramGroupsAdmin.Services
@@ -21,104 +22,108 @@
     <!-- Main Configuration -->
     <MudItem xs="12">
         <MudPaper Class="pa-4" Elevation="2">
-            <MudStack Spacing="3">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                    <div>
-                        <MudText Typo="Typo.h6">Web Push Configuration</MudText>
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">
-                            VAPID authentication for browser push notifications
-                        </MudText>
-                    </div>
-                    <MudChip Color="@(_isConfigured ? Color.Success : Color.Warning)" Size="Size.Small" T="string">
-                        @(_isConfigured ? "Configured" : "Keys Not Generated")
-                    </MudChip>
-                </MudStack>
+            <MudForm @ref="_form" @bind-IsValid="_isFormValid">
+                <MudStack Spacing="3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <div>
+                            <MudText Typo="Typo.h6">Web Push Configuration</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                VAPID authentication for browser push notifications
+                            </MudText>
+                        </div>
+                        <MudChip Color="@(_isConfigured ? Color.Success : Color.Warning)" Size="Size.Small" T="string">
+                            @(_isConfigured ? "Configured" : "Keys Not Generated")
+                        </MudChip>
+                    </MudStack>
 
-                <MudDivider Class="my-2" />
+                    <MudDivider Class="my-2" />
 
-                <!-- Enable/Disable Toggle -->
-                <MudSwitch @bind-Value="_config.Enabled"
-                          Label="Enable Browser Push Notifications"
-                          Color="Color.Primary" />
-                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    When disabled, in-app bell notifications still work, but browser push is skipped.
-                </MudText>
-
-                <MudDivider Class="my-2" />
-
-                <!-- Contact Email -->
-                <MudTextField @bind-Value="_config.ContactEmail"
-                             Label="Contact Email (VAPID Subject)"
-                             Variant="Variant.Outlined"
-                             HelperText="Email address for push service operators to contact. Falls back to primary Owner's email if not set."
-                             Adornment="Adornment.Start"
-                             AdornmentIcon="@Icons.Material.Filled.Email"
-                             Placeholder="admin@example.com">
-                </MudTextField>
-
-                <MudAlert Severity="Severity.Info" Dense="true">
-                    <strong>VAPID Subject:</strong> The Web Push specification requires identifying who operates the push service.
-                    This email is sent to push providers (Google, Mozilla, etc.) in case they need to contact you about abuse.
-                </MudAlert>
-
-                <MudDivider Class="my-2" />
-
-                <!-- VAPID Public Key (read-only) -->
-                <MudStack Spacing="1">
-                    <MudText Typo="Typo.subtitle2">VAPID Public Key</MudText>
+                    <!-- Enable/Disable Toggle -->
+                    <MudSwitch @bind-Value="_config.Enabled"
+                              Label="Enable Browser Push Notifications"
+                              Color="Color.Primary" />
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        Auto-generated on startup. Used by browsers to verify push messages. Not a secret.
+                        When disabled, in-app bell notifications still work, but browser push is skipped.
                     </MudText>
-                    <MudTextField Value="@_config.VapidPublicKey"
+
+                    <MudDivider Class="my-2" />
+
+                    <!-- Contact Email -->
+                    <MudTextField @bind-Value="_config.ContactEmail"
+                                 Label="Contact Email (VAPID Subject)"
                                  Variant="Variant.Outlined"
-                                 ReadOnly="true"
-                                 FullWidth="true"
-                                 Lines="2">
+                                 HelperText="Email address for push service operators to contact. Falls back to primary Owner's email if not set."
+                                 Adornment="Adornment.Start"
+                                 AdornmentIcon="@Icons.Material.Filled.Email"
+                                 Placeholder="admin@example.com"
+                                 Validation="@(new Func<string?, string?>(ValidateEmail))"
+                                 Immediate="true">
                     </MudTextField>
-                </MudStack>
 
-                @if (!_isConfigured)
-                {
-                    <MudAlert Severity="Severity.Warning" Dense="true">
-                        <strong>VAPID keys not yet generated.</strong> They will be auto-generated on next application startup.
-                        If this persists, check the application logs for errors.
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        <strong>VAPID Subject:</strong> The Web Push specification requires identifying who operates the push service.
+                        This email is sent to push providers (Google, Mozilla, etc.) in case they need to contact you about abuse.
                     </MudAlert>
-                }
 
-                <MudDivider Class="my-2" />
+                    <MudDivider Class="my-2" />
 
-                <!-- Save Button -->
-                <MudStack Row="true" Spacing="2">
-                    <MudButton Variant="Variant.Filled"
-                              Color="Color.Primary"
-                              OnClick="@SaveConfigAsync"
-                              Disabled="@_isSaving"
-                              StartIcon="@Icons.Material.Filled.Save">
-                        @if (_isSaving)
-                        {
-                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                            <text>&nbsp;Saving...</text>
-                        }
-                        else
-                        {
-                            <text>Save Settings</text>
-                        }
-                    </MudButton>
+                    <!-- VAPID Public Key (read-only) -->
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.subtitle2">VAPID Public Key</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Auto-generated on startup. Used by browsers to verify push messages. Not a secret.
+                        </MudText>
+                        <MudTextField Value="@_config.VapidPublicKey"
+                                     Variant="Variant.Outlined"
+                                     ReadOnly="true"
+                                     FullWidth="true"
+                                     Lines="2">
+                        </MudTextField>
+                    </MudStack>
 
-                    <MudButton Variant="Variant.Outlined"
-                              Color="Color.Secondary"
-                              OnClick="@LoadConfig"
-                              Disabled="@_isSaving"
-                              StartIcon="@Icons.Material.Filled.Refresh">
-                        Reset
-                    </MudButton>
+                    @if (!_isConfigured)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true">
+                            <strong>VAPID keys not yet generated.</strong> They will be auto-generated on next application startup.
+                            If this persists, check the application logs for errors.
+                        </MudAlert>
+                    }
+
+                    <MudDivider Class="my-2" />
+
+                    <!-- Save Button -->
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Variant="Variant.Filled"
+                                  Color="Color.Primary"
+                                  OnClick="@SaveConfigAsync"
+                                  Disabled="@(!_isFormValid || _isSaving)"
+                                  StartIcon="@Icons.Material.Filled.Save">
+                            @if (_isSaving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                <text>&nbsp;Saving...</text>
+                            }
+                            else
+                            {
+                                <text>Save Settings</text>
+                            }
+                        </MudButton>
+
+                        <MudButton Variant="Variant.Outlined"
+                                  Color="Color.Secondary"
+                                  OnClick="@LoadConfig"
+                                  Disabled="@_isSaving"
+                                  StartIcon="@Icons.Material.Filled.Refresh">
+                            Reset
+                        </MudButton>
+                    </MudStack>
+
+                    <MudAlert Severity="Severity.Success" Dense="true" Icon="@Icons.Material.Filled.Info">
+                        Changes to Enabled/Contact Email apply immediately. VAPID keys cannot be changed
+                        (regenerating would invalidate all existing browser subscriptions).
+                    </MudAlert>
                 </MudStack>
-
-                <MudAlert Severity="Severity.Success" Dense="true" Icon="@Icons.Material.Filled.Info">
-                    Changes to Enabled/Contact Email apply immediately. VAPID keys cannot be changed
-                    (regenerating would invalidate all existing browser subscriptions).
-                </MudAlert>
-            </MudStack>
+            </MudForm>
         </MudPaper>
     </MudItem>
 
@@ -169,9 +174,11 @@
 </MudGrid>
 
 @code {
+    private MudForm? _form;
     private WebPushConfig _config = new();
     private bool _isSaving;
     private bool _isConfigured;
+    private bool _isFormValid = true;
 
     protected override async Task OnInitializedAsync()
     {
@@ -203,6 +210,16 @@
         {
             _isConfigured = false;
         }
+    }
+
+    private string? ValidateEmail(string? email)
+    {
+        // Empty is valid (field is optional, falls back to owner email)
+        if (string.IsNullOrWhiteSpace(email))
+            return null;
+
+        var emailValidator = new EmailAddressAttribute();
+        return emailValidator.IsValid(email) ? null : "Please enter a valid email address";
     }
 
     private async Task SaveConfigAsync()

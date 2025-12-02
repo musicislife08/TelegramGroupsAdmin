@@ -3,18 +3,13 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened]  # Only run once on PR creation, not on every commit
-  issue_comment:
-    types: [created]  # Allow manual trigger via @claude comment
+  # Note: Manual @claude mentions are handled by claude.yml workflow
+  # Removed issue_comment trigger to prevent duplicate reviews
 
 jobs:
   claude-review:
-    # Only run on PR opened events OR comments containing @claude
-    # Security note: contains() in if condition is safe - only used for filtering, not command execution
-    if: |
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request &&
-       contains(github.event.comment.body, '@claude'))
+    # Only run on PR opened events (automatic review on new PRs)
+    if: github.event_name == 'pull_request'
 
     runs-on: ubuntu-latest
     permissions:
@@ -52,4 +47,3 @@ jobs:
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
           claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'
-
