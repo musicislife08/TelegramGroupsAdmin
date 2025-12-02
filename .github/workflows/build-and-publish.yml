@@ -1,11 +1,12 @@
 name: Build and Publish
 
 on:
-  # Split triggers to prevent duplicate runs and ensure Docker publishes from correct branch:
-  # - pull_request: Runs build/test during PR review (feature branch context)
-  # - push: Runs Docker publish after PR merge (target branch context - develop/master)
+  # Trigger explanations:
+  # - pull_request: Runs build/test during PR review (validation only, no push)
+  # - push to develop: Publishes development Docker images after merge
+  # - release published: Publishes production Docker images with release tag version
   pull_request:
-    types: [opened, ready_for_review, synchronize]  # NOT closed - that's handled by push trigger
+    types: [opened, ready_for_review, synchronize]
     branches:
       - develop
       - master
@@ -19,8 +20,7 @@ on:
       - '.github/workflows/claude*.yml'
   push:
     branches:
-      - develop
-      - master
+      - develop  # Only develop - master uses release trigger
     paths-ignore:
       - 'CLAUDE.md'
       - 'README.md'
@@ -29,6 +29,8 @@ on:
       - '.gitignore'
       - '.gitattributes'
       - '.github/workflows/claude*.yml'
+  release:
+    types: [published]  # Production releases - tag already exists, GitVersion picks it up
 
 env:
   REGISTRY: ghcr.io
@@ -89,10 +91,11 @@ jobs:
     name: Determine Docker Version
     runs-on: ubuntu-latest
 
-    # Run on PRs to develop/master (validation) and pushes to develop/master (publish)
+    # Run on PRs (validation), push to develop (dev images), and releases (prod images)
     if: |
       (github.event_name == 'pull_request' && github.event.pull_request.draft == false) ||
-      (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'))
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+      (github.event_name == 'release')
 
     outputs:
       semver: ${{ steps.gitversion.outputs.semVer }}
@@ -123,6 +126,7 @@ jobs:
       - name: Determine Docker tags
         id: docker-tags
         env:
+          EVENT_NAME: ${{ github.event_name }}
           BRANCH_NAME: ${{ github.ref_name }}
           SEMVER: ${{ steps.gitversion.outputs.semVer }}
           MAJOR: ${{ steps.gitversion.outputs.major }}
@@ -132,13 +136,13 @@ jobs:
           # Convert repository name to lowercase for Docker
           REPO_LOWER="${REPO,,}"
 
-          if [ "${BRANCH_NAME}" == "master" ]; then
-            # Master branch: latest + semver
+          if [ "${EVENT_NAME}" == "release" ]; then
+            # Release event: latest + semver + major.minor (production)
             TAGS="${REGISTRY}/${REPO_LOWER}:latest"
             TAGS="${TAGS},${REGISTRY}/${REPO_LOWER}:${SEMVER}"
             TAGS="${TAGS},${REGISTRY}/${REPO_LOWER}:${MAJOR}.${MINOR}"
           else
-            # Develop branch: development + beta semver
+            # Develop branch (push) or PR validation: development + semver
             TAGS="${REGISTRY}/${REPO_LOWER}:development"
             TAGS="${TAGS},${REGISTRY}/${REPO_LOWER}:${SEMVER}"
           fi
@@ -183,8 +187,8 @@ jobs:
           context: .
           file: ./TelegramGroupsAdmin/Dockerfile
           platforms: linux/amd64,linux/arm64
-          # Push only on post-merge (push events), validate only on PRs
-          push: ${{ github.event_name == 'push' }}
+          # Push on develop merge (push) or release creation, validate only on PRs
+          push: ${{ github.event_name == 'push' || github.event_name == 'release' }}
           tags: ${{ needs.docker-version.outputs.tags }}
           # Unified cache for both platforms (v2: force fresh cache after fixing NuGet cache IDs)
           cache-from: type=gha,scope=buildx-multiarch-v2
@@ -198,7 +202,6 @@ jobs:
           VERSION: ${{ needs.docker-version.outputs.semver }}
           EVENT: ${{ github.event_name }}
           TAGS: ${{ needs.docker-version.outputs.tags }}
-          BRANCH_NAME: ${{ github.ref_name }}
           REPO: ${{ steps.repo.outputs.name }}
         run: |
           if [ "$EVENT" == "pull_request" ]; then
@@ -221,7 +224,7 @@ jobs:
           echo "- ✅ Direct manifest creation (no intermediate images)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ "$EVENT" == "push" ]; then
+          if [ "$EVENT" == "push" ] || [ "$EVENT" == "release" ]; then
             echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             echo "${TAGS}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
@@ -229,7 +232,7 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Pull commands:**" >> $GITHUB_STEP_SUMMARY
             echo '```bash' >> $GITHUB_STEP_SUMMARY
-            if [ "${BRANCH_NAME}" == "master" ]; then
+            if [ "$EVENT" == "release" ]; then
               echo "# Stable (latest)" >> $GITHUB_STEP_SUMMARY
               echo "docker pull ${REGISTRY}/${REPO}:latest" >> $GITHUB_STEP_SUMMARY
             else

@@ -67,8 +67,7 @@ git pull origin develop
 **Release to Production (develop → master):**
 
 ```bash
-# Only when develop is stable and ready for release
-# IMPORTANT: Add closing keywords at top of PR body to link resolved issues
+# 1. Create and merge release PR (develop → master)
 gh pr create --base master --head develop \
   --title "Release: v1.2.3" \
   --body "Closes #31, Closes #35, Closes #40
@@ -77,7 +76,28 @@ gh pr create --base master --head develop \
 Release notes here..."
 
 # Merge via GitHub UI after CI passes
-# Docker images auto-published:
+# NOTE: Merging to master does NOT publish Docker images (that's triggered by release creation)
+
+# 2. Create git tag on master
+git checkout master && git pull origin master
+git tag -a v1.2.3 -m "Release v1.2.3 - Brief description"
+git push origin v1.2.3
+
+# 3. Create GitHub Release (THIS triggers Docker image publish)
+gh release create v1.2.3 --title "v1.2.3" --notes "
+## What's New
+- Feature 1
+- Feature 2
+
+## Bug Fixes
+- Fix 1
+
+## Docker Images
+docker pull ghcr.io/musicislife08/telegramgroupsadmin:latest
+docker pull ghcr.io/musicislife08/telegramgroupsadmin:1.2.3
+"
+
+# Docker images are published ONLY when the release is created:
 #   - ghcr.io/musicislife08/telegramgroupsadmin:latest
 #   - ghcr.io/musicislife08/telegramgroupsadmin:1.2.3
 #   - ghcr.io/musicislife08/telegramgroupsadmin:1.2
@@ -104,8 +124,9 @@ git push origin develop
 ```
 
 **Docker Image Tags:**
-- **develop branch** → `development` + semver (e.g., `1.3.0-beta.5`)
-- **master branch** → `latest` + semver + major.minor (e.g., `latest`, `1.2.3`, `1.2`)
+- **develop branch** (on push) → `development` + semver (e.g., `1.3.0-beta.5`)
+- **GitHub Release** (on publish) → `latest` + semver + major.minor (e.g., `latest`, `1.2.3`, `1.2`)
+- **master branch** (on merge) → No Docker publish (release creation triggers publish)
 - **Architectures**: Multi-arch images support `linux/amd64` and `linux/arm64`
 
 **AI Agent Instructions:**
