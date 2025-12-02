@@ -9,11 +9,11 @@ namespace TelegramGroupsAdmin.Services;
 /// </summary>
 public class FeatureAvailabilityService : IFeatureAvailabilityService
 {
-    private readonly IFileScanningConfigRepository _configRepo;
+    private readonly ISystemConfigRepository _configRepo;
     private readonly ILogger<FeatureAvailabilityService> _logger;
 
     public FeatureAvailabilityService(
-        IFileScanningConfigRepository configRepo,
+        ISystemConfigRepository configRepo,
         ILogger<FeatureAvailabilityService> logger)
     {
         _configRepo = configRepo;

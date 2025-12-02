@@ -14,13 +14,13 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 public class ClamAVScannerService : IFileScannerService
 {
     private readonly ILogger<ClamAVScannerService> _logger;
-    private readonly IFileScanningConfigRepository _configRepository;
+    private readonly ISystemConfigRepository _configRepository;
 
     public string ScannerName => "ClamAV";
 
     public ClamAVScannerService(
         ILogger<ClamAVScannerService> logger,
-        IFileScanningConfigRepository configRepository)
+        ISystemConfigRepository configRepository)
     {
         _logger = logger;
         _configRepository = configRepository;

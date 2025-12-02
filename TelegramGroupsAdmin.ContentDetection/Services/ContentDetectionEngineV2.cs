@@ -23,7 +23,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
 {
     private readonly ILogger<ContentDetectionEngineV2> _logger;
     private readonly IContentDetectionConfigRepository _configRepository;
-    private readonly IFileScanningConfigRepository _fileScanningConfigRepo;
+    private readonly ISystemConfigRepository _fileScanningConfigRepo;
     private readonly IEnumerable<IContentCheckV2> _contentChecksV2;
     private readonly IOpenAITranslationService _translationService;
     private readonly IUrlPreFilterService _preFilterService;
@@ -35,7 +35,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     public ContentDetectionEngineV2(
         ILogger<ContentDetectionEngineV2> logger,
         IContentDetectionConfigRepository configRepository,
-        IFileScanningConfigRepository fileScanningConfigRepo,
+        ISystemConfigRepository fileScanningConfigRepo,
         IEnumerable<IContentCheckV2> contentChecksV2,
         IOpenAITranslationService translationService,
         IUrlPreFilterService preFilterService,

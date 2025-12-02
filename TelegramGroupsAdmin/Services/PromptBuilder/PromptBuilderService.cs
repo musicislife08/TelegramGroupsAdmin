@@ -15,13 +15,13 @@ public class PromptBuilderService : IPromptBuilderService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IDetectionResultsRepository _detectionResultsRepository;
-    private readonly IFileScanningConfigRepository _configRepo;
+    private readonly ISystemConfigRepository _configRepo;
     private readonly ILogger<PromptBuilderService> _logger;
 
     public PromptBuilderService(
         IHttpClientFactory httpClientFactory,
         IDetectionResultsRepository detectionResultsRepository,
-        IFileScanningConfigRepository configRepo,
+        ISystemConfigRepository configRepo,
         ILogger<PromptBuilderService> logger)
     {
         _httpClientFactory = httpClientFactory;

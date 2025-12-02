@@ -10,11 +10,11 @@ namespace TelegramGroupsAdmin.Services.Email;
 /// </summary>
 public class SendGridEmailService : IEmailService
 {
-    private readonly IFileScanningConfigRepository _configRepo;
+    private readonly ISystemConfigRepository _configRepo;
     private readonly ILogger<SendGridEmailService> _logger;
 
     public SendGridEmailService(
-        IFileScanningConfigRepository configRepo,
+        ISystemConfigRepository configRepo,
         ILogger<SendGridEmailService> logger)
     {
         _configRepo = configRepo;

@@ -29,4 +29,10 @@ public static class DataProtectionPurposes
     /// Purpose for encrypting Telegram bot token in configs.telegram_bot_token_encrypted column
     /// </summary>
     public const string TelegramBotToken = "TelegramBotToken";
+
+    /// <summary>
+    /// Purpose for encrypting VAPID private key in configs.vapid_private_key_encrypted column
+    /// Used for Web Push notification authentication
+    /// </summary>
+    public const string VapidPrivateKey = "VapidPrivateKey";
 }

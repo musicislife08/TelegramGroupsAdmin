@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 
 namespace TelegramGroupsAdmin.Services;
@@ -7,6 +8,10 @@ namespace TelegramGroupsAdmin.Services;
 /// Startup service that ensures VAPID keys exist for Web Push notifications.
 /// Auto-generates keys on first startup if not present in database.
 /// VAPID keys should never be regenerated once created (breaks all existing subscriptions).
+///
+/// Key storage:
+/// - Public key: WebPushConfig.VapidPublicKey (JSONB, not a secret)
+/// - Private key: configs.vapid_private_key_encrypted (encrypted TEXT column)
 /// </summary>
 public class VapidKeyGenerationService : IHostedService
 {
@@ -28,11 +33,10 @@ public class VapidKeyGenerationService : IHostedService
         try
         {
             using var scope = _scopeFactory.CreateScope();
-            var configRepo = scope.ServiceProvider.GetRequiredService<IFileScanningConfigRepository>();
+            var configRepo = scope.ServiceProvider.GetRequiredService<ISystemConfigRepository>();
 
-            var apiKeys = await configRepo.GetApiKeysAsync(cancellationToken);
-
-            if (apiKeys?.HasVapidKeys() == true)
+            // Check if VAPID keys exist in new location
+            if (await configRepo.HasVapidKeysAsync(cancellationToken))
             {
                 _logger.LogInformation("VAPID keys already configured for Web Push");
                 return;
@@ -43,12 +47,16 @@ public class VapidKeyGenerationService : IHostedService
             // Generate new VAPID key pair
             var (publicKey, privateKey) = GenerateVapidKeys();
 
-            // Save to database
-            apiKeys ??= new();
-            apiKeys.VapidPublicKey = publicKey;
-            apiKeys.VapidPrivateKey = privateKey;
+            // Get or create WebPushConfig and set public key
+            var webPushConfig = await configRepo.GetWebPushConfigAsync(cancellationToken) ?? new WebPushConfig();
+            webPushConfig.VapidPublicKey = publicKey;
+            webPushConfig.Enabled = true;
 
-            await configRepo.SaveApiKeysAsync(apiKeys, cancellationToken);
+            // Save public key to WebPushConfig (JSONB, not a secret)
+            await configRepo.SaveWebPushConfigAsync(webPushConfig, cancellationToken);
+
+            // Save private key to dedicated encrypted column
+            await configRepo.SaveVapidPrivateKeyAsync(privateKey, cancellationToken);
 
             _logger.LogInformation("Generated and saved new VAPID keys for Web Push notifications");
         }

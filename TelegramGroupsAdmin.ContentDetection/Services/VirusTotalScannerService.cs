@@ -16,7 +16,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Services;
 public class VirusTotalScannerService : ICloudScannerService
 {
     private readonly ILogger<VirusTotalScannerService> _logger;
-    private readonly IFileScanningConfigRepository _configRepository;
+    private readonly ISystemConfigRepository _configRepository;
     private readonly IFileScanQuotaRepository _quotaRepository;
     private readonly IHttpClientFactory _httpClientFactory;
 
@@ -29,7 +29,7 @@ public class VirusTotalScannerService : ICloudScannerService
 
     public VirusTotalScannerService(
         ILogger<VirusTotalScannerService> logger,
-        IFileScanningConfigRepository configRepository,
+        ISystemConfigRepository configRepository,
         IFileScanQuotaRepository quotaRepository,
         IHttpClientFactory httpClientFactory)
     {
