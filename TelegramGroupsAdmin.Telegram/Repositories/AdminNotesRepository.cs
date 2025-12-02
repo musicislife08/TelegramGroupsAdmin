@@ -39,7 +39,8 @@ public class AdminNotesRepository : IAdminNotesRepository
         return notes.Select(n => n.Note.ToModel(
             webUserEmail: n.WebUserEmail,
             telegramUsername: n.TelegramUser?.Username,
-            telegramFirstName: n.TelegramUser?.FirstName
+            telegramFirstName: n.TelegramUser?.FirstName,
+            telegramLastName: n.TelegramUser?.LastName
         )).ToList();
     }
 
@@ -112,7 +113,8 @@ public class AdminNotesRepository : IAdminNotesRepository
         return notes.Select(n => n.Note.ToModel(
             webUserEmail: n.WebUserEmail,
             telegramUsername: n.TelegramUser?.Username,
-            telegramFirstName: n.TelegramUser?.FirstName
+            telegramFirstName: n.TelegramUser?.FirstName,
+            telegramLastName: n.TelegramUser?.LastName
         )).ToList();
     }
 

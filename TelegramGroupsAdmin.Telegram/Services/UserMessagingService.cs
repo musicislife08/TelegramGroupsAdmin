@@ -3,6 +3,7 @@ using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -117,7 +118,7 @@ public class UserMessagingService : IUserMessagingService
 
                     await _telegramUserRepository.SetBotDmEnabledAsync(userId, enabled: false, cancellationToken);
 
-                    var userMention = user?.Username != null ? $"@{user.Username}" : (user?.FirstName ?? $"User {userId}");
+                    var userMention = TelegramDisplayName.FormatMention(user?.FirstName, user?.LastName, user?.Username, userId);
                     failedDmUsers.Add((userId, userMention));
                 }
                 catch (Exception ex)
@@ -126,14 +127,14 @@ public class UserMessagingService : IUserMessagingService
                         "Failed to send DM to user {UserId}. Will mention in chat.",
                         userId);
 
-                    var userMention = user?.Username != null ? $"@{user.Username}" : (user?.FirstName ?? $"User {userId}");
+                    var userMention = TelegramDisplayName.FormatMention(user?.FirstName, user?.LastName, user?.Username, userId);
                     failedDmUsers.Add((userId, userMention));
                 }
             }
             else
             {
                 // User doesn't have DM enabled, add to batch mention list
-                var userMention = user?.Username != null ? $"@{user.Username}" : (user?.FirstName ?? $"User {userId}");
+                var userMention = TelegramDisplayName.FormatMention(user?.FirstName, user?.LastName, user?.Username, userId);
                 failedDmUsers.Add((userId, userMention));
             }
         }
@@ -203,9 +204,7 @@ public class UserMessagingService : IUserMessagingService
         {
             // Get user info for mention
             var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
-            var userMention = user?.Username != null
-                ? $"@{user.Username}"
-                : user?.FirstName ?? $"User {userId}";
+            var userMention = TelegramDisplayName.FormatMention(user?.FirstName, user?.LastName, user?.Username, userId);
 
             // Prefix message with mention
             var chatMessage = $"{userMention}: {messageText}";

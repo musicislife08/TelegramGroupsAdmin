@@ -3,6 +3,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Constants
 @using TelegramGroupsAdmin.Core
+@using TelegramGroupsAdmin.Core.Utilities
 @* Telegram-authentic message bubble design *@
 
 <div class="@GetBubbleClass()" @onclick:stopPropagation="true" data-message-id="@Message.MessageId">
@@ -762,13 +763,12 @@
     /// </summary>
     private string GetUserDisplayName()
     {
-        // Special handling for Telegram service account (channel posts, anonymous admin posts)
-        if (Message.UserId == TelegramConstants.ServiceAccountUserId)
-        {
-            return Message.ChatName ?? "Telegram Service Account";
-        }
-
-        return Message.UserName ?? Message.FirstName ?? $"User {Message.UserId}";
+        return TelegramDisplayName.Format(
+            Message.FirstName,
+            Message.LastName,
+            Message.UserName,
+            Message.UserId,
+            Message.ChatName);
     }
 
     /// <summary>

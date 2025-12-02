@@ -89,7 +89,8 @@ public class MuteCommand : IBotCommand
             var executor = Core.Models.Actor.FromTelegramUser(
                 message.From!.Id,
                 message.From.Username,
-                message.From.FirstName);
+                message.From.FirstName,
+                message.From.LastName);
 
             // Execute mute via ModerationActionService
             var result = await _moderationService.RestrictUserAsync(

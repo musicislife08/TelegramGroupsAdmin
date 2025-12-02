@@ -1,4 +1,4 @@
-using TelegramGroupsAdmin.Core;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Models;
 
@@ -26,19 +26,7 @@ public class TelegramUserListItem
     public bool IsAdmin { get; set; }  // Is admin in at least one managed chat
 
     // Display helpers
-    public string DisplayName
-    {
-        get
-        {
-            // Special handling for Telegram service account (channel posts, anonymous admin posts)
-            if (TelegramUserId == TelegramConstants.ServiceAccountUserId)
-            {
-                return "Telegram Service Account";
-            }
-
-            return !string.IsNullOrEmpty(Username) ? $"@{Username}" : FirstName ?? $"User {TelegramUserId}";
-        }
-    }
+    public string DisplayName => TelegramDisplayName.Format(FirstName, LastName, Username, TelegramUserId);
     public TelegramUserStatus Status
     {
         get

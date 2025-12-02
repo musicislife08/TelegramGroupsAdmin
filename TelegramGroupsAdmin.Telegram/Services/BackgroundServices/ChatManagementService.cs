@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -159,13 +160,16 @@ public class ChatManagementService(
 
                     if (isNowAdmin)
                     {
-                        // User promoted to admin
+                        // User promoted to admin - ensure user exists in telegram_users first (FK constraint)
+                        var userRepo = adminScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+                        await EnsureUserExistsAsync(userRepo, affectedUser, cancellationToken);
+
                         var isCreator = newStatus == ChatMemberStatus.Creator;
                         await chatAdminsRepository.UpsertAsync(chat.Id, affectedUser.Id, isCreator, cancellationToken: cancellationToken);
                         logger.LogInformation(
-                            "✅ User {UserId} (@{Username}) promoted to {Role} in chat {ChatId}",
+                            "✅ User {UserId} ({DisplayName}) promoted to {Role} in chat {ChatId}",
                             affectedUser.Id,
-                            affectedUser.Username ?? "unknown",
+                            TelegramDisplayName.Format(affectedUser.FirstName, affectedUser.LastName, affectedUser.Username, affectedUser.Id),
                             isCreator ? "creator" : "admin",
                             chat.Id);
                     }
@@ -174,9 +178,9 @@ public class ChatManagementService(
                         // User demoted from admin
                         await chatAdminsRepository.DeactivateAsync(chat.Id, affectedUser.Id, cancellationToken);
                         logger.LogInformation(
-                            "❌ User {UserId} (@{Username}) demoted from admin in chat {ChatId}",
+                            "❌ User {UserId} ({DisplayName}) demoted from admin in chat {ChatId}",
                             affectedUser.Id,
-                            affectedUser.Username ?? "unknown",
+                            TelegramDisplayName.Format(affectedUser.FirstName, affectedUser.LastName, affectedUser.Username, affectedUser.Id),
                             chat.Id);
                     }
                 }
@@ -295,23 +299,25 @@ public class ChatManagementService(
 
             if (isNowAdmin)
             {
-                // User promoted to admin
+                // User promoted to admin - ensure user exists in telegram_users first (FK constraint)
+                var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+                await EnsureUserExistsAsync(userRepo, user, cancellationToken);
+
                 var isCreator = newStatus == ChatMemberStatus.Creator;
-                await chatAdminsRepository.UpsertAsync(chat.Id, user.Id, isCreator, user.Username, cancellationToken);
+                await chatAdminsRepository.UpsertAsync(chat.Id, user.Id, isCreator, cancellationToken);
 
                 logger.LogInformation(
-                    "⬆️ INSTANT: User promoted to {Role} in chat {ChatId} ({ChatName}): {TelegramId} (@{Username})",
+                    "⬆️ INSTANT: User promoted to {Role} in chat {ChatId} ({ChatName}): {TelegramId} ({DisplayName})",
                     isCreator ? "creator" : "admin",
                     chat.Id,
                     chat.Title ?? "Unknown",
                     user.Id,
-                    user.Username ?? "unknown");
+                    TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id));
 
                 // AUTO-TRUST: Trust admins globally to prevent spam detection and cross-chat bans
                 try
                 {
                     var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-                    var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
                     var trustAction = new UserActionRecord(
                         Id: 0,
@@ -328,9 +334,9 @@ public class ChatManagementService(
                     await userRepo.UpdateTrustStatusAsync(user.Id, isTrusted: true, cancellationToken);
 
                     logger.LogInformation(
-                        "Auto-trusted user {UserId} (@{Username}) - admin in chat {ChatId}",
+                        "Auto-trusted user {UserId} ({DisplayName}) - admin in chat {ChatId}",
                         user.Id,
-                        user.Username ?? "unknown",
+                        TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id),
                         chat.Id);
                 }
                 catch (Exception ex)
@@ -340,7 +346,7 @@ public class ChatManagementService(
 
                 // Phase 5.2: Notify owners about admin promotion
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-                var displayName = user.Username != null ? $"@{user.Username}" : user.FirstName ?? $"User {user.Id}";
+                var displayName = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
                 _ = notificationService.SendSystemNotificationAsync(
                     eventType: NotificationEventType.ChatAdminChanged,
                     subject: $"New Admin Promoted: {chat.Title ?? "Unknown Chat"}",
@@ -357,15 +363,15 @@ public class ChatManagementService(
                 await chatAdminsRepository.DeactivateAsync(chat.Id, user.Id, cancellationToken);
 
                 logger.LogInformation(
-                    "⬇️ INSTANT: User demoted from admin in chat {ChatId} ({ChatName}): {TelegramId} (@{Username})",
+                    "⬇️ INSTANT: User demoted from admin in chat {ChatId} ({ChatName}): {TelegramId} ({DisplayName})",
                     chat.Id,
                     chat.Title ?? "Unknown",
                     user.Id,
-                    user.Username ?? "unknown");
+                    TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id));
 
                 // Phase 5.2: Notify owners about admin demotion
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-                var displayName = user.Username != null ? $"@{user.Username}" : user.FirstName ?? $"User {user.Id}";
+                var displayName = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
                 _ = notificationService.SendSystemNotificationAsync(
                     eventType: NotificationEventType.ChatAdminChanged,
                     subject: $"Admin Demoted: {chat.Title ?? "Unknown Chat"}",
@@ -457,38 +463,41 @@ public class ChatManagementService(
                 await chatAdminsRepository.DeactivateAsync(chatId, demotedId, cancellationToken);
                 var demotedAdmin = cachedAdmins.First(a => a.TelegramId == demotedId);
                 logger.LogInformation(
-                    "⬇️ Admin demoted in chat {ChatId}: {TelegramId} (@{Username})",
+                    "⬇️ Admin demoted in chat {ChatId}: {TelegramId} ({DisplayName})",
                     chatId,
                     demotedId,
-                    demotedAdmin.Username ?? "unknown");
+                    demotedAdmin.DisplayName);
             }
 
             // Upsert current admins (add new, update existing)
             var adminNames = new List<string>();
+            var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+
             foreach (var admin in admins)
             {
+                // Ensure user exists in telegram_users first (FK constraint)
+                await EnsureUserExistsAsync(userRepo, admin.User, cancellationToken);
+
                 var isCreator = admin.Status == ChatMemberStatus.Creator;
-                var username = admin.User.Username; // Store Telegram username (without @)
                 var wasNew = !cachedAdminIds.Contains(admin.User.Id);
 
-                await chatAdminsRepository.UpsertAsync(chatId, admin.User.Id, isCreator, username, cancellationToken);
+                await chatAdminsRepository.UpsertAsync(chatId, admin.User.Id, isCreator, cancellationToken);
 
-                var displayName = username ?? admin.User.FirstName ?? admin.User.Id.ToString();
-                adminNames.Add($"@{displayName}" + (isCreator ? " (creator)" : ""));
+                var displayName = TelegramDisplayName.Format(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id);
+                adminNames.Add(displayName + (isCreator ? " (creator)" : ""));
 
                 if (wasNew)
                 {
                     logger.LogInformation(
-                        "⬆️ New admin promoted in chat {ChatId}: {TelegramId} (@{Username})",
+                        "⬆️ New admin promoted in chat {ChatId}: {TelegramId} ({DisplayName})",
                         chatId,
                         admin.User.Id,
-                        username ?? "unknown");
+                        TelegramDisplayName.Format(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id));
 
                     // AUTO-TRUST: Trust new admins globally
                     try
                     {
                         var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-                        var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
                         var trustAction = new UserActionRecord(
                             Id: 0,
@@ -505,9 +514,9 @@ public class ChatManagementService(
                         await userRepo.UpdateTrustStatusAsync(admin.User.Id, isTrusted: true, cancellationToken);
 
                         logger.LogInformation(
-                            "Auto-trusted user {UserId} (@{Username}) - admin in chat {ChatId}",
+                            "Auto-trusted user {UserId} ({DisplayName}) - admin in chat {ChatId}",
                             admin.User.Id,
-                            username ?? "unknown",
+                            TelegramDisplayName.Format(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
                             chatId);
                     }
                     catch (Exception ex)
@@ -858,6 +867,42 @@ public class ChatManagementService(
             // Non-fatal - invite link validation failure shouldn't fail health check
             logger.LogWarning(ex, "Failed to validate invite link for chat {ChatId}", chatId);
         }
+    }
+
+    /// <summary>
+    /// Ensures a Telegram user exists in the database before creating dependent records (e.g., chat_admins).
+    /// Creates a minimal user record if the user doesn't exist yet (they may not have sent any messages).
+    /// Required for FK constraint: chat_admins.telegram_id → telegram_users.telegram_user_id
+    /// </summary>
+    private static async Task EnsureUserExistsAsync(
+        ITelegramUserRepository userRepo,
+        global::Telegram.Bot.Types.User telegramUser,
+        CancellationToken cancellationToken)
+    {
+        var existingUser = await userRepo.GetByTelegramIdAsync(telegramUser.Id, cancellationToken);
+        if (existingUser != null)
+            return;
+
+        // Create minimal user record - they haven't messaged yet so we only have basic profile info
+        var now = DateTimeOffset.UtcNow;
+        var newUser = new TelegramUser(
+            TelegramUserId: telegramUser.Id,
+            Username: telegramUser.Username,
+            FirstName: telegramUser.FirstName,
+            LastName: telegramUser.LastName,
+            UserPhotoPath: null,
+            PhotoHash: null,
+            PhotoFileUniqueId: null,
+            IsBot: telegramUser.IsBot,
+            IsTrusted: false, // Will be set to true by auto-trust logic after this
+            BotDmEnabled: false,
+            FirstSeenAt: now,
+            LastSeenAt: now,
+            CreatedAt: now,
+            UpdatedAt: now
+        );
+
+        await userRepo.UpsertAsync(newUser, cancellationToken);
     }
 
     /// <summary>

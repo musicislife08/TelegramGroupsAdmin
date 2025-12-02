@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Utilities;
+
 namespace TelegramGroupsAdmin.Core.Models;
 
 /// <summary>
@@ -63,16 +65,13 @@ public record Actor
     /// <summary>
     /// Create actor from Telegram user
     /// </summary>
-    public static Actor FromTelegramUser(long telegramUserId, string? username = null, string? firstName = null)
+    public static Actor FromTelegramUser(long telegramUserId, string? username = null, string? firstName = null, string? lastName = null)
     {
-        var displayName = username != null ? $"@{username}" :
-                         firstName ?? $"User {telegramUserId}";
-
         return new Actor
         {
             Type = ActorType.TelegramUser,
             TelegramUserId = telegramUserId,
-            DisplayName = displayName
+            DisplayName = TelegramDisplayName.Format(firstName, lastName, username, telegramUserId)
         };
     }
 

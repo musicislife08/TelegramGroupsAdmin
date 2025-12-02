@@ -4,6 +4,7 @@
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.Core.Utilities
 @inject IMessageHistoryRepository MessageRepository
 @inject IMessageQueryService MessageQueryService
 @inject IMessageEditService MessageEditService
@@ -1660,7 +1661,15 @@
             return null;
 
         var replyMessage = _filteredMessages.FirstOrDefault(mw => mw.Message.MessageId == _replyToMessageId.Value);
-        return replyMessage?.Message.UserName ?? replyMessage?.Message.FirstName;
+        if (replyMessage == null)
+            return null;
+
+        return TelegramDisplayName.Format(
+            replyMessage.Message.FirstName,
+            replyMessage.Message.LastName,
+            replyMessage.Message.UserName,
+            replyMessage.Message.UserId,
+            replyMessage.Message.ChatName);
     }
 
     /// <summary>

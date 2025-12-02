@@ -55,9 +55,11 @@ public class ImpersonationAlertsRepository : IImpersonationAlertsRepository
                         Alert = alert,
                         SuspectedUserName = suspected.Username,
                         SuspectedFirstName = suspected.FirstName,
+                        SuspectedLastName = suspected.LastName,
                         SuspectedPhotoPath = suspected.UserPhotoPath,
                         TargetUserName = target.Username,
                         TargetFirstName = target.FirstName,
+                        TargetLastName = target.LastName,
                         TargetPhotoPath = target.UserPhotoPath,
                         ChatName = c != null ? c.ChatName : null,
                         ReviewedByEmail = r != null ? r.Email : null
@@ -77,9 +79,11 @@ public class ImpersonationAlertsRepository : IImpersonationAlertsRepository
         return results.Select(x => x.Alert.ToModel(
             suspectedUserName: x.SuspectedUserName,
             suspectedFirstName: x.SuspectedFirstName,
+            suspectedLastName: x.SuspectedLastName,
             suspectedPhotoPath: x.SuspectedPhotoPath,
             targetUserName: x.TargetUserName,
             targetFirstName: x.TargetFirstName,
+            targetLastName: x.TargetLastName,
             targetPhotoPath: x.TargetPhotoPath,
             chatName: x.ChatName,
             reviewedByEmail: x.ReviewedByEmail)).ToList();
@@ -103,9 +107,11 @@ public class ImpersonationAlertsRepository : IImpersonationAlertsRepository
                 Alert = alert,
                 SuspectedUserName = suspected.Username,
                 SuspectedFirstName = suspected.FirstName,
+                SuspectedLastName = suspected.LastName,
                 SuspectedPhotoPath = suspected.UserPhotoPath,
                 TargetUserName = target.Username,
                 TargetFirstName = target.FirstName,
+                TargetLastName = target.LastName,
                 TargetPhotoPath = target.UserPhotoPath,
                 ChatName = c != null ? c.ChatName : null,
                 ReviewedByEmail = r != null ? r.Email : null
@@ -117,9 +123,11 @@ public class ImpersonationAlertsRepository : IImpersonationAlertsRepository
         return result?.Alert.ToModel(
             suspectedUserName: result.SuspectedUserName,
             suspectedFirstName: result.SuspectedFirstName,
+            suspectedLastName: result.SuspectedLastName,
             suspectedPhotoPath: result.SuspectedPhotoPath,
             targetUserName: result.TargetUserName,
             targetFirstName: result.TargetFirstName,
+            targetLastName: result.TargetLastName,
             targetPhotoPath: result.TargetPhotoPath,
             chatName: result.ChatName,
             reviewedByEmail: result.ReviewedByEmail);
@@ -177,9 +185,11 @@ public class ImpersonationAlertsRepository : IImpersonationAlertsRepository
                 Alert = alert,
                 SuspectedUserName = suspected.Username,
                 SuspectedFirstName = suspected.FirstName,
+                SuspectedLastName = suspected.LastName,
                 SuspectedPhotoPath = suspected.UserPhotoPath,
                 TargetUserName = target.Username,
                 TargetFirstName = target.FirstName,
+                TargetLastName = target.LastName,
                 TargetPhotoPath = target.UserPhotoPath,
                 ChatName = c != null ? c.ChatName : null,
                 ReviewedByEmail = r != null ? r.Email : null
@@ -191,9 +201,11 @@ public class ImpersonationAlertsRepository : IImpersonationAlertsRepository
         return results.Select(x => x.Alert.ToModel(
             suspectedUserName: x.SuspectedUserName,
             suspectedFirstName: x.SuspectedFirstName,
+            suspectedLastName: x.SuspectedLastName,
             suspectedPhotoPath: x.SuspectedPhotoPath,
             targetUserName: x.TargetUserName,
             targetFirstName: x.TargetFirstName,
+            targetLastName: x.TargetLastName,
             targetPhotoPath: x.TargetPhotoPath,
             chatName: x.ChatName,
             reviewedByEmail: x.ReviewedByEmail)).ToList();

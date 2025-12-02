@@ -57,6 +57,7 @@ public class ChatAdminsRepository : IChatAdminsRepository
 
         var entities = await context.ChatAdmins
             .AsNoTracking()
+            .Include(ca => ca.TelegramUser)
             .Where(ca => ca.ChatId == chatId && ca.IsActive == true)
             .OrderByDescending(ca => ca.IsCreator)
             .ThenBy(ca => ca.PromotedAt)
@@ -81,7 +82,7 @@ public class ChatAdminsRepository : IChatAdminsRepository
     }
 
     /// <inheritdoc/>
-    public async Task UpsertAsync(long chatId, long telegramId, bool isCreator, string? username = null, CancellationToken cancellationToken = default)
+    public async Task UpsertAsync(long chatId, long telegramId, bool isCreator, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -93,7 +94,6 @@ public class ChatAdminsRepository : IChatAdminsRepository
         if (existing != null)
         {
             // Update existing record
-            existing.Username = username;
             existing.IsCreator = isCreator;
             existing.LastVerifiedAt = now;
             existing.IsActive = true;
@@ -105,7 +105,6 @@ public class ChatAdminsRepository : IChatAdminsRepository
             {
                 ChatId = chatId,
                 TelegramId = telegramId,
-                Username = username,
                 IsCreator = isCreator,
                 PromotedAt = now,
                 LastVerifiedAt = now,
@@ -116,8 +115,8 @@ public class ChatAdminsRepository : IChatAdminsRepository
 
         await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogDebug("Upserted admin: chat={ChatId}, user={TelegramId} (@{Username}), creator={IsCreator}",
-            chatId, telegramId, username ?? "unknown", isCreator);
+        _logger.LogDebug("Upserted admin: chat={ChatId}, user={TelegramId}, creator={IsCreator}",
+            chatId, telegramId, isCreator);
     }
 
     /// <inheritdoc/>

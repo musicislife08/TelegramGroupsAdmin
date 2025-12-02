@@ -607,12 +607,13 @@ public class TelegramUserRepository : ITelegramUserRepository
 
         // Get top users
         var topUsers = await query
-            .GroupBy(x => new { x.u.TelegramUserId, x.u.Username, x.u.FirstName, x.u.UserPhotoPath })
+            .GroupBy(x => new { x.u.TelegramUserId, x.u.Username, x.u.FirstName, x.u.LastName, x.u.UserPhotoPath })
             .Select(g => new UiModels.TopActiveUser
             {
                 TelegramUserId = g.Key.TelegramUserId,
                 Username = g.Key.Username,
                 FirstName = g.Key.FirstName,
+                LastName = g.Key.LastName,
                 UserPhotoPath = g.Key.UserPhotoPath,
                 MessageCount = g.Count(),
                 Percentage = totalMessages > 0 ? (g.Count() / (double)totalMessages * 100.0) : 0

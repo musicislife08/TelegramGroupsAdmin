@@ -105,7 +105,8 @@ public class MessageStatsService : IMessageStatsService
                 x.m,
                 ActorWebEmail = x.user != null ? x.user.Email : null,
                 ActorTelegramUsername = tgUser != null ? tgUser.Username : null,
-                ActorTelegramFirstName = tgUser != null ? tgUser.FirstName : null
+                ActorTelegramFirstName = tgUser != null ? tgUser.FirstName : null,
+                ActorTelegramLastName = tgUser != null ? tgUser.LastName : null
             })
             .OrderByDescending(x => x.dr.DetectedAt)
             .Take(limit)
@@ -119,7 +120,7 @@ public class MessageStatsService : IMessageStatsService
                 IsSpam = x.dr.IsSpam,
                 Confidence = x.dr.Confidence,
                 Reason = x.dr.Reason,
-                AddedBy = ActorMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName),
+                AddedBy = ActorMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName, x.ActorTelegramLastName),
                 UsedForTraining = x.dr.UsedForTraining,
                 NetConfidence = x.dr.NetConfidence,
                 CheckResultsJson = x.dr.CheckResultsJson,

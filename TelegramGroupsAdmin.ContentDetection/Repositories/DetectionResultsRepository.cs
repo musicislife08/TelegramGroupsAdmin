@@ -70,6 +70,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 ActorWebEmail = x.user != null ? x.user.Email : null,
                 ActorTelegramUsername = x.tgUser != null ? x.tgUser.Username : null,
                 ActorTelegramFirstName = x.tgUser != null ? x.tgUser.FirstName : null,
+                ActorTelegramLastName = x.tgUser != null ? x.tgUser.LastName : null,
                 translation
             })
             .Select(x => new DetectionResultRecord
@@ -82,7 +83,7 @@ public class DetectionResultsRepository : IDetectionResultsRepository
                 IsSpam = x.dr.IsSpam,
                 Confidence = x.dr.Confidence,
                 Reason = x.dr.Reason,
-                AddedBy = ActorMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName),
+                AddedBy = ActorMappings.ToActor(x.dr.WebUserId, x.dr.TelegramUserId, x.dr.SystemIdentifier, x.ActorWebEmail, x.ActorTelegramUsername, x.ActorTelegramFirstName, x.ActorTelegramLastName),
                 UsedForTraining = x.dr.UsedForTraining,
                 NetConfidence = x.dr.NetConfidence,
                 CheckResultsJson = x.dr.CheckResultsJson,

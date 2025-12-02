@@ -73,7 +73,8 @@ public class WarnCommand : IBotCommand
             var executor = Core.Models.Actor.FromTelegramUser(
                 message.From!.Id,
                 message.From.Username,
-                message.From.FirstName);
+                message.From.FirstName,
+                message.From.LastName);
 
             // Execute warn action using service
             var result = await _moderationService.WarnUserAsync(

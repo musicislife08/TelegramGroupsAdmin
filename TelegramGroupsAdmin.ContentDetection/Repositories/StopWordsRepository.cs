@@ -128,7 +128,8 @@ public class StopWordsRepository : IStopWordsRepository
                     x.sw,
                     ActorWebEmail = x.user != null ? x.user.Email : null,
                     ActorTelegramUsername = tgUser != null ? tgUser.Username : null,
-                    ActorTelegramFirstName = tgUser != null ? tgUser.FirstName : null
+                    ActorTelegramFirstName = tgUser != null ? tgUser.FirstName : null,
+                    ActorTelegramLastName = tgUser != null ? tgUser.LastName : null
                 })
                 .OrderBy(x => x.sw.Word)
                 .Select(x => new Models.StopWord(
@@ -140,7 +141,11 @@ public class StopWordsRepository : IStopWordsRepository
                     x.sw.WebUserId != null
                         ? (x.ActorWebEmail ?? "User " + x.sw.WebUserId.Substring(0, 8) + "...")
                         : x.sw.TelegramUserId != null
-                            ? (x.ActorTelegramUsername != null ? "@" + x.ActorTelegramUsername : x.ActorTelegramFirstName ?? "User " + x.sw.TelegramUserId.ToString())
+                            ? (x.ActorTelegramUsername != null
+                                ? "@" + x.ActorTelegramUsername
+                                : (x.ActorTelegramFirstName != null || x.ActorTelegramLastName != null
+                                    ? (x.ActorTelegramFirstName ?? "") + (x.ActorTelegramLastName != null ? " " + x.ActorTelegramLastName : "")
+                                    : "User " + x.sw.TelegramUserId.ToString()))
                             : x.sw.SystemIdentifier ?? "System",
                     x.sw.Notes
                 ))

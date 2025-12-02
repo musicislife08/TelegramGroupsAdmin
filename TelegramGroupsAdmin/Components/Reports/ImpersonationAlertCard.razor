@@ -74,7 +74,7 @@
                                          Style="width: 128px; height: 128px;" />
                             }
 
-                            <MudText Typo="Typo.body1"><b>@GetDisplayName(Alert.SuspectedFirstName, Alert.SuspectedUserName)</b></MudText>
+                            <MudText Typo="Typo.body1"><b>@Alert.SuspectedDisplayName</b></MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.SuspectedUserName ?? "No username")</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Alert.SuspectedUserId</MudText>
                         </MudStack>
@@ -102,7 +102,7 @@
                                          Style="width: 128px; height: 128px;" />
                             }
 
-                            <MudText Typo="Typo.body1"><b>@GetDisplayName(Alert.TargetFirstName, Alert.TargetUserName)</b></MudText>
+                            <MudText Typo="Typo.body1"><b>@Alert.TargetDisplayName</b></MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">@(Alert.TargetUserName ?? "No username")</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Alert.TargetUserId</MudText>
                         </MudStack>
@@ -204,15 +204,6 @@
         return Alert.TotalScore >= 100 ? Color.Error :
                Alert.TotalScore >= 50 ? Color.Warning :
                Color.Default;
-    }
-
-    private string GetDisplayName(string? firstName, string? userName)
-    {
-        if (!string.IsNullOrWhiteSpace(firstName))
-            return firstName;
-        if (!string.IsNullOrWhiteSpace(userName))
-            return userName;
-        return "Unknown";
     }
 
     private string GetPhotoUrl(string photoPath)

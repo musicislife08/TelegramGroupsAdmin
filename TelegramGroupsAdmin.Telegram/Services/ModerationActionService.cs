@@ -194,6 +194,7 @@ public class ModerationActionService
                             UserId: userId,
                             UserName: telegramMessage.From?.Username,
                             FirstName: telegramMessage.From?.FirstName,
+                            LastName: telegramMessage.From?.LastName,
                             ChatId: chatId,
                             Timestamp: telegramMessage.Date,
                             MessageText: messageText,

@@ -20,9 +20,6 @@ public class ChatAdminRecordDto
     [Column("telegram_id")]
     public long TelegramId { get; set; }
 
-    [Column("username")]
-    public string? Username { get; set; }
-
     [Column("is_creator")]
     public bool IsCreator { get; set; }
 
@@ -35,7 +32,10 @@ public class ChatAdminRecordDto
     [Column("is_active")]
     public bool IsActive { get; set; }
 
-    // Navigation property
+    // Navigation properties
     [ForeignKey(nameof(ChatId))]
     public virtual ManagedChatRecordDto? ManagedChat { get; set; }
+
+    [ForeignKey(nameof(TelegramId))]
+    public virtual TelegramUserDto? TelegramUser { get; set; }
 }

@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Models;
@@ -12,6 +13,7 @@ public record MessageRecord(
     long UserId,
     string? UserName,
     string? FirstName,
+    string? LastName,
     long ChatId,
     DateTimeOffset Timestamp,
     string? MessageText,
@@ -42,4 +44,11 @@ public record MessageRecord(
     MessageTranslation? Translation, // Translation of message text (if foreign language detected)
                                      // Content check tracking
     ContentCheckSkipReason ContentCheckSkipReason // Reason content check was skipped (NotSkipped, UserTrusted, UserAdmin)
-);
+)
+{
+    /// <summary>
+    /// Formatted display name for the message author.
+    /// Priority: Service Account (ChatName) → FullName (First + Last) → Username → User {id}
+    /// </summary>
+    public string DisplayName => TelegramDisplayName.Format(FirstName, LastName, UserName, UserId, ChatName);
+}

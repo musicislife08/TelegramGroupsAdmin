@@ -90,7 +90,8 @@ public class TempBanCommand : IBotCommand
             var executor = Core.Models.Actor.FromTelegramUser(
                 message.From!.Id,
                 message.From.Username,
-                message.From.FirstName);
+                message.From.FirstName,
+                message.From.LastName);
 
             // Execute temp ban via ModerationActionService
             var result = await _moderationService.TempBanUserAsync(

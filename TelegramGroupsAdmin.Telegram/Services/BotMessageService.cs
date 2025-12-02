@@ -94,6 +94,7 @@ public class BotMessageService
             UserId: botInfo.Id,
             UserName: botInfo.Username,
             FirstName: botInfo.FirstName,
+            LastName: botInfo.LastName,
             ChatId: chatId,
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: text,

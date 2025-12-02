@@ -14,12 +14,13 @@ public static class UserActionMappings
         public UiModels.UserActionRecord ToModel(
             string? webUserEmail = null,
             string? telegramUsername = null,
-            string? telegramFirstName = null) => new(
+            string? telegramFirstName = null,
+            string? telegramLastName = null) => new(
             Id: data.Id,
             UserId: data.UserId,
             ActionType: (UiModels.UserActionType)data.ActionType,
             MessageId: data.MessageId,
-            IssuedBy: ActorMappings.ToActor(data.WebUserId, data.TelegramUserId, data.SystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
+            IssuedBy: ActorMappings.ToActor(data.WebUserId, data.TelegramUserId, data.SystemIdentifier, webUserEmail, telegramUsername, telegramFirstName, telegramLastName),
             IssuedAt: data.IssuedAt,
             ExpiresAt: data.ExpiresAt,
             Reason: data.Reason
