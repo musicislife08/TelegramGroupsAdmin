@@ -27,22 +27,6 @@ public class ApiKeysConfig
     public string? SendGrid { get; set; }
 
     /// <summary>
-    /// [DEPRECATED] VAPID public key - migrated to WebPushConfig.VapidPublicKey
-    /// Kept for backwards compatibility during migration.
-    /// VapidKeyMigrationService moves these to new location on startup.
-    /// TODO: Remove after production migration - see GitHub issue #121
-    /// </summary>
-    public string? VapidPublicKey { get; set; }
-
-    /// <summary>
-    /// [DEPRECATED] VAPID private key - migrated to configs.vapid_private_key_encrypted column
-    /// Kept for backwards compatibility during migration.
-    /// VapidKeyMigrationService moves these to new location on startup.
-    /// TODO: Remove after production migration - see GitHub issue #121
-    /// </summary>
-    public string? VapidPrivateKey { get; set; }
-
-    /// <summary>
     /// Returns true if at least one API key is configured
     /// </summary>
     public bool HasAnyKey()
@@ -50,16 +34,5 @@ public class ApiKeysConfig
         return !string.IsNullOrWhiteSpace(VirusTotal) ||
                !string.IsNullOrWhiteSpace(OpenAI) ||
                !string.IsNullOrWhiteSpace(SendGrid);
-    }
-
-    /// <summary>
-    /// [DEPRECATED] Check if VAPID keys exist in old location (for migration)
-    /// New code should use ISystemConfigRepository.HasVapidKeysAsync()
-    /// TODO: Remove after production migration - see GitHub issue #121
-    /// </summary>
-    public bool HasVapidKeys()
-    {
-        return !string.IsNullOrWhiteSpace(VapidPublicKey) &&
-               !string.IsNullOrWhiteSpace(VapidPrivateKey);
     }
 }

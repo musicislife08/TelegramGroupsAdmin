@@ -43,7 +43,6 @@ public static class ConfigurationExtensions
 
             // Startup migration services (one-time data migrations on first startup)
             services.AddHostedService<TelegramConfigMigrationService>();
-            services.AddHostedService<VapidKeyMigrationService>();
 
             return services;
         }
