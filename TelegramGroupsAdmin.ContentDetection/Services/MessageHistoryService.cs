@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -36,7 +37,9 @@ public class MessageHistoryService(
                 {
                     m.MessageId,
                     m.UserId,
-                    UserName = tu != null ? (tu.Username ?? tu.FirstName ?? "Unknown") : "Unknown",
+                    FirstName = tu != null ? tu.FirstName : null,
+                    LastName = tu != null ? tu.LastName : null,
+                    Username = tu != null ? tu.Username : null,
                     m.MessageText,
                     m.Timestamp,
                     DetectionResults = context.DetectionResults.Where(dr => dr.MessageId == m.MessageId)
@@ -49,7 +52,7 @@ public class MessageHistoryService(
             return messages.Select(m => new HistoryMessage
             {
                 UserId = m.UserId.ToString(),
-                UserName = m.UserName,
+                UserName = TelegramDisplayName.Format(m.FirstName, m.LastName, m.Username, m.UserId),
                 Message = m.MessageText ?? string.Empty,
                 Timestamp = m.Timestamp.UtcDateTime,
                 WasSpam = m.DetectionResults.Any(dr => dr.IsSpam)

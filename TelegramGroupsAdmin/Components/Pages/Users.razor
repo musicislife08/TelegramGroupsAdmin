@@ -97,7 +97,13 @@
                                         </MudTooltip>
                                     }
                                 </MudStack>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.TelegramUserId</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @if (!string.IsNullOrEmpty(context.Username))
+                                    {
+                                        <text>@@@context.Username · </text>
+                                    }
+                                    ID: @context.TelegramUserId
+                                </MudText>
                             </div>
                         </MudStack>
                     </MudTd>
@@ -182,7 +188,13 @@
                                         </MudTooltip>
                                     }
                                 </MudStack>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.TelegramUserId</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @if (!string.IsNullOrEmpty(context.Username))
+                                    {
+                                        <text>@@@context.Username · </text>
+                                    }
+                                    ID: @context.TelegramUserId
+                                </MudText>
                             </div>
                         </MudStack>
                     </MudTd>
@@ -249,7 +261,13 @@
                                         </MudTooltip>
                                     }
                                 </MudStack>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.TelegramUserId</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @if (!string.IsNullOrEmpty(context.Username))
+                                    {
+                                        <text>@@@context.Username · </text>
+                                    }
+                                    ID: @context.TelegramUserId
+                                </MudText>
                             </div>
                         </MudStack>
                     </MudTd>
@@ -315,7 +333,13 @@
                                         </MudTooltip>
                                     }
                                 </MudStack>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.TelegramUserId</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @if (!string.IsNullOrEmpty(context.Username))
+                                    {
+                                        <text>@@@context.Username · </text>
+                                    }
+                                    ID: @context.TelegramUserId
+                                </MudText>
                             </div>
                         </MudStack>
                     </MudTd>

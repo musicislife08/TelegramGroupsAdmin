@@ -52,8 +52,12 @@ public class MessageQueryService : IMessageQueryService
                 ChatIconPath = chat != null ? chat.ChatIconPath : null,
                 UserName = user != null ? user.Username : null,
                 FirstName = user != null ? user.FirstName : null,
+                LastName = user != null ? user.LastName : null,
                 UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
+                ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
+                ParentUserUsername = parentUserInfo != null ? parentUserInfo.Username : null,
+                ParentUserId = parentUserInfo != null ? parentUserInfo.TelegramUserId : (long?)null,
                 ReplyToText = parentMsg != null ? parentMsg.MessageText : null
             }
         )
@@ -66,8 +70,9 @@ public class MessageQueryService : IMessageQueryService
             chatIconPath: x.ChatIconPath,
             userName: x.UserName,
             firstName: x.FirstName,
+            lastName: x.LastName,
             userPhotoPath: x.UserPhotoPath,
-            replyToUser: x.ReplyToUser,
+            replyToUser: TelegramDisplayName.Format(x.ParentUserFirstName, x.ParentUserLastName, x.ParentUserUsername, x.ParentUserId),
             replyToText: x.ReplyToText)).ToList();
     }
 
@@ -99,8 +104,12 @@ public class MessageQueryService : IMessageQueryService
                         ChatIconPath = chat != null ? chat.ChatIconPath : null,
                         UserName = user != null ? user.Username : null,
                         FirstName = user != null ? user.FirstName : null,
+                        LastName = user != null ? user.LastName : null,
                         UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                        ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                        ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
+                        ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
+                        ParentUserUsername = parentUserInfo != null ? parentUserInfo.Username : null,
+                        ParentUserId = parentUserInfo != null ? parentUserInfo.TelegramUserId : (long?)null,
                         ReplyToText = parentMsg != null ? parentMsg.MessageText : null,
                         Translation = translation
                     };
@@ -115,8 +124,9 @@ public class MessageQueryService : IMessageQueryService
             chatIconPath: x.ChatIconPath,
             userName: x.UserName,
             firstName: x.FirstName,
+            lastName: x.LastName,
             userPhotoPath: x.UserPhotoPath,
-            replyToUser: x.ReplyToUser,
+            replyToUser: TelegramDisplayName.Format(x.ParentUserFirstName, x.ParentUserLastName, x.ParentUserUsername, x.ParentUserId),
             replyToText: x.ReplyToText,
             translation: x.Translation?.ToModel())).ToList();
     }
@@ -141,8 +151,12 @@ public class MessageQueryService : IMessageQueryService
                         ChatIconPath = chat != null ? chat.ChatIconPath : null,
                         UserName = user != null ? user.Username : null,
                         FirstName = user != null ? user.FirstName : null,
+                        LastName = user != null ? user.LastName : null,
                         UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                        ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                        ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
+                        ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
+                        ParentUserUsername = parentUserInfo != null ? parentUserInfo.Username : null,
+                        ParentUserId = parentUserInfo != null ? parentUserInfo.TelegramUserId : (long?)null,
                         ReplyToText = parentMsg != null ? parentMsg.MessageText : null
                     };
 
@@ -163,8 +177,9 @@ public class MessageQueryService : IMessageQueryService
             chatIconPath: x.ChatIconPath,
             userName: x.UserName,
             firstName: x.FirstName,
+            lastName: x.LastName,
             userPhotoPath: x.UserPhotoPath,
-            replyToUser: x.ReplyToUser,
+            replyToUser: TelegramDisplayName.Format(x.ParentUserFirstName, x.ParentUserLastName, x.ParentUserUsername, x.ParentUserId),
             replyToText: x.ReplyToText)).ToList();
     }
 
@@ -215,8 +230,12 @@ public class MessageQueryService : IMessageQueryService
                                     ChatIconPath = chat != null ? chat.ChatIconPath : null,
                                     UserName = user != null ? user.Username : null,
                                     FirstName = user != null ? user.FirstName : null,
+                                    LastName = user != null ? user.LastName : null,
                                     UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                                    ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                                    ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
+                                    ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
+                                    ParentUserUsername = parentUserInfo != null ? parentUserInfo.Username : null,
+                                    ParentUserId = parentUserInfo != null ? parentUserInfo.TelegramUserId : (long?)null,
                                     ReplyToText = parentMsg != null ? parentMsg.MessageText : null,
                                     Translation = trans
                                 })
@@ -230,6 +249,12 @@ public class MessageQueryService : IMessageQueryService
                               where userIds.Contains(ut.TelegramUserId) && ut.RemovedAt == null
                               join td in context.TagDefinitions on ut.TagName equals td.TagName into tagGroup
                               from tag in tagGroup.DefaultIfEmpty()
+                              // JOIN to get AddedBy actor Telegram user data
+                              join addedByUser in context.TelegramUsers on ut.ActorTelegramUserId equals addedByUser.TelegramUserId into addedByGroup
+                              from addedBy in addedByGroup.DefaultIfEmpty()
+                              // JOIN to get RemovedBy actor Telegram user data
+                              join removedByUser in context.TelegramUsers on ut.RemovedByTelegramUserId equals removedByUser.TelegramUserId into removedByGroup
+                              from removedBy in removedByGroup.DefaultIfEmpty()
                               select new
                               {
                                   ut.TelegramUserId,
@@ -241,15 +266,24 @@ public class MessageQueryService : IMessageQueryService
                                   ActorWebUserId = ut.ActorWebUserId,
                                   ActorTelegramUserId = ut.ActorTelegramUserId,
                                   ActorSystemIdentifier = ut.ActorSystemIdentifier,
+                                  ActorTelegramUsername = addedBy != null ? addedBy.Username : null,
+                                  ActorTelegramFirstName = addedBy != null ? addedBy.FirstName : null,
+                                  ActorTelegramLastName = addedBy != null ? addedBy.LastName : null,
                                   RemovedByWebUserId = ut.RemovedByWebUserId,
                                   RemovedByTelegramUserId = ut.RemovedByTelegramUserId,
-                                  RemovedBySystemIdentifier = ut.RemovedBySystemIdentifier
+                                  RemovedBySystemIdentifier = ut.RemovedBySystemIdentifier,
+                                  RemovedByTelegramUsername = removedBy != null ? removedBy.Username : null,
+                                  RemovedByTelegramFirstName = removedBy != null ? removedBy.FirstName : null,
+                                  RemovedByTelegramLastName = removedBy != null ? removedBy.LastName : null
                               })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
         var userNotes = await (from an in context.AdminNotes
                                where userIds.Contains(an.TelegramUserId)
+                               // JOIN to get CreatedBy actor Telegram user data
+                               join createdByUser in context.TelegramUsers on an.ActorTelegramUserId equals createdByUser.TelegramUserId into createdByGroup
+                               from createdBy in createdByGroup.DefaultIfEmpty()
                                select new
                                {
                                    an.TelegramUserId,
@@ -261,7 +295,10 @@ public class MessageQueryService : IMessageQueryService
                                    // Actor arc pattern columns
                                    ActorWebUserId = an.ActorWebUserId,
                                    ActorTelegramUserId = an.ActorTelegramUserId,
-                                   ActorSystemIdentifier = an.ActorSystemIdentifier
+                                   ActorSystemIdentifier = an.ActorSystemIdentifier,
+                                   ActorTelegramUsername = createdBy != null ? createdBy.Username : null,
+                                   ActorTelegramFirstName = createdBy != null ? createdBy.FirstName : null,
+                                   ActorTelegramLastName = createdBy != null ? createdBy.LastName : null
                                })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
@@ -284,8 +321,9 @@ public class MessageQueryService : IMessageQueryService
                 chatIconPath: joined.ChatIconPath,
                 userName: joined.UserName,
                 firstName: joined.FirstName,
+                lastName: joined.LastName,
                 userPhotoPath: joined.UserPhotoPath,
-                replyToUser: joined.ReplyToUser,
+                replyToUser: TelegramDisplayName.Format(joined.ParentUserFirstName, joined.ParentUserLastName, joined.ParentUserUsername, joined.ParentUserId),
                 replyToText: joined.ReplyToText,
                 translation: joined.Translation?.ToModel());
 
@@ -317,11 +355,11 @@ public class MessageQueryService : IMessageQueryService
                         TelegramUserId = t.TelegramUserId,
                         TagName = t.TagName,
                         TagColor = (UiModels.TagColor)t.TagColor, // Enum cast from Data to UI layer
-                        AddedBy = ActorMappings.ToActor(t.ActorWebUserId, t.ActorTelegramUserId, t.ActorSystemIdentifier),
+                        AddedBy = ActorMappings.ToActor(t.ActorWebUserId, t.ActorTelegramUserId, t.ActorSystemIdentifier, null, t.ActorTelegramUsername, t.ActorTelegramFirstName, t.ActorTelegramLastName),
                         AddedAt = t.AddedAt,
                         RemovedAt = t.RemovedAt,
                         RemovedBy = t.RemovedAt.HasValue
-                            ? ActorMappings.ToActor(t.RemovedByWebUserId, t.RemovedByTelegramUserId, t.RemovedBySystemIdentifier)
+                            ? ActorMappings.ToActor(t.RemovedByWebUserId, t.RemovedByTelegramUserId, t.RemovedBySystemIdentifier, null, t.RemovedByTelegramUsername, t.RemovedByTelegramFirstName, t.RemovedByTelegramLastName)
                             : null
                     })
                     .ToList(),
@@ -331,7 +369,7 @@ public class MessageQueryService : IMessageQueryService
                         Id = n.Id,
                         TelegramUserId = n.TelegramUserId,
                         NoteText = n.NoteText,
-                        CreatedBy = ActorMappings.ToActor(n.ActorWebUserId, n.ActorTelegramUserId, n.ActorSystemIdentifier),
+                        CreatedBy = ActorMappings.ToActor(n.ActorWebUserId, n.ActorTelegramUserId, n.ActorSystemIdentifier, null, n.ActorTelegramUsername, n.ActorTelegramFirstName, n.ActorTelegramLastName),
                         CreatedAt = n.CreatedAt,
                         UpdatedAt = n.UpdatedAt,
                         IsPinned = n.IsPinned
@@ -367,8 +405,12 @@ public class MessageQueryService : IMessageQueryService
                 ChatIconPath = chat != null ? chat.ChatIconPath : null,
                 UserName = user != null ? user.Username : null,
                 FirstName = user != null ? user.FirstName : null,
+                LastName = user != null ? user.LastName : null,
                 UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
+                ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
+                ParentUserUsername = parentUserInfo != null ? parentUserInfo.Username : null,
+                ParentUserId = parentUserInfo != null ? parentUserInfo.TelegramUserId : (long?)null,
                 ReplyToText = parentMsg != null ? parentMsg.MessageText : null
             }
         )
@@ -381,8 +423,9 @@ public class MessageQueryService : IMessageQueryService
             chatIconPath: x.ChatIconPath,
             userName: x.UserName,
             firstName: x.FirstName,
+            lastName: x.LastName,
             userPhotoPath: x.UserPhotoPath,
-            replyToUser: x.ReplyToUser,
+            replyToUser: TelegramDisplayName.Format(x.ParentUserFirstName, x.ParentUserLastName, x.ParentUserUsername, x.ParentUserId),
             replyToText: x.ReplyToText)).ToList();
     }
 

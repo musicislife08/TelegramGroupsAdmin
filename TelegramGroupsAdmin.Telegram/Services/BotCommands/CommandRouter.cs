@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
@@ -98,8 +99,9 @@ public partial class CommandRouter
             if (!bypassPermissionCheck && permissionLevel < command.MinPermissionLevel)
             {
                 _logger.LogWarning(
-                    "User {UserId} (@{Username}) attempted to use command /{Command} without sufficient permissions (has {UserLevel}, needs {RequiredLevel})",
-                    message.From.Id, message.From.Username ?? "none", commandName, permissionLevel, command.MinPermissionLevel);
+                    "User {User} attempted to use command /{Command} without sufficient permissions (has {UserLevel}, needs {RequiredLevel})",
+                    TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
+                    commandName, permissionLevel, command.MinPermissionLevel);
 
                 // Build appropriate message based on permission level and required level
                 string permissionMessage;
@@ -130,8 +132,9 @@ public partial class CommandRouter
 
             // Execute command
             _logger.LogInformation(
-                "Executing command /{Command} by user {UserId} ({Username}) with args: {Args}",
-                commandName, message.From.Id, message.From.Username, string.Join(", ", args));
+                "Executing command /{Command} by user {User} with args: {Args}",
+                commandName, TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
+                string.Join(", ", args));
 
             var result = await command.ExecuteAsync(botClient, message, args, permissionLevel, cancellationToken);
 

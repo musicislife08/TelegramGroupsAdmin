@@ -151,6 +151,7 @@ public class MessageHistoryRepositoryTests
             UserId: userId,
             UserName: "testuser",
             FirstName: "Test",
+            LastName: "User",
             ChatId: chatId,
             Timestamp: DateTimeOffset.UtcNow,
             MessageText: text,

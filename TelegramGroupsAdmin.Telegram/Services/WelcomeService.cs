@@ -8,6 +8,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Welcome;
@@ -362,7 +363,7 @@ public class WelcomeService : IWelcomeService
     {
         try
         {
-            var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
+            var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
             var warningText = WelcomeMessageBuilder.FormatWrongUserWarning(username);
             var warningMsg = await botClient.SendMessage(
                 chatId: chatId,
@@ -396,7 +397,7 @@ public class WelcomeService : IWelcomeService
         WelcomeConfig config,
         CancellationToken cancellationToken = default)
     {
-        var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
+        var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
 
         // Get chat name for variable substitution
         var chatInfo = await botClient.GetChat(chatId, cancellationToken);
@@ -873,7 +874,7 @@ public class WelcomeService : IWelcomeService
         CancellationToken cancellationToken = default)
     {
         var chatName = await GetChatNameAsync(botClient, chatId, cancellationToken);
-        var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
+        var username = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
 
         // Use extracted builder for rules confirmation message (includes footer)
         var dmText = WelcomeMessageBuilder.FormatRulesConfirmation(config, username, chatName);

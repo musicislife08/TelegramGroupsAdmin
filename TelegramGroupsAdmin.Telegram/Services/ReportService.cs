@@ -55,7 +55,8 @@ public class ReportService(
             ? Actor.FromTelegramUser(
                 originalMessage.From.Id,
                 originalMessage.From.Username,
-                originalMessage.From.FirstName)
+                originalMessage.From.FirstName,
+                originalMessage.From.LastName)
             : null;
 
         await auditService.LogEventAsync(

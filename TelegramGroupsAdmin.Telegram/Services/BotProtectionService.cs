@@ -6,7 +6,7 @@ using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
-
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -44,8 +44,8 @@ public class BotProtectionService : IBotProtectionService
         // Bot protection disabled - allow all bots
         if (!config.Enabled || !config.AutoBanBots)
         {
-            _logger.LogDebug("Bot protection disabled for chat {ChatId}, allowing bot {BotUsername} ({BotId})",
-                chatId, user.Username ?? "unknown", user.Id);
+            _logger.LogDebug("Bot protection disabled for chat {ChatId}, allowing bot {BotDisplayName}",
+                chatId, TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id));
             return true;
         }
 
@@ -71,14 +71,18 @@ public class BotProtectionService : IBotProtectionService
 
                 if (isInviterAdmin)
                 {
-                    _logger.LogInformation("Bot {BotUsername} ({BotId}) was invited by admin {AdminUsername} ({AdminId}) in chat {ChatId}",
-                        user.Username ?? "unknown", user.Id, invitedBy.Username ?? "unknown", invitedBy.Id, chatId);
+                    _logger.LogInformation("Bot {BotDisplayName} was invited by admin {AdminDisplayName} in chat {ChatId}",
+                        TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id),
+                        TelegramDisplayName.Format(invitedBy.FirstName, invitedBy.LastName, invitedBy.Username, invitedBy.Id),
+                        chatId);
                     return true;
                 }
                 else
                 {
-                    _logger.LogWarning("Bot {BotUsername} ({BotId}) was invited by non-admin {Username} ({UserId}) in chat {ChatId} - will be banned",
-                        user.Username ?? "unknown", user.Id, invitedBy.Username ?? "unknown", invitedBy.Id, chatId);
+                    _logger.LogWarning("Bot {BotDisplayName} was invited by non-admin {UserDisplayName} in chat {ChatId} - will be banned",
+                        TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id),
+                        TelegramDisplayName.Format(invitedBy.FirstName, invitedBy.LastName, invitedBy.Username, invitedBy.Id),
+                        chatId);
                 }
             }
         }
@@ -117,8 +121,8 @@ public class BotProtectionService : IBotProtectionService
             // Ban the bot
             await botClient.BanChatMember(chatId, bot.Id, cancellationToken: cancellationToken);
 
-            _logger.LogWarning("Banned unauthorized bot {BotUsername} ({BotId}) from chat {ChatId}. Reason: {Reason}",
-                bot.Username ?? "unknown", bot.Id, chatId, reason);
+            _logger.LogWarning("Banned unauthorized bot {BotDisplayName} from chat {ChatId}. Reason: {Reason}",
+                TelegramDisplayName.Format(bot.FirstName, bot.LastName, bot.Username, bot.Id), chatId, reason);
 
             // Log to user_actions table for audit trail
             var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
@@ -140,8 +144,8 @@ public class BotProtectionService : IBotProtectionService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to ban bot {BotUsername} ({BotId}) from chat {ChatId}",
-                bot.Username ?? "unknown", bot.Id, chatId);
+            _logger.LogError(ex, "Failed to ban bot {BotDisplayName} from chat {ChatId}",
+                TelegramDisplayName.Format(bot.FirstName, bot.LastName, bot.Username, bot.Id), chatId);
             throw;
         }
     }

@@ -44,13 +44,13 @@
 
                         <div style="flex: 1;">
                             <MudText Typo="Typo.h6">@_userDetail.DisplayName</MudText>
-                            <MudText Typo="Typo.body2" Color="Color.Secondary">ID: @_userDetail.TelegramUserId</MudText>
-                            @if (!string.IsNullOrEmpty(_userDetail.FirstName) || !string.IsNullOrEmpty(_userDetail.LastName))
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @_userDetail.FirstName @_userDetail.LastName
-                                </MudText>
-                            }
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                @if (!string.IsNullOrEmpty(_userDetail.Username))
+                                {
+                                    <text>@@@_userDetail.Username · </text>
+                                }
+                                ID: @_userDetail.TelegramUserId
+                            </MudText>
                         </div>
 
                         <MudChip T="string" Color="@GetStatusColor(_userDetail.Status)" Size="Size.Medium">

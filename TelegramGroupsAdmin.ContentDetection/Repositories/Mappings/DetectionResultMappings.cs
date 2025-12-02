@@ -14,7 +14,8 @@ public static class DetectionResultMappings
         public UiModels.DetectionResultRecord ToModel(
             string? webUserEmail = null,
             string? telegramUsername = null,
-            string? telegramFirstName = null)
+            string? telegramFirstName = null,
+            string? telegramLastName = null)
         {
             return new UiModels.DetectionResultRecord
             {
@@ -26,7 +27,7 @@ public static class DetectionResultMappings
                 IsSpam = data.IsSpam,
                 Confidence = data.Confidence,
                 Reason = data.Reason,
-                AddedBy = ActorMappings.ToActor(data.WebUserId, data.TelegramUserId, data.SystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
+                AddedBy = ActorMappings.ToActor(data.WebUserId, data.TelegramUserId, data.SystemIdentifier, webUserEmail, telegramUsername, telegramFirstName, telegramLastName),
                 UsedForTraining = data.UsedForTraining,
                 NetConfidence = data.NetConfidence,
                 CheckResultsJson = data.CheckResultsJson,  // Phase 2.6

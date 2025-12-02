@@ -21,7 +21,8 @@ public static class ActorMappings
         string? systemIdentifier,
         string? webUserEmail = null,
         string? telegramUsername = null,
-        string? telegramFirstName = null)
+        string? telegramFirstName = null,
+        string? telegramLastName = null)
     {
         if (webUserId != null)
         {
@@ -30,7 +31,7 @@ public static class ActorMappings
 
         if (telegramUserId != null)
         {
-            return Actor.FromTelegramUser(telegramUserId.Value, telegramUsername, telegramFirstName);
+            return Actor.FromTelegramUser(telegramUserId.Value, telegramUsername, telegramFirstName, telegramLastName);
         }
 
         if (systemIdentifier != null)

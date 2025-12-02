@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Utilities;
+
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
@@ -19,4 +21,11 @@ public record TelegramUser(
     DateTimeOffset LastSeenAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt
-);
+)
+{
+    /// <summary>
+    /// Formatted display name following Telegram conventions.
+    /// Priority: Service Account (chatName) → FullName (First + Last) → Username → User {id}
+    /// </summary>
+    public string DisplayName => TelegramDisplayName.Format(FirstName, LastName, Username, TelegramUserId);
+}
