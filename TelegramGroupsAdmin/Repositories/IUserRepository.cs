@@ -1,6 +1,7 @@
+using TelegramGroupsAdmin.Core.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
-namespace TelegramGroupsAdmin.Telegram.Repositories;
+namespace TelegramGroupsAdmin.Repositories;
 
 /// <summary>
 /// Repository for user management operations
@@ -12,6 +13,27 @@ public interface IUserRepository
     Task<UiModels.UserRecord?> GetByEmailIncludingDeletedAsync(string email, CancellationToken ct = default);
     Task<UiModels.UserRecord?> GetByIdAsync(string userId, CancellationToken ct = default);
     Task<string> CreateAsync(UiModels.UserRecord user, CancellationToken ct = default);
+
+    /// <summary>
+    /// Atomically register a user (create or reactivate) and mark the invite as used in a single transaction.
+    /// - If email doesn't exist: creates new user with generated ID
+    /// - If email exists (deleted user): reactivates with fresh credentials, resets TOTP/verification
+    /// This prevents the scenario where user is created/updated but invite remains unused (allowing reuse).
+    /// </summary>
+    /// <param name="email">User's email (unique identifier for lookup)</param>
+    /// <param name="passwordHash">Pre-hashed password</param>
+    /// <param name="permissionLevel">Permission level from invite</param>
+    /// <param name="invitedBy">ID of user who created the invite</param>
+    /// <param name="inviteToken">The invite token to mark as used</param>
+    /// <param name="ct">Cancellation token</param>
+    /// <returns>The user's ID (new or existing)</returns>
+    Task<string> RegisterUserWithInviteAsync(
+        string email,
+        string passwordHash,
+        PermissionLevel permissionLevel,
+        string? invitedBy,
+        string inviteToken,
+        CancellationToken ct = default);
     Task UpdateLastLoginAsync(string userId, CancellationToken ct = default);
     Task UpdateSecurityStampAsync(string userId, CancellationToken ct = default);
     Task UpdateTotpSecretAsync(string userId, string totpSecret, CancellationToken ct = default);
@@ -37,4 +59,10 @@ public interface IUserRepository
     Task ResetFailedLoginAttemptsAsync(string userId, CancellationToken ct = default);
     Task LockAccountAsync(string userId, DateTimeOffset lockedUntil, CancellationToken ct = default);
     Task UnlockAccountAsync(string userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get the primary owner's email (first Owner account by created_at)
+    /// Used for VAPID authentication subject in Web Push notifications
+    /// </summary>
+    Task<string?> GetPrimaryOwnerEmailAsync(CancellationToken ct = default);
 }

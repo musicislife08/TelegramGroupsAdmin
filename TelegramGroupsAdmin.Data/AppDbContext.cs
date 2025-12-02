@@ -23,6 +23,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<VerificationTokenDto> VerificationTokens => Set<VerificationTokenDto>();
     public DbSet<AuditLogRecordDto> AuditLogs => Set<AuditLogRecordDto>();
     public DbSet<NotificationPreferencesDto> NotificationPreferences => Set<NotificationPreferencesDto>();
+    public DbSet<WebNotificationDto> WebNotifications => Set<WebNotificationDto>();
 
     // Telegram integration tables
     public DbSet<TelegramUserDto> TelegramUsers => Set<TelegramUserDto>();
@@ -68,7 +69,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<FileScanQuotaRecord> FileScanQuotas => Set<FileScanQuotaRecord>();
 
     // Notification tables
-    public DbSet<PendingNotificationRecord> PendingNotifications => Set<PendingNotificationRecord>();
+    public DbSet<PendingNotificationRecordDto> PendingNotifications => Set<PendingNotificationRecordDto>();
+    public DbSet<PushSubscriptionDto> PushSubscriptions => Set<PushSubscriptionDto>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -421,6 +423,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(its => its.MarkedByTelegramUserId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // PushSubscriptions → Users (one-to-many)
+        modelBuilder.Entity<PushSubscriptionDto>()
+            .HasOne<UserRecordDto>()
+            .WithMany()
+            .HasForeignKey(ps => ps.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // WebNotifications → Users (one-to-many)
+        modelBuilder.Entity<WebNotificationDto>()
+            .HasOne<UserRecordDto>()
+            .WithMany()
+            .HasForeignKey(wn => wn.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
@@ -588,15 +604,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .IsUnique();
 
         // PendingNotifications indexes - lookup by user for delivery
-        modelBuilder.Entity<PendingNotificationRecord>()
+        modelBuilder.Entity<PendingNotificationRecordDto>()
             .HasIndex(pn => pn.TelegramUserId);
 
         // Index for cleanup job (find expired notifications)
-        modelBuilder.Entity<PendingNotificationRecord>()
+        modelBuilder.Entity<PendingNotificationRecordDto>()
             .HasIndex(pn => pn.ExpiresAt);
 
         // Index for analytics (notifications by type)
-        modelBuilder.Entity<PendingNotificationRecord>()
+        modelBuilder.Entity<PendingNotificationRecordDto>()
             .HasIndex(pn => new { pn.NotificationType, pn.CreatedAt });
 
         // ThresholdRecommendations indexes
@@ -622,6 +638,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(vts => new { vts.IsSpam, vts.MarkedAt });  // Filter spam/ham + sort by date
         // Note: No index on photo_hash - Hamming distance similarity requires full table scan anyway
         // Note: No simple is_spam index - low cardinality boolean, sequential scan is faster
+
+        // PushSubscriptions indexes (Web Push API browser subscriptions)
+        modelBuilder.Entity<PushSubscriptionDto>()
+            .HasIndex(ps => ps.UserId);  // Get all subscriptions for a user
+        modelBuilder.Entity<PushSubscriptionDto>()
+            .HasIndex(ps => new { ps.UserId, ps.Endpoint })
+            .IsUnique();  // Prevent duplicate subscriptions for same endpoint
+
+        // WebNotifications indexes (in-app notification bell)
+        modelBuilder.Entity<WebNotificationDto>()
+            .HasIndex(wn => new { wn.UserId, wn.CreatedAt })
+            .HasDatabaseName("ix_web_notifications_user_id_created_at");  // Primary query: recent notifications by user
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)

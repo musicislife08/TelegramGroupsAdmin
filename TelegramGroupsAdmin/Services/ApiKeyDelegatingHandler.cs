@@ -38,7 +38,7 @@ public class ApiKeyDelegatingHandler : DelegatingHandler
         try
         {
             using var scope = _serviceProvider.CreateScope();
-            var configRepo = scope.ServiceProvider.GetRequiredService<IFileScanningConfigRepository>();
+            var configRepo = scope.ServiceProvider.GetRequiredService<ISystemConfigRepository>();
             var apiKeys = await configRepo.GetApiKeysAsync(cancellationToken);
 
             if (apiKeys != null)

@@ -3,10 +3,10 @@ using TelegramGroupsAdmin.Configuration.Models;
 namespace TelegramGroupsAdmin.Configuration.Repositories;
 
 /// <summary>
-/// Repository for managing file scanning configuration
-/// Handles loading, saving, and merging global + chat-specific configs
+/// Repository for managing system-wide configuration
+/// Handles global configs (API keys, service settings) and per-chat config overrides
 /// </summary>
-public interface IFileScanningConfigRepository
+public interface ISystemConfigRepository
 {
     /// <summary>
     /// Get file scanning config for a specific chat (with global fallback)
@@ -77,4 +77,43 @@ public interface IFileScanningConfigRepository
     /// <param name="config">SendGrid configuration to save</param>
     /// <param name="cancellationToken">Cancellation token</param>
     Task SaveSendGridConfigAsync(SendGridConfig config, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get Web Push notification configuration (global only - chat_id = NULL)
+    /// Configuration stored in configs.web_push_config JSONB column
+    /// VAPID private key stored separately in configs.vapid_private_key_encrypted
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Web Push config (never null - returns default if not configured)</returns>
+    Task<WebPushConfig> GetWebPushConfigAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Save Web Push notification configuration (global only - chat_id = NULL)
+    /// </summary>
+    /// <param name="config">Web Push configuration to save (non-secret settings only)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task SaveWebPushConfigAsync(WebPushConfig config, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get VAPID private key (global only - chat_id = NULL)
+    /// Decrypted from configs.vapid_private_key_encrypted column
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Decrypted VAPID private key or null if not configured</returns>
+    Task<string?> GetVapidPrivateKeyAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Save VAPID private key (global only - chat_id = NULL)
+    /// Encrypted and stored in configs.vapid_private_key_encrypted column
+    /// </summary>
+    /// <param name="privateKey">VAPID private key (base64 URL-safe encoded)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task SaveVapidPrivateKeyAsync(string privateKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Check if VAPID keys are fully configured (both public key in config and private key encrypted)
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>True if both public and private keys are configured</returns>
+    Task<bool> HasVapidKeysAsync(CancellationToken cancellationToken = default);
 }

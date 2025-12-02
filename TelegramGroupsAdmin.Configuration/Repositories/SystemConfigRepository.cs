@@ -9,18 +9,18 @@ using TelegramGroupsAdmin.Data.Constants;
 namespace TelegramGroupsAdmin.Configuration.Repositories;
 
 /// <summary>
-/// Repository implementation for file scanning configuration
-/// Stores config in configs.file_scanning_config JSONB column
+/// Repository implementation for system-wide configuration
+/// Handles global configs (API keys, service settings) and per-chat config overrides
 /// </summary>
-public class FileScanningConfigRepository : IFileScanningConfigRepository
+public class SystemConfigRepository : ISystemConfigRepository
 {
-    private readonly ILogger<FileScanningConfigRepository> _logger;
+    private readonly ILogger<SystemConfigRepository> _logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IDataProtectionProvider _dataProtectionProvider;
     private readonly JsonSerializerOptions _jsonOptions;
 
-    public FileScanningConfigRepository(
-        ILogger<FileScanningConfigRepository> logger,
+    public SystemConfigRepository(
+        ILogger<SystemConfigRepository> logger,
         IDbContextFactory<AppDbContext> contextFactory,
         IDataProtectionProvider dataProtectionProvider)
     {
@@ -346,6 +346,146 @@ public class FileScanningConfigRepository : IFileScanningConfigRepository
         await context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("SendGrid configuration saved successfully");
+    }
+
+    public async Task<WebPushConfig> GetWebPushConfigAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Web Push config is global only (chat_id = 0)
+        var configRecord = await context.Configs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord?.WebPushConfig == null)
+        {
+            // Return default config if not set
+            return new WebPushConfig();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<WebPushConfig>(configRecord.WebPushConfig, _jsonOptions) ?? new WebPushConfig();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to deserialize Web Push config");
+            return new WebPushConfig();
+        }
+    }
+
+    public async Task SaveWebPushConfigAsync(WebPushConfig config, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        _logger.LogInformation("Saving Web Push configuration to database");
+
+        // Serialize to JSON
+        var jsonConfig = JsonSerializer.Serialize(config, _jsonOptions);
+
+        // Find or create global config record (chat_id = 0)
+        var configRecord = await context.Configs
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord == null)
+        {
+            // Create new global config record
+            configRecord = new Data.Models.ConfigRecordDto
+            {
+                ChatId = 0,
+                WebPushConfig = jsonConfig,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await context.Configs.AddAsync(configRecord, cancellationToken);
+        }
+        else
+        {
+            // Update existing global config
+            configRecord.WebPushConfig = jsonConfig;
+            configRecord.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Web Push configuration saved successfully");
+    }
+
+    public async Task<string?> GetVapidPrivateKeyAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // VAPID key is global only (chat_id = 0)
+        var configRecord = await context.Configs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord?.VapidPrivateKeyEncrypted == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            // Decrypt using Data Protection
+            var protector = _dataProtectionProvider.CreateProtector(DataProtectionPurposes.VapidPrivateKey);
+            return protector.Unprotect(configRecord.VapidPrivateKeyEncrypted);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to decrypt VAPID private key");
+            return null;
+        }
+    }
+
+    public async Task SaveVapidPrivateKeyAsync(string privateKey, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(privateKey);
+
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        _logger.LogInformation("Saving VAPID private key to encrypted database storage");
+
+        // Encrypt using Data Protection
+        var protector = _dataProtectionProvider.CreateProtector(DataProtectionPurposes.VapidPrivateKey);
+        var encryptedKey = protector.Protect(privateKey);
+
+        // Find or create global config record (chat_id = 0)
+        var configRecord = await context.Configs
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord == null)
+        {
+            // Create new global config record
+            configRecord = new Data.Models.ConfigRecordDto
+            {
+                ChatId = 0,
+                VapidPrivateKeyEncrypted = encryptedKey,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await context.Configs.AddAsync(configRecord, cancellationToken);
+        }
+        else
+        {
+            // Update existing global config
+            configRecord.VapidPrivateKeyEncrypted = encryptedKey;
+            configRecord.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("VAPID private key saved successfully to encrypted database storage");
+    }
+
+    public async Task<bool> HasVapidKeysAsync(CancellationToken cancellationToken = default)
+    {
+        var webPushConfig = await GetWebPushConfigAsync(cancellationToken);
+        if (webPushConfig.HasVapidPublicKey())
+        {
+            var privateKey = await GetVapidPrivateKeyAsync(cancellationToken);
+            return !string.IsNullOrWhiteSpace(privateKey);
+        }
+
+        return false;
     }
 
     /// <summary>

@@ -28,6 +28,7 @@ public class ModerationActionService
     private readonly IUserActionsRepository _userActionsRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IManagedChatsRepository _managedChatsRepository;
+    private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
     private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository;
     private readonly TelegramBotClientFactory _botClientFactory;
@@ -47,6 +48,7 @@ public class ModerationActionService
         IUserActionsRepository userActionsRepository,
         IMessageHistoryRepository messageHistoryRepository,
         IManagedChatsRepository managedChatsRepository,
+        ITelegramUserRepository telegramUserRepository,
         ITelegramUserMappingRepository telegramUserMappingRepository,
         IImageTrainingSamplesRepository imageTrainingSamplesRepository,
         TelegramBotClientFactory botClientFactory,
@@ -65,6 +67,7 @@ public class ModerationActionService
         _userActionsRepository = userActionsRepository;
         _messageHistoryRepository = messageHistoryRepository;
         _managedChatsRepository = managedChatsRepository;
+        _telegramUserRepository = telegramUserRepository;
         _telegramUserMappingRepository = telegramUserMappingRepository;
         _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
         _botClientFactory = botClientFactory;
@@ -147,12 +150,8 @@ public class ModerationActionService
 
             if (message != null)
             {
-                // 3.5. CRITICAL: Invalidate old training data to prevent cross-class conflicts
-                await _detectionResultsRepository.InvalidateTrainingDataForMessageAsync(
-                    messageId,
-                    cancellationToken);
-
                 // 4. Create detection result (manual spam classification) - message exists in DB
+                // Uses atomic method to invalidate old training data + insert new result in single transaction
                 var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
                 var detectionResult = new DetectionResultRecord
                 {
@@ -170,7 +169,7 @@ public class ModerationActionService
                     CheckResultsJson = null,
                     EditVersion = 0
                 };
-                await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
+                await _detectionResultsRepository.InsertWithTrainingInvalidationAsync(messageId, detectionResult, cancellationToken);
 
                 // 4b. ML-5: Save image training sample if message has a photo
                 await _imageTrainingSamplesRepository.SaveTrainingSampleAsync(
@@ -226,12 +225,8 @@ public class ModerationActionService
 
                         await _messageHistoryRepository.InsertMessageAsync(messageRecord, cancellationToken);
 
-                        // Invalidate any existing training data (shouldn't exist for backfill, but be safe)
-                        await _detectionResultsRepository.InvalidateTrainingDataForMessageAsync(
-                            messageId,
-                            cancellationToken);
-
-                        // Now create the detection result with the real message_id
+                        // Create detection result with atomic training invalidation
+                        // (shouldn't have existing training data for backfill, but be safe)
                         var detectionResult = new DetectionResultRecord
                         {
                             MessageId = messageId,
@@ -247,7 +242,7 @@ public class ModerationActionService
                             CheckResultsJson = null,
                             EditVersion = 0
                         };
-                        await _detectionResultsRepository.InsertAsync(detectionResult, cancellationToken);
+                        await _detectionResultsRepository.InsertWithTrainingInvalidationAsync(messageId, detectionResult, cancellationToken);
 
                         _logger.LogInformation(
                             "Message {MessageId} not in database. Backfilled from Telegram with real data for user {UserId}",
@@ -574,6 +569,10 @@ public class ModerationActionService
                 ExpiresAt: null,
                 Reason: reason
             );
+            // Set the trust flag first (matches TelegramUserManagementService pattern)
+            await _telegramUserRepository.UpdateTrustStatusAsync(userId, isTrusted: true, cancellationToken);
+
+            // Then create the audit record
             await _userActionsRepository.InsertAsync(trustAction, cancellationToken);
 
             _logger.LogInformation("Trust action completed: User {UserId} trusted globally", userId);

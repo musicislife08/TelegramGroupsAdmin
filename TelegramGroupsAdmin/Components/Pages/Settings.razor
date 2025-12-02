@@ -49,6 +49,14 @@
                     }
                 </MudNavGroup>
 
+                <!-- Notifications Group -->
+                <MudNavGroup Title="Notifications" Icon="@Icons.Material.Filled.Notifications" Expanded="@_notificationsExpanded" ExpandedChanged="@((bool expanded) => _notificationsExpanded = expanded)">
+                    @if (_canEditInfrastructure)
+                    {
+                        <MudNavLink Href="/settings/notifications/web-push" Icon="@Icons.Material.Filled.NotificationsActive" Match="NavLinkMatch.All">Web Push</MudNavLink>
+                    }
+                </MudNavGroup>
+
                 <!-- Content Detection Group -->
                 <MudNavGroup Title="Content Detection" Icon="@Icons.Material.Filled.Shield" Expanded="@_contentDetectionExpanded" ExpandedChanged="@((bool expanded) => _contentDetectionExpanded = expanded)">
                     <MudNavLink Href="/settings/content-detection/algorithms" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">Detection Algorithms</MudNavLink>
@@ -205,6 +213,33 @@
                     }
                     break;
 
+                // Notifications subsections
+                case "notifications":
+                    @switch (_currentSubSection)
+                    {
+                        case "web-push":
+                            @if (_canEditInfrastructure)
+                            {
+                                <WebPushSettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
+                            break;
+                        default:
+                            @if (_canEditInfrastructure)
+                            {
+                                <WebPushSettings />
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
+                            }
+                            break;
+                    }
+                    break;
+
                 // Content Detection subsections
                 case "content-detection":
                     @switch (_currentSubSection)
@@ -262,6 +297,7 @@
 
     private bool _systemExpanded;
     private bool _telegramExpanded;
+    private bool _notificationsExpanded;
     private bool _contentDetectionExpanded;
     private bool _trainingDataExpanded;
 
@@ -298,6 +334,7 @@
         // Auto-expand the appropriate group based on current section
         _systemExpanded = _currentSection == "system";
         _telegramExpanded = _currentSection == "telegram";
+        _notificationsExpanded = _currentSection == "notifications";
         _contentDetectionExpanded = _currentSection == "content-detection";
         _trainingDataExpanded = _currentSection == "training-data";
 
@@ -318,6 +355,9 @@
 
             // Telegram
             ("telegram", "bot-config") => "Bot Configuration",
+
+            // Notifications
+            ("notifications", "web-push") => "Web Push Notifications",
 
             // Content Detection
             ("content-detection", "algorithms") => "Detection Algorithms",

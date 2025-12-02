@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -35,8 +34,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IUserTagsRepository, UserTagsRepository>(); // Phase 4.12
             services.AddScoped<ITagDefinitionsRepository, TagDefinitionsRepository>(); // Phase 4.12
             services.AddScoped<IPendingNotificationsRepository, PendingNotificationsRepository>(); // DM notification system
-            services.AddScoped<IAuditLogRepository, AuditLogRepository>();
-            services.AddScoped<IUserRepository, UserRepository>();
+            // Note: IAuditLogRepository is registered in AddCoreServices() - it's a cross-cutting concern
             services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
             // REFACTOR-3: Extracted services from MessageHistoryRepository
             services.AddScoped<IMessageQueryService, MessageQueryService>();
@@ -77,6 +75,7 @@ public static class ServiceCollectionExtensions
 
             // Moderation and user management services
             services.AddScoped<ModerationActionService>();
+            services.AddScoped<IReportService, ReportService>(); // Unified report creation + notification
             services.AddScoped<UserAutoTrustService>();
             services.AddScoped<AdminMentionHandler>();
             services.AddScoped<TelegramUserManagementService>(); // Orchestrates Telegram user operations

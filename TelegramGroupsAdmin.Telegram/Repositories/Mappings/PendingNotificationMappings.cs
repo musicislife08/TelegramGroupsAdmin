@@ -8,7 +8,7 @@ namespace TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 /// </summary>
 public static class PendingNotificationMappings
 {
-    extension(DataModels.PendingNotificationRecord db)
+    extension(DataModels.PendingNotificationRecordDto db)
     {
         public UiModels.PendingNotificationModel ToModel() => new()
         {
@@ -24,7 +24,7 @@ public static class PendingNotificationMappings
 
     extension(UiModels.PendingNotificationModel ui)
     {
-        public DataModels.PendingNotificationRecord ToRecord() => new()
+        public DataModels.PendingNotificationRecordDto ToRecord() => new()
         {
             Id = ui.Id,
             TelegramUserId = ui.TelegramUserId,
