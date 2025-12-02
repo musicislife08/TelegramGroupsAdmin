@@ -10,6 +10,7 @@ using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Welcome;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -20,50 +21,6 @@ public class WelcomeService : IWelcomeService
     private readonly IBotProtectionService _botProtectionService;
     private readonly IDmDeliveryService _dmDeliveryService;
     private readonly IJobScheduler _jobScheduler;
-
-    /// <summary>
-    /// Static restricted permissions (all false) for new users awaiting welcome acceptance.
-    /// Reused to avoid allocations on every user join.
-    /// </summary>
-    private static readonly ChatPermissions RestrictedPermissions = new()
-    {
-        CanSendMessages = false,
-        CanSendAudios = false,
-        CanSendDocuments = false,
-        CanSendPhotos = false,
-        CanSendVideos = false,
-        CanSendVideoNotes = false,
-        CanSendVoiceNotes = false,
-        CanSendPolls = false,
-        CanSendOtherMessages = false,
-        CanAddWebPagePreviews = false,
-        CanChangeInfo = false,
-        CanInviteUsers = false,
-        CanPinMessages = false,
-        CanManageTopics = false
-    };
-
-    /// <summary>
-    /// Static default permissions for accepted users (messaging enabled, admin features restricted).
-    /// Reused to avoid allocations when restoring permissions.
-    /// </summary>
-    private static readonly ChatPermissions DefaultPermissions = new()
-    {
-        CanSendMessages = true,
-        CanSendAudios = true,
-        CanSendDocuments = true,
-        CanSendPhotos = true,
-        CanSendVideos = true,
-        CanSendVideoNotes = true,
-        CanSendVoiceNotes = true,
-        CanSendPolls = true,
-        CanSendOtherMessages = true,
-        CanAddWebPagePreviews = true,
-        CanChangeInfo = false,      // Admin feature - restricted
-        CanInviteUsers = true,
-        CanPinMessages = false,     // Admin feature - restricted
-        CanManageTopics = false     // Admin feature - restricted
-    };
 
     public WelcomeService(
         ILogger<WelcomeService> logger,
@@ -317,27 +274,25 @@ public class WelcomeService : IWelcomeService
             user.Id,
             chatId);
 
-        // Parse callback data
-        // Format: "welcome_accept:123456", "welcome_deny:123456", or "dm_accept:chatId:userId"
-        var parts = data.Split(':');
-        var action = parts[0];
-
-        // Handle dm_accept separately (3-part format: dm_accept:groupChatId:userId)
-        if (action == "dm_accept")
+        // Use extracted parser for callback data
+        var parsedCallback = WelcomeCallbackParser.ParseCallbackData(data);
+        if (parsedCallback == null)
         {
-            if (parts.Length != 3 || !long.TryParse(parts[1], out var groupChatId) || !long.TryParse(parts[2], out var targetUserId))
-            {
-                _logger.LogWarning("Invalid dm_accept callback data format: {Data}", data);
-                return;
-            }
+            _logger.LogWarning("Invalid or unrecognized callback data format: {Data}", data);
+            return;
+        }
 
-            // Validate that the clicking user is the target user
-            if (user.Id != targetUserId)
+        // Validate that the clicking user is the target user
+        if (!WelcomeCallbackParser.ValidateCallerIsTarget(user.Id, parsedCallback.UserId))
+        {
+            _logger.LogWarning(
+                "Wrong user clicked button: User {ClickerId} clicked button for user {TargetUserId}",
+                user.Id,
+                parsedCallback.UserId);
+
+            // For DM accept, just show alert (no message in DM chat)
+            if (parsedCallback.Type == WelcomeCallbackType.DmAccept)
             {
-                _logger.LogWarning(
-                    "Wrong user clicked DM accept button: User {ClickerId} clicked button for user {TargetUserId}",
-                    user.Id,
-                    targetUserId);
                 await botClient.AnswerCallbackQuery(
                     callbackQueryId: callbackQuery.Id,
                     text: "⚠️ This button is not for you.",
@@ -346,87 +301,45 @@ public class WelcomeService : IWelcomeService
                 return;
             }
 
-            try
-            {
-                await HandleDmAcceptAsync(botClient, groupChatId, user, message.Chat.Id, message.MessageId, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Failed to handle dm_accept for user {UserId} in group {ChatId}",
-                    user.Id,
-                    groupChatId);
-            }
+            // For chat buttons, send temporary warning message
+            await SendWrongUserWarningAsync(botClient, chatId, user, message.MessageId, cancellationToken);
             return;
         }
 
-        // Handle welcome_accept and welcome_deny (2-part format)
-        if (parts.Length != 2 || !long.TryParse(parts[1], out var targetUserIdForGroup))
-        {
-            _logger.LogWarning("Invalid callback data format: {Data}", data);
-            return;
-        }
-
-        // Validate that the clicking user is the target user
-        if (user.Id != targetUserIdForGroup)
-        {
-            _logger.LogWarning(
-                "Wrong user clicked button: User {ClickerId} clicked button for user {TargetUserId}",
-                user.Id,
-                targetUserIdForGroup);
-
-            // Send temporary warning message tagged to the wrong user
-            try
-            {
-                var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
-                var warningMsg = await botClient.SendMessage(
-                    chatId: chatId,
-                    text: $"{username}, ⚠️ this button is not for you. Only the mentioned user can respond.",
-                    replyParameters: new ReplyParameters { MessageId = message.MessageId },
-                    cancellationToken: cancellationToken);
-
-                // Delete warning after 10 seconds via Quartz.NET
-                var deletePayload = new DeleteMessagePayload(
-                    chatId,
-                    warningMsg.MessageId,
-                    "wrong_user_warning"
-                );
-
-                await _jobScheduler.ScheduleJobAsync(
-                    "DeleteMessage",
-                    deletePayload,
-                    delaySeconds: 10,
-                    cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to send warning message");
-            }
-
-            return;
-        }
-
-        // Load welcome config from database (chat-specific or global fallback)
-        // Must create scope because WelcomeService is singleton but IConfigService is scoped
-        using var scope = _serviceProvider.CreateScope();
-        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
-        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId)
-                     ?? WelcomeConfig.Default;
-
+        // Route to appropriate handler based on callback type
         try
         {
-            if (action == "welcome_accept")
+            switch (parsedCallback.Type)
             {
-                await HandleAcceptAsync(botClient, chatId, user, message.MessageId, config, cancellationToken);
-            }
-            else if (action == "welcome_deny")
-            {
-                await HandleDenyAsync(botClient, chatId, user, message.MessageId, cancellationToken);
-            }
-            else
-            {
-                _logger.LogWarning("Unknown callback action: {Action}", action);
+                case WelcomeCallbackType.DmAccept:
+                    await HandleDmAcceptAsync(
+                        botClient,
+                        parsedCallback.ChatId!.Value,
+                        user,
+                        message.Chat.Id,
+                        message.MessageId,
+                        cancellationToken);
+                    break;
+
+                case WelcomeCallbackType.Accept:
+                case WelcomeCallbackType.Deny:
+                    // Load welcome config for chat-based callbacks
+                    using (var scope = _serviceProvider.CreateScope())
+                    {
+                        var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
+                        var config = await configService.GetEffectiveAsync<WelcomeConfig>(ConfigType.Welcome, chatId)
+                                     ?? WelcomeConfig.Default;
+
+                        if (parsedCallback.Type == WelcomeCallbackType.Accept)
+                        {
+                            await HandleAcceptAsync(botClient, chatId, user, message.MessageId, config, cancellationToken);
+                        }
+                        else
+                        {
+                            await HandleDenyAsync(botClient, chatId, user, message.MessageId, cancellationToken);
+                        }
+                    }
+                    break;
             }
         }
         catch (Exception ex)
@@ -440,6 +353,42 @@ public class WelcomeService : IWelcomeService
         }
     }
 
+    private async Task SendWrongUserWarningAsync(
+        ITelegramBotClient botClient,
+        long chatId,
+        User user,
+        int replyToMessageId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
+            var warningText = WelcomeMessageBuilder.FormatWrongUserWarning(username);
+            var warningMsg = await botClient.SendMessage(
+                chatId: chatId,
+                text: warningText,
+                replyParameters: new ReplyParameters { MessageId = replyToMessageId },
+                cancellationToken: cancellationToken);
+
+            // Delete warning after 10 seconds via Quartz.NET
+            var deletePayload = new DeleteMessagePayload(
+                chatId,
+                warningMsg.MessageId,
+                "wrong_user_warning"
+            );
+
+            await _jobScheduler.ScheduleJobAsync(
+                "DeleteMessage",
+                deletePayload,
+                delaySeconds: 10,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send warning message");
+        }
+    }
+
     private async Task<Message> SendWelcomeMessageAsync(
         ITelegramBotClient botClient,
         long chatId,
@@ -449,66 +398,32 @@ public class WelcomeService : IWelcomeService
     {
         var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
 
-        // In new structure:
-        // - Chat mode: Use MainWelcomeMessage (complete message)
-        // - DM mode: Use DmChatTeaserMessage (short prompt to check DM)
-        string messageText;
-
         // Get chat name for variable substitution
         var chatInfo = await botClient.GetChat(chatId, cancellationToken);
         var chatName = chatInfo.Title ?? "this chat";
 
-        if (config.Mode == WelcomeMode.DmWelcome)
-        {
-            // DM mode: Use teaser message
-            messageText = config.DmChatTeaserMessage
-                .Replace("{username}", username)
-                .Replace("{chat_name}", chatName)
-                .Replace("{timeout}", config.TimeoutSeconds.ToString());
-        }
-        else
-        {
-            // Chat mode: Use main welcome message
-            messageText = config.MainWelcomeMessage
-                .Replace("{username}", username)
-                .Replace("{chat_name}", chatName)
-                .Replace("{timeout}", config.TimeoutSeconds.ToString());
-        }
+        // Use extracted builder for message formatting
+        var messageText = WelcomeMessageBuilder.FormatWelcomeMessage(config, username, chatName);
 
-        // Build keyboard based on welcome mode
+        // Build keyboard based on welcome mode using extracted builders
         InlineKeyboardMarkup keyboard;
 
         if (config.Mode == WelcomeMode.DmWelcome)
         {
-            // DM Welcome mode: Single row with deep link button
             var botInfo = await botClient.GetMe(cancellationToken);
-            var deepLink = $"https://t.me/{botInfo.Username}?start=welcome_{chatId}_{user.Id}";
-
-            keyboard = new InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton.WithUrl(config.DmButtonText, deepLink)
-                ]
-            ]);
+            keyboard = WelcomeKeyboardBuilder.BuildDmModeKeyboard(config, chatId, user.Id, botInfo.Username!);
 
             _logger.LogInformation(
-                "Sent DM welcome message {MessageId} to user {UserId} in chat {ChatId} with deep link: {DeepLink}",
-                0, // Will be set after send
+                "Sending DM welcome message to user {UserId} in chat {ChatId}",
                 user.Id,
-                chatId,
-                deepLink);
+                chatId);
         }
-        else // ChatAcceptDeny
+        else
         {
-            // Chat Accept/Deny mode: Single row with Accept/Deny buttons
-            keyboard = new InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton.WithCallbackData(config.AcceptButtonText, $"welcome_accept:{user.Id}"),
-                    InlineKeyboardButton.WithCallbackData(config.DenyButtonText, $"welcome_deny:{user.Id}")
-                ]
-            ]);
+            keyboard = WelcomeKeyboardBuilder.BuildChatModeKeyboard(config, user.Id);
 
             _logger.LogInformation(
-                "Sent chat accept/deny welcome message to user {UserId} in chat {ChatId}",
+                "Sending chat accept/deny welcome message to user {UserId} in chat {ChatId}",
                 user.Id,
                 chatId);
         }
@@ -533,7 +448,7 @@ public class WelcomeService : IWelcomeService
             await botClient.RestrictChatMember(
                 chatId: chatId,
                 userId: userId,
-                permissions: RestrictedPermissions,
+                permissions: WelcomeChatPermissions.Restricted,
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation(
@@ -573,7 +488,7 @@ public class WelcomeService : IWelcomeService
 
             // Get chat's default permissions to restore user to group defaults
             var chat = await botClient.GetChat(chatId, cancellationToken);
-            var defaultPermissions = chat.Permissions ?? DefaultPermissions;
+            var defaultPermissions = chat.Permissions ?? WelcomeChatPermissions.Default;
 
             _logger.LogDebug(
                 "Restoring user {UserId} to chat {ChatId} default permissions: Messages={CanSendMessages}, Media={CanSendPhotos}",
@@ -884,21 +799,12 @@ public class WelcomeService : IWelcomeService
             var chat = await botClient.GetChat(groupChatId, cancellationToken);
             var chatName = chat.Title ?? "the chat";
 
-            // Build deep link to navigate to chat (not join - user is already member)
-            // For public chats (with username), use t.me/username
-            // For private chats, use tg://resolve?domain= or tg://privatepost for navigation
-            string? chatDeepLink = null;
+            // Build deep link to navigate to chat using extracted builder
+            var chatDeepLink = WelcomeDeepLinkBuilder.BuildPublicChatLink(chat.Username);
 
-            if (!string.IsNullOrEmpty(chat.Username))
+            // For private chats (no username), try to get invite link
+            if (chatDeepLink == null)
             {
-                // Public chat - use username link (works in both web and app)
-                chatDeepLink = $"https://t.me/{chat.Username}";
-                _logger.LogDebug("Using public chat link for {ChatId}: {Link}", groupChatId, chatDeepLink);
-            }
-            else
-            {
-                // Private chat - unfortunately there's no reliable deep link for private chats by ID alone
-                // The best we can do is use the invite link which will open the chat if already a member
                 using var inviteLinkScope = _serviceProvider.CreateScope();
                 var inviteLinkService = inviteLinkScope.ServiceProvider.GetRequiredService<IChatInviteLinkService>();
                 chatDeepLink = await inviteLinkService.GetInviteLinkAsync(botClient, groupChatId, cancellationToken);
@@ -912,15 +818,16 @@ public class WelcomeService : IWelcomeService
                     _logger.LogWarning("Could not get invite link for private chat {ChatId}", groupChatId);
                 }
             }
+            else
+            {
+                _logger.LogDebug("Using public chat link for {ChatId}: {Link}", groupChatId, chatDeepLink);
+            }
 
+            // Build keyboard and confirmation message using extracted builders
             InlineKeyboardMarkup? keyboard = null;
             if (chatDeepLink != null)
             {
-                keyboard = new InlineKeyboardMarkup([
-                    [
-                        InlineKeyboardButton.WithUrl($"💬 Return to {chatName}", chatDeepLink)
-                    ]
-                ]);
+                keyboard = WelcomeKeyboardBuilder.BuildReturnToChatKeyboard(chatName, chatDeepLink);
 
                 _logger.LogInformation(
                     "Sent confirmation with chat deep link to user {UserId}: {DeepLink}",
@@ -928,9 +835,10 @@ public class WelcomeService : IWelcomeService
                     chatDeepLink);
             }
 
+            var confirmationText = WelcomeMessageBuilder.FormatDmAcceptanceConfirmation(chatName);
             await botClient.SendMessage(
                 chatId: user.Id,
-                text: $"✅ Welcome! You can now participate in {chatName}.",
+                text: confirmationText,
                 replyMarkup: keyboard,
                 cancellationToken: cancellationToken);
         }
@@ -967,14 +875,8 @@ public class WelcomeService : IWelcomeService
         var chatName = await GetChatNameAsync(botClient, chatId, cancellationToken);
         var username = user.Username != null ? $"@{user.Username}" : user.FirstName;
 
-        // Send main welcome message as confirmation (user already accepted in group)
-        var dmText = config.MainWelcomeMessage
-            .Replace("{username}", username)
-            .Replace("{chat_name}", chatName)
-            .Replace("{timeout}", config.TimeoutSeconds.ToString());
-
-        // Add confirmation footer
-        dmText += "\n\n✅ You're all set! You can now participate in the chat.";
+        // Use extracted builder for rules confirmation message (includes footer)
+        var dmText = WelcomeMessageBuilder.FormatRulesConfirmation(config, username, chatName);
 
         // Delegate to DmDeliveryService with chat fallback and 30-second auto-delete
         var result = await _dmDeliveryService.SendDmAsync(
