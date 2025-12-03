@@ -1,5 +1,5 @@
 @page "/users"
-@attribute [Authorize(Roles = "GlobalAdmin,Owner")]
+@attribute [Authorize]
 @using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.Components.Shared.Settings
 @inject TelegramUserManagementService UserManagementService
