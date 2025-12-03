@@ -21,6 +21,7 @@
     <MudPaper Class="pa-3 mb-4" Elevation="1">
         <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
             <MudSelect T="ReportTypeFilter"
+                       id="type-filter"
                        Label="Type"
                        Value="_selectedTypeFilter"
                        ValueChanged="OnTypeFilterChanged"
@@ -32,6 +33,7 @@
             </MudSelect>
 
             <MudSelect T="StatusFilter"
+                       id="status-filter"
                        Label="Status"
                        Value="_selectedStatusFilter"
                        ValueChanged="OnStatusFilterChanged"
