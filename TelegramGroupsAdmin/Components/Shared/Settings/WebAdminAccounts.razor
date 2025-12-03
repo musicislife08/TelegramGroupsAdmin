@@ -607,12 +607,16 @@
 
     private async Task ManageInvites()
     {
+        var parameters = new DialogParameters<InviteManagementDialog>
+        {
+            { p => p.CurrentUserPermissionLevel, _currentUserPermissionLevel }
+        };
         var options = new DialogOptions
         {
             MaxWidth = MaxWidth.Large,
             FullWidth = true
         };
-        var dialog = await DialogService.ShowAsync<InviteManagementDialog>("Manage Invites", options);
+        var dialog = await DialogService.ShowAsync<InviteManagementDialog>("Manage Invites", parameters, options);
         await dialog.Result;
     }
 

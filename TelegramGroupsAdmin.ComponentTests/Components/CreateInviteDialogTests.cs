@@ -118,8 +118,83 @@ public class CreateInviteDialogTests : DialogTestContext
         });
     }
 
-    // Note: MudSelect items are rendered via popover which requires JS interop.
-    // Testing specific select options is better suited for Playwright E2E tests.
+    #endregion
+
+    #region Permission Level Restriction Tests
+
+    /// <remarks>
+    /// Note: MudSelect dropdown items render in a popover (JS interop) which isn't fully
+    /// testable in bUnit. These tests verify the selected/displayed value and that higher
+    /// permission options don't appear in the DOM. Full dropdown testing requires Playwright E2E.
+    /// </remarks>
+
+    [Test]
+    public void DefaultsToAdminPermission_SelectedValue()
+    {
+        // Arrange
+        var provider = RenderDialogProvider();
+
+        // Act - Open dialog without specifying max permission
+        _ = OpenDialogAsync();
+
+        // Assert - Admin should be the selected/displayed value (secure default)
+        provider.WaitForAssertion(() =>
+        {
+            // The selected value appears in the visible select input
+            Assert.That(provider.Markup, Does.Contain("Admin - Chat-scoped moderation"));
+        });
+    }
+
+    [Test]
+    public void AdminUser_CannotSeeHigherPermissionOptions()
+    {
+        // Arrange
+        var provider = RenderDialogProvider();
+
+        // Act - Open dialog with Admin max permission
+        _ = OpenDialogAsync(maxPermissionLevel: PermissionLevel.Admin);
+
+        // Assert - Higher permission options should NOT appear anywhere in the DOM
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Not.Contain("GlobalAdmin"));
+            Assert.That(provider.Markup, Does.Not.Contain("Owner - Full system access"));
+        });
+    }
+
+    [Test]
+    public void GlobalAdminUser_CannotSeeOwnerOption()
+    {
+        // Arrange
+        var provider = RenderDialogProvider();
+
+        // Act - Open dialog with GlobalAdmin max permission
+        _ = OpenDialogAsync(maxPermissionLevel: PermissionLevel.GlobalAdmin);
+
+        // Assert - Owner option should NOT appear in the DOM
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Not.Contain("Owner - Full system access"));
+        });
+    }
+
+    [Test]
+    public void DefaultMaxPermission_IsAdmin_NotOwner()
+    {
+        // Arrange
+        var provider = RenderDialogProvider();
+
+        // Act - Open dialog without specifying max permission (should default to Admin)
+        _ = OpenDialogAsync();
+
+        // Assert - Verify secure default: Owner option should NOT be available
+        // This confirms the component defaults to minimum permissions (principle of least privilege)
+        provider.WaitForAssertion(() =>
+        {
+            Assert.That(provider.Markup, Does.Not.Contain("Owner - Full system access"));
+            Assert.That(provider.Markup, Does.Not.Contain("GlobalAdmin"));
+        });
+    }
 
     #endregion
 

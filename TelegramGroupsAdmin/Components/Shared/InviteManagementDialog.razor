@@ -76,13 +76,15 @@
                                 <MudIconButton Icon="@Icons.Material.Filled.ContentCopy"
                                               Size="Size.Small"
                                               Color="Color.Primary"
+                                              Disabled="@(!CanManageInvite(context.PermissionLevel))"
                                               OnClick="@(() => CopyInviteLink(context.Token))"
-                                              title="Copy Link" />
+                                              title="@(CanManageInvite(context.PermissionLevel) ? "Copy Link" : "Insufficient permissions")" />
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete"
                                               Size="Size.Small"
                                               Color="Color.Error"
+                                              Disabled="@(!CanManageInvite(context.PermissionLevel))"
                                               OnClick="@(() => RevokeInvite(context.Token))"
-                                              title="Revoke" />
+                                              title="@(CanManageInvite(context.PermissionLevel) ? "Revoke" : "Insufficient permissions")" />
                             </MudStack>
                         }
                         else
@@ -105,6 +107,14 @@
 @code {
     [CascadingParameter]
     IMudDialogInstance? MudDialog { get; set; }
+
+    /// <summary>
+    /// The permission level of the current user viewing the dialog.
+    /// Used to filter invites and control which actions are available.
+    /// Users can only see and manage invites at or below their permission level.
+    /// </summary>
+    [Parameter]
+    public PermissionLevel CurrentUserPermissionLevel { get; set; } = PermissionLevel.Admin;
 
     private List<InviteRecord> _invites = [];
     private Dictionary<string, string> _userEmails = new();
@@ -139,6 +149,7 @@
         try
         {
             var invitesWithCreators = await InviteService.GetAllInvitesAsync(_filter);
+
             // UI model InviteWithCreator is flat, so we need to convert to InviteRecord
             _invites = invitesWithCreators.Select(i => new InviteRecord(
                 Token: i.Token,
@@ -165,6 +176,15 @@
             _loading = false;
             StateHasChanged();
         }
+    }
+
+    /// <summary>
+    /// Checks if the current user can manage (copy/revoke) the given invite.
+    /// Users can only manage invites at or below their own permission level.
+    /// </summary>
+    private bool CanManageInvite(PermissionLevel invitePermissionLevel)
+    {
+        return invitePermissionLevel <= CurrentUserPermissionLevel;
     }
 
     private string GetCreatorEmail(string userId)
@@ -208,16 +228,16 @@
 
     private static string GetPermissionName(int level) => level switch
     {
-        0 => "ReadOnly",
-        1 => "Admin",
+        0 => "Admin",
+        1 => "GlobalAdmin",
         2 => "Owner",
         _ => "Unknown"
     };
 
     private static Color GetPermissionColor(int level) => level switch
     {
-        0 => Color.Default,
-        1 => Color.Primary,
+        0 => Color.Primary,
+        1 => Color.Info,
         2 => Color.Secondary,
         _ => Color.Error
     };

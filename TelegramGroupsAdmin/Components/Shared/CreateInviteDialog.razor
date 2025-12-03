@@ -1,3 +1,9 @@
+@* TODO: Playwright E2E tests needed for:
+   - Verifying dropdown shows correct options based on MaxPermissionLevel
+   - Testing option selection changes the selected value
+   - Testing form submission returns correct permission level
+   bUnit cannot fully test MudSelect dropdown items (rendered via JS popover)
+*@
 <MudDialog>
     <DialogContent>
         @if (string.IsNullOrEmpty(_inviteLink))
@@ -71,8 +77,12 @@
     [Parameter]
     public DateTimeOffset? ExpiresAt { get; set; }
 
+    /// <summary>
+    /// The maximum permission level that can be granted via this invite.
+    /// Defaults to Admin (lowest) for security - callers must explicitly set higher levels.
+    /// </summary>
     [Parameter]
-    public PermissionLevel MaxPermissionLevel { get; set; } = PermissionLevel.Owner; // Default to Owner if not specified
+    public PermissionLevel MaxPermissionLevel { get; set; } = PermissionLevel.Admin;
 
     private int _validDays = 7;
     private PermissionLevel _permissionLevel = PermissionLevel.Admin; // Default to Admin (chat-scoped)
