@@ -142,6 +142,17 @@ public class TestUserBuilder
     }
 
     /// <summary>
+    /// Configures user to require TOTP setup on first login.
+    /// Sets TotpEnabled=true but no secret, triggering /login/setup-2fa redirect.
+    /// </summary>
+    public TestUserBuilder RequiresTotpSetup()
+    {
+        _totpEnabled = true;
+        _totpSecret = null; // No secret = needs setup
+        return this;
+    }
+
+    /// <summary>
     /// Locks the user's account until the specified time.
     /// </summary>
     public TestUserBuilder LockedUntil(DateTimeOffset lockedUntil)
