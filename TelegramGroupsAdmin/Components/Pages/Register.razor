@@ -205,32 +205,19 @@
                 return;
             }
 
-            // Check if email verification is required
-            if (result.TryGetProperty("requiresEmailVerification", out var requiresVerification) && requiresVerification.GetBoolean())
-            {
-                _successMessage = result.TryGetProperty("message", out var msg)
-                    ? msg.GetString()
-                    : "Account created! Please check your email to verify your account.";
-                _registrationSuccess = true;
-                StateHasChanged();
-
-                // Wait longer to let user read the message
-                await Task.Delay(5000);
-
-                // Redirect to login page
-                Navigation.NavigateTo("/login", forceLoad: true);
-                return;
-            }
-
-            // Auto-login succeeded
+            // Registration successful - show message and redirect to login
+            // The login flow handles all verification: email, TOTP setup, TOTP verify
+            _successMessage = result.TryGetProperty("message", out var msg)
+                ? msg.GetString()
+                : "Account created successfully! Please log in.";
             _registrationSuccess = true;
             StateHasChanged();
 
-            // Wait a moment to show success message
+            // Wait for user to see the success message
             await Task.Delay(2000);
 
-            // Redirect to home page (already logged in)
-            Navigation.NavigateTo("/", forceLoad: true);
+            // Always redirect to login - no auto-login
+            Navigation.NavigateTo("/login", forceLoad: true);
         }
         catch (Exception ex)
         {
