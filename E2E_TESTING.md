@@ -71,9 +71,20 @@ TelegramGroupsAdmin.E2ETests/
 │   └── E2ETestBase.cs             # Base class for all E2E tests
 ├── Infrastructure/
 │   ├── TestWebApplicationFactory.cs  # Custom factory with Kestrel + test DB
-│   └── TestEmailService.cs           # Stub email service for tests
+│   ├── TestEmailService.cs           # Stub email service for tests
+│   ├── TestCredentials.cs            # Credential generation utilities
+│   └── TestUserBuilder.cs            # Fluent builder for test users
+├── PageObjects/
+│   ├── LoginPage.cs                  # Login page object (static SSR)
+│   ├── LoginVerifyPage.cs            # TOTP verification page object
+│   └── RegisterPage.cs               # Registration page object (interactive Blazor)
 └── Tests/
-    └── NavigationTests.cs            # Example tests
+    ├── NavigationTests.cs            # Navigation and redirect tests
+    └── Authentication/
+        ├── AuthSecurityTests.cs      # Security edge case tests
+        ├── LoginTests.cs             # Login flow tests
+        ├── RegistrationTests.cs      # Registration flow tests
+        └── TwoFactorTests.cs         # 2FA/TOTP tests
 ```
 
 ## Key Components
@@ -191,14 +202,18 @@ var emails = EmailService.GetEmailsTo("user@example.com");
 Assert.That(emails, Has.Count.EqualTo(1));
 ```
 
-### Telegram Bot Service
+### Background Services Philosophy
 
-All `IHostedService` registrations are removed, including:
-- `TelegramAdminBotService`
-- Quartz scheduler
-- Other background services
+Background services (Telegram bot, Quartz scheduler, etc.) are **not removed** during E2E tests. The test philosophy is:
 
-A stub `IMessageHistoryService` is provided to satisfy DI requirements.
+> Override ONLY what's necessary for testing. Let the real app run as-is.
+
+This means:
+- **Bot service**: Runs but stays inactive (no bot token configured in test DB)
+- **Quartz jobs**: Run normally but are harmless against isolated test database
+- **Other services**: Function as in production
+
+This approach catches integration issues that might be hidden by heavy mocking.
 
 ## Writing Tests
 
@@ -223,17 +238,34 @@ public class MyTests : E2ETestBase
 }
 ```
 
-### Creating Test Users (Future)
+### Creating Test Users
+
+Use `TestUserBuilder` to create users with specific states:
 
 ```csharp
-// TODO: Implement TestUserBuilder
+// Generate secure test credentials
+var email = TestCredentials.GenerateEmail("mytest");
 var password = TestCredentials.GeneratePassword();
+
+// Create a verified user with TOTP enabled
 var user = await new TestUserBuilder(Factory.Services)
-    .WithEmail("test@local")
+    .WithEmail(email)
     .WithPassword(password)
     .WithEmailVerified()
+    .WithTotpEnabled()  // Returns user with TotpSecret for test code generation
     .BuildAsync();
+
+// Generate valid TOTP code for login
+var totpCode = TotpService.GenerateCode(user.TotpSecret!);
 ```
+
+Available builder methods:
+- `.WithEmail(email)` - Set email address
+- `.WithPassword(password)` - Set password (hashed automatically)
+- `.WithEmailVerified()` - Mark email as verified
+- `.WithTotpEnabled()` - Enable 2FA (secret returned in `TestUser.TotpSecret`)
+- `.WithPermissionLevel(level)` - Set permission level (Admin, GlobalAdmin, Owner)
+- `.WithStatus(status)` - Set user status (Active, Disabled, etc.)
 
 ## References
 

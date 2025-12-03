@@ -1,5 +1,8 @@
+using System.Text.RegularExpressions;
+using Microsoft.Playwright;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Authentication;
 
@@ -25,26 +28,18 @@ public class AuthSecurityTests : E2ETestBase
     }
 
     /// <summary>
-    /// Helper to wait for URL to match login or register (first-run redirects to register)
+    /// Waits for and asserts the current URL is an auth page (login or register).
+    /// Uses Playwright's auto-retry for reliability.
     /// </summary>
-    private async Task WaitForAuthPageAsync()
+    private async Task AssertOnAuthPageAsync(string context, int timeoutMs = 10000)
     {
-        // Wait for page to stabilize after navigation
-        await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+        // Wait for network to stabilize (SignalR connection for Blazor Server)
+        await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Give Blazor a moment to handle client-side routing
-        await Task.Delay(500);
-    }
-
-    /// <summary>
-    /// Asserts the current URL is an auth page (login or register)
-    /// </summary>
-    private void AssertOnAuthPage(string context)
-    {
-        var url = Page.Url;
-        var isOnAuthPage = url.Contains("/login") || url.Contains("/register");
-        Assert.That(isOnAuthPage, Is.True,
-            $"{context} - Expected to be on /login or /register but was on: {url}");
+        // Use Playwright's auto-retry assertion for URL matching
+        await Expect(Page).ToHaveURLAsync(
+            new Regex(@".*/(?:login|register).*"),
+            new() { Timeout = timeoutMs });
     }
 
     [Test]
@@ -54,10 +49,9 @@ public class AuthSecurityTests : E2ETestBase
 
         // Act - try to access protected home page directly
         await Page.GotoAsync($"{BaseUrl}/");
-        await WaitForAuthPageAsync();
 
         // Assert - should redirect to login (or register if first-run)
-        AssertOnAuthPage("Protected pages should redirect unauthenticated users");
+        await AssertOnAuthPageAsync("Protected pages should redirect unauthenticated users");
     }
 
     [Test]
@@ -67,13 +61,13 @@ public class AuthSecurityTests : E2ETestBase
 
         // Act - try to access TOTP setup page directly without valid intermediate token
         await Page.GotoAsync($"{BaseUrl}/login/setup-2fa");
-        await WaitForAuthPageAsync();
 
         // Assert - should redirect to login or register (first-run goes to register)
-        // The key is that we should NOT be on /login/setup-2fa
+        await AssertOnAuthPageAsync("Should be redirected to auth page");
+
+        // Verify we're NOT on /login/setup-2fa (the redirect happened)
         Assert.That(Page.Url, Does.Not.Contain("/setup-2fa"),
             "TOTP setup page should redirect without valid intermediate token");
-        AssertOnAuthPage("Should be redirected to auth page");
     }
 
     [Test]
@@ -83,12 +77,13 @@ public class AuthSecurityTests : E2ETestBase
 
         // Act - try to access TOTP setup with fake credentials
         await Page.GotoAsync($"{BaseUrl}/login/setup-2fa?userId=fake-user-id&token=fake-token");
-        await WaitForAuthPageAsync();
 
         // Assert - should redirect to login or register (not stay on setup-2fa)
+        await AssertOnAuthPageAsync("Should be redirected to auth page");
+
+        // Verify we're NOT on setup-2fa (the redirect happened)
         Assert.That(Page.Url, Does.Not.Contain("/setup-2fa"),
             "TOTP setup page should reject invalid userId and token");
-        AssertOnAuthPage("Should be redirected to auth page");
     }
 
     [Test]
@@ -98,10 +93,11 @@ public class AuthSecurityTests : E2ETestBase
 
         // Act - try to access TOTP verify page directly (route is /login/verify)
         await Page.GotoAsync($"{BaseUrl}/login/verify");
-        await WaitForAuthPageAsync();
 
         // Assert - should redirect to login or register (not stay on verify page)
-        // Note: URL will contain /login but should NOT be the /login/verify path
+        await AssertOnAuthPageAsync("Should be redirected to auth page");
+
+        // Verify we're NOT on /login/verify (could be on /login or /register, but not /login/verify)
         var url = Page.Url;
         var isOnVerifyPage = url.EndsWith("/login/verify") || url.Contains("/login/verify?");
         Assert.That(isOnVerifyPage, Is.False,
@@ -131,12 +127,12 @@ public class AuthSecurityTests : E2ETestBase
 
         // Act - try to navigate to home page directly (bypassing TOTP)
         await Page.GotoAsync($"{BaseUrl}/");
-        await WaitForAuthPageAsync();
 
         // Assert - should redirect back to login (intermediate token doesn't grant access)
         // User exists so should go to /login not /register
-        Assert.That(Page.Url, Does.Contain("/login").And.Not.Contain("/setup-2fa"),
-            "Intermediate token should NOT grant access to protected pages - must complete TOTP setup");
+        await Expect(Page).ToHaveURLAsync(
+            new Regex(@".*/login(?!\/(setup-2fa|verify)).*"),
+            new() { Timeout = 10000 });
     }
 
     [Test]
@@ -156,12 +152,13 @@ public class AuthSecurityTests : E2ETestBase
 
         // Act - try to access settings page while in intermediate state
         await Page.GotoAsync($"{BaseUrl}/settings");
-        await WaitForAuthPageAsync();
 
         // Assert - should redirect to login (not stay on settings)
+        await Expect(Page).ToHaveURLAsync(
+            new Regex(@".*/login.*"),
+            new() { Timeout = 10000 });
+
         Assert.That(Page.Url, Does.Not.Contain("/settings"),
             "Settings page should not be accessible with only intermediate token");
-        Assert.That(Page.Url, Does.Contain("/login"),
-            "Should redirect to login page");
     }
 }

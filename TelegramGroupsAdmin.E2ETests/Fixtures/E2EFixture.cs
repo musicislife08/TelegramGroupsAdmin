@@ -27,6 +27,9 @@ public class E2EFixture
     [OneTimeSetUp]
     public async Task GlobalSetup()
     {
+        // Clear test artifacts from previous runs
+        ClearArtifactsDirectory();
+
         // Start PostgreSQL container
         _container = new PostgreSqlBuilder()
             .WithImage("postgres:17")
@@ -40,6 +43,19 @@ public class E2EFixture
         // Initialize Playwright
         _playwright = await Microsoft.Playwright.Playwright.CreateAsync();
         Console.WriteLine("Playwright initialized");
+    }
+
+    /// <summary>
+    /// Clears the test-artifacts directory at the start of each test run.
+    /// </summary>
+    private static void ClearArtifactsDirectory()
+    {
+        var artifactsDir = Path.Combine(TestContext.CurrentContext.WorkDirectory, "test-artifacts");
+        if (Directory.Exists(artifactsDir))
+        {
+            Directory.Delete(artifactsDir, recursive: true);
+            Console.WriteLine("Cleared test-artifacts directory");
+        }
     }
 
     [OneTimeTearDown]

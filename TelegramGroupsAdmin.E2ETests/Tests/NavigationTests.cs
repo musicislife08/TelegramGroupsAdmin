@@ -1,5 +1,7 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests;
 
@@ -20,30 +22,22 @@ public class NavigationTests : E2ETestBase
 
     /// <summary>
     /// Waits for page to stabilize after navigation/redirect.
-    /// Blazor Server apps may take a moment to complete client-side routing.
+    /// NetworkIdle ensures SignalR connection is established for Blazor Server.
     /// </summary>
     private async Task WaitForPageStableAsync()
     {
-        // Wait for network to be idle (all resources loaded)
         await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
-        // Small delay for Blazor to complete any client-side updates
-        await Task.Delay(300);
     }
 
     /// <summary>
-    /// Waits until the URL contains the expected path, with retry logic.
-    /// More reliable than WaitForURLAsync which waits for a navigation event.
+    /// Waits until the URL contains the expected path using Playwright's auto-retry.
+    /// Uses Expect() which automatically retries until timeout.
     /// </summary>
     private async Task WaitUntilUrlContainsAsync(string pathFragment, int timeoutMs = 10000)
     {
-        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-        while (DateTime.UtcNow < deadline)
-        {
-            if (Page.Url.Contains(pathFragment))
-                return;
-            await Task.Delay(100);
-        }
-        Assert.Fail($"Timeout waiting for URL to contain '{pathFragment}'. Current URL: {Page.Url}");
+        await Expect(Page).ToHaveURLAsync(
+            new Regex($".*{Regex.Escape(pathFragment)}.*"),
+            new() { Timeout = timeoutMs });
     }
 
     [Test]

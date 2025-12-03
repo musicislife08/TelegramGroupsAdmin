@@ -1,5 +1,7 @@
+using System.Text.RegularExpressions;
 using Microsoft.Playwright;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests;
 
@@ -71,10 +73,8 @@ public abstract class E2ETestBase
         var testStatus = TestContext.CurrentContext.Result.Outcome.Status;
         var isFailed = testStatus == NUnit.Framework.Interfaces.TestStatus.Failed;
 
-        // TODO: Change back to failure-only before merging PR
-        // Currently capturing all screenshots to verify CSS/JS loads correctly during development
-        // Original condition: isFailed
-        var shouldCaptureArtifacts = true;
+        // Only capture artifacts (screenshots, traces) when tests fail
+        var shouldCaptureArtifacts = isFailed;
 
         if (Page != null && shouldCaptureArtifacts)
         {
@@ -82,9 +82,6 @@ public abstract class E2ETestBase
             {
                 var artifactsDir = Path.Combine(TestContext.CurrentContext.WorkDirectory, "test-artifacts");
                 Directory.CreateDirectory(artifactsDir);
-
-                // Clean up old artifacts for this test (keeps only latest run)
-                CleanupOldArtifacts(artifactsDir, testName);
 
                 var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
 
@@ -129,29 +126,6 @@ public abstract class E2ETestBase
     }
 
     /// <summary>
-    /// Removes old artifacts for this test, keeping only the latest run.
-    /// Prevents the artifacts folder from growing unbounded during local development.
-    /// </summary>
-    private static void CleanupOldArtifacts(string artifactsDir, string testName)
-    {
-        try
-        {
-            var oldFiles = Directory.GetFiles(artifactsDir)
-                .Where(f => Path.GetFileName(f).StartsWith(testName + "_"))
-                .ToList();
-
-            foreach (var file in oldFiles)
-            {
-                File.Delete(file);
-            }
-        }
-        catch
-        {
-            // Ignore cleanup failures - not critical
-        }
-    }
-
-    /// <summary>
     /// Navigates to a path relative to the base URL.
     /// </summary>
     protected async Task NavigateToAsync(string path)
@@ -172,17 +146,16 @@ public abstract class E2ETestBase
     }
 
     /// <summary>
-    /// Asserts that the current URL matches the expected path.
+    /// Asserts that the current URL matches the expected path using Playwright's auto-retry.
     /// </summary>
-    protected async Task AssertUrlAsync(string expectedPath)
+    protected async Task AssertUrlAsync(string expectedPath, int timeoutMs = 10000)
     {
-        var currentUrl = Page.Url;
-        var expectedUrl = expectedPath.StartsWith("http")
-            ? expectedPath
-            : $"{BaseUrl}{(expectedPath.StartsWith("/") ? expectedPath : $"/{expectedPath}")}";
+        var path = expectedPath.StartsWith("/") ? expectedPath : $"/{expectedPath}";
 
-        // Allow for query strings
-        Assert.That(currentUrl, Does.StartWith(expectedUrl.Split('?')[0]),
-            $"Expected URL to start with '{expectedUrl}' but was '{currentUrl}'");
+        // Use Playwright's auto-retrying assertion
+        // Pattern matches the path, allowing for query strings
+        await Expect(Page).ToHaveURLAsync(
+            new Regex($".*{Regex.Escape(path)}(\\?.*)?$"),
+            new() { Timeout = timeoutMs });
     }
 }
