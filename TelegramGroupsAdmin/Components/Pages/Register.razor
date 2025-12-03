@@ -86,7 +86,9 @@
                       Class="mb-4"
                       InputType="InputType.Password"
                       Disabled="@(_isLoading || _registrationSuccess)"
-                      HelperText="Minimum 8 characters" />
+                      HelperText="Minimum 8 characters with uppercase, lowercase, and number"
+                      Validation="@(new Func<string, string?>(ValidatePassword))"
+                      Immediate="true" />
 
         <MudTextField T="string"
                       Label="Confirm Password"
@@ -94,7 +96,9 @@
                       Variant="Variant.Outlined"
                       Class="mb-6"
                       InputType="InputType.Password"
-                      Disabled="@(_isLoading || _registrationSuccess)" />
+                      Disabled="@(_isLoading || _registrationSuccess)"
+                      Validation="@(new Func<string, string?>(ValidateConfirmPassword))"
+                      Immediate="true" />
 
         <MudButton Variant="Variant.Filled"
                    Color="Color.Primary"
@@ -135,6 +139,37 @@
 
     [SupplyParameterFromQuery(Name = "invite")]
     private string? InviteQueryParam { get; set; }
+
+    private string? ValidatePassword(string password)
+    {
+        if (string.IsNullOrEmpty(password))
+            return "Password is required";
+
+        if (password.Length < 8)
+            return "Password must be at least 8 characters";
+
+        if (!password.Any(char.IsUpper))
+            return "Password must contain at least one uppercase letter";
+
+        if (!password.Any(char.IsLower))
+            return "Password must contain at least one lowercase letter";
+
+        if (!password.Any(char.IsDigit))
+            return "Password must contain at least one number";
+
+        return null;
+    }
+
+    private string? ValidateConfirmPassword(string confirmPassword)
+    {
+        if (string.IsNullOrEmpty(confirmPassword))
+            return "Please confirm your password";
+
+        if (confirmPassword != _password)
+            return "Passwords do not match";
+
+        return null;
+    }
 
     protected override async Task OnInitializedAsync()
     {
