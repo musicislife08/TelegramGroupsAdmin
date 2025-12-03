@@ -23,9 +23,9 @@ public abstract class DialogTestContext : BunitContext
         });
 
         JSInterop.Mode = JSRuntimeMode.Loose;
-        JSInterop.SetupVoid("mudPopover.initialize", _ => true);
-        JSInterop.SetupVoid("mudPopover.connect", _ => true);
-        JSInterop.SetupVoid("mudPopover.disconnect", _ => true);
+        JSInterop.SetupVoid("mudPopover.initialize", _ => true).SetVoidResult();
+        JSInterop.SetupVoid("mudPopover.connect", _ => true).SetVoidResult();
+        JSInterop.SetupVoid("mudPopover.disconnect", _ => true).SetVoidResult();
         JSInterop.Setup<int>("mudpopoverHelper.countProviders").SetResult(1);
     }
 
