@@ -1,5 +1,6 @@
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Authentication;
 
@@ -37,10 +38,8 @@ public class LoginTests : E2ETestBase
         // Assert - should redirect to home page after successful login
         await _loginPage.WaitForRedirectAsync();
 
-        // Verify we're on the home page (not login or error)
-        var currentUrl = Page.Url;
-        Assert.That(currentUrl, Does.Not.Contain("/login"),
-            "Should not remain on login page after successful login");
+        // Verify we're on the home page (not login or error) using Playwright's auto-retry assertion
+        await Expect(Page).Not.ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login"));
     }
 
     [Test]

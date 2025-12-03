@@ -61,18 +61,24 @@ public class LoginPage
 
     /// <summary>
     /// Waits for and returns the error message text.
+    /// Returns null if no error message appears within the timeout.
     /// </summary>
     public async Task<string?> GetErrorMessageAsync(int timeoutMs = 5000)
     {
+        var errorLocator = _page.Locator(ErrorAlert);
+
+        // Use WaitForAsync with visible state for proper waiting
+        // Timeout throws PlaywrightException which we catch and return null
         try
         {
-            await _page.WaitForSelectorAsync(ErrorAlert, new PageWaitForSelectorOptions
+            await errorLocator.WaitForAsync(new LocatorWaitForOptions
             {
+                State = WaitForSelectorState.Visible,
                 Timeout = timeoutMs
             });
-            return await _page.TextContentAsync(ErrorAlert);
+            return await errorLocator.TextContentAsync();
         }
-        catch (TimeoutException)
+        catch (PlaywrightException)
         {
             return null;
         }
@@ -80,18 +86,24 @@ public class LoginPage
 
     /// <summary>
     /// Waits for and returns the success message text.
+    /// Returns null if no success message appears within the timeout.
     /// </summary>
     public async Task<string?> GetSuccessMessageAsync(int timeoutMs = 5000)
     {
+        var successLocator = _page.Locator(SuccessAlert);
+
+        // Use WaitForAsync with visible state for proper waiting
+        // Timeout throws PlaywrightException which we catch and return null
         try
         {
-            await _page.WaitForSelectorAsync(SuccessAlert, new PageWaitForSelectorOptions
+            await successLocator.WaitForAsync(new LocatorWaitForOptions
             {
+                State = WaitForSelectorState.Visible,
                 Timeout = timeoutMs
             });
-            return await _page.TextContentAsync(SuccessAlert);
+            return await successLocator.TextContentAsync();
         }
-        catch (TimeoutException)
+        catch (PlaywrightException)
         {
             return null;
         }

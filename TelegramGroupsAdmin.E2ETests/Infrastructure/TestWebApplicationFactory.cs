@@ -4,8 +4,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
+using NSubstitute;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Services.Email;
 
@@ -28,10 +30,31 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private string? _tempDataPath;
     private bool _databaseCreated;
 
+    // NSubstitute mocks for external services
+    private readonly IOpenAITranslationService _mockOpenAITranslation;
+    private readonly IFileScannerService _mockFileScannerService;
+    private readonly ICloudScannerService _mockCloudScannerService;
+
     public TestWebApplicationFactory(string? databaseName = null)
     {
         _databaseName = databaseName ?? E2EFixture.GetUniqueDatabaseName();
         _testEmailService = new TestEmailService();
+
+        // Configure NSubstitute mocks with safe defaults
+        _mockOpenAITranslation = Substitute.For<IOpenAITranslationService>();
+        _mockOpenAITranslation.TranslateToEnglishAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((TranslationResult?)null); // Default: no translation needed
+
+        _mockFileScannerService = Substitute.For<IFileScannerService>();
+        _mockFileScannerService.ScannerName.Returns("MockClamAV");
+        _mockFileScannerService.ScanFileAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(new FileScanResult { Scanner = "MockClamAV", IsClean = true, ResultType = ScanResultType.Clean });
+
+        _mockCloudScannerService = Substitute.For<ICloudScannerService>();
+        _mockCloudScannerService.ServiceName.Returns("MockVirusTotal");
+        _mockCloudScannerService.IsEnabled.Returns(false); // Disabled by default (no API key in tests)
+        _mockCloudScannerService.IsQuotaAvailableAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
 
         // Configure to use Kestrel with dynamic port (port 0)
         // This MUST be called before StartServer() or accessing Services
@@ -42,6 +65,21 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     /// Gets the test email service for verifying sent emails in tests.
     /// </summary>
     public TestEmailService EmailService => _testEmailService;
+
+    /// <summary>
+    /// Gets the mock OpenAI translation service. Configure in tests to return specific translations.
+    /// </summary>
+    public IOpenAITranslationService MockOpenAITranslation => _mockOpenAITranslation;
+
+    /// <summary>
+    /// Gets the mock file scanner service (ClamAV). Configure in tests for specific scan results.
+    /// </summary>
+    public IFileScannerService MockFileScanner => _mockFileScannerService;
+
+    /// <summary>
+    /// Gets the mock cloud scanner service (VirusTotal). Configure in tests for specific scan results.
+    /// </summary>
+    public ICloudScannerService MockCloudScanner => _mockCloudScannerService;
 
     /// <summary>
     /// Gets the connection string for this test's isolated database.
@@ -119,6 +157,19 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<IEmailService>();
             services.AddSingleton(_testEmailService);
             services.AddScoped<IEmailService>(sp => sp.GetRequiredService<TestEmailService>());
+
+            // Replace external services with NSubstitute mocks
+            // OpenAI translation service
+            services.RemoveAll<IOpenAITranslationService>();
+            services.AddSingleton(_mockOpenAITranslation);
+
+            // File scanner service (ClamAV)
+            services.RemoveAll<IFileScannerService>();
+            services.AddSingleton(_mockFileScannerService);
+
+            // Cloud scanner service (VirusTotal)
+            services.RemoveAll<ICloudScannerService>();
+            services.AddSingleton(_mockCloudScannerService);
         });
     }
 

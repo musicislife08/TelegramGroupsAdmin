@@ -60,23 +60,24 @@ public class RegisterPage
     }
 
     /// <summary>
-    /// Fills the password field (first password input on page).
+    /// Fills the password field identified by its label.
     /// </summary>
     public async Task FillPasswordAsync(string password)
     {
-        // First password input is the Password field
-        var passwordInput = _page.Locator("input.mud-input-slot[type='password']").First;
+        // Find password input by its exact label text within the containing control
+        // Using :has() with exact text match to distinguish from "Confirm Password"
+        var passwordInput = _page.Locator(".mud-input-control:has(label.mud-input-label:text-is('Password')) input.mud-input-slot");
         await passwordInput.ClickAsync();
         await passwordInput.FillAsync(password);
     }
 
     /// <summary>
-    /// Fills the confirm password field (second password input on page).
+    /// Fills the confirm password field identified by its label.
     /// </summary>
     public async Task FillConfirmPasswordAsync(string confirmPassword)
     {
-        // Second password input is Confirm Password
-        var confirmInput = _page.Locator("input.mud-input-slot[type='password']").Nth(1);
+        // Find confirm password input by its label text
+        var confirmInput = _page.Locator(".mud-input-control:has(label.mud-input-label:text-is('Confirm Password')) input.mud-input-slot");
         await confirmInput.ClickAsync();
         await confirmInput.FillAsync(confirmPassword);
     }
@@ -114,18 +115,22 @@ public class RegisterPage
 
     /// <summary>
     /// Waits for and returns the error message text.
+    /// Returns null if no error message appears within the timeout.
     /// </summary>
     public async Task<string?> GetErrorMessageAsync(int timeoutMs = 5000)
     {
+        var errorLocator = _page.Locator(ErrorAlert);
+
         try
         {
-            await _page.WaitForSelectorAsync(ErrorAlert, new PageWaitForSelectorOptions
+            await errorLocator.WaitForAsync(new LocatorWaitForOptions
             {
+                State = WaitForSelectorState.Visible,
                 Timeout = timeoutMs
             });
-            return await _page.TextContentAsync(ErrorAlert);
+            return await errorLocator.TextContentAsync();
         }
-        catch (TimeoutException)
+        catch (PlaywrightException)
         {
             return null;
         }
@@ -133,18 +138,22 @@ public class RegisterPage
 
     /// <summary>
     /// Waits for and returns the success message text.
+    /// Returns null if no success message appears within the timeout.
     /// </summary>
     public async Task<string?> GetSuccessMessageAsync(int timeoutMs = 5000)
     {
+        var successLocator = _page.Locator(SuccessAlert);
+
         try
         {
-            await _page.WaitForSelectorAsync(SuccessAlert, new PageWaitForSelectorOptions
+            await successLocator.WaitForAsync(new LocatorWaitForOptions
             {
+                State = WaitForSelectorState.Visible,
                 Timeout = timeoutMs
             });
-            return await _page.TextContentAsync(SuccessAlert);
+            return await successLocator.TextContentAsync();
         }
-        catch (TimeoutException)
+        catch (PlaywrightException)
         {
             return null;
         }

@@ -1,6 +1,7 @@
-using OtpNet;
+using TelegramGroupsAdmin.E2ETests.Helpers;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.Tests.Authentication;
 
@@ -39,8 +40,7 @@ public class TwoFactorTests : E2ETestBase
 
         // Assert - should redirect to TOTP verification page
         await _verifyPage.WaitForPageAsync();
-        Assert.That(Page.Url, Does.Contain("/login/verify"),
-            "Should redirect to 2FA verification page after password login");
+        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login/verify"));
     }
 
     [Test]
@@ -62,13 +62,12 @@ public class TwoFactorTests : E2ETestBase
         await _verifyPage.WaitForPageAsync();
 
         // Generate valid TOTP code using the same secret
-        var totpCode = GenerateTotpCode(user.TotpSecret!);
+        var totpCode = TotpHelper.GenerateCode(user.TotpSecret!);
         await _verifyPage.VerifyAsync(totpCode);
 
         // Assert - should redirect to home after successful 2FA
         await _verifyPage.WaitForRedirectAsync();
-        Assert.That(Page.Url, Does.Not.Contain("/login"),
-            "Should not remain on login pages after successful 2FA");
+        await Expect(Page).Not.ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login"));
     }
 
     [Test]
@@ -95,8 +94,7 @@ public class TwoFactorTests : E2ETestBase
         // Assert - should show error and stay on verify page
         Assert.That(await _verifyPage.HasErrorMessageAsync(), Is.True,
             "Should display error for invalid TOTP code");
-        Assert.That(Page.Url, Does.Contain("/login/verify"),
-            "Should remain on verification page after invalid code");
+        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login/verify"));
     }
 
     [Test]
@@ -117,20 +115,7 @@ public class TwoFactorTests : E2ETestBase
 
         // Assert - should go directly to home (no 2FA prompt)
         await _loginPage.WaitForRedirectAsync();
-        Assert.That(Page.Url, Does.Not.Contain("/login/verify"),
-            "Users without TOTP should skip verification page");
-        Assert.That(Page.Url, Does.Not.Contain("/login"),
-            "Should redirect to home after login");
-    }
-
-    /// <summary>
-    /// Generates a valid TOTP code for the given Base32-encoded secret.
-    /// Uses Otp.NET library with standard settings (6 digits, 30-second window).
-    /// </summary>
-    private static string GenerateTotpCode(string base32Secret)
-    {
-        var secretBytes = Base32Encoding.ToBytes(base32Secret);
-        var totp = new Totp(secretBytes);
-        return totp.ComputeTotp();
+        await Expect(Page).Not.ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login/verify"));
+        await Expect(Page).Not.ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/login"));
     }
 }
