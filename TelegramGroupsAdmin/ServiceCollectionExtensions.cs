@@ -107,6 +107,9 @@ public static class ServiceCollectionExtensions
             services.AddCascadingAuthenticationState();
             services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
 
+            // Auth cookie service for programmatic cookie generation (used by app and tests)
+            services.AddScoped<TelegramGroupsAdmin.Services.Auth.IAuthCookieService, TelegramGroupsAdmin.Services.Auth.AuthCookieService>();
+
             return services;
         }
 

@@ -1,13 +1,17 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Playwright;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.E2ETests.Helpers;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
+using TelegramGroupsAdmin.Services.Auth;
 
 namespace TelegramGroupsAdmin.E2ETests;
 
 /// <summary>
 /// Base class for E2E tests that require an authenticated user.
-/// Provides convenient login helpers for common authentication scenarios.
+/// Provides convenient login helpers using direct cookie injection for speed.
+/// Falls back to UI login when TOTP verification is needed.
 /// </summary>
 /// <remarks>
 /// Example usage:
@@ -60,6 +64,7 @@ public abstract class AuthenticatedTestBase : E2ETestBase
 
     /// <summary>
     /// Creates a test user with the specified permission level and logs in.
+    /// Uses direct cookie injection for speed (skips UI login flow).
     /// </summary>
     /// <param name="permissionLevel">The permission level for the user</param>
     /// <param name="enableTotp">Whether to enable TOTP (2FA) for the user. Default is false for convenience.</param>
@@ -78,17 +83,56 @@ public abstract class AuthenticatedTestBase : E2ETestBase
         }
 
         var user = await builder.BuildAsync();
-        await LoginAsAsync(user, enableTotp);
+        await LoginAsAsync(user, handleTotp: enableTotp);
         return user;
     }
 
     /// <summary>
-    /// Logs in as the specified test user.
-    /// Handles TOTP verification automatically if the user has TOTP enabled.
+    /// Logs in as the specified test user using direct cookie injection.
+    /// This bypasses the UI login flow for speed. Use LoginViaUiAsync() when
+    /// you specifically need to test the login UI itself.
     /// </summary>
     /// <param name="user">The test user to log in as</param>
-    /// <param name="handleTotp">Whether to automatically handle TOTP verification. Default is true.</param>
+    /// <param name="handleTotp">Ignored for cookie-based login (TOTP already verified in user setup)</param>
     protected async Task LoginAsAsync(TestUser user, bool handleTotp = true)
+    {
+        // Use the same IAuthCookieService the app uses to generate cookies
+        using var scope = Factory.Services.CreateScope();
+        var authCookieService = scope.ServiceProvider.GetRequiredService<IAuthCookieService>();
+
+        // Generate the encrypted cookie value
+        var cookieValue = authCookieService.GenerateCookieValue(
+            user.Id,
+            user.Email,
+            user.PermissionLevel);
+
+        // Extract host and port from the server address
+        var baseUri = new Uri(Factory.ServerAddress);
+
+        // Inject the authentication cookie into the browser context
+        await Context.AddCookiesAsync(new[]
+        {
+            new Cookie
+            {
+                Name = authCookieService.CookieName,
+                Value = cookieValue,
+                Domain = baseUri.Host,
+                Path = "/",
+                HttpOnly = true,
+                Secure = false, // Tests run over HTTP
+                SameSite = SameSiteAttribute.Lax,
+                Expires = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds()
+            }
+        });
+
+        CurrentUser = user;
+    }
+
+    /// <summary>
+    /// Logs in via the UI flow. Use this when testing the login flow itself,
+    /// not when you just need an authenticated session.
+    /// </summary>
+    protected async Task LoginViaUiAsync(TestUser user, bool handleTotp = true)
     {
         var loginPage = new LoginPage(Page);
         await loginPage.NavigateAsync();

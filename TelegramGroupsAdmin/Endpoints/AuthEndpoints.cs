@@ -1,8 +1,7 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
-using TelegramGroupsAdmin.Auth;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Auth;
 
@@ -17,6 +16,7 @@ public static class AuthEndpoints
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
             [FromServices] IRateLimitService rateLimitService,
+            [FromServices] IAuthCookieService authCookieService,
             HttpContext httpContext) =>
         {
             // Rate limiting (SECURITY-5)
@@ -70,7 +70,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication (TOTP disabled by owner)
-            await SignInUserAsync(httpContext, result.UserId!, result.Email!, result.PermissionLevel!.Value);
+            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -137,6 +137,7 @@ public static class AuthEndpoints
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
             [FromServices] IRateLimitService rateLimitService,
+            [FromServices] IAuthCookieService authCookieService,
             HttpContext httpContext) =>
         {
             // SECURITY: Validate intermediate auth token to ensure password was verified first
@@ -167,7 +168,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            await SignInUserAsync(httpContext, result.UserId!, result.Email!, result.PermissionLevel!.Value);
+            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -185,6 +186,7 @@ public static class AuthEndpoints
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
             [FromServices] IRateLimitService rateLimitService,
+            [FromServices] IAuthCookieService authCookieService,
             HttpContext httpContext) =>
         {
             // SECURITY: Validate intermediate auth token to ensure password was verified first
@@ -215,7 +217,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            await SignInUserAsync(httpContext, result.UserId!, result.Email!, result.PermissionLevel!.Value);
+            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -229,38 +231,5 @@ public static class AuthEndpoints
         }).AllowAnonymous();
 
         return endpoints;
-    }
-
-    private static string GetRoleName(int permissionLevel) => permissionLevel switch
-    {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
-        _ => "Admin" // Default to lowest permission level
-    };
-
-    private static async Task SignInUserAsync(HttpContext httpContext, string userId, string email, int permissionLevel)
-    {
-        Claim[] claims =
-        [
-            new(ClaimTypes.NameIdentifier, userId),
-            new(ClaimTypes.Email, email),
-            new(ClaimTypes.Role, GetRoleName(permissionLevel)),
-            new(CustomClaimTypes.PermissionLevel, permissionLevel.ToString())
-        ];
-
-        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-        var authProperties = new AuthenticationProperties
-        {
-            IsPersistent = true,
-            ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-        };
-
-        await httpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
-            claimsPrincipal,
-            authProperties);
     }
 }

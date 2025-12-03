@@ -298,4 +298,5 @@ public record TestUser(
 {
     public string Id => Record.Id;
     public string Email => Record.Email;
+    public TelegramGroupsAdmin.Core.Models.PermissionLevel PermissionLevel => Record.PermissionLevel;
 }
