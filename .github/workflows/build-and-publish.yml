@@ -36,8 +36,9 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  build-and-test:
-    name: Build and Test
+  # Build job - compiles once and validates the build
+  build:
+    name: Build
     runs-on: ubuntu-latest
 
     # Only run on pull_request events (during PR review), skip on push events (after merge)
@@ -77,14 +78,87 @@ jobs:
           echo "NuGetVersion: ${NUGET_VERSION}"
           echo "### Version: ${SEMVER}" >> $GITHUB_STEP_SUMMARY
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
       - name: Restore dependencies
         run: dotnet restore
 
       - name: Build
         run: dotnet build --no-restore --configuration Release
 
-      - name: Run all tests
-        run: dotnet test --no-build --configuration Release --verbosity normal
+  # Parallel test jobs - each test project runs independently
+  test:
+    name: Test (${{ matrix.name }})
+    needs: build
+    runs-on: ubuntu-latest
+
+    # Continue running other tests even if one fails
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Unit
+            project: TelegramGroupsAdmin.Tests
+            # Migration tests - uses Testcontainers for PostgreSQL
+          - name: Component
+            project: TelegramGroupsAdmin.ComponentTests
+            # bUnit tests - no external dependencies
+          - name: E2E
+            project: TelegramGroupsAdmin.E2ETests
+            playwright: true
+            # Playwright tests - needs browser install + Testcontainers
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Install Playwright browsers
+        if: matrix.playwright
+        working-directory: ${{ matrix.project }}
+        run: |
+          # Install PowerShell (required by Playwright install script)
+          dotnet tool install --global PowerShell
+          # Install Chromium browser only (faster than all browsers)
+          pwsh bin/Release/net10.0/playwright.ps1 install chromium
+
+      - name: Run tests
+        env:
+          TEST_PROJECT: ${{ matrix.project }}
+          TEST_NAME: ${{ matrix.name }}
+        run: dotnet test "${TEST_PROJECT}" --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=${TEST_NAME}-results.trx"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.name }}
+          path: ${{ matrix.project }}/TestResults/*.trx
+          retention-days: 7
 
   # Shared versioning job for Docker builds (runs before parallel platform builds)
   docker-version:
