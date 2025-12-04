@@ -152,7 +152,7 @@ public class TelegramMessagePreviewTests : MudBlazorTestContext
         // Arrange & Act
         var cut = Render<TelegramMessagePreview>(p => p
             .Add(x => x.PreviewText, "Hello")
-            .Add(x => x.Buttons, new[] { new[] { "Accept", "Decline" } }));
+            .Add(x => x.Buttons, [["Accept", "Decline"]]));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("telegram-inline-keyboard"));
@@ -166,7 +166,7 @@ public class TelegramMessagePreviewTests : MudBlazorTestContext
         // Arrange & Act
         var cut = Render<TelegramMessagePreview>(p => p
             .Add(x => x.PreviewText, "Hello")
-            .Add(x => x.Buttons, new[] { new[] { "Button1" } }));
+            .Add(x => x.Buttons, [["Button1"]]));
 
         // Assert
         var row = cut.Find(".telegram-button-row");
@@ -179,11 +179,10 @@ public class TelegramMessagePreviewTests : MudBlazorTestContext
         // Arrange & Act
         var cut = Render<TelegramMessagePreview>(p => p
             .Add(x => x.PreviewText, "Hello")
-            .Add(x => x.Buttons, new[]
-            {
-                new[] { "Row1-Btn1", "Row1-Btn2" },
-                new[] { "Row2-Btn1" }
-            }));
+            .Add(x => x.Buttons, [
+                ["Row1-Btn1", "Row1-Btn2"],
+                ["Row2-Btn1"]
+            ]));
 
         // Assert
         var rows = cut.FindAll(".telegram-button-row");
@@ -211,7 +210,7 @@ public class TelegramMessagePreviewTests : MudBlazorTestContext
         // Arrange & Act
         var cut = Render<TelegramMessagePreview>(p => p
             .Add(x => x.PreviewText, "Hello")
-            .Add(x => x.Buttons, Array.Empty<string[]>()));
+            .Add(x => x.Buttons, []));
 
         // Assert - Use FindAll to check element doesn't exist (CSS contains the class name)
         var keyboards = cut.FindAll(".telegram-inline-keyboard");
@@ -229,7 +228,7 @@ public class TelegramMessagePreviewTests : MudBlazorTestContext
         var cut = Render<TelegramMessagePreview>(p => p
             .Add(x => x.PreviewText, "Hello {name}, welcome to {invalid}")
             .Add(x => x.ShowWarning, true)
-            .Add(x => x.ValidVariables, new[] { "name" }));
+            .Add(x => x.ValidVariables, ["name"]));
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("telegram-preview-warning"));
@@ -243,7 +242,7 @@ public class TelegramMessagePreviewTests : MudBlazorTestContext
         var cut = Render<TelegramMessagePreview>(p => p
             .Add(x => x.PreviewText, "Hello {name}, welcome to {group}")
             .Add(x => x.ShowWarning, true)
-            .Add(x => x.ValidVariables, new[] { "name", "group" }));
+            .Add(x => x.ValidVariables, ["name", "group"]));
 
         // Assert - Use FindAll to check element doesn't exist (CSS contains the class name)
         var warnings = cut.FindAll(".telegram-preview-warning");
@@ -257,7 +256,7 @@ public class TelegramMessagePreviewTests : MudBlazorTestContext
         var cut = Render<TelegramMessagePreview>(p => p
             .Add(x => x.PreviewText, "Hello {invalid}")
             .Add(x => x.ShowWarning, false)
-            .Add(x => x.ValidVariables, new[] { "name" }));
+            .Add(x => x.ValidVariables, ["name"]));
 
         // Assert - Use FindAll to check element doesn't exist (CSS contains the class name)
         var warnings = cut.FindAll(".telegram-preview-warning");
@@ -271,7 +270,7 @@ public class TelegramMessagePreviewTests : MudBlazorTestContext
         var cut = Render<TelegramMessagePreview>(p => p
             .Add(x => x.PreviewText, "Hello world, no variables here")
             .Add(x => x.ShowWarning, true)
-            .Add(x => x.ValidVariables, new[] { "name" }));
+            .Add(x => x.ValidVariables, ["name"]));
 
         // Assert - Use FindAll to check element doesn't exist (CSS contains the class name)
         var warnings = cut.FindAll(".telegram-preview-warning");

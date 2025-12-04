@@ -110,8 +110,7 @@ public abstract class AuthenticatedTestBase : E2ETestBase
         var baseUri = new Uri(Factory.ServerAddress);
 
         // Inject the authentication cookie into the browser context
-        await Context.AddCookiesAsync(new[]
-        {
+        await Context.AddCookiesAsync([
             new Cookie
             {
                 Name = authCookieService.CookieName,
@@ -123,7 +122,7 @@ public abstract class AuthenticatedTestBase : E2ETestBase
                 SameSite = SameSiteAttribute.Lax,
                 Expires = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds()
             }
-        });
+        ]);
 
         CurrentUser = user;
     }

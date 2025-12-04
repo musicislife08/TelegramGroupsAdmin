@@ -16,7 +16,7 @@ public class TestEmailService : IEmailService
 
     public Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, CancellationToken ct = default)
     {
-        SentEmails.Add(new SentEmail(new[] { to }, subject, body, isHtml));
+        SentEmails.Add(new SentEmail([to], subject, body, isHtml));
         return Task.CompletedTask;
     }
 
@@ -31,7 +31,7 @@ public class TestEmailService : IEmailService
         // Store template info as subject for easy test verification
         var subject = $"[Template:{template}]";
         var body = string.Join(", ", parameters.Select(p => $"{p.Key}={p.Value}"));
-        SentEmails.Add(new SentEmail(new[] { to }, subject, body, true, template, parameters));
+        SentEmails.Add(new SentEmail([to], subject, body, true, template, parameters));
         return Task.CompletedTask;
     }
 
