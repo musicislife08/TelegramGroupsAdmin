@@ -32,7 +32,7 @@ public class TelegramConfigLoader
     /// chats dynamically when added to groups. Never add ChatId to this method's return value
     /// or require it in configuration validation.
     /// </remarks>
-    public async Task<string> LoadConfigAsync()
+    public virtual async Task<string> LoadConfigAsync()
     {
         // Create scope to resolve scoped ConfigService
         using var scope = _scopeFactory.CreateScope();

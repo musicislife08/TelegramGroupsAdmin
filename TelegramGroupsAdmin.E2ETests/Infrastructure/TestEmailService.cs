@@ -1,0 +1,67 @@
+using System.Collections.Concurrent;
+using TelegramGroupsAdmin.Services.Email;
+
+namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
+
+/// <summary>
+/// Stub email service that captures sent emails without actually sending them.
+/// Used in E2E tests to prevent real email delivery and allow verification of email content.
+/// </summary>
+public class TestEmailService : IEmailService
+{
+    /// <summary>
+    /// Thread-safe collection of all emails "sent" during tests.
+    /// </summary>
+    public ConcurrentBag<SentEmail> SentEmails { get; } = new();
+
+    public Task SendEmailAsync(string to, string subject, string body, bool isHtml = true, CancellationToken ct = default)
+    {
+        SentEmails.Add(new SentEmail([to], subject, body, isHtml));
+        return Task.CompletedTask;
+    }
+
+    public Task SendEmailAsync(IEnumerable<string> to, string subject, string body, bool isHtml = true, CancellationToken ct = default)
+    {
+        SentEmails.Add(new SentEmail(to.ToArray(), subject, body, isHtml));
+        return Task.CompletedTask;
+    }
+
+    public Task SendTemplatedEmailAsync(string to, EmailTemplate template, Dictionary<string, string> parameters, CancellationToken ct = default)
+    {
+        // Store template info as subject for easy test verification
+        var subject = $"[Template:{template}]";
+        var body = string.Join(", ", parameters.Select(p => $"{p.Key}={p.Value}"));
+        SentEmails.Add(new SentEmail([to], subject, body, true, template, parameters));
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult(true);
+
+    /// <summary>
+    /// Clears all captured emails. Call at start of each test for isolation.
+    /// </summary>
+    public void Clear() => SentEmails.Clear();
+
+    /// <summary>
+    /// Gets emails sent to a specific address.
+    /// </summary>
+    public IEnumerable<SentEmail> GetEmailsTo(string email) =>
+        SentEmails.Where(e => e.To.Contains(email, StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Gets emails with a specific template type.
+    /// </summary>
+    public IEnumerable<SentEmail> GetEmailsByTemplate(EmailTemplate template) =>
+        SentEmails.Where(e => e.Template == template);
+}
+
+/// <summary>
+/// Represents an email that was "sent" during testing.
+/// </summary>
+public record SentEmail(
+    string[] To,
+    string Subject,
+    string Body,
+    bool IsHtml,
+    EmailTemplate? Template = null,
+    Dictionary<string, string>? Parameters = null);

@@ -18,6 +18,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.Tests",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.BackgroundJobs", "TelegramGroupsAdmin.BackgroundJobs\TelegramGroupsAdmin.BackgroundJobs.csproj", "{3B8DD04E-CA1F-4CCC-B0A9-53A9F7C6F531}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.E2ETests", "TelegramGroupsAdmin.E2ETests\TelegramGroupsAdmin.E2ETests.csproj", "{FB768838-DFD5-4EDD-85FB-A818878D9C40}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TelegramGroupsAdmin.ComponentTests", "TelegramGroupsAdmin.ComponentTests\TelegramGroupsAdmin.ComponentTests.csproj", "{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -136,6 +140,30 @@ Global
 		{3B8DD04E-CA1F-4CCC-B0A9-53A9F7C6F531}.Release|x64.Build.0 = Release|Any CPU
 		{3B8DD04E-CA1F-4CCC-B0A9-53A9F7C6F531}.Release|x86.ActiveCfg = Release|Any CPU
 		{3B8DD04E-CA1F-4CCC-B0A9-53A9F7C6F531}.Release|x86.Build.0 = Release|Any CPU
+		{FB768838-DFD5-4EDD-85FB-A818878D9C40}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB768838-DFD5-4EDD-85FB-A818878D9C40}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB768838-DFD5-4EDD-85FB-A818878D9C40}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FB768838-DFD5-4EDD-85FB-A818878D9C40}.Debug|x64.Build.0 = Debug|Any CPU
+		{FB768838-DFD5-4EDD-85FB-A818878D9C40}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{FB768838-DFD5-4EDD-85FB-A818878D9C40}.Debug|x86.Build.0 = Debug|Any CPU
+		{FB768838-DFD5-4EDD-85FB-A818878D9C40}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB768838-DFD5-4EDD-85FB-A818878D9C40}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB768838-DFD5-4EDD-85FB-A818878D9C40}.Release|x64.ActiveCfg = Release|Any CPU
+		{FB768838-DFD5-4EDD-85FB-A818878D9C40}.Release|x64.Build.0 = Release|Any CPU
+		{FB768838-DFD5-4EDD-85FB-A818878D9C40}.Release|x86.ActiveCfg = Release|Any CPU
+		{FB768838-DFD5-4EDD-85FB-A818878D9C40}.Release|x86.Build.0 = Release|Any CPU
+		{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}.Debug|x64.Build.0 = Debug|Any CPU
+		{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}.Debug|x86.Build.0 = Debug|Any CPU
+		{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}.Release|x64.ActiveCfg = Release|Any CPU
+		{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}.Release|x64.Build.0 = Release|Any CPU
+		{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}.Release|x86.ActiveCfg = Release|Any CPU
+		{570DFFFA-B78D-4ED1-9E19-D1DAD8DE8FB1}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

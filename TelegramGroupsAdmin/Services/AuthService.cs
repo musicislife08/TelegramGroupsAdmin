@@ -266,7 +266,7 @@ public class AuthService(
             InvitedBy: null,
             IsActive: true,
             TotpSecret: null,
-            TotpEnabled: false,
+            TotpEnabled: true, // All users must set up 2FA by default (owners can disable if needed)
             TotpSetupStartedAt: null,
             CreatedAt: DateTimeOffset.UtcNow,
             LastLoginAt: null,

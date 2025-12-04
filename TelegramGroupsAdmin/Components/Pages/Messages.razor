@@ -37,8 +37,8 @@
             <input type="text"
                    class="sidebar-search"
                    placeholder="Search chats..."
-                   @bind="_chatSearchText"
-                   @bind:event="oninput" />
+                   value="@_chatSearchText"
+                   @oninput="OnChatSearchChanged" />
         </div>
 
         <ChatList Chats="_filteredChats"
@@ -551,6 +551,12 @@
         {
             Logger.LogError(ex, "Failed to load managed chats");
         }
+    }
+
+    private void OnChatSearchChanged(ChangeEventArgs e)
+    {
+        _chatSearchText = e.Value?.ToString() ?? "";
+        ApplyChatFilter();
     }
 
     private void ApplyChatFilter()
