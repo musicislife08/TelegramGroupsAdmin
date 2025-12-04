@@ -195,7 +195,8 @@ public class ImpersonationAlertCardTests : MudBlazorTestContext
 
         // Assert
         Assert.That(cut.Markup, Does.Contain("Photo Match"));
-        Assert.That(cut.Markup, Does.Contain("87%")); // PhotoSimilarityScore formatted as percentage
+        // PhotoSimilarityScore formatted as percentage (locale-agnostic: may be "87%" or "87 %")
+        Assert.That(cut.Markup, Does.Match(@"87\s?%"));
     }
 
     [Test]
