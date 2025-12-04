@@ -75,7 +75,7 @@ public class AuditLogRepository : IAuditLogRepository
 
         var entities = await context.AuditLogs
             .AsNoTracking()
-            .Where(al => al.TargetUserId == userId)
+            .Where(al => al.TargetWebUserId == userId)
             .OrderByDescending(al => al.Timestamp)
             .Take(limit)
             .ToListAsync(ct);
@@ -89,7 +89,7 @@ public class AuditLogRepository : IAuditLogRepository
 
         var entities = await context.AuditLogs
             .AsNoTracking()
-            .Where(al => al.ActorUserId == actorUserId)
+            .Where(al => al.ActorWebUserId == actorUserId)
             .OrderByDescending(al => al.Timestamp)
             .Take(limit)
             .ToListAsync(ct);
@@ -133,17 +133,19 @@ public class AuditLogRepository : IAuditLogRepository
         {
             if (actorUserIdFilter == "SYSTEM")
             {
-                query = query.Where(al => al.ActorUserId == null);
+                // SYSTEM means any system actor (ActorSystemIdentifier is set)
+                query = query.Where(al => al.ActorSystemIdentifier != null);
             }
             else
             {
-                query = query.Where(al => al.ActorUserId == actorUserIdFilter);
+                // Filter by web user ID
+                query = query.Where(al => al.ActorWebUserId == actorUserIdFilter);
             }
         }
 
         if (!string.IsNullOrEmpty(targetUserIdFilter))
         {
-            query = query.Where(al => al.TargetUserId == targetUserIdFilter);
+            query = query.Where(al => al.TargetWebUserId == targetUserIdFilter);
         }
 
         // Get total count for pagination

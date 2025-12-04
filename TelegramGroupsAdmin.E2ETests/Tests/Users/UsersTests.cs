@@ -65,24 +65,23 @@ public class UsersTests : AuthenticatedTestBase
     }
 
     [Test]
-    public async Task Users_DeniesAccess_WhenAdmin()
+    public async Task Users_LoadsSuccessfully_WhenAdmin()
     {
-        // Arrange - login as Admin (lowest role, not allowed on Users page)
+        // Arrange - login as Admin (users page is now accessible to Admin)
+        // Note: Admin users will only see users from their assigned chats
         await LoginAsAdminAsync();
 
         // Act
-        await Page.GotoAsync("/users");
-        await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+        await _usersPage.NavigateAsync();
+        await _usersPage.WaitForLoadAsync();
 
-        // Assert - Admin should be redirected or see access denied
-        // The page requires GlobalAdmin or Owner role
-        var isOnUsersPage = Page.Url.Contains("/users");
-        var hasAccessDenied = await Page.Locator("text=Access Denied").Or(
-            Page.Locator("text=not authorized")).IsVisibleAsync();
+        // Assert - page title is visible (Admin can access)
+        Assert.That(await _usersPage.IsPageTitleVisibleAsync(), Is.True,
+            "Users page title should be visible for Admin");
 
-        // Either redirected away or shown access denied message
-        Assert.That(!isOnUsersPage || hasAccessDenied, Is.True,
-            "Admin user should not be able to access Users page");
+        var pageTitle = await _usersPage.GetPageTitleAsync();
+        Assert.That(pageTitle, Is.EqualTo("Telegram Users"),
+            "Page title should be 'Telegram Users'");
     }
 
     [Test]
@@ -227,9 +226,9 @@ public class UsersTests : AuthenticatedTestBase
         // Search for "Developer"
         await _usersPage.SearchUsersAsync("Developer");
 
-        // Assert - filtered results
-        Assert.That(await _usersPage.IsFilteredChipVisibleAsync(), Is.True,
-            "Filtered chip should be visible when searching");
+        // Wait for the filtered chip to appear (Blazor re-renders asynchronously)
+        var filteredChip = Page.Locator(".mud-chip:has-text('Filtered:')");
+        await Expect(filteredChip).ToBeVisibleAsync(new() { Timeout = 5000 });
 
         var displayedNames = await _usersPage.GetUserDisplayNamesAsync();
         Assert.That(displayedNames.Any(n => n.Contains("Developer")), Is.True,

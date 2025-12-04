@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -96,31 +97,26 @@ public class UsersPage
     /// </summary>
     public async Task<List<string>> GetTabNamesAsync()
     {
-        var tabNames = new List<string>();
         var tabs = await _page.Locator(TabPanel).AllAsync();
+        var textTasks = tabs.Select(tab => tab.TextContentAsync());
+        var texts = await Task.WhenAll(textTasks);
 
-        foreach (var tab in tabs)
-        {
-            var text = await tab.TextContentAsync();
-            if (!string.IsNullOrEmpty(text))
-            {
-                // Extract just the tab name (before any badge number)
-                var name = text.Trim().Split('\n')[0].Trim();
-                tabNames.Add(name);
-            }
-        }
-
-        return tabNames;
+        return texts
+            .Where(text => !string.IsNullOrEmpty(text))
+            .Select(text => text!.Trim().Split('\n')[0].Trim()) // Extract just the tab name (before any badge number)
+            .ToList();
     }
 
     /// <summary>
-    /// Clicks a tab by its name.
+    /// Clicks a tab by its name and waits for it to become active.
     /// </summary>
     public async Task SelectTabAsync(string tabName)
     {
-        var tab = _page.Locator(TabPanel).Filter(new() { HasText = tabName });
+        var tab = _page.GetByRole(AriaRole.Tab, new() { Name = tabName });
         await tab.ClickAsync();
-        await _page.WaitForTimeoutAsync(300); // Wait for tab content to load
+
+        // Wait for the tab to actually become active (aria-selected="true")
+        await Expect(tab).ToHaveAttributeAsync("aria-selected", "true", new() { Timeout = 10000 });
     }
 
     /// <summary>
@@ -140,7 +136,7 @@ public class UsersPage
         var searchInput = _page.Locator(SearchInput);
         await searchInput.ClearAsync();
         await searchInput.FillAsync(searchText);
-        await _page.WaitForTimeoutAsync(300); // Wait for filter to apply
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
     /// <summary>
@@ -150,7 +146,7 @@ public class UsersPage
     {
         var searchInput = _page.Locator(SearchInput);
         await searchInput.ClearAsync();
-        await _page.WaitForTimeoutAsync(300);
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
     /// <summary>
@@ -282,7 +278,9 @@ public class UsersPage
     /// </summary>
     public async Task CloseDialogAsync()
     {
-        var closeButton = _page.Locator(".mud-dialog button:has-text('Close')");
+        var dialog = _page.Locator(".mud-dialog");
+        var closeButton = dialog.Locator("button:has-text('Close')");
+
         if (await closeButton.IsVisibleAsync())
         {
             await closeButton.ClickAsync();
@@ -291,7 +289,9 @@ public class UsersPage
         {
             await _page.Keyboard.PressAsync("Escape");
         }
-        await _page.WaitForTimeoutAsync(300);
+
+        // Wait for dialog to close
+        await Expect(dialog).Not.ToBeVisibleAsync();
     }
 
     /// <summary>

@@ -16,7 +16,7 @@ public class TelegramBotClientFactory
     /// </summary>
     /// <param name="botToken">Bot token from BotFather</param>
     /// <returns>Cached or newly created ITelegramBotClient instance</returns>
-    public ITelegramBotClient GetOrCreate(string botToken)
+    public virtual ITelegramBotClient GetOrCreate(string botToken)
     {
         // Fast path: TryGetValue is lock-free and allocation-free (99.9% cache hit rate)
         if (_clients.TryGetValue(botToken, out var existingClient))

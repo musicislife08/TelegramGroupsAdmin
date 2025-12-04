@@ -113,7 +113,14 @@ public abstract class E2ETestBase
         else if (Context != null)
         {
             // Still need to stop tracing even if not saving
-            try { await Context.Tracing.StopAsync(); } catch { /* ignore */ }
+            try
+            {
+                await Context.Tracing.StopAsync();
+            }
+            catch (Exception ex)
+            {
+                TestContext.Out.WriteLine($"Warning: Failed to stop tracing: {ex.Message}");
+            }
         }
 
         // Safely close browser resources (may be null if setup failed)

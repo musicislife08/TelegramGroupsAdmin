@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using static Microsoft.Playwright.Assertions;
 
 namespace TelegramGroupsAdmin.E2ETests.PageObjects;
 
@@ -127,7 +128,7 @@ public class ChatsPage
         var searchInput = _page.Locator(SearchInput);
         await searchInput.ClearAsync();
         await searchInput.FillAsync(searchText);
-        await _page.WaitForTimeoutAsync(300); // Wait for filter to apply
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
     /// <summary>
@@ -137,7 +138,7 @@ public class ChatsPage
     {
         var searchInput = _page.Locator(SearchInput);
         await searchInput.ClearAsync();
-        await _page.WaitForTimeoutAsync(300);
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
     /// <summary>
@@ -266,22 +267,24 @@ public class ChatsPage
     }
 
     /// <summary>
-    /// Closes the dialog by clicking the close button or outside.
+    /// Closes the dialog by clicking the close button or pressing Escape.
     /// </summary>
     public async Task CloseDialogAsync()
     {
-        // Try to click the close button first
-        var closeButton = _page.Locator(".mud-dialog button:has-text('Close')");
+        var dialog = _page.Locator(".mud-dialog");
+        var closeButton = dialog.Locator("button:has-text('Close')");
+
         if (await closeButton.IsVisibleAsync())
         {
             await closeButton.ClickAsync();
         }
         else
         {
-            // Press Escape to close
             await _page.Keyboard.PressAsync("Escape");
         }
-        await _page.WaitForTimeoutAsync(300);
+
+        // Wait for dialog to close
+        await Expect(dialog).Not.ToBeVisibleAsync();
     }
 
     /// <summary>

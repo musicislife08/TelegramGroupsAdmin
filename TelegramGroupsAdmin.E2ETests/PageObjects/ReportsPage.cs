@@ -66,8 +66,8 @@ public class ReportsPage
             // Loading indicator may have already disappeared
         }
 
-        // Brief wait for any async content to render
-        await _page.WaitForTimeoutAsync(500);
+        // Wait for network to settle
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
     /// <summary>
@@ -108,11 +108,13 @@ public class ReportsPage
         await typeSelect.ClickAsync();
 
         // MudBlazor renders options as .mud-list-item inside .mud-popover-open
-        var option = _page.Locator($".mud-popover-open .mud-list-item-clickable:has-text('{filterOption}')");
+        var popover = _page.Locator(".mud-popover-open");
+        var option = popover.Locator($".mud-list-item-clickable:has-text('{filterOption}')");
         await option.ClickAsync();
 
-        // Brief wait for filter to apply
-        await _page.WaitForTimeoutAsync(300);
+        // Wait for popover to close and network to settle
+        await popover.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
     /// <summary>
@@ -126,11 +128,13 @@ public class ReportsPage
         await statusSelect.ClickAsync();
 
         // MudBlazor renders options as .mud-list-item inside .mud-popover-open
-        var option = _page.Locator($".mud-popover-open .mud-list-item-clickable:has-text('{filterOption}')");
+        var popover = _page.Locator(".mud-popover-open");
+        var option = popover.Locator($".mud-list-item-clickable:has-text('{filterOption}')");
         await option.ClickAsync();
 
-        // Brief wait for filter to apply
-        await _page.WaitForTimeoutAsync(300);
+        // Wait for popover to close and network to settle
+        await popover.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
     /// <summary>
@@ -295,4 +299,107 @@ public class ReportsPage
         var loadingIndicator = _page.Locator(LoadingIndicator);
         return await loadingIndicator.IsVisibleAsync();
     }
+
+    #region Report Action Methods
+
+    /// <summary>
+    /// Clicks the "Delete as Spam" button on a moderation report card.
+    /// This is a NO-CONFIRMATION action that immediately processes the report.
+    /// </summary>
+    public async Task ClickDeleteAsSpamAsync()
+    {
+        var button = _page.Locator("button:has-text('Delete as Spam')").First;
+        await button.ClickAsync();
+    }
+
+    /// <summary>
+    /// Clicks the "Ban User" button on a moderation report card.
+    /// This is a NO-CONFIRMATION action that immediately bans the user.
+    /// </summary>
+    public async Task ClickBanUserAsync()
+    {
+        var button = _page.Locator("button:has-text('Ban User')").First;
+        await button.ClickAsync();
+    }
+
+    /// <summary>
+    /// Clicks the "Warn" button on a moderation report card.
+    /// This is a NO-CONFIRMATION action that immediately issues a warning.
+    /// </summary>
+    public async Task ClickWarnAsync()
+    {
+        var button = _page.Locator("button:has-text('Warn')").First;
+        await button.ClickAsync();
+    }
+
+    /// <summary>
+    /// Clicks the "Dismiss" button on a report/alert card.
+    /// This is a NO-CONFIRMATION action that immediately dismisses the report.
+    /// </summary>
+    public async Task ClickDismissAsync()
+    {
+        var button = _page.Locator("button:has-text('Dismiss')").First;
+        await button.ClickAsync();
+    }
+
+    /// <summary>
+    /// Clicks the "Confirm Ban" button on an impersonation alert card.
+    /// This is a NO-CONFIRMATION action.
+    /// </summary>
+    public async Task ClickConfirmBanAsync()
+    {
+        var button = _page.Locator("button:has-text('Confirm Ban')").First;
+        await button.ClickAsync();
+    }
+
+    /// <summary>
+    /// Clicks the "Unban (False Positive)" button on an impersonation alert card.
+    /// This is a NO-CONFIRMATION action.
+    /// </summary>
+    public async Task ClickUnbanFalsePositiveAsync()
+    {
+        var button = _page.Locator("button:has-text('Unban (False Positive)')").First;
+        await button.ClickAsync();
+    }
+
+    /// <summary>
+    /// Waits for a snackbar message to appear and returns its text.
+    /// </summary>
+    public async Task<string?> WaitForSnackbarAsync(int timeoutMs = 5000)
+    {
+        var snackbar = _page.Locator(".mud-snackbar");
+        await snackbar.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = timeoutMs
+        });
+        return await snackbar.TextContentAsync();
+    }
+
+    /// <summary>
+    /// Returns true if any action button is visible on the first report card.
+    /// </summary>
+    public async Task<bool> HasActionButtonsVisibleAsync()
+    {
+        var actionButtons = _page.Locator(".mud-card-actions button");
+        return await actionButtons.CountAsync() > 0;
+    }
+
+    /// <summary>
+    /// Gets all visible action button texts.
+    /// </summary>
+    public async Task<List<string>> GetVisibleActionButtonsAsync()
+    {
+        var buttons = new List<string>();
+        var actionButtons = await _page.Locator(".mud-card-actions button").AllAsync();
+        foreach (var button in actionButtons)
+        {
+            var text = await button.TextContentAsync();
+            if (!string.IsNullOrWhiteSpace(text))
+                buttons.Add(text.Trim());
+        }
+        return buttons;
+    }
+
+    #endregion
 }

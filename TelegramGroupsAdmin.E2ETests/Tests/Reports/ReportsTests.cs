@@ -66,24 +66,23 @@ public class ReportsTests : AuthenticatedTestBase
     }
 
     [Test]
-    public async Task Reports_DeniesAccess_WhenAdmin()
+    public async Task Reports_LoadsSuccessfully_WhenAdmin()
     {
-        // Arrange - login as Admin (lowest role, not allowed on Reports page)
+        // Arrange - login as Admin (reports are now accessible to Admin)
+        // Note: Admin users will only see reports from their assigned chats (Issue #130)
         await LoginAsAdminAsync();
 
         // Act
-        await Page.GotoAsync("/reports");
-        await Page.WaitForLoadStateAsync(Microsoft.Playwright.LoadState.NetworkIdle);
+        await _reportsPage.NavigateAsync();
+        await _reportsPage.WaitForLoadAsync();
 
-        // Assert - Admin should be redirected or see access denied
-        // The page requires GlobalAdmin or Owner role
-        var isOnReportsPage = Page.Url.Contains("/reports");
-        var hasAccessDenied = await Page.Locator("text=Access Denied").Or(
-            Page.Locator("text=not authorized")).IsVisibleAsync();
+        // Assert - page title is visible (Admin can access)
+        Assert.That(await _reportsPage.IsPageTitleVisibleAsync(), Is.True,
+            "Reports page title should be visible for Admin");
 
-        // Either redirected away or shown access denied message
-        Assert.That(!isOnReportsPage || hasAccessDenied, Is.True,
-            "Admin user should not be able to access Reports page");
+        var pageTitle = await _reportsPage.GetPageTitleAsync();
+        Assert.That(pageTitle, Is.EqualTo("Reports Queue"),
+            "Page title should be 'Reports Queue'");
     }
 
     [Test]
@@ -533,4 +532,353 @@ public class ReportsTests : AuthenticatedTestBase
         Assert.That(await _reportsPage.IsEmptyStateVisibleAsync(), Is.True,
             "Should show empty state when no reports match filter");
     }
+
+    #region Dangerous Action Tests - NO CONFIRMATION
+
+    /// <summary>
+    /// Tests that the Dismiss action on a moderation report executes immediately
+    /// without showing a confirmation dialog. This is by design for rapid moderation.
+    /// </summary>
+    [Test]
+    public async Task ModerationReport_Dismiss_ProcessesImmediately()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(Factory.Services)
+            .WithTitle("Dismiss Action Chat")
+            .BuildAsync();
+
+        var message = await new TestMessageBuilder(Factory.Services)
+            .InChat(chat)
+            .FromUser(400001, "reporteduser", "Reported", "User")
+            .WithText("Message to be dismissed")
+            .BuildAsync();
+
+        await new TestReportBuilder(Factory.Services)
+            .ForMessage(message)
+            .InChat(chat)
+            .ReportedBy(400002, "reporter")
+            .BuildAsync();
+
+        // Act
+        await _reportsPage.NavigateAsync();
+        await _reportsPage.WaitForLoadAsync();
+
+        // Verify report card is visible before action
+        Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
+            "Report should be visible before dismissing");
+
+        // Click dismiss - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickDismissAsync();
+
+        // Assert - snackbar confirms action
+        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
+        Assert.That(snackbarText, Does.Contain("dismiss").IgnoreCase.Or.Contain("processed").IgnoreCase,
+            "Snackbar should confirm the dismiss action");
+    }
+
+    /// <summary>
+    /// Tests that the Delete as Spam action on a moderation report executes immediately.
+    /// This action globally bans the user and deletes their message.
+    /// </summary>
+    [Test]
+    public async Task ModerationReport_DeleteAsSpam_ProcessesImmediately()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(Factory.Services)
+            .WithTitle("Delete Spam Chat")
+            .BuildAsync();
+
+        // Create telegram user first (required for ban action to save user_actions)
+        await new TestTelegramUserBuilder(Factory.Services)
+            .WithUserId(400003)
+            .WithUsername("spammer")
+            .WithName("Spam", "User")
+            .BuildAsync();
+
+        var message = await new TestMessageBuilder(Factory.Services)
+            .InChat(chat)
+            .FromUser(400003, "spammer", "Spam", "User")
+            .WithText("This is spam content")
+            .BuildAsync();
+
+        await new TestReportBuilder(Factory.Services)
+            .ForMessage(message)
+            .InChat(chat)
+            .ReportedBy(400004, "reporter")
+            .BuildAsync();
+
+        // Act
+        await _reportsPage.NavigateAsync();
+        await _reportsPage.WaitForLoadAsync();
+
+        // Verify report exists
+        Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
+            "Report should exist before action");
+
+        // Click Delete as Spam - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickDeleteAsSpamAsync();
+
+        // Assert - snackbar confirms action
+        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
+        Assert.That(snackbarText, Does.Contain("spam").IgnoreCase.Or.Contain("deleted").IgnoreCase.Or.Contain("banned").IgnoreCase,
+            "Snackbar should confirm the spam action");
+    }
+
+    /// <summary>
+    /// Tests that the Ban User action on a moderation report executes immediately.
+    /// This action bans the user but may not delete the message.
+    /// </summary>
+    [Test]
+    public async Task ModerationReport_BanUser_ProcessesImmediately()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(Factory.Services)
+            .WithTitle("Ban User Chat")
+            .BuildAsync();
+
+        // Create telegram user first (required for ban action to save user_actions)
+        await new TestTelegramUserBuilder(Factory.Services)
+            .WithUserId(400005)
+            .WithUsername("baduser")
+            .WithName("Bad", "Actor")
+            .BuildAsync();
+
+        var message = await new TestMessageBuilder(Factory.Services)
+            .InChat(chat)
+            .FromUser(400005, "baduser", "Bad", "Actor")
+            .WithText("Problematic message content")
+            .BuildAsync();
+
+        await new TestReportBuilder(Factory.Services)
+            .ForMessage(message)
+            .InChat(chat)
+            .ReportedBy(400006, "reporter")
+            .BuildAsync();
+
+        // Act
+        await _reportsPage.NavigateAsync();
+        await _reportsPage.WaitForLoadAsync();
+
+        // Verify report exists
+        Assert.That(await _reportsPage.HasReportsAsync(), Is.True,
+            "Report should exist before action");
+
+        // Click Ban User - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickBanUserAsync();
+
+        // Assert - snackbar confirms action
+        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
+        Assert.That(snackbarText, Does.Contain("ban").IgnoreCase.Or.Contain("processed").IgnoreCase,
+            "Snackbar should confirm the ban action");
+    }
+
+    /// <summary>
+    /// Tests that the Confirm Ban action on an impersonation alert executes immediately.
+    /// This confirms that the suspected user was correctly identified as a scammer.
+    /// </summary>
+    [Test]
+    public async Task ImpersonationAlert_ConfirmBan_ProcessesImmediately()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(Factory.Services)
+            .WithTitle("Confirm Ban Chat")
+            .BuildAsync();
+
+        // Create telegram users for impersonation alert
+        await new TestTelegramUserBuilder(Factory.Services)
+            .WithUserId(500001)
+            .WithUsername("impersonator")
+            .WithName("Fake", "Admin")
+            .BuildAsync();
+
+        await new TestTelegramUserBuilder(Factory.Services)
+            .WithUserId(500002)
+            .WithUsername("realadmin")
+            .WithName("Real", "Admin")
+            .BuildAsync();
+
+        await new TestImpersonationAlertBuilder(Factory.Services)
+            .WithSuspectedUser(500001, "impersonator", "Fake", "Admin")
+            .WithTargetUser(500002, "realadmin", "Real", "Admin")
+            .InChat(chat)
+            .AsAutoBanned() // Must be auto-banned to have Confirm Ban option
+            .BuildAsync();
+
+        // Act
+        await _reportsPage.NavigateAsync();
+        await _reportsPage.WaitForLoadAsync();
+
+        // Filter to impersonation alerts to ensure we see the right card
+        await _reportsPage.SelectTypeFilterAsync("Impersonation Alerts");
+
+        // Verify alert exists
+        await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
+
+        // Click Confirm Ban - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickConfirmBanAsync();
+
+        // Assert - snackbar confirms action
+        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
+        Assert.That(snackbarText, Does.Contain("confirm").IgnoreCase.Or.Contain("scam").IgnoreCase.Or.Contain("processed").IgnoreCase,
+            "Snackbar should confirm the verdict");
+    }
+
+    /// <summary>
+    /// Tests that the Unban (False Positive) action on an impersonation alert executes immediately.
+    /// This action unbans the user and marks the detection as a false positive.
+    /// </summary>
+    [Test]
+    public async Task ImpersonationAlert_UnbanFalsePositive_ProcessesImmediately()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(Factory.Services)
+            .WithTitle("False Positive Chat")
+            .BuildAsync();
+
+        // Create telegram users
+        await new TestTelegramUserBuilder(Factory.Services)
+            .WithUserId(500003)
+            .WithUsername("innocentuser")
+            .WithName("Innocent", "User")
+            .BuildAsync();
+
+        await new TestTelegramUserBuilder(Factory.Services)
+            .WithUserId(500004)
+            .WithUsername("adminuser")
+            .WithName("Admin", "User")
+            .BuildAsync();
+
+        await new TestImpersonationAlertBuilder(Factory.Services)
+            .WithSuspectedUser(500003, "innocentuser", "Innocent", "User")
+            .WithTargetUser(500004, "adminuser", "Admin", "User")
+            .InChat(chat)
+            .AsAutoBanned() // Must be auto-banned to have Unban option
+            .BuildAsync();
+
+        // Act
+        await _reportsPage.NavigateAsync();
+        await _reportsPage.WaitForLoadAsync();
+
+        // Filter to impersonation alerts
+        await _reportsPage.SelectTypeFilterAsync("Impersonation Alerts");
+
+        // Verify alert exists
+        await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
+
+        // Click Unban (False Positive) - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickUnbanFalsePositiveAsync();
+
+        // Assert - snackbar confirms action
+        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
+        Assert.That(snackbarText, Does.Contain("unban").IgnoreCase.Or.Contain("false positive").IgnoreCase.Or.Contain("processed").IgnoreCase,
+            "Snackbar should confirm the false positive action");
+    }
+
+    /// <summary>
+    /// Tests that the Dismiss action on an impersonation alert executes immediately.
+    /// </summary>
+    [Test]
+    public async Task ImpersonationAlert_Dismiss_ProcessesImmediately()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(Factory.Services)
+            .WithTitle("Dismiss Alert Chat")
+            .BuildAsync();
+
+        // Create telegram users
+        await new TestTelegramUserBuilder(Factory.Services)
+            .WithUserId(500005)
+            .WithUsername("suspecteduser")
+            .WithName("Suspected", "User")
+            .BuildAsync();
+
+        await new TestTelegramUserBuilder(Factory.Services)
+            .WithUserId(500006)
+            .WithUsername("targetadmin")
+            .WithName("Target", "Admin")
+            .BuildAsync();
+
+        await new TestImpersonationAlertBuilder(Factory.Services)
+            .WithSuspectedUser(500005, "suspecteduser", "Suspected", "User")
+            .WithTargetUser(500006, "targetadmin", "Target", "Admin")
+            .InChat(chat)
+            .BuildAsync();
+
+        // Act
+        await _reportsPage.NavigateAsync();
+        await _reportsPage.WaitForLoadAsync();
+
+        // Filter to impersonation alerts
+        await _reportsPage.SelectTypeFilterAsync("Impersonation Alerts");
+
+        // Verify alert exists
+        await Expect(Page.GetByText("Impersonation Alert", new() { Exact = true })).ToBeVisibleAsync();
+
+        // Click Dismiss - NO CONFIRMATION DIALOG
+        await _reportsPage.ClickDismissAsync();
+
+        // Assert - snackbar confirms action
+        // Note: For impersonation alerts, "Dismiss" action whitelists the user (see Reports.razor line 348-354)
+        var snackbarText = await _reportsPage.WaitForSnackbarAsync();
+        Assert.That(snackbarText, Does.Contain("dismiss").IgnoreCase
+            .Or.Contain("whitelist").IgnoreCase
+            .Or.Contain("processed").IgnoreCase,
+            "Snackbar should confirm the dismiss/whitelist action");
+    }
+
+    /// <summary>
+    /// Tests that action buttons are visible on pending moderation reports.
+    /// </summary>
+    [Test]
+    public async Task ModerationReport_ShowsActionButtons_WhenPending()
+    {
+        // Arrange
+        await LoginAsOwnerAsync();
+
+        var chat = await new TestChatBuilder(Factory.Services)
+            .WithTitle("Action Buttons Chat")
+            .BuildAsync();
+
+        var message = await new TestMessageBuilder(Factory.Services)
+            .InChat(chat)
+            .FromUser(400007, "testuser", "Test", "User")
+            .WithText("Message requiring moderation")
+            .BuildAsync();
+
+        await new TestReportBuilder(Factory.Services)
+            .ForMessage(message)
+            .InChat(chat)
+            .ReportedBy(400008, "reporter")
+            .BuildAsync();
+
+        // Act
+        await _reportsPage.NavigateAsync();
+        await _reportsPage.WaitForLoadAsync();
+
+        // Assert - action buttons are visible
+        Assert.That(await _reportsPage.HasActionButtonsVisibleAsync(), Is.True,
+            "Action buttons should be visible on pending reports");
+
+        var buttons = await _reportsPage.GetVisibleActionButtonsAsync();
+        Assert.That(buttons, Has.Some.Contain("Spam").IgnoreCase,
+            "Delete as Spam button should be visible");
+        Assert.That(buttons, Has.Some.Contain("Ban").IgnoreCase,
+            "Ban User button should be visible");
+        Assert.That(buttons, Has.Some.Contain("Dismiss").IgnoreCase,
+            "Dismiss button should be visible");
+    }
+
+    #endregion
 }

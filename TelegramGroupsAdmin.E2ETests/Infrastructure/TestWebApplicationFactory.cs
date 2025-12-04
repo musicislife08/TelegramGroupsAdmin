@@ -5,11 +5,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using NSubstitute;
+using Telegram.Bot;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Services.Email;
+using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 
@@ -35,6 +38,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly IFileScannerService _mockFileScannerService;
     private readonly ICloudScannerService _mockCloudScannerService;
 
+    // Telegram service test implementations
+    private readonly TestTelegramBotClientFactory _testTelegramBotClientFactory;
+
     public TestWebApplicationFactory(string? databaseName = null)
     {
         _databaseName = databaseName ?? E2EFixture.GetUniqueDatabaseName();
@@ -55,6 +61,11 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         _mockCloudScannerService.IsEnabled.Returns(false); // Disabled by default (no API key in tests)
         _mockCloudScannerService.IsQuotaAvailableAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false));
+
+        // Configure Telegram test implementations
+        // TestTelegramBotClientFactory - returns a mock ITelegramBotClient for all tokens
+        _testTelegramBotClientFactory = new TestTelegramBotClientFactory();
+        // TestTelegramConfigLoader - registered in ConfigureServices (needs IServiceScopeFactory)
 
         // Configure to use Kestrel with dynamic port (port 0)
         // This MUST be called before StartServer() or accessing Services
@@ -170,6 +181,16 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             // Cloud scanner service (VirusTotal)
             services.RemoveAll<ICloudScannerService>();
             services.AddSingleton(_mockCloudScannerService);
+
+            // Telegram services - test implementations to avoid real Telegram API calls
+            // TelegramConfigLoader (returns dummy token)
+            services.RemoveAll<TelegramConfigLoader>();
+            services.AddSingleton<TelegramConfigLoader>(sp =>
+                new TestTelegramConfigLoader(sp.GetRequiredService<IServiceScopeFactory>()));
+
+            // TelegramBotClientFactory (returns mock bot client)
+            services.RemoveAll<TelegramBotClientFactory>();
+            services.AddSingleton<TelegramBotClientFactory>(_testTelegramBotClientFactory);
         });
     }
 

@@ -162,7 +162,7 @@ public class MessagesPage
         await searchInput.ClearAsync();
         // Type character by character to trigger oninput event
         await searchInput.PressSequentiallyAsync(searchText, new LocatorPressSequentiallyOptions { Delay = 50 });
-        await _page.WaitForTimeoutAsync(300); // Wait for filter to apply
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
     /// <summary>
@@ -174,7 +174,7 @@ public class MessagesPage
         // Clear and dispatch input event to trigger filtering
         await searchInput.FillAsync("");
         await searchInput.DispatchEventAsync("input");
-        await _page.WaitForTimeoutAsync(300);
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
     /// <summary>

@@ -56,3 +56,6 @@ compose.override.yml
 **/*.key
 **/*.pem
 tmp/
+
+# Playwright test results
+**/TestResults/

@@ -120,13 +120,12 @@ public class DashboardTests : AuthenticatedTestBase
         await _homePage.WaitForLoadAsync();
 
         // Assert - quick action buttons are visible
-        Assert.Multiple(async () =>
-        {
-            Assert.That(await _homePage.IsViewMessagesButtonVisibleAsync(), Is.True,
-                "View Messages button should be visible");
-            Assert.That(await _homePage.IsRefreshStatsButtonVisibleAsync(), Is.True,
-                "Refresh Stats button should be visible");
-        });
+        // Note: Using sequential assertions instead of Assert.Multiple because
+        // async lambdas don't work correctly with Assert.Multiple (NUnit doesn't await them)
+        Assert.That(await _homePage.IsViewMessagesButtonVisibleAsync(), Is.True,
+            "View Messages button should be visible");
+        Assert.That(await _homePage.IsRefreshStatsButtonVisibleAsync(), Is.True,
+            "Refresh Stats button should be visible");
     }
 
     [Test]
