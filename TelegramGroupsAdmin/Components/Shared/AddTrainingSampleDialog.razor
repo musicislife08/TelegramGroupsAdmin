@@ -97,7 +97,7 @@
 
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
-    [Inject] private IOpenAITranslationService TranslationService { get; set; } = null!;
+    [Inject] private TelegramGroupsAdmin.Core.Services.AI.IAITranslationService TranslationService { get; set; } = null!;
     [Inject] private ISnackbar Snackbar { get; set; } = null!;
 
     private string _messageText = string.Empty;

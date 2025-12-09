@@ -46,7 +46,6 @@ public class ApiKeyDelegatingHandler : DelegatingHandler
                 apiKey = _serviceName switch
                 {
                     "VirusTotal" => apiKeys.VirusTotal,
-                    "OpenAI" => apiKeys.OpenAI,
                     "SendGrid" => apiKeys.SendGrid,
                     _ => null
                 };

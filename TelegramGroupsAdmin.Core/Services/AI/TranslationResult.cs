@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.ContentDetection.Services;
+namespace TelegramGroupsAdmin.Core.Services.AI;
 
 /// <summary>
 /// Result of translation attempt

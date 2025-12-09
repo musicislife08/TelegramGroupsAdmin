@@ -1,30 +1,31 @@
 using System.Text;
 using System.Text.Json;
+using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.Services.AI;
 
 namespace TelegramGroupsAdmin.Services.PromptBuilder;
 
 /// <summary>
-/// Service for generating AI-powered custom spam detection prompts using OpenAI
-/// Phase 4.X: Meta-AI feature - using AI to configure AI
+/// Service for generating AI-powered custom spam detection prompts.
+/// Provider-agnostic - uses IAIServiceFactory for multi-provider support.
 /// Configuration loaded from database (hot-reload support)
 /// </summary>
 public class PromptBuilderService : IPromptBuilderService
 {
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IAIServiceFactory _aiServiceFactory;
     private readonly IDetectionResultsRepository _detectionResultsRepository;
     private readonly ISystemConfigRepository _configRepo;
     private readonly ILogger<PromptBuilderService> _logger;
 
     public PromptBuilderService(
-        IHttpClientFactory httpClientFactory,
+        IAIServiceFactory aiServiceFactory,
         IDetectionResultsRepository detectionResultsRepository,
         ISystemConfigRepository configRepo,
         ILogger<PromptBuilderService> logger)
     {
-        _httpClientFactory = httpClientFactory;
+        _aiServiceFactory = aiServiceFactory;
         _detectionResultsRepository = detectionResultsRepository;
         _configRepo = configRepo;
         _logger = logger;
@@ -36,28 +37,14 @@ public class PromptBuilderService : IPromptBuilderService
     {
         try
         {
-            // Load configuration from database (supports hot-reload)
-            var openAIConfig = await _configRepo.GetOpenAIConfigAsync(cancellationToken);
-            var apiKeys = await _configRepo.GetApiKeysAsync(cancellationToken);
-
-            // Validate OpenAI is enabled
-            if (openAIConfig?.Enabled != true)
+            // Get AI chat service for prompt builder feature
+            var chatService = await _aiServiceFactory.GetChatServiceAsync(AIFeatureType.PromptBuilder, cancellationToken);
+            if (chatService == null)
             {
                 return new PromptBuilderResponse
                 {
                     Success = false,
-                    ErrorMessage = "OpenAI service is disabled"
-                };
-            }
-
-            // Validate API key
-            var apiKey = apiKeys?.OpenAI;
-            if (string.IsNullOrEmpty(apiKey))
-            {
-                return new PromptBuilderResponse
-                {
-                    Success = false,
-                    ErrorMessage = "OpenAI API key not configured"
+                    ErrorMessage = "AI service not configured for prompt building"
                 };
             }
 
@@ -67,15 +54,23 @@ public class PromptBuilderService : IPromptBuilderService
             // Build the meta-prompt
             var metaPrompt = BuildMetaPrompt(request, trainingSamples);
 
-            // Call OpenAI API with config from database
-            var generatedPrompt = await CallOpenAiAsync(metaPrompt, openAIConfig, apiKey, cancellationToken);
+            // Call AI service
+            var result = await chatService.GetCompletionAsync(
+                "You are an expert at creating spam detection rules for online communities.",
+                metaPrompt,
+                new ChatCompletionOptions
+                {
+                    MaxTokens = 1000, // Cap for detailed rules
+                    Temperature = 0.3 // Cap for focused output
+                },
+                cancellationToken);
 
-            if (string.IsNullOrWhiteSpace(generatedPrompt))
+            if (result == null || string.IsNullOrWhiteSpace(result.Content))
             {
                 return new PromptBuilderResponse
                 {
                     Success = false,
-                    ErrorMessage = "OpenAI returned empty response"
+                    ErrorMessage = "AI returned empty response"
                 };
             }
 
@@ -95,7 +90,7 @@ public class PromptBuilderService : IPromptBuilderService
             return new PromptBuilderResponse
             {
                 Success = true,
-                GeneratedPrompt = generatedPrompt,
+                GeneratedPrompt = result.Content,
                 GenerationMetadata = metadata
             };
         }
@@ -117,43 +112,37 @@ public class PromptBuilderService : IPromptBuilderService
     {
         try
         {
-            // Load configuration from database (supports hot-reload)
-            var openAIConfig = await _configRepo.GetOpenAIConfigAsync(cancellationToken);
-            var apiKeys = await _configRepo.GetApiKeysAsync(cancellationToken);
-
-            // Validate OpenAI is enabled
-            if (openAIConfig?.Enabled != true)
+            // Get AI chat service for prompt builder feature
+            var chatService = await _aiServiceFactory.GetChatServiceAsync(AIFeatureType.PromptBuilder, cancellationToken);
+            if (chatService == null)
             {
                 return new PromptBuilderResponse
                 {
                     Success = false,
-                    ErrorMessage = "OpenAI service is disabled"
-                };
-            }
-
-            // Validate API key
-            var apiKey = apiKeys?.OpenAI;
-            if (string.IsNullOrEmpty(apiKey))
-            {
-                return new PromptBuilderResponse
-                {
-                    Success = false,
-                    ErrorMessage = "OpenAI API key not configured"
+                    ErrorMessage = "AI service not configured for prompt building"
                 };
             }
 
             // Build the improvement meta-prompt
             var metaPrompt = BuildImprovementMetaPrompt(currentPrompt, improvementFeedback);
 
-            // Call OpenAI API with config from database
-            var improvedPrompt = await CallOpenAiAsync(metaPrompt, openAIConfig, apiKey, cancellationToken);
+            // Call AI service
+            var result = await chatService.GetCompletionAsync(
+                "You are an expert at creating spam detection rules for online communities.",
+                metaPrompt,
+                new ChatCompletionOptions
+                {
+                    MaxTokens = 1000, // Cap for detailed rules
+                    Temperature = 0.3 // Cap for focused output
+                },
+                cancellationToken);
 
-            if (string.IsNullOrWhiteSpace(improvedPrompt))
+            if (result == null || string.IsNullOrWhiteSpace(result.Content))
             {
                 return new PromptBuilderResponse
                 {
                     Success = false,
-                    ErrorMessage = "OpenAI returned empty response"
+                    ErrorMessage = "AI returned empty response"
                 };
             }
 
@@ -168,7 +157,7 @@ public class PromptBuilderService : IPromptBuilderService
             return new PromptBuilderResponse
             {
                 Success = true,
-                GeneratedPrompt = improvedPrompt,
+                GeneratedPrompt = result.Content,
                 GenerationMetadata = metadata
             };
         }
@@ -258,7 +247,7 @@ public class PromptBuilderService : IPromptBuilderService
     }
 
     /// <summary>
-    /// Build the meta-prompt that tells OpenAI how to generate good spam detection rules
+    /// Build the meta-prompt that tells AI how to generate good spam detection rules
     /// </summary>
     private string BuildMetaPrompt(PromptBuilderRequest request, string trainingSamples)
     {
@@ -288,7 +277,7 @@ public class PromptBuilderService : IPromptBuilderService
             {{trainingSamples}}
 
             ## Your Task
-            Generate clear, specific spam detection rules for this group. Your output will REPLACE the default rules in the OpenAI spam detection system.
+            Generate clear, specific spam detection rules for this group. Your output will REPLACE the default rules in the AI spam detection system.
 
             Generate two sections:
 
@@ -308,69 +297,4 @@ public class PromptBuilderService : IPromptBuilderService
             Output ONLY the two sections above in plain text with bullet points. No JSON, no code blocks, no preamble.
             """;
     }
-
-    /// <summary>
-    /// Call OpenAI API with the meta-prompt to generate custom rules
-    /// </summary>
-    private async Task<string> CallOpenAiAsync(string metaPrompt, TelegramGroupsAdmin.Configuration.Models.OpenAIConfig openAIConfig, string apiKey, CancellationToken cancellationToken)
-    {
-        // Create HttpClient with API key from database
-        var httpClient = _httpClientFactory.CreateClient();
-        httpClient.BaseAddress = new Uri("https://api.openai.com/v1/");
-        httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-
-        var request = new
-        {
-            model = openAIConfig.Model,
-            messages = new[]
-            {
-                new { role = "system", content = "You are an expert at creating spam detection rules for online communities." },
-                new { role = "user", content = metaPrompt }
-            },
-            temperature = Math.Min(openAIConfig.Temperature, 0.3), // Cap at 0.3 for focused output
-            max_tokens = Math.Min(openAIConfig.MaxTokens, 1000)  // Cap at 1000 for detailed rules
-        };
-
-        var requestJson = JsonSerializer.Serialize(request);
-        var httpContent = new StringContent(requestJson, Encoding.UTF8, "application/json");
-
-        var response = await httpClient.PostAsync("chat/completions", httpContent, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var error = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("OpenAI API error: {StatusCode} - {Error}", response.StatusCode, error);
-            throw new HttpRequestException($"OpenAI API error: {response.StatusCode}");
-        }
-
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        _logger.LogDebug("OpenAI API response: {Response}", responseJson);
-
-        var openAiResponse = JsonSerializer.Deserialize<OpenAiResponse>(responseJson, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
-
-        if (openAiResponse?.Choices == null || openAiResponse.Choices.Length == 0)
-        {
-            _logger.LogWarning("OpenAI returned no choices. Response: {Response}", responseJson);
-            throw new InvalidOperationException("OpenAI returned no response choices");
-        }
-
-        var content = openAiResponse.Choices[0]?.Message?.Content?.Trim();
-
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            _logger.LogWarning("OpenAI returned empty content. Response: {Response}", responseJson);
-            throw new InvalidOperationException("OpenAI returned empty content");
-        }
-
-        return content;
-    }
-
-    // OpenAI API response models
-    private record OpenAiResponse(Choice[]? Choices);
-    private record Choice(Message? Message);
-    private record Message(string? Content);
 }

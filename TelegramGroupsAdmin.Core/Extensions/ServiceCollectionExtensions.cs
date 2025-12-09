@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Services.AI;
 
 namespace TelegramGroupsAdmin.Core.Extensions;
 
@@ -11,6 +12,10 @@ public static class ServiceCollectionExtensions
         // Audit services
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<IAuditService, AuditService>();
+
+        // AI services (Semantic Kernel multi-provider support)
+        services.AddScoped<IAIServiceFactory, AIServiceFactory>();
+        services.AddScoped<IAITranslationService, AITranslationService>();
 
         return services;
     }

@@ -21,7 +21,7 @@
 @inject ILogger<Messages> Logger
 @inject ISnackbar Snackbar
 @inject IMediaRefetchQueueService MediaRefetchQueue
-@inject TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService TranslationService
+@inject TelegramGroupsAdmin.Core.Services.AI.IAITranslationService TranslationService
 @inject IWebBotMessagingService WebBotMessagingService
 @attribute [Authorize]
 @implements IDisposable

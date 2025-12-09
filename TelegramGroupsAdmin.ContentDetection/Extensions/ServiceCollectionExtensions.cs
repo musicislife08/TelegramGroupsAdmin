@@ -26,7 +26,7 @@ public static class ServiceCollectionExtensions
 
             // Register core services
             services.AddScoped<ITokenizerService, TokenizerService>();
-            services.AddScoped<IOpenAITranslationService, OpenAITranslationService>();
+            // Note: IAITranslationService is registered in Core (depends on IAIServiceFactory)
             services.AddSingleton<ILanguageDetectionService, FastTextLanguageDetectionService>(); // FastText language detection (Singleton: model loaded once, thread-safe)
             services.AddScoped<IUrlContentScrapingService, UrlContentScrapingService>();
             services.AddSingleton<IImageTextExtractionService, ImageTextExtractionService>(); // ML-5: OCR service (Singleton: binary path lookup happens once)
@@ -103,7 +103,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IContentCheckV2, Checks.SimilarityContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.BayesContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.SpacingContentCheckV2>();
-            services.AddScoped<IContentCheckV2, Checks.OpenAIContentCheckV2>();
+            services.AddScoped<IContentCheckV2, Checks.AIContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.UrlBlocklistContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.ThreatIntelContentCheckV2>();
             services.AddScoped<IContentCheckV2, Checks.ImageContentCheckV2>();

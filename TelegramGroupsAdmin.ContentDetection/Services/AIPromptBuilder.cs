@@ -4,16 +4,16 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
-/// Static utility class for building OpenAI API prompts
-/// Extracted from OpenAISpamCheck (Phase 4.5 modular prompt system)
+/// Static utility class for building AI prompts for spam detection.
+/// Provider-agnostic - returns prompts that can be used with any AI provider via IChatService.
 /// </summary>
-public static class OpenAIPromptBuilder
+public static class AIPromptBuilder
 {
     /// <summary>
-    /// Create enhanced OpenAI API request with history context and JSON response format
-    /// Phase 4.5: Uses modular prompt building system
+    /// Create system and user prompts for spam detection.
+    /// Returns prompts that can be passed to IChatService.GetCompletionAsync().
     /// </summary>
-    public static OpenAIRequest CreateRequest(
+    public static AIPromptResult CreatePrompts(
         OpenAICheckRequest req,
         IEnumerable<HistoryMessage> history)
     {
@@ -56,19 +56,7 @@ public static class OpenAIPromptBuilder
               Respond with JSON: {"result": "spam" or "clean" or "review", "reason": "explanation", "confidence": 0.0-1.0}
               """;
 
-        return new OpenAIRequest
-        {
-            Model = req.Model,
-            Messages =
-            [
-                new OpenAIMessage { Role = "system", Content = systemPrompt },
-                new OpenAIMessage { Role = "user", Content = userPrompt }
-            ],
-            MaxTokens = req.MaxTokens,
-            Temperature = 0.1,
-            TopP = 1.0,
-            ResponseFormat = new { type = "json_object" }
-        };
+        return new AIPromptResult(systemPrompt, userPrompt);
     }
 
     /// <summary>
@@ -194,23 +182,6 @@ public static class OpenAIPromptBuilder
 }
 
 /// <summary>
-/// OpenAI API request structure
+/// Result of prompt building - contains system and user prompts for AI chat completion.
 /// </summary>
-public record OpenAIRequest
-{
-    public required string Model { get; init; }
-    public required OpenAIMessage[] Messages { get; init; }
-    public int MaxTokens { get; init; }
-    public double Temperature { get; init; }
-    public double TopP { get; init; }
-    public object? ResponseFormat { get; init; }
-}
-
-/// <summary>
-/// OpenAI message structure
-/// </summary>
-public record OpenAIMessage
-{
-    public required string Role { get; init; }
-    public required string Content { get; init; }
-}
+public record AIPromptResult(string SystemPrompt, string UserPrompt);
