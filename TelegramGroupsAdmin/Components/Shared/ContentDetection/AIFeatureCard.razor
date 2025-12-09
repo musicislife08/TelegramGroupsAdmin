@@ -51,7 +51,9 @@
             @if (SelectedConnection.Provider == AIProviderType.AzureOpenAI)
             {
                 <!-- Azure: Deployment name text field -->
-                <MudTextField @bind-Value="FeatureConfig.AzureDeploymentName"
+                <MudTextField T="string"
+                              Value="@FeatureConfig.AzureDeploymentName"
+                              ValueChanged="@OnAzureDeploymentNameChanged"
                               Label="Deployment Name"
                               Variant="Variant.Outlined"
                               Required="true"
@@ -64,7 +66,8 @@
                     @if (SelectedConnection.AvailableModels.Count > 0)
                     {
                         <MudSelect T="string"
-                                   @bind-Value="FeatureConfig.Model"
+                                   Value="@FeatureConfig.Model"
+                                   ValueChanged="@OnModelChanged"
                                    Label="Model"
                                    Variant="Variant.Outlined"
                                    Style="flex-grow: 1;">
@@ -78,7 +81,9 @@
                     }
                     else
                     {
-                        <MudTextField @bind-Value="FeatureConfig.Model"
+                        <MudTextField T="string"
+                                      Value="@FeatureConfig.Model"
+                                      ValueChanged="@OnModelChanged"
                                       Label="Model"
                                       Variant="Variant.Outlined"
                                       Placeholder="gpt-4o-mini"
@@ -104,12 +109,16 @@
 
             <!-- Parameters -->
             <MudStack Row="true" Spacing="2">
-                <MudNumericField @bind-Value="FeatureConfig.MaxTokens"
+                <MudNumericField T="int"
+                                 Value="@FeatureConfig.MaxTokens"
+                                 ValueChanged="@OnMaxTokensChanged"
                                  Label="Max Tokens"
                                  Variant="Variant.Outlined"
                                  Min="100"
                                  Style="flex: 1;" />
-                <MudNumericField @bind-Value="FeatureConfig.Temperature"
+                <MudNumericField T="double"
+                                 Value="@FeatureConfig.Temperature"
+                                 ValueChanged="@OnTemperatureChanged"
                                  Label="Temperature"
                                  Variant="Variant.Outlined"
                                  Min="0.0" Max="2.0" Step="0.1"
@@ -258,6 +267,30 @@
     {
         _testResult = null; // Clear test result on connection change
         await OnConnectionChanged.InvokeAsync(connectionId);
+    }
+
+    private void OnAzureDeploymentNameChanged(string? value)
+    {
+        FeatureConfig.AzureDeploymentName = value;
+        _testResult = null; // Clear test result - config changed, must re-test
+    }
+
+    private void OnModelChanged(string? value)
+    {
+        FeatureConfig.Model = value ?? "";
+        _testResult = null; // Clear test result - config changed, must re-test
+    }
+
+    private void OnMaxTokensChanged(int value)
+    {
+        FeatureConfig.MaxTokens = value;
+        _testResult = null; // Clear test result - config changed, must re-test
+    }
+
+    private void OnTemperatureChanged(double value)
+    {
+        FeatureConfig.Temperature = value;
+        _testResult = null; // Clear test result - config changed, must re-test
     }
 
     private async Task OnRefreshModelsClicked()

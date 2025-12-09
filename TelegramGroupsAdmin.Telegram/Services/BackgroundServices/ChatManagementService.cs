@@ -4,11 +4,13 @@ using System.Collections.Concurrent;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Services.Telegram;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -18,6 +20,8 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public class ChatManagementService(
     IServiceProvider serviceProvider,
+    TelegramBotClientFactory botFactory,
+    TelegramConfigLoader configLoader,
     ILogger<ChatManagementService> logger)
 {
     private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();
@@ -547,10 +551,16 @@ public class ChatManagementService(
     {
         try
         {
+            // Get bot client if not provided - API calls are safe even when polling is disabled
             if (botClient == null)
             {
-                logger.LogWarning("Bot client not initialized, skipping health check for chat {ChatId}", chatId);
-                return;
+                var botToken = await configLoader.LoadConfigAsync();
+                if (string.IsNullOrEmpty(botToken))
+                {
+                    logger.LogWarning("No bot token configured, skipping health check for chat {ChatId}", chatId);
+                    return;
+                }
+                botClient = botFactory.GetOrCreate(botToken);
             }
 
             var (health, chatName) = await PerformHealthCheckAsync(botClient, chatId, cancellationToken);
@@ -744,10 +754,16 @@ public class ChatManagementService(
     {
         try
         {
+            // Get bot client if not provided - API calls are safe even when polling is disabled
             if (botClient == null)
             {
-                logger.LogWarning("Bot client not initialized, skipping health check");
-                return;
+                var botToken = await configLoader.LoadConfigAsync();
+                if (string.IsNullOrEmpty(botToken))
+                {
+                    logger.LogWarning("No bot token configured, skipping health check");
+                    return;
+                }
+                botClient = botFactory.GetOrCreate(botToken);
             }
 
             using var scope = serviceProvider.CreateScope();
@@ -770,6 +786,14 @@ public class ChatManagementService(
                 {
                     await FetchChatIconAsync(botClient, chat.ChatId, cancellationToken);
                 }
+            }
+
+            // Sync linked channels for all managed chats (impersonation detection)
+            // This handles: new links, changed links, and removed links
+            logger.LogInformation("Syncing linked channels for {Count} managed chats", chats.Count);
+            foreach (var chat in chats)
+            {
+                await FetchLinkedChannelAsync(botClient, chat.ChatId, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -915,6 +939,101 @@ public class ChatManagementService(
         );
 
         await userRepo.UpsertAsync(newUser, cancellationToken);
+    }
+
+    /// <summary>
+    /// Fetch and sync linked channel information for a managed chat.
+    /// Linked channels are used for impersonation detection (comparing user names/photos against channel).
+    /// Creates/updates the linked channel record if chat has one, deletes stale record if channel was unlinked.
+    /// </summary>
+    private async Task FetchLinkedChannelAsync(
+        ITelegramBotClient botClient,
+        long chatId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var linkedChannelsRepository = scope.ServiceProvider.GetRequiredService<ILinkedChannelsRepository>();
+            var photoService = scope.ServiceProvider.GetRequiredService<TelegramPhotoService>();
+            var photoHashService = scope.ServiceProvider.GetRequiredService<IPhotoHashService>();
+
+            // Get chat info to check for linked channel
+            var chat = await botClient.GetChat(chatId, cancellationToken);
+
+            if (chat.LinkedChatId.HasValue)
+            {
+                // Chat has a linked channel - fetch channel info
+                var linkedChannelId = chat.LinkedChatId.Value;
+
+                try
+                {
+                    var linkedChannel = await botClient.GetChat(linkedChannelId, cancellationToken);
+
+                    // Fetch and save channel icon
+                    string? iconPath = null;
+                    try
+                    {
+                        iconPath = await photoService.GetChatIconAsync(botClient, linkedChannelId);
+                    }
+                    catch (Exception iconEx)
+                    {
+                        logger.LogWarning(iconEx, "Failed to fetch channel icon for {ChannelId} (non-fatal)", linkedChannelId);
+                    }
+
+                    // Compute photo hash for impersonation comparison
+                    byte[]? photoHash = null;
+                    if (!string.IsNullOrEmpty(iconPath))
+                    {
+                        try
+                        {
+                            photoHash = await photoHashService.ComputePhotoHashAsync(iconPath);
+                        }
+                        catch (Exception hashEx)
+                        {
+                            logger.LogWarning(hashEx, "Failed to compute photo hash for channel {ChannelId} (non-fatal)", linkedChannelId);
+                        }
+                    }
+
+                    // Upsert linked channel record
+                    var record = new LinkedChannelRecord(
+                        Id: 0, // DB will assign or upsert will match existing
+                        ManagedChatId: chatId,
+                        ChannelId: linkedChannelId,
+                        ChannelName: linkedChannel.Title,
+                        ChannelIconPath: iconPath,
+                        PhotoHash: photoHash,
+                        LastSynced: DateTimeOffset.UtcNow
+                    );
+
+                    await linkedChannelsRepository.UpsertAsync(record, cancellationToken);
+
+                    logger.LogDebug(
+                        "Synced linked channel {ChannelId} ({ChannelName}) for chat {ChatId}",
+                        linkedChannelId,
+                        linkedChannel.Title,
+                        chatId);
+                }
+                catch (Exception channelEx)
+                {
+                    // Bot may not have permission to GetChat on the linked channel
+                    logger.LogWarning(channelEx,
+                        "Failed to fetch linked channel {ChannelId} for chat {ChatId} - bot may lack permission",
+                        linkedChannelId,
+                        chatId);
+                }
+            }
+            else
+            {
+                // No linked channel - remove any stale record
+                await linkedChannelsRepository.DeleteByChatIdAsync(chatId, cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to sync linked channel for chat {ChatId} (non-fatal)", chatId);
+            // Non-fatal - don't throw
+        }
     }
 
     /// <summary>

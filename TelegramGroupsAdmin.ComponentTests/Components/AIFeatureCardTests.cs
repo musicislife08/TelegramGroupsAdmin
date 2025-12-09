@@ -386,6 +386,157 @@ public class AIFeatureCardTests : MudBlazorTestContext
 
     #endregion
 
+    #region Test Result Clearing Behavior (#137)
+
+    [Test]
+    public async Task SaveButton_DisabledInitially_BeforeTest()
+    {
+        // Arrange
+        var connection = CreateConnection();
+        var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
+        var connections = new List<AIConnection> { connection };
+
+        // Act
+        var cut = Render<AIFeatureCard>(p => p
+            .Add(x => x.FeatureType, AIFeatureType.SpamDetection)
+            .Add(x => x.FeatureConfig, config)
+            .Add(x => x.Connections, connections)
+            .Add(x => x.TestService, _mockTestService));
+
+        // Assert - Save button should be disabled (no test result yet)
+        var saveButton = cut.FindAll("button").FirstOrDefault(b => b.TextContent.Contains("Save"));
+        Assert.That(saveButton, Is.Not.Null, "Save button should exist");
+        Assert.That(saveButton!.HasAttribute("disabled"), Is.True, "Save button should be disabled before test");
+    }
+
+    [Test]
+    public async Task SaveButton_EnabledAfterSuccessfulTest()
+    {
+        // Arrange
+        var connection = CreateConnection();
+        var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
+        var connections = new List<AIConnection> { connection };
+
+        _mockTestService.TestFeatureAsync(
+            Arg.Any<AIFeatureType>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>())
+            .Returns(FeatureTestResult.Ok("Test passed"));
+
+        var cut = Render<AIFeatureCard>(p => p
+            .Add(x => x.FeatureType, AIFeatureType.SpamDetection)
+            .Add(x => x.FeatureConfig, config)
+            .Add(x => x.Connections, connections)
+            .Add(x => x.TestService, _mockTestService));
+
+        // Act - Click Test button
+        var testButton = cut.FindAll("button").First(b => b.TextContent.Contains("Test"));
+        await cut.InvokeAsync(() => testButton.Click());
+
+        // Assert - Save button should be enabled after successful test
+        var saveButton = cut.FindAll("button").First(b => b.TextContent.Contains("Save"));
+        Assert.That(saveButton.HasAttribute("disabled"), Is.False, "Save button should be enabled after successful test");
+    }
+
+    [Test]
+    public async Task SaveButton_DisabledAfterFailedTest()
+    {
+        // Arrange
+        var connection = CreateConnection();
+        var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
+        var connections = new List<AIConnection> { connection };
+
+        _mockTestService.TestFeatureAsync(
+            Arg.Any<AIFeatureType>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>())
+            .Returns(FeatureTestResult.Fail("Connection failed", "API error"));
+
+        var cut = Render<AIFeatureCard>(p => p
+            .Add(x => x.FeatureType, AIFeatureType.SpamDetection)
+            .Add(x => x.FeatureConfig, config)
+            .Add(x => x.Connections, connections)
+            .Add(x => x.TestService, _mockTestService));
+
+        // Act - Click Test button (test will fail)
+        var testButton = cut.FindAll("button").First(b => b.TextContent.Contains("Test"));
+        await cut.InvokeAsync(() => testButton.Click());
+
+        // Assert - Save button should still be disabled after failed test
+        var saveButton = cut.FindAll("button").First(b => b.TextContent.Contains("Save"));
+        Assert.That(saveButton.HasAttribute("disabled"), Is.True, "Save button should be disabled after failed test");
+    }
+
+    [Test]
+    public async Task ShowsPassedChip_AfterSuccessfulTest()
+    {
+        // Arrange
+        var connection = CreateConnection();
+        var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
+        var connections = new List<AIConnection> { connection };
+
+        _mockTestService.TestFeatureAsync(
+            Arg.Any<AIFeatureType>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>())
+            .Returns(FeatureTestResult.Ok("Test passed"));
+
+        var cut = Render<AIFeatureCard>(p => p
+            .Add(x => x.FeatureType, AIFeatureType.SpamDetection)
+            .Add(x => x.FeatureConfig, config)
+            .Add(x => x.Connections, connections)
+            .Add(x => x.TestService, _mockTestService));
+
+        // Act - Click Test button
+        var testButton = cut.FindAll("button").First(b => b.TextContent.Contains("Test"));
+        await cut.InvokeAsync(() => testButton.Click());
+
+        // Assert - Should show "Passed" chip
+        Assert.That(cut.Markup, Does.Contain("Passed"));
+    }
+
+    [Test]
+    public async Task ShowsFailedChip_AfterFailedTest()
+    {
+        // Arrange
+        var connection = CreateConnection();
+        var config = CreateFeatureConfig(connectionId: connection.Id, model: "gpt-4o");
+        var connections = new List<AIConnection> { connection };
+
+        _mockTestService.TestFeatureAsync(
+            Arg.Any<AIFeatureType>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
+            Arg.Any<int>(),
+            Arg.Any<CancellationToken>())
+            .Returns(FeatureTestResult.Fail("Connection failed"));
+
+        var cut = Render<AIFeatureCard>(p => p
+            .Add(x => x.FeatureType, AIFeatureType.SpamDetection)
+            .Add(x => x.FeatureConfig, config)
+            .Add(x => x.Connections, connections)
+            .Add(x => x.TestService, _mockTestService));
+
+        // Act - Click Test button
+        var testButton = cut.FindAll("button").First(b => b.TextContent.Contains("Test"));
+        await cut.InvokeAsync(() => testButton.Click());
+
+        // Assert - Should show "Failed" chip
+        Assert.That(cut.Markup, Does.Contain("Failed"));
+    }
+
+    #endregion
+
     #region Structure Tests
 
     [Test]

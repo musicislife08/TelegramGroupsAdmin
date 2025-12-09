@@ -167,10 +167,8 @@ public class ChatsTests : AuthenticatedTestBase
         // Search for "Development"
         await _chatsPage.SearchChatsAsync("Development");
 
-        // Assert - only Development chats visible
-        var chatCount = await _chatsPage.GetChatCountAsync();
-        Assert.That(chatCount, Is.EqualTo(2),
-            "Should show 2 chats matching 'Development'");
+        // Assert - only Development chats visible (uses auto-retry for Blazor re-render)
+        await _chatsPage.ExpectChatCountAsync(2);
 
         var chatNames = await _chatsPage.GetChatNamesAsync();
         Assert.That(chatNames, Does.Contain("Development Team"));
@@ -196,17 +194,14 @@ public class ChatsTests : AuthenticatedTestBase
         await _chatsPage.NavigateAsync();
         await _chatsPage.WaitForLoadAsync();
 
-        // Filter and then clear
+        // Filter and then clear (uses auto-retry for Blazor re-render)
         await _chatsPage.SearchChatsAsync("Engineering");
-        var filteredCount = await _chatsPage.GetChatCountAsync();
-        Assert.That(filteredCount, Is.EqualTo(1), "Should show 1 chat when filtering");
+        await _chatsPage.ExpectChatCountAsync(1);
 
         await _chatsPage.ClearSearchAsync();
 
-        // Assert - all chats visible
-        var totalCount = await _chatsPage.GetChatCountAsync();
-        Assert.That(totalCount, Is.EqualTo(2),
-            "Should show all 2 chats when search is cleared");
+        // Assert - all chats visible (uses auto-retry for Blazor re-render)
+        await _chatsPage.ExpectChatCountAsync(2);
     }
 
     [Test]
@@ -409,10 +404,8 @@ public class ChatsTests : AuthenticatedTestBase
         // Search by chat ID
         await _chatsPage.SearchChatsAsync(chat.ChatId.ToString());
 
-        // Assert - only the chat with matching ID is shown
-        var chatCount = await _chatsPage.GetChatCountAsync();
-        Assert.That(chatCount, Is.EqualTo(1),
-            "Should show only 1 chat when searching by ID");
+        // Assert - only the chat with matching ID is shown (uses auto-retry for Blazor re-render)
+        await _chatsPage.ExpectChatCountAsync(1);
 
         var chatNames = await _chatsPage.GetChatNamesAsync();
         Assert.That(chatNames, Does.Contain("ID Search Chat"),

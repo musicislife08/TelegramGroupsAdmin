@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.Tests.TestData;
 public static class GoldenDataset
 {
     // Tables with DTOs that BackupService can export (excludes: __EFMigrationsHistory, file_scan_quota, file_scan_results, ticker.*)
-    public const int TotalTableCount = 36; // Updated 2025-12-01: +pending_notifications (renamed to Dto suffix for backup coverage)
+    public const int TotalTableCount = 37; // Updated 2025-12-09: +linked_channels (Phase 4.10 impersonation detection)
 
     /// <summary>
     /// Web application users (ASP.NET Identity)
@@ -246,6 +246,27 @@ public static class GoldenDataset
     }
 
     /// <summary>
+    /// Linked channels (channels linked to managed chat groups for impersonation detection)
+    /// </summary>
+    public static class LinkedChannels
+    {
+        // Channel linked to MainChat (1:1 relationship per Telegram API)
+        public const long Channel1_ManagedChatId = ManagedChats.MainChat_Id;
+        public const long Channel1_ChannelId = -1001555777999;
+        public const string Channel1_Name = "Main Test Channel";
+        public const string? Channel1_IconPath = null; // No icon downloaded
+        // Photo hash: 8 bytes representing a pHash for impersonation detection
+        public static readonly byte[] Channel1_PhotoHash = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0];
+
+        // Channel linked to Chat1 (no photo hash - tests null handling)
+        public const long Channel2_ManagedChatId = ManagedChats.Chat1_Id;
+        public const long Channel2_ChannelId = -1001444666888;
+        public const string Channel2_Name = "Alpha Channel";
+        public const string? Channel2_IconPath = "channels/alpha_icon.jpg";
+        public static readonly byte[]? Channel2_PhotoHash = null;
+    }
+
+    /// <summary>
     /// Test API keys (plaintext, will be encrypted during seed)
     /// </summary>
     public static class ApiKeys
@@ -345,7 +366,21 @@ public static class GoldenDataset
             """
         );
 
-        // 4. Seed messages (use parameters for text to handle special characters)
+        // 4. Seed linked_channels (FK to managed_chats)
+        await context.Database.ExecuteSqlRawAsync(
+            $$"""
+            INSERT INTO linked_channels (managed_chat_id, channel_id, channel_name, channel_icon_path, photo_hash, last_synced)
+            VALUES
+            ({{LinkedChannels.Channel1_ManagedChatId}}, {{LinkedChannels.Channel1_ChannelId}}, {0}, NULL, {1}, NOW() - INTERVAL '1 day'),
+            ({{LinkedChannels.Channel2_ManagedChatId}}, {{LinkedChannels.Channel2_ChannelId}}, {2}, {3}, NULL, NOW() - INTERVAL '2 days')
+            """,
+            LinkedChannels.Channel1_Name,
+            LinkedChannels.Channel1_PhotoHash,
+            LinkedChannels.Channel2_Name,
+            (object?)LinkedChannels.Channel2_IconPath ?? DBNull.Value
+        );
+
+        // 5. Seed messages (use parameters for text to handle special characters, FK to telegram_users and managed_chats)
         await context.Database.ExecuteSqlRawAsync(
             $$"""
             INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, media_type, content_check_skip_reason)
@@ -366,7 +401,7 @@ public static class GoldenDataset
             Messages.Msg7_Text, Messages.Msg8_Text, Messages.Msg9_Text, Messages.Msg10_Text, Messages.Msg11_Text
         );
 
-        // 5. Seed detection_results (use parameters for text fields)
+        // 6. Seed detection_results (FK to messages)
         await context.Database.ExecuteSqlRawAsync(
             $$"""
             INSERT INTO detection_results (message_id, detected_at, detection_source, detection_method, confidence, reason, system_identifier, used_for_training, net_confidence, edit_version)
@@ -378,7 +413,7 @@ public static class GoldenDataset
             DetectionResults.Result2_DetectionMethod, DetectionResults.Result2_Reason
         );
 
-        // 6. Seed configs (with encrypted api_keys and JSONB)
+        // 7. Seed configs (with encrypted api_keys and JSONB)
         string? encryptedApiKeys = null;
         if (apiKeyProtector != null)
         {
