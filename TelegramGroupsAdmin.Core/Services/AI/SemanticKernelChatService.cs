@@ -15,7 +15,12 @@ namespace TelegramGroupsAdmin.Core.Services.AI;
 /// </summary>
 public class SemanticKernelChatService : IChatService
 {
-    // Static cache - persists across scoped instances for kernel reuse
+    // Static cache - persists across scoped instances for kernel reuse.
+    // Thread safety: ConcurrentDictionary + GetOrAdd provides atomic access even when
+    // multiple scoped instances (from different HTTP requests) access simultaneously.
+    // Cache bounds: Expected <10 entries in homelab use (connections × models configured).
+    // Unbounded growth is not a concern - entries only added when new connection/model combos
+    // are configured, and InvalidateCache() clears entries when connections are modified.
     private static readonly ConcurrentDictionary<string, CachedKernel> KernelCache = new();
     private readonly ISystemConfigRepository _configRepository;
     private readonly ILogger<SemanticKernelChatService> _logger;
@@ -170,7 +175,8 @@ public class SemanticKernelChatService : IChatService
         var kernelInfo = await GetOrCreateTestKernelAsync(connectionId, model, azureDeploymentName, ct);
         if (kernelInfo == null)
         {
-            _logger.LogWarning("Failed to create test kernel for connection {ConnectionId}, model {Model}",
+            // Debug level - specific reason already logged at Warning level by GetOrCreateTestKernelAsync
+            _logger.LogDebug("Test kernel not available for connection {ConnectionId}, model {Model}",
                 connectionId, model);
             return null;
         }
@@ -250,7 +256,8 @@ public class SemanticKernelChatService : IChatService
         var kernelInfo = await GetOrCreateTestKernelAsync(connectionId, model, azureDeploymentName, ct);
         if (kernelInfo == null)
         {
-            _logger.LogWarning("Failed to create test kernel for vision call, connection {ConnectionId}, model {Model}",
+            // Debug level - specific reason already logged at Warning level by GetOrCreateTestKernelAsync
+            _logger.LogDebug("Test kernel not available for vision call, connection {ConnectionId}, model {Model}",
                 connectionId, model);
             return null;
         }
@@ -418,6 +425,11 @@ public class SemanticKernelChatService : IChatService
     /// Generate a cache key that changes when relevant config changes.
     /// Uses full key string to avoid hash collisions - cache size is small (typically &lt;10 entries).
     /// </summary>
+    /// <remarks>
+    /// MaxTokens and Temperature are intentionally NOT included in the cache key because they are
+    /// per-request execution settings passed to GetChatMessageContentAsync(), not kernel configuration.
+    /// The kernel/client can be reused across requests with different token limits and temperatures.
+    /// </remarks>
     private static string GenerateCacheKey(AIConnection connection, AIFeatureConfig featureConfig, string? apiKey)
     {
         // Use full key to avoid hash collisions - cache has few entries

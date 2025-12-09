@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.Services
 @inject ISystemConfigRepository ConfigRepository
 @inject IAIServiceFactory AIServiceFactory
+@inject IChatService ChatService
 @inject IAuditService AuditService
 @inject BlazorAuthHelper AuthHelper
 @inject IDialogService DialogService
@@ -25,13 +26,7 @@
     <!-- Add Connection Button -->
     <MudItem xs="12">
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudText Typo="Typo.h6">Connections (@_config.Connections.Count)</MudText>
-                @if (_isSaving)
-                {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
-                }
-            </MudStack>
+            <MudText Typo="Typo.h6">Connections (@_config.Connections.Count)</MudText>
             <MudButton Variant="Variant.Filled"
                       Color="Color.Primary"
                       StartIcon="@Icons.Material.Filled.Add"
@@ -61,110 +56,10 @@
         @foreach (var connection in _config.Connections)
         {
             <MudItem xs="12" md="6">
-                <MudPaper Class="pa-4" Elevation="2">
-                    <MudStack Spacing="3">
-                        <!-- Header -->
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudIcon Icon="@GetProviderIcon(connection.Provider)" Color="Color.Primary" />
-                                <div>
-                                    <MudText Typo="Typo.subtitle1"><strong>@connection.Id</strong></MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@GetProviderDisplayName(connection.Provider)</MudText>
-                                </div>
-                            </MudStack>
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                <MudSwitch T="bool"
-                                          Value="@connection.Enabled"
-                                          ValueChanged="@((bool enabled) => ToggleConnectionAsync(connection, enabled))"
-                                          Color="Color.Primary"
-                                          Size="Size.Small" />
-                                <MudChip T="string"
-                                        Color="@(connection.Enabled ? Color.Success : Color.Default)"
-                                        Size="Size.Small">
-                                    @(connection.Enabled ? "Enabled" : "Disabled")
-                                </MudChip>
-                            </MudStack>
-                        </MudStack>
-
-                        <MudDivider />
-
-                        <!-- Provider-specific fields -->
-                        @if (connection.Provider == AIProviderType.AzureOpenAI)
-                        {
-                            <MudTextField Value="@connection.AzureEndpoint"
-                                         ValueChanged="@((string val) => OnAzureEndpointChanged(connection, val))"
-                                         Label="Azure Endpoint"
-                                         Variant="Variant.Outlined"
-                                         Placeholder="https://your-resource.openai.azure.com/"
-                                         HelperText="Azure OpenAI Service endpoint URL"
-                                         DebounceInterval="500"
-                                         OnDebounceIntervalElapsed="@SaveConfigAsync" />
-                            <MudTextField Value="@connection.AzureApiVersion"
-                                         ValueChanged="@((string val) => OnAzureApiVersionChanged(connection, val))"
-                                         Label="API Version"
-                                         Variant="Variant.Outlined"
-                                         HelperText="e.g., 2024-02-01"
-                                         DebounceInterval="500"
-                                         OnDebounceIntervalElapsed="@SaveConfigAsync" />
-                        }
-                        else if (connection.Provider == AIProviderType.LocalOpenAI)
-                        {
-                            <MudTextField Value="@connection.LocalEndpoint"
-                                         ValueChanged="@((string val) => OnLocalEndpointChanged(connection, val))"
-                                         Label="Endpoint URL"
-                                         Variant="Variant.Outlined"
-                                         Placeholder="http://localhost:11434/v1"
-                                         HelperText="OpenAI-compatible API endpoint (Ollama, LM Studio, vLLM)"
-                                         DebounceInterval="500"
-                                         OnDebounceIntervalElapsed="@SaveConfigAsync" />
-                            <MudSwitch T="bool"
-                                      Value="@connection.LocalRequiresApiKey"
-                                      ValueChanged="@((bool val) => OnLocalRequiresApiKeyChanged(connection, val))"
-                                      Label="Requires API Key"
-                                      Color="Color.Primary" />
-                        }
-
-                        <!-- API Key -->
-                        @{
-                            var apiKeyValue = GetApiKey(connection.Id);
-                            var showKey = _visibleApiKeys.Contains(connection.Id);
-                        }
-                        <MudTextField Value="@apiKeyValue"
-                                     ValueChanged="@((string val) => SetApiKey(connection.Id, val))"
-                                     Label="API Key"
-                                     Variant="Variant.Outlined"
-                                     InputType="@(showKey ? InputType.Text : InputType.Password)"
-                                     Placeholder="@GetApiKeyPlaceholder(connection.Provider)"
-                                     HelperText="@GetApiKeyHelperText(connection.Provider)"
-                                     Disabled="@(connection.Provider == AIProviderType.LocalOpenAI && !connection.LocalRequiresApiKey)"
-                                     Adornment="Adornment.End"
-                                     AdornmentIcon="@(showKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
-                                     OnAdornmentClick="@(() => ToggleKeyVisibility(connection.Id))"
-                                     DebounceInterval="500"
-                                     OnDebounceIntervalElapsed="@SaveApiKeysAsync" />
-
-                        <!-- Status -->
-                        @{
-                            var hasKey = !string.IsNullOrWhiteSpace(apiKeyValue);
-                            var isReady = connection.Enabled && (hasKey || (connection.Provider == AIProviderType.LocalOpenAI && !connection.LocalRequiresApiKey));
-                        }
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                            <MudChip T="string"
-                                    Color="@(isReady ? Color.Success : Color.Warning)"
-                                    Size="Size.Small"
-                                    Icon="@(isReady ? Icons.Material.Filled.Check : Icons.Material.Filled.Warning)">
-                                @(isReady ? "Ready" : (hasKey ? "Disabled" : "Needs API Key"))
-                            </MudChip>
-                            <MudButton Variant="Variant.Text"
-                                      Color="Color.Error"
-                                      Size="Size.Small"
-                                      StartIcon="@Icons.Material.Filled.Delete"
-                                      OnClick="@(() => DeleteConnectionAsync(connection))">
-                                Delete
-                            </MudButton>
-                        </MudStack>
-                    </MudStack>
-                </MudPaper>
+                <AIConnectionCard Connection="@connection"
+                                  InitialApiKey="@GetApiKey(connection.Id)"
+                                  OnSave="@SaveConnectionAsync"
+                                  OnDelete="@DeleteConnectionAsync" />
             </MudItem>
         }
     }
@@ -197,8 +92,6 @@
 @code {
     private AIProviderConfig _config = new();
     private ApiKeysConfig _apiKeys = new();
-    private bool _isSaving;
-    private HashSet<string> _visibleApiKeys = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -223,86 +116,42 @@
         }
     }
 
-    private async Task SaveConfigAsync()
+    private async Task SaveConnectionAsync((AIConnection Connection, string? ApiKey) args)
     {
-        if (_isSaving) return;
-
-        _isSaving = true;
-        StateHasChanged();
-
         try
         {
+            // Save config (connection is already updated by the card component)
             await ConfigRepository.SaveAIProviderConfigAsync(_config);
-            await LogAuditAsync();
+
+            // Save API key if provided
+            if (args.ApiKey != null)
+            {
+                _apiKeys.SetAIConnectionKey(args.Connection.Id, args.ApiKey);
+                await ConfigRepository.SaveApiKeysAsync(_apiKeys);
+            }
+
+            // Invalidate cached kernel for this connection so changes take effect immediately
+            ChatService.InvalidateCache(args.Connection.Id);
+
+            await LogAuditAsync(args.Connection);
+            Snackbar.Add($"Connection '{args.Connection.Id}' saved", Severity.Success);
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error saving settings: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _isSaving = false;
-            StateHasChanged();
+            Snackbar.Add($"Error saving connection: {ex.Message}", Severity.Error);
         }
     }
 
-    private async Task SaveApiKeysAsync()
-    {
-        if (_isSaving) return;
-
-        _isSaving = true;
-        StateHasChanged();
-
-        try
-        {
-            await ConfigRepository.SaveApiKeysAsync(_apiKeys);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error saving API keys: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _isSaving = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task SaveAllAsync()
-    {
-        if (_isSaving) return;
-
-        _isSaving = true;
-        StateHasChanged();
-
-        try
-        {
-            await ConfigRepository.SaveAIProviderConfigAsync(_config);
-            await ConfigRepository.SaveApiKeysAsync(_apiKeys);
-            await LogAuditAsync();
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error saving settings: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _isSaving = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task LogAuditAsync()
+    private async Task LogAuditAsync(AIConnection connection)
     {
         var userId = await AuthHelper.GetCurrentUserIdAsync();
         if (!string.IsNullOrEmpty(userId))
         {
-            var enabledCount = _config.Connections.Count(c => c.Enabled);
             await AuditService.LogEventAsync(
                 AuditEventType.ConfigurationChanged,
                 Actor.FromWebUser(userId),
                 Actor.FromWebUser(userId),
-                $"ai_providers:connections={_config.Connections.Count}:enabled={enabledCount}");
+                $"ai_connection:{connection.Id}:provider={connection.Provider}:enabled={connection.Enabled}");
         }
     }
 
@@ -326,35 +175,10 @@
         if (result is { Canceled: false, Data: AIConnection newConnection })
         {
             _config.Connections.Add(newConnection);
-            await SaveConfigAsync();
+            await ConfigRepository.SaveAIProviderConfigAsync(_config);
+            await LogAuditAsync(newConnection);
+            Snackbar.Add($"Connection '{newConnection.Id}' created", Severity.Success);
         }
-    }
-
-    private async Task ToggleConnectionAsync(AIConnection connection, bool enabled)
-    {
-        connection.Enabled = enabled;
-        await SaveConfigAsync();
-    }
-
-    private void OnAzureEndpointChanged(AIConnection connection, string value)
-    {
-        connection.AzureEndpoint = value;
-    }
-
-    private void OnAzureApiVersionChanged(AIConnection connection, string value)
-    {
-        connection.AzureApiVersion = value;
-    }
-
-    private void OnLocalEndpointChanged(AIConnection connection, string value)
-    {
-        connection.LocalEndpoint = value;
-    }
-
-    private async Task OnLocalRequiresApiKeyChanged(AIConnection connection, bool value)
-    {
-        connection.LocalRequiresApiKey = value;
-        await SaveConfigAsync();
     }
 
     private async Task DeleteConnectionAsync(AIConnection connection)
@@ -369,57 +193,29 @@
         {
             _config.Connections.Remove(connection);
             _apiKeys.AIConnectionKeys.Remove(connection.Id);
-            await SaveAllAsync();
+
+            await ConfigRepository.SaveAIProviderConfigAsync(_config);
+            await ConfigRepository.SaveApiKeysAsync(_apiKeys);
+
+            // Invalidate cached kernel for deleted connection
+            ChatService.InvalidateCache(connection.Id);
+
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    Actor.FromWebUser(userId),
+                    Actor.FromWebUser(userId),
+                    $"ai_connection_deleted:{connection.Id}");
+            }
+
+            Snackbar.Add($"Connection '{connection.Id}' deleted", Severity.Success);
         }
     }
 
-    private string GetApiKey(string connectionId)
+    private string? GetApiKey(string connectionId)
     {
-        return _apiKeys.GetAIConnectionKey(connectionId) ?? "";
+        return _apiKeys.GetAIConnectionKey(connectionId);
     }
-
-    private void SetApiKey(string connectionId, string value)
-    {
-        _apiKeys.SetAIConnectionKey(connectionId, value);
-    }
-
-    private void ToggleKeyVisibility(string connectionId)
-    {
-        if (_visibleApiKeys.Contains(connectionId))
-            _visibleApiKeys.Remove(connectionId);
-        else
-            _visibleApiKeys.Add(connectionId);
-    }
-
-    private static string GetProviderDisplayName(AIProviderType provider) => provider switch
-    {
-        AIProviderType.OpenAI => "OpenAI (api.openai.com)",
-        AIProviderType.AzureOpenAI => "Azure OpenAI Service",
-        AIProviderType.LocalOpenAI => "Local / OpenAI-compatible",
-        _ => provider.ToString()
-    };
-
-    private static string GetProviderIcon(AIProviderType provider) => provider switch
-    {
-        AIProviderType.OpenAI => Icons.Material.Filled.Cloud,
-        AIProviderType.AzureOpenAI => Icons.Material.Filled.CloudQueue,
-        AIProviderType.LocalOpenAI => Icons.Material.Filled.Computer,
-        _ => Icons.Material.Filled.Psychology
-    };
-
-    private static string GetApiKeyPlaceholder(AIProviderType provider) => provider switch
-    {
-        AIProviderType.OpenAI => "sk-...",
-        AIProviderType.AzureOpenAI => "Azure API key",
-        AIProviderType.LocalOpenAI => "Optional API key",
-        _ => "API key"
-    };
-
-    private static string GetApiKeyHelperText(AIProviderType provider) => provider switch
-    {
-        AIProviderType.OpenAI => "Get your API key from https://platform.openai.com/api-keys",
-        AIProviderType.AzureOpenAI => "Azure OpenAI Service API key from Azure Portal",
-        AIProviderType.LocalOpenAI => "Leave empty if your provider doesn't require authentication",
-        _ => ""
-    };
 }

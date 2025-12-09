@@ -53,6 +53,15 @@ public class FeatureTestService(
         ArgumentNullException.ThrowIfNull(connectionId);
         ArgumentNullException.ThrowIfNull(model);
 
+        // Early validation: if azureDeploymentName was explicitly provided (not null) but is empty/whitespace,
+        // return a clear error instead of letting it fail deep in the kernel builder
+        if (azureDeploymentName is not null && string.IsNullOrWhiteSpace(azureDeploymentName))
+        {
+            return FeatureTestResult.Fail(
+                "Azure deployment name is required",
+                "Enter the deployment name from your Azure OpenAI resource in the Azure Portal.");
+        }
+
         var tokens = maxTokens ?? DefaultMaxTokens;
 
         try

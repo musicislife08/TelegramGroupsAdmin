@@ -1,0 +1,201 @@
+@using TelegramGroupsAdmin.Configuration.Models
+@using TelegramGroupsAdmin.Core.Services.AI
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudStack Spacing="3">
+        <!-- Header -->
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@GetProviderIcon(Connection.Provider)" Color="Color.Primary" />
+                <div>
+                    <MudText Typo="Typo.subtitle1"><strong>@Connection.Id</strong></MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@GetProviderDisplayName(Connection.Provider)</MudText>
+                </div>
+            </MudStack>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudSwitch T="bool"
+                          Value="@_enabled"
+                          ValueChanged="@OnEnabledChanged"
+                          Color="Color.Primary"
+                          Size="Size.Small" />
+                <MudChip T="string"
+                        Color="@(_enabled ? Color.Success : Color.Default)"
+                        Size="Size.Small">
+                    @(_enabled ? "Enabled" : "Disabled")
+                </MudChip>
+            </MudStack>
+        </MudStack>
+
+        <MudDivider />
+
+        <!-- Provider-specific fields -->
+        @if (Connection.Provider == AIProviderType.AzureOpenAI)
+        {
+            <MudTextField @bind-Value="_azureEndpoint"
+                         Label="Azure Endpoint"
+                         Variant="Variant.Outlined"
+                         Placeholder="https://your-resource.openai.azure.com/"
+                         HelperText="Azure OpenAI Service endpoint URL" />
+            <MudTextField @bind-Value="_azureApiVersion"
+                         Label="API Version"
+                         Variant="Variant.Outlined"
+                         HelperText="e.g., 2024-02-01" />
+        }
+        else if (Connection.Provider == AIProviderType.LocalOpenAI)
+        {
+            <MudTextField @bind-Value="_localEndpoint"
+                         Label="Endpoint URL"
+                         Variant="Variant.Outlined"
+                         Placeholder="http://localhost:11434/v1"
+                         HelperText="OpenAI-compatible API endpoint (Ollama, LM Studio, vLLM)" />
+            <MudSwitch T="bool"
+                      @bind-Value="_localRequiresApiKey"
+                      Label="Requires API Key"
+                      Color="Color.Primary" />
+        }
+
+        <!-- API Key -->
+        <MudTextField @bind-Value="_apiKey"
+                     Label="API Key"
+                     Variant="Variant.Outlined"
+                     InputType="@(_showApiKey ? InputType.Text : InputType.Password)"
+                     Placeholder="@GetApiKeyPlaceholder(Connection.Provider)"
+                     HelperText="@GetApiKeyHelperText(Connection.Provider)"
+                     Disabled="@(Connection.Provider == AIProviderType.LocalOpenAI && !_localRequiresApiKey)"
+                     Adornment="Adornment.End"
+                     AdornmentIcon="@(_showApiKey ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                     OnAdornmentClick="@(() => _showApiKey = !_showApiKey)" />
+
+        <!-- Status & Actions -->
+        @{
+            var hasKey = !string.IsNullOrWhiteSpace(_apiKey);
+            var isReady = _enabled && (hasKey || (Connection.Provider == AIProviderType.LocalOpenAI && !_localRequiresApiKey));
+        }
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudChip T="string"
+                    Color="@(isReady ? Color.Success : Color.Warning)"
+                    Size="Size.Small"
+                    Icon="@(isReady ? Icons.Material.Filled.Check : Icons.Material.Filled.Warning)">
+                @(isReady ? "Ready" : (hasKey ? "Disabled" : "Needs API Key"))
+            </MudChip>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudButton Variant="Variant.Filled"
+                          Color="Color.Primary"
+                          Size="Size.Small"
+                          StartIcon="@(_isSaving ? null : Icons.Material.Filled.Save)"
+                          OnClick="@SaveAsync"
+                          Disabled="@_isSaving">
+                    @if (_isSaving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <text>Saving...</text>
+                    }
+                    else
+                    {
+                        <text>Save</text>
+                    }
+                </MudButton>
+                <MudButton Variant="Variant.Text"
+                          Color="Color.Error"
+                          Size="Size.Small"
+                          StartIcon="@Icons.Material.Filled.Delete"
+                          OnClick="@OnDeleteClicked">
+                    Delete
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public AIConnection Connection { get; set; } = null!;
+    [Parameter, EditorRequired] public string? InitialApiKey { get; set; }
+    [Parameter] public EventCallback<(AIConnection Connection, string? ApiKey)> OnSave { get; set; }
+    [Parameter] public EventCallback<AIConnection> OnDelete { get; set; }
+
+    // Local state for editing (copied from Connection on init)
+    private bool _enabled;
+    private string? _azureEndpoint;
+    private string? _azureApiVersion;
+    private string? _localEndpoint;
+    private bool _localRequiresApiKey;
+    private string? _apiKey;
+    private bool _showApiKey;
+    private bool _isSaving;
+
+    protected override void OnParametersSet()
+    {
+        // Copy connection values to local state for editing
+        _enabled = Connection.Enabled;
+        _azureEndpoint = Connection.AzureEndpoint;
+        _azureApiVersion = Connection.AzureApiVersion;
+        _localEndpoint = Connection.LocalEndpoint;
+        _localRequiresApiKey = Connection.LocalRequiresApiKey;
+        _apiKey = InitialApiKey;
+    }
+
+    private void OnEnabledChanged(bool enabled)
+    {
+        _enabled = enabled;
+    }
+
+    private async Task SaveAsync()
+    {
+        _isSaving = true;
+        StateHasChanged();
+
+        try
+        {
+            // Update connection with local state
+            Connection.Enabled = _enabled;
+            Connection.AzureEndpoint = _azureEndpoint;
+            Connection.AzureApiVersion = _azureApiVersion;
+            Connection.LocalEndpoint = _localEndpoint;
+            Connection.LocalRequiresApiKey = _localRequiresApiKey;
+
+            await OnSave.InvokeAsync((Connection, _apiKey));
+        }
+        finally
+        {
+            _isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnDeleteClicked()
+    {
+        await OnDelete.InvokeAsync(Connection);
+    }
+
+    private static string GetProviderDisplayName(AIProviderType provider) => provider switch
+    {
+        AIProviderType.OpenAI => "OpenAI (api.openai.com)",
+        AIProviderType.AzureOpenAI => "Azure OpenAI Service",
+        AIProviderType.LocalOpenAI => "Local / OpenAI-compatible",
+        _ => provider.ToString()
+    };
+
+    private static string GetProviderIcon(AIProviderType provider) => provider switch
+    {
+        AIProviderType.OpenAI => Icons.Material.Filled.Cloud,
+        AIProviderType.AzureOpenAI => Icons.Material.Filled.CloudQueue,
+        AIProviderType.LocalOpenAI => Icons.Material.Filled.Computer,
+        _ => Icons.Material.Filled.Psychology
+    };
+
+    private static string GetApiKeyPlaceholder(AIProviderType provider) => provider switch
+    {
+        AIProviderType.OpenAI => "sk-...",
+        AIProviderType.AzureOpenAI => "Azure API key",
+        AIProviderType.LocalOpenAI => "Optional API key",
+        _ => "API key"
+    };
+
+    private static string GetApiKeyHelperText(AIProviderType provider) => provider switch
+    {
+        AIProviderType.OpenAI => "Get your API key from https://platform.openai.com/api-keys",
+        AIProviderType.AzureOpenAI => "Azure OpenAI Service API key from Azure Portal",
+        AIProviderType.LocalOpenAI => "Leave empty if your provider doesn't require authentication",
+        _ => ""
+    };
+}
