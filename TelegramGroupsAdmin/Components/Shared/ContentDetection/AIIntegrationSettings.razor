@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.Services
 @inject ISystemConfigRepository ConfigRepository
 @inject IAIServiceFactory AIServiceFactory
+@inject IFeatureTestService FeatureTestService
 @inject IAuditService AuditService
 @inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
@@ -38,138 +39,14 @@
 <MudGrid>
     @foreach (var featureType in Enum.GetValues<AIFeatureType>())
     {
-        var featureConfig = GetFeatureConfig(featureType);
-        var selectedConnection = GetConnection(featureConfig.ConnectionId);
-        var isVisionFeature = featureType is AIFeatureType.ImageAnalysis or AIFeatureType.VideoAnalysis;
-
         <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudStack Spacing="3">
-                    <!-- Feature Header -->
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIcon Icon="@GetFeatureIcon(featureType)" Color="Color.Primary" />
-                            <MudText Typo="Typo.h6">@GetFeatureDisplayName(featureType)</MudText>
-                        </MudStack>
-                        @if (isVisionFeature)
-                        {
-                            <MudChip T="string" Color="Color.Info" Size="Size.Small" Icon="@Icons.Material.Filled.Visibility">
-                                Vision
-                            </MudChip>
-                        }
-                    </MudStack>
-
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        @GetFeatureDescription(featureType)
-                    </MudText>
-
-                    <MudDivider />
-
-                    <!-- Connection Selector -->
-                    <MudSelect T="string"
-                               Value="@featureConfig.ConnectionId"
-                               ValueChanged="@((string val) => OnConnectionChanged(featureType, val))"
-                               Label="Connection"
-                               Variant="Variant.Outlined"
-                               HelperText="@GetConnectionHelperText(selectedConnection)">
-                        <MudSelectItem T="string" Value="@((string?)null)">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error" />
-                                <span>Disabled</span>
-                            </MudStack>
-                        </MudSelectItem>
-                        @foreach (var conn in _config.Connections.Where(c => c.Enabled))
-                        {
-                            <MudSelectItem T="string" Value="@conn.Id">
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                    <MudIcon Icon="@GetProviderIcon(conn.Provider)" Size="Size.Small" />
-                                    <span>@conn.Id (@GetProviderShortName(conn.Provider))</span>
-                                </MudStack>
-                            </MudSelectItem>
-                        }
-                    </MudSelect>
-
-                    @if (featureConfig.ConnectionId != null && selectedConnection != null)
-                    {
-                        <!-- Model Selection -->
-                        @if (selectedConnection.Provider == AIProviderType.AzureOpenAI)
-                        {
-                            <!-- Azure: Deployment name text field -->
-                            <MudTextField @bind-Value="featureConfig.AzureDeploymentName"
-                                          Label="Deployment Name"
-                                          Variant="Variant.Outlined"
-                                          Required="true"
-                                          HelperText="Azure OpenAI deployment name from Azure Portal" />
-                        }
-                        else
-                        {
-                            <!-- OpenAI/Local: Model dropdown or text field -->
-                            <MudStack Row="true" AlignItems="AlignItems.End" Spacing="2">
-                                @if (selectedConnection.AvailableModels.Count > 0)
-                                {
-                                    <MudSelect T="string"
-                                               @bind-Value="featureConfig.Model"
-                                               Label="Model"
-                                               Variant="Variant.Outlined"
-                                               Style="flex-grow: 1;">
-                                        @foreach (var model in selectedConnection.AvailableModels)
-                                        {
-                                            <MudSelectItem T="string" Value="@model.Id">
-                                                @model.Id @(model.SizeBytes.HasValue ? $" ({ByteSizeLib.ByteSize.FromBytes(model.SizeBytes.Value):0.#})" : "")
-                                            </MudSelectItem>
-                                        }
-                                    </MudSelect>
-                                }
-                                else
-                                {
-                                    <MudTextField @bind-Value="featureConfig.Model"
-                                                  Label="Model"
-                                                  Variant="Variant.Outlined"
-                                                  Placeholder="gpt-4o-mini"
-                                                  HelperText="Click refresh to load available models"
-                                                  Style="flex-grow: 1;" />
-                                }
-                                <MudTooltip Text="Refresh available models">
-                                    <MudIconButton Icon="@Icons.Material.Filled.Refresh"
-                                                   OnClick="@(() => RefreshModels(selectedConnection))"
-                                                   Disabled="@(_refreshingConnectionId == selectedConnection.Id)"
-                                                   Color="Color.Primary" />
-                                </MudTooltip>
-                            </MudStack>
-
-                            @if (selectedConnection.ModelsLastFetched.HasValue)
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @selectedConnection.AvailableModels.Count models available
-                                    (fetched @FormatRelativeTime(selectedConnection.ModelsLastFetched.Value))
-                                </MudText>
-                            }
-                        }
-
-                        <!-- Parameters -->
-                        <MudStack Row="true" Spacing="2">
-                            <MudNumericField @bind-Value="featureConfig.MaxTokens"
-                                             Label="Max Tokens"
-                                             Variant="Variant.Outlined"
-                                             Min="100" Max="4000"
-                                             Style="flex: 1;" />
-                            <MudNumericField @bind-Value="featureConfig.Temperature"
-                                             Label="Temperature"
-                                             Variant="Variant.Outlined"
-                                             Min="0.0" Max="2.0" Step="0.1"
-                                             Format="F1"
-                                             Style="flex: 1;" />
-                        </MudStack>
-
-                    }
-                    else
-                    {
-                        <MudAlert Severity="Severity.Normal" Dense="true" Icon="@Icons.Material.Filled.Info">
-                            Feature disabled - select a connection to enable.
-                        </MudAlert>
-                    }
-                </MudStack>
-            </MudPaper>
+            <AIFeatureCard FeatureType="@featureType"
+                           FeatureConfig="@GetFeatureConfig(featureType)"
+                           Connections="@_config.Connections"
+                           TestService="@FeatureTestService"
+                           OnConnectionChanged="@((connectionId) => OnConnectionChanged(featureType, connectionId))"
+                           OnRefreshModels="@RefreshModels"
+                           IsRefreshingModels="@(_refreshingConnectionId != null)" />
         </MudItem>
     }
 </MudGrid>
@@ -274,13 +151,6 @@
         return config;
     }
 
-    private AIConnection? GetConnection(string? connectionId)
-    {
-        return connectionId == null
-            ? null
-            : _config.Connections.FirstOrDefault(c => c.Id == connectionId);
-    }
-
     private void OnConnectionChanged(AIFeatureType featureType, string? connectionId)
     {
         var config = GetFeatureConfig(featureType);
@@ -289,7 +159,7 @@
         // Reset model if connection changed
         if (connectionId != null)
         {
-            var connection = GetConnection(connectionId);
+            var connection = _config.Connections.FirstOrDefault(c => c.Id == connectionId);
             if (connection != null)
             {
                 // Set default model based on provider
@@ -335,75 +205,5 @@
         {
             _refreshingConnectionId = null;
         }
-    }
-
-    private static string GetFeatureDisplayName(AIFeatureType feature) => feature switch
-    {
-        AIFeatureType.SpamDetection => "Spam Detection",
-        AIFeatureType.Translation => "Translation",
-        AIFeatureType.ImageAnalysis => "Image Analysis",
-        AIFeatureType.VideoAnalysis => "Video Analysis",
-        AIFeatureType.PromptBuilder => "Prompt Builder",
-        _ => feature.ToString()
-    };
-
-    private static string GetFeatureDescription(AIFeatureType feature) => feature switch
-    {
-        AIFeatureType.SpamDetection => "AI-powered text spam analysis using LLM classification",
-        AIFeatureType.Translation => "Automatic translation of non-English messages for spam detection",
-        AIFeatureType.ImageAnalysis => "Vision API for detecting spam in images (requires vision-capable model)",
-        AIFeatureType.VideoAnalysis => "Vision API for detecting spam in video frames (requires vision-capable model)",
-        AIFeatureType.PromptBuilder => "AI-assisted prompt generation for spam detection rules",
-        _ => ""
-    };
-
-    private static string GetFeatureIcon(AIFeatureType feature) => feature switch
-    {
-        AIFeatureType.SpamDetection => Icons.Material.Filled.Shield,
-        AIFeatureType.Translation => Icons.Material.Filled.Translate,
-        AIFeatureType.ImageAnalysis => Icons.Material.Filled.Image,
-        AIFeatureType.VideoAnalysis => Icons.Material.Filled.VideoLibrary,
-        AIFeatureType.PromptBuilder => Icons.Material.Filled.AutoAwesome,
-        _ => Icons.Material.Filled.Psychology
-    };
-
-    private static string GetProviderIcon(AIProviderType provider) => provider switch
-    {
-        AIProviderType.OpenAI => Icons.Material.Filled.Cloud,
-        AIProviderType.AzureOpenAI => Icons.Material.Filled.CloudQueue,
-        AIProviderType.LocalOpenAI => Icons.Material.Filled.Computer,
-        _ => Icons.Material.Filled.Psychology
-    };
-
-    private static string GetProviderShortName(AIProviderType provider) => provider switch
-    {
-        AIProviderType.OpenAI => "OpenAI",
-        AIProviderType.AzureOpenAI => "Azure",
-        AIProviderType.LocalOpenAI => "Local",
-        _ => provider.ToString()
-    };
-
-    private static string GetConnectionHelperText(AIConnection? connection)
-    {
-        if (connection == null)
-            return "Select an enabled connection to configure this feature";
-
-        return connection.Provider switch
-        {
-            AIProviderType.OpenAI => "Using OpenAI API (api.openai.com)",
-            AIProviderType.AzureOpenAI => $"Using Azure OpenAI at {connection.AzureEndpoint ?? "(not configured)"}",
-            AIProviderType.LocalOpenAI => $"Using local endpoint at {connection.LocalEndpoint ?? "(not configured)"}",
-            _ => ""
-        };
-    }
-
-    private static string FormatRelativeTime(DateTimeOffset dateTime)
-    {
-        var diff = DateTimeOffset.UtcNow - dateTime;
-
-        if (diff.TotalMinutes < 1) return "just now";
-        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes} min ago";
-        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours} hr ago";
-        return $"{(int)diff.TotalDays} days ago";
     }
 }
