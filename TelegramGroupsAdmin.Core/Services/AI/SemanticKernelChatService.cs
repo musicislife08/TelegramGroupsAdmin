@@ -334,23 +334,20 @@ public class SemanticKernelChatService : IChatService
         // Generate cache key for test kernel
         var cacheKey = GenerateCacheKey(connection, testFeatureConfig, apiKey);
 
-        if (KernelCache.TryGetValue(cacheKey, out var cached))
+        // Use GetOrAdd for thread-safe atomic cache access
+        var cachedKernel = KernelCache.GetOrAdd(cacheKey, _ =>
         {
-            return cached;
-        }
+            var kernel = BuildKernel(connection, testFeatureConfig, apiKey);
+            var chatService = kernel.GetRequiredService<IChatCompletionService>();
+            var modelId = connection.Provider == AIProviderType.AzureOpenAI
+                ? azureDeploymentName ?? model
+                : model;
 
-        // Build new kernel
-        var kernel = BuildKernel(connection, testFeatureConfig, apiKey);
-        var chatService = kernel.GetRequiredService<IChatCompletionService>();
-        var modelId = connection.Provider == AIProviderType.AzureOpenAI
-            ? azureDeploymentName ?? model
-            : model;
+            _logger.LogDebug("Created and cached test kernel for connection {ConnectionId}, model {Model}",
+                connection.Id, modelId);
 
-        var cachedKernel = new CachedKernel(kernel, chatService, modelId);
-        KernelCache[cacheKey] = cachedKernel;
-
-        _logger.LogDebug("Created and cached test kernel for connection {ConnectionId}, model {Model}",
-            connection.Id, modelId);
+            return new CachedKernel(kernel, chatService, modelId);
+        });
 
         return cachedKernel;
     }
@@ -386,25 +383,27 @@ public class SemanticKernelChatService : IChatService
         // Generate cache key based on connection + model + relevant config
         var cacheKey = GenerateCacheKey(connection, featureConfig, apiKey);
 
-        if (KernelCache.TryGetValue(cacheKey, out var cached))
-        {
-            return cached;
-        }
+        // Use GetOrAdd for thread-safe atomic cache access
+        // Capture variables for the closure
+        var conn = connection;
+        var featConfig = featureConfig;
+        var key = apiKey;
 
-        // Build new kernel
         try
         {
-            var kernel = BuildKernel(connection, featureConfig, apiKey);
-            var chatService = kernel.GetRequiredService<IChatCompletionService>();
-            var modelId = connection.Provider == AIProviderType.AzureOpenAI
-                ? featureConfig.AzureDeploymentName ?? featureConfig.Model
-                : featureConfig.Model;
+            var cachedKernel = KernelCache.GetOrAdd(cacheKey, _ =>
+            {
+                var kernel = BuildKernel(conn, featConfig, key);
+                var chatService = kernel.GetRequiredService<IChatCompletionService>();
+                var modelId = conn.Provider == AIProviderType.AzureOpenAI
+                    ? featConfig.AzureDeploymentName ?? featConfig.Model
+                    : featConfig.Model;
 
-            var cachedKernel = new CachedKernel(kernel, chatService, modelId);
-            KernelCache[cacheKey] = cachedKernel;
+                _logger.LogDebug("Created and cached kernel for connection {ConnectionId}, model {Model}",
+                    conn.Id, modelId);
 
-            _logger.LogDebug("Created and cached kernel for connection {ConnectionId}, model {Model}",
-                connection.Id, modelId);
+                return new CachedKernel(kernel, chatService, modelId);
+            });
 
             return cachedKernel;
         }
@@ -416,26 +415,22 @@ public class SemanticKernelChatService : IChatService
     }
 
     /// <summary>
-    /// Generate a cache key that changes when relevant config changes
+    /// Generate a cache key that changes when relevant config changes.
+    /// Uses full key string to avoid hash collisions - cache size is small (typically &lt;10 entries).
     /// </summary>
     private static string GenerateCacheKey(AIConnection connection, AIFeatureConfig featureConfig, string? apiKey)
     {
-        // Include all config values that affect the kernel
-        var keyParts = new[]
-        {
+        // Use full key to avoid hash collisions - cache has few entries
+        // API key included so kernel is rebuilt if key changes
+        return string.Join("|",
             connection.Id,
             connection.Provider.ToString(),
-            featureConfig.Model,
+            featureConfig.Model ?? "",
             featureConfig.AzureDeploymentName ?? "",
             connection.AzureEndpoint ?? "",
             connection.AzureApiVersion ?? "",
             connection.LocalEndpoint ?? "",
-            apiKey ?? ""
-        };
-
-        // Simple hash - if any config changes, key changes, kernel gets rebuilt
-        var combined = string.Join("|", keyParts);
-        return $"{connection.Id}:{combined.GetHashCode():X8}";
+            apiKey ?? "");
     }
 
     /// <summary>

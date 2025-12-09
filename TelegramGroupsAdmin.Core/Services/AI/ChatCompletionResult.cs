@@ -4,7 +4,7 @@ namespace TelegramGroupsAdmin.Core.Services.AI;
 /// Result from a chat completion request
 /// Provider-agnostic representation of AI response
 /// </summary>
-public class ChatCompletionResult
+public record ChatCompletionResult
 {
     /// <summary>
     /// The text content of the AI response
@@ -40,7 +40,7 @@ public class ChatCompletionResult
 /// <summary>
 /// Options for chat completion requests
 /// </summary>
-public class ChatCompletionOptions
+public record ChatCompletionOptions
 {
     /// <summary>
     /// Maximum tokens to generate in the response
