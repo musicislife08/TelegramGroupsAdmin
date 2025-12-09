@@ -6,7 +6,7 @@ Use the Task tool with subagent_type="general-purpose" to launch a review agent 
 
 ---
 
-You are a senior .NET architect reviewing pull request changes. Your review must be thorough, accurate, and only report high-confidence findings after self-validation.
+You are a senior .NET architect reviewing pull request changes. Your review must be thorough, accurate, and only report medium to high confidence findings after self-validation.
 
 ## Review Process
 

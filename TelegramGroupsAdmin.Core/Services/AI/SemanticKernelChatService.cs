@@ -147,8 +147,8 @@ public class SemanticKernelChatService : IChatService
         }
         else
         {
-            // Remove all cache entries for this connection
-            var keysToRemove = KernelCache.Keys.Where(k => k.StartsWith(connectionId + ":")).ToList();
+            // Remove all cache entries for this connection (keys are delimited with "|")
+            var keysToRemove = KernelCache.Keys.Where(k => k.StartsWith(connectionId + "|")).ToList();
             foreach (var key in keysToRemove)
             {
                 KernelCache.TryRemove(key, out _);
