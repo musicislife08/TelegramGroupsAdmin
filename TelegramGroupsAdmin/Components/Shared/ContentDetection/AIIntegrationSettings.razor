@@ -46,49 +46,18 @@
                            TestService="@FeatureTestService"
                            OnConnectionChanged="@((connectionId) => OnConnectionChanged(featureType, connectionId))"
                            OnRefreshModels="@RefreshModels"
+                           OnSave="@(config => SaveFeatureConfigAsync(featureType, config))"
                            IsRefreshingModels="@(_refreshingConnectionId != null)" />
         </MudItem>
     }
 </MudGrid>
 
-<!-- Save Button -->
-<MudPaper Class="pa-4 mt-4" Elevation="2">
-    <MudStack Spacing="3">
-        <MudStack Row="true" Spacing="2">
-            <MudButton Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       OnClick="@SaveConfigAsync"
-                       Disabled="@_isSaving"
-                       StartIcon="@Icons.Material.Filled.Save">
-                @if (_isSaving)
-                {
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
-                    <text>&nbsp;Saving...</text>
-                }
-                else
-                {
-                    <text>Save Feature Configuration</text>
-                }
-            </MudButton>
-
-            <MudButton Variant="Variant.Outlined"
-                       Color="Color.Secondary"
-                       OnClick="@LoadConfigAsync"
-                       Disabled="@_isSaving"
-                       StartIcon="@Icons.Material.Filled.Refresh">
-                Reset
-            </MudButton>
-        </MudStack>
-
-        <MudAlert Severity="Severity.Success" Dense="true" Icon="@Icons.Material.Filled.Info">
-            Changes apply immediately (hot-reload). No app restart required.
-        </MudAlert>
-    </MudStack>
-</MudPaper>
+<MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Filled.Info" Class="mt-4">
+    Test each feature configuration, then save. Changes apply immediately (hot-reload).
+</MudAlert>
 
 @code {
     private AIProviderConfig _config = new();
-    private bool _isSaving;
     private string? _refreshingConnectionId;
 
     protected override async Task OnInitializedAsync()
@@ -110,34 +79,33 @@
         }
     }
 
-    private async Task SaveConfigAsync()
+    private async Task SaveFeatureConfigAsync(AIFeatureType featureType, AIFeatureConfig featureConfig)
     {
-        _isSaving = true;
         try
         {
+            // Update config dictionary with the latest feature config
+            _config.Features[featureType] = featureConfig;
+
+            // Save entire config (feature configs are nested in the JSON)
             await ConfigRepository.SaveAIProviderConfigAsync(_config);
 
             // Audit log
             var userId = await AuthHelper.GetCurrentUserIdAsync();
             if (!string.IsNullOrEmpty(userId))
             {
-                var configuredCount = _config.Features.Count(f => f.Value.ConnectionId != null);
+                var model = featureConfig.Model ?? featureConfig.AzureDeploymentName ?? "none";
                 await AuditService.LogEventAsync(
                     AuditEventType.ConfigurationChanged,
                     Actor.FromWebUser(userId),
                     Actor.FromWebUser(userId),
-                    $"ai_features:configured={configuredCount}");
+                    $"ai_feature:{featureType}:connection={featureConfig.ConnectionId ?? "disabled"},model={model}");
             }
 
-            Snackbar.Add("AI feature configuration saved successfully", Severity.Success);
+            Snackbar.Add($"{featureType} configuration saved", Severity.Success);
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error saving settings: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _isSaving = false;
+            Snackbar.Add($"Error saving {featureType}: {ex.Message}", Severity.Error);
         }
     }
 

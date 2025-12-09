@@ -15,6 +15,7 @@ public interface IFeatureTestService
     /// <param name="connectionId">Connection ID to use</param>
     /// <param name="model">Model name to test</param>
     /// <param name="azureDeploymentName">Azure deployment name (required for Azure connections)</param>
+    /// <param name="maxTokens">Max tokens from feature config (defaults to 500 if not specified)</param>
     /// <param name="ct">Cancellation token</param>
     /// <returns>Test result with success status and message</returns>
     Task<FeatureTestResult> TestFeatureAsync(
@@ -22,6 +23,7 @@ public interface IFeatureTestService
         string connectionId,
         string model,
         string? azureDeploymentName = null,
+        int? maxTokens = null,
         CancellationToken ct = default);
 }
 

@@ -13,14 +13,14 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
 /// <summary>
 /// V2 AI spam check with proper scoring (0.0-5.0 points).
-/// Provider-agnostic - uses IAIServiceFactory to get the configured AI service.
+/// Provider-agnostic - uses IChatService for multi-provider AI support.
 /// Can operate in two modes:
 /// 1. Regular mode: Acts like any other check, contributes score
 /// 2. Veto mode: Engine-level override (handled by ContentDetectionEngineV2)
 /// </summary>
 public class AIContentCheckV2(
     ILogger<AIContentCheckV2> logger,
-    IAIServiceFactory aiServiceFactory,
+    IChatService chatService,
     IMemoryCache cache,
     IMessageHistoryService messageHistoryService) : IContentCheckV2
 {
@@ -97,21 +97,6 @@ public class AIContentCheckV2(
                 return ParseAIResponse(cachedResult, fromCache: true, startTimestamp);
             }
 
-            // Get AI chat service for spam detection feature
-            var chatService = await aiServiceFactory.GetChatServiceAsync(AIFeatureType.SpamDetection, req.CancellationToken);
-            if (chatService == null)
-            {
-                logger.LogWarning("AI spam detection not configured - no chat service available");
-                return new ContentCheckResponseV2
-                {
-                    CheckName = CheckName,
-                    Score = 0.0,
-                    Abstained = true,
-                    Details = "AI not configured - abstaining",
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-                };
-            }
-
             // Get message history for context (count from config)
             var history = await messageHistoryService.GetRecentMessagesAsync(req.ChatId, req.MessageHistoryCount, req.CancellationToken);
 
@@ -123,6 +108,7 @@ public class AIContentCheckV2(
 
             // Make AI call using the chat service
             var result = await chatService.GetCompletionAsync(
+                AIFeatureType.SpamDetection,
                 prompts.SystemPrompt,
                 prompts.UserPrompt,
                 new ChatCompletionOptions

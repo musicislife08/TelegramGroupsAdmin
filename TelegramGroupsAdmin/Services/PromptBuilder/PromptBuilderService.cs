@@ -9,23 +9,23 @@ namespace TelegramGroupsAdmin.Services.PromptBuilder;
 
 /// <summary>
 /// Service for generating AI-powered custom spam detection prompts.
-/// Provider-agnostic - uses IAIServiceFactory for multi-provider support.
+/// Provider-agnostic - uses IChatService for multi-provider support.
 /// Configuration loaded from database (hot-reload support)
 /// </summary>
 public class PromptBuilderService : IPromptBuilderService
 {
-    private readonly IAIServiceFactory _aiServiceFactory;
+    private readonly IChatService _chatService;
     private readonly IDetectionResultsRepository _detectionResultsRepository;
     private readonly ISystemConfigRepository _configRepo;
     private readonly ILogger<PromptBuilderService> _logger;
 
     public PromptBuilderService(
-        IAIServiceFactory aiServiceFactory,
+        IChatService chatService,
         IDetectionResultsRepository detectionResultsRepository,
         ISystemConfigRepository configRepo,
         ILogger<PromptBuilderService> logger)
     {
-        _aiServiceFactory = aiServiceFactory;
+        _chatService = chatService;
         _detectionResultsRepository = detectionResultsRepository;
         _configRepo = configRepo;
         _logger = logger;
@@ -37,9 +37,8 @@ public class PromptBuilderService : IPromptBuilderService
     {
         try
         {
-            // Get AI chat service for prompt builder feature
-            var chatService = await _aiServiceFactory.GetChatServiceAsync(AIFeatureType.PromptBuilder, cancellationToken);
-            if (chatService == null)
+            // Check if prompt builder feature is available
+            if (!await _chatService.IsFeatureAvailableAsync(AIFeatureType.PromptBuilder, cancellationToken))
             {
                 return new PromptBuilderResponse
                 {
@@ -55,7 +54,8 @@ public class PromptBuilderService : IPromptBuilderService
             var metaPrompt = BuildMetaPrompt(request, trainingSamples);
 
             // Call AI service
-            var result = await chatService.GetCompletionAsync(
+            var result = await _chatService.GetCompletionAsync(
+                AIFeatureType.PromptBuilder,
                 "You are an expert at creating spam detection rules for online communities.",
                 metaPrompt,
                 new ChatCompletionOptions
@@ -112,9 +112,8 @@ public class PromptBuilderService : IPromptBuilderService
     {
         try
         {
-            // Get AI chat service for prompt builder feature
-            var chatService = await _aiServiceFactory.GetChatServiceAsync(AIFeatureType.PromptBuilder, cancellationToken);
-            if (chatService == null)
+            // Check if prompt builder feature is available
+            if (!await _chatService.IsFeatureAvailableAsync(AIFeatureType.PromptBuilder, cancellationToken))
             {
                 return new PromptBuilderResponse
                 {
@@ -127,7 +126,8 @@ public class PromptBuilderService : IPromptBuilderService
             var metaPrompt = BuildImprovementMetaPrompt(currentPrompt, improvementFeedback);
 
             // Call AI service
-            var result = await chatService.GetCompletionAsync(
+            var result = await _chatService.GetCompletionAsync(
+                AIFeatureType.PromptBuilder,
                 "You are an expert at creating spam detection rules for online communities.",
                 metaPrompt,
                 new ChatCompletionOptions

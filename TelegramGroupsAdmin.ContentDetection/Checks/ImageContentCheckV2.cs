@@ -17,7 +17,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
 /// <summary>
 /// V2 image spam check with 3-layer detection strategy and proper scoring.
-/// Provider-agnostic - uses IAIServiceFactory for multi-provider Vision support.
+/// Provider-agnostic - uses IChatService for multi-provider Vision support.
 /// Layer 1: Hash similarity (fastest, cheapest, most reliable for known spam)
 /// Layer 2: OCR + text spam checks (fast, cheap, good for text-heavy images)
 /// Layer 3: AI Vision fallback (slow, expensive, comprehensive)
@@ -25,7 +25,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// </summary>
 public class ImageContentCheckV2(
     ILogger<ImageContentCheckV2> logger,
-    IAIServiceFactory aiServiceFactory,
+    IChatService chatService,
     IImageTextExtractionService imageTextExtractionService,
     IServiceProvider serviceProvider,
     IContentDetectionConfigRepository configRepository,
@@ -241,7 +241,7 @@ public class ImageContentCheckV2(
                 }
             }
 
-            // ML-5 Layer 3: AI Vision fallback (provider-agnostic via IAIServiceFactory)
+            // ML-5 Layer 3: AI Vision fallback (provider-agnostic via IChatService)
             return await CheckWithVisionAsync(req, startTimestamp);
         }
         catch (Exception ex)
@@ -260,13 +260,12 @@ public class ImageContentCheckV2(
     }
 
     /// <summary>
-    /// ML-5 Layer 3: AI Vision check using IAIServiceFactory (supports multiple providers)
+    /// ML-5 Layer 3: AI Vision check using IChatService (supports multiple providers)
     /// </summary>
     private async Task<ContentCheckResponseV2> CheckWithVisionAsync(ImageCheckRequest req, long startTimestamp)
     {
-        // Get AI chat service for image analysis feature
-        var chatService = await aiServiceFactory.GetChatServiceAsync(AIFeatureType.ImageAnalysis, req.CancellationToken);
-        if (chatService == null)
+        // Check if image analysis feature is available
+        if (!await chatService.IsFeatureAvailableAsync(AIFeatureType.ImageAnalysis, req.CancellationToken))
         {
             logger.LogDebug("ImageSpam V2 Layer 3: Vision not configured - no AI provider for image analysis");
             return new ContentCheckResponseV2
@@ -319,6 +318,7 @@ public class ImageContentCheckV2(
         try
         {
             var result = await chatService.GetVisionCompletionAsync(
+                AIFeatureType.ImageAnalysis,
                 GetDefaultImagePrompt(),
                 prompt,
                 imageData,

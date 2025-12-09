@@ -18,20 +18,11 @@ public record AIFeatureStatus(
     string? ModelName);
 
 /// <summary>
-/// Factory for creating AI chat services based on feature configuration
-/// Resolves: feature -> AIFeatureConfig -> AIConnection -> IChatService
+/// Service for AI configuration management (used by Settings UI)
+/// For making AI calls, use IChatService directly
 /// </summary>
 public interface IAIServiceFactory
 {
-    /// <summary>
-    /// Get chat service for a specific AI feature
-    /// Returns null if the feature is not configured or the connection is disabled
-    /// </summary>
-    /// <param name="feature">The AI feature type</param>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>Chat service or null if not available</returns>
-    Task<IChatService?> GetChatServiceAsync(AIFeatureType feature, CancellationToken ct = default);
-
     /// <summary>
     /// Get the status of an AI feature's configuration
     /// </summary>

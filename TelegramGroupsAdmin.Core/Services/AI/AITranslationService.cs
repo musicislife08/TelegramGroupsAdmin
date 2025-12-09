@@ -10,7 +10,7 @@ namespace TelegramGroupsAdmin.Core.Services.AI;
 /// </summary>
 public class AITranslationService : IAITranslationService
 {
-    private readonly IAIServiceFactory _aiServiceFactory;
+    private readonly IChatService _chatService;
     private readonly ILogger<AITranslationService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -19,10 +19,10 @@ public class AITranslationService : IAITranslationService
     };
 
     public AITranslationService(
-        IAIServiceFactory aiServiceFactory,
+        IChatService chatService,
         ILogger<AITranslationService> logger)
     {
-        _aiServiceFactory = aiServiceFactory;
+        _chatService = chatService;
         _logger = logger;
     }
 
@@ -36,14 +36,6 @@ public class AITranslationService : IAITranslationService
 
         try
         {
-            // Get chat service for translation feature
-            var chatService = await _aiServiceFactory.GetChatServiceAsync(AIFeatureType.Translation, cancellationToken);
-            if (chatService == null)
-            {
-                _logger.LogDebug("AI Translation service not configured, skipping translation");
-                return null;
-            }
-
             var systemPrompt = """
                 You are a language detection and translation assistant.
                 Analyze text and respond with a JSON object.
@@ -61,18 +53,23 @@ public class AITranslationService : IAITranslationService
                 IMPORTANT: Respond with ONLY the raw JSON object. Do NOT wrap it in markdown code blocks or backticks.
                 """;
 
-            var featureConfig = await _aiServiceFactory.GetFeatureConfigAsync(AIFeatureType.Translation, cancellationToken);
             var options = new ChatCompletionOptions
             {
-                MaxTokens = Math.Min(featureConfig?.MaxTokens ?? 200, 200), // Cap at 200 for translation
-                Temperature = featureConfig?.Temperature ?? 0.2,
+                MaxTokens = 200,
+                Temperature = 0.2,
                 JsonMode = true
             };
 
-            var result = await chatService.GetCompletionAsync(systemPrompt, userPrompt, options, cancellationToken);
+            var result = await _chatService.GetCompletionAsync(
+                AIFeatureType.Translation,
+                systemPrompt,
+                userPrompt,
+                options,
+                cancellationToken);
+
             if (result == null || string.IsNullOrWhiteSpace(result.Content))
             {
-                _logger.LogWarning("Empty response from AI translation service");
+                _logger.LogDebug("AI Translation not configured or returned empty response");
                 return null;
             }
 

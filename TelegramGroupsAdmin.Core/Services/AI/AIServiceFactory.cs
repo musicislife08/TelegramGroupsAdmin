@@ -7,15 +7,14 @@ using TelegramGroupsAdmin.Configuration.Repositories;
 namespace TelegramGroupsAdmin.Core.Services.AI;
 
 /// <summary>
-/// Factory implementation for creating AI chat services based on feature configuration
-/// Handles configuration lookup, API key resolution, and service instantiation
+/// Service for AI configuration management (used by Settings UI)
+/// For making AI calls, use IChatService directly
 /// </summary>
 public class AIServiceFactory : IAIServiceFactory
 {
     private readonly ISystemConfigRepository _configRepository;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<AIServiceFactory> _logger;
-    private readonly ILoggerFactory _loggerFactory;
 
     // JSON options for API responses
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -26,72 +25,11 @@ public class AIServiceFactory : IAIServiceFactory
     public AIServiceFactory(
         ISystemConfigRepository configRepository,
         IHttpClientFactory httpClientFactory,
-        ILogger<AIServiceFactory> logger,
-        ILoggerFactory loggerFactory)
+        ILogger<AIServiceFactory> logger)
     {
         _configRepository = configRepository;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
-        _loggerFactory = loggerFactory;
-    }
-
-    /// <inheritdoc />
-    public async Task<IChatService?> GetChatServiceAsync(AIFeatureType feature, CancellationToken ct = default)
-    {
-        var config = await _configRepository.GetAIProviderConfigAsync(ct);
-        if (config == null)
-        {
-            _logger.LogDebug("AI provider config not found, feature {Feature} not available", feature);
-            return null;
-        }
-
-        // Get feature config
-        if (!config.Features.TryGetValue(feature, out var featureConfig) || featureConfig.ConnectionId == null)
-        {
-            _logger.LogDebug("Feature {Feature} not configured", feature);
-            return null;
-        }
-
-        // Find the connection
-        var connection = config.Connections.FirstOrDefault(c => c.Id == featureConfig.ConnectionId);
-        if (connection == null)
-        {
-            _logger.LogWarning("Connection {ConnectionId} not found for feature {Feature}",
-                featureConfig.ConnectionId, feature);
-            return null;
-        }
-
-        if (!connection.Enabled)
-        {
-            _logger.LogDebug("Connection {ConnectionId} is disabled for feature {Feature}",
-                connection.Id, feature);
-            return null;
-        }
-
-        // Get API key for this specific connection
-        var apiKeys = await _configRepository.GetApiKeysAsync(ct);
-        var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
-
-        // Validate API key if required (local providers may not need one)
-        if (connection.Provider != AIProviderType.LocalOpenAI || connection.LocalRequiresApiKey)
-        {
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                _logger.LogWarning("API key not configured for connection {ConnectionId}", connection.Id);
-                return null;
-            }
-        }
-
-        try
-        {
-            var chatServiceLogger = _loggerFactory.CreateLogger<SemanticKernelChatService>();
-            return new SemanticKernelChatService(connection, featureConfig, apiKey, chatServiceLogger);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to create chat service for feature {Feature}", feature);
-            return null;
-        }
     }
 
     /// <inheritdoc />
@@ -108,7 +46,7 @@ public class AIServiceFactory : IAIServiceFactory
             return new AIFeatureStatus(false, false, featureConfig?.RequiresVision ?? false, null, null);
         }
 
-        var connection = config.Connections.FirstOrDefault(c => c.Id == featureConfig.ConnectionId);
+        var connection = config.Connections.SingleOrDefault(c => c.Id == featureConfig.ConnectionId);
         if (connection == null)
         {
             return new AIFeatureStatus(false, false, featureConfig.RequiresVision, featureConfig.ConnectionId, featureConfig.Model);
@@ -157,7 +95,7 @@ public class AIServiceFactory : IAIServiceFactory
             return [];
         }
 
-        var connection = config.Connections.FirstOrDefault(c => c.Id == connectionId);
+        var connection = config.Connections.SingleOrDefault(c => c.Id == connectionId);
         if (connection == null)
         {
             _logger.LogWarning("Cannot refresh models: Connection {ConnectionId} not found", connectionId);

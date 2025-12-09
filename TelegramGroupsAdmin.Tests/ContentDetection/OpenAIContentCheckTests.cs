@@ -19,7 +19,6 @@ namespace TelegramGroupsAdmin.Tests.ContentDetection;
 public class AIContentCheckTests
 {
     private ILogger<AIContentCheckV2> _mockLogger = null!;
-    private IAIServiceFactory _mockAIServiceFactory = null!;
     private IChatService _mockChatService = null!;
     private IMessageHistoryService _mockMessageHistoryService = null!;
     private IMemoryCache _memoryCache = null!;
@@ -29,7 +28,6 @@ public class AIContentCheckTests
     public void Setup()
     {
         _mockLogger = Substitute.For<ILogger<AIContentCheckV2>>();
-        _mockAIServiceFactory = Substitute.For<IAIServiceFactory>();
         _mockChatService = Substitute.For<IChatService>();
         _mockMessageHistoryService = Substitute.For<IMessageHistoryService>();
         _memoryCache = new MemoryCache(new MemoryCacheOptions());
@@ -39,14 +37,9 @@ public class AIContentCheckTests
             .GetRecentMessagesAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IEnumerable<HistoryMessage>>(new List<HistoryMessage>()));
 
-        // Setup AI service factory to return the mock chat service by default
-        _mockAIServiceFactory
-            .GetChatServiceAsync(AIFeatureType.SpamDetection, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IChatService?>(_mockChatService));
-
         _check = new AIContentCheckV2(
             _mockLogger,
-            _mockAIServiceFactory,
+            _mockChatService,
             _memoryCache,
             _mockMessageHistoryService
         );
@@ -298,10 +291,15 @@ public class AIContentCheckTests
     [Test]
     public async Task CheckAsync_AIServiceNotConfigured_Abstains()
     {
-        // Arrange - AI service factory returns null (not configured)
-        _mockAIServiceFactory
-            .GetChatServiceAsync(AIFeatureType.SpamDetection, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IChatService?>(null));
+        // Arrange - Chat service returns null (feature not configured)
+        _mockChatService
+            .GetCompletionAsync(
+                Arg.Any<AIFeatureType>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(null));
 
         var request = CreateValidRequest();
 
@@ -311,7 +309,6 @@ public class AIContentCheckTests
         // Assert
         Assert.That(response.Score, Is.EqualTo(0.0));
         Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("not configured"));
     }
 
     #endregion
@@ -452,6 +449,7 @@ public class AIContentCheckTests
 
         // Verify chat service was only called once (cached on second call)
         await _mockChatService.Received(1).GetCompletionAsync(
+            Arg.Any<AIFeatureType>(),
             Arg.Any<string>(),
             Arg.Any<string>(),
             Arg.Any<ChatCompletionOptions?>(),
@@ -467,7 +465,7 @@ public class AIContentCheckTests
     {
         // Arrange - Chat service returns null (API error)
         _mockChatService
-            .GetCompletionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ChatCompletionResult?>(null));
 
         var request = CreateValidRequest();
@@ -485,7 +483,7 @@ public class AIContentCheckTests
     {
         // Arrange
         _mockChatService
-            .GetCompletionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
             .Returns<ChatCompletionResult?>(_ => throw new InvalidOperationException("Network error"));
 
         var request = CreateValidRequest();
@@ -505,7 +503,7 @@ public class AIContentCheckTests
         // Arrange
         var invalidResult = new ChatCompletionResult { Content = "This is not valid JSON", TotalTokens = 10 };
         _mockChatService
-            .GetCompletionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ChatCompletionResult?>(invalidResult));
 
         var request = CreateValidRequest();
@@ -525,7 +523,7 @@ public class AIContentCheckTests
         // Arrange
         var emptyResult = new ChatCompletionResult { Content = "", TotalTokens = 0 };
         _mockChatService
-            .GetCompletionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ChatCompletionResult?>(emptyResult));
 
         var request = CreateValidRequest();
@@ -554,7 +552,7 @@ public class AIContentCheckTests
         });
         var result = new ChatCompletionResult { Content = jsonResponse, TotalTokens = 20 };
         _mockChatService
-            .GetCompletionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ChatCompletionResult?>(result));
 
         var request = CreateValidRequest();
@@ -580,7 +578,7 @@ public class AIContentCheckTests
         });
         var result = new ChatCompletionResult { Content = jsonResponse, TotalTokens = 20 };
         _mockChatService
-            .GetCompletionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ChatCompletionResult?>(result));
 
         var request = CreateValidRequest();
@@ -653,7 +651,7 @@ public class AIContentCheckTests
     private void SetupChatService(ChatCompletionResult response)
     {
         _mockChatService
-            .GetCompletionAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ChatCompletionResult?>(response));
     }
 

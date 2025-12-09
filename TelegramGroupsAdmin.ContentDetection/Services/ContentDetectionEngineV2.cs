@@ -142,7 +142,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             var openAICheckV2 = _contentChecksV2.FirstOrDefault(check => check.CheckName == CheckName.OpenAI);
             if (openAICheckV2 != null)
             {
-                // Note: AI service is obtained via IAIServiceFactory (supports OpenAI, Azure, local providers)
+                // Note: AI service is obtained via IChatService (supports OpenAI, Azure, local providers)
                 _logger.LogInformation("[V2] Running AI veto check for user {UserId}", request.UserId);
 
                 var vetoRequest = request with { HasSpamFlags = true };

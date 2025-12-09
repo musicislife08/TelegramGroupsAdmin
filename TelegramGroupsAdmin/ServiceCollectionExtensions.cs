@@ -249,7 +249,7 @@ public static class ServiceCollectionExtensions
                     resiliencePipelineBuilder.AddRateLimiter(limiterOptions);
                 });
 
-            // Note: OpenAI HttpClient removed - now using Semantic Kernel via IAIServiceFactory
+            // Note: OpenAI HttpClient removed - now using Semantic Kernel via IChatService
             // which handles multiple providers (OpenAI, Azure OpenAI, local endpoints)
 
             services.AddHttpClient();

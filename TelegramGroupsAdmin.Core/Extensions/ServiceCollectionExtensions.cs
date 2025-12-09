@@ -14,6 +14,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuditService, AuditService>();
 
         // AI services (Semantic Kernel multi-provider support)
+        // IChatService is Scoped (matches ISystemConfigRepository), kernel cache is static
+        services.AddScoped<IChatService, SemanticKernelChatService>();
         services.AddScoped<IAIServiceFactory, AIServiceFactory>();
         services.AddScoped<IAITranslationService, AITranslationService>();
         services.AddScoped<IFeatureTestService, FeatureTestService>();

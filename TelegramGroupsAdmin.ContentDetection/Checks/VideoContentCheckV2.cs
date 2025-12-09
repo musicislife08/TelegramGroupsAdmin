@@ -18,14 +18,14 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
 /// <summary>
 /// Spam check that analyzes videos using 3-layer detection strategy (ML-6).
-/// Provider-agnostic - uses IAIServiceFactory for multi-provider Vision support.
+/// Provider-agnostic - uses IChatService for multi-provider Vision support.
 /// Layer 1: Keyframe hash similarity (fastest, cheapest, most reliable for known spam)
 /// Layer 2: OCR on frames + text spam checks (fast, cheap, good for text-heavy videos)
 /// Layer 3: AI Vision on frames fallback (slow, expensive, comprehensive)
 /// </summary>
 public class VideoContentCheckV2(
     ILogger<VideoContentCheckV2> logger,
-    IAIServiceFactory aiServiceFactory,
+    IChatService chatService,
     IVideoFrameExtractionService frameExtractionService,
     IImageTextExtractionService imageTextExtractionService,
     IServiceProvider serviceProvider,
@@ -412,7 +412,7 @@ public class VideoContentCheckV2(
     }
 
     /// <summary>
-    /// ML-6 Layer 3: AI Vision on representative frame (provider-agnostic via IAIServiceFactory)
+    /// ML-6 Layer 3: AI Vision on representative frame (provider-agnostic via IChatService)
     /// </summary>
     private async Task<ContentCheckResponseV2> CheckFrameWithVisionAsync(
         List<ExtractedFrame> frames,
@@ -422,9 +422,8 @@ public class VideoContentCheckV2(
     {
         try
         {
-            // Get AI chat service for video analysis feature
-            var chatService = await aiServiceFactory.GetChatServiceAsync(AIFeatureType.VideoAnalysis, cancellationToken);
-            if (chatService == null)
+            // Check if video analysis feature is available
+            if (!await chatService.IsFeatureAvailableAsync(AIFeatureType.VideoAnalysis, cancellationToken))
             {
                 logger.LogDebug("VideoSpam Layer 3: Vision not configured - no AI provider for video analysis");
                 return new ContentCheckResponseV2
@@ -454,6 +453,7 @@ public class VideoContentCheckV2(
             logger.LogDebug("VideoSpam Layer 3: Calling AI Vision API for user {UserId}", req.UserId);
 
             var result = await chatService.GetVisionCompletionAsync(
+                AIFeatureType.VideoAnalysis,
                 GetDefaultVideoPrompt(),
                 prompt,
                 imageData,

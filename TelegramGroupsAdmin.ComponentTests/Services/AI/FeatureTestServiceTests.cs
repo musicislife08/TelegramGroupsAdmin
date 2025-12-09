@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NUnit.Framework;
 using TelegramGroupsAdmin.Configuration.Models;
-using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.Core.Services.AI;
 
 namespace TelegramGroupsAdmin.ComponentTests.Services.AI;
@@ -15,32 +14,19 @@ namespace TelegramGroupsAdmin.ComponentTests.Services.AI;
 [TestFixture]
 public class FeatureTestServiceTests
 {
-    private ISystemConfigRepository _mockConfigRepo = null!;
-    private ILoggerFactory _mockLoggerFactory = null!;
+    private IChatService _mockChatService = null!;
     private ILogger<FeatureTestService> _mockLogger = null!;
     private FeatureTestService _service = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _mockConfigRepo = Substitute.For<ISystemConfigRepository>();
-        _mockLoggerFactory = Substitute.For<ILoggerFactory>();
+        _mockChatService = Substitute.For<IChatService>();
         _mockLogger = Substitute.For<ILogger<FeatureTestService>>();
 
-        // Setup LoggerFactory to return a logger for SemanticKernelChatService
-        _mockLoggerFactory.CreateLogger(Arg.Any<string>())
-            .Returns(Substitute.For<ILogger<SemanticKernelChatService>>());
-
         _service = new FeatureTestService(
-            _mockConfigRepo,
-            _mockLoggerFactory,
+            _mockChatService,
             _mockLogger);
-    }
-
-    [TearDown]
-    public void TearDown()
-    {
-        (_mockLoggerFactory as IDisposable)?.Dispose();
     }
 
     #region Validation Tests
@@ -68,52 +54,19 @@ public class FeatureTestServiceTests
     }
 
     [Test]
-    public async Task TestFeatureAsync_ConnectionNotFound_ReturnsFailure()
+    public async Task TestFeatureAsync_ChatServiceReturnsNull_ReturnsFailure()
     {
-        // Arrange
-        var config = new AIProviderConfig
-        {
-            Connections = [], // No connections
-            Features = new Dictionary<AIFeatureType, AIFeatureConfig>()
-        };
-
-        _mockConfigRepo.GetAIProviderConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(config);
-
-        // Act - Single() fails but is caught by try-catch, returns failure result
-        var result = await _service.TestFeatureAsync(
-            AIFeatureType.SpamDetection,
-            "non-existent",
-            "gpt-4o-mini");
-
-        // Assert
-        Assert.Multiple(() =>
-        {
-            Assert.That(result.Success, Is.False);
-            Assert.That(result.Message, Does.Contain("Test failed unexpectedly"));
-        });
-    }
-
-    [Test]
-    public async Task TestFeatureAsync_ConnectionDisabled_ReturnsFailure()
-    {
-        // Arrange
-        var config = new AIProviderConfig
-        {
-            Connections =
-            [
-                new AIConnection
-                {
-                    Id = "test-connection",
-                    Provider = AIProviderType.OpenAI,
-                    Enabled = false // Disabled
-                }
-            ],
-            Features = new Dictionary<AIFeatureType, AIFeatureConfig>()
-        };
-
-        _mockConfigRepo.GetAIProviderConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(config);
+        // Arrange - Chat service returns null (connection not found or disabled)
+        _mockChatService
+            .TestCompletionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(null));
 
         // Act
         var result = await _service.TestFeatureAsync(
@@ -125,203 +78,250 @@ public class FeatureTestServiceTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Success, Is.False);
-            Assert.That(result.Message, Does.Contain("disabled"));
+            Assert.That(result.Message, Does.Contain("No response received"));
         });
     }
 
     [Test]
-    public async Task TestFeatureAsync_OpenAIWithoutApiKey_ReturnsFailure()
+    public async Task TestFeatureAsync_ChatServiceReturnsEmptyContent_ReturnsFailure()
     {
-        // Arrange
-        var config = new AIProviderConfig
-        {
-            Connections =
-            [
-                new AIConnection
-                {
-                    Id = "openai",
-                    Provider = AIProviderType.OpenAI,
-                    Enabled = true
-                }
-            ],
-            Features = new Dictionary<AIFeatureType, AIFeatureConfig>()
-        };
-
-        _mockConfigRepo.GetAIProviderConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(config);
-
-        // No API key
-        _mockConfigRepo.GetApiKeysAsync(Arg.Any<CancellationToken>())
-            .Returns((ApiKeysConfig?)null);
+        // Arrange - Chat service returns result with empty content
+        _mockChatService
+            .TestCompletionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(new ChatCompletionResult { Content = "" }));
 
         // Act
         var result = await _service.TestFeatureAsync(
             AIFeatureType.SpamDetection,
-            "openai",
+            "test-connection",
             "gpt-4o-mini");
 
         // Assert
         Assert.Multiple(() =>
         {
             Assert.That(result.Success, Is.False);
-            Assert.That(result.Message, Does.Contain("API key not configured"));
+            Assert.That(result.Message, Does.Contain("No response received"));
         });
     }
 
     [Test]
-    public async Task TestFeatureAsync_AzureWithoutApiKey_ReturnsFailure()
+    public async Task TestFeatureAsync_SpamDetection_Success()
     {
         // Arrange
-        var config = new AIProviderConfig
-        {
-            Connections =
-            [
-                new AIConnection
-                {
-                    Id = "azure",
-                    Provider = AIProviderType.AzureOpenAI,
-                    Enabled = true,
-                    AzureEndpoint = "https://test.openai.azure.com"
-                }
-            ],
-            Features = new Dictionary<AIFeatureType, AIFeatureConfig>()
-        };
-
-        _mockConfigRepo.GetAIProviderConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(config);
-
-        _mockConfigRepo.GetApiKeysAsync(Arg.Any<CancellationToken>())
-            .Returns(new ApiKeysConfig());
+        _mockChatService
+            .TestCompletionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(new ChatCompletionResult
+            {
+                Content = "OK",
+                TotalTokens = 5
+            }));
 
         // Act
         var result = await _service.TestFeatureAsync(
             AIFeatureType.SpamDetection,
-            "azure",
-            "gpt-4o-mini",
-            "deployment-name");
+            "test-connection",
+            "gpt-4o-mini");
 
         // Assert
         Assert.Multiple(() =>
         {
-            Assert.That(result.Success, Is.False);
-            Assert.That(result.Message, Does.Contain("API key not configured"));
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Message, Does.Contain("Model responded successfully"));
+            Assert.That(result.Message, Does.Contain("5 tokens"));
         });
     }
 
     [Test]
-    public async Task TestFeatureAsync_LocalRequiresKeyButNoKey_ReturnsFailure()
+    public async Task TestFeatureAsync_Translation_Success()
     {
         // Arrange
-        var config = new AIProviderConfig
-        {
-            Connections =
-            [
-                new AIConnection
-                {
-                    Id = "local",
-                    Provider = AIProviderType.LocalOpenAI,
-                    Enabled = true,
-                    LocalEndpoint = "http://localhost:1234/v1",
-                    LocalRequiresApiKey = true
-                }
-            ],
-            Features = new Dictionary<AIFeatureType, AIFeatureConfig>()
-        };
-
-        _mockConfigRepo.GetAIProviderConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(config);
-
-        _mockConfigRepo.GetApiKeysAsync(Arg.Any<CancellationToken>())
-            .Returns(new ApiKeysConfig());
+        _mockChatService
+            .TestCompletionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(new ChatCompletionResult
+            {
+                Content = "Hola",
+                TotalTokens = 3
+            }));
 
         // Act
         var result = await _service.TestFeatureAsync(
-            AIFeatureType.SpamDetection,
-            "local",
-            "local-model");
+            AIFeatureType.Translation,
+            "test-connection",
+            "gpt-4o-mini");
 
         // Assert
         Assert.Multiple(() =>
         {
-            Assert.That(result.Success, Is.False);
-            Assert.That(result.Message, Does.Contain("API key not configured"));
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Message, Does.Contain("Translation test passed"));
         });
     }
 
     [Test]
-    public async Task TestFeatureAsync_ServiceCreationFails_ReturnsFailure()
+    public async Task TestFeatureAsync_ImageAnalysis_VisionSuccess()
     {
-        // Arrange - Azure without endpoint (will fail service creation)
-        var config = new AIProviderConfig
-        {
-            Connections =
-            [
-                new AIConnection
-                {
-                    Id = "azure-bad",
-                    Provider = AIProviderType.AzureOpenAI,
-                    Enabled = true,
-                    AzureEndpoint = null // Missing - will cause exception
-                }
-            ],
-            Features = new Dictionary<AIFeatureType, AIFeatureConfig>()
-        };
-
-        var apiKeys = new ApiKeysConfig();
-        apiKeys.SetAIConnectionKey("azure-bad", "test-api-key");
-
-        _mockConfigRepo.GetAIProviderConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(config);
-        _mockConfigRepo.GetApiKeysAsync(Arg.Any<CancellationToken>())
-            .Returns(apiKeys);
+        // Arrange
+        _mockChatService
+            .TestVisionCompletionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(new ChatCompletionResult
+            {
+                Content = "red",
+                TotalTokens = 8
+            }));
 
         // Act
         var result = await _service.TestFeatureAsync(
-            AIFeatureType.SpamDetection,
-            "azure-bad",
-            "gpt-4o-mini",
-            "deployment");
+            AIFeatureType.ImageAnalysis,
+            "test-connection",
+            "gpt-4o-mini");
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Message, Does.Contain("Vision test passed"));
+            Assert.That(result.Message, Does.Contain("image"));
+        });
+    }
+
+    [Test]
+    public async Task TestFeatureAsync_VideoAnalysis_VisionSuccess()
+    {
+        // Arrange
+        _mockChatService
+            .TestVisionCompletionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(new ChatCompletionResult
+            {
+                Content = "red",
+                TotalTokens = 10
+            }));
+
+        // Act
+        var result = await _service.TestFeatureAsync(
+            AIFeatureType.VideoAnalysis,
+            "test-connection",
+            "gpt-4o-mini");
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Message, Does.Contain("Vision test passed"));
+            Assert.That(result.Message, Does.Contain("video frame"));
+        });
+    }
+
+    [Test]
+    public async Task TestFeatureAsync_VisionReturnsNull_ReturnsVisionNotSupported()
+    {
+        // Arrange - Vision call returns null (model doesn't support vision)
+        _mockChatService
+            .TestVisionCompletionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<byte[]>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(null));
+
+        // Act
+        var result = await _service.TestFeatureAsync(
+            AIFeatureType.ImageAnalysis,
+            "test-connection",
+            "gpt-4o-mini");
 
         // Assert
         Assert.Multiple(() =>
         {
             Assert.That(result.Success, Is.False);
-            Assert.That(result.Message, Does.Contain("Failed to initialize chat service"));
-            Assert.That(result.ErrorDetails, Is.Not.Null);
+            Assert.That(result.Message, Does.Contain("vision"));
+        });
+    }
+
+    [Test]
+    public async Task TestFeatureAsync_PromptBuilder_Success()
+    {
+        // Arrange
+        _mockChatService
+            .TestCompletionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(new ChatCompletionResult
+            {
+                Content = "ready",
+                TotalTokens = 4
+            }));
+
+        // Act
+        var result = await _service.TestFeatureAsync(
+            AIFeatureType.PromptBuilder,
+            "test-connection",
+            "gpt-4o-mini");
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.True);
+            Assert.That(result.Message, Does.Contain("Prompt builder test passed"));
         });
     }
 
     [Test]
     public async Task TestFeatureAsync_UnknownFeatureType_ReturnsFailure()
     {
-        // Arrange
-        var config = new AIProviderConfig
-        {
-            Connections =
-            [
-                new AIConnection
-                {
-                    Id = "openai",
-                    Provider = AIProviderType.OpenAI,
-                    Enabled = true
-                }
-            ],
-            Features = new Dictionary<AIFeatureType, AIFeatureConfig>()
-        };
-
-        var apiKeys = new ApiKeysConfig();
-        apiKeys.SetAIConnectionKey("openai", "test-api-key");
-
-        _mockConfigRepo.GetAIProviderConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(config);
-        _mockConfigRepo.GetApiKeysAsync(Arg.Any<CancellationToken>())
-            .Returns(apiKeys);
-
         // Act - Use invalid enum value
         var invalidFeatureType = (AIFeatureType)999;
         var result = await _service.TestFeatureAsync(
             invalidFeatureType,
-            "openai",
+            "test-connection",
             "gpt-4o-mini");
 
         // Assert
@@ -332,56 +332,34 @@ public class FeatureTestServiceTests
         });
     }
 
-    #endregion
-
-    #region Feature-Specific Test Configuration
-
     [Test]
-    public async Task TestFeatureAsync_SpamDetection_UsesCorrectPrompts()
+    public async Task TestFeatureAsync_ExceptionThrown_ReturnsFailure()
     {
-        // This test validates that the spam detection test uses appropriate prompts
-        // Full flow testing with actual HTTP requires WireMock (integration tests)
+        // Arrange - Chat service throws exception
+        _mockChatService
+            .TestCompletionAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns<ChatCompletionResult?>(_ => throw new InvalidOperationException("Connection failed"));
 
-        // Arrange
-        var config = new AIProviderConfig
+        // Act
+        var result = await _service.TestFeatureAsync(
+            AIFeatureType.SpamDetection,
+            "test-connection",
+            "gpt-4o-mini");
+
+        // Assert
+        Assert.Multiple(() =>
         {
-            Connections =
-            [
-                new AIConnection
-                {
-                    Id = "openai",
-                    Provider = AIProviderType.OpenAI,
-                    Enabled = true
-                }
-            ]
-        };
-
-        var apiKeys = new ApiKeysConfig();
-        apiKeys.SetAIConnectionKey("openai", "sk-test-key");
-
-        _mockConfigRepo.GetAIProviderConfigAsync(Arg.Any<CancellationToken>())
-            .Returns(config);
-        _mockConfigRepo.GetApiKeysAsync(Arg.Any<CancellationToken>())
-            .Returns(apiKeys);
-
-        // Act - Will fail in real scenario (no actual API), but validates config setup
-        // Note: Actual HTTP call testing requires WireMock
-
-        Assert.Pass("Full flow test requires WireMock integration test");
-    }
-
-    [Test]
-    public async Task TestFeatureAsync_Translation_UsesCorrectPrompts()
-    {
-        // Placeholder for translation-specific test validation
-        Assert.Pass("Full flow test requires WireMock integration test");
-    }
-
-    [Test]
-    public async Task TestFeatureAsync_VisionFeatures_UseTestImage()
-    {
-        // Placeholder for vision-specific test validation (ImageAnalysis, VideoAnalysis)
-        Assert.Pass("Full flow test requires WireMock integration test");
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Message, Does.Contain("Test failed unexpectedly"));
+            Assert.That(result.ErrorDetails, Does.Contain("Connection failed"));
+        });
     }
 
     #endregion
