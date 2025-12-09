@@ -738,6 +738,7 @@ public class ChatManagementService(
 
     /// <summary>
     /// Refresh health for all active managed chats (excludes chats where bot was removed)
+    /// Also backfills missing chat icons to ensure they're fetched eventually
     /// </summary>
     public async Task RefreshAllHealthAsync(ITelegramBotClient? botClient, CancellationToken cancellationToken = default)
     {
@@ -759,6 +760,17 @@ public class ChatManagementService(
             }
 
             logger.LogDebug("Completed health check for {Count} active chats", chats.Count);
+
+            // Backfill missing chat icons (only fetches for chats without icons)
+            var chatsWithoutIcons = chats.Where(c => string.IsNullOrEmpty(c.ChatIconPath)).ToList();
+            if (chatsWithoutIcons.Count > 0)
+            {
+                logger.LogInformation("Backfilling {Count} missing chat icons", chatsWithoutIcons.Count);
+                foreach (var chat in chatsWithoutIcons)
+                {
+                    await FetchChatIconAsync(botClient, chat.ChatId, cancellationToken);
+                }
+            }
         }
         catch (Exception ex)
         {
