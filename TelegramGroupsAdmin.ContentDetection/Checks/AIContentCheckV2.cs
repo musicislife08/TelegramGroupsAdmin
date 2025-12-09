@@ -107,6 +107,7 @@ public class AIContentCheckV2(
                 req.UserId, req.Message.Length);
 
             // Make AI call using the chat service
+            // Temperature and MaxTokens defaults come from feature config if not specified
             var result = await chatService.GetCompletionAsync(
                 AIFeatureType.SpamDetection,
                 prompts.SystemPrompt,
@@ -114,7 +115,7 @@ public class AIContentCheckV2(
                 new ChatCompletionOptions
                 {
                     MaxTokens = req.MaxTokens,
-                    Temperature = 0.1,
+                    // Temperature uses feature config default (set in AI Integration settings)
                     JsonMode = true // Request JSON format response
                 },
                 req.CancellationToken);

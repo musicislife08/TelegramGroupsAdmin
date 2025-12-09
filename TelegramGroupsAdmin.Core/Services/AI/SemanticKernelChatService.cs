@@ -41,12 +41,15 @@ public class SemanticKernelChatService : IChatService
         ChatCompletionOptions? options = null,
         CancellationToken ct = default)
     {
-        var kernelInfo = await GetOrCreateKernelAsync(feature, ct);
-        if (kernelInfo == null)
+        var lookupResult = await GetOrCreateKernelAsync(feature, ct);
+        if (lookupResult == null)
         {
             _logger.LogDebug("Feature {Feature} is not configured, skipping AI call", feature);
             return null;
         }
+
+        var kernelInfo = lookupResult.Kernel;
+        var featureConfig = lookupResult.FeatureConfig;
 
         try
         {
@@ -54,7 +57,9 @@ public class SemanticKernelChatService : IChatService
             chatHistory.AddSystemMessage(systemPrompt);
             chatHistory.AddUserMessage(userPrompt);
 
-            var executionSettings = CreateExecutionSettings(options);
+            // Apply feature config defaults for settings not specified by caller
+            var effectiveOptions = ApplyFeatureConfigDefaults(options, featureConfig);
+            var executionSettings = CreateExecutionSettings(effectiveOptions);
 
             var response = await kernelInfo.ChatService.GetChatMessageContentAsync(
                 chatHistory,
@@ -82,12 +87,15 @@ public class SemanticKernelChatService : IChatService
         ChatCompletionOptions? options = null,
         CancellationToken ct = default)
     {
-        var kernelInfo = await GetOrCreateKernelAsync(feature, ct);
-        if (kernelInfo == null)
+        var lookupResult = await GetOrCreateKernelAsync(feature, ct);
+        if (lookupResult == null)
         {
             _logger.LogDebug("Feature {Feature} is not configured, skipping AI vision call", feature);
             return null;
         }
+
+        var kernelInfo = lookupResult.Kernel;
+        var featureConfig = lookupResult.FeatureConfig;
 
         try
         {
@@ -99,7 +107,9 @@ public class SemanticKernelChatService : IChatService
             var textContent = new TextContent(userPrompt);
             chatHistory.AddUserMessage([textContent, imageContent]);
 
-            var executionSettings = CreateExecutionSettings(options);
+            // Apply feature config defaults for settings not specified by caller
+            var effectiveOptions = ApplyFeatureConfigDefaults(options, featureConfig);
+            var executionSettings = CreateExecutionSettings(effectiveOptions);
 
             var response = await kernelInfo.ChatService.GetChatMessageContentAsync(
                 chatHistory,
@@ -362,7 +372,7 @@ public class SemanticKernelChatService : IChatService
     /// <summary>
     /// Get or create a cached Kernel for the specified feature
     /// </summary>
-    private async Task<CachedKernel?> GetOrCreateKernelAsync(AIFeatureType feature, CancellationToken ct)
+    private async Task<KernelLookupResult?> GetOrCreateKernelAsync(AIFeatureType feature, CancellationToken ct)
     {
         var config = await _configRepository.GetAIProviderConfigAsync(ct);
         if (config == null) return null;
@@ -412,7 +422,8 @@ public class SemanticKernelChatService : IChatService
                 return new CachedKernel(kernel, chatService, modelId);
             });
 
-            return cachedKernel;
+            // Return kernel with feature config so caller can use config defaults (Temperature, MaxTokens)
+            return new KernelLookupResult(cachedKernel, featureConfig);
         }
         catch (Exception ex)
         {
@@ -499,6 +510,21 @@ public class SemanticKernelChatService : IChatService
     }
 
     /// <summary>
+    /// Apply feature config defaults to caller-provided options.
+    /// Caller-specified values take precedence over config defaults.
+    /// </summary>
+    private static ChatCompletionOptions ApplyFeatureConfigDefaults(ChatCompletionOptions? options, AIFeatureConfig featureConfig)
+    {
+        return new ChatCompletionOptions
+        {
+            // Use caller value if specified, otherwise use feature config default
+            MaxTokens = options?.MaxTokens ?? featureConfig.MaxTokens,
+            Temperature = options?.Temperature ?? featureConfig.Temperature,
+            JsonMode = options?.JsonMode ?? false
+        };
+    }
+
+    /// <summary>
     /// Create execution settings from options
     /// </summary>
     private static OpenAIPromptExecutionSettings CreateExecutionSettings(ChatCompletionOptions? options)
@@ -563,4 +589,9 @@ public class SemanticKernelChatService : IChatService
     /// Cached kernel with associated services
     /// </summary>
     private sealed record CachedKernel(Kernel Kernel, IChatCompletionService ChatService, string ModelId);
+
+    /// <summary>
+    /// Kernel lookup result including feature config defaults for execution settings
+    /// </summary>
+    private sealed record KernelLookupResult(CachedKernel Kernel, AIFeatureConfig FeatureConfig);
 }

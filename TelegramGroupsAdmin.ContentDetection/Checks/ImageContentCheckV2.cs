@@ -317,6 +317,7 @@ public class ImageContentCheckV2(
 
         try
         {
+            // Temperature uses feature config default (set in AI Integration settings)
             var result = await chatService.GetVisionCompletionAsync(
                 AIFeatureType.ImageAnalysis,
                 GetDefaultImagePrompt(),
@@ -325,8 +326,7 @@ public class ImageContentCheckV2(
                 mimeType,
                 new ChatCompletionOptions
                 {
-                    MaxTokens = 300,
-                    Temperature = 0.1
+                    MaxTokens = 300
                 },
                 req.CancellationToken);
 
