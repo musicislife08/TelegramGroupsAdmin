@@ -208,6 +208,9 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                     RiskLevel = score >= 100 ? ImpersonationRiskLevel.Critical : ImpersonationRiskLevel.Medium,
                     SuspectedUserId = userId,
                     TargetUserId = admin.TelegramUserId,
+                    TargetEntityType = ProtectedEntityType.User,
+                    TargetEntityId = admin.TelegramUserId,
+                    TargetEntityName = $"{admin.FirstName} {admin.LastName}".Trim(),
                     ChatId = chatId,
                     NameMatch = nameMatch,
                     PhotoMatch = photoMatch,
@@ -216,12 +219,20 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             }
         }
 
+        // Also check against protected entities (chat names and linked channels)
+        bestMatch = await CheckUserAgainstProtectedEntitiesAsync(
+            userId, chatId, firstName, lastName, photoPath, highestScore, bestMatch);
+
         // Only return if score >= 50 (at least one attribute matched)
         if (bestMatch != null && bestMatch.TotalScore >= 50)
         {
+            var targetDescription = bestMatch.TargetEntityType == ProtectedEntityType.User
+                ? $"Admin {bestMatch.TargetUserId}"
+                : $"{bestMatch.TargetEntityType} '{bestMatch.TargetEntityName}' ({bestMatch.TargetEntityId})";
+
             _logger.LogWarning(
-                "Impersonation detected: User {UserId} vs Admin {TargetId} in chat {ChatId} (score: {Score}, risk: {Risk})",
-                userId, bestMatch.TargetUserId, chatId, bestMatch.TotalScore, bestMatch.RiskLevel);
+                "Impersonation detected: User {UserId} vs {TargetDescription} in chat {ChatId} (score: {Score}, risk: {Risk})",
+                userId, targetDescription, chatId, bestMatch.TotalScore, bestMatch.RiskLevel);
             return bestMatch;
         }
 
@@ -341,5 +352,162 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         public string? FirstName { get; set; }
         public string? LastName { get; set; }
         public string? UserPhotoPath { get; set; }
+    }
+
+    /// <summary>
+    /// Get protected entities (chat names and linked channels) for impersonation detection.
+    /// </summary>
+    private async Task<List<ProtectedEntity>> GetProtectedEntitiesAsync()
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var entities = new List<ProtectedEntity>();
+
+        // Get chat names from managed chats
+        var chatEntities = await context.ManagedChats
+            .Where(mc => mc.IsActive && !string.IsNullOrEmpty(mc.ChatName))
+            .Select(mc => new ProtectedEntity
+            {
+                Type = ProtectedEntityType.Chat,
+                Id = mc.ChatId,
+                Name = mc.ChatName!,
+                PhotoHash = null // Chat photos not hashed yet
+            })
+            .AsNoTracking()
+            .ToListAsync();
+
+        entities.AddRange(chatEntities);
+
+        // Get linked channels
+        var channelEntities = await context.LinkedChannels
+            .Where(lc => !string.IsNullOrEmpty(lc.ChannelName))
+            .Select(lc => new ProtectedEntity
+            {
+                Type = ProtectedEntityType.Channel,
+                Id = lc.ChannelId,
+                Name = lc.ChannelName!,
+                PhotoHash = lc.PhotoHash
+            })
+            .AsNoTracking()
+            .ToListAsync();
+
+        entities.AddRange(channelEntities);
+
+        _logger.LogDebug(
+            "Found {ChatCount} chat names and {ChannelCount} linked channels for impersonation protection",
+            chatEntities.Count,
+            channelEntities.Count);
+
+        return entities;
+    }
+
+    /// <summary>
+    /// Check user against protected entities (chat names and linked channels)
+    /// </summary>
+    private async Task<ImpersonationCheckResult?> CheckUserAgainstProtectedEntitiesAsync(
+        long userId,
+        long chatId,
+        string? firstName,
+        string? lastName,
+        string? photoPath,
+        int currentHighestScore,
+        ImpersonationCheckResult? currentBestMatch)
+    {
+        var protectedEntities = await GetProtectedEntitiesAsync();
+
+        if (protectedEntities.Count == 0)
+        {
+            return currentBestMatch;
+        }
+
+        var bestMatch = currentBestMatch;
+        var highestScore = currentHighestScore;
+
+        foreach (var entity in protectedEntities)
+        {
+            int score = 0;
+            bool nameMatch = false;
+            bool photoMatch = false;
+            double? photoSimilarity = null;
+
+            // Check name similarity against entity name (50 points)
+            // Compare user's first name + last name against entity name
+            if (!string.IsNullOrWhiteSpace(firstName))
+            {
+                var userName = $"{firstName} {lastName}".Trim();
+                var similarity = StringUtilities.CalculateStringSimilarity(userName, entity.Name);
+
+                if (similarity >= NameSimilarityThreshold)
+                {
+                    nameMatch = true;
+                    score += 50;
+                    _logger.LogDebug(
+                        "Name match detected: User {UserId} '{UserName}' vs {EntityType} '{EntityName}' (similarity: {Similarity:F2})",
+                        userId, userName, entity.Type, entity.Name, similarity);
+                }
+            }
+
+            // Check photo similarity against entity photo (50 points) - channels only
+            if (entity.PhotoHash != null && !string.IsNullOrWhiteSpace(photoPath))
+            {
+                try
+                {
+                    var userHash = await _photoHashService.ComputePhotoHashAsync(photoPath);
+
+                    if (userHash != null)
+                    {
+                        var similarity = _photoHashService.CompareHashes(userHash, entity.PhotoHash);
+                        photoSimilarity = similarity;
+
+                        if (similarity >= PhotoSimilarityThreshold)
+                        {
+                            photoMatch = true;
+                            score += 50;
+                            _logger.LogDebug(
+                                "Photo match detected: User {UserId} vs {EntityType} {EntityId} (similarity: {Similarity:F2})",
+                                userId, entity.Type, entity.Id, similarity);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Failed to compare photos for User {UserId} vs {EntityType} {EntityId}",
+                        userId, entity.Type, entity.Id);
+                }
+            }
+
+            // Track highest scoring match
+            if (score > highestScore)
+            {
+                highestScore = score;
+                bestMatch = new ImpersonationCheckResult
+                {
+                    TotalScore = score,
+                    RiskLevel = score >= 100 ? ImpersonationRiskLevel.Critical : ImpersonationRiskLevel.Medium,
+                    SuspectedUserId = userId,
+                    TargetUserId = 0, // Not a user
+                    TargetEntityType = entity.Type,
+                    TargetEntityId = entity.Id,
+                    TargetEntityName = entity.Name,
+                    ChatId = chatId,
+                    NameMatch = nameMatch,
+                    PhotoMatch = photoMatch,
+                    PhotoSimilarityScore = photoSimilarity
+                };
+            }
+        }
+
+        return bestMatch;
+    }
+
+    /// <summary>
+    /// Internal data structure for protected entity (chat or channel)
+    /// </summary>
+    private class ProtectedEntity
+    {
+        public ProtectedEntityType Type { get; init; }
+        public long Id { get; init; }
+        public string Name { get; init; } = string.Empty;
+        public byte[]? PhotoHash { get; init; }
     }
 }

@@ -42,4 +42,9 @@ public class ManagedChatRecordDto
 
     // Navigation properties
     public virtual ICollection<ChatAdminRecordDto> ChatAdmins { get; set; } = [];
+
+    /// <summary>
+    /// Linked channel for this chat (1:1 relationship - groups can only have one linked channel)
+    /// </summary>
+    public virtual LinkedChannelRecordDto? LinkedChannel { get; set; }
 }

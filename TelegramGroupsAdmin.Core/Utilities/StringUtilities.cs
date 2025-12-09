@@ -75,4 +75,26 @@ public static class StringUtilities
         // Convert distance to similarity (0 distance = 100% similar)
         return 1.0 - ((double)distance / maxLength);
     }
+
+    /// <summary>
+    /// Calculate similarity between two strings using normalized Levenshtein distance
+    /// </summary>
+    /// <param name="string1">First string</param>
+    /// <param name="string2">Second string</param>
+    /// <returns>Similarity score from 0.0 (completely different) to 1.0 (identical)</returns>
+    public static double CalculateStringSimilarity(string? string1, string? string2)
+    {
+        if (string.IsNullOrWhiteSpace(string1) || string.IsNullOrWhiteSpace(string2))
+            return 0.0;
+
+        // Normalize (lowercase, trim)
+        var s1 = string1.ToLowerInvariant().Trim();
+        var s2 = string2.ToLowerInvariant().Trim();
+
+        var distance = LevenshteinDistance(s1, s2);
+        var maxLength = Math.Max(s1.Length, s2.Length);
+
+        // Convert distance to similarity (0 distance = 100% similar)
+        return 1.0 - ((double)distance / maxLength);
+    }
 }

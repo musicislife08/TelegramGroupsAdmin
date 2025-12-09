@@ -34,6 +34,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IUserTagsRepository, UserTagsRepository>(); // Phase 4.12
             services.AddScoped<ITagDefinitionsRepository, TagDefinitionsRepository>(); // Phase 4.12
             services.AddScoped<IPendingNotificationsRepository, PendingNotificationsRepository>(); // DM notification system
+            services.AddScoped<ILinkedChannelsRepository, LinkedChannelsRepository>(); // Linked channel impersonation detection
             // Note: IAuditLogRepository is registered in AddCoreServices() - it's a cross-cutting concern
             services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
             // REFACTOR-3: Extracted services from MessageHistoryRepository
