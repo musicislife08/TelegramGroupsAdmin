@@ -16,6 +16,7 @@ public static class ServiceCollectionExtensions
         // AI services (Semantic Kernel multi-provider support)
         services.AddScoped<IAIServiceFactory, AIServiceFactory>();
         services.AddScoped<IAITranslationService, AITranslationService>();
+        services.AddScoped<IFeatureTestService, FeatureTestService>();
 
         return services;
     }
