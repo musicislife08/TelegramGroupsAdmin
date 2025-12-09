@@ -43,8 +43,9 @@ public class AIProviderMigrationService : IHostedService
             var connections = new List<AIConnection>();
             string? primaryConnectionId = null;
 
-            // Check for OpenAI key
-            if (apiKeys?.AIConnectionKeys.ContainsKey("openai") == true)
+            // Check for OpenAI key (must be non-empty)
+            if (apiKeys?.AIConnectionKeys.TryGetValue("openai", out var openaiKey) == true &&
+                !string.IsNullOrWhiteSpace(openaiKey))
             {
                 connections.Add(new AIConnection
                 {
@@ -56,8 +57,9 @@ public class AIProviderMigrationService : IHostedService
                 _logger.LogInformation("Creating 'openai' connection from migrated key");
             }
 
-            // Check for Azure OpenAI key
-            if (apiKeys?.AIConnectionKeys.ContainsKey("azure-openai") == true)
+            // Check for Azure OpenAI key (must be non-empty)
+            if (apiKeys?.AIConnectionKeys.TryGetValue("azure-openai", out var azureKey) == true &&
+                !string.IsNullOrWhiteSpace(azureKey))
             {
                 connections.Add(new AIConnection
                 {
@@ -68,8 +70,9 @@ public class AIProviderMigrationService : IHostedService
                 _logger.LogInformation("Creating 'azure-openai' connection from migrated key (disabled - needs endpoint)");
             }
 
-            // Check for Local AI key
-            if (apiKeys?.AIConnectionKeys.ContainsKey("local-ai") == true)
+            // Check for Local AI key (must be non-empty)
+            if (apiKeys?.AIConnectionKeys.TryGetValue("local-ai", out var localKey) == true &&
+                !string.IsNullOrWhiteSpace(localKey))
             {
                 connections.Add(new AIConnection
                 {

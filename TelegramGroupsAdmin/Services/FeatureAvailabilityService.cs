@@ -66,9 +66,11 @@ public class FeatureAvailabilityService : IFeatureAvailabilityService
                 return false;
             }
 
-            // Return true if any enabled connection has an API key configured
+            // Return true if any enabled connection has a non-empty API key configured
             return aiProviderConfig.Connections.Any(c =>
-                c.Enabled && apiKeys.AIConnectionKeys.ContainsKey(c.Id));
+                c.Enabled &&
+                apiKeys.AIConnectionKeys.TryGetValue(c.Id, out var key) &&
+                !string.IsNullOrWhiteSpace(key));
         }
         catch (Exception ex)
         {
