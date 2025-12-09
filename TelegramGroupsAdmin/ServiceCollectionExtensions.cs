@@ -154,6 +154,7 @@ public static class ServiceCollectionExtensions
             // Web Push browser notifications (PushServiceClient + VAPID auto-generation)
             services.AddHttpClient<Lib.Net.Http.WebPush.PushServiceClient>();
             services.AddHostedService<VapidKeyGenerationService>(); // Auto-generates VAPID keys on first startup
+            services.AddHostedService<AIProviderMigrationService>(); // Migrates OpenAI config to multi-provider format
 
             // Push subscriptions repository (browser push endpoints)
             services.AddScoped<Core.Repositories.IPushSubscriptionsRepository, Core.Repositories.PushSubscriptionsRepository>();
@@ -248,20 +249,8 @@ public static class ServiceCollectionExtensions
                     resiliencePipelineBuilder.AddRateLimiter(limiterOptions);
                 });
 
-            // Named HttpClient for OpenAI (shared by all OpenAI services)
-            // Uses ApiKeyDelegatingHandler to load API key from database (with env var fallback)
-            services.AddHttpClient("OpenAI", client =>
-            {
-                client.BaseAddress = new Uri("https://api.openai.com/v1/");
-                client.Timeout = TimeSpan.FromSeconds(30);
-                client.DefaultRequestHeaders.Add("User-Agent", "TelegramGroupsAdmin/1.0");
-            })
-                .AddHttpMessageHandler(sp => new ApiKeyDelegatingHandler(
-                    sp,
-                    configuration,
-                    serviceName: "OpenAI",
-                    headerName: "Authorization",
-                    headerValueFormat: "Bearer {0}"));
+            // Note: OpenAI HttpClient removed - now using Semantic Kernel via IChatService
+            // which handles multiple providers (OpenAI, Azure OpenAI, local endpoints)
 
             services.AddHttpClient();
 

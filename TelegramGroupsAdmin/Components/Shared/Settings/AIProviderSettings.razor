@@ -1,0 +1,221 @@
+@using TelegramGroupsAdmin.Configuration.Models
+@using TelegramGroupsAdmin.Configuration.Repositories
+@using TelegramGroupsAdmin.Core.Services.AI
+@using TelegramGroupsAdmin.Services
+@inject ISystemConfigRepository ConfigRepository
+@inject IAIServiceFactory AIServiceFactory
+@inject IChatService ChatService
+@inject IAuditService AuditService
+@inject BlazorAuthHelper AuthHelper
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudGrid>
+    <!-- Info Alert -->
+    <MudItem xs="12">
+        <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+            <MudText Typo="Typo.subtitle2"><strong>AI Provider Connections</strong></MudText>
+            <MudText Typo="Typo.body2">
+                Configure AI provider connections for spam detection, content translation,
+                image/video analysis, and AI veto mode. Create multiple connections of the same type
+                if needed (e.g., separate OpenAI accounts for different features).
+            </MudText>
+        </MudAlert>
+    </MudItem>
+
+    <!-- Add Connection Button -->
+    <MudItem xs="12">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h6">Connections (@_config.Connections.Count)</MudText>
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      StartIcon="@Icons.Material.Filled.Add"
+                      OnClick="@OpenAddConnectionDialog">
+                Add Connection
+            </MudButton>
+        </MudStack>
+    </MudItem>
+
+    <!-- Connection List -->
+    @if (_config.Connections.Count == 0)
+    {
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="1">
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.CloudOff" Size="Size.Large" Color="Color.Default" />
+                    <MudText Typo="Typo.body1" Color="Color.Secondary">No AI connections configured</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Click "Add Connection" to configure your first AI provider.
+                    </MudText>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    }
+    else
+    {
+        @foreach (var connection in _config.Connections)
+        {
+            <MudItem xs="12" md="6">
+                <AIConnectionCard Connection="@connection"
+                                  InitialApiKey="@GetApiKey(connection.Id)"
+                                  OnSave="@SaveConnectionAsync"
+                                  OnDelete="@DeleteConnectionAsync" />
+            </MudItem>
+        }
+    }
+
+    <!-- Warning if no active connections -->
+    @if (_config.Connections.Count > 0 && !_config.Connections.Any(c => c.Enabled))
+    {
+        <MudItem xs="12">
+            <MudAlert Severity="Severity.Warning" Dense="true">
+                <strong>No Active Connections:</strong> Enable at least one connection with an API key.
+                Until configured, AI spam detection, translation, and image analysis will be skipped.
+            </MudAlert>
+        </MudItem>
+    }
+
+    <!-- Feature Configuration Link -->
+    <MudItem xs="12">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">Feature Configuration</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Configure which connection to use for each feature (model selection, per-feature settings)
+                    in <MudLink Href="/settings/content-detection/ai-integration">Content Detection → AI Integration</MudLink>.
+                </MudText>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private AIProviderConfig _config = new();
+    private ApiKeysConfig _apiKeys = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfigAsync();
+    }
+
+    private async Task LoadConfigAsync()
+    {
+        try
+        {
+            var config = await ConfigRepository.GetAIProviderConfigAsync();
+            _config = config ?? new AIProviderConfig();
+
+            var apiKeys = await ConfigRepository.GetApiKeysAsync();
+            _apiKeys = apiKeys ?? new ApiKeysConfig();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
+            _config = new AIProviderConfig();
+            _apiKeys = new ApiKeysConfig();
+        }
+    }
+
+    private async Task SaveConnectionAsync((AIConnection Connection, string? ApiKey) args)
+    {
+        try
+        {
+            // Save config (connection is already updated by the card component)
+            await ConfigRepository.SaveAIProviderConfigAsync(_config);
+
+            // Save API key if provided
+            if (args.ApiKey != null)
+            {
+                _apiKeys.SetAIConnectionKey(args.Connection.Id, args.ApiKey);
+                await ConfigRepository.SaveApiKeysAsync(_apiKeys);
+            }
+
+            // Invalidate cached kernel for this connection so changes take effect immediately
+            ChatService.InvalidateCache(args.Connection.Id);
+
+            await LogAuditAsync(args.Connection);
+            Snackbar.Add($"Connection '{args.Connection.Id}' saved", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving connection: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LogAuditAsync(AIConnection connection)
+    {
+        var userId = await AuthHelper.GetCurrentUserIdAsync();
+        if (!string.IsNullOrEmpty(userId))
+        {
+            await AuditService.LogEventAsync(
+                AuditEventType.ConfigurationChanged,
+                Actor.FromWebUser(userId),
+                Actor.FromWebUser(userId),
+                $"ai_connection:{connection.Id}:provider={connection.Provider}:enabled={connection.Enabled}");
+        }
+    }
+
+    private async Task OpenAddConnectionDialog()
+    {
+        var parameters = new DialogParameters<AddAIConnectionDialog>
+        {
+            { x => x.ExistingIds, _config.Connections.Select(c => c.Id).ToList() }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<AddAIConnectionDialog>("Add AI Connection", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: AIConnection newConnection })
+        {
+            _config.Connections.Add(newConnection);
+            await ConfigRepository.SaveAIProviderConfigAsync(_config);
+            await LogAuditAsync(newConnection);
+            Snackbar.Add($"Connection '{newConnection.Id}' created", Severity.Success);
+        }
+    }
+
+    private async Task DeleteConnectionAsync(AIConnection connection)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Connection",
+            $"Are you sure you want to delete the connection '{connection.Id}'? This cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            _config.Connections.Remove(connection);
+            _apiKeys.AIConnectionKeys.Remove(connection.Id);
+
+            await ConfigRepository.SaveAIProviderConfigAsync(_config);
+            await ConfigRepository.SaveApiKeysAsync(_apiKeys);
+
+            // Invalidate cached kernel for deleted connection
+            ChatService.InvalidateCache(connection.Id);
+
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            if (!string.IsNullOrEmpty(userId))
+            {
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    Actor.FromWebUser(userId),
+                    Actor.FromWebUser(userId),
+                    $"ai_connection_deleted:{connection.Id}");
+            }
+
+            Snackbar.Add($"Connection '{connection.Id}' deleted", Severity.Success);
+        }
+    }
+
+    private string? GetApiKey(string connectionId)
+    {
+        return _apiKeys.GetAIConnectionKey(connectionId);
+    }
+}

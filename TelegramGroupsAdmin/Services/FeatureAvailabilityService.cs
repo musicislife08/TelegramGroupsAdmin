@@ -52,20 +52,29 @@ public class FeatureAvailabilityService : IFeatureAvailabilityService
     {
         try
         {
-            // Check if OpenAI is enabled in database config
-            var openAIConfig = await _configRepo.GetOpenAIConfigAsync();
-            if (openAIConfig?.Enabled != true)
+            // Check if any AI connection is configured and has an API key
+            var aiProviderConfig = await _configRepo.GetAIProviderConfigAsync();
+            if (aiProviderConfig?.Connections == null || aiProviderConfig.Connections.Count == 0)
             {
                 return false;
             }
 
-            // Check if API key is configured in database
+            // Check if any enabled connection has an API key
             var apiKeys = await _configRepo.GetApiKeysAsync();
-            return !string.IsNullOrWhiteSpace(apiKeys?.OpenAI);
+            if (apiKeys?.AIConnectionKeys == null)
+            {
+                return false;
+            }
+
+            // Return true if any enabled connection has a non-empty API key configured
+            return aiProviderConfig.Connections.Any(c =>
+                c.Enabled &&
+                apiKeys.AIConnectionKeys.TryGetValue(c.Id, out var key) &&
+                !string.IsNullOrWhiteSpace(key));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to check OpenAI configuration status");
+            _logger.LogError(ex, "Failed to check AI provider configuration status");
             return false;
         }
     }

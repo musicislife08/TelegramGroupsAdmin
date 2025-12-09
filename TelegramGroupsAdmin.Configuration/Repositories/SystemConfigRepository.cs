@@ -488,6 +488,68 @@ public class SystemConfigRepository : ISystemConfigRepository
         return false;
     }
 
+    public async Task<AIProviderConfig?> GetAIProviderConfigAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        // AI provider config is global only (chat_id = 0)
+        var configRecord = await context.Configs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord?.AIProviderConfig == null)
+        {
+            // Return null if not configured (migration not run yet)
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<AIProviderConfig>(configRecord.AIProviderConfig, _jsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Failed to deserialize AI provider config");
+            return null;
+        }
+    }
+
+    public async Task SaveAIProviderConfigAsync(AIProviderConfig config, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+
+        _logger.LogInformation("Saving AI provider configuration to database");
+
+        // Serialize to JSON
+        var jsonConfig = JsonSerializer.Serialize(config, _jsonOptions);
+
+        // Find or create global config record (chat_id = 0)
+        var configRecord = await context.Configs
+            .FirstOrDefaultAsync(c => c.ChatId == 0, cancellationToken);
+
+        if (configRecord == null)
+        {
+            // Create new global config record
+            configRecord = new Data.Models.ConfigRecordDto
+            {
+                ChatId = 0,
+                AIProviderConfig = jsonConfig,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await context.Configs.AddAsync(configRecord, cancellationToken);
+        }
+        else
+        {
+            // Update existing global config
+            configRecord.AIProviderConfig = jsonConfig;
+            configRecord.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("AI provider configuration saved successfully");
+    }
+
     /// <summary>
     /// Deep merge chat config onto global config
     /// Chat values override global defaults for all properties

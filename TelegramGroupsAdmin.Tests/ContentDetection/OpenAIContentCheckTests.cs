@@ -1,33 +1,34 @@
-using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.ContentDetection.Checks;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Services.AI;
 
 namespace TelegramGroupsAdmin.Tests.ContentDetection;
 
 /// <summary>
-/// Tests for OpenAIContentCheckV2 with V2 scoring model (0.0-5.0 points)
+/// Tests for AIContentCheckV2 with V2 scoring model (0.0-5.0 points)
+/// Renamed from OpenAIContentCheckTests after Semantic Kernel refactoring.
 /// </summary>
 [TestFixture]
-public class OpenAIContentCheckTests
+public class AIContentCheckTests
 {
-    private ILogger<OpenAIContentCheckV2> _mockLogger = null!;
-    private IHttpClientFactory _mockHttpClientFactory = null!;
+    private ILogger<AIContentCheckV2> _mockLogger = null!;
+    private IChatService _mockChatService = null!;
     private IMessageHistoryService _mockMessageHistoryService = null!;
     private IMemoryCache _memoryCache = null!;
-    private OpenAIContentCheckV2 _check = null!;
-    private TestHttpMessageHandler _httpHandler = null!;
+    private AIContentCheckV2 _check = null!;
 
     [SetUp]
     public void Setup()
     {
-        _mockLogger = Substitute.For<ILogger<OpenAIContentCheckV2>>();
-        _mockHttpClientFactory = Substitute.For<IHttpClientFactory>();
+        _mockLogger = Substitute.For<ILogger<AIContentCheckV2>>();
+        _mockChatService = Substitute.For<IChatService>();
         _mockMessageHistoryService = Substitute.For<IMessageHistoryService>();
         _memoryCache = new MemoryCache(new MemoryCacheOptions());
 
@@ -36,12 +37,9 @@ public class OpenAIContentCheckTests
             .GetRecentMessagesAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IEnumerable<HistoryMessage>>(new List<HistoryMessage>()));
 
-        // Setup test HTTP handler
-        _httpHandler = new TestHttpMessageHandler();
-
-        _check = new OpenAIContentCheckV2(
+        _check = new AIContentCheckV2(
             _mockLogger,
-            _mockHttpClientFactory,
+            _mockChatService,
             _memoryCache,
             _mockMessageHistoryService
         );
@@ -51,7 +49,6 @@ public class OpenAIContentCheckTests
     public void TearDown()
     {
         _memoryCache.Dispose();
-        _httpHandler.Dispose();
     }
 
     #region ShouldExecute Tests
@@ -194,8 +191,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_MessageTooShort_ButCheckShortMessagesEnabled_CallsAPI()
     {
         // Arrange
-        var apiResponse = CreateSpamResponse("Suspicious short message", 0.8);
-        SetupHttpClient(apiResponse);
+        SetupChatService(CreateSpamResponse("Suspicious short message", 0.8));
 
         var request = new OpenAICheckRequest
         {
@@ -260,8 +256,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_VetoMode_HasSpamFlags_CallsAPI()
     {
         // Arrange
-        var apiResponse = CreateCleanResponse("Looks fine to me", 0.9);
-        SetupHttpClient(apiResponse);
+        SetupChatService(CreateCleanResponse("Looks fine to me", 0.9));
 
         var request = new OpenAICheckRequest
         {
@@ -291,13 +286,20 @@ public class OpenAIContentCheckTests
 
     #endregion
 
-    #region CheckAsync - Missing/Invalid API Key Tests
+    #region CheckAsync - AI Service Not Configured Tests
 
     [Test]
-    public async Task CheckAsync_UnauthorizedResponse_Abstains()
+    public async Task CheckAsync_AIServiceNotConfigured_Abstains()
     {
-        // Arrange - Simulates missing or invalid API key (delegating handler injects key)
-        SetupHttpClientError(HttpStatusCode.Unauthorized, "Invalid API key");
+        // Arrange - Chat service returns null (feature not configured)
+        _mockChatService
+            .GetCompletionAsync(
+                Arg.Any<AIFeatureType>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<ChatCompletionOptions?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(null));
 
         var request = CreateValidRequest();
 
@@ -307,7 +309,6 @@ public class OpenAIContentCheckTests
         // Assert
         Assert.That(response.Score, Is.EqualTo(0.0));
         Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("API error"));
     }
 
     #endregion
@@ -318,8 +319,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_SpamDetected_HighConfidence_ReturnsHighScore()
     {
         // Arrange
-        var apiResponse = CreateSpamResponse("This contains prohibited content", 0.95);
-        SetupHttpClient(apiResponse);
+        SetupChatService(CreateSpamResponse("This contains prohibited content", 0.95));
 
         var request = CreateValidRequest();
 
@@ -338,8 +338,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_SpamDetected_MediumConfidence_ReturnsMediumScore()
     {
         // Arrange
-        var apiResponse = CreateSpamResponse("Possibly spam", 0.6);
-        SetupHttpClient(apiResponse);
+        SetupChatService(CreateSpamResponse("Possibly spam", 0.6));
 
         var request = CreateValidRequest();
 
@@ -355,8 +354,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_SpamDetected_LowConfidence_ReturnsLowScore()
     {
         // Arrange
-        var apiResponse = CreateSpamResponse("Slightly suspicious", 0.3);
-        SetupHttpClient(apiResponse);
+        SetupChatService(CreateSpamResponse("Slightly suspicious", 0.3));
 
         var request = CreateValidRequest();
 
@@ -376,8 +374,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_ReviewResult_HighConfidence_CappedAt3Points()
     {
         // Arrange
-        var apiResponse = CreateReviewResponse("Needs human review", 0.9);
-        SetupHttpClient(apiResponse);
+        SetupChatService(CreateReviewResponse("Needs human review", 0.9));
 
         var request = CreateValidRequest();
 
@@ -395,8 +392,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_ReviewResult_MediumConfidence_ReturnsScore()
     {
         // Arrange
-        var apiResponse = CreateReviewResponse("Uncertain", 0.5);
-        SetupHttpClient(apiResponse);
+        SetupChatService(CreateReviewResponse("Uncertain", 0.5));
 
         var request = CreateValidRequest();
 
@@ -416,8 +412,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_CleanResult_ReturnsCleanVerdict()
     {
         // Arrange
-        var apiResponse = CreateCleanResponse("This is a legitimate message", 0.85);
-        SetupHttpClient(apiResponse);
+        SetupChatService(CreateCleanResponse("This is a legitimate message", 0.85));
 
         var request = CreateValidRequest();
 
@@ -439,8 +434,7 @@ public class OpenAIContentCheckTests
     public async Task CheckAsync_SecondCall_UsesCachedResult()
     {
         // Arrange
-        var apiResponse = CreateSpamResponse("Spam detected", 0.8);
-        SetupHttpClient(apiResponse);
+        SetupChatService(CreateSpamResponse("Spam detected", 0.8));
 
         var request = CreateValidRequest();
 
@@ -453,8 +447,13 @@ public class OpenAIContentCheckTests
         Assert.That(response1.Score, Is.EqualTo(response2.Score));
         Assert.That(response2.Details, Does.Contain("cached"));
 
-        // Verify HTTP client was only called once (cached on second call)
-        Assert.That(_httpHandler.RequestCount, Is.EqualTo(1));
+        // Verify chat service was only called once (cached on second call)
+        await _mockChatService.Received(1).GetCompletionAsync(
+            Arg.Any<AIFeatureType>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<ChatCompletionOptions?>(),
+            Arg.Any<CancellationToken>());
     }
 
     #endregion
@@ -462,10 +461,12 @@ public class OpenAIContentCheckTests
     #region CheckAsync - Error Handling Tests
 
     [Test]
-    public async Task CheckAsync_ApiReturnsError_Abstains()
+    public async Task CheckAsync_APIReturnsNull_Abstains()
     {
-        // Arrange
-        SetupHttpClientError(HttpStatusCode.InternalServerError, "Server error");
+        // Arrange - Chat service returns null (API error)
+        _mockChatService
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(null));
 
         var request = CreateValidRequest();
 
@@ -475,120 +476,15 @@ public class OpenAIContentCheckTests
         // Assert
         Assert.That(response.Score, Is.EqualTo(0.0));
         Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("API error"));
-    }
-
-    [Test]
-    public async Task CheckAsync_ApiRateLimited_Abstains()
-    {
-        // Arrange
-        SetupHttpClientError(HttpStatusCode.TooManyRequests, "Rate limit exceeded");
-
-        var request = CreateValidRequest();
-
-        // Act
-        var response = await _check.CheckAsync(request);
-
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("rate limited"));
-    }
-
-    [Test]
-    public async Task CheckAsync_Timeout_Abstains()
-    {
-        // Arrange
-        _httpHandler.SetException(new TaskCanceledException("Request timed out"));
-
-        var httpClient = new HttpClient(_httpHandler)
-        {
-            BaseAddress = new Uri("https://api.openai.com/v1/")
-        };
-
-        _mockHttpClientFactory
-            .CreateClient("OpenAI")
-            .Returns(httpClient);
-
-        var request = CreateValidRequest();
-
-        // Act
-        var response = await _check.CheckAsync(request);
-
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("timed out"));
-    }
-
-    [Test]
-    public async Task CheckAsync_InvalidJsonResponse_Abstains()
-    {
-        // Arrange
-        var invalidResponse = new OpenAIResponse
-        {
-            Choices = new[]
-            {
-                new OpenAIChoice
-                {
-                    Message = new OpenAIMessage
-                    {
-                        Role = "assistant",
-                        Content = "This is not valid JSON"
-                    }
-                }
-            }
-        };
-
-        SetupHttpClient(invalidResponse);
-
-        var request = CreateValidRequest();
-
-        // Act
-        var response = await _check.CheckAsync(request);
-
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("Failed to parse OpenAI response"));
-    }
-
-    [Test]
-    public async Task CheckAsync_EmptyResponse_Abstains()
-    {
-        // Arrange
-        var emptyResponse = new OpenAIResponse
-        {
-            Choices = Array.Empty<OpenAIChoice>()
-        };
-
-        SetupHttpClient(emptyResponse);
-
-        var request = CreateValidRequest();
-
-        // Act
-        var response = await _check.CheckAsync(request);
-
-        // Assert
-        Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True);
-        Assert.That(response.Details, Does.Contain("Invalid OpenAI response"));
     }
 
     [Test]
     public async Task CheckAsync_Exception_Abstains()
     {
         // Arrange
-        _httpHandler.SetException(new HttpRequestException("Network error"));
-
-        var httpClient = new HttpClient(_httpHandler)
-        {
-            BaseAddress = new Uri("https://api.openai.com/v1/")
-        };
-
-        _mockHttpClientFactory
-            .CreateClient("OpenAI")
-            .Returns(httpClient);
+        _mockChatService
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns<ChatCompletionResult?>(_ => throw new InvalidOperationException("Network error"));
 
         var request = CreateValidRequest();
 
@@ -601,6 +497,45 @@ public class OpenAIContentCheckTests
         Assert.That(response.Error, Is.Not.Null);
     }
 
+    [Test]
+    public async Task CheckAsync_InvalidJsonResponse_Abstains()
+    {
+        // Arrange
+        var invalidResult = new ChatCompletionResult { Content = "This is not valid JSON", TotalTokens = 10 };
+        _mockChatService
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(invalidResult));
+
+        var request = CreateValidRequest();
+
+        // Act
+        var response = await _check.CheckAsync(request);
+
+        // Assert
+        Assert.That(response.Score, Is.EqualTo(0.0));
+        Assert.That(response.Abstained, Is.True);
+        Assert.That(response.Details, Does.Contain("Failed to parse"));
+    }
+
+    [Test]
+    public async Task CheckAsync_EmptyContent_Abstains()
+    {
+        // Arrange
+        var emptyResult = new ChatCompletionResult { Content = "", TotalTokens = 0 };
+        _mockChatService
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(emptyResult));
+
+        var request = CreateValidRequest();
+
+        // Act
+        var response = await _check.CheckAsync(request);
+
+        // Assert
+        Assert.That(response.Score, Is.EqualTo(0.0));
+        Assert.That(response.Abstained, Is.True);
+    }
+
     #endregion
 
     #region CheckAsync - Edge Cases
@@ -608,28 +543,17 @@ public class OpenAIContentCheckTests
     [Test]
     public async Task CheckAsync_MissingConfidence_UsesDefault()
     {
-        // Arrange
-        var apiResponse = new OpenAIResponse
+        // Arrange - JSON response with missing confidence field
+        var jsonResponse = JsonSerializer.Serialize(new
         {
-            Choices = new[]
-            {
-                new OpenAIChoice
-                {
-                    Message = new OpenAIMessage
-                    {
-                        Role = "assistant",
-                        Content = JsonSerializer.Serialize(new
-                        {
-                            result = "spam",
-                            reason = "Test spam"
-                            // No confidence field
-                        })
-                    }
-                }
-            }
-        };
-
-        SetupHttpClient(apiResponse);
+            result = "spam",
+            reason = "Test spam"
+            // No confidence field
+        });
+        var result = new ChatCompletionResult { Content = jsonResponse, TotalTokens = 20 };
+        _mockChatService
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(result));
 
         var request = CreateValidRequest();
 
@@ -643,30 +567,19 @@ public class OpenAIContentCheckTests
     }
 
     [Test]
-    public async Task CheckAsync_UnknownResult_TreatsAsClean()
+    public async Task CheckAsync_UnknownResult_Abstains()
     {
-        // Arrange
-        var apiResponse = new OpenAIResponse
+        // Arrange - JSON response with unknown result value
+        var jsonResponse = JsonSerializer.Serialize(new
         {
-            Choices = new[]
-            {
-                new OpenAIChoice
-                {
-                    Message = new OpenAIMessage
-                    {
-                        Role = "assistant",
-                        Content = JsonSerializer.Serialize(new
-                        {
-                            result = "unknown_value",
-                            reason = "Test",
-                            confidence = 0.5
-                        })
-                    }
-                }
-            }
-        };
-
-        SetupHttpClient(apiResponse);
+            result = "unknown_value",
+            reason = "Test",
+            confidence = 0.5
+        });
+        var result = new ChatCompletionResult { Content = jsonResponse, TotalTokens = 20 };
+        _mockChatService
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(result));
 
         var request = CreateValidRequest();
 
@@ -675,7 +588,7 @@ public class OpenAIContentCheckTests
 
         // Assert
         Assert.That(response.Score, Is.EqualTo(0.0));
-        Assert.That(response.Abstained, Is.True); // Unknown result should abstain (unparseable)
+        Assert.That(response.Abstained, Is.True); // Unknown result should abstain
     }
 
     #endregion
@@ -702,157 +615,44 @@ public class OpenAIContentCheckTests
         };
     }
 
-    private OpenAIResponse CreateSpamResponse(string reason, double confidence)
+    private static ChatCompletionResult CreateSpamResponse(string reason, double confidence)
     {
-        return new OpenAIResponse
+        var jsonResponse = JsonSerializer.Serialize(new
         {
-            Choices = new[]
-            {
-                new OpenAIChoice
-                {
-                    Message = new OpenAIMessage
-                    {
-                        Role = "assistant",
-                        Content = JsonSerializer.Serialize(new
-                        {
-                            result = "spam",
-                            reason,
-                            confidence
-                        })
-                    }
-                }
-            }
-        };
-    }
-
-    private OpenAIResponse CreateCleanResponse(string reason, double confidence)
-    {
-        return new OpenAIResponse
-        {
-            Choices = new[]
-            {
-                new OpenAIChoice
-                {
-                    Message = new OpenAIMessage
-                    {
-                        Role = "assistant",
-                        Content = JsonSerializer.Serialize(new
-                        {
-                            result = "clean",
-                            reason,
-                            confidence
-                        })
-                    }
-                }
-            }
-        };
-    }
-
-    private OpenAIResponse CreateReviewResponse(string reason, double confidence)
-    {
-        return new OpenAIResponse
-        {
-            Choices = new[]
-            {
-                new OpenAIChoice
-                {
-                    Message = new OpenAIMessage
-                    {
-                        Role = "assistant",
-                        Content = JsonSerializer.Serialize(new
-                        {
-                            result = "review",
-                            reason,
-                            confidence
-                        })
-                    }
-                }
-            }
-        };
-    }
-
-    private void SetupHttpClient(OpenAIResponse apiResponse)
-    {
-        var responseJson = JsonSerializer.Serialize(apiResponse, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            result = "spam",
+            reason,
+            confidence
         });
-
-        _httpHandler.SetResponse(new HttpResponseMessage
-        {
-            StatusCode = HttpStatusCode.OK,
-            Content = new StringContent(responseJson)
-        });
-
-        var httpClient = new HttpClient(_httpHandler)
-        {
-            BaseAddress = new Uri("https://api.openai.com/v1/")
-        };
-
-        _mockHttpClientFactory
-            .CreateClient("OpenAI")
-            .Returns(httpClient);
+        return new ChatCompletionResult { Content = jsonResponse, TotalTokens = 50 };
     }
 
-    private void SetupHttpClientError(HttpStatusCode statusCode, string errorMessage)
+    private static ChatCompletionResult CreateCleanResponse(string reason, double confidence)
     {
-        _httpHandler.SetResponse(new HttpResponseMessage
+        var jsonResponse = JsonSerializer.Serialize(new
         {
-            StatusCode = statusCode,
-            Content = new StringContent(errorMessage)
+            result = "clean",
+            reason,
+            confidence
         });
-
-        var httpClient = new HttpClient(_httpHandler)
-        {
-            BaseAddress = new Uri("https://api.openai.com/v1/")
-        };
-
-        _mockHttpClientFactory
-            .CreateClient("OpenAI")
-            .Returns(httpClient);
+        return new ChatCompletionResult { Content = jsonResponse, TotalTokens = 50 };
     }
 
-    #endregion
-
-    #region Test HTTP Handler
-
-    /// <summary>
-    /// Test HTTP message handler that allows configuring responses and exceptions
-    /// </summary>
-    private class TestHttpMessageHandler : HttpMessageHandler
+    private static ChatCompletionResult CreateReviewResponse(string reason, double confidence)
     {
-        private HttpResponseMessage? _response;
-        private Exception? _exception;
-        public int RequestCount { get; private set; }
-
-        public void SetResponse(HttpResponseMessage response)
+        var jsonResponse = JsonSerializer.Serialize(new
         {
-            _response = response;
-            _exception = null;
-        }
+            result = "review",
+            reason,
+            confidence
+        });
+        return new ChatCompletionResult { Content = jsonResponse, TotalTokens = 50 };
+    }
 
-        public void SetException(Exception exception)
-        {
-            _exception = exception;
-            _response = null;
-        }
-
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            RequestCount++;
-
-            if (_exception != null)
-            {
-                throw _exception;
-            }
-
-            if (_response != null)
-            {
-                return Task.FromResult(_response);
-            }
-
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
-        }
+    private void SetupChatService(ChatCompletionResult response)
+    {
+        _mockChatService
+            .GetCompletionAsync(Arg.Any<AIFeatureType>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<ChatCompletionOptions?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ChatCompletionResult?>(response));
     }
 
     #endregion

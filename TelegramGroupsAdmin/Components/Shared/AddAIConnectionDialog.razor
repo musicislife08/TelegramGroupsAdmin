@@ -1,0 +1,148 @@
+@using TelegramGroupsAdmin.Configuration.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Create a new AI provider connection. You can have multiple connections
+                of the same type (e.g., separate OpenAI accounts for different features).
+            </MudAlert>
+
+            <MudSelect @bind-Value="_provider"
+                       Label="Provider Type"
+                       Variant="Variant.Outlined"
+                       Required="true"
+                       HelperText="@GetProviderHelperText(_provider)">
+                <MudSelectItem Value="AIProviderType.OpenAI">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Cloud" Size="Size.Small" />
+                        <span>OpenAI (api.openai.com)</span>
+                    </MudStack>
+                </MudSelectItem>
+                <MudSelectItem Value="AIProviderType.AzureOpenAI">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.CloudQueue" Size="Size.Small" />
+                        <span>Azure OpenAI Service</span>
+                    </MudStack>
+                </MudSelectItem>
+                <MudSelectItem Value="AIProviderType.LocalOpenAI">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Computer" Size="Size.Small" />
+                        <span>Local / OpenAI-Compatible</span>
+                    </MudStack>
+                </MudSelectItem>
+            </MudSelect>
+
+            <MudTextField @bind-Value="_connectionId"
+                          Label="Connection ID"
+                          Required="true"
+                          RequiredError="Connection ID is required"
+                          Placeholder="@GetIdPlaceholder(_provider)"
+                          Variant="Variant.Outlined"
+                          HelperText="Unique identifier for this connection (lowercase, no spaces)"
+                          OnKeyUp="@ValidateId" />
+
+            @if (_idExists)
+            {
+                <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.Warning" Dense="true">
+                    A connection with this ID already exists.
+                </MudAlert>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_connectionId) && !IsValidId(_connectionId))
+            {
+                <MudAlert Severity="Severity.Error" Icon="@Icons.Material.Filled.Error" Dense="true">
+                    ID must be lowercase with only letters, numbers, and hyphens.
+                </MudAlert>
+            }
+
+            <MudSwitch @bind-Value="_enabled"
+                       Label="Enable immediately"
+                       Color="Color.Primary" />
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                After creating the connection, configure the API key and any provider-specific
+                settings (Azure endpoint, local URL) in the connection card.
+            </MudText>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="@Submit"
+                   Disabled="@(!CanSubmit())">
+            Add Connection
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public List<string> ExistingIds { get; set; } = [];
+
+    private AIProviderType _provider = AIProviderType.OpenAI;
+    private string _connectionId = "";
+    private bool _enabled = true;
+    private bool _idExists;
+
+    private void ValidateId()
+    {
+        _idExists = !string.IsNullOrWhiteSpace(_connectionId) &&
+                    ExistingIds.Contains(_connectionId.Trim().ToLowerInvariant());
+    }
+
+    private static bool IsValidId(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+            return false;
+
+        var trimmed = id.Trim();
+        return trimmed.All(c => char.IsLetterOrDigit(c) || c == '-') &&
+               trimmed == trimmed.ToLowerInvariant();
+    }
+
+    private bool CanSubmit()
+    {
+        return !string.IsNullOrWhiteSpace(_connectionId) &&
+               IsValidId(_connectionId) &&
+               !_idExists;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Submit()
+    {
+        if (!CanSubmit())
+            return;
+
+        var connection = new AIConnection
+        {
+            Id = _connectionId.Trim().ToLowerInvariant(),
+            Provider = _provider,
+            Enabled = _enabled,
+            // Set defaults based on provider type
+            AzureApiVersion = _provider == AIProviderType.AzureOpenAI ? "2024-10-21" : null,
+            LocalRequiresApiKey = false
+        };
+
+        MudDialog.Close(DialogResult.Ok(connection));
+    }
+
+    private static string GetProviderHelperText(AIProviderType provider) => provider switch
+    {
+        AIProviderType.OpenAI => "Standard OpenAI API - requires API key from platform.openai.com",
+        AIProviderType.AzureOpenAI => "Azure OpenAI Service - requires endpoint URL and API key from Azure Portal",
+        AIProviderType.LocalOpenAI => "Ollama, LM Studio, vLLM, or other OpenAI-compatible APIs",
+        _ => ""
+    };
+
+    private static string GetIdPlaceholder(AIProviderType provider) => provider switch
+    {
+        AIProviderType.OpenAI => "openai-main",
+        AIProviderType.AzureOpenAI => "azure-prod",
+        AIProviderType.LocalOpenAI => "local-ollama",
+        _ => "my-connection"
+    };
+}

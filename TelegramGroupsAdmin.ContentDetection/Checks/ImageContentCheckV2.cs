@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Helpers;
@@ -11,26 +11,27 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Services.AI;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
 /// <summary>
-/// V2 image spam check with 3-layer detection strategy and proper scoring
+/// V2 image spam check with 3-layer detection strategy and proper scoring.
+/// Provider-agnostic - uses IChatService for multi-provider Vision support.
 /// Layer 1: Hash similarity (fastest, cheapest, most reliable for known spam)
 /// Layer 2: OCR + text spam checks (fast, cheap, good for text-heavy images)
-/// Layer 3: OpenAI Vision fallback (slow, expensive, comprehensive)
+/// Layer 3: AI Vision fallback (slow, expensive, comprehensive)
 /// Scoring: Maps confidence (0-100%) to points (0.0-5.0)
 /// </summary>
 public class ImageContentCheckV2(
     ILogger<ImageContentCheckV2> logger,
-    IHttpClientFactory httpClientFactory,
+    IChatService chatService,
     IImageTextExtractionService imageTextExtractionService,
     IServiceProvider serviceProvider,
     IContentDetectionConfigRepository configRepository,
     IPhotoHashService photoHashService,
     IImageTrainingSamplesRepository imageTrainingSamplesRepository) : IContentCheckV2
 {
-    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
     private readonly IImageTextExtractionService _imageTextExtractionService = imageTextExtractionService;
     private readonly IServiceProvider _serviceProvider = serviceProvider; // Lazy resolve to break circular dependency
     private readonly IContentDetectionConfigRepository _configRepository = configRepository;
@@ -240,134 +241,8 @@ public class ImageContentCheckV2(
                 }
             }
 
-            // ML-5 Layer 3: OpenAI Vision fallback
-            // Note: API key is injected via ApiKeyDelegatingHandler on the named "OpenAI" HttpClient
-
-            // Build image URL - either use provided PhotoUrl, construct from PhotoFileId, or convert PhotoLocalPath
-            string imageUrl;
-            if (!string.IsNullOrEmpty(req.PhotoUrl))
-            {
-                imageUrl = req.PhotoUrl;
-            }
-            else if (!string.IsNullOrEmpty(req.PhotoLocalPath) && File.Exists(req.PhotoLocalPath))
-            {
-                // Convert local file to base64 data URI for OpenAI Vision API
-                var imageBytes = await File.ReadAllBytesAsync(req.PhotoLocalPath, req.CancellationToken);
-                var base64 = Convert.ToBase64String(imageBytes);
-                var mimeType = req.PhotoLocalPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? "image/png" : "image/jpeg";
-                imageUrl = $"data:{mimeType};base64,{base64}";
-            }
-            else if (!string.IsNullOrEmpty(req.PhotoFileId))
-            {
-                logger.LogWarning("PhotoFileId provided but no PhotoUrl - image cannot be processed, abstaining");
-                return new ContentCheckResponseV2
-                {
-                    CheckName = CheckName,
-                    Score = 0.0,
-                    Abstained = true,
-                    Details = "No image URL provided",
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-                };
-            }
-            else
-            {
-                return new ContentCheckResponseV2
-                {
-                    CheckName = CheckName,
-                    Score = 0.0,
-                    Abstained = true,
-                    Details = "No image data provided",
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-                };
-            }
-
-            var prompt = BuildPrompt(req.Message, req.CustomPrompt);
-
-            var apiRequest = new
-            {
-                model = "gpt-4o-mini",
-                messages = new[]
-                {
-                    new
-                    {
-                        role = "user",
-                        content = new object[]
-                        {
-                            new { type = "text", text = prompt },
-                            new
-                            {
-                                type = "image_url",
-                                image_url = new
-                                {
-                                    url = imageUrl,
-                                    detail = "high"
-                                }
-                            }
-                        }
-                    }
-                },
-                max_tokens = 300,
-                temperature = 0.1
-            };
-
-            logger.LogDebug("ImageSpam V2 check for user {UserId}: Calling OpenAI Vision API",
-                req.UserId);
-
-            // Use named "OpenAI" HttpClient (configured in ServiceCollectionExtensions)
-            var httpClient = _httpClientFactory.CreateClient("OpenAI");
-            var response = await httpClient.PostAsJsonAsync(
-                "chat/completions",
-                apiRequest,
-                req.CancellationToken);
-
-            // Handle rate limiting
-            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-            {
-                var retryAfter = response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 60;
-                logger.LogWarning("OpenAI Vision rate limit hit. Retry after {RetryAfter} seconds, abstaining", retryAfter);
-
-                return new ContentCheckResponseV2
-                {
-                    CheckName = CheckName,
-                    Score = 0.0,
-                    Abstained = true,
-                    Details = $"OpenAI rate limited, retry after {retryAfter}s",
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-                };
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var error = await response.Content.ReadAsStringAsync(req.CancellationToken);
-                logger.LogError("OpenAI Vision API error: {StatusCode} - {Error}, abstaining", response.StatusCode, error);
-
-                return new ContentCheckResponseV2
-                {
-                    CheckName = CheckName,
-                    Score = 0.0,
-                    Abstained = true,
-                    Details = $"OpenAI API error: {response.StatusCode}",
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-                };
-            }
-
-            var result = await response.Content.ReadFromJsonAsync<OpenAIVisionApiResponse>(cancellationToken: req.CancellationToken);
-            var content = result?.Choices?[0]?.Message?.Content;
-
-            if (string.IsNullOrWhiteSpace(content))
-            {
-                logger.LogWarning("Empty response from OpenAI Vision for user {UserId}, abstaining", req.UserId);
-                return new ContentCheckResponseV2
-                {
-                    CheckName = CheckName,
-                    Score = 0.0,
-                    Abstained = true,
-                    Details = "Empty OpenAI response",
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-                };
-            }
-
-            return ParseSpamResponse(content, req.UserId, startTimestamp);
+            // ML-5 Layer 3: AI Vision fallback (provider-agnostic via IChatService)
+            return await CheckWithVisionAsync(req, startTimestamp);
         }
         catch (Exception ex)
         {
@@ -385,21 +260,117 @@ public class ImageContentCheckV2(
     }
 
     /// <summary>
-    /// Build prompt for OpenAI Vision analysis
+    /// ML-5 Layer 3: AI Vision check using IChatService (supports multiple providers)
+    /// </summary>
+    private async Task<ContentCheckResponseV2> CheckWithVisionAsync(ImageCheckRequest req, long startTimestamp)
+    {
+        // Check if image analysis feature is available
+        if (!await chatService.IsFeatureAvailableAsync(AIFeatureType.ImageAnalysis, req.CancellationToken))
+        {
+            logger.LogDebug("ImageSpam V2 Layer 3: Vision not configured - no AI provider for image analysis");
+            return new ContentCheckResponseV2
+            {
+                CheckName = CheckName,
+                Score = 0.0,
+                Abstained = true,
+                Details = "Vision not available - no AI provider configured for image analysis",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+            };
+        }
+
+        // Prepare image data - either from local path or URL
+        byte[]? imageData = null;
+        string mimeType = "image/jpeg";
+
+        if (!string.IsNullOrEmpty(req.PhotoLocalPath) && File.Exists(req.PhotoLocalPath))
+        {
+            imageData = await File.ReadAllBytesAsync(req.PhotoLocalPath, req.CancellationToken);
+            mimeType = req.PhotoLocalPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? "image/png" : "image/jpeg";
+        }
+        else if (!string.IsNullOrEmpty(req.PhotoFileId))
+        {
+            logger.LogWarning("PhotoFileId provided but no PhotoLocalPath - image cannot be processed, abstaining");
+            return new ContentCheckResponseV2
+            {
+                CheckName = CheckName,
+                Score = 0.0,
+                Abstained = true,
+                Details = "No local image file available for Vision analysis",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+            };
+        }
+        else
+        {
+            return new ContentCheckResponseV2
+            {
+                CheckName = CheckName,
+                Score = 0.0,
+                Abstained = true,
+                Details = "No image data provided",
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+            };
+        }
+
+        var prompt = BuildPrompt(req.Message, req.CustomPrompt);
+
+        logger.LogDebug("ImageSpam V2 check for user {UserId}: Calling AI Vision API", req.UserId);
+
+        try
+        {
+            var result = await chatService.GetVisionCompletionAsync(
+                AIFeatureType.ImageAnalysis,
+                GetDefaultImagePrompt(),
+                prompt,
+                imageData,
+                mimeType,
+                new ChatCompletionOptions
+                {
+                    MaxTokens = 300,
+                    Temperature = 0.1
+                },
+                req.CancellationToken);
+
+            if (result == null || string.IsNullOrWhiteSpace(result.Content))
+            {
+                logger.LogWarning("Empty response from AI Vision for user {UserId}, abstaining", req.UserId);
+                return new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = 0.0,
+                    Abstained = true,
+                    Details = "Empty AI Vision response",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                };
+            }
+
+            return ParseSpamResponse(result.Content, req.UserId, startTimestamp);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "AI Vision API error for user {UserId}, abstaining", req.UserId);
+            return new ContentCheckResponseV2
+            {
+                CheckName = CheckName,
+                Score = 0.0,
+                Abstained = true,
+                Details = $"AI Vision error: {ex.Message}",
+                Error = ex,
+                ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+            };
+        }
+    }
+
+    /// <summary>
+    /// Build prompt for AI Vision analysis
     /// Uses configurable system prompt if provided, otherwise uses default
     /// </summary>
     private static string BuildPrompt(string? messageText, string? customPrompt)
     {
-        // Use custom prompt if provided, otherwise use default
-        var systemPrompt = customPrompt ?? GetDefaultImagePrompt();
-
         var messageContext = messageText != null
             ? $"Message text: \"{messageText}\""
             : "No message text provided.";
 
         return $$"""
-            {{systemPrompt}}
-
             {{messageContext}}
 
             Respond ONLY with valid JSON (no markdown, no code blocks):
@@ -413,7 +384,7 @@ public class ImageContentCheckV2(
     }
 
     /// <summary>
-    /// Get default image spam detection prompt (used when SystemPrompt is not configured)
+    /// Get default image spam detection prompt (used as system prompt for Vision)
     /// </summary>
     private static string GetDefaultImagePrompt() => """
         You are a spam detection system for Telegram. Analyze this image and determine if it's spam/scam.
@@ -432,7 +403,7 @@ public class ImageContentCheckV2(
         """;
 
     /// <summary>
-    /// Parse OpenAI Vision response and create V2 spam check result with scoring
+    /// Parse AI Vision response and create V2 spam check result with scoring
     /// </summary>
     private ContentCheckResponseV2 ParseSpamResponse(string content, long userId, long startTimestamp)
     {
@@ -446,25 +417,25 @@ public class ImageContentCheckV2(
                 content = string.Join('\n', lines.Skip(1).SkipLast(1));
             }
 
-            var response = JsonSerializer.Deserialize<OpenAIVisionResponse>(
+            var response = JsonSerializer.Deserialize<VisionSpamResponse>(
                 content,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             if (response == null)
             {
-                logger.LogWarning("Failed to deserialize OpenAI Vision response for user {UserId}: {Content}, abstaining",
+                logger.LogWarning("Failed to deserialize AI Vision response for user {UserId}: {Content}, abstaining",
                     userId, content);
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "Failed to parse OpenAI response",
+                    Details = "Failed to parse AI Vision response",
                     ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
-            logger.LogDebug("OpenAI Vision V2 analysis for user {UserId}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
+            logger.LogDebug("AI Vision V2 analysis for user {UserId}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
                 userId, response.Spam, response.Confidence, response.Reason);
 
             var details = response.Reason ?? "No reason provided";
@@ -481,7 +452,7 @@ public class ImageContentCheckV2(
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"OpenAI Vision: Clean ({details})",
+                    Details = $"AI Vision: Clean ({details})",
                     ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
@@ -500,7 +471,7 @@ public class ImageContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error parsing OpenAI Vision response for user {UserId}: {Content}, abstaining",
+            logger.LogError(ex, "Error parsing AI Vision response for user {UserId}: {Content}, abstaining",
                 userId, content);
             return new ContentCheckResponseV2
             {
@@ -516,30 +487,10 @@ public class ImageContentCheckV2(
 }
 
 /// <summary>
-/// OpenAI API response structure for Vision
+/// Expected JSON response structure from AI Vision for spam detection.
+/// This is the format we request in our prompts.
 /// </summary>
-internal record OpenAIVisionApiResponse(
-    [property: JsonPropertyName("choices")] VisionChoice[]? Choices
-);
-
-/// <summary>
-/// OpenAI choice structure for Vision
-/// </summary>
-internal record VisionChoice(
-    [property: JsonPropertyName("message")] VisionMessage? Message
-);
-
-/// <summary>
-/// OpenAI message structure for Vision
-/// </summary>
-internal record VisionMessage(
-    [property: JsonPropertyName("content")] string? Content
-);
-
-/// <summary>
-/// OpenAI Vision response structure
-/// </summary>
-internal record OpenAIVisionResponse(
+internal record VisionSpamResponse(
     [property: JsonPropertyName("spam")] bool Spam,
     [property: JsonPropertyName("confidence")] int Confidence,
     [property: JsonPropertyName("reason")] string? Reason,

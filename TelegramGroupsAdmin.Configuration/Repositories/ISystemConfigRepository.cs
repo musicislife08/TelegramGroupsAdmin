@@ -116,4 +116,20 @@ public interface ISystemConfigRepository
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if both public and private keys are configured</returns>
     Task<bool> HasVapidKeysAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Get AI provider configuration (global only - chat_id = NULL)
+    /// Multi-provider support: OpenAI, Azure OpenAI, local/OpenAI-compatible endpoints
+    /// Configuration stored in configs.ai_provider_config JSONB column
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>AI provider config or null if not configured (migration not run yet)</returns>
+    Task<AIProviderConfig?> GetAIProviderConfigAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Save AI provider configuration (global only - chat_id = NULL)
+    /// </summary>
+    /// <param name="config">AI provider configuration to save</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task SaveAIProviderConfigAsync(AIProviderConfig config, CancellationToken cancellationToken = default);
 }

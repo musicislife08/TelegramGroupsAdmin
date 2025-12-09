@@ -5,10 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 using NSubstitute;
-using Telegram.Bot;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Services.Email;
 using TelegramGroupsAdmin.Telegram.Abstractions.Services;
@@ -34,7 +34,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private bool _databaseCreated;
 
     // NSubstitute mocks for external services
-    private readonly IOpenAITranslationService _mockOpenAITranslation;
+    private readonly IAITranslationService _mockAITranslationService;
     private readonly IFileScannerService _mockFileScannerService;
     private readonly ICloudScannerService _mockCloudScannerService;
 
@@ -47,8 +47,8 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         _testEmailService = new TestEmailService();
 
         // Configure NSubstitute mocks with safe defaults
-        _mockOpenAITranslation = Substitute.For<IOpenAITranslationService>();
-        _mockOpenAITranslation.TranslateToEnglishAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _mockAITranslationService = Substitute.For<IAITranslationService>();
+        _mockAITranslationService.TranslateToEnglishAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns((TranslationResult?)null); // Default: no translation needed
 
         _mockFileScannerService = Substitute.For<IFileScannerService>();
@@ -78,9 +78,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     public TestEmailService EmailService => _testEmailService;
 
     /// <summary>
-    /// Gets the mock OpenAI translation service. Configure in tests to return specific translations.
+    /// Gets the mock AI translation service. Configure in tests to return specific translations.
     /// </summary>
-    public IOpenAITranslationService MockOpenAITranslation => _mockOpenAITranslation;
+    public IAITranslationService MockAITranslation => _mockAITranslationService;
 
     /// <summary>
     /// Gets the mock file scanner service (ClamAV). Configure in tests for specific scan results.
@@ -170,9 +170,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             services.AddScoped<IEmailService>(sp => sp.GetRequiredService<TestEmailService>());
 
             // Replace external services with NSubstitute mocks
-            // OpenAI translation service
-            services.RemoveAll<IOpenAITranslationService>();
-            services.AddSingleton(_mockOpenAITranslation);
+            // AI translation service
+            services.RemoveAll<IAITranslationService>();
+            services.AddSingleton(_mockAITranslationService);
 
             // File scanner service (ClamAV)
             services.RemoveAll<IFileScannerService>();

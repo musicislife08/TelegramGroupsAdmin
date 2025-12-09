@@ -4,7 +4,7 @@ using MudBlazor;
 using MudBlazor.Services;
 using NSubstitute;
 using TelegramGroupsAdmin.Components.Shared;
-using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Services.AI;
 
 namespace TelegramGroupsAdmin.ComponentTests.Components;
 
@@ -14,13 +14,13 @@ namespace TelegramGroupsAdmin.ComponentTests.Components;
 /// </summary>
 public class AddTrainingSampleDialogTestContext : BunitContext
 {
-    protected IOpenAITranslationService TranslationService { get; }
+    protected IAITranslationService TranslationService { get; }
     protected IDialogService DialogService { get; private set; } = null!;
 
     protected AddTrainingSampleDialogTestContext()
     {
         // Create mocks FIRST (before AddMudServices locks the container)
-        TranslationService = Substitute.For<IOpenAITranslationService>();
+        TranslationService = Substitute.For<IAITranslationService>();
 
         // Register mocks
         Services.AddSingleton(TranslationService);
