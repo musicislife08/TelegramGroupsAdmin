@@ -194,7 +194,7 @@ public class SemanticKernelChatService : IChatService
     /// <summary>
     /// Create result from SK response
     /// </summary>
-    private ChatCompletionResult? CreateResult(ChatMessageContent response)
+    internal ChatCompletionResult? CreateResult(ChatMessageContent response)
     {
         var content = response.Content;
         if (string.IsNullOrEmpty(content))

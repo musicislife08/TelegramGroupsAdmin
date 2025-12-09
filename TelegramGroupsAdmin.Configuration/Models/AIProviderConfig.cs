@@ -79,9 +79,9 @@ public class AIConnection
     public string? AzureEndpoint { get; set; }
 
     /// <summary>
-    /// Azure OpenAI API version (default: 2024-02-01)
+    /// Azure OpenAI API version (default: 2024-10-21)
     /// </summary>
-    public string? AzureApiVersion { get; set; } = "2024-02-01";
+    public string? AzureApiVersion { get; set; } = "2024-10-21";
 
     /// <summary>
     /// Local endpoint URL for OpenAI-compatible providers (e.g., http://localhost:11434/v1)
