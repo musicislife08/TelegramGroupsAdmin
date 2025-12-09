@@ -202,60 +202,19 @@ public class AIServiceFactory : IAIServiceFactory
         var apiKeys = await _configRepository.GetApiKeysAsync(ct);
         var apiKey = apiKeys?.GetAIConnectionKey(connection.Id);
 
-        switch (connection.Provider)
-        {
-            case AIProviderType.OpenAI:
-                return await FetchOpenAIModelsAsync(apiKey, ct);
+        // Determine endpoint based on provider
+        var endpoint = connection.Provider == AIProviderType.OpenAI
+            ? "https://api.openai.com"
+            : connection.LocalEndpoint!;
 
-            case AIProviderType.LocalOpenAI:
-                // Try Ollama format first, fall back to OpenAI-compatible
-                return await FetchLocalModelsAsync(connection.LocalEndpoint!, apiKey, ct);
-
-            default:
-                return [];
-        }
+        return await FetchOpenAICompatibleModelsAsync(endpoint, apiKey, ct);
     }
 
     /// <summary>
-    /// Fetch models from OpenAI API
+    /// Fetch models from any OpenAI-compatible endpoint (including OpenAI itself and Ollama)
+    /// Returns ALL models - filtering by capability is done at the UI layer
     /// </summary>
-    private async Task<IReadOnlyList<AIModelInfo>> FetchOpenAIModelsAsync(string? apiKey, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            _logger.LogWarning("Cannot fetch OpenAI models: API key not configured");
-            return [];
-        }
-
-        using var client = _httpClientFactory.CreateClient();
-        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-
-        var response = await client.GetAsync("https://api.openai.com/v1/models", ct);
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogWarning("Failed to fetch OpenAI models: {StatusCode}", response.StatusCode);
-            return [];
-        }
-
-        var content = await response.Content.ReadAsStringAsync(ct);
-        var modelsResponse = JsonSerializer.Deserialize<OpenAIModelsResponse>(content, JsonOptions);
-
-        return modelsResponse?.Data?
-            .Where(m => IsChatModel(m.Id))
-            .Select(m => new AIModelInfo
-            {
-                Id = m.Id,
-                Description = m.OwnedBy,
-                SupportsVision = InferVisionSupport(m.Id)
-            })
-            .OrderBy(m => m.Id)
-            .ToList() ?? [];
-    }
-
-    /// <summary>
-    /// Fetch models from local/OpenAI-compatible endpoint
-    /// </summary>
-    private async Task<IReadOnlyList<AIModelInfo>> FetchLocalModelsAsync(
+    private async Task<IReadOnlyList<AIModelInfo>> FetchOpenAICompatibleModelsAsync(
         string endpoint,
         string? apiKey,
         CancellationToken ct)
@@ -267,10 +226,9 @@ public class AIServiceFactory : IAIServiceFactory
             client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
         }
 
-        // Parse base URL and try different endpoints
         var baseUri = new Uri(endpoint.TrimEnd('/'));
 
-        // Try Ollama's /api/tags endpoint first (if base URL contains ollama port or path)
+        // Try Ollama's /api/tags endpoint first if URL suggests Ollama
         if (endpoint.Contains("11434") || endpoint.Contains("ollama", StringComparison.OrdinalIgnoreCase))
         {
             try
@@ -295,39 +253,36 @@ public class AIServiceFactory : IAIServiceFactory
                 : $"{endpoint.TrimEnd('/')}/v1/models";
 
             var response = await client.GetAsync(modelsUrl, ct);
-            if (response.IsSuccessStatusCode)
+            if (!response.IsSuccessStatusCode)
             {
-                var content = await response.Content.ReadAsStringAsync(ct);
-                var modelsResponse = JsonSerializer.Deserialize<OpenAIModelsResponse>(content, JsonOptions);
-
-                return modelsResponse?.Data?
-                    .Select(m => new AIModelInfo
-                    {
-                        Id = m.Id,
-                        Description = m.OwnedBy,
-                        SupportsVision = InferVisionSupport(m.Id)
-                    })
-                    .OrderBy(m => m.Id)
-                    .ToList() ?? [];
+                _logger.LogWarning("Failed to fetch models from {Endpoint}: {StatusCode}", endpoint, response.StatusCode);
+                return [];
             }
+
+            var content = await response.Content.ReadAsStringAsync(ct);
+            var modelsResponse = JsonSerializer.Deserialize<OpenAIModelsResponse>(content, JsonOptions);
+
+            // Return ALL models - no filtering (UI handles capability filtering)
+            return modelsResponse?.Data?
+                .Select(m => new AIModelInfo { Id = m.Id })
+                .OrderBy(m => m.Id)
+                .ToList() ?? [];
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to fetch models from OpenAI-compatible endpoint");
+            _logger.LogWarning(ex, "Failed to fetch models from {Endpoint}", endpoint);
+            return [];
         }
-
-        return [];
     }
 
     /// <summary>
-    /// Fetch models from Ollama API
+    /// Fetch models from Ollama API (/api/tags endpoint)
     /// </summary>
     private async Task<IReadOnlyList<AIModelInfo>> FetchOllamaModelsAsync(
         HttpClient client,
         Uri baseUri,
         CancellationToken ct)
     {
-        // Ollama API uses /api/tags for model listing
         var ollamaUrl = $"{baseUri.Scheme}://{baseUri.Host}:{baseUri.Port}/api/tags";
 
         var response = await client.GetAsync(ollamaUrl, ct);
@@ -343,67 +298,10 @@ public class AIServiceFactory : IAIServiceFactory
             .Select(m => new AIModelInfo
             {
                 Id = m.Name,
-                Description = $"Size: {FormatSize(m.Size)}, Modified: {m.ModifiedAt:g}",
-                SupportsVision = InferVisionSupport(m.Name)
+                SizeBytes = m.Size
             })
             .OrderBy(m => m.Id)
             .ToList() ?? [];
-    }
-
-    /// <summary>
-    /// Check if a model ID is likely a chat model
-    /// </summary>
-    private static bool IsChatModel(string modelId)
-    {
-        // Filter to chat-capable models
-        var chatPrefixes = new[] { "gpt-", "o1-", "o3-", "chatgpt-" };
-        return chatPrefixes.Any(p => modelId.StartsWith(p, StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <summary>
-    /// Infer vision support from model name
-    /// </summary>
-    private static bool? InferVisionSupport(string modelId)
-    {
-        var lowerModel = modelId.ToLowerInvariant();
-
-        // Models known to support vision
-        if (lowerModel.Contains("vision") ||
-            lowerModel.Contains("4o") ||  // gpt-4o models support vision
-            lowerModel.Contains("llava") ||  // LLaVA models
-            lowerModel.Contains("bakllava") ||  // BakLLaVA models
-            lowerModel.Contains("cogvlm") ||  // CogVLM models
-            lowerModel.Contains("moondream"))  // Moondream models
-        {
-            return true;
-        }
-
-        // Models known NOT to support vision
-        if (lowerModel.Contains("instruct") && !lowerModel.Contains("4o") ||
-            lowerModel.StartsWith("gpt-3.5") ||
-            lowerModel.StartsWith("text-"))
-        {
-            return false;
-        }
-
-        // Unknown - let the user decide
-        return null;
-    }
-
-    /// <summary>
-    /// Format byte size to human-readable string
-    /// </summary>
-    private static string FormatSize(long bytes)
-    {
-        string[] suffixes = ["B", "KB", "MB", "GB", "TB"];
-        var i = 0;
-        double size = bytes;
-        while (size >= 1024 && i < suffixes.Length - 1)
-        {
-            size /= 1024;
-            i++;
-        }
-        return $"{size:F1} {suffixes[i]}";
     }
 
     // Response models for API parsing

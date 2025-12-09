@@ -106,6 +106,7 @@ public class AIConnection
 
 /// <summary>
 /// Model info returned from provider's model listing API
+/// Simplified structure - capability validation is done via test button, not inference
 /// </summary>
 public class AIModelInfo
 {
@@ -115,14 +116,9 @@ public class AIModelInfo
     public string Id { get; set; } = "";
 
     /// <summary>
-    /// Model description (if provided by the API)
+    /// Model size in bytes (from Ollama API, null for cloud providers)
     /// </summary>
-    public string? Description { get; set; }
-
-    /// <summary>
-    /// Whether this model supports vision (inferred from model name or null if unknown)
-    /// </summary>
-    public bool? SupportsVision { get; set; }
+    public long? SizeBytes { get; set; }
 }
 
 /// <summary>

@@ -115,7 +115,7 @@
                                         @foreach (var model in selectedConnection.AvailableModels)
                                         {
                                             <MudSelectItem T="string" Value="@model.Id">
-                                                @model.Id @(model.SupportsVision == true ? " (Vision)" : "")
+                                                @model.Id @(model.SizeBytes.HasValue ? $" ({ByteSizeLib.ByteSize.FromBytes(model.SizeBytes.Value):0.#})" : "")
                                             </MudSelectItem>
                                         }
                                     </MudSelect>
@@ -161,17 +161,6 @@
                                              Style="flex: 1;" />
                         </MudStack>
 
-                        <!-- Vision Warning -->
-                        @if (isVisionFeature && selectedConnection.AvailableModels.Count > 0)
-                        {
-                            var selectedModel = selectedConnection.AvailableModels.FirstOrDefault(m => m.Id == featureConfig.Model);
-                            @if (selectedModel?.SupportsVision == false)
-                            {
-                                <MudAlert Severity="Severity.Warning" Dense="true">
-                                    This model may not support vision. Consider using a vision-capable model like gpt-4o.
-                                </MudAlert>
-                            }
-                        }
                     }
                     else
                     {
