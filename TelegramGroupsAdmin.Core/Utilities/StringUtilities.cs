@@ -62,18 +62,11 @@ public static class StringUtilities
         string? firstName1, string? lastName1,
         string? firstName2, string? lastName2)
     {
-        // Normalize names (combine first+last, lowercase, trim whitespace)
-        var name1 = $"{firstName1} {lastName1}".ToLowerInvariant().Trim();
-        var name2 = $"{firstName2} {lastName2}".ToLowerInvariant().Trim();
+        // Combine first+last names and delegate to generic string similarity
+        var name1 = $"{firstName1} {lastName1}".Trim();
+        var name2 = $"{firstName2} {lastName2}".Trim();
 
-        if (string.IsNullOrWhiteSpace(name1) || string.IsNullOrWhiteSpace(name2))
-            return 0.0;
-
-        var distance = LevenshteinDistance(name1, name2);
-        var maxLength = Math.Max(name1.Length, name2.Length);
-
-        // Convert distance to similarity (0 distance = 100% similar)
-        return 1.0 - ((double)distance / maxLength);
+        return CalculateStringSimilarity(name1, name2);
     }
 
     /// <summary>

@@ -39,9 +39,9 @@ public record ImpersonationCheckResult
     public ProtectedEntityType TargetEntityType { get; init; } = ProtectedEntityType.User;
 
     /// <summary>
-    /// Target entity ID (chat ID or channel ID when TargetEntityType is Chat/Channel)
+    /// Target entity ID (chat ID or channel ID when TargetEntityType is Chat/Channel, 0 when User)
     /// </summary>
-    public long? TargetEntityId { get; init; }
+    public long TargetEntityId { get; init; }
 
     /// <summary>
     /// Display name of the target entity (chat name or channel name)

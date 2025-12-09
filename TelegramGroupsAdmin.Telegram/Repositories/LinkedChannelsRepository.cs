@@ -19,6 +19,10 @@ public class LinkedChannelsRepository : ILinkedChannelsRepository
         _logger = logger;
     }
 
+    // Note: Telegram enforces 1:1 relationship between channels and discussion groups.
+    // A channel can only link to ONE group, and a group can only link to ONE channel.
+    // Our unique index on managed_chat_id reflects this constraint.
+    // See: https://core.telegram.org/api/discussion
     public async Task UpsertAsync(LinkedChannelRecord record, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);

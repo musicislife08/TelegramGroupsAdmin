@@ -150,11 +150,11 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             // Check name similarity (50 points)
             if (!string.IsNullOrWhiteSpace(firstName) && !string.IsNullOrWhiteSpace(admin.FirstName))
             {
-                var similarity = StringUtilities.CalculateNameSimilarity(
+                var nameSimilarity = StringUtilities.CalculateNameSimilarity(
                     firstName, lastName,
                     admin.FirstName, admin.LastName);
 
-                if (similarity >= NameSimilarityThreshold)
+                if (nameSimilarity >= NameSimilarityThreshold)
                 {
                     nameMatch = true;
                     score += 50;
@@ -162,40 +162,21 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
                         "Name match detected: User {UserId} '{UserName}' vs Admin {AdminId} '{AdminName}' (similarity: {Similarity:F2})",
                         userId, $"{firstName} {lastName}".Trim(),
                         admin.TelegramUserId, $"{admin.FirstName} {admin.LastName}".Trim(),
-                        similarity);
+                        nameSimilarity);
                 }
             }
 
             // Check photo similarity (50 points)
-            if (!string.IsNullOrWhiteSpace(photoPath) && !string.IsNullOrWhiteSpace(admin.UserPhotoPath))
+            var (isPhotoMatch, photoSim) = await ComparePhotosAsync(photoPath, admin.UserPhotoPath);
+            photoSimilarity = photoSim;
+
+            if (isPhotoMatch)
             {
-                try
-                {
-                    // Compute hashes for both photos
-                    var userHash = await _photoHashService.ComputePhotoHashAsync(photoPath);
-                    var adminHash = await _photoHashService.ComputePhotoHashAsync(admin.UserPhotoPath);
-
-                    if (userHash != null && adminHash != null)
-                    {
-                        var similarity = _photoHashService.CompareHashes(userHash, adminHash);
-                        photoSimilarity = similarity;
-
-                        if (similarity >= PhotoSimilarityThreshold)
-                        {
-                            photoMatch = true;
-                            score += 50;
-                            _logger.LogDebug(
-                                "Photo match detected: User {UserId} vs Admin {AdminId} (similarity: {Similarity:F2})",
-                                userId, admin.TelegramUserId, similarity);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex,
-                        "Failed to compare photos for User {UserId} vs Admin {AdminId}",
-                        userId, admin.TelegramUserId);
-                }
+                photoMatch = true;
+                score += 50;
+                _logger.LogDebug(
+                    "Photo match detected: User {UserId} vs Admin {AdminId} (similarity: {Similarity:F2})",
+                    userId, admin.TelegramUserId, photoSim);
             }
 
             // Track highest scoring match
@@ -422,6 +403,20 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         var bestMatch = currentBestMatch;
         var highestScore = currentHighestScore;
 
+        // Pre-compute user's photo hash ONCE before the loop to avoid N+1 (computed per entity with photo)
+        byte[]? userPhotoHash = null;
+        if (!string.IsNullOrWhiteSpace(photoPath) && protectedEntities.Any(e => e.PhotoHash != null))
+        {
+            try
+            {
+                userPhotoHash = await _photoHashService.ComputePhotoHashAsync(photoPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to compute photo hash for user {UserId}", userId);
+            }
+        }
+
         foreach (var entity in protectedEntities)
         {
             int score = 0;
@@ -447,33 +442,17 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             }
 
             // Check photo similarity against entity photo (50 points) - channels only
-            if (entity.PhotoHash != null && !string.IsNullOrWhiteSpace(photoPath))
+            // Uses pre-computed userPhotoHash to avoid N+1 hash computations
+            var (isPhotoMatch, photoSim) = ComparePhotoHashes(userPhotoHash, entity.PhotoHash);
+            photoSimilarity = photoSim;
+
+            if (isPhotoMatch)
             {
-                try
-                {
-                    var userHash = await _photoHashService.ComputePhotoHashAsync(photoPath);
-
-                    if (userHash != null)
-                    {
-                        var similarity = _photoHashService.CompareHashes(userHash, entity.PhotoHash);
-                        photoSimilarity = similarity;
-
-                        if (similarity >= PhotoSimilarityThreshold)
-                        {
-                            photoMatch = true;
-                            score += 50;
-                            _logger.LogDebug(
-                                "Photo match detected: User {UserId} vs {EntityType} {EntityId} (similarity: {Similarity:F2})",
-                                userId, entity.Type, entity.Id, similarity);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex,
-                        "Failed to compare photos for User {UserId} vs {EntityType} {EntityId}",
-                        userId, entity.Type, entity.Id);
-                }
+                photoMatch = true;
+                score += 50;
+                _logger.LogDebug(
+                    "Photo match detected: User {UserId} vs {EntityType} {EntityId} (similarity: {Similarity:F2})",
+                    userId, entity.Type, entity.Id, photoSim);
             }
 
             // Track highest scoring match
@@ -509,5 +488,50 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         public long Id { get; init; }
         public string Name { get; init; } = string.Empty;
         public byte[]? PhotoHash { get; init; }
+    }
+
+    /// <summary>
+    /// Compare two photos by computing and comparing their perceptual hashes.
+    /// </summary>
+    /// <param name="userPhotoPath">Path to the user's photo</param>
+    /// <param name="targetPhotoPath">Path to the target's photo</param>
+    /// <param name="precomputedUserHash">Optional pre-computed user hash to avoid N+1</param>
+    /// <returns>Tuple of (isMatch, similarity score)</returns>
+    private async Task<(bool isMatch, double? similarity)> ComparePhotosAsync(
+        string? userPhotoPath,
+        string? targetPhotoPath,
+        byte[]? precomputedUserHash = null)
+    {
+        if (string.IsNullOrWhiteSpace(userPhotoPath) || string.IsNullOrWhiteSpace(targetPhotoPath))
+            return (false, null);
+
+        try
+        {
+            var userHash = precomputedUserHash ?? await _photoHashService.ComputePhotoHashAsync(userPhotoPath);
+            var targetHash = await _photoHashService.ComputePhotoHashAsync(targetPhotoPath);
+
+            if (userHash == null || targetHash == null)
+                return (false, null);
+
+            var similarity = _photoHashService.CompareHashes(userHash, targetHash);
+            return (similarity >= PhotoSimilarityThreshold, similarity);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to compare photos: {UserPhoto} vs {TargetPhoto}", userPhotoPath, targetPhotoPath);
+            return (false, null);
+        }
+    }
+
+    /// <summary>
+    /// Compare a pre-computed user hash against an entity's stored hash.
+    /// </summary>
+    private (bool isMatch, double? similarity) ComparePhotoHashes(byte[]? userHash, byte[]? entityHash)
+    {
+        if (userHash == null || entityHash == null)
+            return (false, null);
+
+        var similarity = _photoHashService.CompareHashes(userHash, entityHash);
+        return (similarity >= PhotoSimilarityThreshold, similarity);
     }
 }

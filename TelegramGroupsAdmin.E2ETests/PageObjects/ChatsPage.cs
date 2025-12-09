@@ -112,11 +112,22 @@ public class ChatsPage
     }
 
     /// <summary>
-    /// Gets the count of rows in the table.
+    /// Gets the count of visible rows in the table.
+    /// MudTable filtering may leave hidden rows in the DOM - only count visible ones.
     /// </summary>
     public async Task<int> GetChatCountAsync()
     {
-        return await _page.Locator(TableRow).CountAsync();
+        var rows = _page.Locator(TableRow);
+        var count = await rows.CountAsync();
+        var visibleCount = 0;
+
+        for (var i = 0; i < count; i++)
+        {
+            if (await rows.Nth(i).IsVisibleAsync())
+                visibleCount++;
+        }
+
+        return visibleCount;
     }
 
     /// <summary>
@@ -128,7 +139,33 @@ public class ChatsPage
         var searchInput = _page.Locator(SearchInput);
         await searchInput.ClearAsync();
         await searchInput.FillAsync(searchText);
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
+        // MudTextField with Immediate="true" triggers Blazor's async re-render
+        // Client-side filtering doesn't make network requests, so NetworkIdle is insufficient
+        // Wait for input to have the expected value (confirms input was processed)
+        await Expect(searchInput).ToHaveValueAsync(searchText);
+    }
+
+    /// <summary>
+    /// Waits for the visible chat count to equal the expected value using Playwright's auto-retry.
+    /// Use this instead of GetChatCountAsync + Assert for reliable filtering tests.
+    /// </summary>
+    public async Task ExpectChatCountAsync(int expectedCount, int timeoutMs = 5000)
+    {
+        // Use Playwright's auto-retrying WaitForFunction to check visible row count
+        // This properly waits for Blazor to complete re-rendering after filter
+        await _page.WaitForFunctionAsync(
+            @"([selector, expected]) => {
+                const rows = document.querySelectorAll(selector);
+                let visibleCount = 0;
+                for (const row of rows) {
+                    // offsetParent is null for hidden elements (display:none or not in DOM tree)
+                    if (row.offsetParent !== null) visibleCount++;
+                }
+                return visibleCount === expected;
+            }",
+            new object[] { TableRow, expectedCount },
+            new PageWaitForFunctionOptions { Timeout = timeoutMs, PollingInterval = 100 });
     }
 
     /// <summary>
@@ -138,7 +175,9 @@ public class ChatsPage
     {
         var searchInput = _page.Locator(SearchInput);
         await searchInput.ClearAsync();
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
+        // Wait for input to be empty (confirms clear was processed)
+        await Expect(searchInput).ToHaveValueAsync("");
     }
 
     /// <summary>
