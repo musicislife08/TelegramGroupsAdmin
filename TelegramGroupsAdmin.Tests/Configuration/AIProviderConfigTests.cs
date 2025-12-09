@@ -146,13 +146,13 @@ public class AIProviderConfigTests
     }
 
     [Test]
-    public void AIConnection_DefaultAzureApiVersion_Is2024_02_01()
+    public void AIConnection_DefaultAzureApiVersion_Is2024_10_21()
     {
         // Act
         var connection = new AIConnection();
 
-        // Assert
-        Assert.That(connection.AzureApiVersion, Is.EqualTo("2024-02-01"));
+        // Assert - Updated to 2024-10-21 (supported by Semantic Kernel 1.45.0)
+        Assert.That(connection.AzureApiVersion, Is.EqualTo("2024-10-21"));
     }
 
     [Test]

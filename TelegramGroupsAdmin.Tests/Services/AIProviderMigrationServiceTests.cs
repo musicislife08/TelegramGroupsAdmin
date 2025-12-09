@@ -203,7 +203,7 @@ public class AIProviderMigrationServiceTests
         };
         var oldConfig = new OpenAIConfig
         {
-            Model = null
+            Model = null! // Intentionally null to test fallback behavior
         };
 
         _mockConfigRepo.GetAIProviderConfigAsync(Arg.Any<CancellationToken>())
