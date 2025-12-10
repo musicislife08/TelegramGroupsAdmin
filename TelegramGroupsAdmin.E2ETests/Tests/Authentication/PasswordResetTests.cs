@@ -8,9 +8,10 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Authentication;
 /// <summary>
 /// Tests for the password reset flow.
 /// Flow: /forgot-password → email sent → /reset-password?token=xxx → /login
+/// Uses SharedE2ETestBase for faster test execution with shared factory.
 /// </summary>
 [TestFixture]
-public class PasswordResetTests : E2ETestBase
+public class PasswordResetTests : SharedE2ETestBase
 {
     private ForgotPasswordPage _forgotPage = null!;
     private ResetPasswordPage _resetPage = null!;
@@ -28,7 +29,7 @@ public class PasswordResetTests : E2ETestBase
     public async Task ForgotPassword_WithValidEmail_ShowsSuccessMessage()
     {
         // Arrange - create a verified user
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("reset"))
             .WithPassword(TestCredentials.GeneratePassword())
             .WithEmailVerified()
@@ -76,7 +77,7 @@ public class PasswordResetTests : E2ETestBase
     public async Task ForgotPassword_SendsResetEmail()
     {
         // Arrange - create a verified user
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("email-sent"))
             .WithPassword(TestCredentials.GeneratePassword())
             .WithEmailVerified()
@@ -103,7 +104,7 @@ public class PasswordResetTests : E2ETestBase
         // Arrange - create user and request password reset
         var originalPassword = TestCredentials.GeneratePassword();
         var newPassword = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("valid-reset"))
             .WithPassword(originalPassword)
             .WithEmailVerified()
@@ -143,7 +144,7 @@ public class PasswordResetTests : E2ETestBase
     public async Task ResetPassword_WithMismatchedPasswords_ShowsError()
     {
         // Arrange - create user and get reset token
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("mismatch"))
             .WithPassword(TestCredentials.GeneratePassword())
             .WithEmailVerified()
@@ -172,7 +173,7 @@ public class PasswordResetTests : E2ETestBase
     public async Task ResetPassword_WithShortPassword_ShowsError()
     {
         // Arrange - create user and get reset token
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("short-pw"))
             .WithPassword(TestCredentials.GeneratePassword())
             .WithEmailVerified()
@@ -247,7 +248,7 @@ public class PasswordResetTests : E2ETestBase
         // Arrange - create user with known password
         var originalPassword = TestCredentials.GeneratePassword();
         var newPassword = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("old-pw-invalid"))
             .WithPassword(originalPassword)
             .WithEmailVerified()

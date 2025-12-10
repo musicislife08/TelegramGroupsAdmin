@@ -8,9 +8,10 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Users;
 /// Tests for the Users page (/users).
 /// Verifies Telegram user management display, search, tabs, and permission-based access.
 /// Note: This page requires GlobalAdmin or Owner role - Admin cannot access.
+/// Uses SharedAuthenticatedTestBase for faster test execution with shared factory.
 /// </summary>
 [TestFixture]
-public class UsersTests : AuthenticatedTestBase
+public class UsersTests : SharedAuthenticatedTestBase
 {
     private UsersPage _usersPage = null!;
 
@@ -143,31 +144,31 @@ public class UsersTests : AuthenticatedTestBase
         // Arrange - create chat with Telegram users who have sent messages
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Test Chat")
             .BuildAsync();
 
         // Create Telegram users in telegram_users table
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(111111)
             .WithUsername("alice")
             .WithName("Alice", "Smith")
             .BuildAsync();
 
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(222222)
             .WithUsername("bob")
             .WithName("Bob", "Jones")
             .BuildAsync();
 
         // Create messages from those users (required for chat count stats)
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(111111, "alice", "Alice", "Smith")
             .WithText("Hello!")
             .BuildAsync();
 
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(222222, "bob", "Bob", "Jones")
             .WithText("Hi there!")
@@ -189,31 +190,31 @@ public class UsersTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Search Test Chat")
             .BuildAsync();
 
         // Create Telegram users
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(333333)
             .WithUsername("developer")
             .WithName("Developer", "Dan")
             .BuildAsync();
 
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(444444)
             .WithUsername("designer")
             .WithName("Designer", "Diana")
             .BuildAsync();
 
         // Create messages from those users
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(333333, "developer", "Developer", "Dan")
             .WithText("Code review")
             .BuildAsync();
 
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(444444, "designer", "Designer", "Diana")
             .WithText("UI feedback")
@@ -241,31 +242,31 @@ public class UsersTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Clear Search Chat")
             .BuildAsync();
 
         // Create Telegram users
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(555555)
             .WithUsername("userA")
             .WithName("User", "Alpha")
             .BuildAsync();
 
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(666666)
             .WithUsername("userB")
             .WithName("User", "Beta")
             .BuildAsync();
 
         // Create messages
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(555555, "userA", "User", "Alpha")
             .WithText("Message A")
             .BuildAsync();
 
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(666666, "userB", "User", "Beta")
             .WithText("Message B")
@@ -316,18 +317,18 @@ public class UsersTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Info Test Chat")
             .BuildAsync();
 
         // Create Telegram user and message
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(777777)
             .WithUsername("infouser")
             .WithName("Info", "User")
             .BuildAsync();
 
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(777777, "infouser", "Info", "User")
             .WithText("Test message")
@@ -349,35 +350,35 @@ public class UsersTests : AuthenticatedTestBase
         // Arrange - GlobalAdmin should see all users across all chats
         await LoginAsGlobalAdminAsync();
 
-        var chat1 = await new TestChatBuilder(Factory.Services)
+        var chat1 = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Chat One")
             .BuildAsync();
 
-        var chat2 = await new TestChatBuilder(Factory.Services)
+        var chat2 = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Chat Two")
             .BuildAsync();
 
         // Create Telegram users
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(888888)
             .WithUsername("user1")
             .WithName("First", "User")
             .BuildAsync();
 
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(999999)
             .WithUsername("user2")
             .WithName("Second", "User")
             .BuildAsync();
 
         // Create messages
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat1)
             .FromUser(888888, "user1", "First", "User")
             .WithText("In chat 1")
             .BuildAsync();
 
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat2)
             .FromUser(999999, "user2", "Second", "User")
             .WithText("In chat 2")
@@ -399,18 +400,18 @@ public class UsersTests : AuthenticatedTestBase
         // Arrange - Owner should see all users
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Owner Test Chat")
             .BuildAsync();
 
         // Create Telegram user and message
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(101010)
             .WithUsername("ownertest")
             .WithName("Owner", "TestUser")
             .BuildAsync();
 
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(101010, "ownertest", "Owner", "TestUser")
             .WithText("Owner can see me")

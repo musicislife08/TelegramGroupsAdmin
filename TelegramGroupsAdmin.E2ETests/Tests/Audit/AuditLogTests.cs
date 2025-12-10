@@ -11,9 +11,10 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Audit;
 /// Tests for the Audit Log page (/audit).
 /// Verifies Web Admin Log and Telegram Moderation Log tabs, filtering, and permission-based access.
 /// Note: This page requires GlobalAdmin or Owner role - Admin cannot access.
+/// Uses SharedAuthenticatedTestBase for faster test execution with shared factory.
 /// </summary>
 [TestFixture]
-public class AuditLogTests : AuthenticatedTestBase
+public class AuditLogTests : SharedAuthenticatedTestBase
 {
     private AuditLogPage _auditLogPage = null!;
 
@@ -87,11 +88,11 @@ public class AuditLogTests : AuthenticatedTestBase
         var owner = await LoginAsOwnerAsync();
 
         // Create some audit log entries
-        await new TestAuditLogBuilder(Factory.Services)
+        await new TestAuditLogBuilder(SharedFactory.Services)
             .AsLoginEvent(owner.Id, owner.Email)
             .BuildAsync();
 
-        await new TestAuditLogBuilder(Factory.Services)
+        await new TestAuditLogBuilder(SharedFactory.Services)
             .WithEventType(AuditEventType.UserRegistered)
             .WithWebUserActor(owner.Id, owner.Email)
             .BuildAsync();
@@ -127,11 +128,11 @@ public class AuditLogTests : AuthenticatedTestBase
         var owner = await LoginAsOwnerAsync();
 
         // Create exactly one of each event type for deterministic filtering
-        await new TestAuditLogBuilder(Factory.Services)
+        await new TestAuditLogBuilder(SharedFactory.Services)
             .AsLoginEvent(owner.Id, owner.Email)
             .BuildAsync();
 
-        await new TestAuditLogBuilder(Factory.Services)
+        await new TestAuditLogBuilder(SharedFactory.Services)
             .WithEventType(AuditEventType.UserRegistered)
             .WithWebUserActor(owner.Id, owner.Email)
             .BuildAsync();
@@ -178,11 +179,11 @@ public class AuditLogTests : AuthenticatedTestBase
         var globalAdmin = await CreateUserAsync(PermissionLevel.GlobalAdmin);
 
         // Create exactly one event per actor for deterministic filtering
-        await new TestAuditLogBuilder(Factory.Services)
+        await new TestAuditLogBuilder(SharedFactory.Services)
             .AsLoginEvent(owner.Id, owner.Email)
             .BuildAsync();
 
-        await new TestAuditLogBuilder(Factory.Services)
+        await new TestAuditLogBuilder(SharedFactory.Services)
             .AsLoginEvent(globalAdmin.Id, globalAdmin.Email)
             .BuildAsync();
 
@@ -243,14 +244,14 @@ public class AuditLogTests : AuthenticatedTestBase
         await LoginAsOwnerAsync();
 
         // Create a Telegram user for the moderation action
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(111111)
             .WithUsername("spammer")
             .WithName("Spam", "User")
             .BuildAsync();
 
         // Create moderation action entries
-        await new TestUserActionBuilder(Factory.Services)
+        await new TestUserActionBuilder(SharedFactory.Services)
             .AsBan(111111, "Spam detected by bot protection")
             .BuildAsync();
 
@@ -292,24 +293,24 @@ public class AuditLogTests : AuthenticatedTestBase
         await LoginAsOwnerAsync();
 
         // Create Telegram users
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(222222)
             .WithUsername("banneduser")
             .WithName("Banned", "User")
             .BuildAsync();
 
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(333333)
             .WithUsername("warneduser")
             .WithName("Warned", "User")
             .BuildAsync();
 
         // Create diverse moderation actions
-        await new TestUserActionBuilder(Factory.Services)
+        await new TestUserActionBuilder(SharedFactory.Services)
             .AsBan(222222, "Spam detected")
             .BuildAsync();
 
-        await new TestUserActionBuilder(Factory.Services)
+        await new TestUserActionBuilder(SharedFactory.Services)
             .AsWarn(333333, "First warning")
             .BuildAsync();
 
@@ -358,7 +359,7 @@ public class AuditLogTests : AuthenticatedTestBase
         var owner = await LoginAsOwnerAsync();
 
         var detailsText = "Permission changed from Admin to GlobalAdmin";
-        await new TestAuditLogBuilder(Factory.Services)
+        await new TestAuditLogBuilder(SharedFactory.Services)
             .WithEventType(AuditEventType.UserPermissionChanged)
             .WithWebUserActor(owner.Id, owner.Email)
             .WithWebUserTarget(owner.Id, owner.Email)

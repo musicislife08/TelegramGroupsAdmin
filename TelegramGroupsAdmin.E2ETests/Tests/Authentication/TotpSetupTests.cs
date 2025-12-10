@@ -9,9 +9,10 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Authentication;
 /// Tests for TOTP setup flow during first login.
 /// When a user has TotpEnabled=true but no secret configured,
 /// they are redirected to /login/setup-2fa after password login.
+/// Uses SharedE2ETestBase for faster test execution with shared factory.
 /// </summary>
 [TestFixture]
-public class TotpSetupTests : E2ETestBase
+public class TotpSetupTests : SharedE2ETestBase
 {
     private LoginPage _loginPage = null!;
     private TotpSetupPage _setupPage = null!;
@@ -28,7 +29,7 @@ public class TotpSetupTests : E2ETestBase
     {
         // Arrange - create user requiring TOTP setup (enabled but no secret)
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("totp-setup"))
             .WithPassword(password)
             .WithEmailVerified()
@@ -50,7 +51,7 @@ public class TotpSetupTests : E2ETestBase
     {
         // Arrange - create user requiring TOTP setup
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("qr-display"))
             .WithPassword(password)
             .WithEmailVerified()
@@ -78,7 +79,7 @@ public class TotpSetupTests : E2ETestBase
     {
         // Arrange - create user requiring TOTP setup
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("manual-key"))
             .WithPassword(password)
             .WithEmailVerified()
@@ -108,7 +109,7 @@ public class TotpSetupTests : E2ETestBase
     {
         // Arrange - create user requiring TOTP setup
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("valid-setup"))
             .WithPassword(password)
             .WithEmailVerified()
@@ -142,7 +143,7 @@ public class TotpSetupTests : E2ETestBase
     {
         // Arrange - create user requiring TOTP setup
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("invalid-setup"))
             .WithPassword(password)
             .WithEmailVerified()
@@ -169,7 +170,7 @@ public class TotpSetupTests : E2ETestBase
     {
         // Arrange - create user requiring TOTP setup
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("page-title"))
             .WithPassword(password)
             .WithEmailVerified()
@@ -193,7 +194,7 @@ public class TotpSetupTests : E2ETestBase
     {
         // Arrange - create user requiring TOTP setup
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("steps-visible"))
             .WithPassword(password)
             .WithEmailVerified()

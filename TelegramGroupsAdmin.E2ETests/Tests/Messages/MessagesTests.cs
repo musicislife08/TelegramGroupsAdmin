@@ -8,9 +8,10 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Messages;
 /// <summary>
 /// Tests for the Messages page (/messages).
 /// Verifies chat list display, message viewing, and permission-based access.
+/// Uses SharedAuthenticatedTestBase for faster test execution with shared factory.
 /// </summary>
 [TestFixture]
-public class MessagesTests : AuthenticatedTestBase
+public class MessagesTests : SharedAuthenticatedTestBase
 {
     private MessagesPage _messagesPage = null!;
 
@@ -98,12 +99,12 @@ public class MessagesTests : AuthenticatedTestBase
         // Arrange - create test chats
         await LoginAsOwnerAsync();
 
-        var chat1 = await new TestChatBuilder(Factory.Services)
+        var chat1 = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Alpha Chat")
             .AsGroup()
             .BuildAsync();
 
-        var chat2 = await new TestChatBuilder(Factory.Services)
+        var chat2 = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Beta Chat")
             .AsSupergroup()
             .BuildAsync();
@@ -130,15 +131,15 @@ public class MessagesTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Alpha Group")
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Beta Channel")
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Alpha Team")
             .BuildAsync();
 
@@ -166,11 +167,11 @@ public class MessagesTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Developers Group")
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Marketing Team")
             .BuildAsync();
 
@@ -197,7 +198,7 @@ public class MessagesTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Test Group")
             .BuildAsync();
 
@@ -221,7 +222,7 @@ public class MessagesTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Empty Chat")
             .BuildAsync();
 
@@ -248,26 +249,26 @@ public class MessagesTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Active Chat")
             .BuildAsync();
 
         // Create test messages
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(111, "alice", "Alice")
             .WithText("Hello everyone!")
             .At(DateTimeOffset.UtcNow.AddMinutes(-5))
             .BuildAsync();
 
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(222, "bob", "Bob")
             .WithText("Hi Alice!")
             .At(DateTimeOffset.UtcNow.AddMinutes(-3))
             .BuildAsync();
 
-        await new TestMessageBuilder(Factory.Services)
+        await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(111, "alice", "Alice")
             .WithText("How is everyone today?")
@@ -334,11 +335,11 @@ public class MessagesTests : AuthenticatedTestBase
         // Arrange - GlobalAdmin should see all chats (no chat_admins link needed)
         await LoginAsGlobalAdminAsync();
 
-        var chat1 = await new TestChatBuilder(Factory.Services)
+        var chat1 = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Public Chat")
             .BuildAsync();
 
-        var chat2 = await new TestChatBuilder(Factory.Services)
+        var chat2 = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Private Chat")
             .BuildAsync();
 
@@ -358,15 +359,15 @@ public class MessagesTests : AuthenticatedTestBase
         // Arrange - Owner should see all chats
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Chat 1")
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Chat 2")
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Chat 3")
             .BuildAsync();
 
@@ -386,7 +387,7 @@ public class MessagesTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Target Chat")
             .BuildAsync();
 

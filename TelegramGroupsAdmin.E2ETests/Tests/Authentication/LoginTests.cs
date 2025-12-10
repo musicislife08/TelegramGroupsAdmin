@@ -7,9 +7,10 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Authentication;
 /// <summary>
 /// Tests for login functionality.
 /// These tests validate the TestUserBuilder infrastructure and login flows.
+/// Uses SharedE2ETestBase for faster test execution with shared factory.
 /// </summary>
 [TestFixture]
-public class LoginTests : E2ETestBase
+public class LoginTests : SharedE2ETestBase
 {
     private LoginPage _loginPage = null!;
 
@@ -24,7 +25,7 @@ public class LoginTests : E2ETestBase
     {
         // Arrange - create a verified user who can login
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("login"))
             .WithPassword(password)
             .WithEmailVerified()
@@ -46,7 +47,7 @@ public class LoginTests : E2ETestBase
     public async Task Login_WithInvalidPassword_ShowsError()
     {
         // Arrange - create a verified user
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("invalid"))
             .WithPassword(TestCredentials.GeneratePassword())
             .WithEmailVerified()
@@ -67,7 +68,7 @@ public class LoginTests : E2ETestBase
     {
         // Arrange - create user WITHOUT email verification
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("unverified"))
             .WithPassword(password)
             .WithEmailVerified(false) // Email not verified
@@ -90,7 +91,7 @@ public class LoginTests : E2ETestBase
     {
         // Arrange - create a locked user
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("locked"))
             .WithPassword(password)
             .WithEmailVerified()
@@ -114,7 +115,7 @@ public class LoginTests : E2ETestBase
     {
         // Arrange - create a disabled user
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("disabled"))
             .WithPassword(password)
             .WithEmailVerified()
