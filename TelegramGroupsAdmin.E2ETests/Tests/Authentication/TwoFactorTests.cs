@@ -7,9 +7,10 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Authentication;
 
 /// <summary>
 /// Tests for two-factor authentication (TOTP) login flow.
+/// Uses SharedE2ETestBase for faster test execution with shared factory.
 /// </summary>
 [TestFixture]
-public class TwoFactorTests : E2ETestBase
+public class TwoFactorTests : SharedE2ETestBase
 {
     private LoginPage _loginPage = null!;
     private LoginVerifyPage _verifyPage = null!;
@@ -26,7 +27,7 @@ public class TwoFactorTests : E2ETestBase
     {
         // Arrange - create user with TOTP enabled
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("totp"))
             .WithPassword(password)
             .WithEmailVerified()
@@ -48,7 +49,7 @@ public class TwoFactorTests : E2ETestBase
     {
         // Arrange - create user with TOTP enabled
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("totp-valid"))
             .WithPassword(password)
             .WithEmailVerified()
@@ -75,7 +76,7 @@ public class TwoFactorTests : E2ETestBase
     {
         // Arrange - create user with TOTP enabled
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("totp-invalid"))
             .WithPassword(password)
             .WithEmailVerified()
@@ -102,7 +103,7 @@ public class TwoFactorTests : E2ETestBase
     {
         // Arrange - create user WITHOUT TOTP (regular login)
         var password = TestCredentials.GeneratePassword();
-        var user = await new TestUserBuilder(Factory.Services)
+        var user = await new TestUserBuilder(SharedFactory.Services)
             .WithEmail(TestCredentials.GenerateEmail("no-totp"))
             .WithPassword(password)
             .WithEmailVerified()

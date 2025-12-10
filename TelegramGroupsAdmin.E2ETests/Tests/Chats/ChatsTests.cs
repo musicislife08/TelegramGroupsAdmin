@@ -7,9 +7,10 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Chats;
 /// <summary>
 /// Tests for the Chats page (/chats).
 /// Verifies chat management table display, search, and permission-based access.
+/// Uses SharedAuthenticatedTestBase for faster test execution with shared factory.
 /// </summary>
 [TestFixture]
-public class ChatsTests : AuthenticatedTestBase
+public class ChatsTests : SharedAuthenticatedTestBase
 {
     private ChatsPage _chatsPage = null!;
 
@@ -63,7 +64,7 @@ public class ChatsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Test Chat")
             .BuildAsync();
 
@@ -86,12 +87,12 @@ public class ChatsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Alpha Chat")
             .AsGroup()
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Beta Chat")
             .AsSupergroup()
             .BuildAsync();
@@ -118,12 +119,12 @@ public class ChatsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("My Group")
             .AsGroup()
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("My Supergroup")
             .AsSupergroup()
             .BuildAsync();
@@ -148,15 +149,15 @@ public class ChatsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Development Team")
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Marketing Team")
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Development Support")
             .BuildAsync();
 
@@ -182,11 +183,11 @@ public class ChatsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Engineering")
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Sales")
             .BuildAsync();
 
@@ -250,11 +251,11 @@ public class ChatsTests : AuthenticatedTestBase
         // Arrange - GlobalAdmin should see all chats (no chat_admins link needed)
         await LoginAsGlobalAdminAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Chat One")
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Chat Two")
             .BuildAsync();
 
@@ -274,15 +275,15 @@ public class ChatsTests : AuthenticatedTestBase
         // Arrange - Owner should see all chats
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("First Chat")
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Second Chat")
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Third Chat")
             .BuildAsync();
 
@@ -302,7 +303,7 @@ public class ChatsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Health Test Chat")
             .BuildAsync();
 
@@ -322,7 +323,7 @@ public class ChatsTests : AuthenticatedTestBase
         // Arrange - chat without custom spam config should show "Global"
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Global Config Chat")
             .BuildAsync();
 
@@ -342,7 +343,7 @@ public class ChatsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Configurable Chat")
             .BuildAsync();
 
@@ -363,7 +364,7 @@ public class ChatsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Dialog Test Chat")
             .BuildAsync();
 
@@ -389,11 +390,11 @@ public class ChatsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("ID Search Chat")
             .BuildAsync();
 
-        await new TestChatBuilder(Factory.Services)
+        await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Other Chat")
             .BuildAsync();
 

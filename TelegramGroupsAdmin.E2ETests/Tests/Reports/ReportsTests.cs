@@ -9,9 +9,10 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Reports;
 /// Tests for the Reports Queue page (/reports).
 /// Verifies report display, filtering, permission-based access, and pending counts.
 /// Note: This page requires GlobalAdmin or Owner role - Admin cannot access.
+/// Uses SharedAuthenticatedTestBase for faster test execution with shared factory.
 /// </summary>
 [TestFixture]
-public class ReportsTests : AuthenticatedTestBase
+public class ReportsTests : SharedAuthenticatedTestBase
 {
     private ReportsPage _reportsPage = null!;
 
@@ -124,17 +125,17 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Test Chat")
             .BuildAsync();
 
-        var message = await new TestMessageBuilder(Factory.Services)
+        var message = await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(111111, "spammer", "Spam", "User")
             .WithText("Spam message content")
             .BuildAsync();
 
-        var report = await new TestReportBuilder(Factory.Services)
+        var report = await new TestReportBuilder(SharedFactory.Services)
             .ForMessage(message)
             .InChat(chat)
             .ReportedBy(222222, "reporter")
@@ -161,24 +162,24 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Alert Test Chat")
             .BuildAsync();
 
         // Create telegram users first (foreign key requirements)
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(333333)
             .WithUsername("scammer")
             .WithName("Scam", "User")
             .BuildAsync();
 
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(444444)
             .WithUsername("admin")
             .WithName("Real", "Admin")
             .BuildAsync();
 
-        var alert = await new TestImpersonationAlertBuilder(Factory.Services)
+        var alert = await new TestImpersonationAlertBuilder(SharedFactory.Services)
             .WithSuspectedUser(333333, "scammer", "Scam", "User")
             .WithTargetUser(444444, "admin", "Real", "Admin")
             .InChat(chat)
@@ -206,37 +207,37 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Filter Test Chat")
             .BuildAsync();
 
         // Create moderation report
-        var message = await new TestMessageBuilder(Factory.Services)
+        var message = await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(555555, "user1", "Test", "User")
             .WithText("Reported message")
             .BuildAsync();
 
-        await new TestReportBuilder(Factory.Services)
+        await new TestReportBuilder(SharedFactory.Services)
             .ForMessage(message)
             .InChat(chat)
             .ReportedBy(666666, "reporter")
             .BuildAsync();
 
         // Create impersonation alert
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(777777)
             .WithUsername("suspected")
             .WithName("Suspected", "User")
             .BuildAsync();
 
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(888888)
             .WithUsername("target")
             .WithName("Target", "Admin")
             .BuildAsync();
 
-        await new TestImpersonationAlertBuilder(Factory.Services)
+        await new TestImpersonationAlertBuilder(SharedFactory.Services)
             .WithSuspectedUser(777777, "suspected", "Suspected", "User")
             .WithTargetUser(888888, "target", "Target", "Admin")
             .InChat(chat)
@@ -269,37 +270,37 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Impersonation Filter Chat")
             .BuildAsync();
 
         // Create moderation report
-        var message = await new TestMessageBuilder(Factory.Services)
+        var message = await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(111222, "reporter", "Report", "User")
             .WithText("Some message")
             .BuildAsync();
 
-        await new TestReportBuilder(Factory.Services)
+        await new TestReportBuilder(SharedFactory.Services)
             .ForMessage(message)
             .InChat(chat)
             .ReportedBy(333444, "admin")
             .BuildAsync();
 
         // Create impersonation alert
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(555666)
             .WithUsername("faker")
             .WithName("Fake", "Admin")
             .BuildAsync();
 
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(777888)
             .WithUsername("realadmin")
             .WithName("Real", "Admin")
             .BuildAsync();
 
-        await new TestImpersonationAlertBuilder(Factory.Services)
+        await new TestImpersonationAlertBuilder(SharedFactory.Services)
             .WithSuspectedUser(555666, "faker", "Fake", "Admin")
             .WithTargetUser(777888, "realadmin", "Real", "Admin")
             .InChat(chat)
@@ -332,31 +333,31 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Status Filter Chat")
             .BuildAsync();
 
         // Create pending report
-        var message1 = await new TestMessageBuilder(Factory.Services)
+        var message1 = await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(100001, "user1", "Pending", "User")
             .WithText("Pending report message")
             .BuildAsync();
 
-        await new TestReportBuilder(Factory.Services)
+        await new TestReportBuilder(SharedFactory.Services)
             .ForMessage(message1)
             .InChat(chat)
             .ReportedBy(100002, "reporter1")
             .BuildAsync();
 
         // Create reviewed report
-        var message2 = await new TestMessageBuilder(Factory.Services)
+        var message2 = await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(100003, "user2", "Reviewed", "User")
             .WithText("Reviewed report message")
             .BuildAsync();
 
-        await new TestReportBuilder(Factory.Services)
+        await new TestReportBuilder(SharedFactory.Services)
             .ForMessageId((int)message2.MessageId)
             .InChat(chat)
             .ReportedBy(100004, "reporter2")
@@ -409,25 +410,25 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Critical Alert Chat")
             .BuildAsync();
 
         // Create telegram users
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(999001)
             .WithUsername("criticalscammer")
             .WithName("Scam", "Artist")
             .BuildAsync();
 
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(999002)
             .WithUsername("targetadmin")
             .WithName("Target", "Admin")
             .BuildAsync();
 
         // Create critical impersonation alert
-        await new TestImpersonationAlertBuilder(Factory.Services)
+        await new TestImpersonationAlertBuilder(SharedFactory.Services)
             .WithSuspectedUser(999001, "criticalscammer", "Scam", "Artist")
             .WithTargetUser(999002, "targetadmin", "Target", "Admin")
             .InChat(chat)
@@ -452,34 +453,34 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange - GlobalAdmin should see all reports across all chats
         await LoginAsGlobalAdminAsync();
 
-        var chat1 = await new TestChatBuilder(Factory.Services)
+        var chat1 = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Chat One")
             .BuildAsync();
 
-        var chat2 = await new TestChatBuilder(Factory.Services)
+        var chat2 = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Chat Two")
             .BuildAsync();
 
         // Create reports in different chats
-        var message1 = await new TestMessageBuilder(Factory.Services)
+        var message1 = await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat1)
             .FromUser(200001, "user1", "User", "One")
             .WithText("Message in chat 1")
             .BuildAsync();
 
-        await new TestReportBuilder(Factory.Services)
+        await new TestReportBuilder(SharedFactory.Services)
             .ForMessage(message1)
             .InChat(chat1)
             .ReportedBy(200002, "reporter1")
             .BuildAsync();
 
-        var message2 = await new TestMessageBuilder(Factory.Services)
+        var message2 = await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat2)
             .FromUser(200003, "user2", "User", "Two")
             .WithText("Message in chat 2")
             .BuildAsync();
 
-        await new TestReportBuilder(Factory.Services)
+        await new TestReportBuilder(SharedFactory.Services)
             .ForMessage(message2)
             .InChat(chat2)
             .ReportedBy(200004, "reporter2")
@@ -501,18 +502,18 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange - create only moderation reports, then filter to impersonation
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("No Match Chat")
             .BuildAsync();
 
         // Create only moderation report
-        var message = await new TestMessageBuilder(Factory.Services)
+        var message = await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(300001, "user", "Test", "User")
             .WithText("Test message")
             .BuildAsync();
 
-        await new TestReportBuilder(Factory.Services)
+        await new TestReportBuilder(SharedFactory.Services)
             .ForMessage(message)
             .InChat(chat)
             .ReportedBy(300002, "reporter")
@@ -545,17 +546,17 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Dismiss Action Chat")
             .BuildAsync();
 
-        var message = await new TestMessageBuilder(Factory.Services)
+        var message = await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(400001, "reporteduser", "Reported", "User")
             .WithText("Message to be dismissed")
             .BuildAsync();
 
-        await new TestReportBuilder(Factory.Services)
+        await new TestReportBuilder(SharedFactory.Services)
             .ForMessage(message)
             .InChat(chat)
             .ReportedBy(400002, "reporter")
@@ -588,24 +589,24 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Delete Spam Chat")
             .BuildAsync();
 
         // Create telegram user first (required for ban action to save user_actions)
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(400003)
             .WithUsername("spammer")
             .WithName("Spam", "User")
             .BuildAsync();
 
-        var message = await new TestMessageBuilder(Factory.Services)
+        var message = await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(400003, "spammer", "Spam", "User")
             .WithText("This is spam content")
             .BuildAsync();
 
-        await new TestReportBuilder(Factory.Services)
+        await new TestReportBuilder(SharedFactory.Services)
             .ForMessage(message)
             .InChat(chat)
             .ReportedBy(400004, "reporter")
@@ -638,24 +639,24 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Ban User Chat")
             .BuildAsync();
 
         // Create telegram user first (required for ban action to save user_actions)
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(400005)
             .WithUsername("baduser")
             .WithName("Bad", "Actor")
             .BuildAsync();
 
-        var message = await new TestMessageBuilder(Factory.Services)
+        var message = await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(400005, "baduser", "Bad", "Actor")
             .WithText("Problematic message content")
             .BuildAsync();
 
-        await new TestReportBuilder(Factory.Services)
+        await new TestReportBuilder(SharedFactory.Services)
             .ForMessage(message)
             .InChat(chat)
             .ReportedBy(400006, "reporter")
@@ -688,24 +689,24 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Confirm Ban Chat")
             .BuildAsync();
 
         // Create telegram users for impersonation alert
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(500001)
             .WithUsername("impersonator")
             .WithName("Fake", "Admin")
             .BuildAsync();
 
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(500002)
             .WithUsername("realadmin")
             .WithName("Real", "Admin")
             .BuildAsync();
 
-        await new TestImpersonationAlertBuilder(Factory.Services)
+        await new TestImpersonationAlertBuilder(SharedFactory.Services)
             .WithSuspectedUser(500001, "impersonator", "Fake", "Admin")
             .WithTargetUser(500002, "realadmin", "Real", "Admin")
             .InChat(chat)
@@ -741,24 +742,24 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("False Positive Chat")
             .BuildAsync();
 
         // Create telegram users
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(500003)
             .WithUsername("innocentuser")
             .WithName("Innocent", "User")
             .BuildAsync();
 
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(500004)
             .WithUsername("adminuser")
             .WithName("Admin", "User")
             .BuildAsync();
 
-        await new TestImpersonationAlertBuilder(Factory.Services)
+        await new TestImpersonationAlertBuilder(SharedFactory.Services)
             .WithSuspectedUser(500003, "innocentuser", "Innocent", "User")
             .WithTargetUser(500004, "adminuser", "Admin", "User")
             .InChat(chat)
@@ -793,24 +794,24 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Dismiss Alert Chat")
             .BuildAsync();
 
         // Create telegram users
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(500005)
             .WithUsername("suspecteduser")
             .WithName("Suspected", "User")
             .BuildAsync();
 
-        await new TestTelegramUserBuilder(Factory.Services)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
             .WithUserId(500006)
             .WithUsername("targetadmin")
             .WithName("Target", "Admin")
             .BuildAsync();
 
-        await new TestImpersonationAlertBuilder(Factory.Services)
+        await new TestImpersonationAlertBuilder(SharedFactory.Services)
             .WithSuspectedUser(500005, "suspecteduser", "Suspected", "User")
             .WithTargetUser(500006, "targetadmin", "Target", "Admin")
             .InChat(chat)
@@ -847,17 +848,17 @@ public class ReportsTests : AuthenticatedTestBase
         // Arrange
         await LoginAsOwnerAsync();
 
-        var chat = await new TestChatBuilder(Factory.Services)
+        var chat = await new TestChatBuilder(SharedFactory.Services)
             .WithTitle("Action Buttons Chat")
             .BuildAsync();
 
-        var message = await new TestMessageBuilder(Factory.Services)
+        var message = await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(400007, "testuser", "Test", "User")
             .WithText("Message requiring moderation")
             .BuildAsync();
 
-        await new TestReportBuilder(Factory.Services)
+        await new TestReportBuilder(SharedFactory.Services)
             .ForMessage(message)
             .InChat(chat)
             .ReportedBy(400008, "reporter")

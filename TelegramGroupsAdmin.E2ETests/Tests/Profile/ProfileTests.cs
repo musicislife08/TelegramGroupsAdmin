@@ -8,9 +8,10 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Profile;
 /// <summary>
 /// Tests for the Profile page (/profile).
 /// Verifies account info display, password change, TOTP status, and Telegram account linking.
+/// Uses SharedAuthenticatedTestBase for faster test execution with shared factory.
 /// </summary>
 [TestFixture]
-public class ProfileTests : AuthenticatedTestBase
+public class ProfileTests : SharedAuthenticatedTestBase
 {
     private ProfilePage _profilePage = null!;
 
@@ -184,7 +185,7 @@ public class ProfileTests : AuthenticatedTestBase
     {
         // Arrange - create user with TOTP enabled and login via cookie injection
         // Cookie-based login bypasses TOTP verification entirely
-        var totpUser = await new TestUserBuilder(Factory.Services)
+        var totpUser = await new TestUserBuilder(SharedFactory.Services)
             .AsOwner()
             .WithEmailVerified()
             .WithTotp(enabled: true)
@@ -288,7 +289,7 @@ public class ProfileTests : AuthenticatedTestBase
         var owner = await LoginAsOwnerAsync();
 
         // Create a linked Telegram account
-        await new TestTelegramUserMappingBuilder(Factory.Services)
+        await new TestTelegramUserMappingBuilder(SharedFactory.Services)
             .WithTelegramId(123456789)
             .WithTelegramUsername("testlinkeduser")
             .LinkedToWebUser(owner.Id)
@@ -318,7 +319,7 @@ public class ProfileTests : AuthenticatedTestBase
         // Arrange - login as Owner and create linked Telegram account
         var owner = await LoginAsOwnerAsync();
 
-        await new TestTelegramUserMappingBuilder(Factory.Services)
+        await new TestTelegramUserMappingBuilder(SharedFactory.Services)
             .WithTelegramId(987654321)
             .WithTelegramUsername("unlinkme")
             .LinkedToWebUser(owner.Id)

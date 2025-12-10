@@ -9,9 +9,10 @@ namespace TelegramGroupsAdmin.E2ETests.Tests.Analytics;
 /// Tests for the Analytics page (/analytics).
 /// Verifies tab navigation and that all analytics components load.
 /// Analytics is accessible to all authenticated users (Admin, GlobalAdmin, Owner).
+/// Uses SharedAuthenticatedTestBase for faster test execution with shared factory.
 /// </summary>
 [TestFixture]
-public class AnalyticsTests : AuthenticatedTestBase
+public class AnalyticsTests : SharedAuthenticatedTestBase
 {
     private AnalyticsPage _analyticsPage = null!;
 
