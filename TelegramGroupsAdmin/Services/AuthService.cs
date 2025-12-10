@@ -346,11 +346,6 @@ public class AuthService(
         return await totpService.VerifyAndEnableTotpAsync(userId, code, ct);
     }
 
-    public async Task<bool> DisableTotpAsync(string userId, string password, CancellationToken ct = default)
-    {
-        return await totpService.DisableTotpAsync(userId, password, ct);
-    }
-
     public async Task<bool> AdminDisableTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default)
     {
         return await totpService.AdminDisableTotpAsync(targetUserId, adminUserId, ct);

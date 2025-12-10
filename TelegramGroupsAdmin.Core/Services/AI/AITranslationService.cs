@@ -55,7 +55,7 @@ public class AITranslationService : IAITranslationService
 
             var options = new ChatCompletionOptions
             {
-                MaxTokens = 200,
+                MaxTokens = 500, // Increased from 200 - translations can be longer than source text
                 Temperature = 0.2,
                 JsonMode = true
             };
@@ -73,6 +73,16 @@ public class AITranslationService : IAITranslationService
                 return null;
             }
 
+            // Check for truncation due to token limit
+            if (result.FinishReason?.Equals("Length", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                _logger.LogWarning(
+                    "Translation response truncated due to token limit (finish_reason=length). " +
+                    "Text length: {TextLength} chars, CompletionTokens: {Tokens}",
+                    text.Length, result.CompletionTokens);
+                return null;
+            }
+
             var content = result.Content.Trim();
 
             // Remove markdown code blocks if present (some models still add them despite JsonMode)
@@ -87,6 +97,13 @@ public class AITranslationService : IAITranslationService
             if (translationResult == null)
             {
                 _logger.LogWarning("Failed to parse AI translation result: {Content}", content);
+                return null;
+            }
+
+            // Validate required fields (guard against truncated/malformed JSON)
+            if (string.IsNullOrWhiteSpace(translationResult.Language))
+            {
+                _logger.LogWarning("AI translation result missing required 'language' field: {Content}", content);
                 return null;
             }
 

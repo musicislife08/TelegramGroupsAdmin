@@ -5,7 +5,6 @@ public interface ITotpService
     Task<TotpSetupResult> SetupTotpAsync(string userId, string userEmail, CancellationToken ct = default);
     Task<TotpVerificationResult> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken ct = default);
     Task<bool> VerifyTotpCodeAsync(string userId, string code, CancellationToken ct = default);
-    Task<bool> DisableTotpAsync(string userId, string password, CancellationToken ct = default);
     Task<bool> AdminDisableTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default);
     Task<bool> AdminEnableTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default);
     Task<bool> AdminResetTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default);
