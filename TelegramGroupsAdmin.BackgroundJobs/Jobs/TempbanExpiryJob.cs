@@ -7,9 +7,8 @@ using Telegram.Bot;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
-using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Core.JobPayloads;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
@@ -22,13 +21,11 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class TempbanExpiryJob(
     ILogger<TempbanExpiryJob> logger,
     IDbContextFactory<AppDbContext> contextFactory,
-    TelegramBotClientFactory botClientFactory,
-    TelegramConfigLoader configLoader) : IJob
+    TelegramBotClientFactory botClientFactory) : IJob
 {
     private readonly ILogger<TempbanExpiryJob> _logger = logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly TelegramConfigLoader _configLoader = configLoader;
 
     public async Task Execute(IJobExecutionContext context)
     {
@@ -61,11 +58,8 @@ public class TempbanExpiryJob(
                 payload.Reason,
                 payload.ExpiresAt);
 
-            // Load bot config from database
-            var botToken = await _configLoader.LoadConfigAsync();
-
             // Get bot client from factory
-            var botClient = _botClientFactory.GetOrCreate(botToken);
+            var botClient = await _botClientFactory.GetBotClientAsync();
 
             try
             {

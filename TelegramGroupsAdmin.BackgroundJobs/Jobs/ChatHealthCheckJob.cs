@@ -7,8 +7,7 @@ using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Telegram.Abstractions;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -24,20 +23,17 @@ public class ChatHealthCheckJob : IJob
 {
     private readonly ChatManagementService _chatService;
     private readonly TelegramBotClientFactory _botFactory;
-    private readonly TelegramConfigLoader _configLoader;
     private readonly IConfigService _configService;
     private readonly ILogger<ChatHealthCheckJob> _logger;
 
     public ChatHealthCheckJob(
         ChatManagementService chatService,
         TelegramBotClientFactory botFactory,
-        TelegramConfigLoader configLoader,
         IConfigService configService,
         ILogger<ChatHealthCheckJob> logger)
     {
         _chatService = chatService;
         _botFactory = botFactory;
-        _configLoader = configLoader;
         _configService = configService;
         _logger = logger;
     }
@@ -91,9 +87,8 @@ public class ChatHealthCheckJob : IJob
                 return;
             }
 
-            // Load bot config from database
-            var botToken = await _configLoader.LoadConfigAsync();
-            var botClient = _botFactory.GetOrCreate(botToken);
+            // Get bot client from factory
+            var botClient = await _botFactory.GetBotClientAsync();
 
             try
             {

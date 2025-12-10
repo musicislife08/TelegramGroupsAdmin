@@ -9,10 +9,8 @@ using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.ContentDetection.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -34,7 +32,6 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     private readonly IImpersonationAlertsRepository _impersonationAlertsRepository;
     private readonly ModerationActionService _moderationActionService;
     private readonly TelegramBotClientFactory _botClientFactory;
-    private readonly TelegramConfigLoader _configLoader;
     private readonly IConfigService _configService;
     private readonly ILogger<ImpersonationDetectionService> _logger;
 
@@ -54,7 +51,6 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         IImpersonationAlertsRepository impersonationAlertsRepository,
         ModerationActionService moderationActionService,
         TelegramBotClientFactory botClientFactory,
-        TelegramConfigLoader configLoader,
         IConfigService configService,
         ILogger<ImpersonationDetectionService> logger)
     {
@@ -67,7 +63,6 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         _impersonationAlertsRepository = impersonationAlertsRepository;
         _moderationActionService = moderationActionService;
         _botClientFactory = botClientFactory;
-        _configLoader = configLoader;
         _configService = configService;
         _logger = logger;
     }
@@ -252,8 +247,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             {
                 var reason = $"Auto-banned: Impersonation detected (name match: {result.NameMatch}, photo match: {result.PhotoMatch}, score: {result.TotalScore})";
 
-                var botToken = await _configLoader.LoadConfigAsync();
-                var botClient = _botClientFactory.GetOrCreate(botToken);
+                var botClient = await _botClientFactory.GetBotClientAsync();
                 var executor = Core.Models.Actor.Impersonation;
                 var banResult = await _moderationActionService.BanUserAsync(
                     botClient: botClient,

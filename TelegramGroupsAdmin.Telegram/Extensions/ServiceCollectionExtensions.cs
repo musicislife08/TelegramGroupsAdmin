@@ -7,7 +7,6 @@ using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Extensions;
 

@@ -5,9 +5,7 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Telegram.Abstractions;
-using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 

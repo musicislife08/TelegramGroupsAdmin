@@ -8,7 +8,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.BackgroundJobs.Services;
 using TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
-using TelegramGroupsAdmin.Telegram.Abstractions.JobPayloads;
+using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;

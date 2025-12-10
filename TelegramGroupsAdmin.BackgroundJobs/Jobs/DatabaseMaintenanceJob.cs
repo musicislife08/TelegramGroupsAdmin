@@ -6,7 +6,7 @@ using Npgsql;
 using Quartz;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Telegram.Abstractions;
+using TelegramGroupsAdmin.Core.JobPayloads;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
