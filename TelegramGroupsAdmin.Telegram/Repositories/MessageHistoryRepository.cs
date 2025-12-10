@@ -1,11 +1,10 @@
 using Microsoft.EntityFrameworkCore;
-using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
-using DataModels = TelegramGroupsAdmin.Data.Models;
+using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
@@ -137,8 +136,12 @@ public class MessageHistoryRepository : IMessageHistoryRepository
                 ChatIconPath = chat != null ? chat.ChatIconPath : null,
                 UserName = user != null ? user.Username : null,
                 FirstName = user != null ? user.FirstName : null,
+                LastName = user != null ? user.LastName : null,
                 UserPhotoPath = user != null ? user.UserPhotoPath : null,
-                ReplyToUser = parentUserInfo != null ? parentUserInfo.Username : null,
+                ParentUserFirstName = parentUserInfo != null ? parentUserInfo.FirstName : null,
+                ParentUserLastName = parentUserInfo != null ? parentUserInfo.LastName : null,
+                ParentUserUsername = parentUserInfo != null ? parentUserInfo.Username : null,
+                ParentUserId = parentUserInfo != null ? parentUserInfo.TelegramUserId : (long?)null,
                 ReplyToText = parentMsg != null ? parentMsg.MessageText : null
             }
         )
@@ -153,8 +156,9 @@ public class MessageHistoryRepository : IMessageHistoryRepository
             chatIconPath: result.ChatIconPath,
             userName: result.UserName,
             firstName: result.FirstName,
+            lastName: result.LastName,
             userPhotoPath: result.UserPhotoPath,
-            replyToUser: result.ReplyToUser,
+            replyToUser: TelegramDisplayName.Format(result.ParentUserFirstName, result.ParentUserLastName, result.ParentUserUsername, result.ParentUserId),
             replyToText: result.ReplyToText);
 
         // Validate media path exists on filesystem (nulls if missing)

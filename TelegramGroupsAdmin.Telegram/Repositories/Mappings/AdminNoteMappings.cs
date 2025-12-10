@@ -14,12 +14,13 @@ public static class AdminNoteMappings
         public UiModels.AdminNote ToModel(
             string? webUserEmail = null,
             string? telegramUsername = null,
-            string? telegramFirstName = null) => new()
+            string? telegramFirstName = null,
+            string? telegramLastName = null) => new()
             {
                 Id = data.Id,
                 TelegramUserId = data.TelegramUserId,
                 NoteText = data.NoteText,
-                CreatedBy = ActorMappings.ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
+                CreatedBy = ActorMappings.ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName, telegramLastName),
                 CreatedAt = data.CreatedAt,
                 UpdatedAt = data.UpdatedAt,
                 IsPinned = data.IsPinned

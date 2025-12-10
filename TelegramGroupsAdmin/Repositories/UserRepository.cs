@@ -118,9 +118,9 @@ public class UserRepository : IUserRepository
             existingEntity.InvitedBy = invitedBy;
             existingEntity.Status = DataModels.UserStatus.Active;
             existingEntity.IsActive = true;
-            // Reset security-sensitive fields
+            // Reset security-sensitive fields - require 2FA setup
             existingEntity.TotpSecret = null;
-            existingEntity.TotpEnabled = false;
+            existingEntity.TotpEnabled = true; // All users must set up 2FA by default
             existingEntity.TotpSetupStartedAt = null;
             existingEntity.EmailVerified = false;
             existingEntity.EmailVerificationToken = null;
@@ -148,7 +148,7 @@ public class UserRepository : IUserRepository
                 Status = DataModels.UserStatus.Active,
                 IsActive = true,
                 TotpSecret = null,
-                TotpEnabled = false,
+                TotpEnabled = true, // All users must set up 2FA by default
                 TotpSetupStartedAt = null,
                 CreatedAt = now,
                 LastLoginAt = null,

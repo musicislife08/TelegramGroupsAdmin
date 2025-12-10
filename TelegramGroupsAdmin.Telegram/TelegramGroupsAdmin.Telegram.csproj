@@ -20,7 +20,6 @@
     <ProjectReference Include="..\TelegramGroupsAdmin.Configuration\TelegramGroupsAdmin.Configuration.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.Data\TelegramGroupsAdmin.Data.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.ContentDetection\TelegramGroupsAdmin.ContentDetection.csproj" />
-    <ProjectReference Include="..\TelegramGroupsAdmin.Telegram.Abstractions\TelegramGroupsAdmin.Telegram.Abstractions.csproj" />
     <ProjectReference Include="..\TelegramGroupsAdmin.Core\TelegramGroupsAdmin.Core.csproj" />
   </ItemGroup>
 

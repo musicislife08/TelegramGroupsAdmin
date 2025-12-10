@@ -412,6 +412,7 @@ public partial class MessageProcessingService(
                 message.From!.Id,
                 message.From.Username,
                 message.From.FirstName,
+                message.From.LastName,
                 message.Chat.Id,
                 now,
                 text,

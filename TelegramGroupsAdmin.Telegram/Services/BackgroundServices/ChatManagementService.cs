@@ -4,10 +4,13 @@ using System.Collections.Concurrent;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Services.Telegram;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
@@ -17,6 +20,8 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public class ChatManagementService(
     IServiceProvider serviceProvider,
+    TelegramBotClientFactory botFactory,
+    TelegramConfigLoader configLoader,
     ILogger<ChatManagementService> logger)
 {
     private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();
@@ -159,13 +164,16 @@ public class ChatManagementService(
 
                     if (isNowAdmin)
                     {
-                        // User promoted to admin
+                        // User promoted to admin - ensure user exists in telegram_users first (FK constraint)
+                        var userRepo = adminScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+                        await EnsureUserExistsAsync(userRepo, affectedUser, cancellationToken);
+
                         var isCreator = newStatus == ChatMemberStatus.Creator;
                         await chatAdminsRepository.UpsertAsync(chat.Id, affectedUser.Id, isCreator, cancellationToken: cancellationToken);
                         logger.LogInformation(
-                            "✅ User {UserId} (@{Username}) promoted to {Role} in chat {ChatId}",
+                            "✅ User {UserId} ({DisplayName}) promoted to {Role} in chat {ChatId}",
                             affectedUser.Id,
-                            affectedUser.Username ?? "unknown",
+                            TelegramDisplayName.Format(affectedUser.FirstName, affectedUser.LastName, affectedUser.Username, affectedUser.Id),
                             isCreator ? "creator" : "admin",
                             chat.Id);
                     }
@@ -174,9 +182,9 @@ public class ChatManagementService(
                         // User demoted from admin
                         await chatAdminsRepository.DeactivateAsync(chat.Id, affectedUser.Id, cancellationToken);
                         logger.LogInformation(
-                            "❌ User {UserId} (@{Username}) demoted from admin in chat {ChatId}",
+                            "❌ User {UserId} ({DisplayName}) demoted from admin in chat {ChatId}",
                             affectedUser.Id,
-                            affectedUser.Username ?? "unknown",
+                            TelegramDisplayName.Format(affectedUser.FirstName, affectedUser.LastName, affectedUser.Username, affectedUser.Id),
                             chat.Id);
                     }
                 }
@@ -295,23 +303,25 @@ public class ChatManagementService(
 
             if (isNowAdmin)
             {
-                // User promoted to admin
+                // User promoted to admin - ensure user exists in telegram_users first (FK constraint)
+                var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+                await EnsureUserExistsAsync(userRepo, user, cancellationToken);
+
                 var isCreator = newStatus == ChatMemberStatus.Creator;
-                await chatAdminsRepository.UpsertAsync(chat.Id, user.Id, isCreator, user.Username, cancellationToken);
+                await chatAdminsRepository.UpsertAsync(chat.Id, user.Id, isCreator, cancellationToken);
 
                 logger.LogInformation(
-                    "⬆️ INSTANT: User promoted to {Role} in chat {ChatId} ({ChatName}): {TelegramId} (@{Username})",
+                    "⬆️ INSTANT: User promoted to {Role} in chat {ChatId} ({ChatName}): {TelegramId} ({DisplayName})",
                     isCreator ? "creator" : "admin",
                     chat.Id,
                     chat.Title ?? "Unknown",
                     user.Id,
-                    user.Username ?? "unknown");
+                    TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id));
 
                 // AUTO-TRUST: Trust admins globally to prevent spam detection and cross-chat bans
                 try
                 {
                     var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-                    var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
                     var trustAction = new UserActionRecord(
                         Id: 0,
@@ -328,9 +338,9 @@ public class ChatManagementService(
                     await userRepo.UpdateTrustStatusAsync(user.Id, isTrusted: true, cancellationToken);
 
                     logger.LogInformation(
-                        "Auto-trusted user {UserId} (@{Username}) - admin in chat {ChatId}",
+                        "Auto-trusted user {UserId} ({DisplayName}) - admin in chat {ChatId}",
                         user.Id,
-                        user.Username ?? "unknown",
+                        TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id),
                         chat.Id);
                 }
                 catch (Exception ex)
@@ -340,7 +350,7 @@ public class ChatManagementService(
 
                 // Phase 5.2: Notify owners about admin promotion
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-                var displayName = user.Username != null ? $"@{user.Username}" : user.FirstName ?? $"User {user.Id}";
+                var displayName = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
                 _ = notificationService.SendSystemNotificationAsync(
                     eventType: NotificationEventType.ChatAdminChanged,
                     subject: $"New Admin Promoted: {chat.Title ?? "Unknown Chat"}",
@@ -357,15 +367,15 @@ public class ChatManagementService(
                 await chatAdminsRepository.DeactivateAsync(chat.Id, user.Id, cancellationToken);
 
                 logger.LogInformation(
-                    "⬇️ INSTANT: User demoted from admin in chat {ChatId} ({ChatName}): {TelegramId} (@{Username})",
+                    "⬇️ INSTANT: User demoted from admin in chat {ChatId} ({ChatName}): {TelegramId} ({DisplayName})",
                     chat.Id,
                     chat.Title ?? "Unknown",
                     user.Id,
-                    user.Username ?? "unknown");
+                    TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id));
 
                 // Phase 5.2: Notify owners about admin demotion
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
-                var displayName = user.Username != null ? $"@{user.Username}" : user.FirstName ?? $"User {user.Id}";
+                var displayName = TelegramDisplayName.FormatMention(user.FirstName, user.LastName, user.Username, user.Id);
                 _ = notificationService.SendSystemNotificationAsync(
                     eventType: NotificationEventType.ChatAdminChanged,
                     subject: $"Admin Demoted: {chat.Title ?? "Unknown Chat"}",
@@ -457,38 +467,41 @@ public class ChatManagementService(
                 await chatAdminsRepository.DeactivateAsync(chatId, demotedId, cancellationToken);
                 var demotedAdmin = cachedAdmins.First(a => a.TelegramId == demotedId);
                 logger.LogInformation(
-                    "⬇️ Admin demoted in chat {ChatId}: {TelegramId} (@{Username})",
+                    "⬇️ Admin demoted in chat {ChatId}: {TelegramId} ({DisplayName})",
                     chatId,
                     demotedId,
-                    demotedAdmin.Username ?? "unknown");
+                    demotedAdmin.DisplayName);
             }
 
             // Upsert current admins (add new, update existing)
             var adminNames = new List<string>();
+            var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+
             foreach (var admin in admins)
             {
+                // Ensure user exists in telegram_users first (FK constraint)
+                await EnsureUserExistsAsync(userRepo, admin.User, cancellationToken);
+
                 var isCreator = admin.Status == ChatMemberStatus.Creator;
-                var username = admin.User.Username; // Store Telegram username (without @)
                 var wasNew = !cachedAdminIds.Contains(admin.User.Id);
 
-                await chatAdminsRepository.UpsertAsync(chatId, admin.User.Id, isCreator, username, cancellationToken);
+                await chatAdminsRepository.UpsertAsync(chatId, admin.User.Id, isCreator, cancellationToken);
 
-                var displayName = username ?? admin.User.FirstName ?? admin.User.Id.ToString();
-                adminNames.Add($"@{displayName}" + (isCreator ? " (creator)" : ""));
+                var displayName = TelegramDisplayName.Format(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id);
+                adminNames.Add(displayName + (isCreator ? " (creator)" : ""));
 
                 if (wasNew)
                 {
                     logger.LogInformation(
-                        "⬆️ New admin promoted in chat {ChatId}: {TelegramId} (@{Username})",
+                        "⬆️ New admin promoted in chat {ChatId}: {TelegramId} ({DisplayName})",
                         chatId,
                         admin.User.Id,
-                        username ?? "unknown");
+                        TelegramDisplayName.Format(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id));
 
                     // AUTO-TRUST: Trust new admins globally
                     try
                     {
                         var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-                        var userRepo = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
                         var trustAction = new UserActionRecord(
                             Id: 0,
@@ -505,9 +518,9 @@ public class ChatManagementService(
                         await userRepo.UpdateTrustStatusAsync(admin.User.Id, isTrusted: true, cancellationToken);
 
                         logger.LogInformation(
-                            "Auto-trusted user {UserId} (@{Username}) - admin in chat {ChatId}",
+                            "Auto-trusted user {UserId} ({DisplayName}) - admin in chat {ChatId}",
                             admin.User.Id,
-                            username ?? "unknown",
+                            TelegramDisplayName.Format(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
                             chatId);
                     }
                     catch (Exception ex)
@@ -538,10 +551,16 @@ public class ChatManagementService(
     {
         try
         {
+            // Get bot client if not provided - API calls are safe even when polling is disabled
             if (botClient == null)
             {
-                logger.LogWarning("Bot client not initialized, skipping health check for chat {ChatId}", chatId);
-                return;
+                var botToken = await configLoader.LoadConfigAsync();
+                if (string.IsNullOrEmpty(botToken))
+                {
+                    logger.LogWarning("No bot token configured, skipping health check for chat {ChatId}", chatId);
+                    return;
+                }
+                botClient = botFactory.GetOrCreate(botToken);
             }
 
             var (health, chatName) = await PerformHealthCheckAsync(botClient, chatId, cancellationToken);
@@ -729,15 +748,22 @@ public class ChatManagementService(
 
     /// <summary>
     /// Refresh health for all active managed chats (excludes chats where bot was removed)
+    /// Also backfills missing chat icons to ensure they're fetched eventually
     /// </summary>
     public async Task RefreshAllHealthAsync(ITelegramBotClient? botClient, CancellationToken cancellationToken = default)
     {
         try
         {
+            // Get bot client if not provided - API calls are safe even when polling is disabled
             if (botClient == null)
             {
-                logger.LogWarning("Bot client not initialized, skipping health check");
-                return;
+                var botToken = await configLoader.LoadConfigAsync();
+                if (string.IsNullOrEmpty(botToken))
+                {
+                    logger.LogWarning("No bot token configured, skipping health check");
+                    return;
+                }
+                botClient = botFactory.GetOrCreate(botToken);
             }
 
             using var scope = serviceProvider.CreateScope();
@@ -750,6 +776,25 @@ public class ChatManagementService(
             }
 
             logger.LogDebug("Completed health check for {Count} active chats", chats.Count);
+
+            // Backfill missing chat icons (only fetches for chats without icons)
+            var chatsWithoutIcons = chats.Where(c => string.IsNullOrEmpty(c.ChatIconPath)).ToList();
+            if (chatsWithoutIcons.Count > 0)
+            {
+                logger.LogInformation("Backfilling {Count} missing chat icons", chatsWithoutIcons.Count);
+                foreach (var chat in chatsWithoutIcons)
+                {
+                    await FetchChatIconAsync(botClient, chat.ChatId, cancellationToken);
+                }
+            }
+
+            // Sync linked channels for all managed chats (impersonation detection)
+            // This handles: new links, changed links, and removed links
+            logger.LogInformation("Syncing linked channels for {Count} managed chats", chats.Count);
+            foreach (var chat in chats)
+            {
+                await FetchLinkedChannelAsync(botClient, chat.ChatId, cancellationToken);
+            }
         }
         catch (Exception ex)
         {
@@ -857,6 +902,137 @@ public class ChatManagementService(
         {
             // Non-fatal - invite link validation failure shouldn't fail health check
             logger.LogWarning(ex, "Failed to validate invite link for chat {ChatId}", chatId);
+        }
+    }
+
+    /// <summary>
+    /// Ensures a Telegram user exists in the database before creating dependent records (e.g., chat_admins).
+    /// Creates a minimal user record if the user doesn't exist yet (they may not have sent any messages).
+    /// Required for FK constraint: chat_admins.telegram_id → telegram_users.telegram_user_id
+    /// </summary>
+    private static async Task EnsureUserExistsAsync(
+        ITelegramUserRepository userRepo,
+        global::Telegram.Bot.Types.User telegramUser,
+        CancellationToken cancellationToken)
+    {
+        var existingUser = await userRepo.GetByTelegramIdAsync(telegramUser.Id, cancellationToken);
+        if (existingUser != null)
+            return;
+
+        // Create minimal user record - they haven't messaged yet so we only have basic profile info
+        var now = DateTimeOffset.UtcNow;
+        var newUser = new TelegramUser(
+            TelegramUserId: telegramUser.Id,
+            Username: telegramUser.Username,
+            FirstName: telegramUser.FirstName,
+            LastName: telegramUser.LastName,
+            UserPhotoPath: null,
+            PhotoHash: null,
+            PhotoFileUniqueId: null,
+            IsBot: telegramUser.IsBot,
+            IsTrusted: false, // Will be set to true by auto-trust logic after this
+            BotDmEnabled: false,
+            FirstSeenAt: now,
+            LastSeenAt: now,
+            CreatedAt: now,
+            UpdatedAt: now
+        );
+
+        await userRepo.UpsertAsync(newUser, cancellationToken);
+    }
+
+    /// <summary>
+    /// Fetch and sync linked channel information for a managed chat.
+    /// Linked channels are used for impersonation detection (comparing user names/photos against channel).
+    /// Creates/updates the linked channel record if chat has one, deletes stale record if channel was unlinked.
+    /// </summary>
+    private async Task FetchLinkedChannelAsync(
+        ITelegramBotClient botClient,
+        long chatId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var linkedChannelsRepository = scope.ServiceProvider.GetRequiredService<ILinkedChannelsRepository>();
+            var photoService = scope.ServiceProvider.GetRequiredService<TelegramPhotoService>();
+            var photoHashService = scope.ServiceProvider.GetRequiredService<IPhotoHashService>();
+
+            // Get chat info to check for linked channel
+            var chat = await botClient.GetChat(chatId, cancellationToken);
+
+            if (chat.LinkedChatId.HasValue)
+            {
+                // Chat has a linked channel - fetch channel info
+                var linkedChannelId = chat.LinkedChatId.Value;
+
+                try
+                {
+                    var linkedChannel = await botClient.GetChat(linkedChannelId, cancellationToken);
+
+                    // Fetch and save channel icon
+                    string? iconPath = null;
+                    try
+                    {
+                        iconPath = await photoService.GetChatIconAsync(botClient, linkedChannelId);
+                    }
+                    catch (Exception iconEx)
+                    {
+                        logger.LogWarning(iconEx, "Failed to fetch channel icon for {ChannelId} (non-fatal)", linkedChannelId);
+                    }
+
+                    // Compute photo hash for impersonation comparison
+                    byte[]? photoHash = null;
+                    if (!string.IsNullOrEmpty(iconPath))
+                    {
+                        try
+                        {
+                            photoHash = await photoHashService.ComputePhotoHashAsync(iconPath);
+                        }
+                        catch (Exception hashEx)
+                        {
+                            logger.LogWarning(hashEx, "Failed to compute photo hash for channel {ChannelId} (non-fatal)", linkedChannelId);
+                        }
+                    }
+
+                    // Upsert linked channel record
+                    var record = new LinkedChannelRecord(
+                        Id: 0, // DB will assign or upsert will match existing
+                        ManagedChatId: chatId,
+                        ChannelId: linkedChannelId,
+                        ChannelName: linkedChannel.Title,
+                        ChannelIconPath: iconPath,
+                        PhotoHash: photoHash,
+                        LastSynced: DateTimeOffset.UtcNow
+                    );
+
+                    await linkedChannelsRepository.UpsertAsync(record, cancellationToken);
+
+                    logger.LogDebug(
+                        "Synced linked channel {ChannelId} ({ChannelName}) for chat {ChatId}",
+                        linkedChannelId,
+                        linkedChannel.Title,
+                        chatId);
+                }
+                catch (Exception channelEx)
+                {
+                    // Bot may not have permission to GetChat on the linked channel
+                    logger.LogWarning(channelEx,
+                        "Failed to fetch linked channel {ChannelId} for chat {ChatId} - bot may lack permission",
+                        linkedChannelId,
+                        chatId);
+                }
+            }
+            else
+            {
+                // No linked channel - remove any stale record
+                await linkedChannelsRepository.DeleteByChatIdAsync(chatId, cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to sync linked channel for chat {ChatId} (non-fatal)", chatId);
+            // Non-fatal - don't throw
         }
     }
 

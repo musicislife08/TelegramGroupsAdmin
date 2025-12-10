@@ -4,6 +4,7 @@
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.Core.Utilities
 @inject IMessageHistoryRepository MessageRepository
 @inject IMessageQueryService MessageQueryService
 @inject IMessageEditService MessageEditService
@@ -20,7 +21,7 @@
 @inject ILogger<Messages> Logger
 @inject ISnackbar Snackbar
 @inject IMediaRefetchQueueService MediaRefetchQueue
-@inject TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService TranslationService
+@inject TelegramGroupsAdmin.Core.Services.AI.IAITranslationService TranslationService
 @inject IWebBotMessagingService WebBotMessagingService
 @attribute [Authorize]
 @implements IDisposable
@@ -36,8 +37,8 @@
             <input type="text"
                    class="sidebar-search"
                    placeholder="Search chats..."
-                   @bind="_chatSearchText"
-                   @bind:event="oninput" />
+                   value="@_chatSearchText"
+                   @oninput="OnChatSearchChanged" />
         </div>
 
         <ChatList Chats="_filteredChats"
@@ -550,6 +551,12 @@
         {
             Logger.LogError(ex, "Failed to load managed chats");
         }
+    }
+
+    private void OnChatSearchChanged(ChangeEventArgs e)
+    {
+        _chatSearchText = e.Value?.ToString() ?? "";
+        ApplyChatFilter();
     }
 
     private void ApplyChatFilter()
@@ -1660,7 +1667,15 @@
             return null;
 
         var replyMessage = _filteredMessages.FirstOrDefault(mw => mw.Message.MessageId == _replyToMessageId.Value);
-        return replyMessage?.Message.UserName ?? replyMessage?.Message.FirstName;
+        if (replyMessage == null)
+            return null;
+
+        return TelegramDisplayName.Format(
+            replyMessage.Message.FirstName,
+            replyMessage.Message.LastName,
+            replyMessage.Message.UserName,
+            replyMessage.Message.UserId,
+            replyMessage.Message.ChatName);
     }
 
     /// <summary>

@@ -2,15 +2,19 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.Core.Models
 @using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Components.Reports
 @inject IReportsRepository ReportsRepository
 @inject IImpersonationAlertsRepository ImpersonationAlertsRepository
 @inject IReportActionsService ReportActionsService
+@inject IManagedChatsRepository ManagedChatsRepository
+@inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthStateProvider
 @inject ILogger<Reports> Logger
-@attribute [Authorize(Roles = "GlobalAdmin,Owner")]
+@attribute [Authorize]
 
 <PageTitle>Reports Queue - TelegramGroupsAdmin</PageTitle>
 
@@ -21,6 +25,7 @@
     <MudPaper Class="pa-3 mb-4" Elevation="1">
         <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
             <MudSelect T="ReportTypeFilter"
+                       id="type-filter"
                        Label="Type"
                        Value="_selectedTypeFilter"
                        ValueChanged="OnTypeFilterChanged"
@@ -32,6 +37,7 @@
             </MudSelect>
 
             <MudSelect T="StatusFilter"
+                       id="status-filter"
                        Label="Status"
                        Value="_selectedStatusFilter"
                        ValueChanged="OnStatusFilterChanged"
@@ -156,6 +162,22 @@
 
         try
         {
+            // Get accessible chats for current user (Admin users only see their chats)
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            var permissionLevel = await AuthHelper.GetCurrentPermissionLevelAsync();
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                Snackbar.Add("Unable to identify current user", Severity.Error);
+                return;
+            }
+
+            var accessibleChats = await ManagedChatsRepository.GetUserAccessibleChatsAsync(
+                userId,
+                permissionLevel,
+                CancellationToken.None);
+            var accessibleChatIds = accessibleChats.Select(c => c.ChatId).ToHashSet();
+
             var unifiedQueue = new List<ReportQueueItem>();
 
             // Load spam reports
@@ -165,7 +187,12 @@
                 limit: 100,
                 offset: 0);
 
-            foreach (var report in spamReports)
+            // Filter to accessible chats only
+            var filteredSpamReports = spamReports
+                .Where(r => accessibleChatIds.Contains(r.ChatId))
+                .ToList();
+
+            foreach (var report in filteredSpamReports)
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
@@ -186,7 +213,12 @@
                 chatId: null,
                 cancellationToken: CancellationToken.None);
 
-            foreach (var alert in impersonationAlerts)
+            // Filter to accessible chats only
+            var filteredImpersonationAlerts = impersonationAlerts
+                .Where(a => accessibleChatIds.Contains(a.ChatId))
+                .ToList();
+
+            foreach (var alert in filteredImpersonationAlerts)
             {
                 unifiedQueue.Add(new ReportQueueItem
                 {
@@ -208,9 +240,9 @@
                 .ThenByDescending(x => x.Timestamp)
                 .ToList();
 
-            // Update counts
-            _pendingSpamCount = spamReports.Count(r => r.Status == DataModels.ReportStatus.Pending);
-            _pendingImpersonationCount = impersonationAlerts.Count(a => !a.ReviewedAt.HasValue);
+            // Update counts (based on filtered reports)
+            _pendingSpamCount = filteredSpamReports.Count(r => r.Status == DataModels.ReportStatus.Pending);
+            _pendingImpersonationCount = filteredImpersonationAlerts.Count(a => !a.ReviewedAt.HasValue);
 
             ApplyFilters();
         }

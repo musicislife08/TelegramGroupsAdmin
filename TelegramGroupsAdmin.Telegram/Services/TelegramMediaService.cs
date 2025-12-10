@@ -4,7 +4,7 @@ using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Utilities;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -17,7 +17,6 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class TelegramMediaService(
     ILogger<TelegramMediaService> logger,
     TelegramBotClientFactory botClientFactory,
-    TelegramConfigLoader configLoader,
     IOptions<MessageHistoryOptions> historyOptions)
 {
     // Telegram Bot API file download limit (standard api.telegram.org)
@@ -25,7 +24,6 @@ public class TelegramMediaService(
 
     private readonly ILogger<TelegramMediaService> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly TelegramConfigLoader _configLoader = configLoader;
     private readonly string _mediaStoragePath = historyOptions.Value.ImageStoragePath; // Reuse same base path
 
     /// <summary>
@@ -42,9 +40,8 @@ public class TelegramMediaService(
     {
         try
         {
-            // Load bot config from database
-            var botToken = await _configLoader.LoadConfigAsync();
-            var botClient = _botClientFactory.GetOrCreate(botToken);
+            // Get bot client
+            var botClient = await _botClientFactory.GetBotClientAsync();
 
             // Get file info from Telegram
             var file = await botClient.GetFile(fileId, cancellationToken);

@@ -5,17 +5,20 @@
 <MudNavMenu>
     @if (_isAuthenticated)
     {
-        <!-- Main Navigation -->
+        <!-- Main Navigation (all authenticated users) -->
         <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Home</MudNavLink>
         <MudNavLink Href="/analytics" Icon="@Icons.Material.Filled.Insights">Analytics</MudNavLink>
         <MudNavLink Href="/messages" Icon="@Icons.Material.Filled.Message">Messages</MudNavLink>
         <MudNavLink Href="/tools" Icon="@Icons.Material.Filled.Build">Tools</MudNavLink>
 
-        @if (_isAdminOrOwner)
+        <!-- Admin+ can see Reports/Users (content is chat-scoped for Admin role) -->
+        <MudNavLink Href="/reports" Icon="@Icons.Material.Filled.Flag">Reports</MudNavLink>
+        <MudNavLink Href="/users" Icon="@Icons.Material.Filled.People">Users</MudNavLink>
+
+        @if (_isGlobalAdminOrOwner)
         {
+            <!-- GlobalAdmin/Owner only -->
             <MudNavLink Href="/chats" Icon="@Icons.Material.Filled.Forum">Chat Management</MudNavLink>
-            <MudNavLink Href="/reports" Icon="@Icons.Material.Filled.Flag">Reports</MudNavLink>
-            <MudNavLink Href="/users" Icon="@Icons.Material.Filled.People">Users</MudNavLink>
             <MudNavLink Href="/audit" Icon="@Icons.Material.Filled.Security">Audit Log</MudNavLink>
             <MudNavLink Href="/settings" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
         }
@@ -33,7 +36,7 @@
     [Inject] private NavigationManager Navigation { get; set; } = null!;
 
     private bool _isAuthenticated;
-    private bool _isAdminOrOwner;
+    private bool _isGlobalAdminOrOwner;
 
     protected override async Task OnInitializedAsync()
     {
@@ -47,7 +50,9 @@
             var permissionClaim = user.FindFirst(CustomClaimTypes.PermissionLevel);
             if (permissionClaim != null && int.TryParse(permissionClaim.Value, out var level))
             {
-                _isAdminOrOwner = level >= 1; // Admin=1, Owner=2
+                // Admin=0, GlobalAdmin=1, Owner=2
+                // GlobalAdmin and Owner can see Settings, Audit, Chat Management
+                _isGlobalAdminOrOwner = level >= 1;
             }
         }
     }

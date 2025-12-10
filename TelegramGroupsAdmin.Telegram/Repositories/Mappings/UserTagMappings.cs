@@ -15,18 +15,20 @@ public static class UserTagMappings
             string? webUserEmail = null,
             string? telegramUsername = null,
             string? telegramFirstName = null,
+            string? telegramLastName = null,
             string? removedByWebUserEmail = null,
             string? removedByTelegramUsername = null,
-            string? removedByTelegramFirstName = null) => new()
+            string? removedByTelegramFirstName = null,
+            string? removedByTelegramLastName = null) => new()
             {
                 Id = data.Id,
                 TelegramUserId = data.TelegramUserId,
                 TagName = data.TagName,
-                AddedBy = ActorMappings.ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName),
+                AddedBy = ActorMappings.ToActor(data.ActorWebUserId, data.ActorTelegramUserId, data.ActorSystemIdentifier, webUserEmail, telegramUsername, telegramFirstName, telegramLastName),
                 AddedAt = data.AddedAt,
                 RemovedAt = data.RemovedAt,
                 RemovedBy = data.RemovedAt.HasValue
-                ? ActorMappings.ToActor(data.RemovedByWebUserId, data.RemovedByTelegramUserId, data.RemovedBySystemIdentifier, removedByWebUserEmail, removedByTelegramUsername, removedByTelegramFirstName)
+                ? ActorMappings.ToActor(data.RemovedByWebUserId, data.RemovedByTelegramUserId, data.RemovedBySystemIdentifier, removedByWebUserEmail, removedByTelegramUsername, removedByTelegramFirstName, removedByTelegramLastName)
                 : null
             };
     }

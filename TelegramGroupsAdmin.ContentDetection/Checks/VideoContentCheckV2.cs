@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Constants;
@@ -12,18 +12,20 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Services.AI;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
 
 /// <summary>
-/// Spam check that analyzes videos using 3-layer detection strategy (ML-6)
+/// Spam check that analyzes videos using 3-layer detection strategy (ML-6).
+/// Provider-agnostic - uses IChatService for multi-provider Vision support.
 /// Layer 1: Keyframe hash similarity (fastest, cheapest, most reliable for known spam)
 /// Layer 2: OCR on frames + text spam checks (fast, cheap, good for text-heavy videos)
-/// Layer 3: OpenAI Vision on frames fallback (slow, expensive, comprehensive)
+/// Layer 3: AI Vision on frames fallback (slow, expensive, comprehensive)
 /// </summary>
 public class VideoContentCheckV2(
     ILogger<VideoContentCheckV2> logger,
-    IHttpClientFactory httpClientFactory,
+    IChatService chatService,
     IVideoFrameExtractionService frameExtractionService,
     IImageTextExtractionService imageTextExtractionService,
     IServiceProvider serviceProvider,
@@ -134,7 +136,7 @@ public class VideoContentCheckV2(
                 }
             }
 
-            // ML-6 Layer 3: OpenAI Vision fallback on representative frame
+            // ML-6 Layer 3: AI Vision fallback on representative frame
             if (videoConfig.UseOpenAIVision)
             {
                 var layer3Result = await CheckFrameWithVisionAsync(frames, req, startTimestamp, req.CancellationToken);
@@ -263,7 +265,7 @@ public class VideoContentCheckV2(
                     score = 0.0;
                     abstained = true;
                 }
-                
+
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -384,7 +386,7 @@ public class VideoContentCheckV2(
                     score = 0.0;
                     abstained = true;
                 }
-                
+
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
@@ -410,7 +412,7 @@ public class VideoContentCheckV2(
     }
 
     /// <summary>
-    /// ML-6 Layer 3: OpenAI Vision on representative frame
+    /// ML-6 Layer 3: AI Vision on representative frame (provider-agnostic via IChatService)
     /// </summary>
     private async Task<ContentCheckResponseV2> CheckFrameWithVisionAsync(
         List<ExtractedFrame> frames,
@@ -420,7 +422,19 @@ public class VideoContentCheckV2(
     {
         try
         {
-            // Note: API key is injected via ApiKeyDelegatingHandler on the named "OpenAI" HttpClient
+            // Check if video analysis feature is available
+            if (!await chatService.IsFeatureAvailableAsync(AIFeatureType.VideoAnalysis, cancellationToken))
+            {
+                logger.LogDebug("VideoSpam Layer 3: Vision not configured - no AI provider for video analysis");
+                return new ContentCheckResponseV2
+                {
+                    CheckName = CheckName,
+                    Score = 0.0,
+                    Abstained = true,
+                    Details = "Vision not available - no AI provider configured for video analysis",
+                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
+                };
+            }
 
             // Select best representative frame (prefer non-black frames, middle frame)
             var representativeFrame = frames
@@ -431,105 +445,45 @@ public class VideoContentCheckV2(
             logger.LogDebug("VideoSpam Layer 3: Using frame at {Position:P0} for Vision analysis",
                 representativeFrame.PositionPercent);
 
-            // Convert frame to base64 data URI for OpenAI Vision API
-            var imageBytes = await File.ReadAllBytesAsync(representativeFrame.FramePath, cancellationToken);
-            var base64 = Convert.ToBase64String(imageBytes);
-            var imageUrl = $"data:image/jpeg;base64,{base64}";
+            // Load frame image data
+            var imageData = await File.ReadAllBytesAsync(representativeFrame.FramePath, cancellationToken);
 
             var prompt = BuildVideoPrompt(req.CustomPrompt);
 
-            var apiRequest = new
-            {
-                model = "gpt-4o-mini",
-                messages = new[]
+            logger.LogDebug("VideoSpam Layer 3: Calling AI Vision API for user {UserId}", req.UserId);
+
+            // Temperature uses feature config default (set in AI Integration settings)
+            var result = await chatService.GetVisionCompletionAsync(
+                AIFeatureType.VideoAnalysis,
+                GetDefaultVideoPrompt(),
+                prompt,
+                imageData,
+                "image/jpeg",
+                new ChatCompletionOptions
                 {
-                    new
-                    {
-                        role = "user",
-                        content = new object[]
-                        {
-                            new { type = "text", text = prompt },
-                            new
-                            {
-                                type = "image_url",
-                                image_url = new
-                                {
-                                    url = imageUrl,
-                                    detail = "high"
-                                }
-                            }
-                        }
-                    }
+                    MaxTokens = 300
                 },
-                max_tokens = 300,
-                temperature = 0.1
-            };
-
-            logger.LogDebug("VideoSpam Layer 3: Calling OpenAI Vision API for user {UserId}",
-                req.UserId);
-
-            // Use named "OpenAI" HttpClient (configured in ServiceCollectionExtensions)
-            var httpClient = httpClientFactory.CreateClient("OpenAI");
-            var response = await httpClient.PostAsJsonAsync(
-                "chat/completions",
-                apiRequest,
                 cancellationToken);
 
-            // Handle rate limiting
-            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            if (result == null || string.IsNullOrWhiteSpace(result.Content))
             {
-                var retryAfter = response.Headers.RetryAfter?.Delta?.TotalSeconds ?? 60;
-                logger.LogWarning("OpenAI Vision rate limit hit. Retry after {RetryAfter} seconds", retryAfter);
-                
+                logger.LogWarning("Empty response from AI Vision for user {UserId}", req.UserId);
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = $"OpenAI rate limited, retry after {retryAfter}s",
-                    Error = new HttpRequestException($"OpenAI API rate limited"),
+                    Details = "Empty AI Vision response",
+                    Error = new InvalidOperationException("Empty AI Vision response"),
                     ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
-            if (!response.IsSuccessStatusCode)
-            {
-                var error = await response.Content.ReadAsStringAsync(cancellationToken);
-                logger.LogError("OpenAI Vision API error: {StatusCode} - {Error}", response.StatusCode, error);
-                
-                return new ContentCheckResponseV2
-                {
-                    CheckName = CheckName,
-                    Score = 0.0,
-                    Abstained = true,
-                    Details = $"OpenAI API error: {response.StatusCode}",
-                    Error = new HttpRequestException($"OpenAI API error: {response.StatusCode}"),
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-                };
-            }
-
-            var result = await response.Content.ReadFromJsonAsync<OpenAIVisionApiResponse>(cancellationToken: cancellationToken);
-            var content = result?.Choices?[0]?.Message?.Content;
-
-            if (string.IsNullOrWhiteSpace(content))
-            {
-                logger.LogWarning("Empty response from OpenAI Vision for user {UserId}", req.UserId);
-                return new ContentCheckResponseV2
-                {
-                    CheckName = CheckName,
-                    Score = 0.0,
-                    Abstained = true,
-                    Details = "Empty OpenAI response",
-                    Error = new InvalidOperationException("Empty OpenAI response"),
-                    ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
-                };
-            }
-
-            return ParseSpamResponse(content, req.UserId, startTimestamp);
+            return ParseSpamResponse(result.Content, req.UserId, startTimestamp);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error in VideoSpam Layer 3 (OpenAI Vision)");
+            logger.LogError(ex, "Error in VideoSpam Layer 3 (AI Vision)");
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -543,16 +497,11 @@ public class VideoContentCheckV2(
     }
 
     /// <summary>
-    /// Build prompt for OpenAI Vision analysis of video frame
+    /// Build prompt for AI Vision analysis of video frame
     /// </summary>
     private static string BuildVideoPrompt(string? customPrompt)
     {
-        // Use custom prompt if provided, otherwise use default
-        var systemPrompt = customPrompt ?? GetDefaultVideoPrompt();
-
-        return $$"""
-            {{systemPrompt}}
-
+        return """
             Note: This is a keyframe extracted from a video message. Analyze the visual content.
 
             Respond ONLY with valid JSON (no markdown, no code blocks):
@@ -566,7 +515,7 @@ public class VideoContentCheckV2(
     }
 
     /// <summary>
-    /// Get default video spam detection prompt (used when CustomPrompt is not configured)
+    /// Get default video spam detection prompt (used as system prompt for Vision)
     /// </summary>
     private static string GetDefaultVideoPrompt() => """
         You are a spam detection system for Telegram. Analyze this video frame and determine if it's spam/scam.
@@ -586,7 +535,7 @@ public class VideoContentCheckV2(
         """;
 
     /// <summary>
-    /// Parse OpenAI Vision response and create spam check result
+    /// Parse AI Vision response and create spam check result
     /// </summary>
     private ContentCheckResponseV2 ParseSpamResponse(string content, long userId, long startTimestamp)
     {
@@ -600,26 +549,26 @@ public class VideoContentCheckV2(
                 content = string.Join('\n', lines.Skip(1).SkipLast(1));
             }
 
-            var response = JsonSerializer.Deserialize<OpenAIVisionResponse>(
+            var response = JsonSerializer.Deserialize<VideoSpamResponse>(
                 content,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             if (response == null)
             {
-                logger.LogWarning("Failed to deserialize OpenAI Vision response for user {UserId}: {Content}",
+                logger.LogWarning("Failed to deserialize AI Vision response for user {UserId}: {Content}",
                     userId, content);
                 return new ContentCheckResponseV2
                 {
                     CheckName = CheckName,
                     Score = 0.0,
                     Abstained = true,
-                    Details = "Failed to parse OpenAI response",
-                    Error = new InvalidOperationException("Failed to parse OpenAI response"),
+                    Details = "Failed to parse AI Vision response",
+                    Error = new InvalidOperationException("Failed to parse AI Vision response"),
                     ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds
                 };
             }
 
-            logger.LogDebug("OpenAI Vision analysis for user {UserId}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
+            logger.LogDebug("AI Vision analysis for user {UserId}: Spam={Spam}, Confidence={Confidence}, Reason={Reason}",
                 userId, response.Spam, response.Confidence, response.Reason);
 
             var details = response.Reason ?? "No reason provided";
@@ -643,7 +592,7 @@ public class VideoContentCheckV2(
                 score = 0.0;
                 abstained = true;
             }
-            
+
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
@@ -655,7 +604,7 @@ public class VideoContentCheckV2(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error parsing OpenAI Vision response for user {UserId}: {Content}",
+            logger.LogError(ex, "Error parsing AI Vision response for user {UserId}: {Content}",
                 userId, content);
             return new ContentCheckResponseV2
             {
@@ -697,4 +646,15 @@ public class VideoContentCheckV2(
 internal record KeyframeHashJson(
     [property: JsonPropertyName("position")] double Position,
     [property: JsonPropertyName("hash")] string Hash
+);
+
+/// <summary>
+/// Expected JSON response structure from AI Vision for video spam detection.
+/// This is the format we request in our prompts.
+/// </summary>
+internal record VideoSpamResponse(
+    [property: JsonPropertyName("spam")] bool Spam,
+    [property: JsonPropertyName("confidence")] int Confidence,
+    [property: JsonPropertyName("reason")] string? Reason,
+    [property: JsonPropertyName("patterns_detected")] string[]? PatternsDetected
 );

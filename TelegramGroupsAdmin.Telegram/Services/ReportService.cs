@@ -5,9 +5,7 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Telegram.Abstractions;
-using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -55,7 +53,8 @@ public class ReportService(
             ? Actor.FromTelegramUser(
                 originalMessage.From.Id,
                 originalMessage.From.Username,
-                originalMessage.From.FirstName)
+                originalMessage.From.FirstName,
+                originalMessage.From.LastName)
             : null;
 
         await auditService.LogEventAsync(

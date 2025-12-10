@@ -266,7 +266,7 @@ public class AuthService(
             InvitedBy: null,
             IsActive: true,
             TotpSecret: null,
-            TotpEnabled: false,
+            TotpEnabled: true, // All users must set up 2FA by default (owners can disable if needed)
             TotpSetupStartedAt: null,
             CreatedAt: DateTimeOffset.UtcNow,
             LastLoginAt: null,
@@ -344,11 +344,6 @@ public class AuthService(
     public async Task<TotpVerificationResult> VerifyAndEnableTotpAsync(string userId, string code, CancellationToken ct = default)
     {
         return await totpService.VerifyAndEnableTotpAsync(userId, code, ct);
-    }
-
-    public async Task<bool> DisableTotpAsync(string userId, string password, CancellationToken ct = default)
-    {
-        return await totpService.DisableTotpAsync(userId, password, ct);
     }
 
     public async Task<bool> AdminDisableTotpAsync(string targetUserId, string adminUserId, CancellationToken ct = default)

@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -47,7 +48,11 @@ public class SpamCommand : IBotCommand
 
         var spamMessage = message.ReplyToMessage;
         var spamUserId = spamMessage.From?.Id;
-        var spamUserName = spamMessage.From?.Username ?? spamMessage.From?.FirstName ?? "Unknown";
+        var spamUserName = TelegramDisplayName.Format(
+            spamMessage.From?.FirstName,
+            spamMessage.From?.LastName,
+            spamMessage.From?.Username,
+            spamUserId);
 
         if (spamUserId == null)
         {
@@ -76,7 +81,8 @@ public class SpamCommand : IBotCommand
         var executor = Core.Models.Actor.FromTelegramUser(
             message.From!.Id,
             message.From.Username,
-            message.From.FirstName);
+            message.From.FirstName,
+            message.From.LastName);
 
         // Execute spam and ban action via centralized service
         var reason = $"Spam detected via /spam command in chat {message.Chat.Title ?? message.Chat.Id.ToString()}";

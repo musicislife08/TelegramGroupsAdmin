@@ -30,6 +30,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TelegramUserMappingRecordDto> TelegramUserMappings => Set<TelegramUserMappingRecordDto>();
     public DbSet<TelegramLinkTokenRecordDto> TelegramLinkTokens => Set<TelegramLinkTokenRecordDto>();
     public DbSet<ManagedChatRecordDto> ManagedChats => Set<ManagedChatRecordDto>();
+    public DbSet<LinkedChannelRecordDto> LinkedChannels => Set<LinkedChannelRecordDto>();
     public DbSet<ChatAdminRecordDto> ChatAdmins => Set<ChatAdminRecordDto>();
     public DbSet<ChatPromptRecordDto> ChatPrompts => Set<ChatPromptRecordDto>();
 
@@ -182,6 +183,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany(mc => mc.ChatAdmins)
             .HasForeignKey(ca => ca.ChatId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // ManagedChats → LinkedChannels (one-to-one)
+        // Groups can only have one linked channel; cascade delete when chat is removed
+        modelBuilder.Entity<LinkedChannelRecordDto>(entity =>
+        {
+            entity.HasOne(lc => lc.ManagedChat)
+                .WithOne(mc => mc.LinkedChannel)
+                .HasForeignKey<LinkedChannelRecordDto>(lc => lc.ManagedChatId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Index on channel_id for lookups during impersonation checks
+            entity.HasIndex(lc => lc.ChannelId);
+        });
 
         // TelegramUsers → AdminNotes (one-to-many)
         modelBuilder.Entity<AdminNoteDto>()

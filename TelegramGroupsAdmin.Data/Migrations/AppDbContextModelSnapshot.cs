@@ -551,10 +551,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("actor_telegram_user_id");
 
-                    b.Property<string>("ActorUserId")
-                        .HasColumnType("text")
-                        .HasColumnName("actor_user_id");
-
                     b.Property<string>("ActorWebUserId")
                         .HasColumnType("character varying(450)")
                         .HasColumnName("actor_web_user_id");
@@ -570,10 +566,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<long?>("TargetTelegramUserId")
                         .HasColumnType("bigint")
                         .HasColumnName("target_telegram_user_id");
-
-                    b.Property<string>("TargetUserId")
-                        .HasColumnType("text")
-                        .HasColumnName("target_user_id");
 
                     b.Property<string>("TargetWebUserId")
                         .HasColumnType("character varying(450)")
@@ -779,10 +771,6 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("telegram_id");
 
-                    b.Property<string>("Username")
-                        .HasColumnType("text")
-                        .HasColumnName("username");
-
                     b.HasKey("Id");
 
                     b.HasIndex("ChatId");
@@ -839,6 +827,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AIProviderConfig")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ai_provider_config");
 
                     b.Property<string>("ApiKeys")
                         .HasColumnType("text")
@@ -1485,6 +1477,49 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.HasIndex("UserRecordDtoId");
 
                     b.ToTable("invites");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.LinkedChannelRecordDto", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ChannelIconPath")
+                        .HasColumnType("text")
+                        .HasColumnName("channel_icon_path");
+
+                    b.Property<long>("ChannelId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("channel_id");
+
+                    b.Property<string>("ChannelName")
+                        .HasColumnType("text")
+                        .HasColumnName("channel_name");
+
+                    b.Property<DateTimeOffset>("LastSynced")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_synced");
+
+                    b.Property<long>("ManagedChatId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("managed_chat_id");
+
+                    b.Property<byte[]>("PhotoHash")
+                        .HasColumnType("bytea")
+                        .HasColumnName("photo_hash");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChannelId");
+
+                    b.HasIndex("ManagedChatId")
+                        .IsUnique();
+
+                    b.ToTable("linked_channels");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ManagedChatRecordDto", b =>
@@ -2969,7 +3004,15 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("TelegramGroupsAdmin.Data.Models.TelegramUserDto", "TelegramUser")
+                        .WithMany()
+                        .HasForeignKey("TelegramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("ManagedChat");
+
+                    b.Navigation("TelegramUser");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.DetectionResultRecordDto", b =>
@@ -3060,6 +3103,17 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Navigation("Creator");
 
                     b.Navigation("UsedByUser");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.LinkedChannelRecordDto", b =>
+                {
+                    b.HasOne("TelegramGroupsAdmin.Data.Models.ManagedChatRecordDto", "ManagedChat")
+                        .WithOne("LinkedChannel")
+                        .HasForeignKey("TelegramGroupsAdmin.Data.Models.LinkedChannelRecordDto", "ManagedChatId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ManagedChat");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.MessageEditRecordDto", b =>
@@ -3273,6 +3327,8 @@ namespace TelegramGroupsAdmin.Data.Migrations
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.ManagedChatRecordDto", b =>
                 {
                     b.Navigation("ChatAdmins");
+
+                    b.Navigation("LinkedChannel");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.MessageRecordDto", b =>

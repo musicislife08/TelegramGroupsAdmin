@@ -2,6 +2,7 @@
 @using TelegramGroupsAdmin.Telegram.Repositories
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Core
+@using TelegramGroupsAdmin.Core.Utilities
 @* @using DataModels = TelegramGroupsAdmin.Data.Models *@
 
 @inject IMessageHistoryRepository MessageRepository
@@ -219,24 +220,14 @@
         if (_message == null)
             return "Unknown";
 
-        // Special handling for Telegram service account (channel posts, anonymous admin posts)
-        if (_message.UserId == TelegramConstants.ServiceAccountUserId)
-        {
-            return _message.ChatName ?? "Telegram Service Account";
-        }
-
-        // Priority 1: Username (check both telegram_users table and message cache)
-        if (_reportedUser?.Username != null)
-            return $"@{_reportedUser.Username}";
-        if (!string.IsNullOrEmpty(_message.UserName))
-            return _message.UserName;
-
-        // Priority 2: First name from telegram_users table
-        if (_reportedUser?.FirstName != null)
-            return _reportedUser.FirstName;
-
-        // Priority 3: Last resort - show user ID
-        return $"User {_message.UserId}";
+        // Use utility for consistent display name formatting
+        // Priority: Service Account (chatName) → FullName (First + Last) → Username → User {id}
+        return TelegramDisplayName.Format(
+            _reportedUser?.FirstName ?? _message.FirstName,
+            _reportedUser?.LastName ?? _message.LastName,
+            _reportedUser?.Username ?? _message.UserName,
+            _message.UserId,
+            _message.ChatName);
     }
 
     private string GetReporterDisplay()

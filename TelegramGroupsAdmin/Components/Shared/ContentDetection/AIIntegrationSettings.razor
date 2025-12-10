@@ -1,269 +1,177 @@
-@using TelegramGroupsAdmin.ContentDetection.Configuration
-@using TelegramGroupsAdmin.ContentDetection.Repositories
-@inject IContentDetectionConfigRepository ConfigRepository
+@using TelegramGroupsAdmin.Configuration.Models
+@using TelegramGroupsAdmin.Configuration.Repositories
+@using TelegramGroupsAdmin.Core.Services.AI
+@using TelegramGroupsAdmin.Services
+@inject ISystemConfigRepository ConfigRepository
+@inject IAIServiceFactory AIServiceFactory
+@inject IFeatureTestService FeatureTestService
+@inject IAuditService AuditService
+@inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 
 <MudStack Spacing="3" Class="mb-4">
-    <MudAlert Severity="Severity.Info" Dense="true">
-        Configure how OpenAI Vision is used for image and video spam detection. API key and connection settings are managed in
-        <MudLink OnClick="@(() => Navigation.NavigateTo("/settings/system/openai"))" Style="cursor: pointer;" Color="Color.Primary"><strong>System → OpenAI</strong></MudLink>.
+    <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+        <MudText Typo="Typo.subtitle2"><strong>AI Feature Configuration</strong></MudText>
+        <MudText Typo="Typo.body2">
+            Assign AI connections and models to each feature. Connections are configured in
+            <MudLink OnClick="@(() => Navigation.NavigateTo("/settings/system/ai-providers"))"
+                     Style="cursor: pointer; color: inherit; text-decoration: underline;">
+                System → AI Providers
+            </MudLink>.
+        </MudText>
     </MudAlert>
-</MudStack>
 
-<MudStack Spacing="2" Class="mb-4">
-    <MudAlert Severity="Severity.Info" Dense="true">
-        <strong>Other Detection Features:</strong>
-        <ul style="margin: 8px 0 0 20px; padding: 0;">
-            <li>URL Blocklist configuration → <MudLink OnClick="@(() => Navigation.NavigateTo("/settings/content-detection/url-filters"))" Style="cursor: pointer; text-decoration: underline;" Color="Color.Primary">URL Filtering</MudLink></li>
-            <li>Threat Intelligence (VirusTotal) → <MudLink OnClick="@(() => Navigation.NavigateTo("/settings/content-detection/file-scanning"))" Style="cursor: pointer; text-decoration: underline;" Color="Color.Primary">File Scanning</MudLink></li>
-            <li>SEO Scraping detection → <MudLink OnClick="@(() => Navigation.NavigateTo("/settings/content-detection/algorithms"))" Style="cursor: pointer; text-decoration: underline;" Color="Color.Primary">Detection Algorithms</MudLink></li>
-        </ul>
-    </MudAlert>
+    @if (!_config.Connections.Any(c => c.Enabled))
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
+            <MudText Typo="Typo.body2">
+                <strong>No AI Connections Available:</strong> Configure and enable at least one AI connection
+                in <MudLink OnClick="@(() => Navigation.NavigateTo("/settings/system/ai-providers"))"
+                           Style="cursor: pointer; color: inherit; text-decoration: underline;">
+                    AI Providers
+                </MudLink> before configuring features.
+            </MudText>
+        </MudAlert>
+    }
 </MudStack>
 
 <MudGrid>
-    <MudItem xs="12" md="6">
-        <MudPaper Class="pa-4" Elevation="1">
-            <MudStack Spacing="3">
-                <MudText Typo="Typo.h6" Color="Color.Primary">Image Content Detection</MudText>
-
-                @if (!IsGlobalView)
-                {
-                    <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
-                        <MudSwitch T="bool" Value="_config.ImageSpam.UseGlobal"
-                                  ValueChanged="OnImageUseGlobalChanged"
-                                  Label="@(_config.ImageSpam.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
-                                  Color="@(_config.ImageSpam.UseGlobal ? Color.Default : Color.Primary)" />
-                    </MudPaper>
-                }
-
-                @{
-                    var imageConfig = (IsGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
-                    var imageReadOnly = !IsGlobalView && _config.ImageSpam.UseGlobal;
-                    var imageTimeoutSeconds = (int)imageConfig.Timeout.TotalSeconds;
-                }
-
-                <MudSwitch T="bool" Value="imageConfig.Enabled"
-                          ValueChanged="OnImageEnabledChanged"
-                          Label="Enable Image Content Detection"
-                          Color="Color.Primary"
-                          Disabled="@imageReadOnly" />
-
-                @if (imageConfig.Enabled)
-                {
-                    <MudSwitch T="bool" Value="imageConfig.UseOpenAIVision"
-                              ValueChanged="OnImageUseOpenAIVisionChanged"
-                              Label="Use OpenAI Vision"
-                              Color="Color.Primary"
-                              Disabled="@imageReadOnly" />
-
-                    <MudNumericField Value="imageTimeoutSeconds"
-                                    ValueChanged="@((int val) => OnImageTimeoutChanged(val))"
-                                    Label="Timeout (seconds)"
-                                    Min="10" Max="60"
-                                    Disabled="@imageReadOnly"
-                                    HelperText="@(imageReadOnly ? $"Using global value: {imageTimeoutSeconds}s" : "Request timeout for image analysis")" />
-                }
-            </MudStack>
-        </MudPaper>
-    </MudItem>
-
-    <MudItem xs="12" md="6">
-        <MudPaper Class="pa-4" Elevation="1">
-            <MudStack Spacing="3">
-                <MudText Typo="Typo.h6" Color="Color.Primary">Video Content Detection</MudText>
-
-                @if (!IsGlobalView)
-                {
-                    <MudPaper Class="pa-3" Elevation="0" Style="background-color: var(--mud-palette-background-grey)">
-                        <MudSwitch T="bool" Value="_config.VideoSpam.UseGlobal"
-                                  ValueChanged="OnVideoUseGlobalChanged"
-                                  Label="@(_config.VideoSpam.UseGlobal ? "Using Global Settings" : "Using Custom Settings")"
-                                  Color="@(_config.VideoSpam.UseGlobal ? Color.Default : Color.Primary)" />
-                    </MudPaper>
-                }
-
-                @{
-                    var videoConfig = (IsGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
-                    var videoReadOnly = !IsGlobalView && _config.VideoSpam.UseGlobal;
-                    var videoTimeoutSeconds = (int)videoConfig.Timeout.TotalSeconds;
-                }
-
-                <MudSwitch T="bool" Value="videoConfig.Enabled"
-                          ValueChanged="OnVideoEnabledChanged"
-                          Label="Enable Video Content Detection"
-                          Color="Color.Primary"
-                          Disabled="@videoReadOnly" />
-
-                @if (videoConfig.Enabled)
-                {
-                    <MudSwitch T="bool" Value="videoConfig.UseOpenAIVision"
-                              ValueChanged="OnVideoUseOpenAIVisionChanged"
-                              Label="Use OpenAI Vision"
-                              Color="Color.Primary"
-                              Disabled="@videoReadOnly" />
-
-                    <MudNumericField Value="videoTimeoutSeconds"
-                                    ValueChanged="@((int val) => OnVideoTimeoutChanged(val))"
-                                    Label="Timeout (seconds)"
-                                    Min="10" Max="120"
-                                    Disabled="@videoReadOnly"
-                                    HelperText="@(videoReadOnly ? $"Using global value: {videoTimeoutSeconds}s" : "Request timeout for video analysis")" />
-                }
-            </MudStack>
-        </MudPaper>
-    </MudItem>
+    @foreach (var featureType in Enum.GetValues<AIFeatureType>())
+    {
+        <MudItem xs="12" md="6">
+            <AIFeatureCard FeatureType="@featureType"
+                           FeatureConfig="@GetFeatureConfig(featureType)"
+                           Connections="@_config.Connections"
+                           TestService="@FeatureTestService"
+                           OnConnectionChanged="@((connectionId) => OnConnectionChanged(featureType, connectionId))"
+                           OnRefreshModels="@RefreshModels"
+                           OnSave="@(config => SaveFeatureConfigAsync(featureType, config))"
+                           IsRefreshingModels="@(_refreshingConnectionId != null)" />
+        </MudItem>
+    }
 </MudGrid>
 
-@code {
-    [Parameter]
-    public long? ChatId { get; set; }
+<MudAlert Severity="Severity.Info" Dense="true" Icon="@Icons.Material.Filled.Info" Class="mt-4">
+    Test each feature configuration, then save. Changes apply immediately (hot-reload).
+</MudAlert>
 
-    private ContentDetectionConfig _config = new();
-    private ContentDetectionConfig _globalConfig = new();
-    private bool IsGlobalView => ChatId is null or 0;
+@code {
+    private AIProviderConfig _config = new();
+    private string? _refreshingConnectionId;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadConfiguration();
+        await LoadConfigAsync();
     }
 
-    private async Task LoadConfiguration()
+    private async Task LoadConfigAsync()
     {
         try
         {
-            // Always load global config for comparison/fallback
-            _globalConfig = await ConfigRepository.GetGlobalConfigAsync();
-
-            if (IsGlobalView)
-            {
-                // Editing global config directly
-                _config = _globalConfig;
-            }
-            else
-            {
-                // Load chat-specific config (which may have UseGlobal flags set)
-                var chatConfig = await ConfigRepository.GetByChatIdAsync(ChatId!.Value);
-                _config = chatConfig ?? new ContentDetectionConfig();
-            }
+            var config = await ConfigRepository.GetAIProviderConfigAsync();
+            _config = config ?? new AIProviderConfig();
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error loading configuration: {ex.Message}", Severity.Error);
-            _config = new ContentDetectionConfig();
-            _globalConfig = new ContentDetectionConfig();
+            _config = new AIProviderConfig();
         }
     }
 
-    public ContentDetectionConfig GetConfig()
+    private async Task SaveFeatureConfigAsync(AIFeatureType featureType, AIFeatureConfig featureConfig)
     {
-        // Ensure global configs always have UseGlobal=true
-        if (IsGlobalView)
-        {
-            _config.UrlBlocklist.UseGlobal = true;
-            _config.ThreatIntel.UseGlobal = true;
-            _config.SeoScraping.UseGlobal = true;
-            _config.ImageSpam.UseGlobal = true;
-            _config.VideoSpam.UseGlobal = true;
-        }
-
-        return _config;
-    }
-
-    private bool _isSaving;
-
-    private async Task SaveConfiguration()
-    {
-        if (_isSaving) return;
-
-        _isSaving = true;
         try
         {
-            // Ensure global configs have UseGlobal=true
-            if (IsGlobalView)
+            // Update config dictionary with the latest feature config
+            _config.Features[featureType] = featureConfig;
+
+            // Save entire config (feature configs are nested in the JSON)
+            await ConfigRepository.SaveAIProviderConfigAsync(_config);
+
+            // Audit log
+            var userId = await AuthHelper.GetCurrentUserIdAsync();
+            if (!string.IsNullOrEmpty(userId))
             {
-                _config.UrlBlocklist.UseGlobal = true;
-                _config.ThreatIntel.UseGlobal = true;
-                _config.SeoScraping.UseGlobal = true;
-                _config.ImageSpam.UseGlobal = true;
-                _config.VideoSpam.UseGlobal = true;
+                var model = featureConfig.Model ?? featureConfig.AzureDeploymentName ?? "none";
+                await AuditService.LogEventAsync(
+                    AuditEventType.ConfigurationChanged,
+                    Actor.FromWebUser(userId),
+                    Actor.FromWebUser(userId),
+                    $"ai_feature:{featureType}:connection={featureConfig.ConnectionId ?? "disabled"},model={model}");
             }
 
-            if (IsGlobalView)
+            Snackbar.Add($"{featureType} configuration saved", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving {featureType}: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private AIFeatureConfig GetFeatureConfig(AIFeatureType featureType)
+    {
+        if (!_config.Features.TryGetValue(featureType, out var config))
+        {
+            config = new AIFeatureConfig();
+            _config.Features[featureType] = config;
+        }
+        return config;
+    }
+
+    private void OnConnectionChanged(AIFeatureType featureType, string? connectionId)
+    {
+        var config = GetFeatureConfig(featureType);
+        config.ConnectionId = connectionId;
+
+        // Reset model if connection changed
+        if (connectionId != null)
+        {
+            var connection = _config.Connections.FirstOrDefault(c => c.Id == connectionId);
+            if (connection != null)
             {
-                await ConfigRepository.UpdateGlobalConfigAsync(_config);
-                Snackbar.Add("Global settings saved", Severity.Success);
+                // Set default model based on provider
+                if (connection.Provider == AIProviderType.AzureOpenAI)
+                {
+                    config.AzureDeploymentName ??= "";
+                }
+                else if (connection.AvailableModels.Count > 0)
+                {
+                    // Pick first model or keep existing if valid
+                    if (!connection.AvailableModels.Any(m => m.Id == config.Model))
+                    {
+                        config.Model = connection.AvailableModels[0].Id;
+                    }
+                }
+            }
+        }
+    }
+
+    private async Task RefreshModels(AIConnection connection)
+    {
+        _refreshingConnectionId = connection.Id;
+        try
+        {
+            var models = await AIServiceFactory.RefreshModelsAsync(connection.Id);
+            connection.AvailableModels = models.ToList();
+            connection.ModelsLastFetched = DateTimeOffset.UtcNow;
+
+            if (models.Count > 0)
+            {
+                Snackbar.Add($"Loaded {models.Count} models from {connection.Id}", Severity.Success);
             }
             else
             {
-                await ConfigRepository.UpdateChatConfigAsync(ChatId!.Value, _config);
-                Snackbar.Add("Chat settings saved", Severity.Success);
+                Snackbar.Add($"No models found for {connection.Id}. Check connection settings.", Severity.Warning);
             }
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Error saving: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Error fetching models: {ex.Message}", Severity.Error);
         }
         finally
         {
-            _isSaving = false;
+            _refreshingConnectionId = null;
         }
-    }
-
-    // Image Content Detection change handlers
-    private async Task OnImageUseGlobalChanged(bool value)
-    {
-        _config.ImageSpam.UseGlobal = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnImageEnabledChanged(bool value)
-    {
-        var config = (IsGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
-        config.Enabled = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnImageUseOpenAIVisionChanged(bool value)
-    {
-        var config = (IsGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
-        config.UseOpenAIVision = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnImageTimeoutChanged(int seconds)
-    {
-        var config = (IsGlobalView || !_config.ImageSpam.UseGlobal) ? _config.ImageSpam : _globalConfig.ImageSpam;
-        config.Timeout = TimeSpan.FromSeconds(seconds);
-        await SaveConfiguration();
-    }
-
-    // Video Content Detection change handlers
-    private async Task OnVideoUseGlobalChanged(bool value)
-    {
-        _config.VideoSpam.UseGlobal = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnVideoEnabledChanged(bool value)
-    {
-        var config = (IsGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
-        config.Enabled = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnVideoUseOpenAIVisionChanged(bool value)
-    {
-        var config = (IsGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
-        config.UseOpenAIVision = value;
-        await SaveConfiguration();
-    }
-
-    private async Task OnVideoTimeoutChanged(int seconds)
-    {
-        var config = (IsGlobalView || !_config.VideoSpam.UseGlobal) ? _config.VideoSpam : _globalConfig.VideoSpam;
-        config.Timeout = TimeSpan.FromSeconds(seconds);
-        await SaveConfiguration();
     }
 }

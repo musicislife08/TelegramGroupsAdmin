@@ -8,8 +8,9 @@ using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
-using TelegramGroupsAdmin.Telegram.Abstractions;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Core.Utilities;
+using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using DataModels = TelegramGroupsAdmin.Data.Models;
@@ -160,7 +161,7 @@ public class DetectionActionService(
                 SendNotificationAsync(message.Chat.Id, NotificationEventType.MalwareDetected,
                     "Malware Detected and Removed",
                     $"Malware was detected in chat '{message.Chat.Title ?? message.Chat.Id.ToString()}' and the message was deleted.\n\n" +
-                    $"User: {message.From?.Username ?? message.From?.FirstName ?? message.From?.Id.ToString()}\n" +
+                    $"User: {TelegramDisplayName.Format(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id)}\n" +
                     $"Detection: {malwareResult.Details}\n\n" +
                     $"The user was NOT auto-banned (malware upload may be accidental). Please review the report in the admin panel.",
                     cancellationToken);
@@ -538,7 +539,7 @@ public class DetectionActionService(
 
             var userId = message.From.Id;
             var chatId = message.Chat.Id;
-            var userName = message.From.Username ?? message.From.FirstName ?? $"User {userId}";
+            var userName = TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, userId);
 
             logger.LogWarning(
                 "Critical check violation by user {UserId} (@{Username}) in chat {ChatId}: {Violations}",
@@ -632,14 +633,12 @@ public class DetectionActionService(
         {
             try
             {
-                // Extract user info
-                var userName = message.From?.Username != null
-                    ? $"@{message.From.Username}"
-                    : message.From?.FirstName ?? message.From?.Id.ToString() ?? "Unknown";
-
-                var userDisplay = message.From?.Username != null
-                    ? $"@{message.From.Username} ({message.From.FirstName ?? ""})"
-                    : message.From?.FirstName ?? message.From?.Id.ToString() ?? "Unknown";
+                // Extract user info - using FormatMention since this is sent to Telegram
+                var userDisplay = TelegramDisplayName.FormatMention(
+                    message.From?.FirstName,
+                    message.From?.LastName,
+                    message.From?.Username,
+                    message.From?.Id);
 
                 // Build message text preview (truncate if >200 chars for caption limit)
                 var messageTextPreview = message.Text != null && message.Text.Length > 200

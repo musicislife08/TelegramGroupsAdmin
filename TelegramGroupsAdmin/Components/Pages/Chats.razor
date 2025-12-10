@@ -3,7 +3,7 @@
 @using TelegramGroupsAdmin.Components.Shared.ChatManagement
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Core.BackgroundJobs
-@using TelegramGroupsAdmin.Telegram.Abstractions
+@using TelegramGroupsAdmin.Core.JobPayloads
 @inject TelegramAdminBotService BotService
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject IContentDetectionConfigRepository SpamConfigRepository
@@ -46,7 +46,7 @@
                 <MudText Typo="Typo.h6">Managed Chats</MudText>
                 <MudSpacer />
                 <MudTextField @bind-Value="_searchString" Placeholder="Search chats" Adornment="Adornment.Start"
-                             AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                             AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0" Immediate="true"></MudTextField>
             </ToolBarContent>
             <HeaderContent>
                 <MudTh>Chat Name</MudTh>

@@ -31,8 +31,9 @@ public interface IChatAdminsRepository
 
     /// <summary>
     /// Upsert admin record (insert or update if exists)
+    /// User details (username, name) come from telegram_users table via JOIN
     /// </summary>
-    Task UpsertAsync(long chatId, long telegramId, bool isCreator, string? username = null, CancellationToken cancellationToken = default);
+    Task UpsertAsync(long chatId, long telegramId, bool isCreator, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Mark admin as demoted (soft delete via is_active=false)

@@ -17,9 +17,11 @@ public static class ImpersonationAlertMappings
         public UiModels.ImpersonationAlertRecord ToModel(
             string? suspectedUserName = null,
             string? suspectedFirstName = null,
+            string? suspectedLastName = null,
             string? suspectedPhotoPath = null,
             string? targetUserName = null,
             string? targetFirstName = null,
+            string? targetLastName = null,
             string? targetPhotoPath = null,
             string? chatName = null,
             string? reviewedByEmail = null) => new()
@@ -40,9 +42,11 @@ public static class ImpersonationAlertMappings
                 Verdict = data.Verdict,
                 SuspectedUserName = suspectedUserName,
                 SuspectedFirstName = suspectedFirstName,
+                SuspectedLastName = suspectedLastName,
                 SuspectedPhotoPath = suspectedPhotoPath,
                 TargetUserName = targetUserName,
                 TargetFirstName = targetFirstName,
+                TargetLastName = targetLastName,
                 TargetPhotoPath = targetPhotoPath,
                 ChatName = chatName,
                 ReviewedByEmail = reviewedByEmail

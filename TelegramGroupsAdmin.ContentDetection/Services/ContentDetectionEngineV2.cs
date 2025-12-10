@@ -9,6 +9,7 @@ using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
+using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Core.Telemetry;
 using OpenAIConfigDb = TelegramGroupsAdmin.Configuration.Models.OpenAIConfig;
 
@@ -25,7 +26,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
     private readonly IContentDetectionConfigRepository _configRepository;
     private readonly ISystemConfigRepository _fileScanningConfigRepo;
     private readonly IEnumerable<IContentCheckV2> _contentChecksV2;
-    private readonly IOpenAITranslationService _translationService;
+    private readonly IAITranslationService _translationService;
     private readonly IUrlPreFilterService _preFilterService;
     private readonly ContentDetectionOptions _spamDetectionOptions;
 
@@ -37,7 +38,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         IContentDetectionConfigRepository configRepository,
         ISystemConfigRepository fileScanningConfigRepo,
         IEnumerable<IContentCheckV2> contentChecksV2,
-        IOpenAITranslationService translationService,
+        IAITranslationService translationService,
         IUrlPreFilterService preFilterService,
         IOptions<ContentDetectionOptions> spamDetectionOptions)
     {
@@ -141,11 +142,11 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             var openAICheckV2 = _contentChecksV2.FirstOrDefault(check => check.CheckName == CheckName.OpenAI);
             if (openAICheckV2 != null)
             {
-                // Note: API key is injected via ApiKeyDelegatingHandler on the named "OpenAI" HttpClient
-                _logger.LogInformation("[V2] Running OpenAI veto check for user {UserId}", request.UserId);
+                // Note: AI service is obtained via IChatService (supports OpenAI, Azure, local providers)
+                _logger.LogInformation("[V2] Running AI veto check for user {UserId}", request.UserId);
 
                 var vetoRequest = request with { HasSpamFlags = true };
-                var checkRequest = BuildOpenAIRequest(vetoRequest, config, openAIConfig, cancellationToken);
+                var checkRequest = BuildAIRequest(vetoRequest, config, openAIConfig, cancellationToken);
                 var vetoResultV2 = await openAICheckV2.CheckAsync(checkRequest);
 
                 // Convert V2 response to ContentCheckResponse
@@ -432,7 +433,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
         };
     }
 
-    private ContentCheckRequestBase BuildOpenAIRequest(
+    private ContentCheckRequestBase BuildAIRequest(
         ContentCheckRequest originalRequest,
         ContentDetectionConfig config,
         OpenAIConfigDb? openAIConfig,

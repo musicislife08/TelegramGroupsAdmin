@@ -1,8 +1,7 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
-using TelegramGroupsAdmin.Auth;
+using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Services;
 using TelegramGroupsAdmin.Services.Auth;
 
@@ -17,6 +16,7 @@ public static class AuthEndpoints
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
             [FromServices] IRateLimitService rateLimitService,
+            [FromServices] IAuthCookieService authCookieService,
             HttpContext httpContext) =>
         {
             // Rate limiting (SECURITY-5)
@@ -54,8 +54,23 @@ public static class AuthEndpoints
                 });
             }
 
-            // Sign in the user with cookie authentication
-            await SignInUserAsync(httpContext, result.UserId!, result.Email!, result.PermissionLevel!.Value);
+            // Check if user needs to set up TOTP (TotpEnabled=true but no secret yet)
+            if (result.TotpEnabled)
+            {
+                // Generate intermediate authentication token for TOTP setup flow
+                var intermediateToken = intermediateAuthService.CreateToken(result.UserId!);
+
+                return Results.Json(new
+                {
+                    success = true,
+                    requiresTotpSetup = true,
+                    userId = result.UserId,
+                    intermediateToken = intermediateToken
+                });
+            }
+
+            // Sign in the user with cookie authentication (TOTP disabled by owner)
+            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -98,28 +113,11 @@ public static class AuthEndpoints
                     return Results.Json(new { success = false, error = result.ErrorMessage });
                 }
 
-                // Auto-login after successful registration
-                var loginResult = await authService.LoginAsync(request.Email, request.Password);
-
-                if (loginResult is { Success: true, RequiresTotp: false })
-                {
-                    // Sign in the user with cookie authentication
-                    await SignInUserAsync(httpContext, loginResult.UserId!, loginResult.Email!, loginResult.PermissionLevel!.Value);
-
-                    return Results.Json(new { success = true });
-                }
-
-                // Login failed - check if it's due to email verification
-                if (loginResult.ErrorMessage?.Contains("verify your email", StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    logger.LogInformation("Registration succeeded for {Email}, email verification required", request.Email);
-                    return Results.Json(new { success = true, requiresEmailVerification = true, message = "Account created! Please check your email to verify your account before logging in." });
-                }
-
-                // Other login failure (TOTP setup, etc.)
-                var errorMsg = loginResult.ErrorMessage ?? "Login failed after registration";
-                logger.LogWarning("Registration succeeded but auto-login failed for {Email}: {Error}", request.Email, errorMsg);
-                return Results.Json(new { success = false, error = errorMsg });
+                // Registration successful - always redirect to login page
+                // The login flow handles: email verification, TOTP setup, TOTP verification
+                // No cookies are set here - authentication only happens through the login flow
+                logger.LogInformation("Registration succeeded for {Email}, redirecting to login", request.Email);
+                return Results.Json(new { success = true, message = "Account created successfully! Please log in." });
             }
             catch (Exception ex)
             {
@@ -139,6 +137,7 @@ public static class AuthEndpoints
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
             [FromServices] IRateLimitService rateLimitService,
+            [FromServices] IAuthCookieService authCookieService,
             HttpContext httpContext) =>
         {
             // SECURITY: Validate intermediate auth token to ensure password was verified first
@@ -169,7 +168,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            await SignInUserAsync(httpContext, result.UserId!, result.Email!, result.PermissionLevel!.Value);
+            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -187,6 +186,7 @@ public static class AuthEndpoints
             [FromServices] IAuthService authService,
             [FromServices] IIntermediateAuthService intermediateAuthService,
             [FromServices] IRateLimitService rateLimitService,
+            [FromServices] IAuthCookieService authCookieService,
             HttpContext httpContext) =>
         {
             // SECURITY: Validate intermediate auth token to ensure password was verified first
@@ -217,7 +217,7 @@ public static class AuthEndpoints
             }
 
             // Sign in the user with cookie authentication
-            await SignInUserAsync(httpContext, result.UserId!, result.Email!, result.PermissionLevel!.Value);
+            await authCookieService.SignInAsync(httpContext, result.UserId!, result.Email!, (PermissionLevel)result.PermissionLevel!.Value);
 
             // Check if this is a browser request (has Accept: text/html)
             var acceptHeader = httpContext.Request.Headers.Accept.ToString();
@@ -231,38 +231,5 @@ public static class AuthEndpoints
         }).AllowAnonymous();
 
         return endpoints;
-    }
-
-    private static string GetRoleName(int permissionLevel) => permissionLevel switch
-    {
-        0 => "Admin",
-        1 => "GlobalAdmin",
-        2 => "Owner",
-        _ => "Admin" // Default to lowest permission level
-    };
-
-    private static async Task SignInUserAsync(HttpContext httpContext, string userId, string email, int permissionLevel)
-    {
-        Claim[] claims =
-        [
-            new(ClaimTypes.NameIdentifier, userId),
-            new(ClaimTypes.Email, email),
-            new(ClaimTypes.Role, GetRoleName(permissionLevel)),
-            new(CustomClaimTypes.PermissionLevel, permissionLevel.ToString())
-        ];
-
-        var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
-
-        var authProperties = new AuthenticationProperties
-        {
-            IsPersistent = true,
-            ExpiresUtc = DateTimeOffset.UtcNow.AddDays(30)
-        };
-
-        await httpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
-            claimsPrincipal,
-            authProperties);
     }
 }

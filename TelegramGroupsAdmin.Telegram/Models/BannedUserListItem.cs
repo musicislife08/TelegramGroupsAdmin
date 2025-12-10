@@ -1,3 +1,5 @@
+using TelegramGroupsAdmin.Core.Utilities;
+
 namespace TelegramGroupsAdmin.Telegram.Models;
 
 /// <summary>
@@ -25,6 +27,6 @@ public class BannedUserListItem
     public long? TriggerMessageId { get; set; }
 
     // Display helpers
-    public string DisplayName => !string.IsNullOrEmpty(Username) ? $"@{Username}" : FirstName ?? $"User {TelegramUserId}";
+    public string DisplayName => TelegramDisplayName.Format(FirstName, LastName, Username, TelegramUserId);
     public bool IsPermanentBan => BanExpires == null;
 }

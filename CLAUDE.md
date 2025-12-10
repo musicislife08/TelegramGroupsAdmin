@@ -300,6 +300,9 @@ When `SEQ_URL` is configured, the application automatically enables:
 **Commit Messages**: All completed work documented with full technical details. Single source of truth for project history.
 **PR Descriptions**: Link related issues using closing keywords (`Closes #123`) at the top of the PR body to auto-close issues when merged.
 
+**Additional Documentation Files:**
+- [E2E_TESTING.md](E2E_TESTING.md) - Playwright E2E testing patterns, .NET 10 `UseKestrel()` API usage, test infrastructure
+
 ### GitHub Issue Labels
 
 **Type Labels:**
@@ -344,6 +347,8 @@ When `SEQ_URL` is configured, the application automatically enables:
 ## Testing
 
 **Migration Tests**: NUnit + Testcontainers.PostgreSQL, validates all migrations against real PostgreSQL 17 (tests always passing)
+
+**E2E Tests**: Playwright + Testcontainers.PostgreSQL for browser-based UI testing. Uses .NET 10's `WebApplicationFactory.UseKestrel()` for real HTTP server. See [E2E_TESTING.md](E2E_TESTING.md) for full documentation.
 
 ## CRITICAL RULES
 

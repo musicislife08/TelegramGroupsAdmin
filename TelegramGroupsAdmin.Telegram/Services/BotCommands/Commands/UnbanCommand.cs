@@ -55,7 +55,8 @@ public class UnbanCommand : IBotCommand
             var executor = Core.Models.Actor.FromTelegramUser(
                 message.From!.Id,
                 message.From.Username,
-                message.From.FirstName);
+                message.From.FirstName,
+                message.From.LastName);
 
             // Execute unban action through ModerationActionService
             var result = await _moderationService.UnbanUserAsync(

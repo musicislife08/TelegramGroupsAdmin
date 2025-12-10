@@ -86,7 +86,8 @@ public class TrustCommand : IBotCommand
         var executor = Core.Models.Actor.FromTelegramUser(
             message.From!.Id,
             message.From.Username,
-            message.From.FirstName);
+            message.From.FirstName,
+            message.From.LastName);
 
         // Build reason with chat context
         var chatName = message.Chat.Title ?? message.Chat.Username ?? message.Chat.Id.ToString();

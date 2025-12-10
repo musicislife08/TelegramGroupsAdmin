@@ -134,9 +134,20 @@ public class ConfigRecordDto
     /// Model selection, max tokens, and other non-sensitive settings
     /// API key stored in api_keys column (encrypted)
     /// Only used for global config (chat_id = 0)
+    /// DEPRECATED: Will be migrated to ai_provider_config on first startup
     /// </summary>
     [Column("openai_config", TypeName = "jsonb")]
     public string? OpenAIConfig { get; set; }
+
+    /// <summary>
+    /// AI provider configuration (JSONB)
+    /// Multi-provider support: OpenAI, Azure OpenAI, local/OpenAI-compatible endpoints
+    /// Contains connections (provider endpoints) and per-feature configuration
+    /// API keys stored in api_keys column (encrypted) - OpenAI, AzureOpenAI, LocalAI
+    /// Only used for global config (chat_id = 0)
+    /// </summary>
+    [Column("ai_provider_config", TypeName = "jsonb")]
+    public string? AIProviderConfig { get; set; }
 
     /// <summary>
     /// SendGrid email service configuration (JSONB)

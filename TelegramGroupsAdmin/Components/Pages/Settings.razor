@@ -28,7 +28,7 @@
                     }
                     @if (_canEditInfrastructure)
                     {
-                        <MudNavLink Href="/settings/system/openai" Icon="@Icons.Material.Filled.Psychology" Match="NavLinkMatch.All">OpenAI</MudNavLink>
+                        <MudNavLink Href="/settings/system/ai-providers" Icon="@Icons.Material.Filled.Psychology" Match="NavLinkMatch.All">AI Providers</MudNavLink>
                         <MudNavLink Href="/settings/system/email" Icon="@Icons.Material.Filled.Email" Match="NavLinkMatch.All">Email</MudNavLink>
                         <MudNavLink Href="/settings/system/clamav" Icon="@Icons.Material.Filled.Shield" Match="NavLinkMatch.All">ClamAV</MudNavLink>
                         <MudNavLink Href="/settings/system/virustotal" Icon="@Icons.Material.Filled.Security" Match="NavLinkMatch.All">VirusTotal</MudNavLink>
@@ -123,10 +123,10 @@
                                 <MudAlert Severity="Severity.Error" Class="mb-4">Owner access required for infrastructure settings</MudAlert>
                             }
                             break;
-                        case "openai":
+                        case "ai-providers":
                             @if (_canEditInfrastructure)
                             {
-                                <OpenAIInfrastructureSettings />
+                                <AIProviderSettings />
                             }
                             else
                             {
@@ -345,7 +345,7 @@
             ("system", "general") => "General Settings",
             ("system", "security") => "Security Settings",
             ("system", "accounts") => "Admin Accounts",
-            ("system", "openai") => "OpenAI",
+            ("system", "ai-providers") => "AI Providers",
             ("system", "email") => "Email",
             ("system", "clamav") => "ClamAV",
             ("system", "virustotal") => "VirusTotal",

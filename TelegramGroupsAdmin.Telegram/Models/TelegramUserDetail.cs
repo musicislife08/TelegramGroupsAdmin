@@ -1,6 +1,5 @@
 using TelegramGroupsAdmin.ContentDetection.Models;
-using TelegramGroupsAdmin.Core;
-using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Models;
 
@@ -29,19 +28,7 @@ public class TelegramUserDetail
     public List<UserTag> Tags { get; set; } = [];  // Phase 4.12
 
     // Display helpers
-    public string DisplayName
-    {
-        get
-        {
-            // Special handling for Telegram service account (channel posts, anonymous admin posts)
-            if (TelegramUserId == TelegramConstants.ServiceAccountUserId)
-            {
-                return "Telegram Service Account";
-            }
-
-            return !string.IsNullOrEmpty(Username) ? $"@{Username}" : FirstName ?? $"User {TelegramUserId}";
-        }
-    }
+    public string DisplayName => TelegramDisplayName.Format(FirstName, LastName, Username, TelegramUserId);
     public TelegramUserStatus Status
     {
         get

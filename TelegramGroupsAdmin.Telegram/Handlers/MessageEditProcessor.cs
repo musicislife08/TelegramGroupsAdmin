@@ -5,6 +5,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -146,8 +147,8 @@ public class MessageEditProcessor
         if (latinRatio >= spamConfig.Translation.LatinScriptThreshold)
             return;
 
-        var openAITranslationService = scope.ServiceProvider.GetRequiredService<TelegramGroupsAdmin.ContentDetection.Services.IOpenAITranslationService>();
-        var translationResult = await openAITranslationService.TranslateToEnglishAsync(newText, cancellationToken);
+        var aiTranslationService = scope.ServiceProvider.GetRequiredService<IAITranslationService>();
+        var translationResult = await aiTranslationService.TranslateToEnglishAsync(newText, cancellationToken);
 
         if (translationResult != null && translationResult.WasTranslated)
         {

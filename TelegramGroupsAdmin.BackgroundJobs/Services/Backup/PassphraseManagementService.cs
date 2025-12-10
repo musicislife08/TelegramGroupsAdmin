@@ -5,7 +5,7 @@ using Npgsql;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Core.Security;
 using TelegramGroupsAdmin.Data.Services;
-using TelegramGroupsAdmin.Telegram.Abstractions.JobPayloads;
+using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 

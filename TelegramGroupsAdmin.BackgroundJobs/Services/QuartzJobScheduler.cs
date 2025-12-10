@@ -93,6 +93,7 @@ public class QuartzJobScheduler : IJobScheduler
     {
         return jobName switch
         {
+            BackgroundJobNames.ChatHealthCheck => typeof(Jobs.ChatHealthCheckJob),
             BackgroundJobNames.DeleteMessage => typeof(Jobs.DeleteMessageJob),
             BackgroundJobNames.DeleteUserMessages => typeof(Jobs.DeleteUserMessagesJob),
             BackgroundJobNames.FetchUserPhoto => typeof(Jobs.FetchUserPhotoJob),

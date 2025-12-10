@@ -1,6 +1,7 @@
 @page "/audit"
 @using TelegramGroupsAdmin.Repositories
 @using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Core.Utilities
 @inject IAuditService AuditService
 @inject IUserRepository UserRepository
 @inject IUserActionsRepository UserActionsRepository
@@ -17,10 +18,7 @@
 
     <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4" ActivePanelIndex="_activeTabIndex" ActivePanelIndexChanged="OnTabChanged">
         <MudTabPanel Text="Web Admin Log" Icon="@Icons.Material.Filled.Security">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
-                <MudChip T="string" Icon="@Icons.Material.Filled.Security" Color="Color.Primary">
-                    Web Admin Audit Log
-                </MudChip>
+            <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="mb-4">
                 <MudIconButton Icon="@Icons.Material.Filled.Refresh"
                               Color="Color.Primary"
                               OnClick="@(async () => await _webAdminTable.ReloadServerData())"
@@ -127,9 +125,28 @@
                     }
                     else if (context.ActorTelegramUserId.HasValue)
                     {
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SmartToy" Color="Color.Info">
-                            Telegram @context.ActorTelegramUserId
-                        </MudChip>
+                        @if (_telegramUsersCache.TryGetValue(context.ActorTelegramUserId.Value, out var actorUser))
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                @if (!string.IsNullOrEmpty(actorUser.UserPhotoPath))
+                                {
+                                    <img src="@($"/media/{actorUser.UserPhotoPath}")" alt="@GetTelegramUserDisplayName(actorUser)" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover;" />
+                                }
+                                else
+                                {
+                                    <MudAvatar Size="Size.Small" Color="Color.Info" Style="width: 24px; height: 24px;">
+                                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                                    </MudAvatar>
+                                }
+                                <MudText Typo="Typo.body2">@GetTelegramUserDisplayName(actorUser)</MudText>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SmartToy" Color="Color.Info">
+                                User @context.ActorTelegramUserId
+                            </MudChip>
+                        }
                     }
                     else
                     {
@@ -152,9 +169,28 @@
                     }
                     else if (context.TargetTelegramUserId.HasValue)
                     {
-                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SmartToy" Color="Color.Info">
-                            Telegram @context.TargetTelegramUserId
-                        </MudChip>
+                        @if (_telegramUsersCache.TryGetValue(context.TargetTelegramUserId.Value, out var targetUser))
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                @if (!string.IsNullOrEmpty(targetUser.UserPhotoPath))
+                                {
+                                    <img src="@($"/media/{targetUser.UserPhotoPath}")" alt="@GetTelegramUserDisplayName(targetUser)" style="width: 24px; height: 24px; border-radius: 50%; object-fit: cover;" />
+                                }
+                                else
+                                {
+                                    <MudAvatar Size="Size.Small" Color="Color.Info" Style="width: 24px; height: 24px;">
+                                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                                    </MudAvatar>
+                                }
+                                <MudText Typo="Typo.body2">@GetTelegramUserDisplayName(targetUser)</MudText>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.SmartToy" Color="Color.Info">
+                                User @context.TargetTelegramUserId
+                            </MudChip>
+                        }
                     }
                     else
                     {
@@ -182,10 +218,7 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Telegram Moderation Log" Icon="@Icons.Material.Filled.SmartToy">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
-                <MudChip T="string" Icon="@Icons.Material.Filled.Shield" Color="Color.Primary">
-                    Telegram Moderation Log
-                </MudChip>
+            <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="mb-4">
                 <MudIconButton Icon="@Icons.Material.Filled.Refresh"
                               Color="Color.Primary"
                               OnClick="@(async () => await _moderationTable.ReloadServerData())"
@@ -470,6 +503,26 @@
                 targetUserIdFilter: _filterTargetUserId,
                 ct: cancellationToken);
 
+            // Build Telegram users cache for this page (actors and targets)
+            var telegramUserIds = events
+                .SelectMany(e => new[] { e.ActorTelegramUserId, e.TargetTelegramUserId })
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToList();
+
+            foreach (var userId in telegramUserIds)
+            {
+                if (!_telegramUsersCache.ContainsKey(userId))
+                {
+                    var user = await TelegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
+                    if (user != null)
+                    {
+                        _telegramUsersCache[userId] = user;
+                    }
+                }
+            }
+
             return new TableData<AuditLogRecord> { Items = events, TotalItems = totalCount };
         }
         catch (Exception ex)
@@ -680,10 +733,21 @@
     // Telegram User Display Helper
     private static string GetTelegramUserDisplayName(TelegramUser user)
     {
-        if (!string.IsNullOrEmpty(user.Username))
-            return $"@{user.Username}";
-        if (!string.IsNullOrEmpty(user.FirstName))
-            return user.FirstName;
-        return $"User {user.TelegramUserId}";
+        return TelegramDisplayName.Format(
+            user.FirstName,
+            user.LastName,
+            user.Username,
+            user.TelegramUserId);
+    }
+
+    // Telegram User Display Helper by ID (with cache lookup)
+    private string GetTelegramUserDisplayNameById(long telegramUserId)
+    {
+        if (_telegramUsersCache.TryGetValue(telegramUserId, out var user))
+        {
+            return GetTelegramUserDisplayName(user);
+        }
+        // Fallback to User {id} format if not in cache
+        return $"User {telegramUserId}";
     }
 }

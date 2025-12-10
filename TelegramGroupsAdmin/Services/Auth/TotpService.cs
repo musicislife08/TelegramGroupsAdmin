@@ -12,7 +12,6 @@ public class TotpService(
     IUserRepository userRepository,
     IAuditService auditLog,
     IDataProtectionService totpProtection,
-    IPasswordHasher passwordHasher,
     ILogger<TotpService> logger)
     : ITotpService
 {
@@ -45,9 +44,10 @@ public class TotpService(
 
         // Reuse existing TOTP secret if:
         // 1. User has a TOTP secret
-        // 2. TOTP is not enabled yet (setup in progress)
+        // 2. Setup is in progress (TotpSetupStartedAt is set - secret generated but not verified yet)
         // 3. Setup has not expired (< 15 minutes old)
-        if (!string.IsNullOrEmpty(user.TotpSecret) && !user.TotpEnabled && !setupExpired)
+        // Note: We check TotpSetupStartedAt instead of !TotpEnabled because TotpEnabled=true by default
+        if (!string.IsNullOrEmpty(user.TotpSecret) && user.TotpSetupStartedAt.HasValue && !setupExpired)
         {
             // TOTP setup in progress - reuse existing secret (handles Blazor SSR page reloads)
             secret = totpProtection.Unprotect(user.TotpSecret);
@@ -56,9 +56,9 @@ public class TotpService(
         else
         {
             // Generate new TOTP secret if:
-            // - No existing secret
-            // - TOTP already enabled (user wants to reset)
-            // - Setup expired (security: abandoned setup)
+            // - No existing secret (first time setup)
+            // - Setup completed (TotpSetupStartedAt cleared - user wants to reset)
+            // - Setup expired (security: abandoned setup after 15min)
             secret = Base32Encoding.ToString(KeyGeneration.GenerateRandomKey(20));
 
             // Encrypt and store secret (not enabled yet)
@@ -161,37 +161,6 @@ public class TotpService(
 
             return false;
         }
-
-        return true;
-    }
-
-    public async Task<bool> DisableTotpAsync(string userId, string password, CancellationToken ct = default)
-    {
-        var user = await userRepository.GetByIdAsync(userId, ct);
-        if (user is null)
-        {
-            return false;
-        }
-
-        // Verify password before disabling TOTP
-        if (!passwordHasher.VerifyPassword(password, user.PasswordHash))
-        {
-            logger.LogWarning("Invalid password attempt when disabling TOTP for user: {UserId}", userId);
-            return false;
-        }
-
-        await userRepository.DisableTotpAsync(userId, ct);
-        await userRepository.UpdateSecurityStampAsync(userId, ct);
-
-        logger.LogInformation("TOTP disabled for user: {UserId}", userId);
-
-        // Audit log
-        await auditLog.LogEventAsync(
-            AuditEventType.UserTotpReset,
-            actor: Actor.FromWebUser(userId),
-            target: Actor.FromWebUser(userId),
-            value: "TOTP 2FA disabled by user",
-            ct: ct);
 
         return true;
     }

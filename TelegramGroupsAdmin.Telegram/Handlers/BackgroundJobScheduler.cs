@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
-using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
+using TelegramGroupsAdmin.Core.JobPayloads;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 

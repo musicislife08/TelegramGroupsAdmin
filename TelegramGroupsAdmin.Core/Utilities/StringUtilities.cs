@@ -62,15 +62,30 @@ public static class StringUtilities
         string? firstName1, string? lastName1,
         string? firstName2, string? lastName2)
     {
-        // Normalize names (combine first+last, lowercase, trim whitespace)
-        var name1 = $"{firstName1} {lastName1}".ToLowerInvariant().Trim();
-        var name2 = $"{firstName2} {lastName2}".ToLowerInvariant().Trim();
+        // Combine first+last names and delegate to generic string similarity
+        var name1 = $"{firstName1} {lastName1}".Trim();
+        var name2 = $"{firstName2} {lastName2}".Trim();
 
-        if (string.IsNullOrWhiteSpace(name1) || string.IsNullOrWhiteSpace(name2))
+        return CalculateStringSimilarity(name1, name2);
+    }
+
+    /// <summary>
+    /// Calculate similarity between two strings using normalized Levenshtein distance
+    /// </summary>
+    /// <param name="string1">First string</param>
+    /// <param name="string2">Second string</param>
+    /// <returns>Similarity score from 0.0 (completely different) to 1.0 (identical)</returns>
+    public static double CalculateStringSimilarity(string? string1, string? string2)
+    {
+        if (string.IsNullOrWhiteSpace(string1) || string.IsNullOrWhiteSpace(string2))
             return 0.0;
 
-        var distance = LevenshteinDistance(name1, name2);
-        var maxLength = Math.Max(name1.Length, name2.Length);
+        // Normalize (lowercase, trim)
+        var s1 = string1.ToLowerInvariant().Trim();
+        var s2 = string2.ToLowerInvariant().Trim();
+
+        var distance = LevenshteinDistance(s1, s2);
+        var maxLength = Math.Max(s1.Length, s2.Length);
 
         // Convert distance to similarity (0 distance = 100% similar)
         return 1.0 - ((double)distance / maxLength);
