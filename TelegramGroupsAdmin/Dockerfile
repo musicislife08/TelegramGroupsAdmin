@@ -104,7 +104,6 @@ COPY ["TelegramGroupsAdmin.Configuration/TelegramGroupsAdmin.Configuration.cspro
 COPY ["TelegramGroupsAdmin.Core/TelegramGroupsAdmin.Core.csproj", "TelegramGroupsAdmin.Core/"]
 COPY ["TelegramGroupsAdmin.Data/TelegramGroupsAdmin.Data.csproj", "TelegramGroupsAdmin.Data/"]
 COPY ["TelegramGroupsAdmin.Telegram/TelegramGroupsAdmin.Telegram.csproj", "TelegramGroupsAdmin.Telegram/"]
-COPY ["TelegramGroupsAdmin.Telegram.Abstractions/TelegramGroupsAdmin.Telegram.Abstractions.csproj", "TelegramGroupsAdmin.Telegram.Abstractions/"]
 COPY ["TelegramGroupsAdmin.ContentDetection/TelegramGroupsAdmin.ContentDetection.csproj", "TelegramGroupsAdmin.ContentDetection/"]
 
 # Restore with runtime identifier for cross-compilation
