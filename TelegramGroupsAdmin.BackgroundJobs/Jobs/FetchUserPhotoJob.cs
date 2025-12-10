@@ -26,7 +26,6 @@ public class FetchUserPhotoJob(
     TelegramPhotoService photoService,
     ITelegramUserRepository telegramUserRepository,
     IPhotoHashService photoHashService,
-    TelegramConfigLoader configLoader,
     IOptions<MessageHistoryOptions> historyOptions) : IJob
 {
     private readonly ILogger<FetchUserPhotoJob> _logger = logger;
@@ -34,7 +33,6 @@ public class FetchUserPhotoJob(
     private readonly TelegramPhotoService _photoService = photoService;
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly IPhotoHashService _photoHashService = photoHashService;
-    private readonly TelegramConfigLoader _configLoader = configLoader;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
 
     public async Task Execute(IJobExecutionContext context)
@@ -66,11 +64,8 @@ public class FetchUserPhotoJob(
                 payload.UserId,
                 payload.MessageId);
 
-            // Load bot config from database
-            var botToken = await _configLoader.LoadConfigAsync();
-
             // Get bot client from factory
-            var botClient = _botClientFactory.GetOrCreate(botToken);
+            var botClient = await _botClientFactory.GetBotClientAsync();
 
             try
             {

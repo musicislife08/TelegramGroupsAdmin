@@ -34,8 +34,7 @@ public class FileScanJob(
     IEnumerable<IContentCheckV2> contentChecks,
     ITelegramUserRepository telegramUserRepository,
     IMessageHistoryRepository messageHistoryRepository,
-    IDetectionResultsRepository detectionResultsRepository,
-    TelegramConfigLoader configLoader) : IJob
+    IDetectionResultsRepository detectionResultsRepository) : IJob
 {
     private readonly ILogger<FileScanJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
@@ -43,7 +42,6 @@ public class FileScanJob(
     private readonly ITelegramUserRepository _telegramUserRepository = telegramUserRepository;
     private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
     private readonly IDetectionResultsRepository _detectionResultsRepository = detectionResultsRepository;
-    private readonly TelegramConfigLoader _configLoader = configLoader;
 
     public async Task Execute(IJobExecutionContext context)
     {
@@ -77,11 +75,8 @@ public class FileScanJob(
                 payload.ChatId,
                 payload.MessageId);
 
-            // Load bot config from database
-            var botToken = await _configLoader.LoadConfigAsync();
-
-            // Get bot client from factory (singleton instance, one per bot token)
-            var botClient = _botClientFactory.GetOrCreate(botToken);
+            // Get bot client from factory
+            var botClient = await _botClientFactory.GetBotClientAsync();
 
             string? tempFilePath = null;
 

@@ -82,7 +82,6 @@ public class ImpersonationDetectionServiceTests
             _mockImpersonationAlertsRepo,
             null!, // ModerationActionService - not used by ShouldCheckUserAsync
             null!, // TelegramBotClientFactory - not used by ShouldCheckUserAsync
-            null!, // TelegramConfigLoader - not used by ShouldCheckUserAsync
             _mockConfigService,
             mockLogger);
     }

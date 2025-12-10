@@ -17,20 +17,17 @@ public class DmDeliveryService : IDmDeliveryService
     private readonly ILogger<DmDeliveryService> _logger;
     private readonly TelegramBotClientFactory _botClientFactory;
     private readonly IServiceProvider _serviceProvider;
-    private readonly TelegramConfigLoader _configLoader;
     private readonly IJobScheduler _jobScheduler;
 
     public DmDeliveryService(
         ILogger<DmDeliveryService> logger,
         TelegramBotClientFactory botClientFactory,
         IServiceProvider serviceProvider,
-        TelegramConfigLoader configLoader,
         IJobScheduler jobScheduler)
     {
         _logger = logger;
         _botClientFactory = botClientFactory;
         _serviceProvider = serviceProvider;
-        _configLoader = configLoader;
         _jobScheduler = jobScheduler;
     }
 
@@ -41,8 +38,7 @@ public class DmDeliveryService : IDmDeliveryService
         int? autoDeleteSeconds = null,
         CancellationToken cancellationToken = default)
     {
-        var botToken = await _configLoader.LoadConfigAsync();
-        var botClient = _botClientFactory.GetOrCreate(botToken);
+        var botClient = await _botClientFactory.GetBotClientAsync();
 
         try
         {
@@ -127,8 +123,7 @@ public class DmDeliveryService : IDmDeliveryService
         string messageText,
         CancellationToken cancellationToken = default)
     {
-        var botToken = await _configLoader.LoadConfigAsync();
-        var botClient = _botClientFactory.GetOrCreate(botToken);
+        var botClient = await _botClientFactory.GetBotClientAsync();
 
         try
         {
@@ -300,8 +295,7 @@ public class DmDeliveryService : IDmDeliveryService
         string? videoPath = null,
         CancellationToken cancellationToken = default)
     {
-        var botToken = await _configLoader.LoadConfigAsync();
-        var botClient = _botClientFactory.GetOrCreate(botToken);
+        var botClient = await _botClientFactory.GetBotClientAsync();
 
         try
         {

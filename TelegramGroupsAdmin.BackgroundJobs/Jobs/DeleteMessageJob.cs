@@ -17,12 +17,10 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// </summary>
 public class DeleteMessageJob(
     ILogger<DeleteMessageJob> logger,
-    TelegramBotClientFactory botClientFactory,
-    TelegramConfigLoader configLoader) : IJob
+    TelegramBotClientFactory botClientFactory) : IJob
 {
     private readonly ILogger<DeleteMessageJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly TelegramConfigLoader _configLoader = configLoader;
 
     /// <summary>
     /// Execute delayed message deletion (Quartz.NET entry point)
@@ -56,11 +54,8 @@ public class DeleteMessageJob(
                 payload.ChatId,
                 payload.Reason);
 
-            // Load bot config from database
-            var botToken = await _configLoader.LoadConfigAsync();
-
             // Get bot client from factory
-            var botClient = _botClientFactory.GetOrCreate(botToken);
+            var botClient = await _botClientFactory.GetBotClientAsync();
 
             await botClient.DeleteMessage(
                 chatId: payload.ChatId,

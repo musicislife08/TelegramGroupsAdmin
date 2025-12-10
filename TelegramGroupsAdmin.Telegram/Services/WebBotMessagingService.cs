@@ -20,7 +20,6 @@ public class WebBotMessagingService : IWebBotMessagingService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly TelegramBotClientFactory _botFactory;
-    private readonly TelegramConfigLoader _configLoader;
     private readonly BotMessageService _botMessageService;
     private readonly ITelegramUserRepository _userRepo;
     private readonly ITelegramUserMappingRepository _mappingRepo;
@@ -30,7 +29,6 @@ public class WebBotMessagingService : IWebBotMessagingService
     public WebBotMessagingService(
         IServiceScopeFactory scopeFactory,
         TelegramBotClientFactory botFactory,
-        TelegramConfigLoader configLoader,
         BotMessageService botMessageService,
         ITelegramUserRepository userRepo,
         ITelegramUserMappingRepository mappingRepo,
@@ -39,7 +37,6 @@ public class WebBotMessagingService : IWebBotMessagingService
     {
         _scopeFactory = scopeFactory;
         _botFactory = botFactory;
-        _configLoader = configLoader;
         _botMessageService = botMessageService;
         _userRepo = userRepo;
         _mappingRepo = mappingRepo;
@@ -54,8 +51,8 @@ public class WebBotMessagingService : IWebBotMessagingService
         try
         {
             // Check 1: Bot must be configured (check if bot token exists)
-            var botToken = await _configLoader.LoadConfigAsync();
-            if (string.IsNullOrEmpty(botToken))
+            var botClient = await _botFactory.GetBotClientAsync();
+            if (botClient == null)
             {
                 _logger.LogDebug("WebBotMessaging unavailable: Bot token not configured");
                 return new WebBotFeatureAvailability(false, null, null, "Bot token not configured");
@@ -115,14 +112,12 @@ public class WebBotMessagingService : IWebBotMessagingService
     {
         try
         {
-            // Get bot token and client
-            var botToken = await _configLoader.LoadConfigAsync();
-            if (string.IsNullOrEmpty(botToken))
+            // Get bot client
+            var botClient = await _botFactory.GetBotClientAsync();
+            if (botClient == null)
             {
                 return new WebBotMessageResult(false, null, "Bot token not configured");
             }
-
-            var botClient = _botFactory.GetOrCreate(botToken);
 
             // Get linked Telegram user for signature
             var (linkedUser, errorMessage) = await GetLinkedTelegramUserAsync(webUserId, cancellationToken);
@@ -188,14 +183,12 @@ public class WebBotMessagingService : IWebBotMessagingService
     {
         try
         {
-            // Get bot token and client
-            var botToken = await _configLoader.LoadConfigAsync();
-            if (string.IsNullOrEmpty(botToken))
+            // Get bot client
+            var botClient = await _botFactory.GetBotClientAsync();
+            if (botClient == null)
             {
                 return new WebBotMessageResult(false, null, "Bot token not configured");
             }
-
-            var botClient = _botFactory.GetOrCreate(botToken);
 
             // Validate input
             if (string.IsNullOrWhiteSpace(text))

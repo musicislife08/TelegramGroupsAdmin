@@ -19,12 +19,10 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class DeleteUserMessagesJob(
     ILogger<DeleteUserMessagesJob> logger,
     TelegramBotClientFactory botClientFactory,
-    TelegramConfigLoader configLoader,
     IMessageHistoryRepository messageHistoryRepository) : IJob
 {
     private readonly ILogger<DeleteUserMessagesJob> _logger = logger;
     private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
-    private readonly TelegramConfigLoader _configLoader = configLoader;
     private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
 
     public async Task Execute(IJobExecutionContext context)
@@ -55,11 +53,8 @@ public class DeleteUserMessagesJob(
                 "Starting cross-chat message cleanup for user {UserId}",
                 payload.TelegramUserId);
 
-            // Load bot config from database
-            var botToken = await _configLoader.LoadConfigAsync();
-
             // Get bot client from factory
-            var botClient = _botClientFactory.GetOrCreate(botToken);
+            var botClient = await _botClientFactory.GetBotClientAsync();
 
             // Fetch all user messages (non-deleted only)
             var userMessages = await _messageHistoryRepository.GetUserMessagesAsync(
