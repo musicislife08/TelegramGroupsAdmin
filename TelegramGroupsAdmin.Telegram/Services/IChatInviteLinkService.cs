@@ -1,5 +1,3 @@
-using Telegram.Bot;
-
 namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
@@ -13,7 +11,6 @@ public interface IChatInviteLinkService
     /// Returns null if bot lacks permissions or chat is private without link
     /// </summary>
     Task<string?> GetInviteLinkAsync(
-        ITelegramBotClient botClient,
         long chatId,
         CancellationToken ct = default);
 
@@ -22,7 +19,6 @@ public interface IChatInviteLinkService
     /// Use this to validate cached link is still valid (e.g., in health checks)
     /// </summary>
     Task<string?> RefreshInviteLinkAsync(
-        ITelegramBotClient botClient,
         long chatId,
         CancellationToken ct = default);
 }

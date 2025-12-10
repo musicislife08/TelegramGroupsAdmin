@@ -2,9 +2,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -14,13 +14,16 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class ImageProcessingHandler
 {
+    private readonly TelegramBotClientFactory _botFactory;
     private readonly MessageHistoryOptions _historyOptions;
     private readonly ILogger<ImageProcessingHandler> _logger;
 
     public ImageProcessingHandler(
+        TelegramBotClientFactory botFactory,
         IOptions<MessageHistoryOptions> historyOptions,
         ILogger<ImageProcessingHandler> logger)
     {
+        _botFactory = botFactory;
         _historyOptions = historyOptions.Value;
         _logger = logger;
     }
@@ -31,7 +34,6 @@ public class ImageProcessingHandler
     /// Fails open on errors (logs warning but doesn't block message storage).
     /// </summary>
     public async Task<ImageProcessingResult?> ProcessImageAsync(
-        ITelegramBotClient botClient,
         Message message,
         long chatId,
         int messageId,
@@ -48,9 +50,12 @@ public class ImageProcessingHandler
         var photoFileId = largestPhoto.FileId;
         var photoFileSize = largestPhoto.FileSize.HasValue ? (int)largestPhoto.FileSize.Value : (int?)null;
 
+        // Get operations from factory
+        var operations = await _botFactory.GetOperationsAsync();
+
         // Download and process image
         var (fullPath, thumbPath) = await DownloadAndProcessImageAsync(
-            botClient,
+            operations,
             photoFileId,
             chatId,
             messageId,
@@ -74,7 +79,7 @@ public class ImageProcessingHandler
     /// Returns relative paths for database storage, or (null, null) on failure.
     /// </summary>
     private async Task<(string? fullPath, string? thumbPath)> DownloadAndProcessImageAsync(
-        ITelegramBotClient botClient,
+        ITelegramOperations operations,
         string photoFileId,
         long chatId,
         long messageId,
@@ -96,7 +101,7 @@ public class ImageProcessingHandler
             var thumbPath = Path.Combine(thumbDir, fileName);
 
             // Download file from Telegram
-            var file = await botClient.GetFile(photoFileId, cancellationToken);
+            var file = await operations.GetFileAsync(photoFileId, cancellationToken);
             if (file.FilePath == null)
             {
                 _logger.LogWarning("Unable to get file path for photo {FileId}", photoFileId);
@@ -109,7 +114,7 @@ public class ImageProcessingHandler
             {
                 await using (var fileStream = File.Create(tempPath))
                 {
-                    await botClient.DownloadFile(file.FilePath, fileStream, cancellationToken);
+                    await operations.DownloadFileAsync(file.FilePath, fileStream, cancellationToken);
                 }
 
                 // Copy to full image location

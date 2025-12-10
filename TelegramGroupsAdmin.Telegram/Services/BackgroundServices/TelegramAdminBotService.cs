@@ -15,7 +15,8 @@ using TelegramGroupsAdmin.Telegram.Services;
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 /// <summary>
-/// Core Telegram bot service - handles bot lifecycle and routes updates to specialized services
+/// Core Telegram bot service - handles bot lifecycle and routes updates to specialized services.
+/// Implements IUpdateProcessor to enable unit testing of update routing logic.
 /// </summary>
 public class TelegramAdminBotService(
     TelegramBotClientFactory botFactory,
@@ -26,7 +27,7 @@ public class TelegramAdminBotService(
     ChatManagementService chatManagementService,
     IWelcomeService welcomeService,
     ILogger<TelegramAdminBotService> logger)
-    : BackgroundService, IMessageHistoryService
+    : BackgroundService, IMessageHistoryService, IUpdateProcessor
 {
     private readonly TelegramConfigLoader _configLoader = configLoader;
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
@@ -187,10 +188,10 @@ public class TelegramAdminBotService(
         await RegisterBotCommandsAsync(botClient, stoppingToken);
 
         // Cache admin lists for all managed chats
-        await chatManagementService.RefreshAllChatAdminsAsync(botClient, stoppingToken);
+        await chatManagementService.RefreshAllChatAdminsAsync(stoppingToken);
 
         // Perform initial health check for all chats
-        await chatManagementService.RefreshAllHealthAsync(botClient);
+        await chatManagementService.RefreshAllHealthAsync(stoppingToken);
 
         // Periodic health checks now handled by ChatHealthCheckJob via Quartz.NET recurring job scheduler
         // (see QuartzSchedulingSyncService and BackgroundJobConfigService default config)
@@ -251,10 +252,22 @@ public class TelegramAdminBotService(
             _consecutiveErrors = 0;
         }
 
+        // Delegate to IUpdateProcessor implementation for testable routing
+        await ProcessUpdateAsync(update, cancellationToken);
+    }
+
+    /// <summary>
+    /// Process a Telegram update - routes to appropriate handler based on update type.
+    /// This method implements IUpdateProcessor and can be tested independently of the polling mechanism.
+    /// </summary>
+    /// <param name="update">The Telegram update to process</param>
+    /// <param name="ct">Cancellation token</param>
+    public async Task ProcessUpdateAsync(Update update, CancellationToken ct = default)
+    {
         // Handle bot's chat member status changes (added/removed from chats)
         if (update.MyChatMember is { } myChatMember)
         {
-            await chatManagementService.HandleMyChatMemberUpdateAsync(botClient, myChatMember, cancellationToken);
+            await chatManagementService.HandleMyChatMemberUpdateAsync(myChatMember, ct);
             return;
         }
 
@@ -262,34 +275,35 @@ public class TelegramAdminBotService(
         if (update.ChatMember is { } chatMember)
         {
             // Check for admin status changes (instant permission updates)
-            await chatManagementService.HandleAdminStatusChangeAsync(chatMember, cancellationToken);
+            await chatManagementService.HandleAdminStatusChangeAsync(chatMember, ct);
 
             // Handle joins/leaves (welcome system - Phase 4.4)
-            await welcomeService.HandleChatMemberUpdateAsync(botClient, chatMember, cancellationToken);
+            await welcomeService.HandleChatMemberUpdateAsync(chatMember, ct);
             return;
         }
 
         // Handle callback queries from inline buttons (for welcome accept/deny - Phase 4.4)
         if (update.CallbackQuery is { } callbackQuery)
         {
-            await welcomeService.HandleCallbackQueryAsync(botClient, callbackQuery, cancellationToken);
+            await welcomeService.HandleCallbackQueryAsync(callbackQuery, ct);
 
             // Always answer callback queries to remove loading state
-            await botClient.AnswerCallbackQuery(callbackQuery.Id, cancellationToken: cancellationToken);
+            var operations = await botFactory.GetOperationsAsync();
+            await operations.AnswerCallbackQueryAsync(callbackQuery.Id, ct: ct);
             return;
         }
 
         // Handle new messages
         if (update.Message is { } message)
         {
-            await messageProcessingService.HandleNewMessageAsync(botClient, message);
+            await messageProcessingService.HandleNewMessageAsync(message);
             return;
         }
 
         // Handle edited messages
         if (update.EditedMessage is { } editedMessage)
         {
-            await messageProcessingService.HandleEditedMessageAsync(botClient, editedMessage);
+            await messageProcessingService.HandleEditedMessageAsync(editedMessage);
             return;
         }
     }

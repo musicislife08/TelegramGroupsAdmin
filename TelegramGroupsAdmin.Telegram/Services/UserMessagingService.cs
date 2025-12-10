@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -11,24 +10,28 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class UserMessagingService : IUserMessagingService
 {
     private readonly ITelegramUserRepository _telegramUserRepository;
+    private readonly TelegramBotClientFactory _botClientFactory;
     private readonly ILogger<UserMessagingService> _logger;
 
     public UserMessagingService(
         ITelegramUserRepository telegramUserRepository,
+        TelegramBotClientFactory botClientFactory,
         ILogger<UserMessagingService> logger)
     {
         _telegramUserRepository = telegramUserRepository;
+        _botClientFactory = botClientFactory;
         _logger = logger;
     }
 
     public async Task<MessageSendResult> SendToUserAsync(
-        ITelegramBotClient botClient,
         long userId,
         long chatId,
         string messageText,
         int? replyToMessageId = null,
         CancellationToken cancellationToken = default)
     {
+        var operations = await _botClientFactory.GetOperationsAsync();
+
         // Get user's DM preference
         var user = await _telegramUserRepository.GetByTelegramIdAsync(userId, cancellationToken);
         var botDmEnabled = user?.BotDmEnabled ?? false;
@@ -38,11 +41,11 @@ public class UserMessagingService : IUserMessagingService
         {
             try
             {
-                await botClient.SendMessage(
+                await operations.SendMessageAsync(
                     chatId: userId, // Send to user's private chat
                     text: messageText,
                     parseMode: ParseMode.Markdown,
-                    cancellationToken: cancellationToken);
+                    ct: cancellationToken);
 
                 _logger.LogInformation(
                     "Sent DM to user {UserId}: {MessagePreview}",
@@ -73,17 +76,17 @@ public class UserMessagingService : IUserMessagingService
         }
 
         // Fallback: Send as chat mention
-        return await SendChatMentionAsync(botClient, userId, chatId, messageText, replyToMessageId, cancellationToken);
+        return await SendChatMentionAsync(operations, userId, chatId, messageText, replyToMessageId, cancellationToken);
     }
 
     public async Task<List<MessageSendResult>> SendToMultipleUsersAsync(
-        ITelegramBotClient botClient,
         List<long> userIds,
         long chatId,
         string messageText,
         int? replyToMessageId = null,
         CancellationToken cancellationToken = default)
     {
+        var operations = await _botClientFactory.GetOperationsAsync();
         var results = new List<MessageSendResult>();
         var failedDmUsers = new List<(long UserId, string Mention)>();
 
@@ -97,11 +100,11 @@ public class UserMessagingService : IUserMessagingService
             {
                 try
                 {
-                    await botClient.SendMessage(
+                    await operations.SendMessageAsync(
                         chatId: userId,
                         text: messageText,
                         parseMode: ParseMode.Markdown,
-                        cancellationToken: cancellationToken);
+                        ct: cancellationToken);
 
                     _logger.LogInformation(
                         "Sent DM to user {UserId}: {MessagePreview}",
@@ -147,14 +150,14 @@ public class UserMessagingService : IUserMessagingService
                 var mentions = string.Join(", ", failedDmUsers.Select(u => u.Mention));
                 var chatMessage = $"{mentions}:\n\n{messageText}";
 
-                var sentMessage = await botClient.SendMessage(
+                var sentMessage = await operations.SendMessageAsync(
                     chatId: chatId,
                     text: chatMessage,
                     parseMode: ParseMode.Markdown,
                     replyParameters: replyToMessageId.HasValue
                         ? new ReplyParameters { MessageId = replyToMessageId.Value }
                         : null,
-                    cancellationToken: cancellationToken);
+                    ct: cancellationToken);
 
                 _logger.LogInformation(
                     "Sent batched chat mention to {UserCount} users in chat {ChatId}",
@@ -193,7 +196,7 @@ public class UserMessagingService : IUserMessagingService
     /// Send a message in the chat with user mention (fallback when DM unavailable)
     /// </summary>
     private async Task<MessageSendResult> SendChatMentionAsync(
-        ITelegramBotClient botClient,
+        ITelegramOperations operations,
         long userId,
         long chatId,
         string messageText,
@@ -209,14 +212,14 @@ public class UserMessagingService : IUserMessagingService
             // Prefix message with mention
             var chatMessage = $"{userMention}: {messageText}";
 
-            var sentMessage = await botClient.SendMessage(
+            var sentMessage = await operations.SendMessageAsync(
                 chatId: chatId,
                 text: chatMessage,
                 parseMode: ParseMode.Markdown,
                 replyParameters: replyToMessageId.HasValue
                     ? new ReplyParameters { MessageId = replyToMessageId.Value }
                     : null,
-                cancellationToken: cancellationToken);
+                ct: cancellationToken);
 
             _logger.LogInformation(
                 "Sent chat mention to user {UserId} in chat {ChatId}",

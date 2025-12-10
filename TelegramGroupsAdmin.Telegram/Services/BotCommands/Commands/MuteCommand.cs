@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -35,7 +34,6 @@ public class MuteCommand : IBotCommand
     }
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,
@@ -94,13 +92,12 @@ public class MuteCommand : IBotCommand
 
             // Execute mute via ModerationActionService
             var result = await _moderationService.RestrictUserAsync(
-                botClient,
-                targetUser.Id,
-                message.ReplyToMessage.MessageId,
-                executor,
-                reason,
-                duration,
-                cancellationToken);
+                userId: targetUser.Id,
+                messageId: message.ReplyToMessage.MessageId,
+                executor: executor,
+                reason: reason,
+                duration: duration,
+                cancellationToken: cancellationToken);
 
             if (!result.Success)
             {

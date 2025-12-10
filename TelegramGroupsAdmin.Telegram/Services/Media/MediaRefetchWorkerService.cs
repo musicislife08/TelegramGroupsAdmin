@@ -15,20 +15,17 @@ public class MediaRefetchWorkerService : BackgroundService
     private readonly MediaRefetchQueueService _queueService;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly MessageProcessingService _messageProcessingService;
-    private readonly TelegramBotClientFactory _botClientFactory;
     private readonly ILogger<MediaRefetchWorkerService> _logger;
 
     public MediaRefetchWorkerService(
         IMediaRefetchQueueService queueService,
         IServiceScopeFactory scopeFactory,
         MessageProcessingService messageProcessingService,
-        TelegramBotClientFactory botClientFactory,
         ILogger<MediaRefetchWorkerService> logger)
     {
         _queueService = (MediaRefetchQueueService)queueService;
         _scopeFactory = scopeFactory;
         _messageProcessingService = messageProcessingService;
-        _botClientFactory = botClientFactory;
         _logger = logger;
     }
 
@@ -138,16 +135,12 @@ public class MediaRefetchWorkerService : BackgroundService
 
         _logger.LogInformation("Worker {WorkerId} refetching user photo: user {UserId}", workerId, request.UserId);
 
-        // Get singleton bot client from factory (same instance used by TelegramAdminBotService)
-        var botClient = await _botClientFactory.GetBotClientAsync();
-
         // Get user's current file_unique_id from database
         var user = await userRepo.GetByIdAsync(request.UserId!.Value);
         var knownPhotoId = user?.PhotoFileUniqueId;
 
         // Download photo (will check if changed)
         var result = await photoService.GetUserPhotoWithMetadataAsync(
-            botClient,
             request.UserId!.Value,
             knownPhotoId);
 

@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
+using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.ContentDetection.Models;
@@ -108,13 +108,12 @@ public class ModerationActionService
     /// Used by: /spam command, Messages.razor "Mark as Spam", Reports "Spam & Ban" action
     /// </summary>
     public async Task<ModerationResult> MarkAsSpamAndBanAsync(
-        ITelegramBotClient botClient,
         long messageId,
         long userId,
         long chatId,
         Actor executor,
         string reason,
-        global::Telegram.Bot.Types.Message? telegramMessage = null,
+        Message? telegramMessage = null,
         CancellationToken cancellationToken = default)
     {
         // Protect Telegram service account from moderation
@@ -130,7 +129,6 @@ public class ModerationActionService
             try
             {
                 await _botMessageService.DeleteAndMarkMessageAsync(
-                    botClient,
                     chatId,
                     (int)messageId,
                     deletionSource: "spam_action",
@@ -273,6 +271,7 @@ public class ModerationActionService
             result.TrustRemoved = true;
 
             // 6. Ban user globally across all managed chats (PERF-TG-2: parallel execution with concurrency limit)
+            var operations = await _botClientFactory.GetOperationsAsync();
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
@@ -297,10 +296,10 @@ public class ModerationActionService
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
-                    await botClient.BanChatMember(
+                    await operations.BanChatMemberAsync(
                         chatId: chatId,
                         userId: userId,
-                        cancellationToken: cancellationToken);
+                        ct: cancellationToken);
                     return true;
                 }
                 catch (Exception ex)
@@ -345,26 +344,10 @@ public class ModerationActionService
     }
 
     /// <summary>
-    /// UI-friendly overload: Mark message as spam without requiring bot client parameter
-    /// </summary>
-    public async Task<ModerationResult> MarkAsSpamAndBanAsync(
-        long messageId,
-        long userId,
-        long chatId,
-        Actor executor,
-        string reason,
-        CancellationToken cancellationToken = default)
-    {
-        var botClient = await _botClientFactory.GetBotClientAsync();
-        return await MarkAsSpamAndBanAsync(botClient, messageId, userId, chatId, executor, reason, null, cancellationToken);
-    }
-
-    /// <summary>
     /// Ban user globally across all managed chats.
     /// Used by: /ban command, Reports "Ban" action
     /// </summary>
     public async Task<ModerationResult> BanUserAsync(
-        ITelegramBotClient botClient,
         long userId,
         long? messageId,
         Actor executor,
@@ -385,6 +368,7 @@ public class ModerationActionService
             result.TrustRemoved = true;
 
             // Ban globally (PERF-TG-2: parallel execution with concurrency limit)
+            var operations = await _botClientFactory.GetOperationsAsync();
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
@@ -408,10 +392,10 @@ public class ModerationActionService
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
-                    await botClient.BanChatMember(
+                    await operations.BanChatMemberAsync(
                         chatId: chatId,
                         userId: userId,
-                        cancellationToken: cancellationToken);
+                        ct: cancellationToken);
                     return true;
                 }
                 catch (Exception ex)
@@ -509,11 +493,9 @@ public class ModerationActionService
             {
                 // 4. Auto-ban user
                 var autoBanReason = warningConfig.AutoBanReason.Replace("{count}", warnCount.ToString());
-                var botClient = await _botClientFactory.GetBotClientAsync();
 
                 var autoBanExecutor = Actor.AutoBan;
                 var banResult = await BanUserAsync(
-                    botClient: botClient,
                     userId: userId,
                     messageId: messageId,
                     executor: autoBanExecutor,
@@ -587,7 +569,6 @@ public class ModerationActionService
     /// Used by: /unban command, Messages.razor "Mark as Ham", Reports "Dismiss" action
     /// </summary>
     public async Task<ModerationResult> UnbanUserAsync(
-        ITelegramBotClient botClient,
         long userId,
         Actor executor,
         string reason,
@@ -602,6 +583,7 @@ public class ModerationActionService
             await _userActionsRepository.ExpireBansForUserAsync(userId, chatId: null, cancellationToken);
 
             // Unban from all chats (PERF-TG-2: parallel execution with concurrency limit)
+            var operations = await _botClientFactory.GetOperationsAsync();
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
@@ -625,11 +607,10 @@ public class ModerationActionService
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
-                    await botClient.UnbanChatMember(
+                    await operations.UnbanChatMemberAsync(
                         chatId: chatId,
                         userId: userId,
-                        onlyIfBanned: true,
-                        cancellationToken: cancellationToken);
+                        ct: cancellationToken);
                     return true;
                 }
                 catch (Exception ex)
@@ -681,20 +662,6 @@ public class ModerationActionService
     }
 
     /// <summary>
-    /// UI-friendly overload: Unban user without requiring bot client parameter
-    /// </summary>
-    public async Task<ModerationResult> UnbanUserAsync(
-        long userId,
-        Actor executor,
-        string reason,
-        bool restoreTrust = false,
-        CancellationToken cancellationToken = default)
-    {
-        var botClient = await _botClientFactory.GetBotClientAsync();
-        return await UnbanUserAsync(botClient, userId, executor, reason, restoreTrust, cancellationToken);
-    }
-
-    /// <summary>
     /// Delete a message from Telegram and mark as deleted in database
     /// Used by: Messages.razor "Delete" button
     /// </summary>
@@ -710,14 +677,10 @@ public class ModerationActionService
         {
             var result = new ModerationResult();
 
-            // Get bot client from factory (singleton instance)
-            var botClient = await _botClientFactory.GetBotClientAsync();
-
             // 1. Delete the message from Telegram and mark as deleted in database
             try
             {
                 await _botMessageService.DeleteAndMarkMessageAsync(
-                    botClient,
                     chatId,
                     (int)messageId,
                     deletionSource: "manual_ui_delete",
@@ -764,7 +727,6 @@ public class ModerationActionService
     /// Used by: /tempban command
     /// </summary>
     public async Task<ModerationResult> TempBanUserAsync(
-        ITelegramBotClient botClient,
         long userId,
         long? messageId,
         Actor executor,
@@ -783,6 +745,7 @@ public class ModerationActionService
             var expiresAt = DateTimeOffset.UtcNow.Add(duration);
 
             // Temp ban globally (permanent ban, will be lifted by background job) (PERF-TG-2: parallel execution)
+            var operations = await _botClientFactory.GetOperationsAsync();
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
@@ -806,10 +769,10 @@ public class ModerationActionService
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
-                    await botClient.BanChatMember(
+                    await operations.BanChatMemberAsync(
                         chatId: chatId,
                         userId: userId,
-                        cancellationToken: cancellationToken);
+                        ct: cancellationToken);
                     return true;
                 }
                 catch (Exception ex)
@@ -860,7 +823,7 @@ public class ModerationActionService
                 expiresAt);
 
             // Send DM notification with rejoin links (both UI and bot command)
-            await SendTempBanNotificationAsync(botClient, userId, reason, duration, cancellationToken);
+            await SendTempBanNotificationAsync(userId, reason, duration, cancellationToken);
 
             _logger.LogInformation(
                 "Temp ban action completed: User {UserId} banned from {ChatsAffected} chats until {ExpiresAt}",
@@ -877,26 +840,10 @@ public class ModerationActionService
     }
 
     /// <summary>
-    /// UI-friendly overload: Temp ban user without requiring bot client parameter
-    /// </summary>
-    public async Task<ModerationResult> TempBanUserAsync(
-        long userId,
-        long? messageId,
-        Actor executor,
-        string reason,
-        TimeSpan duration,
-        CancellationToken cancellationToken = default)
-    {
-        var botClient = await _botClientFactory.GetBotClientAsync();
-        return await TempBanUserAsync(botClient, userId, messageId, executor, reason, duration, cancellationToken);
-    }
-
-    /// <summary>
     /// Restrict user (mute) globally with automatic unrestriction.
     /// Used by: /mute command
     /// </summary>
     public async Task<ModerationResult> RestrictUserAsync(
-        ITelegramBotClient botClient,
         long userId,
         long? messageId,
         Actor executor,
@@ -915,6 +862,7 @@ public class ModerationActionService
             var expiresAt = DateTimeOffset.UtcNow.Add(duration);
 
             // Restrict user globally (Telegram API handles auto-unrestrict via until_date) (PERF-TG-2: parallel execution)
+            var operations = await _botClientFactory.GetOperationsAsync();
             var allChats = await _managedChatsRepository.GetAllChatsAsync(cancellationToken);
             var activeChatIds = allChats.Where(c => c.IsActive).Select(c => c.ChatId).ToList();
 
@@ -938,10 +886,10 @@ public class ModerationActionService
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
-                    await botClient.RestrictChatMember(
+                    await operations.RestrictChatMemberAsync(
                         chatId: chatId,
                         userId: userId,
-                        permissions: new global::Telegram.Bot.Types.ChatPermissions
+                        permissions: new ChatPermissions
                         {
                             CanSendMessages = false,
                             CanSendAudios = false,
@@ -959,7 +907,7 @@ public class ModerationActionService
                             CanManageTopics = false
                         },
                         untilDate: expiresAt.DateTime,
-                        cancellationToken: cancellationToken);
+                        ct: cancellationToken);
                     return true;
                 }
                 catch (Exception ex)
@@ -1009,7 +957,6 @@ public class ModerationActionService
     /// No chat fallback - DM only per requirements.
     /// </summary>
     private async Task SendTempBanNotificationAsync(
-        ITelegramBotClient botClient,
         long userId,
         string reason,
         TimeSpan duration,
@@ -1044,7 +991,7 @@ public class ModerationActionService
             var inviteLinks = new List<(string ChatName, string? InviteLink)>();
             foreach (var chat in activeChats)
             {
-                var inviteLink = await _inviteLinkService.GetInviteLinkAsync(botClient, chat.ChatId, cancellationToken);
+                var inviteLink = await _inviteLinkService.GetInviteLinkAsync(chat.ChatId, cancellationToken);
                 inviteLinks.Add((chat.ChatName ?? $"Chat {chat.ChatId}", inviteLink));
 
                 if (inviteLink != null)
@@ -1086,7 +1033,6 @@ public class ModerationActionService
                 userId, notification.Length);
 
             var result = await _messagingService.SendToUserAsync(
-                botClient,
                 userId: userId,
                 chatId: fallbackChatId,
                 messageText: notification,

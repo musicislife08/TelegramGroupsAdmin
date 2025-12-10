@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -56,7 +55,6 @@ public partial class CommandRouter
     /// Route and execute bot command
     /// </summary>
     public async Task<CommandResult?> RouteCommandAsync(
-        ITelegramBotClient botClient,
         Message message,
         CancellationToken cancellationToken = default)
     {
@@ -136,7 +134,7 @@ public partial class CommandRouter
                 commandName, TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
                 string.Join(", ", args));
 
-            var result = await command.ExecuteAsync(botClient, message, args, permissionLevel, cancellationToken);
+            var result = await command.ExecuteAsync(message, args, permissionLevel, cancellationToken);
 
             // Commands can now return dynamic CommandResult or use defaults from interface properties
             return result;

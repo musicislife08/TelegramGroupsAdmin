@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -32,7 +31,6 @@ public class UnbanCommand : IBotCommand
     }
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,
@@ -60,12 +58,11 @@ public class UnbanCommand : IBotCommand
 
             // Execute unban action through ModerationActionService
             var result = await _moderationService.UnbanUserAsync(
-                botClient,
-                targetUser.Id,
-                executor,
-                $"Manual unban command by {message.From?.Username ?? message.From?.Id.ToString() ?? "unknown"}",
+                userId: targetUser.Id,
+                executor: executor,
+                reason: $"Manual unban command by {message.From?.Username ?? message.From?.Id.ToString() ?? "unknown"}",
                 restoreTrust: false,
-                cancellationToken);
+                cancellationToken: cancellationToken);
 
             // Build response based on result
             if (!result.Success)

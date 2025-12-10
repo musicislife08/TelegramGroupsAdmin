@@ -1,11 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
@@ -50,9 +48,13 @@ public class WebBotMessagingService : IWebBotMessagingService
     {
         try
         {
-            // Check 1: Bot must be configured (check if bot token exists)
-            var botClient = await _botFactory.GetBotClientAsync();
-            if (botClient == null)
+            // Check 1: Bot must be configured (check if bot token exists via factory)
+            // TelegramConfigLoader.LoadConfigAsync() throws InvalidOperationException if token not configured
+            try
+            {
+                await _botFactory.GetOperationsAsync();
+            }
+            catch (InvalidOperationException)
             {
                 _logger.LogDebug("WebBotMessaging unavailable: Bot token not configured");
                 return new WebBotFeatureAvailability(false, null, null, "Bot token not configured");
@@ -112,13 +114,6 @@ public class WebBotMessagingService : IWebBotMessagingService
     {
         try
         {
-            // Get bot client
-            var botClient = await _botFactory.GetBotClientAsync();
-            if (botClient == null)
-            {
-                return new WebBotMessageResult(false, null, "Bot token not configured");
-            }
-
             // Get linked Telegram user for signature
             var (linkedUser, errorMessage) = await GetLinkedTelegramUserAsync(webUserId, cancellationToken);
             if (linkedUser == null)
@@ -153,7 +148,6 @@ public class WebBotMessagingService : IWebBotMessagingService
 
             // Send message via BotMessageService
             var sentMessage = await _botMessageService.SendAndSaveMessageAsync(
-                botClient,
                 chatId,
                 messageWithSignature,
                 replyParameters: replyParameters,
@@ -183,13 +177,6 @@ public class WebBotMessagingService : IWebBotMessagingService
     {
         try
         {
-            // Get bot client
-            var botClient = await _botFactory.GetBotClientAsync();
-            if (botClient == null)
-            {
-                return new WebBotMessageResult(false, null, "Bot token not configured");
-            }
-
             // Validate input
             if (string.IsNullOrWhiteSpace(text))
             {
@@ -205,7 +192,6 @@ public class WebBotMessagingService : IWebBotMessagingService
 
             // Edit message via BotMessageService (no signature added/modified)
             var editedMessage = await _botMessageService.EditAndUpdateMessageAsync(
-                botClient,
                 chatId,
                 messageId,
                 text,

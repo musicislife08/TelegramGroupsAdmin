@@ -2,7 +2,6 @@ using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using Telegram.Bot;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -54,13 +53,13 @@ public class DeleteMessageJob(
                 payload.ChatId,
                 payload.Reason);
 
-            // Get bot client from factory
-            var botClient = await _botClientFactory.GetBotClientAsync();
+            // Get operations from factory
+            var operations = await _botClientFactory.GetOperationsAsync();
 
-            await botClient.DeleteMessage(
+            await operations.DeleteMessageAsync(
                 chatId: payload.ChatId,
                 messageId: payload.MessageId,
-                cancellationToken: cancellationToken);
+                ct: cancellationToken);
 
             _logger.LogInformation(
                 "Deleted message {MessageId} in chat {ChatId} (reason: {Reason})",

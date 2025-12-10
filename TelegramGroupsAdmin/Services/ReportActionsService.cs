@@ -1,4 +1,3 @@
-using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -18,7 +17,6 @@ public class ReportActionsService : IReportActionsService
     private readonly IReportsRepository _reportsRepository;
     private readonly IMessageHistoryRepository _messageRepository;
     private readonly ModerationActionService _moderationService;
-    private readonly TelegramBotClientFactory _botFactory;
     private readonly IAuditService _auditService;
     private readonly BotMessageService _botMessageService;
     private readonly ILogger<ReportActionsService> _logger;
@@ -27,7 +25,6 @@ public class ReportActionsService : IReportActionsService
         IReportsRepository reportsRepository,
         IMessageHistoryRepository messageRepository,
         ModerationActionService moderationService,
-        TelegramBotClientFactory botFactory,
         IAuditService auditService,
         BotMessageService botMessageService,
         ILogger<ReportActionsService> logger)
@@ -35,7 +32,6 @@ public class ReportActionsService : IReportActionsService
         _reportsRepository = reportsRepository;
         _messageRepository = messageRepository;
         _moderationService = moderationService;
-        _botFactory = botFactory;
         _auditService = auditService;
         _botMessageService = botMessageService;
         _logger = logger;
@@ -55,14 +51,11 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Message {report.MessageId} not found");
         }
 
-        var botClient = await _botFactory.GetBotClientAsync();
-
         // Create executor actor from web user
         var executor = Actor.FromWebUser(reviewerId);
 
         // Execute spam + ban action via ModerationActionService
         var result = await _moderationService.MarkAsSpamAndBanAsync(
-            botClient: botClient,
             messageId: report.MessageId,
             userId: message.UserId,
             chatId: report.ChatId,
@@ -111,14 +104,11 @@ public class ReportActionsService : IReportActionsService
             throw new InvalidOperationException($"Message {report.MessageId} not found");
         }
 
-        var botClient = await _botFactory.GetBotClientAsync();
-
         // Create executor actor from web user
         var executor = Actor.FromWebUser(reviewerId);
 
         // Execute ban action via ModerationActionService
         var result = await _moderationService.BanUserAsync(
-            botClient: botClient,
             userId: message.UserId,
             messageId: report.MessageId,
             executor: executor,
@@ -135,7 +125,6 @@ public class ReportActionsService : IReportActionsService
         try
         {
             await _botMessageService.DeleteAndMarkMessageAsync(
-                botClient,
                 report.ChatId,
                 report.MessageId,
                 deletionSource: "ban_action");
@@ -255,8 +244,6 @@ public class ReportActionsService : IReportActionsService
 
     private async Task SendReportReplyAsync(Report report, string message)
     {
-        var botClient = await _botFactory.GetBotClientAsync();
-
         try
         {
             // Phase 2.6: For web UI reports, reply to the reported message itself
@@ -266,7 +253,6 @@ public class ReportActionsService : IReportActionsService
 
             // Use BotMessageService to save bot response to database
             await _botMessageService.SendAndSaveMessageAsync(
-                botClient,
                 report.ChatId,
                 message,
                 parseMode: ParseMode.Markdown,

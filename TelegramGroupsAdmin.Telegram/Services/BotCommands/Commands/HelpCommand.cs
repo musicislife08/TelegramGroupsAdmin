@@ -1,5 +1,4 @@
 using System.Text;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -43,7 +42,6 @@ public class HelpCommand : IBotCommand
     public int? DeleteResponseAfterSeconds => 30; // Auto-delete help response after 30 seconds
 
     public Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,

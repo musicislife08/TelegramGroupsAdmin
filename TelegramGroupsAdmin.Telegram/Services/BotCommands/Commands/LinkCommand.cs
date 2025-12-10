@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -28,7 +27,6 @@ public class LinkCommand : IBotCommand
     }
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,

@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
@@ -37,7 +36,6 @@ public class InviteCommand : IBotCommand
     }
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,
@@ -71,7 +69,7 @@ public class InviteCommand : IBotCommand
         }
 
         // Get cached invite link (or fetch from Telegram if not cached)
-        var inviteLink = await inviteLinkService.GetInviteLinkAsync(botClient, chatId, cancellationToken);
+        var inviteLink = await inviteLinkService.GetInviteLinkAsync(chatId, cancellationToken);
 
         if (string.IsNullOrEmpty(inviteLink))
         {

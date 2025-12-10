@@ -1,4 +1,3 @@
-using Telegram.Bot;
 using Telegram.Bot.Types;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -19,5 +18,5 @@ public interface IBotProtectionService
     /// <summary>
     /// Ban a bot from the chat and log the event
     /// </summary>
-    Task BanBotAsync(ITelegramBotClient botClient, long chatId, User bot, string reason, CancellationToken cancellationToken = default);
+    Task BanBotAsync(long chatId, User bot, string reason, CancellationToken cancellationToken = default);
 }

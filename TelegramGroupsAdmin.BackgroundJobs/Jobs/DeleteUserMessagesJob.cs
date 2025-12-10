@@ -2,7 +2,6 @@ using System.Text.Json;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using Telegram.Bot;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -53,8 +52,8 @@ public class DeleteUserMessagesJob(
                 "Starting cross-chat message cleanup for user {UserId}",
                 payload.TelegramUserId);
 
-            // Get bot client from factory
-            var botClient = await _botClientFactory.GetBotClientAsync();
+            // Get operations from factory
+            var operations = await _botClientFactory.GetOperationsAsync();
 
             // Fetch all user messages (non-deleted only)
             var userMessages = await _messageHistoryRepository.GetUserMessagesAsync(
@@ -93,10 +92,10 @@ public class DeleteUserMessagesJob(
 
                 try
                 {
-                    await botClient.DeleteMessage(
+                    await operations.DeleteMessageAsync(
                         chatId: message.ChatId,
                         messageId: (int)message.MessageId,
-                        cancellationToken: cancellationToken);
+                        ct: cancellationToken);
 
                     deletedCount++;
 

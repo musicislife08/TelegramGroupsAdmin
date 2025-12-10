@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -21,8 +20,6 @@ public class ReportService(
     IAuditService auditService,
     IUserMessagingService messagingService,
     IChatAdminsRepository chatAdminsRepository,
-    TelegramBotClientFactory botFactory,
-    TelegramConfigLoader configLoader,
     ILogger<ReportService> logger) : IReportService
 {
     public async Task<ReportCreationResult> CreateReportAsync(
@@ -147,16 +144,12 @@ public class ReportService(
                   (string.IsNullOrEmpty(jumpLink) ? "" : $"{jumpLink}\n\n") +
                   $"Review in the Reports tab or use moderation commands.";
 
-            var botToken = await configLoader.LoadConfigAsync();
-            var botClient = botFactory.GetOrCreate(botToken);
-
             var results = await messagingService.SendToMultipleUsersAsync(
-                botClient,
                 userIds: adminUserIds,
                 chatId: report.ChatId,
                 messageText: reportNotification,
                 replyToMessageId: originalMessage?.MessageId,
-                cancellationToken);
+                cancellationToken: cancellationToken);
 
             var dmCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.PrivateDm);
             var mentionCount = results.Count(r => r.DeliveryMethod == MessageDeliveryMethod.ChatMention);

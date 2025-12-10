@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
@@ -17,10 +16,14 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class LanguageWarningHandler
 {
+    private readonly TelegramBotClientFactory _botFactory;
     private readonly ILogger<LanguageWarningHandler> _logger;
 
-    public LanguageWarningHandler(ILogger<LanguageWarningHandler> logger)
+    public LanguageWarningHandler(
+        TelegramBotClientFactory botFactory,
+        ILogger<LanguageWarningHandler> logger)
     {
+        _botFactory = botFactory;
         _logger = logger;
     }
 
@@ -29,7 +32,6 @@ public class LanguageWarningHandler
     /// Checks translation, config, user status, then issues warning via moderation system.
     /// </summary>
     public async Task HandleWarningAsync(
-        ITelegramBotClient botClient,
         Message message,
         IServiceScope scope,
         CancellationToken cancellationToken)
@@ -60,7 +62,8 @@ public class LanguageWarningHandler
                 return;
 
             // Check if user is admin in this chat
-            var chatMember = await botClient.GetChatMember(message.Chat.Id, message.From.Id, cancellationToken);
+            var operations = await _botFactory.GetOperationsAsync();
+            var chatMember = await operations.GetChatMemberAsync(message.Chat.Id, message.From.Id, cancellationToken);
             if (chatMember.Status is ChatMemberStatus.Administrator or ChatMemberStatus.Creator)
                 return;
 
@@ -98,7 +101,6 @@ public class LanguageWarningHandler
             // Send warning to user via DM with chat fallback
             var messagingService = scope.ServiceProvider.GetRequiredService<IUserMessagingService>();
             await messagingService.SendToUserAsync(
-                botClient: botClient,
                 userId: message.From.Id,
                 chatId: message.Chat.Id,
                 messageText: warningMessage,

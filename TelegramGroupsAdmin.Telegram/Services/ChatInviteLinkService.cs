@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using TelegramGroupsAdmin.Configuration.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -13,17 +12,19 @@ public class ChatInviteLinkService : IChatInviteLinkService
 {
     private readonly ILogger<ChatInviteLinkService> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly TelegramBotClientFactory _botClientFactory;
 
     public ChatInviteLinkService(
         ILogger<ChatInviteLinkService> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        TelegramBotClientFactory botClientFactory)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _botClientFactory = botClientFactory;
     }
 
     public async Task<string?> GetInviteLinkAsync(
-        ITelegramBotClient botClient,
         long chatId,
         CancellationToken ct = default)
     {
@@ -41,7 +42,7 @@ public class ChatInviteLinkService : IChatInviteLinkService
             }
 
             // Step 2: Not cached - fetch and cache
-            return await FetchAndCacheInviteLinkAsync(botClient, chatId, configRepo, ct);
+            return await FetchAndCacheInviteLinkAsync(chatId, configRepo, ct);
         }
         catch (Exception ex)
         {
@@ -59,7 +60,6 @@ public class ChatInviteLinkService : IChatInviteLinkService
     }
 
     public async Task<string?> RefreshInviteLinkAsync(
-        ITelegramBotClient botClient,
         long chatId,
         CancellationToken ct = default)
     {
@@ -72,7 +72,7 @@ public class ChatInviteLinkService : IChatInviteLinkService
 
             _logger.LogDebug("Refreshing invite link from Telegram for chat {ChatId}", chatId);
 
-            return await FetchAndCacheInviteLinkAsync(botClient, chatId, configRepo, ct);
+            return await FetchAndCacheInviteLinkAsync(chatId, configRepo, ct);
         }
         catch (Exception ex)
         {
@@ -89,13 +89,14 @@ public class ChatInviteLinkService : IChatInviteLinkService
     /// Only updates cache if link has changed (reduces unnecessary writes)
     /// </summary>
     private async Task<string?> FetchAndCacheInviteLinkAsync(
-        ITelegramBotClient botClient,
         long chatId,
         IConfigRepository configRepo,
         CancellationToken ct)
     {
+        var operations = await _botClientFactory.GetOperationsAsync();
+
         // Get chat info from Telegram
-        var chat = await botClient.GetChat(chatId, ct);
+        var chat = await operations.GetChatAsync(chatId, ct);
 
         string? currentLink;
 
@@ -120,7 +121,7 @@ public class ChatInviteLinkService : IChatInviteLinkService
 
             // No cached link - export the primary link (this WILL revoke any previous primary link)
             // This should only happen on first setup
-            currentLink = await botClient.ExportChatInviteLink(chatId, ct);
+            currentLink = await operations.ExportChatInviteLinkAsync(chatId, ct);
             _logger.LogWarning(
                 "Exported PRIMARY invite link for private chat {ChatId} - this revokes previous primary link! " +
                 "Link: {Link}",

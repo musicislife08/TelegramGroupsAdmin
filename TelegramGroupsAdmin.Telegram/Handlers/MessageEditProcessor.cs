@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Core.Models;
@@ -35,7 +34,6 @@ public class MessageEditProcessor
     /// Returns the edit record for event raising (or null if no actual edit occurred).
     /// </summary>
     public async Task<MessageEditRecord?> ProcessEditAsync(
-        ITelegramBotClient botClient,
         Message editedMessage,
         IServiceScope scope,
         CancellationToken cancellationToken = default)
@@ -109,7 +107,7 @@ public class MessageEditProcessor
             editedMessage.Chat.Id);
 
         // Schedule spam re-scan in background
-        await ScheduleSpamReScanAsync(botClient, editedMessage, newText);
+        await ScheduleSpamReScanAsync(editedMessage, newText);
 
         return editRecord;
     }
@@ -177,7 +175,6 @@ public class MessageEditProcessor
     /// Detects "post innocent, edit to spam" tactic.
     /// </summary>
     private Task ScheduleSpamReScanAsync(
-        ITelegramBotClient botClient,
         Message editedMessage,
         string? newText)
     {
@@ -198,7 +195,7 @@ public class MessageEditProcessor
                     : 0;
 
                 var contentOrchestrator = scope.ServiceProvider.GetRequiredService<ContentDetectionOrchestrator>();
-                await contentOrchestrator.RunDetectionAsync(botClient, editedMessage, newText, photoLocalPath: null, editVersion: maxEditVersion + 1, CancellationToken.None);
+                await contentOrchestrator.RunDetectionAsync(editedMessage, newText, photoLocalPath: null, editVersion: maxEditVersion + 1, CancellationToken.None);
             }
             catch (Exception ex)
             {

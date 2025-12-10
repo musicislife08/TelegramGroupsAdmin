@@ -64,13 +64,10 @@ public class FetchUserPhotoJob(
                 payload.UserId,
                 payload.MessageId);
 
-            // Get bot client from factory
-            var botClient = await _botClientFactory.GetBotClientAsync();
-
             try
             {
                 // Fetch user photo (cached if already downloaded)
-                var userPhotoPath = await _photoService.GetUserPhotoAsync(botClient, payload.UserId);
+                var userPhotoPath = await _photoService.GetUserPhotoAsync(payload.UserId);
 
                 if (userPhotoPath != null)
                 {
