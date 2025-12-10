@@ -74,7 +74,9 @@ public class AITranslationService : IAITranslationService
             }
 
             // Check for truncation due to token limit
-            if (result.FinishReason?.Equals("Length", StringComparison.OrdinalIgnoreCase) == true)
+            // Pattern "is { } reason" ensures FinishReason is not null before comparison
+            // Case-insensitive check needed for provider compatibility (OpenAI, Azure OpenAI, local models)
+            if (result.FinishReason is { } reason && reason.Equals("Length", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning(
                     "Translation response truncated due to token limit (finish_reason=length). " +
