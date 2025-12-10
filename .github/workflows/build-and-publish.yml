@@ -104,8 +104,11 @@ jobs:
       matrix:
         include:
           - name: Unit
-            project: TelegramGroupsAdmin.Tests
-            # Migration tests - uses Testcontainers for PostgreSQL
+            project: TelegramGroupsAdmin.UnitTests
+            # Pure unit tests - mocked dependencies, fast execution
+          - name: Integration
+            project: TelegramGroupsAdmin.IntegrationTests
+            # DB-dependent tests - uses Testcontainers for PostgreSQL
           - name: Component
             project: TelegramGroupsAdmin.ComponentTests
             # bUnit tests - no external dependencies
