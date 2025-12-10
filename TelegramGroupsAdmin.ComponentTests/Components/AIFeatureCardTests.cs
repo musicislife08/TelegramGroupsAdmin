@@ -27,7 +27,7 @@ public class AIFeatureCardTests : MudBlazorTestContext
     /// </summary>
     private static AIFeatureConfig CreateFeatureConfig(
         string? connectionId = null,
-        string? model = null,
+        string model = "gpt-4o-mini",
         string? azureDeploymentName = null,
         int maxTokens = 500,
         double temperature = 0.7)

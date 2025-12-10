@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Telegram.Bot;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -9,17 +10,16 @@ namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 /// This allows E2E tests to run without a real Telegram bot token.
 /// </summary>
 /// <remarks>
-/// This class doesn't inherit from TelegramBotClientFactory because:
-/// 1. The base class now requires TelegramConfigLoader in its constructor
-/// 2. Test infrastructure creates this before DI is configured
-/// 3. We override all methods anyway, so inheritance provides no value
+/// This class inherits from TelegramBotClientFactory to override virtual methods.
+/// Base constructor parameters are null since we override all methods that use them.
 /// </remarks>
 public class TestTelegramBotClientFactory : TelegramBotClientFactory
 {
     private readonly ITelegramBotClient _mockClient;
+    private ITelegramOperations? _mockOperations;
 
     public TestTelegramBotClientFactory()
-        : base(null!) // Base constructor param unused since we override all methods
+        : base(null!, null!) // Base constructor params unused since we override all methods
     {
         _mockClient = Substitute.For<ITelegramBotClient>();
     }
@@ -41,7 +41,24 @@ public class TestTelegramBotClientFactory : TelegramBotClientFactory
     }
 
     /// <summary>
+    /// Returns ITelegramOperations wrapper around the mock client.
+    /// </summary>
+    public override Task<ITelegramOperations> GetOperationsAsync()
+    {
+        _mockOperations ??= new TelegramOperations(
+            _mockClient,
+            Substitute.For<ILogger<TelegramOperations>>());
+        return Task.FromResult(_mockOperations);
+    }
+
+    /// <summary>
     /// Gets the mock client for test verification if needed.
     /// </summary>
     public ITelegramBotClient MockClient => _mockClient;
+
+    /// <summary>
+    /// Gets the mock operations wrapper for test verification.
+    /// </summary>
+    public ITelegramOperations MockOperations => _mockOperations
+        ?? throw new InvalidOperationException("Call GetOperationsAsync() first");
 }

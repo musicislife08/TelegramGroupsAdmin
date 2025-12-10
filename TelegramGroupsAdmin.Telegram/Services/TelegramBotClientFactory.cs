@@ -17,7 +17,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class TelegramBotClientFactory : IDisposable
 {
-    private readonly TelegramConfigLoader _configLoader;
+    private readonly ITelegramConfigLoader _configLoader;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TelegramBotClientFactory> _logger;
     private readonly object _lock = new();
@@ -28,7 +28,7 @@ public class TelegramBotClientFactory : IDisposable
     private TelegramOperations? _currentOperations;
 
     public TelegramBotClientFactory(
-        TelegramConfigLoader configLoader,
+        ITelegramConfigLoader configLoader,
         ILoggerFactory loggerFactory)
     {
         _configLoader = configLoader;

@@ -64,7 +64,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         // Configure Telegram test implementations
         // TestTelegramBotClientFactory - returns a mock ITelegramBotClient for all tokens
         _testTelegramBotClientFactory = new TestTelegramBotClientFactory();
-        // TestTelegramConfigLoader - registered in ConfigureServices (needs IServiceScopeFactory)
+        // TestTelegramConfigLoader - registered in ConfigureServices (implements ITelegramConfigLoader)
 
         // Configure to use Kestrel with dynamic port (port 0)
         // This MUST be called before StartServer() or accessing Services
@@ -182,10 +182,9 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             services.AddSingleton(_mockCloudScannerService);
 
             // Telegram services - test implementations to avoid real Telegram API calls
-            // TelegramConfigLoader (returns dummy token)
-            services.RemoveAll<TelegramConfigLoader>();
-            services.AddSingleton<TelegramConfigLoader>(sp =>
-                new TestTelegramConfigLoader(sp.GetRequiredService<IServiceScopeFactory>()));
+            // ITelegramConfigLoader (returns dummy token)
+            services.RemoveAll<ITelegramConfigLoader>();
+            services.AddSingleton<ITelegramConfigLoader, TestTelegramConfigLoader>();
 
             // TelegramBotClientFactory (returns mock bot client)
             services.RemoveAll<TelegramBotClientFactory>();
