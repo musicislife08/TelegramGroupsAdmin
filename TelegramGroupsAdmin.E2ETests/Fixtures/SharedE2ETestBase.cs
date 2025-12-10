@@ -9,8 +9,11 @@ using static Microsoft.Playwright.Assertions;
 namespace TelegramGroupsAdmin.E2ETests;
 
 /// <summary>
-/// Base class for E2E tests that share a single TestWebApplicationFactory instance per test class.
-/// Uses TRUNCATE to reset the database between tests for fast isolation (~10-50ms vs ~2s for DB creation).
+/// Base class for E2E tests that share a single TestWebApplicationFactory instance.
+///
+/// IMPORTANT: The factory is shared across ALL test classes that inherit from this base,
+/// not just within a single test class. This is intentional for maximum performance.
+/// Database isolation between tests is achieved via TRUNCATE (~10-50ms), not factory recreation.
 ///
 /// Use this base class for tests that:
 /// - Use unique identifiers (emails, user IDs, etc.) that don't conflict
@@ -22,13 +25,20 @@ namespace TelegramGroupsAdmin.E2ETests;
 /// </summary>
 public abstract class SharedE2ETestBase
 {
-    // Shared across all tests in the fixture - created once in OneTimeSetUp
+    // Shared across ALL test classes that inherit from this base (not per-class)
+    // This is intentional for maximum performance - TRUNCATE provides data isolation
     private static TestWebApplicationFactory? _sharedFactory;
     private static HttpClient? _sharedClient;
     private static readonly object _factoryLock = new();
 
     /// <summary>
-    /// Gets the shared factory instance. Created once per test class.
+    /// Validates PostgreSQL identifier names to prevent injection (defense-in-depth).
+    /// Pattern: Start with letter/underscore, contain only letters/digits/underscores.
+    /// </summary>
+    private static readonly Regex ValidTableNamePattern = new(@"^[a-zA-Z_][a-zA-Z0-9_]*$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Gets the shared factory instance. Created once and shared across all test classes.
     /// </summary>
     protected static TestWebApplicationFactory SharedFactory
     {
@@ -173,19 +183,11 @@ public abstract class SharedE2ETestBase
     [OneTimeTearDown]
     public virtual async Task OneTimeTearDown()
     {
-        // Dispose shared resources when all tests in this class are done
-        lock (_factoryLock)
-        {
-            _sharedClient?.Dispose();
-            _sharedClient = null;
-
-            if (_sharedFactory != null)
-            {
-                _sharedFactory.Dispose();
-                _sharedFactory = null;
-            }
-        }
-
+        // Note: SharedFactory is intentionally NOT disposed here.
+        // It's shared across all test classes for performance, and disposing it
+        // while other test classes may still be using it causes race conditions.
+        // The factory will be cleaned up when the test process exits.
+        // Each test run creates a unique database anyway, so no cleanup needed.
         await Task.CompletedTask;
     }
 
@@ -207,21 +209,34 @@ public abstract class SharedE2ETestBase
             AND tablename != '__EFMigrationsHistory'
         ").ToListAsync();
 
-        if (tables.Count > 0)
+        // Fail fast if no tables found - indicates migration failure
+        if (tables.Count == 0)
         {
-            // Build comma-separated list with proper quoting for PostgreSQL
-            var tableList = string.Join(", ", tables.Select(t => $"\"{t}\""));
-
-            // TRUNCATE is much faster than DELETE:
-            // - Removes all rows without scanning them
-            // - RESTART IDENTITY resets auto-increment sequences
-            // - CASCADE handles foreign key dependencies automatically
-            // Note: Table names come from pg_tables system catalog, not user input - safe from injection
-#pragma warning disable EF1002 // Table names from system catalog are safe
-            await dbContext.Database.ExecuteSqlRawAsync(
-                $"TRUNCATE TABLE {tableList} RESTART IDENTITY CASCADE;");
-#pragma warning restore EF1002
+            throw new InvalidOperationException(
+                "No application tables found in database. " +
+                "This likely indicates database migrations have not run.");
         }
+
+        // Defense-in-depth: validate table names match PostgreSQL identifier pattern
+        // Even though pg_tables is trusted, this guards against edge cases
+        var invalidTables = tables.Where(t => !ValidTableNamePattern.IsMatch(t)).ToList();
+        if (invalidTables.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Invalid table names from pg_tables (unexpected format): {string.Join(", ", invalidTables)}");
+        }
+
+        // Build comma-separated list with proper quoting for PostgreSQL
+        var tableList = string.Join(", ", tables.Select(t => $"\"{t}\""));
+
+        // TRUNCATE is much faster than DELETE:
+        // - Removes all rows without scanning them
+        // - RESTART IDENTITY resets auto-increment sequences
+        // - CASCADE handles foreign key dependencies automatically
+#pragma warning disable EF1002 // Table names validated above and come from system catalog
+        await dbContext.Database.ExecuteSqlRawAsync(
+            $"TRUNCATE TABLE {tableList} RESTART IDENTITY CASCADE;");
+#pragma warning restore EF1002
     }
 
     /// <summary>

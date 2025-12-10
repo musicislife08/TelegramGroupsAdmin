@@ -95,6 +95,13 @@ public abstract class SharedAuthenticatedTestBase : SharedE2ETestBase
     /// This bypasses the UI login flow for speed. Use LoginViaUiAsync() when
     /// you specifically need to test the login UI itself.
     /// </summary>
+    /// <remarks>
+    /// Security Note: Cookie injection is safe in test context because:
+    /// 1. We use the same IAuthCookieService the production app uses
+    /// 2. The cookie is properly signed/encrypted by the app's data protection
+    /// 3. This is faster than UI login and doesn't test auth flow (tested separately)
+    /// 4. The browser context is isolated per-test, cookies don't leak
+    /// </remarks>
     /// <param name="user">The test user to log in as</param>
     /// <param name="handleTotp">Ignored for cookie-based login (TOTP already verified in user setup)</param>
     protected async Task LoginAsAsync(TestUser user, bool handleTotp = true)
