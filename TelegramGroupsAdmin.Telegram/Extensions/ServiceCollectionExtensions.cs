@@ -134,6 +134,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<MessageProcessingService>();
             services.AddSingleton<TelegramAdminBotService>();
             services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());
+            services.AddSingleton<IUpdateProcessor>(sp => sp.GetRequiredService<TelegramAdminBotService>());
             services.AddHostedService(sp => sp.GetRequiredService<TelegramAdminBotService>());
 
             return services;
