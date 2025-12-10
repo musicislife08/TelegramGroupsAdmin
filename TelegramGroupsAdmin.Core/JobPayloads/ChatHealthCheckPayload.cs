@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Abstractions;
+namespace TelegramGroupsAdmin.Core.JobPayloads;
 
 /// <summary>
 /// Payload for ChatHealthCheckJob

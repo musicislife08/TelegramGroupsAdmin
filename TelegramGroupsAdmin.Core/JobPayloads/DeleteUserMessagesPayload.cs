@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Abstractions;
+namespace TelegramGroupsAdmin.Core.JobPayloads;
 
 /// <summary>
 /// Payload for cross-chat ban message cleanup (FEATURE-4.23)

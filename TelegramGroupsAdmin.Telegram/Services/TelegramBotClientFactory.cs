@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Telegram.Bot;
 
-namespace TelegramGroupsAdmin.Telegram.Abstractions.Services;
+namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
 /// Factory for creating and caching Telegram Bot API clients

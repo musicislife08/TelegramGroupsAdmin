@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Abstractions.JobPayloads;
+namespace TelegramGroupsAdmin.Core.JobPayloads;
 
 /// <summary>
 /// Payload for rotating backup encryption passphrase.

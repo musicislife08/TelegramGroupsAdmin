@@ -5,10 +5,9 @@ using Quartz;
 using Telegram.Bot;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
-using TelegramGroupsAdmin.Telegram.Abstractions;
-using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Core.JobPayloads;
+using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 

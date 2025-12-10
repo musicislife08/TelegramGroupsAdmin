@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Abstractions;
+namespace TelegramGroupsAdmin.Core.JobPayloads;
 
 /// <summary>
 /// Payload for RefreshUserPhotosJob - nightly refresh of active user photos

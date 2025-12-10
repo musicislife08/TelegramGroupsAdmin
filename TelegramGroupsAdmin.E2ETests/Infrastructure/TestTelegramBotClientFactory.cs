@@ -1,6 +1,6 @@
 using NSubstitute;
 using Telegram.Bot;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;
 

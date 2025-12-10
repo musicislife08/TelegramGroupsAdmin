@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Abstractions;
+namespace TelegramGroupsAdmin.Core.JobPayloads;
 
 /// <summary>
 /// Payload for DatabaseMaintenanceJob - PostgreSQL VACUUM and ANALYZE operations

@@ -11,7 +11,6 @@ using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Services.Email;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
 using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.E2ETests.Infrastructure;

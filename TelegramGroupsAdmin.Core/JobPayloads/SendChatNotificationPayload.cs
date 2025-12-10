@@ -1,6 +1,6 @@
 using TelegramGroupsAdmin.Core.Models;
 
-namespace TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
+namespace TelegramGroupsAdmin.Core.JobPayloads;
 
 /// <summary>
 /// Payload for sending chat notifications via Quartz job

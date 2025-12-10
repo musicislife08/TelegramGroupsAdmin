@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
+namespace TelegramGroupsAdmin.Core.JobPayloads;
 
 /// <summary>
 /// Payload for TempbanExpiryJob - scheduled to run when a tempban expires

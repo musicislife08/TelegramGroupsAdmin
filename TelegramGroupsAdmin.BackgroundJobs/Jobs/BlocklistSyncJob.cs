@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using Quartz;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
-using TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
+using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.ContentDetection.Services.Blocklists;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;

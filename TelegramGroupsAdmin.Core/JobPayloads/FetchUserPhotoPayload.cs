@@ -1,4 +1,4 @@
-namespace TelegramGroupsAdmin.Telegram.Abstractions.Jobs;
+namespace TelegramGroupsAdmin.Core.JobPayloads;
 
 /// <summary>
 /// Payload for fetch user photo job

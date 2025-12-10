@@ -2,10 +2,9 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Telegram.Abstractions.Services;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Handlers;
 using TelegramGroupsAdmin.Telegram.Models;
-using TelegramGroupsAdmin.Telegram.Services;
 using TelegramBotDocument = Telegram.Bot.Types.Document;
 
 namespace TelegramGroupsAdmin.Tests.Telegram.Handlers;
