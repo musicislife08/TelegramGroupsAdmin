@@ -9,18 +9,7 @@
 @inject ISnackbar Snackbar
 
 
-<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
-    <MudStack Spacing="4">
-        <MudStack Row="true" Justify="Justify.FlexEnd">
-            <MudButton Variant="Variant.Outlined"
-                      Color="Color.Primary"
-                      StartIcon="@Icons.Material.Filled.Refresh"
-                      OnClick="@RefreshData"
-                      Disabled="@_loading">
-                Refresh Data
-            </MudButton>
-        </MudStack>
-
+<MudStack Spacing="4">
         @if (_loading)
         {
             <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
@@ -29,7 +18,17 @@
         <!-- Overview Stats -->
         <MudPaper Class="pa-4" Elevation="2">
             <MudStack Spacing="3">
-                <MudText Typo="Typo.h6" Color="Color.Primary">Overview</MudText>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.h6" Color="Color.Primary">Overview</MudText>
+                    <MudButton Variant="Variant.Outlined"
+                              Size="Size.Small"
+                              Color="Color.Primary"
+                              StartIcon="@Icons.Material.Filled.Refresh"
+                              OnClick="@RefreshData"
+                              Disabled="@_loading">
+                        Refresh
+                    </MudButton>
+                </MudStack>
 
                 <!-- Total Checks (no bar) -->
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -349,7 +348,6 @@
             </MudStack>
         </MudPaper>
     </MudStack>
-</MudContainer>
 
 @code {
     [Parameter] public List<long> SelectedChatIds { get; set; } = [];
