@@ -12,7 +12,6 @@ public class TotpService(
     IUserRepository userRepository,
     IAuditService auditLog,
     IDataProtectionService totpProtection,
-    IPasswordHasher passwordHasher,
     ILogger<TotpService> logger)
     : ITotpService
 {
@@ -162,37 +161,6 @@ public class TotpService(
 
             return false;
         }
-
-        return true;
-    }
-
-    public async Task<bool> DisableTotpAsync(string userId, string password, CancellationToken ct = default)
-    {
-        var user = await userRepository.GetByIdAsync(userId, ct);
-        if (user is null)
-        {
-            return false;
-        }
-
-        // Verify password before disabling TOTP
-        if (!passwordHasher.VerifyPassword(password, user.PasswordHash))
-        {
-            logger.LogWarning("Invalid password attempt when disabling TOTP for user: {UserId}", userId);
-            return false;
-        }
-
-        await userRepository.DisableTotpAsync(userId, ct);
-        await userRepository.UpdateSecurityStampAsync(userId, ct);
-
-        logger.LogInformation("TOTP disabled for user: {UserId}", userId);
-
-        // Audit log
-        await auditLog.LogEventAsync(
-            AuditEventType.UserTotpReset,
-            actor: Actor.FromWebUser(userId),
-            target: Actor.FromWebUser(userId),
-            value: "TOTP 2FA disabled by user",
-            ct: ct);
 
         return true;
     }

@@ -19,14 +19,7 @@ public class AuditLogRecordDto
     [Column("timestamp")]
     public DateTimeOffset Timestamp { get; set; }
 
-    // ===== Legacy Fields (to be dropped after migration) =====
-    [Column("actor_user_id")]
-    public string? ActorUserId { get; set; }        // Legacy - who performed the action (web user ID only)
-
-    [Column("target_user_id")]
-    public string? TargetUserId { get; set; }       // Legacy - who was affected (web/telegram user ID mixed)
-
-    // ===== Actor Exclusive Arc (ARCH-2 migration) =====
+    // ===== Actor Exclusive Arc =====
     // Exactly one of these should be non-null (enforced by DB check constraint)
     [Column("actor_web_user_id")]
     public string? ActorWebUserId { get; set; }     // Web admin user ID (FK to users)
