@@ -19,7 +19,7 @@ public class TelegramBotClientFactory : ITelegramBotClientFactory
     private readonly ITelegramConfigLoader _configLoader;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TelegramBotClientFactory> _logger;
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
 
     // Single client/token pair (not dictionary) - replaced when token changes
     private string? _currentToken;
@@ -50,7 +50,8 @@ public class TelegramBotClientFactory : ITelegramBotClientFactory
 
         lock (_lock)
         {
-            return _currentOperations!;
+            return _currentOperations
+                ?? throw new InvalidOperationException("Operations not initialized - GetOrRefresh failed to create instance");
         }
     }
 
