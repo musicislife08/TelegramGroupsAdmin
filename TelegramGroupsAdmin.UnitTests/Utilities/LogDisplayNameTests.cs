@@ -174,9 +174,17 @@ public class LogDisplayNameTests
     [Test]
     public void UserDebug_PreFormatted_EmptyString_ReturnsFallbackAndId()
     {
-        // Empty string is not null, so it passes through (unlike null which triggers fallback)
+        // Empty string should be treated same as null - falls back to User ID
         var result = LogDisplayName.UserDebug("", 12345);
-        Assert.That(result, Is.EqualTo(" (12345)"));
+        Assert.That(result, Is.EqualTo("User 12345 (12345)"));
+    }
+
+    [Test]
+    public void UserDebug_PreFormatted_WhitespaceString_ReturnsFallbackAndId()
+    {
+        // Whitespace should be treated same as null - falls back to User ID
+        var result = LogDisplayName.UserDebug("   ", 12345);
+        Assert.That(result, Is.EqualTo("User 12345 (12345)"));
     }
 
     #endregion

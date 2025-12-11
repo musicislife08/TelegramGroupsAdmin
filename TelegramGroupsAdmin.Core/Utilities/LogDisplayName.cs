@@ -70,7 +70,7 @@ public static class LogDisplayName
     /// <param name="userId">Telegram user ID</param>
     /// <returns>"DisplayName (userId)"</returns>
     public static string UserDebug(string? displayName, long userId)
-        => $"{displayName ?? $"User {userId}"} ({userId})";
+        => $"{(string.IsNullOrWhiteSpace(displayName) ? $"User {userId}" : displayName)} ({userId})";
 
     #endregion
 
