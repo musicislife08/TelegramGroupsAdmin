@@ -474,9 +474,9 @@ public partial class MessageProcessingService(
             if (isUserBanned)
             {
                 logger.LogWarning(
-                    "User {UserId} is already banned in chat {ChatId}, deleting message {MessageId} immediately (multi-message spam cleanup)",
-                    message.From.Id,
-                    message.Chat.Id,
+                    "{User} is already banned in {Chat}, deleting message {MessageId} immediately (multi-message spam cleanup)",
+                    LogDisplayName.UserDebug(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
+                    LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
                     message.MessageId);
 
                 var moderationService = messageScope.ServiceProvider.GetRequiredService<ModerationActionService>();
@@ -569,9 +569,9 @@ public partial class MessageProcessingService(
                 if (impersonationResult != null)
                 {
                     logger.LogWarning(
-                        "Impersonation detected for user {UserId} in chat {ChatId} (score: {Score}, risk: {Risk})",
-                        message.From.Id,
-                        message.Chat.Id,
+                        "Impersonation detected for {User} in {Chat} (score: {Score}, risk: {Risk})",
+                        LogDisplayName.UserDebug(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
+                        LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
                         impersonationResult.TotalScore,
                         impersonationResult.RiskLevel);
 
@@ -583,8 +583,8 @@ public partial class MessageProcessingService(
                     if (impersonationResult.ShouldAutoBan)
                     {
                         logger.LogInformation(
-                            "User {UserId} auto-banned for impersonation (score: {Score})",
-                            message.From.Id,
+                            "{User} auto-banned for impersonation (score: {Score})",
+                            LogDisplayName.UserInfo(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
                             impersonationResult.TotalScore);
                     }
                 }

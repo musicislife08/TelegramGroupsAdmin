@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
@@ -31,10 +32,17 @@ public class UserActionsRepository : IUserActionsRepository
         context.UserActions.Add(entity);
         await context.SaveChangesAsync(cancellationToken);
 
+        // Get user display name for logging (single additional query, same context)
+        var targetUser = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.TelegramUserId == action.UserId)
+            .Select(u => new { u.FirstName, u.LastName, u.Username })
+            .FirstOrDefaultAsync(cancellationToken);
+
         _logger.LogInformation(
-            "Inserted user action {ActionType} for user {UserId} (expires: {ExpiresAt})",
+            "Inserted user action {ActionType} for {User} (expires: {ExpiresAt})",
             action.ActionType,
-            action.UserId,
+            LogDisplayName.UserInfo(targetUser?.FirstName, targetUser?.LastName, targetUser?.Username, action.UserId),
             action.ExpiresAt?.ToString() ?? "never");
 
         return entity.Id;
@@ -45,9 +53,13 @@ public class UserActionsRepository : IUserActionsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entity = await context.UserActions
             .AsNoTracking()
+            .Include(ua => ua.TargetUser)
             .FirstOrDefaultAsync(ua => ua.Id == id, cancellationToken);
 
-        return entity?.ToModel();
+        return entity?.ToModel(
+            targetUsername: entity?.TargetUser?.Username,
+            targetFirstName: entity?.TargetUser?.FirstName,
+            targetLastName: entity?.TargetUser?.LastName);
     }
 
     public async Task<List<UserActionRecord>> GetByUserIdAsync(long userId, CancellationToken cancellationToken = default)
@@ -55,11 +67,15 @@ public class UserActionsRepository : IUserActionsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.UserActions
             .AsNoTracking()
+            .Include(ua => ua.TargetUser)
             .Where(ua => ua.UserId == userId)
             .OrderByDescending(ua => ua.IssuedAt)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => e.ToModel()).ToList();
+        return entities.Select(e => e.ToModel(
+            targetUsername: e.TargetUser?.Username,
+            targetFirstName: e.TargetUser?.FirstName,
+            targetLastName: e.TargetUser?.LastName)).ToList();
     }
 
     public async Task<List<UserActionRecord>> GetActiveActionsByUserIdAsync(long userId, CancellationToken cancellationToken = default)
@@ -68,12 +84,16 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow;
         var entities = await context.UserActions
             .AsNoTracking()
+            .Include(ua => ua.TargetUser)
             .Where(ua => ua.UserId == userId
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
             .OrderByDescending(ua => ua.IssuedAt)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => e.ToModel()).ToList();
+        return entities.Select(e => e.ToModel(
+            targetUsername: e.TargetUser?.Username,
+            targetFirstName: e.TargetUser?.FirstName,
+            targetLastName: e.TargetUser?.LastName)).ToList();
     }
 
     public async Task<List<UserActionRecord>> GetActiveBansAsync(CancellationToken cancellationToken = default)
@@ -82,12 +102,16 @@ public class UserActionsRepository : IUserActionsRepository
         var now = DateTimeOffset.UtcNow;
         var entities = await context.UserActions
             .AsNoTracking()
+            .Include(ua => ua.TargetUser)
             .Where(ua => ua.ActionType == DataModels.UserActionType.Ban
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
             .OrderByDescending(ua => ua.IssuedAt)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => e.ToModel()).ToList();
+        return entities.Select(e => e.ToModel(
+            targetUsername: e.TargetUser?.Username,
+            targetFirstName: e.TargetUser?.FirstName,
+            targetLastName: e.TargetUser?.LastName)).ToList();
     }
 
     public async Task<bool> IsUserBannedAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default)
@@ -136,17 +160,19 @@ public class UserActionsRepository : IUserActionsRepository
     public async Task ExpireActionAsync(long actionId, Actor expiredBy, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var entity = await context.UserActions.FindAsync([actionId], cancellationToken);
+        var entity = await context.UserActions
+            .Include(ua => ua.TargetUser)
+            .FirstOrDefaultAsync(ua => ua.Id == actionId, cancellationToken);
         if (entity != null)
         {
             entity.ExpiresAt = DateTimeOffset.UtcNow;
             await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
-                "Expired action {ActionId} ({ActionType} for user {UserId}) by {ExpiredBy}",
+                "Expired action {ActionId} ({ActionType} for {User}) by {ExpiredBy}",
                 actionId,
                 entity.ActionType,
-                entity.UserId,
+                LogDisplayName.UserInfo(entity.TargetUser?.FirstName, entity.TargetUser?.LastName, entity.TargetUser?.Username, entity.UserId),
                 expiredBy);
         }
     }
@@ -169,10 +195,17 @@ public class UserActionsRepository : IUserActionsRepository
 
         await context.SaveChangesAsync(cancellationToken);
 
+        // Get user display name for logging
+        var targetUser = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.TelegramUserId == userId)
+            .Select(u => new { u.FirstName, u.LastName, u.Username })
+            .FirstOrDefaultAsync(cancellationToken);
+
         _logger.LogInformation(
-            "Expired {Count} bans for user {UserId}",
+            "Expired {Count} bans for {User}",
             bansToExpire.Count,
-            userId);
+            LogDisplayName.UserInfo(targetUser?.FirstName, targetUser?.LastName, targetUser?.Username, userId));
     }
 
     public async Task ExpireTrustsForUserAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default)
@@ -193,10 +226,17 @@ public class UserActionsRepository : IUserActionsRepository
 
         await context.SaveChangesAsync(cancellationToken);
 
+        // Get user display name for logging
+        var targetUser = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.TelegramUserId == userId)
+            .Select(u => new { u.FirstName, u.LastName, u.Username })
+            .FirstOrDefaultAsync(cancellationToken);
+
         _logger.LogInformation(
-            "Expired {Count} trusts for user {UserId}",
+            "Expired {Count} trusts for {User}",
             trustsToExpire.Count,
-            userId);
+            LogDisplayName.UserInfo(targetUser?.FirstName, targetUser?.LastName, targetUser?.Username, userId));
     }
 
     public async Task<List<UserActionRecord>> GetRecentAsync(int limit = 100, CancellationToken cancellationToken = default)
@@ -204,11 +244,15 @@ public class UserActionsRepository : IUserActionsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.UserActions
             .AsNoTracking()
+            .Include(ua => ua.TargetUser)
             .OrderByDescending(ua => ua.IssuedAt)
             .Take(limit)
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => e.ToModel()).ToList();
+        return entities.Select(e => e.ToModel(
+            targetUsername: e.TargetUser?.Username,
+            targetFirstName: e.TargetUser?.FirstName,
+            targetLastName: e.TargetUser?.LastName)).ToList();
     }
 
     public async Task<(List<UserActionRecord> Actions, int TotalCount)> GetPagedActionsAsync(
@@ -248,14 +292,18 @@ public class UserActionsRepository : IUserActionsRepository
         // Get total count for pagination
         var totalCount = await query.CountAsync(cancellationToken);
 
-        // Get page of results
+        // Get page of results with user enrichment
         var entities = await query
+            .Include(ua => ua.TargetUser)
             .OrderByDescending(ua => ua.IssuedAt)
             .Skip(skip)
             .Take(take)
             .ToListAsync(cancellationToken);
 
-        var actions = entities.Select(e => e.ToModel()).ToList();
+        var actions = entities.Select(e => e.ToModel(
+            targetUsername: e.TargetUser?.Username,
+            targetFirstName: e.TargetUser?.FirstName,
+            targetLastName: e.TargetUser?.LastName)).ToList();
 
         return (actions, totalCount);
     }
@@ -293,12 +341,16 @@ public class UserActionsRepository : IUserActionsRepository
         var dataActionType = (DataModels.UserActionType)(int)actionType;
         var entities = await context.UserActions
             .AsNoTracking()
+            .Include(ua => ua.TargetUser)
             .Where(ua => ua.UserId == userId
                 && ua.ActionType == dataActionType
                 && (ua.ExpiresAt == null || ua.ExpiresAt > now))
             .ToListAsync(cancellationToken);
 
-        return entities.Select(e => e.ToModel()).ToList();
+        return entities.Select(e => e.ToModel(
+            targetUsername: e.TargetUser?.Username,
+            targetFirstName: e.TargetUser?.FirstName,
+            targetLastName: e.TargetUser?.LastName)).ToList();
     }
 
     public async Task DeactivateAsync(long actionId, CancellationToken cancellationToken = default)

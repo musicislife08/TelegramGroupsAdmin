@@ -6,6 +6,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.ContentDetection.Utilities;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -79,7 +80,12 @@ public class ContentDetectionOrchestrator
             {
                 Message = text ?? "", // Empty string for image-only messages
                 UserId = message.From?.Id ?? 0,
-                UserName = message.From?.Username,
+                // Pass pre-formatted display name for logging (REFACTOR-10 will rename to UserDisplayName)
+                UserName = TelegramDisplayName.Format(
+                    message.From?.FirstName,
+                    message.From?.LastName,
+                    message.From?.Username,
+                    message.From?.Id ?? 0),
                 ChatId = message.Chat.Id,
                 PhotoLocalPath = photoFullPath // Pass full for ImageSpamCheck layers
             };

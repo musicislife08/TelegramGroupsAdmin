@@ -98,8 +98,11 @@ public class DetectionActionService(
             {
                 // Hard block = instant policy violation (no OpenAI veto needed)
                 logger.LogWarning(
-                    "Hard block for message {MessageId} from user {UserId} in chat {ChatId}: {Reason}",
-                    message.MessageId, message.From?.Id, message.Chat.Id, hardBlockResult.Details);
+                    "Hard block for message {MessageId} from {User} in {Chat}: {Reason}",
+                    message.MessageId,
+                    LogDisplayName.UserDebug(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                    LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
+                    hardBlockResult.Details);
 
                 // Execute instant ban across all chats
                 await ExecuteAutoBanAsync(
@@ -121,8 +124,9 @@ public class DetectionActionService(
                     cancellationToken: cancellationToken);
 
                 logger.LogWarning(
-                    "Deleted hard block message {MessageId} and banned user {UserId} (policy violation)",
-                    message.MessageId, message.From?.Id);
+                    "Deleted hard block message {MessageId} and banned {User} (policy violation)",
+                    message.MessageId,
+                    LogDisplayName.UserDebug(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0));
                 return;
             }
 
@@ -130,8 +134,11 @@ public class DetectionActionService(
             {
                 // Malware = delete message + alert admin (don't auto-ban, might be accidental upload)
                 logger.LogWarning(
-                    "Malware detected in message {MessageId} from user {UserId} in chat {ChatId}: {Details}",
-                    message.MessageId, message.From?.Id, message.Chat.Id, malwareResult.Details);
+                    "Malware detected in message {MessageId} from {User} in {Chat}: {Details}",
+                    message.MessageId,
+                    LogDisplayName.UserDebug(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                    LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
+                    malwareResult.Details);
 
                 // Delete the malware-containing message
                 await moderationActionService.DeleteMessageAsync(
@@ -203,10 +210,10 @@ public class DetectionActionService(
             {
                 // High confidence + OpenAI confirmed = auto-ban across all managed chats
                 logger.LogInformation(
-                    "Message {MessageId} from user {UserId} in chat {ChatId} triggers auto-ban (net: {NetConfidence}, OpenAI: {OpenAIConf}%)",
+                    "Message {MessageId} from {User} in {Chat} triggers auto-ban (net: {NetConfidence}, OpenAI: {OpenAIConf}%)",
                     message.MessageId,
-                    message.From?.Id,
-                    message.Chat.Id,
+                    LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                    LogDisplayName.ChatInfo(message.Chat.Title, message.Chat.Id),
                     spamResult.NetConfidence,
                     openAIResult.Confidence);
 
@@ -366,8 +373,8 @@ public class DetectionActionService(
                 if (adminChats.Count > 0)
                 {
                     logger.LogInformation(
-                        "Skipping auto-ban for user {UserId} - user is admin in {ChatCount} managed chat(s) (admin protection)",
-                        message.From.Id,
+                        "Skipping auto-ban for {User} - user is admin in {ChatCount} managed chat(s) (admin protection)",
+                        LogDisplayName.UserInfo(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
                         adminChats.Count);
                     return null;
                 }
@@ -389,8 +396,8 @@ public class DetectionActionService(
             }
 
             logger.LogInformation(
-                "Executing auto-ban for user {UserId} across {ChatCount} managed chats ({SkippedCount} skipped due to health)",
-                message.From.Id,
+                "Executing auto-ban for {User} across {ChatCount} managed chats ({SkippedCount} skipped due to health)",
+                LogDisplayName.UserInfo(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
                 actionableChats.Count,
                 skippedChatIds.Count);
 
@@ -411,23 +418,23 @@ public class DetectionActionService(
                     successCount++;
 
                     logger.LogInformation(
-                        "Banned user {UserId} from chat {ChatId}",
-                        message.From.Id,
-                        chat.ChatId);
+                        "Banned {User} from {Chat}",
+                        LogDisplayName.UserInfo(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
+                        LogDisplayName.ChatInfo(chat.ChatName, chat.ChatId));
                 }
                 catch (Exception ex)
                 {
                     failCount++;
                     logger.LogError(ex,
-                        "Failed to ban user {UserId} from chat {ChatId}",
-                        message.From.Id,
-                        chat.ChatId);
+                        "Failed to ban {User} from {Chat}",
+                        LogDisplayName.UserDebug(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
+                        LogDisplayName.ChatDebug(chat.ChatName, chat.ChatId));
                 }
             }
 
             logger.LogInformation(
-                "Auto-ban complete for user {UserId}: {SuccessCount}/{TotalCount} successful, {FailCount} failed",
-                message.From.Id,
+                "Auto-ban complete for {User}: {SuccessCount}/{TotalCount} successful, {FailCount} failed",
+                LogDisplayName.UserInfo(message.From.FirstName, message.From.LastName, message.From.Username, message.From.Id),
                 successCount,
                 actionableChats.Count,
                 failCount);
@@ -535,10 +542,9 @@ public class DetectionActionService(
             var userName = TelegramDisplayName.Format(message.From.FirstName, message.From.LastName, message.From.Username, userId);
 
             logger.LogWarning(
-                "Critical check violation by user {UserId} (@{Username}) in chat {ChatId}: {Violations}",
-                userId,
-                userName,
-                chatId,
+                "Critical check violation by {User} in {Chat}: {Violations}",
+                LogDisplayName.UserDebug(message.From.FirstName, message.From.LastName, message.From.Username, userId),
+                LogDisplayName.ChatDebug(message.Chat.Title, chatId),
                 string.Join("; ", violations));
 
             // Step 1: Delete the violating message with tracked deletion

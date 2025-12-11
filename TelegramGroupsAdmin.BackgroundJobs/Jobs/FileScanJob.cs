@@ -120,7 +120,8 @@ public class FileScanJob(
                 {
                     Message = $"File attachment: {payload.FileName ?? "unknown"}",
                     UserId = payload.UserId,
-                    UserName = user?.Username,
+                    // Pass pre-formatted display name for logging (REFACTOR-10 will rename to UserDisplayName)
+                    UserName = TelegramDisplayName.Format(user?.FirstName, user?.LastName, user?.Username, payload.UserId),
                     ChatId = payload.ChatId,
                     FilePath = tempFilePath,
                     FileName = payload.FileName ?? "unknown",

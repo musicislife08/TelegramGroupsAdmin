@@ -1,4 +1,5 @@
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Email;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -64,8 +65,8 @@ public class AccountLockoutService : IAccountLockoutService
             await _userRepository.LockAccountAsync(userId, lockedUntil, ct);
 
             _logger.LogWarning(
-                "Account locked for user {UserId} after {Attempts} failed attempts. Locked until {LockedUntil}",
-                userId, user.FailedLoginAttempts, lockedUntil);
+                "Account locked for {User} after {Attempts} failed attempts. Locked until {LockedUntil}",
+                LogDisplayName.WebUserDebug(user.Email, userId), user.FailedLoginAttempts, lockedUntil);
 
             // Send email notification (fire-and-forget, don't block login flow)
             _ = Task.Run(async () =>
@@ -118,7 +119,8 @@ public class AccountLockoutService : IAccountLockoutService
         // Unlock the account
         await _userRepository.UnlockAccountAsync(userId, ct);
 
-        _logger.LogInformation("Account manually unlocked for user {UserId} by {UnlockedBy}", userId, unlockedBy);
+        _logger.LogInformation("Account manually unlocked for {User} by {UnlockedBy}",
+            LogDisplayName.WebUserInfo(user.Email, userId), unlockedBy);
 
         // Send email notification (fire-and-forget)
         _ = Task.Run(async () =>

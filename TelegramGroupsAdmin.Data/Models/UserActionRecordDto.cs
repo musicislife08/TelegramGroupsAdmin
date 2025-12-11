@@ -44,7 +44,13 @@ public class UserActionRecordDto
     [Column("reason")]
     public string? Reason { get; set; }
 
-    // Navigation property
+    // Navigation properties
     [ForeignKey(nameof(MessageId))]
     public virtual MessageRecordDto? Message { get; set; }
+
+    /// <summary>
+    /// Target user of the action (for display name enrichment in logs and UI)
+    /// </summary>
+    [ForeignKey(nameof(UserId))]
+    public virtual TelegramUserDto? TargetUser { get; set; }
 }

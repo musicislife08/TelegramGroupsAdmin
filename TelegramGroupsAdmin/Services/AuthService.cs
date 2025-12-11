@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -49,7 +50,8 @@ public class AuthService(
         if (user.IsLocked)
         {
             var timeRemaining = user.LockedUntil!.Value - DateTimeOffset.UtcNow;
-            logger.LogWarning("Login attempt for locked account: {UserId}, locked until {LockedUntil}", user.Id, user.LockedUntil);
+            logger.LogWarning("Login attempt for locked account: {User}, locked until {LockedUntil}",
+                LogDisplayName.WebUserDebug(user.Email, user.Id), user.LockedUntil);
 
             // Audit log - failed login (account locked)
             await auditLog.LogEventAsync(
@@ -66,7 +68,8 @@ public class AuthService(
         // Check user status (Disabled = 2, Deleted = 3)
         if (user.Status == UserStatus.Disabled)
         {
-            logger.LogWarning("Login attempt for disabled user: {UserId}", user.Id);
+            logger.LogWarning("Login attempt for disabled account: {User}",
+                LogDisplayName.WebUserDebug(user.Email, user.Id));
 
             // Audit log - failed login (disabled account)
             await auditLog.LogEventAsync(
@@ -81,7 +84,8 @@ public class AuthService(
 
         if (user.Status == UserStatus.Deleted)
         {
-            logger.LogWarning("Login attempt for deleted user: {UserId}", user.Id);
+            logger.LogWarning("Login attempt for deleted account: {User}",
+                LogDisplayName.WebUserDebug(user.Email, user.Id));
 
             // Audit log - failed login (deleted account)
             await auditLog.LogEventAsync(
@@ -96,7 +100,8 @@ public class AuthService(
 
         if (!passwordHasher.VerifyPassword(password, user.PasswordHash))
         {
-            logger.LogWarning("Invalid password for user: {UserId}", user.Id);
+            logger.LogWarning("Invalid password for {User}",
+                LogDisplayName.WebUserDebug(user.Email, user.Id));
 
             // Audit log - failed login (wrong password)
             await auditLog.LogEventAsync(
@@ -115,7 +120,8 @@ public class AuthService(
         // Check if email is verified
         if (!user.EmailVerified)
         {
-            logger.LogWarning("Login attempt for unverified email: {UserId}", user.Id);
+            logger.LogWarning("Login attempt for unverified email: {User}",
+                LogDisplayName.WebUserDebug(user.Email, user.Id));
 
             // Audit log - failed login (email not verified)
             await auditLog.LogEventAsync(
@@ -223,7 +229,7 @@ public class AuthService(
             inviteToken!,
             ct);
 
-        logger.LogInformation("User registered: {UserId} via invite from {InviterId}", userId, inviteValidation.InvitedBy);
+        logger.LogInformation("User registered: {Email} via invite from {InviterId}", email, inviteValidation.InvitedBy);
 
         // Audit log
         await auditLog.LogEventAsync(
@@ -241,8 +247,8 @@ public class AuthService(
         else
         {
             logger.LogWarning(
-                "User {UserId} registered without email verification (email service not configured)",
-                userId);
+                "{User} registered without email verification (email service not configured)",
+                LogDisplayName.WebUserDebug(email, userId));
         }
 
         return new RegisterResult(true, userId, null);
@@ -283,7 +289,7 @@ public class AuthService(
         );
 
         await userRepository.CreateAsync(user, ct);
-        logger.LogInformation("Owner account created: {UserId}", userId);
+        logger.LogInformation("Owner account created: {Email}", email);
 
         await auditLog.LogEventAsync(
             AuditEventType.UserRegistered,
@@ -388,7 +394,7 @@ public class AuthService(
 
     public async Task LogoutAsync(string userId, CancellationToken ct = default)
     {
-        logger.LogInformation("User logged out: {UserId}", userId);
+        logger.LogInformation("User logged out: {UserId}", userId); // Note: No email in scope
 
         // Audit log
         await auditLog.LogEventAsync(
@@ -411,7 +417,8 @@ public class AuthService(
         // Verify current password
         if (!passwordHasher.VerifyPassword(currentPassword, user.PasswordHash))
         {
-            logger.LogWarning("Invalid current password during password change for user: {UserId}", userId);
+            logger.LogWarning("Invalid current password during password change for {User}",
+                LogDisplayName.WebUserDebug(user.Email, userId));
             return false;
         }
 
@@ -429,7 +436,7 @@ public class AuthService(
 
         await userRepository.UpdateAsync(updatedUser, ct);
 
-        logger.LogInformation("Password changed for user: {UserId}", userId);
+        logger.LogInformation("Password changed for {User}", LogDisplayName.WebUserInfo(user.Email, userId));
 
         // Audit log
         await auditLog.LogEventAsync(
@@ -500,7 +507,8 @@ public class AuthService(
         // If already verified, no need to resend
         if (user.EmailVerified)
         {
-            logger.LogInformation("Resend verification attempt for already verified user: {UserId}", user.Id);
+            logger.LogInformation("Resend verification attempt for already verified {User}",
+                LogDisplayName.WebUserInfo(email, user.Id));
             return false;
         }
 
@@ -624,6 +632,7 @@ public class AuthService(
         if (user is null)
         {
             logger.LogWarning("Password reset token references non-existent user {UserId}", resetToken.UserId);
+            // No email available - just log the ID
             return false;
         }
 
@@ -642,7 +651,7 @@ public class AuthService(
         // Mark token as used
         await verificationTokenRepository.MarkAsUsedAsync(token, ct);
 
-        logger.LogInformation("Password reset for user {UserId}", user.Id);
+        logger.LogInformation("Password reset for {User}", LogDisplayName.WebUserInfo(user.Email, user.Id));
 
         // Audit log
         await auditLog.LogEventAsync(

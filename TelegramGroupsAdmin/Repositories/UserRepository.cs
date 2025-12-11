@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Data;
@@ -479,8 +480,8 @@ public class UserRepository : IUserRepository
         entity.LockedUntil = lockedUntil;
         await context.SaveChangesAsync(ct);
 
-        _logger.LogWarning("Locked account for user {UserId} until {LockedUntil}",
-            userId, lockedUntil);
+        _logger.LogWarning("Locked account for {User} until {LockedUntil}",
+            LogDisplayName.WebUserDebug(entity.Email, userId), lockedUntil);
     }
 
     public async Task UnlockAccountAsync(string userId, CancellationToken ct = default)
