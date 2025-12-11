@@ -16,13 +16,13 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class DmDeliveryService : IDmDeliveryService
 {
     private readonly ILogger<DmDeliveryService> _logger;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IServiceProvider _serviceProvider;
     private readonly IJobScheduler _jobScheduler;
 
     public DmDeliveryService(
         ILogger<DmDeliveryService> logger,
-        TelegramBotClientFactory botClientFactory,
+        ITelegramBotClientFactory botClientFactory,
         IServiceProvider serviceProvider,
         IJobScheduler jobScheduler)
     {

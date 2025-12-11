@@ -21,6 +21,9 @@ public class TelegramOperations : ITelegramOperations
 
     public TelegramOperations(ITelegramBotClient botClient, ILogger<TelegramOperations> logger)
     {
+        ArgumentNullException.ThrowIfNull(botClient);
+        ArgumentNullException.ThrowIfNull(logger);
+
         _botClient = botClient;
         _logger = logger;
     }

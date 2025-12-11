@@ -19,8 +19,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// Implements IUpdateProcessor to enable unit testing of update routing logic.
 /// </summary>
 public class TelegramAdminBotService(
-    TelegramBotClientFactory botFactory,
-    TelegramConfigLoader configLoader,
+    ITelegramBotClientFactory botFactory,
     IServiceScopeFactory scopeFactory,
     CommandRouter commandRouter,
     MessageProcessingService messageProcessingService,
@@ -29,16 +28,12 @@ public class TelegramAdminBotService(
     ILogger<TelegramAdminBotService> logger)
     : BackgroundService, IMessageHistoryService, IUpdateProcessor
 {
-    private readonly TelegramConfigLoader _configLoader = configLoader;
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private ITelegramBotClient? _botClient;
     private CancellationTokenSource? _botCancellationTokenSource;
     private Task? _botTask;
     private readonly SemaphoreSlim _configChangeSignal = new(0, 1);
     private User? _botUserInfo; // Cached bot user info from GetMe()
-
-    // Cached configuration loaded once at startup
-    private string? _botToken;
 
     // Events for real-time UI updates (forwarded from child services)
     public event Action<MessageRecord>? OnNewMessage
@@ -169,14 +164,8 @@ public class TelegramAdminBotService(
 
     private async Task RunBotAsync(CancellationToken stoppingToken)
     {
-        // Load configuration from database (if not already loaded)
-        if (_botToken == null)
-        {
-            _botToken = await _configLoader.LoadConfigAsync();
-            logger.LogInformation("Loaded Telegram bot configuration from database");
-        }
-
-        _botClient = botFactory.GetOrCreate(_botToken);
+        // Get bot client from factory (factory handles token loading internally)
+        _botClient = await botFactory.GetBotClientAsync();
         var botClient = _botClient;
 
         // Fetch and cache bot info

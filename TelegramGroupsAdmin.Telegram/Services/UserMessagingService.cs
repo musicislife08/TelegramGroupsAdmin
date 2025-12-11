@@ -10,12 +10,12 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class UserMessagingService : IUserMessagingService
 {
     private readonly ITelegramUserRepository _telegramUserRepository;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly ILogger<UserMessagingService> _logger;
 
     public UserMessagingService(
         ITelegramUserRepository telegramUserRepository,
-        TelegramBotClientFactory botClientFactory,
+        ITelegramBotClientFactory botClientFactory,
         ILogger<UserMessagingService> logger)
     {
         _telegramUserRepository = telegramUserRepository;

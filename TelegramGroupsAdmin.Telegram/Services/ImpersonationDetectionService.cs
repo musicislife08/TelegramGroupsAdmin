@@ -31,7 +31,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     private readonly IPhotoHashService _photoHashService;
     private readonly IImpersonationAlertsRepository _impersonationAlertsRepository;
     private readonly ModerationActionService _moderationActionService;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IConfigService _configService;
     private readonly ILogger<ImpersonationDetectionService> _logger;
 
@@ -50,7 +50,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         IPhotoHashService photoHashService,
         IImpersonationAlertsRepository impersonationAlertsRepository,
         ModerationActionService moderationActionService,
-        TelegramBotClientFactory botClientFactory,
+        ITelegramBotClientFactory botClientFactory,
         IConfigService configService,
         ILogger<ImpersonationDetectionService> logger)
     {

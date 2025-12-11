@@ -16,11 +16,11 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class LanguageWarningHandler
 {
-    private readonly TelegramBotClientFactory _botFactory;
+    private readonly ITelegramBotClientFactory _botFactory;
     private readonly ILogger<LanguageWarningHandler> _logger;
 
     public LanguageWarningHandler(
-        TelegramBotClientFactory botFactory,
+        ITelegramBotClientFactory botFactory,
         ILogger<LanguageWarningHandler> logger)
     {
         _botFactory = botFactory;

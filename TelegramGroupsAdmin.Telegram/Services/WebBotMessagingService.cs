@@ -17,7 +17,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class WebBotMessagingService : IWebBotMessagingService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly TelegramBotClientFactory _botFactory;
+    private readonly ITelegramBotClientFactory _botFactory;
     private readonly BotMessageService _botMessageService;
     private readonly ITelegramUserRepository _userRepo;
     private readonly ITelegramUserMappingRepository _mappingRepo;
@@ -26,7 +26,7 @@ public class WebBotMessagingService : IWebBotMessagingService
 
     public WebBotMessagingService(
         IServiceScopeFactory scopeFactory,
-        TelegramBotClientFactory botFactory,
+        ITelegramBotClientFactory botFactory,
         BotMessageService botMessageService,
         ITelegramUserRepository userRepo,
         ITelegramUserMappingRepository mappingRepo,

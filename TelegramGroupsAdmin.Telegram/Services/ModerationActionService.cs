@@ -31,7 +31,7 @@ public class ModerationActionService
     private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly ITelegramUserMappingRepository _telegramUserMappingRepository;
     private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IConfigService _configService;
     private readonly IServiceProvider _serviceProvider;
     private readonly IUserMessagingService _messagingService;
@@ -50,7 +50,7 @@ public class ModerationActionService
         ITelegramUserRepository telegramUserRepository,
         ITelegramUserMappingRepository telegramUserMappingRepository,
         IImageTrainingSamplesRepository imageTrainingSamplesRepository,
-        TelegramBotClientFactory botClientFactory,
+        ITelegramBotClientFactory botClientFactory,
         IConfigService configService,
         IServiceProvider serviceProvider,
         IUserMessagingService messagingService,

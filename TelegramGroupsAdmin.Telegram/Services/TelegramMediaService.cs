@@ -14,14 +14,14 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class TelegramMediaService(
     ILogger<TelegramMediaService> logger,
-    TelegramBotClientFactory botClientFactory,
+    ITelegramBotClientFactory botClientFactory,
     IOptions<MessageHistoryOptions> historyOptions)
 {
     // Telegram Bot API file download limit (standard api.telegram.org)
     private const long MaxFileSizeBytes = 20 * 1024 * 1024; // 20MB
 
     private readonly ILogger<TelegramMediaService> _logger = logger;
-    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly string _mediaStoragePath = historyOptions.Value.ImageStoragePath; // Reuse same base path
 
     /// <summary>

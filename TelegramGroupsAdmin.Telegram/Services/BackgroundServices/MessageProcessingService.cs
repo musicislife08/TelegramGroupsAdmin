@@ -23,7 +23,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 public partial class MessageProcessingService(
     IServiceScopeFactory scopeFactory,
     IOptions<MessageHistoryOptions> historyOptions,
-    TelegramBotClientFactory botFactory,
+    ITelegramBotClientFactory botFactory,
     CommandRouter commandRouter,
     ChatManagementService chatManagementService,
     TelegramPhotoService telegramPhotoService,
@@ -33,7 +33,7 @@ public partial class MessageProcessingService(
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
-    private readonly TelegramBotClientFactory _botFactory = botFactory;
+    private readonly ITelegramBotClientFactory _botFactory = botFactory;
     private readonly TelegramPhotoService _photoService = telegramPhotoService;
     private readonly TelegramMediaService _mediaService = telegramMediaService;
 

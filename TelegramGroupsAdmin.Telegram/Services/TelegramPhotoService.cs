@@ -17,14 +17,14 @@ public class TelegramPhotoService
     private const long MaxFileSizeBytes = 20 * 1024 * 1024; // 20MB
 
     private readonly ILogger<TelegramPhotoService> _logger;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly MessageHistoryOptions _options;
     private readonly string _chatIconsPath;
     private readonly string _userPhotosPath;
 
     public TelegramPhotoService(
         ILogger<TelegramPhotoService> logger,
-        TelegramBotClientFactory botClientFactory,
+        ITelegramBotClientFactory botClientFactory,
         IOptions<MessageHistoryOptions> options)
     {
         _logger = logger;

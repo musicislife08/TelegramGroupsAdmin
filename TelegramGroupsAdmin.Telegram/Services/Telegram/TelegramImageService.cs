@@ -5,11 +5,11 @@ namespace TelegramGroupsAdmin.Telegram.Services.Telegram;
 
 public class TelegramImageService : ITelegramImageService
 {
-    private readonly TelegramBotClientFactory _botFactory;
+    private readonly ITelegramBotClientFactory _botFactory;
     private readonly ILogger<TelegramImageService> _logger;
 
     public TelegramImageService(
-        TelegramBotClientFactory botFactory,
+        ITelegramBotClientFactory botFactory,
         ILogger<TelegramImageService> logger)
     {
         _botFactory = botFactory;

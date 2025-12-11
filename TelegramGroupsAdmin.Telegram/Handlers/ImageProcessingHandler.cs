@@ -14,12 +14,12 @@ namespace TelegramGroupsAdmin.Telegram.Handlers;
 /// </summary>
 public class ImageProcessingHandler
 {
-    private readonly TelegramBotClientFactory _botFactory;
+    private readonly ITelegramBotClientFactory _botFactory;
     private readonly MessageHistoryOptions _historyOptions;
     private readonly ILogger<ImageProcessingHandler> _logger;
 
     public ImageProcessingHandler(
-        TelegramBotClientFactory botFactory,
+        ITelegramBotClientFactory botFactory,
         IOptions<MessageHistoryOptions> historyOptions,
         ILogger<ImageProcessingHandler> logger)
     {

@@ -16,13 +16,13 @@ public class MyStatusCommand : IBotCommand
     private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IUserActionsRepository _userActionsRepository;
     private readonly INotificationOrchestrator _notificationOrchestrator;
-    private readonly TelegramBotClientFactory _botFactory;
+    private readonly ITelegramBotClientFactory _botFactory;
 
     public MyStatusCommand(
         ITelegramUserRepository telegramUserRepository,
         IUserActionsRepository userActionsRepository,
         INotificationOrchestrator notificationOrchestrator,
-        TelegramBotClientFactory botFactory)
+        ITelegramBotClientFactory botFactory)
     {
         _telegramUserRepository = telegramUserRepository;
         _userActionsRepository = userActionsRepository;

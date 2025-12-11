@@ -13,12 +13,12 @@ public class AdminMentionHandler
 {
     private readonly ILogger<AdminMentionHandler> _logger;
     private readonly IChatAdminsRepository _chatAdminsRepository;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
 
     public AdminMentionHandler(
         ILogger<AdminMentionHandler> logger,
         IChatAdminsRepository chatAdminsRepository,
-        TelegramBotClientFactory botClientFactory)
+        ITelegramBotClientFactory botClientFactory)
     {
         _logger = logger;
         _chatAdminsRepository = chatAdminsRepository;

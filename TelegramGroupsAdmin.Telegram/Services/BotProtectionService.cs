@@ -14,12 +14,12 @@ public class BotProtectionService : IBotProtectionService
 {
     private readonly ILogger<BotProtectionService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
 
     public BotProtectionService(
         ILogger<BotProtectionService> logger,
         IServiceScopeFactory scopeFactory,
-        TelegramBotClientFactory botClientFactory)
+        ITelegramBotClientFactory botClientFactory)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;

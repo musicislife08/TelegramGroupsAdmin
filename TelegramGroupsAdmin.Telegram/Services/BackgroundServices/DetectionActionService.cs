@@ -84,7 +84,7 @@ public class DetectionActionService(
             using var scope = serviceProvider.CreateScope();
             var reportService = scope.ServiceProvider.GetRequiredService<IReportService>();
             var moderationActionService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
-            var botFactory = scope.ServiceProvider.GetRequiredService<TelegramBotClientFactory>();
+            var botFactory = scope.ServiceProvider.GetRequiredService<ITelegramBotClientFactory>();
             var configLoader = scope.ServiceProvider.GetRequiredService<TelegramConfigLoader>();
             var botToken = await configLoader.LoadConfigAsync();
             var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
@@ -328,7 +328,7 @@ public class DetectionActionService(
     private async Task<AutoBanResult?> ExecuteAutoBanAsync(
         IUserActionsRepository userActionsRepo,
         IManagedChatsRepository managedChatsRepo,
-        TelegramBotClientFactory botFactory,
+        ITelegramBotClientFactory botFactory,
         Message message,
         TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
         TelegramGroupsAdmin.ContentDetection.Models.ContentCheckResponse openAIResult,

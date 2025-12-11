@@ -21,7 +21,7 @@ public class StartCommand : IBotCommand
     private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IPendingNotificationsRepository _pendingNotificationsRepository;
     private readonly IServiceProvider _serviceProvider;
-    private readonly TelegramBotClientFactory _botFactory;
+    private readonly ITelegramBotClientFactory _botFactory;
 
     public StartCommand(
         ILogger<StartCommand> logger,
@@ -29,7 +29,7 @@ public class StartCommand : IBotCommand
         ITelegramUserRepository telegramUserRepository,
         IPendingNotificationsRepository pendingNotificationsRepository,
         IServiceProvider serviceProvider,
-        TelegramBotClientFactory botFactory)
+        ITelegramBotClientFactory botFactory)
     {
         _logger = logger;
         _welcomeResponsesRepository = welcomeResponsesRepository;

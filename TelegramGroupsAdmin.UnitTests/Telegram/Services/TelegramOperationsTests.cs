@@ -15,7 +15,7 @@ namespace TelegramGroupsAdmin.UnitTests.Telegram.Services;
 /// 2. Constructor initialization
 ///
 /// Full integration testing of the wrapper methods (SendMessageAsync, BanChatMemberAsync, etc.)
-/// is done in E2E tests where TestTelegramBotClientFactory provides a mock client.
+/// is done in E2E tests using ITelegramBotClientFactory with NSubstitute mocks.
 /// </summary>
 [TestFixture]
 public class TelegramOperationsTests
@@ -62,30 +62,28 @@ public class TelegramOperationsTests
         Assert.That(result, Is.EqualTo(expectedBotId));
     }
 
+    #endregion
+
+    #region Null Guard Tests
+
     [Test]
-    public void BotId_WhenBotClientReturnsZero_ReturnsZero()
+    public void Constructor_WithNullBotClient_ThrowsArgumentNullException()
     {
-        // Arrange
-        _mockBotClient.BotId.Returns(0L);
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            new TelegramOperations(null!, _mockLogger));
 
-        // Act
-        var result = _sut.BotId;
-
-        // Assert
-        Assert.That(result, Is.EqualTo(0L));
+        Assert.That(ex!.ParamName, Is.EqualTo("botClient"));
     }
 
     [Test]
-    public void BotId_WhenBotClientReturnsNegative_ReturnsNegative()
+    public void Constructor_WithNullLogger_ThrowsArgumentNullException()
     {
-        // Arrange - Telegram bot IDs are always positive, but test edge case
-        _mockBotClient.BotId.Returns(-1L);
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            new TelegramOperations(_mockBotClient, null!));
 
-        // Act
-        var result = _sut.BotId;
-
-        // Assert
-        Assert.That(result, Is.EqualTo(-1L));
+        Assert.That(ex!.ParamName, Is.EqualTo("logger"));
     }
 
     #endregion
@@ -95,26 +93,9 @@ public class TelegramOperationsTests
     [Test]
     public void TelegramOperations_ImplementsITelegramOperations()
     {
-        // Assert
+        // Assert - Verifies the class properly implements the interface
+        // (compiler enforces method signatures, this confirms runtime type)
         Assert.That(_sut, Is.InstanceOf<ITelegramOperations>());
-    }
-
-    [Test]
-    public void ITelegramOperations_HasExpectedMethods()
-    {
-        // Verify key methods exist on the interface
-        var interfaceType = typeof(ITelegramOperations);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(interfaceType.GetMethod("SendMessageAsync"), Is.Not.Null, "SendMessageAsync should exist");
-            Assert.That(interfaceType.GetMethod("DeleteMessageAsync"), Is.Not.Null, "DeleteMessageAsync should exist");
-            Assert.That(interfaceType.GetMethod("BanChatMemberAsync"), Is.Not.Null, "BanChatMemberAsync should exist");
-            Assert.That(interfaceType.GetMethod("UnbanChatMemberAsync"), Is.Not.Null, "UnbanChatMemberAsync should exist");
-            Assert.That(interfaceType.GetMethod("GetMeAsync"), Is.Not.Null, "GetMeAsync should exist");
-            Assert.That(interfaceType.GetMethod("GetFileAsync"), Is.Not.Null, "GetFileAsync should exist");
-            Assert.That(interfaceType.GetMethod("DownloadFileAsync"), Is.Not.Null, "DownloadFileAsync should exist");
-        });
     }
 
     #endregion

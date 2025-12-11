@@ -17,11 +17,11 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 /// </summary>
 public class DeleteUserMessagesJob(
     ILogger<DeleteUserMessagesJob> logger,
-    TelegramBotClientFactory botClientFactory,
+    ITelegramBotClientFactory botClientFactory,
     IMessageHistoryRepository messageHistoryRepository) : IJob
 {
     private readonly ILogger<DeleteUserMessagesJob> _logger = logger;
-    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly IMessageHistoryRepository _messageHistoryRepository = messageHistoryRepository;
 
     public async Task Execute(IJobExecutionContext context)

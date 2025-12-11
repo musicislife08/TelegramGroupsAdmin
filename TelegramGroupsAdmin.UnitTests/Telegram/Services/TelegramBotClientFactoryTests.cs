@@ -45,36 +45,45 @@ public class TelegramBotClientFactoryTests
         _sut?.Dispose();
     }
 
-    #region GetOrCreate Tests
+    #region GetBotClientAsync Tests
 
     [Test]
-    public void GetOrCreate_SameToken_ReturnsSameClient()
+    public async Task GetBotClientAsync_SameToken_ReturnsSameClient()
     {
+        // Arrange
+        _mockConfigLoader.LoadConfigAsync().Returns(TestToken1);
+
         // Act
-        var client1 = _sut.GetOrCreate(TestToken1);
-        var client2 = _sut.GetOrCreate(TestToken1);
+        var client1 = await _sut.GetBotClientAsync();
+        var client2 = await _sut.GetBotClientAsync();
 
         // Assert
         Assert.That(client2, Is.SameAs(client1), "Same token should return cached client");
     }
 
     [Test]
-    public void GetOrCreate_DifferentToken_ReturnsNewClient()
+    public async Task GetBotClientAsync_DifferentToken_ReturnsNewClient()
     {
+        // Arrange - First call returns token1, second returns token2
+        _mockConfigLoader.LoadConfigAsync().Returns(TestToken1, TestToken2);
+
         // Act
-        var client1 = _sut.GetOrCreate(TestToken1);
-        var client2 = _sut.GetOrCreate(TestToken2);
+        var client1 = await _sut.GetBotClientAsync();
+        var client2 = await _sut.GetBotClientAsync();
 
         // Assert
         Assert.That(client2, Is.Not.SameAs(client1), "Different token should return new client");
     }
 
     [Test]
-    public void GetOrCreate_AfterTokenChange_LogsTokenChanged()
+    public async Task GetBotClientAsync_AfterTokenChange_LogsTokenChanged()
     {
+        // Arrange
+        _mockConfigLoader.LoadConfigAsync().Returns(TestToken1, TestToken2);
+
         // Act
-        _ = _sut.GetOrCreate(TestToken1);
-        _ = _sut.GetOrCreate(TestToken2);
+        _ = await _sut.GetBotClientAsync();
+        _ = await _sut.GetBotClientAsync();
 
         // Assert - Verify LogInformation was called (token changed message)
         _mockFactoryLogger.Received().Log(
@@ -133,20 +142,105 @@ public class TelegramBotClientFactoryTests
 
     #endregion
 
+    #region Exception Handling Tests
+
+    [Test]
+    public void GetBotClientAsync_WhenLoaderReturnsNull_ThrowsArgumentNullException()
+    {
+        // Arrange
+        _mockConfigLoader.LoadConfigAsync().Returns((string)null!);
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<ArgumentNullException>(async () =>
+            await _sut.GetBotClientAsync());
+
+        Assert.That(ex!.ParamName, Is.EqualTo("token"));
+    }
+
+    [Test]
+    public void GetBotClientAsync_WhenLoaderReturnsEmptyString_ThrowsArgumentException()
+    {
+        // Arrange
+        _mockConfigLoader.LoadConfigAsync().Returns(string.Empty);
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _sut.GetBotClientAsync());
+
+        Assert.That(ex!.ParamName, Is.EqualTo("token"));
+    }
+
+    [Test]
+    public void GetBotClientAsync_WhenLoaderReturnsWhitespace_ThrowsArgumentException()
+    {
+        // Arrange
+        _mockConfigLoader.LoadConfigAsync().Returns("   ");
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _sut.GetBotClientAsync());
+
+        Assert.That(ex!.ParamName, Is.EqualTo("token"));
+    }
+
+    [Test]
+    public void GetBotClientAsync_WhenLoaderThrowsException_PropagatesException()
+    {
+        // Arrange
+        var expectedException = new InvalidOperationException("Config not available");
+        _mockConfigLoader.LoadConfigAsync().Returns<string>(_ => throw expectedException);
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _sut.GetBotClientAsync());
+
+        Assert.That(ex, Is.SameAs(expectedException));
+    }
+
+    [Test]
+    public void GetOperationsAsync_WhenLoaderReturnsNull_ThrowsArgumentNullException()
+    {
+        // Arrange
+        _mockConfigLoader.LoadConfigAsync().Returns((string)null!);
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<ArgumentNullException>(async () =>
+            await _sut.GetOperationsAsync());
+
+        Assert.That(ex!.ParamName, Is.EqualTo("token"));
+    }
+
+    [Test]
+    public void GetOperationsAsync_WhenLoaderThrowsException_PropagatesException()
+    {
+        // Arrange
+        var expectedException = new InvalidOperationException("Config not available");
+        _mockConfigLoader.LoadConfigAsync().Returns<string>(_ => throw expectedException);
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _sut.GetOperationsAsync());
+
+        Assert.That(ex, Is.SameAs(expectedException));
+    }
+
+    #endregion
+
     #region Dispose Tests
 
     [Test]
-    public void Dispose_ClearsCache_SubsequentCallsCreateNewClient()
+    public async Task Dispose_ClearsCache_SubsequentCallsCreateNewClient()
     {
         // Arrange
-        var clientBefore = _sut.GetOrCreate(TestToken1);
+        _mockConfigLoader.LoadConfigAsync().Returns(TestToken1);
+        var clientBefore = await _sut.GetBotClientAsync();
         _sut.Dispose();
 
         // Create new factory (simulating app restart)
         var newFactory = new TelegramBotClientFactory(_mockConfigLoader, _mockLoggerFactory);
 
         // Act
-        var clientAfter = newFactory.GetOrCreate(TestToken1);
+        var clientAfter = await newFactory.GetBotClientAsync();
 
         // Assert
         Assert.That(clientAfter, Is.Not.SameAs(clientBefore), "After dispose, new client should be created");
@@ -165,6 +259,102 @@ public class TelegramBotClientFactoryTests
             _sut.Dispose();
             _sut.Dispose();
         });
+    }
+
+    [Test]
+    public async Task GetBotClientAsync_AfterDispose_ReturnsNewClient()
+    {
+        // Arrange - Get a client, then dispose
+        _mockConfigLoader.LoadConfigAsync().Returns(TestToken1);
+        var clientBefore = await _sut.GetBotClientAsync();
+        _sut.Dispose();
+
+        // Act - Call again after dispose (factory allows reuse after dispose)
+        var clientAfter = await _sut.GetBotClientAsync();
+
+        // Assert - Should create new client since cache was cleared
+        Assert.That(clientAfter, Is.Not.SameAs(clientBefore));
+    }
+
+    [Test]
+    public async Task GetOperationsAsync_AfterDispose_ReturnsNewOperations()
+    {
+        // Arrange - Get operations, then dispose
+        _mockConfigLoader.LoadConfigAsync().Returns(TestToken1);
+        var operationsBefore = await _sut.GetOperationsAsync();
+        _sut.Dispose();
+
+        // Act - Call again after dispose
+        var operationsAfter = await _sut.GetOperationsAsync();
+
+        // Assert - Should create new operations since cache was cleared
+        Assert.That(operationsAfter, Is.Not.SameAs(operationsBefore));
+    }
+
+    #endregion
+
+    #region Concurrent Access Tests
+
+    [Test]
+    public async Task GetBotClientAsync_ConcurrentCalls_ReturnsSameClientInstance()
+    {
+        // Arrange
+        _mockConfigLoader.LoadConfigAsync().Returns(TestToken1);
+
+        // Act - Call from multiple threads simultaneously
+        var tasks = Enumerable.Range(0, 10)
+            .Select(_ => _sut.GetBotClientAsync())
+            .ToList();
+
+        var clients = await Task.WhenAll(tasks);
+
+        // Assert - All should return the same cached instance
+        var firstClient = clients[0];
+        Assert.That(clients.All(c => ReferenceEquals(c, firstClient)), Is.True,
+            "All concurrent calls should return the same client instance");
+    }
+
+    [Test]
+    public async Task GetOperationsAsync_ConcurrentCalls_ReturnsSameOperationsInstance()
+    {
+        // Arrange
+        _mockConfigLoader.LoadConfigAsync().Returns(TestToken1);
+
+        // Act - Call from multiple threads simultaneously
+        var tasks = Enumerable.Range(0, 10)
+            .Select(_ => _sut.GetOperationsAsync())
+            .ToList();
+
+        var operationsList = await Task.WhenAll(tasks);
+
+        // Assert - All should return the same cached instance
+        var firstOperations = operationsList[0];
+        Assert.That(operationsList.All(o => ReferenceEquals(o, firstOperations)), Is.True,
+            "All concurrent calls should return the same operations instance");
+    }
+
+    [Test]
+    public async Task GetBotClientAsync_ConcurrentCallsWithTokenChange_HandlesRaceCondition()
+    {
+        // Arrange - First few calls get token1, rest get token2
+        var callCount = 0;
+        _mockConfigLoader.LoadConfigAsync().Returns(_ =>
+        {
+            var count = Interlocked.Increment(ref callCount);
+            return count <= 5 ? TestToken1 : TestToken2;
+        });
+
+        // Act - Call from multiple threads
+        var tasks = Enumerable.Range(0, 10)
+            .Select(_ => _sut.GetBotClientAsync())
+            .ToList();
+
+        var clients = await Task.WhenAll(tasks);
+
+        // Assert - Should have at most 2 distinct client instances (one per token)
+        var distinctClients = clients.Distinct().Count();
+        Assert.That(distinctClients, Is.LessThanOrEqualTo(2),
+            "Should have at most 2 client instances (one per token)");
     }
 
     #endregion

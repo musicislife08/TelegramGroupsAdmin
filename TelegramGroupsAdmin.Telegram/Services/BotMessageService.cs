@@ -15,7 +15,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class BotMessageService
 {
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IMessageHistoryRepository _messageRepo;
     private readonly IMessageEditService _editService;
     private readonly ITelegramUserRepository _userRepo;
@@ -23,7 +23,7 @@ public class BotMessageService
     private User? _cachedBotInfo; // In-memory cache to avoid repeated GetMe() calls
 
     public BotMessageService(
-        TelegramBotClientFactory botClientFactory,
+        ITelegramBotClientFactory botClientFactory,
         IMessageHistoryRepository messageRepo,
         IMessageEditService editService,
         ITelegramUserRepository userRepo,

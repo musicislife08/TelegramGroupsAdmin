@@ -12,12 +12,12 @@ public class ChatInviteLinkService : IChatInviteLinkService
 {
     private readonly ILogger<ChatInviteLinkService> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
 
     public ChatInviteLinkService(
         ILogger<ChatInviteLinkService> logger,
         IServiceProvider serviceProvider,
-        TelegramBotClientFactory botClientFactory)
+        ITelegramBotClientFactory botClientFactory)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;

@@ -19,8 +19,8 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public class ChatManagementService(
     IServiceProvider serviceProvider,
-    TelegramBotClientFactory botFactory,
-    TelegramConfigLoader configLoader,
+    ITelegramBotClientFactory botFactory,
+    ITelegramConfigLoader configLoader,
     ILogger<ChatManagementService> logger)
 {
     private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();

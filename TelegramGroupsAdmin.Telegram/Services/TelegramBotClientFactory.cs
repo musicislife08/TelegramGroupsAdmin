@@ -10,12 +10,11 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// Uses a "refresh on change" pattern - tracks single active client, disposes old
 /// client when token changes. This keeps resource usage low for homelab deployment.
 ///
-/// Three usage patterns:
-/// - GetBotClientAsync(): Loads token from database (recommended for most services)
-/// - GetOperationsAsync(): Returns ITelegramOperations wrapper (recommended for testable services)
-/// - GetOrCreate(token): Direct token injection (used by TelegramAdminBotService which caches token)
+/// Two usage patterns:
+/// - GetBotClientAsync(): Returns raw client for polling (TelegramAdminBotService only)
+/// - GetOperationsAsync(): Returns ITelegramOperations wrapper (all other services)
 /// </summary>
-public class TelegramBotClientFactory : IDisposable
+public class TelegramBotClientFactory : ITelegramBotClientFactory
 {
     private readonly ITelegramConfigLoader _configLoader;
     private readonly ILoggerFactory _loggerFactory;
@@ -36,27 +35,15 @@ public class TelegramBotClientFactory : IDisposable
         _logger = loggerFactory.CreateLogger<TelegramBotClientFactory>();
     }
 
-    /// <summary>
-    /// Get ITelegramBotClient using token loaded from database configuration.
-    /// Replaces old client if token has changed.
-    /// </summary>
-    /// <returns>Current ITelegramBotClient instance</returns>
-    public virtual async Task<ITelegramBotClient> GetBotClientAsync()
+    /// <inheritdoc />
+    public async Task<ITelegramBotClient> GetBotClientAsync()
     {
         var botToken = await _configLoader.LoadConfigAsync();
         return GetOrRefresh(botToken);
     }
 
-    /// <summary>
-    /// Get ITelegramOperations using token loaded from database configuration.
-    /// Returns mockable wrapper around the current ITelegramBotClient.
-    /// </summary>
-    /// <returns>Current ITelegramOperations instance</returns>
-    /// <remarks>
-    /// This is the recommended method for services that need Telegram API access.
-    /// ITelegramOperations can be mocked with NSubstitute for unit testing.
-    /// </remarks>
-    public virtual async Task<ITelegramOperations> GetOperationsAsync()
+    /// <inheritdoc />
+    public async Task<ITelegramOperations> GetOperationsAsync()
     {
         var botToken = await _configLoader.LoadConfigAsync();
         GetOrRefresh(botToken); // Ensure client is current
@@ -65,17 +52,6 @@ public class TelegramBotClientFactory : IDisposable
         {
             return _currentOperations!;
         }
-    }
-
-    /// <summary>
-    /// Get or create client using provided token, replacing old client if token changed.
-    /// Use this when you already have the token (e.g., TelegramAdminBotService caches it).
-    /// </summary>
-    /// <param name="botToken">Bot token from BotFather</param>
-    /// <returns>Current ITelegramBotClient instance</returns>
-    public virtual ITelegramBotClient GetOrCreate(string botToken)
-    {
-        return GetOrRefresh(botToken);
     }
 
     private ITelegramBotClient GetOrRefresh(string botToken)

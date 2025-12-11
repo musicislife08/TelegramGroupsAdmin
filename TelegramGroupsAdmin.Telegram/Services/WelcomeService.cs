@@ -21,7 +21,7 @@ public class WelcomeService : IWelcomeService
     private readonly IBotProtectionService _botProtectionService;
     private readonly IDmDeliveryService _dmDeliveryService;
     private readonly IJobScheduler _jobScheduler;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
 
     public WelcomeService(
         ILogger<WelcomeService> logger,
@@ -29,7 +29,7 @@ public class WelcomeService : IWelcomeService
         IBotProtectionService botProtectionService,
         IDmDeliveryService dmDeliveryService,
         IJobScheduler jobScheduler,
-        TelegramBotClientFactory botClientFactory)
+        ITelegramBotClientFactory botClientFactory)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
