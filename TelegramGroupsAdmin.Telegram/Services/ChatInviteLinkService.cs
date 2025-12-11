@@ -105,6 +105,16 @@ public class ChatInviteLinkService : IChatInviteLinkService
         {
             currentLink = $"https://t.me/{chat.Username}";
             _logger.LogDebug("Got public invite link for chat {ChatId}: {Link}", chatId, currentLink);
+
+            // Cache public group link too (username could change)
+            var cachedConfig = await configRepo.GetByChatIdAsync(chatId, ct);
+            if (cachedConfig?.InviteLink != currentLink)
+            {
+                await configRepo.SaveInviteLinkAsync(chatId, currentLink, ct);
+                _logger.LogDebug("Cached public invite link for chat {ChatId}", chatId);
+            }
+
+            return currentLink;
         }
         else
         {
@@ -132,7 +142,5 @@ public class ChatInviteLinkService : IChatInviteLinkService
             await configRepo.SaveInviteLinkAsync(chatId, currentLink, ct);
             return currentLink;
         }
-
-        return currentLink;
     }
 }

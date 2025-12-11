@@ -634,8 +634,8 @@ public class ChatManagementService(
             // Refresh admin cache in database (for permission checks in commands)
             await RefreshChatAdminsAsync(chatId, cancellationToken);
 
-            // Validate and refresh cached invite link (private groups only)
-            if (chat.Type == ChatType.Supergroup && string.IsNullOrEmpty(chat.Username))
+            // Validate and refresh cached invite link (all groups - public and private)
+            if (chat.Type is ChatType.Supergroup or ChatType.Group)
             {
                 await ValidateInviteLinkAsync(chatId, cancellationToken);
             }
@@ -861,9 +861,9 @@ public class ChatManagementService(
 
     /// <summary>
     /// Validate and update cached invite link from Telegram
-    /// Only applies to private supergroups (not public chats with usernames)
-    /// Fetches current primary link from Telegram and updates cache if changed
-    /// Detects when admin changes/revokes link and keeps cache in sync
+    /// Applies to all groups (public and private)
+    /// - Public groups: Caches https://t.me/{username} link
+    /// - Private groups: Fetches/caches primary invite link (only exports if not cached)
     /// </summary>
     private async Task ValidateInviteLinkAsync(long chatId, CancellationToken cancellationToken = default)
     {
