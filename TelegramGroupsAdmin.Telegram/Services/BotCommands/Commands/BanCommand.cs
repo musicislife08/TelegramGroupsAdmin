@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -107,9 +108,11 @@ public class BanCommand : IBotCommand
                 : "chat mention";
 
             _logger.LogInformation(
-                "User {TargetId} ({TargetUsername}) banned by {ExecutorId} from {ChatsAffected} chats. " +
+                "{TargetUser} banned by {Executor} from {ChatsAffected} chats. " +
                 "Reason: {Reason}. User notified via {DeliveryMethod}. Trust removed: {TrustRemoved}",
-                targetUser.Id, targetUser.Username, message.From?.Id, result.ChatsAffected, reason, deliveryMethod, result.TrustRemoved);
+                LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
+                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                result.ChatsAffected, reason, deliveryMethod, result.TrustRemoved);
 
             // Silent mode: No chat feedback, command message simply disappears
             // Admins see action through DM notifications if enabled
@@ -117,7 +120,8 @@ public class BanCommand : IBotCommand
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to ban user {UserId}", targetUser.Id);
+            _logger.LogError(ex, "Failed to ban {User}",
+                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id));
             return new CommandResult($"❌ Failed to ban user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }

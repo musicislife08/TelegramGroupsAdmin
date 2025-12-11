@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -101,16 +102,17 @@ public class TrustCommand : IBotCommand
         // Build response based on result
         if (!result.Success)
         {
-            _logger.LogError("Failed to trust user {UserId}: {Error}", targetUser.Id, result.ErrorMessage);
+            _logger.LogError("Failed to trust {User}: {Error}",
+                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
+                result.ErrorMessage);
             return new CommandResult($"❌ Failed to trust user: {result.ErrorMessage}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
         _logger.LogInformation(
-            "User {TargetId} (@{TargetUsername}) trusted by {ExecutorId} in chat {ChatId}",
-            targetUser.Id,
-            targetUser.Username,
-            message.From?.Id,
-            message.Chat.Id);
+            "{TargetUser} trusted by {Executor} in {Chat}",
+            LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
+            LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+            LogDisplayName.ChatInfo(message.Chat.Title, message.Chat.Id));
 
         return new CommandResult($"✅ User @{targetUser.Username ?? targetUser.Id.ToString()} marked as trusted\n\n" +
                $"This user's messages will bypass spam detection globally.", DeleteCommandMessage, DeleteResponseAfterSeconds);

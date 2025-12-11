@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using OtpNet;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
@@ -101,7 +102,8 @@ public class TotpService(
         {
             if (setupExpired)
             {
-                logger.LogWarning("Invalid TOTP verification code during setup for user {UserId} (setup expired - user may need to re-scan QR code)", userId);
+                logger.LogWarning("Invalid TOTP verification code during setup for {User} (setup expired - user may need to re-scan QR code)",
+                    LogDisplayName.WebUserDebug(user.Email, userId));
                 return new TotpVerificationResult(
                     false,
                     true,
@@ -109,7 +111,8 @@ public class TotpService(
             }
             else
             {
-                logger.LogWarning("Invalid TOTP verification code during setup for user: {UserId}", userId);
+                logger.LogWarning("Invalid TOTP verification code during setup for {User}",
+                    LogDisplayName.WebUserDebug(user.Email, userId));
                 return new TotpVerificationResult(false, false, "Invalid verification code. Please try again.");
             }
         }
@@ -120,7 +123,7 @@ public class TotpService(
         // Update security stamp
         await userRepository.UpdateSecurityStampAsync(userId, ct);
 
-        logger.LogInformation("TOTP enabled for user: {UserId}", userId);
+        logger.LogInformation("TOTP enabled for {User}", LogDisplayName.WebUserInfo(user.Email, userId));
 
         // Audit log
         await auditLog.LogEventAsync(
@@ -149,7 +152,7 @@ public class TotpService(
         // Testing showed 1-2 minute drift is common on mobile devices between NTP syncs
         if (!totp.VerifyTotp(code, out _, new VerificationWindow(5, 5)))
         {
-            logger.LogWarning("Invalid TOTP code for user: {UserId}", userId);
+            logger.LogWarning("Invalid TOTP code for {User}", LogDisplayName.WebUserDebug(user.Email, userId));
 
             // Audit log for security monitoring (track brute force attempts)
             await auditLog.LogEventAsync(
@@ -171,7 +174,8 @@ public class TotpService(
         var admin = await userRepository.GetByIdAsync(adminUserId, ct);
         if (admin is null || admin.PermissionLevelInt != (int)PermissionLevel.Owner)
         {
-            logger.LogWarning("Non-Owner user {AdminUserId} attempted to admin-disable TOTP for user {TargetUserId}", adminUserId, targetUserId);
+            logger.LogWarning("Non-Owner {Admin} attempted to admin-disable TOTP for user {TargetUserId}",
+                LogDisplayName.WebUserDebug(admin?.Email, adminUserId), targetUserId);
             return false;
         }
 
@@ -179,7 +183,8 @@ public class TotpService(
         var targetUser = await userRepository.GetByIdAsync(targetUserId, ct);
         if (targetUser is null)
         {
-            logger.LogWarning("Admin {AdminUserId} attempted to disable TOTP for non-existent user {TargetUserId}", adminUserId, targetUserId);
+            logger.LogWarning("{Admin} attempted to disable TOTP for non-existent user {TargetUserId}",
+                LogDisplayName.WebUserDebug(admin.Email, adminUserId), targetUserId);
             return false;
         }
 
@@ -187,7 +192,9 @@ public class TotpService(
         await userRepository.DisableTotpAsync(targetUserId, ct);
         await userRepository.UpdateSecurityStampAsync(targetUserId, ct);
 
-        logger.LogWarning("TOTP admin-disabled for user {TargetUserId} by Owner {AdminUserId}", targetUserId, adminUserId);
+        logger.LogWarning("TOTP admin-disabled for {TargetUser} by Owner {Admin}",
+            LogDisplayName.WebUserDebug(targetUser.Email, targetUserId),
+            LogDisplayName.WebUserDebug(admin.Email, adminUserId));
 
         // Audit log
         await auditLog.LogEventAsync(
@@ -206,7 +213,8 @@ public class TotpService(
         var admin = await userRepository.GetByIdAsync(adminUserId, ct);
         if (admin is null || admin.PermissionLevelInt != (int)PermissionLevel.Owner)
         {
-            logger.LogWarning("Non-Owner user {AdminUserId} attempted to admin-enable TOTP for user {TargetUserId}", adminUserId, targetUserId);
+            logger.LogWarning("Non-Owner {Admin} attempted to admin-enable TOTP for user {TargetUserId}",
+                LogDisplayName.WebUserDebug(admin?.Email, adminUserId), targetUserId);
             return false;
         }
 
@@ -214,7 +222,8 @@ public class TotpService(
         var targetUser = await userRepository.GetByIdAsync(targetUserId, ct);
         if (targetUser is null)
         {
-            logger.LogWarning("Admin {AdminUserId} attempted to enable TOTP for non-existent user {TargetUserId}", adminUserId, targetUserId);
+            logger.LogWarning("{Admin} attempted to enable TOTP for non-existent user {TargetUserId}",
+                LogDisplayName.WebUserDebug(admin.Email, adminUserId), targetUserId);
             return false;
         }
 
@@ -222,7 +231,9 @@ public class TotpService(
         await userRepository.EnableTotpAsync(targetUserId, ct);
         await userRepository.UpdateSecurityStampAsync(targetUserId, ct);
 
-        logger.LogWarning("TOTP admin-enabled for user {TargetUserId} by Owner {AdminUserId}", targetUserId, adminUserId);
+        logger.LogWarning("TOTP admin-enabled for {TargetUser} by Owner {Admin}",
+            LogDisplayName.WebUserDebug(targetUser.Email, targetUserId),
+            LogDisplayName.WebUserDebug(admin.Email, adminUserId));
 
         // Audit log
         await auditLog.LogEventAsync(
@@ -241,7 +252,8 @@ public class TotpService(
         var admin = await userRepository.GetByIdAsync(adminUserId, ct);
         if (admin is null || admin.PermissionLevelInt != (int)PermissionLevel.Owner)
         {
-            logger.LogWarning("Non-Owner user {AdminUserId} attempted to reset TOTP for user {TargetUserId}", adminUserId, targetUserId);
+            logger.LogWarning("Non-Owner {Admin} attempted to reset TOTP for user {TargetUserId}",
+                LogDisplayName.WebUserDebug(admin?.Email, adminUserId), targetUserId);
             return false;
         }
 
@@ -249,7 +261,8 @@ public class TotpService(
         var targetUser = await userRepository.GetByIdAsync(targetUserId, ct);
         if (targetUser is null)
         {
-            logger.LogWarning("Admin {AdminUserId} attempted to reset TOTP for non-existent user {TargetUserId}", adminUserId, targetUserId);
+            logger.LogWarning("{Admin} attempted to reset TOTP for non-existent user {TargetUserId}",
+                LogDisplayName.WebUserDebug(admin.Email, adminUserId), targetUserId);
             return false;
         }
 
@@ -257,7 +270,9 @@ public class TotpService(
         await userRepository.ResetTotpAsync(targetUserId, ct);
         await userRepository.UpdateSecurityStampAsync(targetUserId, ct);
 
-        logger.LogWarning("TOTP reset for user {TargetUserId} by Owner {AdminUserId}", targetUserId, adminUserId);
+        logger.LogWarning("TOTP reset for {TargetUser} by Owner {Admin}",
+            LogDisplayName.WebUserDebug(targetUser.Email, targetUserId),
+            LogDisplayName.WebUserDebug(admin.Email, adminUserId));
 
         // Audit log
         await auditLog.LogEventAsync(
@@ -293,9 +308,13 @@ public class TotpService(
         var codeHash = HashRecoveryCode(code);
         var isValid = await userRepository.UseRecoveryCodeAsync(userId, codeHash, ct);
 
+        // Fetch user for logging (security investigation needs email)
+        var user = await userRepository.GetByIdAsync(userId, ct);
+
         if (!isValid)
         {
-            logger.LogWarning("Invalid recovery code attempt for user: {UserId}", userId);
+            logger.LogWarning("Invalid recovery code attempt for {User}",
+                LogDisplayName.WebUserDebug(user?.Email, userId));
 
             // Audit log for security monitoring (track brute force attempts)
             await auditLog.LogEventAsync(
@@ -308,7 +327,8 @@ public class TotpService(
             return false;
         }
 
-        logger.LogInformation("Recovery code used for user: {UserId}", userId);
+        logger.LogInformation("Recovery code used for {User}",
+            LogDisplayName.WebUserInfo(user?.Email, userId));
         return true;
     }
 

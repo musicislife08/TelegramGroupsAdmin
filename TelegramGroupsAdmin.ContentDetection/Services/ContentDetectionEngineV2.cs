@@ -11,6 +11,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Core.Telemetry;
+using TelegramGroupsAdmin.Core.Utilities;
 using OpenAIConfigDb = TelegramGroupsAdmin.Configuration.Models.OpenAIConfig;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
@@ -84,8 +85,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             if (hardBlock.ShouldBlock)
             {
                 _logger.LogWarning(
-                    "Hard block triggered for user {UserId} in chat {ChatId}: {Reason}",
-                    request.UserId, request.ChatId, hardBlock.Reason);
+                    "Hard block triggered for {User} in chat {ChatId}: {Reason}",
+                    LogDisplayName.UserDebug(request.UserName, request.UserId), request.ChatId, hardBlock.Reason);
 
                 var hardBlockResult = new ContentDetectionResult
                 {
@@ -143,7 +144,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             if (openAICheckV2 != null)
             {
                 // Note: AI service is obtained via IChatService (supports OpenAI, Azure, local providers)
-                _logger.LogInformation("[V2] Running AI veto check for user {UserId}", request.UserId);
+                _logger.LogInformation("[V2] Running AI veto check for {User}", request.UserName ?? $"User {request.UserId}");
 
                 var vetoRequest = request with { HasSpamFlags = true };
                 var checkRequest = BuildAIRequest(vetoRequest, config, openAIConfig, cancellationToken);
@@ -165,8 +166,8 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 // OpenAI abstained (API error, timeout, rate limit) - defer to pipeline verdict
                 if (vetoResultV2.Abstained)
                 {
-                    _logger.LogWarning("OpenAI veto abstained for user {UserId} ({Details}), deferring to pipeline verdict (NetConf={NetConf})",
-                        request.UserId, vetoResultV2.Details, nonOpenAIResult.NetConfidence);
+                    _logger.LogWarning("OpenAI veto abstained for {User} ({Details}), deferring to pipeline verdict (NetConf={NetConf})",
+                        LogDisplayName.UserDebug(request.UserName, request.UserId), vetoResultV2.Details, nonOpenAIResult.NetConfidence);
 
                     // Return nonOpenAIResult with OpenAI check appended for visibility
                     var deferredResult = nonOpenAIResult with { CheckResults = updatedCheckResults };
@@ -177,16 +178,16 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 // OpenAI ran successfully and returned clean (score = 0.0, not abstained) - veto the spam detection
                 if (vetoResultV2.Score == 0.0)
                 {
-                    _logger.LogInformation("OpenAI vetoed spam detection for user {UserId} (clean result with 0.0 score)",
-                        request.UserId);
+                    _logger.LogInformation("OpenAI vetoed spam detection for {User} (clean result with 0.0 score)",
+                        request.UserName ?? $"User {request.UserId}");
                     var vetoedResult = CreateVetoedResult(updatedCheckResults, vetoCheckResult);
                     RecordDetectionMetrics(startTimestamp, vetoedResult, activity);
                     return vetoedResult;
                 }
 
                 // OpenAI confirmed spam - add score to total
-                _logger.LogInformation("OpenAI confirmed spam for user {UserId} with score {Score}",
-                    request.UserId, vetoResultV2.Score);
+                _logger.LogInformation("OpenAI confirmed spam for {User} with score {Score}",
+                    request.UserName ?? $"User {request.UserId}", vetoResultV2.Score);
 
                 var newTotalScore = (nonOpenAIResult.NetConfidence / 20.0) + vetoResultV2.Score;
 
@@ -242,7 +243,7 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error running {CheckName} for user {UserId}", check.CheckName, request.UserId);
+                _logger.LogError(ex, "Error running {CheckName} for {User}", check.CheckName, LogDisplayName.UserDebug(request.UserName, request.UserId));
                 // Continue with other checks
             }
         }

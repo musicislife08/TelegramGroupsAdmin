@@ -997,14 +997,14 @@ public class ModerationActionService
                 if (inviteLink != null)
                 {
                     _logger.LogInformation(
-                        "Retrieved invite link for chat {ChatId} ({ChatName}): {InviteLink}",
-                        chat.ChatId, chat.ChatName, inviteLink);
+                        "Retrieved invite link for {Chat}",
+                        LogDisplayName.ChatInfo(chat.ChatName, chat.ChatId));
                 }
                 else
                 {
                     _logger.LogWarning(
-                        "Failed to retrieve invite link for chat {ChatId} ({ChatName}). User will not receive rejoin link for this chat.",
-                        chat.ChatId, chat.ChatName);
+                        "Failed to retrieve invite link for {Chat}. User will not receive rejoin link for this chat.",
+                        LogDisplayName.ChatDebug(chat.ChatName, chat.ChatId));
                 }
             }
 

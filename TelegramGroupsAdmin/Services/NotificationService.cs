@@ -1,6 +1,7 @@
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Repositories;
 using TelegramGroupsAdmin.Services.Email;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -302,10 +303,11 @@ public class NotificationService : INotificationService
         string message,
         CancellationToken ct)
     {
+        Telegram.Models.UserRecord? user = null;
         try
         {
             // Get user's account email
-            var user = await _userRepo.GetByIdAsync(userId, ct);
+            user = await _userRepo.GetByIdAsync(userId, ct);
             if (user == null)
             {
                 _logger.LogWarning("User {UserId} not found, cannot send email notification", userId);
@@ -340,14 +342,15 @@ public class NotificationService : INotificationService
 
             await _emailService.SendEmailAsync(emailAddress, subject, htmlBody, isHtml: true, ct);
 
-            _logger.LogInformation("Sent email notification to user {UserId} at {EmailAddress}",
-                userId, emailAddress);
+            _logger.LogInformation("Sent email notification to {User}",
+                LogDisplayName.WebUserInfo(emailAddress, userId));
 
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send email to user {UserId}", userId);
+            _logger.LogError(ex, "Failed to send email to {User}",
+                LogDisplayName.WebUserDebug(user?.Email, userId));
             return false;
         }
     }

@@ -102,7 +102,7 @@ public class ChatManagementService(
             // Skip private chats - only manage groups/supergroups
             if (chat.Type == ChatType.Private)
             {
-                logger.LogDebug("Skipping MyChatMember update for private chat {ChatId}", chat.Id);
+                logger.LogDebug("Skipping MyChatMember update for private chat {Chat}", LogDisplayName.ChatDebug(null, chat.Id));
                 return;
             }
 
@@ -170,21 +170,19 @@ public class ChatManagementService(
                         var isCreator = newStatus == ChatMemberStatus.Creator;
                         await chatAdminsRepository.UpsertAsync(chat.Id, affectedUser.Id, isCreator, cancellationToken: cancellationToken);
                         logger.LogInformation(
-                            "✅ User {UserId} ({DisplayName}) promoted to {Role} in chat {ChatId}",
-                            affectedUser.Id,
-                            TelegramDisplayName.Format(affectedUser.FirstName, affectedUser.LastName, affectedUser.Username, affectedUser.Id),
+                            "✅ {User} promoted to {Role} in {Chat}",
+                            LogDisplayName.UserInfo(affectedUser.FirstName, affectedUser.LastName, affectedUser.Username, affectedUser.Id),
                             isCreator ? "creator" : "admin",
-                            chat.Id);
+                            LogDisplayName.ChatInfo(chat.Title, chat.Id));
                     }
                     else
                     {
                         // User demoted from admin
                         await chatAdminsRepository.DeactivateAsync(chat.Id, affectedUser.Id, cancellationToken);
                         logger.LogInformation(
-                            "❌ User {UserId} ({DisplayName}) demoted from admin in chat {ChatId}",
-                            affectedUser.Id,
-                            TelegramDisplayName.Format(affectedUser.FirstName, affectedUser.LastName, affectedUser.Username, affectedUser.Id),
-                            chat.Id);
+                            "❌ {User} demoted from admin in {Chat}",
+                            LogDisplayName.UserInfo(affectedUser.FirstName, affectedUser.LastName, affectedUser.Username, affectedUser.Id),
+                            LogDisplayName.ChatInfo(chat.Title, chat.Id));
                     }
                 }
             }
@@ -192,13 +190,13 @@ public class ChatManagementService(
             // If bot was just promoted to admin, refresh admin cache for this chat immediately
             var botWasAdmin = oldStatus == ChatMemberStatus.Administrator;
             var botIsNowAdmin = newStatus == ChatMemberStatus.Administrator;
+            var chatName = chat.Title ?? chat.Username;
 
             if (!botWasAdmin && botIsNowAdmin)
             {
                 logger.LogInformation(
-                    "🎉 Bot promoted to admin in {ChatId} ({ChatName}), refreshing admin cache immediately",
-                    chat.Id,
-                    chat.Title ?? chat.Username ?? "Unknown");
+                    "🎉 Bot promoted to admin in {Chat}, refreshing admin cache immediately",
+                    LogDisplayName.ChatInfo(chatName, chat.Id));
 
                 // Refresh admin cache immediately instead of waiting for periodic health check (30min)
                 await RefreshChatAdminsAsync(chat.Id, cancellationToken);
@@ -207,18 +205,16 @@ public class ChatManagementService(
             if (isActive)
             {
                 logger.LogInformation(
-                    "✅ Bot added to {ChatType} {ChatId} ({ChatName}) as {Status}",
+                    "✅ Bot added to {ChatType} {Chat} as {Status}",
                     chat.Type,
-                    chat.Id,
-                    chat.Title ?? chat.Username ?? "Unknown",
+                    LogDisplayName.ChatInfo(chatName, chat.Id),
                     newStatus);
             }
             else
             {
                 logger.LogWarning(
-                    "❌ Bot removed from {ChatId} ({ChatName}) - status: {Status}",
-                    chat.Id,
-                    chat.Title ?? chat.Username ?? "Unknown",
+                    "❌ Bot removed from {Chat} - status: {Status}",
+                    LogDisplayName.ChatDebug(chatName, chat.Id),
                     newStatus);
             }
 
@@ -228,8 +224,8 @@ public class ChatManagementService(
         catch (Exception ex)
         {
             logger.LogError(ex,
-                "Error handling MyChatMember update for chat {ChatId}",
-                myChatMember.Chat.Id);
+                "Error handling MyChatMember update for {Chat}",
+                LogDisplayName.ChatDebug(myChatMember.Chat.Title, myChatMember.Chat.Id));
         }
     }
 
@@ -310,12 +306,10 @@ public class ChatManagementService(
                 await chatAdminsRepository.UpsertAsync(chat.Id, user.Id, isCreator, cancellationToken);
 
                 logger.LogInformation(
-                    "⬆️ INSTANT: User promoted to {Role} in chat {ChatId} ({ChatName}): {TelegramId} ({DisplayName})",
+                    "⬆️ INSTANT: {User} promoted to {Role} in {Chat}",
+                    LogDisplayName.UserInfo(user.FirstName, user.LastName, user.Username, user.Id),
                     isCreator ? "creator" : "admin",
-                    chat.Id,
-                    chat.Title ?? "Unknown",
-                    user.Id,
-                    TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id));
+                    LogDisplayName.ChatInfo(chat.Title, chat.Id));
 
                 // AUTO-TRUST: Trust admins globally to prevent spam detection and cross-chat bans
                 try
@@ -337,14 +331,15 @@ public class ChatManagementService(
                     await userRepo.UpdateTrustStatusAsync(user.Id, isTrusted: true, cancellationToken);
 
                     logger.LogInformation(
-                        "Auto-trusted user {UserId} ({DisplayName}) - admin in chat {ChatId}",
-                        user.Id,
-                        TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id),
-                        chat.Id);
+                        "Auto-trusted {User} - admin in {Chat}",
+                        LogDisplayName.UserInfo(user.FirstName, user.LastName, user.Username, user.Id),
+                        LogDisplayName.ChatInfo(chat.Title, chat.Id));
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Failed to auto-trust admin {UserId} in chat {ChatId}", user.Id, chat.Id);
+                    logger.LogError(ex, "Failed to auto-trust admin {User} in {Chat}",
+                        LogDisplayName.UserDebug(user.FirstName, user.LastName, user.Username, user.Id),
+                        LogDisplayName.ChatDebug(chat.Title, chat.Id));
                 }
 
                 // Phase 5.2: Notify owners about admin promotion
@@ -366,11 +361,9 @@ public class ChatManagementService(
                 await chatAdminsRepository.DeactivateAsync(chat.Id, user.Id, cancellationToken);
 
                 logger.LogInformation(
-                    "⬇️ INSTANT: User demoted from admin in chat {ChatId} ({ChatName}): {TelegramId} ({DisplayName})",
-                    chat.Id,
-                    chat.Title ?? "Unknown",
-                    user.Id,
-                    TelegramDisplayName.Format(user.FirstName, user.LastName, user.Username, user.Id));
+                    "⬇️ INSTANT: {User} demoted from admin in {Chat}",
+                    LogDisplayName.UserInfo(user.FirstName, user.LastName, user.Username, user.Id),
+                    LogDisplayName.ChatInfo(chat.Title, chat.Id));
 
                 // Phase 5.2: Notify owners about admin demotion
                 var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
@@ -388,9 +381,11 @@ public class ChatManagementService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to handle admin status change for user {UserId} in chat {ChatId}",
-                chatMemberUpdate.NewChatMember.User.Id,
-                chatMemberUpdate.Chat.Id);
+            var u = chatMemberUpdate.NewChatMember.User;
+            var c = chatMemberUpdate.Chat;
+            logger.LogError(ex, "Failed to handle admin status change for {User} in {Chat}",
+                LogDisplayName.UserDebug(u.FirstName, u.LastName, u.Username, u.Id),
+                LogDisplayName.ChatDebug(c.Title, c.Id));
         }
     }
 
@@ -417,7 +412,8 @@ public class ChatManagementService(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Failed to refresh admin cache for chat {ChatId}", chat.ChatId);
+                    logger.LogWarning(ex, "Failed to refresh admin cache for {Chat}",
+                        LogDisplayName.ChatDebug(chat.ChatName, chat.ChatId));
                 }
             }
 
@@ -442,7 +438,8 @@ public class ChatManagementService(
             var chat = await operations.GetChatAsync(chatId, cancellationToken);
             if (chat.Type != ChatType.Group && chat.Type != ChatType.Supergroup)
             {
-                logger.LogDebug("Skipping admin refresh for non-group chat {ChatId} (type: {Type})", chatId, chat.Type);
+                logger.LogDebug("Skipping admin refresh for non-group chat {Chat} (type: {Type})",
+                    LogDisplayName.ChatDebug(chat.Title, chatId), chat.Type);
                 return;
             }
 
@@ -468,10 +465,9 @@ public class ChatManagementService(
                 await chatAdminsRepository.DeactivateAsync(chatId, demotedId, cancellationToken);
                 var demotedAdmin = cachedAdmins.First(a => a.TelegramId == demotedId);
                 logger.LogInformation(
-                    "⬇️ Admin demoted in chat {ChatId}: {TelegramId} ({DisplayName})",
-                    chatId,
-                    demotedId,
-                    demotedAdmin.DisplayName);
+                    "⬇️ {Admin} demoted in {Chat}",
+                    demotedAdmin.DisplayName,
+                    LogDisplayName.ChatInfo(chat.Title, chatId));
             }
 
             // Upsert current admins (add new, update existing)
@@ -494,10 +490,9 @@ public class ChatManagementService(
                 if (wasNew)
                 {
                     logger.LogInformation(
-                        "⬆️ New admin promoted in chat {ChatId}: {TelegramId} ({DisplayName})",
-                        chatId,
-                        admin.User.Id,
-                        TelegramDisplayName.Format(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id));
+                        "⬆️ New admin {Admin} promoted in {Chat}",
+                        LogDisplayName.UserInfo(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
+                        LogDisplayName.ChatInfo(chat.Title, chatId));
 
                     // AUTO-TRUST: Trust new admins globally
                     try
@@ -519,22 +514,23 @@ public class ChatManagementService(
                         await userRepo.UpdateTrustStatusAsync(admin.User.Id, isTrusted: true, cancellationToken);
 
                         logger.LogInformation(
-                            "Auto-trusted user {UserId} ({DisplayName}) - admin in chat {ChatId}",
-                            admin.User.Id,
-                            TelegramDisplayName.Format(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
-                            chatId);
+                            "Auto-trusted {User} - admin in {Chat}",
+                            LogDisplayName.UserInfo(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
+                            LogDisplayName.ChatInfo(chat.Title, chatId));
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Failed to auto-trust admin {UserId} in chat {ChatId}", admin.User.Id, chatId);
+                        logger.LogError(ex, "Failed to auto-trust admin {User} in {Chat}",
+                            LogDisplayName.UserDebug(admin.User.FirstName, admin.User.LastName, admin.User.Username, admin.User.Id),
+                            LogDisplayName.ChatDebug(chat.Title, chatId));
                     }
                 }
             }
 
             logger.LogDebug(
-                "✅ Synced {Count} admins for chat {ChatId}: {Admins}",
+                "✅ Synced {Count} admins for {Chat}: {Admins}",
                 admins.Length,
-                chatId,
+                LogDisplayName.ChatDebug(chat.Title, chatId),
                 string.Join(", ", adminNames));
 
         }
@@ -570,12 +566,13 @@ public class ChatManagementService(
                     // Update with fresh chat name from Telegram
                     var updatedChat = existingChat with { ChatName = chatName };
                     await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
-                    logger.LogDebug("Updated chat name for {ChatId}: {OldName} -> {NewName}",
-                        chatId, existingChat.ChatName, chatName);
+                    logger.LogDebug("Updated chat name: {OldName} -> {NewName} ({ChatId})",
+                        existingChat.ChatName, chatName, chatId);
                 }
             }
 
-            logger.LogDebug("Health check completed for chat {ChatId}: {Status}", chatId, health.Status);
+            logger.LogDebug("Health check completed for {Chat}: {Status}",
+                LogDisplayName.ChatDebug(chatName, chatId), health.Status);
         }
         catch (Exception ex)
         {
@@ -609,7 +606,8 @@ public class ChatManagementService(
             {
                 health.Status = ChatHealthStatusType.NotApplicable;
                 health.Warnings.Add("Health checks not applicable to private chats");
-                logger.LogDebug("Skipping health check for private chat {ChatId}", chatId);
+                logger.LogDebug("Skipping health check for private chat {Chat}",
+                    LogDisplayName.ChatDebug(chatName, chatId));
                 return (health, chatName);
             }
 
@@ -684,7 +682,8 @@ public class ChatManagementService(
         {
             // Timeout or cancellation - transient error, don't send notification
             // Includes TaskCanceledException from HTTP client timeouts
-            logger.LogWarning(cancelEx, "Request timeout/cancellation during health check for chat {ChatId} - will retry on next cycle", chatId);
+            logger.LogWarning(cancelEx, "Request timeout/cancellation during health check for {Chat} - will retry on next cycle",
+                LogDisplayName.ChatDebug(chatName, chatId));
             health.IsReachable = false;
             health.Status = ChatHealthStatusType.Error;
             health.Warnings.Add($"Request timeout: {cancelEx.Message}");
@@ -693,7 +692,8 @@ public class ChatManagementService(
         {
             // Transient network error - log warning but don't send notification
             // These are usually temporary API connectivity issues that resolve on their own
-            logger.LogWarning(httpEx, "Transient network error during health check for chat {ChatId} - will retry on next cycle", chatId);
+            logger.LogWarning(httpEx, "Transient network error during health check for {Chat} - will retry on next cycle",
+                LogDisplayName.ChatDebug(chatName, chatId));
             health.IsReachable = false;
             health.Status = ChatHealthStatusType.Error;
             health.Warnings.Add($"Temporary network issue: {httpEx.Message}");
@@ -705,7 +705,8 @@ public class ChatManagementService(
 
             if (isTransient)
             {
-                logger.LogWarning(ex, "Transient network error during health check for chat {ChatId} - will retry on next cycle", chatId);
+                logger.LogWarning(ex, "Transient network error during health check for {Chat} - will retry on next cycle",
+                    LogDisplayName.ChatDebug(chatName, chatId));
                 health.IsReachable = false;
                 health.Status = ChatHealthStatusType.Error;
                 health.Warnings.Add($"Temporary network issue: {ex.Message}");
@@ -713,7 +714,8 @@ public class ChatManagementService(
             else
             {
                 // Critical error - likely bot kicked or permission denied
-                logger.LogError(ex, "Health check failed for chat {ChatId}", chatId);
+                logger.LogError(ex, "Health check failed for {Chat}",
+                    LogDisplayName.ChatDebug(chatName, chatId));
                 health.IsReachable = false;
                 health.Status = ChatHealthStatusType.Error;
                 health.Warnings.Add($"Cannot reach chat: {ex.Message}");
@@ -802,7 +804,7 @@ public class ChatManagementService(
     {
         try
         {
-            logger.LogDebug("Refreshing single chat {ChatId}", chatId);
+            logger.LogDebug("Refreshing single chat {ChatId}", chatId); // ID-only since we don't have name yet
 
             // Refresh admin list and health
             await RefreshChatAdminsAsync(chatId, cancellationToken);
@@ -814,7 +816,7 @@ public class ChatManagementService(
                 await FetchChatIconAsync(chatId, cancellationToken);
             }
 
-            logger.LogDebug("✅ Single chat refresh completed for {ChatId}", chatId);
+            logger.LogDebug("✅ Single chat refresh completed for chat {ChatId}", chatId);
         }
         catch (Exception ex)
         {
@@ -848,13 +850,14 @@ public class ChatManagementService(
                 {
                     var updatedChat = existingChat with { ChatIconPath = iconPath };
                     await managedChatsRepository.UpsertAsync(updatedChat, cancellationToken);
-                    logger.LogInformation("✅ Cached chat icon for {ChatId}: {IconPath}", chatId, iconPath);
+                    logger.LogInformation("✅ Cached chat icon for {Chat}",
+                        LogDisplayName.ChatInfo(existingChat.ChatName, chatId));
                 }
             }
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to fetch chat icon for {ChatId} (non-fatal)", chatId);
+            logger.LogWarning(ex, "Failed to fetch chat icon for chat {ChatId} (non-fatal)", chatId);
             // Non-fatal - don't throw
         }
     }
@@ -965,7 +968,8 @@ public class ChatManagementService(
                     }
                     catch (Exception iconEx)
                     {
-                        logger.LogWarning(iconEx, "Failed to fetch channel icon for {ChannelId} (non-fatal)", linkedChannelId);
+                        logger.LogWarning(iconEx, "Failed to fetch channel icon for {Channel} (non-fatal)",
+                            LogDisplayName.ChatDebug(null, linkedChannelId));
                     }
 
                     // Compute photo hash for impersonation comparison
@@ -996,18 +1000,17 @@ public class ChatManagementService(
                     await linkedChannelsRepository.UpsertAsync(record, cancellationToken);
 
                     logger.LogDebug(
-                        "Synced linked channel {ChannelId} ({ChannelName}) for chat {ChatId}",
-                        linkedChannelId,
-                        linkedChannel.Title,
-                        chatId);
+                        "Synced linked channel {Channel} for {Chat}",
+                        LogDisplayName.ChatDebug(linkedChannel.Title, linkedChannelId),
+                        LogDisplayName.ChatDebug(chat.Title, chatId));
                 }
                 catch (Exception channelEx)
                 {
                     // Bot may not have permission to GetChat on the linked channel
                     logger.LogWarning(channelEx,
-                        "Failed to fetch linked channel {ChannelId} for chat {ChatId} - bot may lack permission",
+                        "Failed to fetch linked channel {ChannelId} for {Chat} - bot may lack permission",
                         linkedChannelId,
-                        chatId);
+                        LogDisplayName.ChatDebug(chat.Title, chatId));
                 }
             }
             else
@@ -1019,7 +1022,7 @@ public class ChatManagementService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to sync linked channel for chat {ChatId} (non-fatal)", chatId);
-            // Non-fatal - don't throw
+            // Non-fatal - don't throw (no chat name available in outer catch)
         }
     }
 

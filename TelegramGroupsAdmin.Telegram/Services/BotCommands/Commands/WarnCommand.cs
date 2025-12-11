@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -128,7 +129,8 @@ public class WarnCommand : IBotCommand
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to warn user {UserId}", targetUser.Id);
+            _logger.LogError(ex, "Failed to warn {User}",
+                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id));
             return new CommandResult($"❌ Failed to issue warning: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }

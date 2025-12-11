@@ -111,14 +111,17 @@ public class MuteCommand : IBotCommand
                           $"⚠️ Will be automatically unmuted at {DateTimeOffset.UtcNow.Add(duration):yyyy-MM-dd HH:mm} UTC";
 
             _logger.LogInformation(
-                "User {TargetId} ({TargetUsername}) muted by {ExecutorId} in {ChatsAffected} chats for {Duration}. Reason: {Reason}",
-                targetUser.Id, targetUser.Username, message.From?.Id, result.ChatsAffected, duration, reason);
+                "{TargetUser} muted by {Executor} in {ChatsAffected} chats for {Duration}. Reason: {Reason}",
+                LogDisplayName.UserInfo(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id),
+                LogDisplayName.UserInfo(message.From?.FirstName, message.From?.LastName, message.From?.Username, message.From?.Id ?? 0),
+                result.ChatsAffected, duration, reason);
 
             return new CommandResult(response, DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to mute user {UserId}", targetUser.Id);
+            _logger.LogError(ex, "Failed to mute {User}",
+                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id));
             return new CommandResult($"❌ Failed to mute user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -76,7 +77,8 @@ public class UnbanCommand : IBotCommand
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to unban user {UserId}", targetUser.Id);
+            _logger.LogError(ex, "Failed to unban {User}",
+                LogDisplayName.UserDebug(targetUser.FirstName, targetUser.LastName, targetUser.Username, targetUser.Id));
             return new CommandResult($"❌ Failed to unban user: {ex.Message}", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
     }
