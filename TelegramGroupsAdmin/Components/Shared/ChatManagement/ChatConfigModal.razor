@@ -111,21 +111,21 @@
                                         }
                                     </MudButton>
                                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                        Clear this if admins regenerated the invite link in Telegram. The next health check (within 1 minute) will fetch and cache the fresh link.
+                                        Clear this if admins regenerated the invite link in Telegram. The next health check will fetch and cache the fresh link.
                                     </MudText>
                                 </MudStack>
                             }
                             else
                             {
                                 <MudAlert Severity="Severity.Info">
-                                    No invite link cached yet. The health check will fetch and cache it within 1 minute.
+                                    No invite link cached yet. The next health check will fetch and cache it automatically.
                                 </MudAlert>
                             }
                         </MudPaper>
 
                         <!-- Info message about automatic updates -->
                         <MudAlert Severity="Severity.Info">
-                            Health status updates automatically every minute and when bot permissions change.
+                            Health status updates automatically on a schedule (configurable in Settings → Background Jobs) and when bot permissions change.
                         </MudAlert>
                     </MudStack>
                 }
@@ -455,7 +455,7 @@
             await ConfigRepository.ClearInviteLinkAsync(ChatInfo.Chat.ChatId);
             _cachedInviteLink = null;
             Snackbar.Add(
-                "Cleared cached invite link for this chat. The next health check (within 1 minute) will fetch a fresh link from Telegram.",
+                "Cleared cached invite link for this chat. The next health check will fetch a fresh link from Telegram.",
                 Severity.Success);
         }
         catch (Exception ex)

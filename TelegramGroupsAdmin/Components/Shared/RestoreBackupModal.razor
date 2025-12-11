@@ -1,8 +1,8 @@
 @using TelegramGroupsAdmin.BackgroundJobs.Services.Backup
 @inject IBackupService BackupService
 @inject ISnackbar Snackbar
-@inject NavigationManager Navigation
 @inject IDialogService DialogService
+@inject NavigationManager Navigation
 
 <MudDialog>
     <DialogContent>
@@ -11,7 +11,7 @@
         <MudAlert Severity="Severity.Warning" Class="mb-4">
             <MudText Typo="Typo.body2">
                 This will restore all users, settings, and data from a backup file.
-                After restore completes, log in with credentials from the backup.
+                If your account no longer exists after restore, you'll need to log in with credentials from the backup.
             </MudText>
         </MudAlert>
 
@@ -178,18 +178,10 @@
                 await BackupService.RestoreAsync(_backupBytes);
             }
 
-            Snackbar.Add("System restored successfully! The Telegram bot has been disabled to prevent dual instances. " +
-                        "You'll need to re-enable it if this is the only active instance. Redirecting to login...",
-                        Severity.Success,
-                        config =>
-                        {
-                            config.VisibleStateDuration = 5000; // Show for 5 seconds
-                        });
-
-            // Close dialog and redirect
+            // Close dialog and force page reload to re-evaluate auth state
+            // If user's account no longer exists, auth middleware will redirect to login
             MudDialog.Close(DialogResult.Ok(true));
-            await Task.Delay(5000); // Give user time to read the message (5 seconds)
-            Navigation.NavigateTo("/login", forceLoad: true);
+            Navigation.NavigateTo("/settings/backup", forceLoad: true);
         }
         catch (Exception ex)
         {
