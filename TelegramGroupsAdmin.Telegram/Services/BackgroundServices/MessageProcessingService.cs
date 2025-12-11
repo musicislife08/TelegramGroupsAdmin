@@ -3,7 +3,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
@@ -24,6 +23,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 public partial class MessageProcessingService(
     IServiceScopeFactory scopeFactory,
     IOptions<MessageHistoryOptions> historyOptions,
+    ITelegramBotClientFactory botFactory,
     CommandRouter commandRouter,
     ChatManagementService chatManagementService,
     TelegramPhotoService telegramPhotoService,
@@ -33,6 +33,7 @@ public partial class MessageProcessingService(
 {
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly MessageHistoryOptions _historyOptions = historyOptions.Value;
+    private readonly ITelegramBotClientFactory _botFactory = botFactory;
     private readonly TelegramPhotoService _photoService = telegramPhotoService;
     private readonly TelegramMediaService _mediaService = telegramMediaService;
 
@@ -57,7 +58,7 @@ public partial class MessageProcessingService(
     /// Handle new messages: save to database, execute commands, run spam detection
     /// Only processes group/supergroup messages - private DMs are handled by commands only
     /// </summary>
-    public async Task HandleNewMessageAsync(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken = default)
+    public async Task HandleNewMessageAsync(Message message, CancellationToken cancellationToken = default)
     {
         using var activity = TelemetryConstants.MessageProcessing.StartActivity("message_processing.handle_new_message");
         activity?.SetTag("message.chat_id", message.Chat.Id);
@@ -74,14 +75,13 @@ public partial class MessageProcessingService(
             {
                 try
                 {
-                    var commandResult = await commandRouter.RouteCommandAsync(botClient, message, cancellationToken);
+                    var commandResult = await commandRouter.RouteCommandAsync(message, cancellationToken);
                     if (commandResult?.Response != null && !string.IsNullOrWhiteSpace(commandResult.Response))
                     {
                         // Use BotMessageService to save bot response to database
                         using var scope = _scopeFactory.CreateScope();
                         var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
                         await botMessageService.SendAndSaveMessageAsync(
-                            botClient,
                             message.Chat.Id,
                             commandResult.Response,
                             parseMode: ParseMode.Markdown,
@@ -137,12 +137,16 @@ public partial class MessageProcessingService(
 
             // Skip deletion if the bot itself was removed from the group
             // Bot no longer has permissions to delete messages after being kicked
-            if (message.LeftChatMember != null && message.LeftChatMember.Id == botClient.BotId)
+            if (message.LeftChatMember != null)
             {
-                logger.LogInformation(
-                    "Skipping deletion of LeftChatMember service message - bot was removed from chat {ChatId}",
-                    message.Chat.Id);
-                return; // Don't try to delete or process further
+                var operations = await _botFactory.GetOperationsAsync();
+                if (message.LeftChatMember.Id == operations.BotId)
+                {
+                    logger.LogInformation(
+                        "Skipping deletion of LeftChatMember service message - bot was removed from chat {ChatId}",
+                        message.Chat.Id);
+                    return; // Don't try to delete or process further
+                }
             }
 
             try
@@ -151,7 +155,6 @@ public partial class MessageProcessingService(
                 using var scope = _scopeFactory.CreateScope();
                 var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
                 await botMessageService.DeleteAndMarkMessageAsync(
-                    botClient,
                     message.Chat.Id,
                     message.MessageId,
                     deletionSource: "service_message",
@@ -220,7 +223,7 @@ public partial class MessageProcessingService(
 
                     try
                     {
-                        await chatManagementService.RefreshChatAdminsAsync(botClient, message.Chat.Id, cancellationToken);
+                        await chatManagementService.RefreshChatAdminsAsync(message.Chat.Id, cancellationToken);
                     }
                     catch (Exception ex)
                     {
@@ -243,7 +246,7 @@ public partial class MessageProcessingService(
             {
                 try
                 {
-                    commandResult = await commandRouter.RouteCommandAsync(botClient, message, cancellationToken);
+                    commandResult = await commandRouter.RouteCommandAsync(message, cancellationToken);
                     if (commandResult != null)
                     {
                         // Send response if there is one (and it's not empty)
@@ -252,7 +255,6 @@ public partial class MessageProcessingService(
                             // Use BotMessageService to save bot response to database
                             var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
                             var responseMessage = await botMessageService.SendAndSaveMessageAsync(
-                                botClient,
                                 message.Chat.Id,
                                 commandResult.Response,
                                 parseMode: ParseMode.Markdown,
@@ -294,7 +296,7 @@ public partial class MessageProcessingService(
                     var adminMentionHandler = mentionScope.ServiceProvider.GetRequiredService<AdminMentionHandler>();
                     if (adminMentionHandler.ContainsAdminMention(text))
                     {
-                        await adminMentionHandler.NotifyAdminsAsync(botClient, message, cancellationToken);
+                        await adminMentionHandler.NotifyAdminsAsync(message, cancellationToken);
                     }
                 }
                 catch (Exception ex)
@@ -317,7 +319,6 @@ public partial class MessageProcessingService(
 
             var imageHandler = scope.ServiceProvider.GetRequiredService<Handlers.ImageProcessingHandler>();
             var imageResult = await imageHandler.ProcessImageAsync(
-                botClient,
                 message,
                 message.Chat.Id,
                 message.MessageId,
@@ -608,7 +609,6 @@ public partial class MessageProcessingService(
                     // Use BotMessageService for tracked deletion
                     var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
                     await botMessageService.DeleteAndMarkMessageAsync(
-                        botClient,
                         message.Chat.Id,
                         message.MessageId,
                         deletionSource: "command_cleanup",
@@ -639,7 +639,6 @@ public partial class MessageProcessingService(
 
                 // Use translated text if available (avoids double translation in ContentDetectionEngine)
                 await contentOrchestrator.RunDetectionAsync(
-                    botClient,
                     message,
                     translationForDetection.TextForDetection,
                     photoLocalPath,
@@ -660,7 +659,7 @@ public partial class MessageProcessingService(
     /// <summary>
     /// REFACTOR-2: Handle edited messages using MessageEditProcessor
     /// </summary>
-    public async Task HandleEditedMessageAsync(ITelegramBotClient botClient, Message editedMessage, CancellationToken cancellationToken = default)
+    public async Task HandleEditedMessageAsync(Message editedMessage, CancellationToken cancellationToken = default)
     {
         using var activity = TelemetryConstants.MessageProcessing.StartActivity("message_processing.handle_edited_message");
         activity?.SetTag("message.chat_id", editedMessage.Chat.Id);
@@ -672,7 +671,7 @@ public partial class MessageProcessingService(
             using var scope = _scopeFactory.CreateScope();
             var editProcessor = scope.ServiceProvider.GetRequiredService<Handlers.MessageEditProcessor>();
 
-            var editRecord = await editProcessor.ProcessEditAsync(botClient, editedMessage, scope, cancellationToken);
+            var editRecord = await editProcessor.ProcessEditAsync(editedMessage, scope, cancellationToken);
 
             // Raise event for real-time UI updates (if edit actually occurred)
             if (editRecord != null)

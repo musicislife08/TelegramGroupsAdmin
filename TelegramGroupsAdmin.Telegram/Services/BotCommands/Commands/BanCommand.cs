@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -38,7 +37,6 @@ public class BanCommand : IBotCommand
     }
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,
@@ -78,12 +76,11 @@ public class BanCommand : IBotCommand
 
             // Execute ban via ModerationActionService
             var result = await _moderationService.BanUserAsync(
-                botClient,
-                targetUser.Id,
-                message.ReplyToMessage.MessageId,
-                executor,
-                reason,
-                cancellationToken);
+                userId: targetUser.Id,
+                messageId: message.ReplyToMessage.MessageId,
+                executor: executor,
+                reason: reason,
+                cancellationToken: cancellationToken);
 
             if (!result.Success)
             {
@@ -99,12 +96,11 @@ public class BanCommand : IBotCommand
                                  $"If you believe this was a mistake, you may appeal by contacting the chat administrators.";
 
             var messageResult = await _messagingService.SendToUserAsync(
-                botClient,
                 userId: targetUser.Id,
                 chatId: message.Chat.Id,
                 messageText: banNotification,
                 replyToMessageId: null, // Don't reply to trigger message for bans
-                cancellationToken);
+                cancellationToken: cancellationToken);
 
             var deliveryMethod = messageResult.DeliveryMethod == MessageDeliveryMethod.PrivateDm
                 ? "DM"

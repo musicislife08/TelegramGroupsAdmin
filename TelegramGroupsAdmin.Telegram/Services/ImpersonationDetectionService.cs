@@ -31,7 +31,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
     private readonly IPhotoHashService _photoHashService;
     private readonly IImpersonationAlertsRepository _impersonationAlertsRepository;
     private readonly ModerationActionService _moderationActionService;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IConfigService _configService;
     private readonly ILogger<ImpersonationDetectionService> _logger;
 
@@ -50,7 +50,7 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
         IPhotoHashService photoHashService,
         IImpersonationAlertsRepository impersonationAlertsRepository,
         ModerationActionService moderationActionService,
-        TelegramBotClientFactory botClientFactory,
+        ITelegramBotClientFactory botClientFactory,
         IConfigService configService,
         ILogger<ImpersonationDetectionService> logger)
     {
@@ -247,10 +247,8 @@ public class ImpersonationDetectionService : IImpersonationDetectionService
             {
                 var reason = $"Auto-banned: Impersonation detected (name match: {result.NameMatch}, photo match: {result.PhotoMatch}, score: {result.TotalScore})";
 
-                var botClient = await _botClientFactory.GetBotClientAsync();
                 var executor = Core.Models.Actor.Impersonation;
                 var banResult = await _moderationActionService.BanUserAsync(
-                    botClient: botClient,
                     userId: result.SuspectedUserId,
                     messageId: null,
                     executor: executor,

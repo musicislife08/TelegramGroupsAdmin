@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -38,7 +37,6 @@ public class WarnCommand : IBotCommand
     }
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,
@@ -105,12 +103,11 @@ public class WarnCommand : IBotCommand
             }
 
             var messageResult = await _messagingService.SendToUserAsync(
-                botClient,
                 userId: targetUser.Id,
                 chatId: message.Chat.Id,
                 messageText: warningNotification,
                 replyToMessageId: message.ReplyToMessage.MessageId,
-                cancellationToken);
+                cancellationToken: cancellationToken);
 
             // Build admin confirmation response
             var username = targetUser.Username ?? targetUser.FirstName ?? targetUser.Id.ToString();

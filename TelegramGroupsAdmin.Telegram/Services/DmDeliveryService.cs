@@ -1,7 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Exceptions;
+using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -15,13 +16,13 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 public class DmDeliveryService : IDmDeliveryService
 {
     private readonly ILogger<DmDeliveryService> _logger;
-    private readonly TelegramBotClientFactory _botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IServiceProvider _serviceProvider;
     private readonly IJobScheduler _jobScheduler;
 
     public DmDeliveryService(
         ILogger<DmDeliveryService> logger,
-        TelegramBotClientFactory botClientFactory,
+        ITelegramBotClientFactory botClientFactory,
         IServiceProvider serviceProvider,
         IJobScheduler jobScheduler)
     {
@@ -38,15 +39,15 @@ public class DmDeliveryService : IDmDeliveryService
         int? autoDeleteSeconds = null,
         CancellationToken cancellationToken = default)
     {
-        var botClient = await _botClientFactory.GetBotClientAsync();
+        var operations = await _botClientFactory.GetOperationsAsync();
 
         try
         {
             // Attempt to send DM
-            await botClient.SendMessage(
+            await operations.SendMessageAsync(
                 chatId: telegramUserId,
                 text: messageText,
-                cancellationToken: cancellationToken);
+                ct: cancellationToken);
 
             _logger.LogInformation(
                 "DM sent successfully to user {UserId}",
@@ -85,7 +86,7 @@ public class DmDeliveryService : IDmDeliveryService
             if (fallbackChatId.HasValue)
             {
                 return await SendFallbackToChatAsync(
-                    botClient,
+                    operations,
                     fallbackChatId.Value,
                     messageText,
                     autoDeleteSeconds,
@@ -123,15 +124,15 @@ public class DmDeliveryService : IDmDeliveryService
         string messageText,
         CancellationToken cancellationToken = default)
     {
-        var botClient = await _botClientFactory.GetBotClientAsync();
+        var operations = await _botClientFactory.GetOperationsAsync();
 
         try
         {
             // Attempt to send DM
-            await botClient.SendMessage(
+            await operations.SendMessageAsync(
                 chatId: telegramUserId,
                 text: messageText,
-                cancellationToken: cancellationToken);
+                ct: cancellationToken);
 
             _logger.LogInformation(
                 "DM sent successfully to user {UserId} (notification type: {NotificationType})",
@@ -217,7 +218,7 @@ public class DmDeliveryService : IDmDeliveryService
     /// Send fallback message in chat with optional auto-delete
     /// </summary>
     private async Task<DmDeliveryResult> SendFallbackToChatAsync(
-        ITelegramBotClient botClient,
+        ITelegramOperations operations,
         long chatId,
         string messageText,
         int? autoDeleteSeconds,
@@ -225,10 +226,10 @@ public class DmDeliveryService : IDmDeliveryService
     {
         try
         {
-            var fallbackMessage = await botClient.SendMessage(
+            var fallbackMessage = await operations.SendMessageAsync(
                 chatId: chatId,
                 text: messageText,
-                cancellationToken: cancellationToken);
+                ct: cancellationToken);
 
             _logger.LogInformation(
                 "Sent fallback message {MessageId} in chat {ChatId}{DeleteInfo}",
@@ -295,7 +296,7 @@ public class DmDeliveryService : IDmDeliveryService
         string? videoPath = null,
         CancellationToken cancellationToken = default)
     {
-        var botClient = await _botClientFactory.GetBotClientAsync();
+        var operations = await _botClientFactory.GetOperationsAsync();
 
         try
         {
@@ -309,12 +310,12 @@ public class DmDeliveryService : IDmDeliveryService
                 {
                     // Send photo with caption
                     await using var photoStream = File.OpenRead(photoPath);
-                    await botClient.SendPhoto(
+                    await operations.SendPhotoAsync(
                         chatId: telegramUserId,
-                        photo: global::Telegram.Bot.Types.InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
+                        photo: InputFile.FromStream(photoStream, Path.GetFileName(photoPath)),
                         caption: messageText,
-                        parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
-                        cancellationToken: cancellationToken);
+                        parseMode: ParseMode.MarkdownV2,
+                        ct: cancellationToken);
 
                     _logger.LogInformation("DM with photo sent successfully to user {UserId}", telegramUserId);
                 }
@@ -322,12 +323,12 @@ public class DmDeliveryService : IDmDeliveryService
                 {
                     // Send video with caption
                     await using var videoStream = File.OpenRead(videoPath);
-                    await botClient.SendVideo(
+                    await operations.SendVideoAsync(
                         chatId: telegramUserId,
-                        video: global::Telegram.Bot.Types.InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
+                        video: InputFile.FromStream(videoStream, Path.GetFileName(videoPath)),
                         caption: messageText,
-                        parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
-                        cancellationToken: cancellationToken);
+                        parseMode: ParseMode.MarkdownV2,
+                        ct: cancellationToken);
 
                     _logger.LogInformation("DM with video sent successfully to user {UserId}", telegramUserId);
                 }
@@ -337,23 +338,21 @@ public class DmDeliveryService : IDmDeliveryService
                     _logger.LogWarning("Media file not found (photo: {PhotoPath}, video: {VideoPath}), sending text-only DM to user {UserId}",
                         photoPath, videoPath, telegramUserId);
 
-                    await botClient.SendMessage(
+                    await operations.SendMessageAsync(
                         chatId: telegramUserId,
                         text: messageText,
-                        parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
-                        linkPreviewOptions: new global::Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true },
-                        cancellationToken: cancellationToken);
+                        parseMode: ParseMode.MarkdownV2,
+                        ct: cancellationToken);
                 }
             }
             else
             {
                 // No media - send text only
-                await botClient.SendMessage(
+                await operations.SendMessageAsync(
                     chatId: telegramUserId,
                     text: messageText,
-                    parseMode: global::Telegram.Bot.Types.Enums.ParseMode.MarkdownV2,
-                    linkPreviewOptions: new global::Telegram.Bot.Types.LinkPreviewOptions { IsDisabled = true },
-                    cancellationToken: cancellationToken);
+                    parseMode: ParseMode.MarkdownV2,
+                    ct: cancellationToken);
 
                 _logger.LogInformation("DM sent successfully to user {UserId}", telegramUserId);
             }

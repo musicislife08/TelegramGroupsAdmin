@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Constants;
@@ -85,7 +84,7 @@ public class DetectionActionService(
             using var scope = serviceProvider.CreateScope();
             var reportService = scope.ServiceProvider.GetRequiredService<IReportService>();
             var moderationActionService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
-            var botFactory = scope.ServiceProvider.GetRequiredService<TelegramBotClientFactory>();
+            var botFactory = scope.ServiceProvider.GetRequiredService<ITelegramBotClientFactory>();
             var configLoader = scope.ServiceProvider.GetRequiredService<TelegramConfigLoader>();
             var botToken = await configLoader.LoadConfigAsync();
             var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
@@ -107,7 +106,6 @@ public class DetectionActionService(
                     userActionsRepo,
                     managedChatsRepo,
                     botFactory,
-                    botToken,
                     message,
                     spamResult,
                     hardBlockResult,
@@ -217,7 +215,6 @@ public class DetectionActionService(
                     userActionsRepo,
                     managedChatsRepo,
                     botFactory,
-                    botToken,
                     message,
                     spamResult,
                     openAIResult,
@@ -331,8 +328,7 @@ public class DetectionActionService(
     private async Task<AutoBanResult?> ExecuteAutoBanAsync(
         IUserActionsRepository userActionsRepo,
         IManagedChatsRepository managedChatsRepo,
-        TelegramBotClientFactory botFactory,
-        string botToken,
+        ITelegramBotClientFactory botFactory,
         Message message,
         TelegramGroupsAdmin.ContentDetection.Services.ContentDetectionResult spamResult,
         TelegramGroupsAdmin.ContentDetection.Models.ContentCheckResponse openAIResult,
@@ -340,7 +336,7 @@ public class DetectionActionService(
     {
         try
         {
-            var botClient = botFactory.GetOrCreate(botToken);
+            var operations = await botFactory.GetOperationsAsync();
 
             // Store ban action in database
             var banAction = new UserActionRecord(
@@ -406,12 +402,11 @@ public class DetectionActionService(
             {
                 try
                 {
-                    await botClient.BanChatMember(
+                    await operations.BanChatMemberAsync(
                         chatId: chat.ChatId,
                         userId: message.From.Id,
                         untilDate: null, // Permanent ban
-                        revokeMessages: true, // Delete all messages from this user
-                        cancellationToken: cancellationToken);
+                        ct: cancellationToken);
 
                     successCount++;
 
@@ -516,12 +511,10 @@ public class DetectionActionService(
     /// Policy: Delete message + DM notice, NO ban/warn for trusted/admin users
     /// Critical checks (URL filtering, file scanning) bypass trust status
     /// </summary>
-    /// <param name="botClient">Telegram bot client</param>
     /// <param name="message">Original message that violated critical check</param>
     /// <param name="violations">List of critical check violations with details</param>
     /// <param name="cancellationToken">Cancellation token</param>
     public async Task HandleCriticalCheckViolationAsync(
-        ITelegramBotClient botClient,
         Message message,
         List<string> violations,
         CancellationToken cancellationToken = default)
@@ -554,7 +547,6 @@ public class DetectionActionService(
                 using var deleteScope = serviceProvider.CreateScope();
                 var botMessageService = deleteScope.ServiceProvider.GetRequiredService<BotMessageService>();
                 await botMessageService.DeleteAndMarkMessageAsync(
-                    botClient,
                     chatId,
                     message.MessageId,
                     deletionSource: "critical_violation",
@@ -578,12 +570,11 @@ public class DetectionActionService(
                                      $"These checks apply to all users regardless of trust status.";
 
             var sendResult = await userMessagingService.SendToUserAsync(
-                botClient,
                 userId,
                 chatId,
                 notificationMessage,
                 replyToMessageId: null,  // Original message already deleted
-                cancellationToken);
+                cancellationToken: cancellationToken);
 
             if (sendResult.Success)
             {

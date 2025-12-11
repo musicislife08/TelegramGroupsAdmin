@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
@@ -39,7 +38,6 @@ public class ContentDetectionOrchestrator
     /// Handles: critical violations, detection result storage, auto-trust, language warnings, spam actions.
     /// </summary>
     public async Task RunDetectionAsync(
-        ITelegramBotClient botClient,
         Message message,
         string? text,
         string? photoLocalPath,
@@ -101,7 +99,6 @@ public class ContentDetectionOrchestrator
                 // Use DetectionActionService to handle critical violations
                 // Policy: Delete + DM notice, NO ban/warn for trusted/admin users
                 await _spamActionService.HandleCriticalCheckViolationAsync(
-                    botClient,
                     message,
                     result.CriticalCheckViolations,
                     cancellationToken);
@@ -135,7 +132,7 @@ public class ContentDetectionOrchestrator
                     // Language warning is handled by LanguageWarningHandler (REFACTOR-2 Phase 2.2)
                     // This will be extracted to handler in next phase
                     var languageWarningHandler = scope.ServiceProvider.GetRequiredService<LanguageWarningHandler>();
-                    await languageWarningHandler.HandleWarningAsync(botClient, message, scope, cancellationToken);
+                    await languageWarningHandler.HandleWarningAsync(message, scope, cancellationToken);
                 }
 
                 // Phase 2.7: Handle spam actions based on net confidence

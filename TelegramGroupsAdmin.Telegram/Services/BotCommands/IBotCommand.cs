@@ -1,4 +1,3 @@
-using Telegram.Bot;
 using Telegram.Bot.Types;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands;
@@ -47,14 +46,12 @@ public interface IBotCommand
     /// <summary>
     /// Execute the command
     /// </summary>
-    /// <param name="botClient">Telegram bot client for API calls</param>
     /// <param name="message">Telegram message containing the command</param>
     /// <param name="args">Command arguments (parsed after command name)</param>
     /// <param name="userPermissionLevel">Permission level of user who issued command</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>CommandResult with response message and optional dynamic deletion time</returns>
     Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,

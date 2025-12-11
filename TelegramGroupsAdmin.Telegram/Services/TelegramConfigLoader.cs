@@ -9,7 +9,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// Replaces IOptions&lt;TelegramOptions&gt; pattern with database-backed configuration
 /// Used by all services that need bot credentials (token)
 /// </summary>
-public class TelegramConfigLoader
+public class TelegramConfigLoader : ITelegramConfigLoader
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<TelegramConfigLoader> _logger;
@@ -32,7 +32,8 @@ public class TelegramConfigLoader
     /// chats dynamically when added to groups. Never add ChatId to this method's return value
     /// or require it in configuration validation.
     /// </remarks>
-    public virtual async Task<string> LoadConfigAsync()
+    /// <inheritdoc />
+    public async Task<string> LoadConfigAsync()
     {
         // Create scope to resolve scoped ConfigService
         using var scope = _scopeFactory.CreateScope();

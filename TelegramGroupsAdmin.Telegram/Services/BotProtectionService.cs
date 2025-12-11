@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Services;
@@ -15,13 +14,16 @@ public class BotProtectionService : IBotProtectionService
 {
     private readonly ILogger<BotProtectionService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory;
 
     public BotProtectionService(
         ILogger<BotProtectionService> logger,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        ITelegramBotClientFactory botClientFactory)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
+        _botClientFactory = botClientFactory;
     }
 
     public async Task<bool> ShouldAllowBotAsync(long chatId, User user, ChatMemberUpdated? chatMemberUpdate = null, CancellationToken cancellationToken = default)
@@ -91,7 +93,7 @@ public class BotProtectionService : IBotProtectionService
         return false;
     }
 
-    public async Task BanBotAsync(ITelegramBotClient botClient, long chatId, User bot, string reason, CancellationToken cancellationToken = default)
+    public async Task BanBotAsync(long chatId, User bot, string reason, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -119,7 +121,8 @@ public class BotProtectionService : IBotProtectionService
             await telegramUserRepo.UpsertAsync(telegramUser, cancellationToken);
 
             // Ban the bot
-            await botClient.BanChatMember(chatId, bot.Id, cancellationToken: cancellationToken);
+            var operations = await _botClientFactory.GetOperationsAsync();
+            await operations.BanChatMemberAsync(chatId, bot.Id, ct: cancellationToken);
 
             _logger.LogWarning("Banned unauthorized bot {BotDisplayName} from chat {ChatId}. Reason: {Reason}",
                 TelegramDisplayName.Format(bot.FirstName, bot.LastName, bot.Username, bot.Id), chatId, reason);

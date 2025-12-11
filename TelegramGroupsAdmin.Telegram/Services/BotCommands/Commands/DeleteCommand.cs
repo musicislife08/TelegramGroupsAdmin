@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
@@ -31,7 +30,6 @@ public class DeleteCommand : IBotCommand
     }
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,
@@ -50,7 +48,6 @@ public class DeleteCommand : IBotCommand
             using var scope = _serviceProvider.CreateScope();
             var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
             await botMessageService.DeleteAndMarkMessageAsync(
-                botClient,
                 message.Chat.Id,
                 targetMessage.MessageId,
                 deletionSource: "delete_command",

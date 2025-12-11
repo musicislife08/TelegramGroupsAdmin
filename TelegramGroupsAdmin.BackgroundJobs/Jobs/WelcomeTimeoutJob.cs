@@ -3,7 +3,6 @@ using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using Telegram.Bot;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
@@ -20,11 +19,11 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class WelcomeTimeoutJob(
     ILogger<WelcomeTimeoutJob> logger,
     IDbContextFactory<AppDbContext> contextFactory,
-    TelegramBotClientFactory botClientFactory) : IJob
+    ITelegramBotClientFactory botClientFactory) : IJob
 {
     private readonly ILogger<WelcomeTimeoutJob> _logger = logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
-    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
 
     /// <summary>
     /// Quartz.NET entry point - extracts payload and delegates to ExecuteAsync
@@ -58,8 +57,8 @@ public class WelcomeTimeoutJob(
                 payload.UserId,
                 payload.ChatId);
 
-            // Get bot client from factory
-            var botClient = await _botClientFactory.GetBotClientAsync();
+            // Get operations from factory
+            var operations = await _botClientFactory.GetOperationsAsync();
 
             // Check if user has responded
             await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -86,14 +85,14 @@ public class WelcomeTimeoutJob(
             // Kick user for timeout (ban then immediately unban)
             try
             {
-                await botClient.BanChatMember(
+                await operations.BanChatMemberAsync(
                     chatId: payload.ChatId,
                     userId: payload.UserId,
-                    cancellationToken: cancellationToken);
-                await botClient.UnbanChatMember(
+                    ct: cancellationToken);
+                await operations.UnbanChatMemberAsync(
                     chatId: payload.ChatId,
                     userId: payload.UserId,
-                    cancellationToken: cancellationToken);
+                    ct: cancellationToken);
 
                 _logger.LogInformation(
                     "Kicked user {UserId} from chat {ChatId} due to welcome timeout",
@@ -113,10 +112,10 @@ public class WelcomeTimeoutJob(
             // Delete welcome message
             try
             {
-                await botClient.DeleteMessage(
+                await operations.DeleteMessageAsync(
                     chatId: payload.ChatId,
                     messageId: payload.WelcomeMessageId,
-                    cancellationToken: cancellationToken);
+                    ct: cancellationToken);
             }
             catch (Exception ex)
             {

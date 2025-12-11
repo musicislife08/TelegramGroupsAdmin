@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using NSubstitute;
+using Telegram.Bot;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
@@ -37,8 +39,10 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     private readonly IFileScannerService _mockFileScannerService;
     private readonly ICloudScannerService _mockCloudScannerService;
 
-    // Telegram service test implementations
-    private readonly TestTelegramBotClientFactory _testTelegramBotClientFactory;
+    // Telegram service test implementations (pure NSubstitute - no custom test classes needed)
+    private readonly ITelegramConfigLoader _mockTelegramConfigLoader;
+    private readonly ITelegramBotClient _mockTelegramBotClient;
+    private readonly ITelegramBotClientFactory _mockTelegramBotClientFactory;
 
     public TestWebApplicationFactory(string? databaseName = null)
     {
@@ -61,10 +65,23 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         _mockCloudScannerService.IsQuotaAvailableAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false));
 
-        // Configure Telegram test implementations
-        // TestTelegramBotClientFactory - returns a mock ITelegramBotClient for all tokens
-        _testTelegramBotClientFactory = new TestTelegramBotClientFactory();
-        // TestTelegramConfigLoader - registered in ConfigureServices (needs IServiceScopeFactory)
+        // Configure Telegram test implementations using pure NSubstitute
+        // Mock ITelegramConfigLoader (returns dummy token)
+        _mockTelegramConfigLoader = Substitute.For<ITelegramConfigLoader>();
+        _mockTelegramConfigLoader.LoadConfigAsync().Returns(Task.FromResult("test-bot-token-for-e2e-tests"));
+
+        // Mock ITelegramBotClient for low-level API access
+        _mockTelegramBotClient = Substitute.For<ITelegramBotClient>();
+
+        // Mock ITelegramBotClientFactory that returns real TelegramOperations wrapping the mock client
+        // Note: Using a factory lambda to create fresh instances per call prevents test pollution
+        // (though TelegramOperations is stateless, this is the correct pattern for mocks)
+        _mockTelegramBotClientFactory = Substitute.For<ITelegramBotClientFactory>();
+        _mockTelegramBotClientFactory.GetBotClientAsync()
+            .Returns(Task.FromResult(_mockTelegramBotClient));
+        _mockTelegramBotClientFactory.GetOperationsAsync()
+            .Returns(_ => Task.FromResult<ITelegramOperations>(
+                new TelegramOperations(_mockTelegramBotClient, NullLogger<TelegramOperations>.Instance)));
 
         // Configure to use Kestrel with dynamic port (port 0)
         // This MUST be called before StartServer() or accessing Services
@@ -181,15 +198,12 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<ICloudScannerService>();
             services.AddSingleton(_mockCloudScannerService);
 
-            // Telegram services - test implementations to avoid real Telegram API calls
-            // TelegramConfigLoader (returns dummy token)
-            services.RemoveAll<TelegramConfigLoader>();
-            services.AddSingleton<TelegramConfigLoader>(sp =>
-                new TestTelegramConfigLoader(sp.GetRequiredService<IServiceScopeFactory>()));
+            // Telegram services - test implementations via pure NSubstitute (no custom test classes)
+            services.RemoveAll<ITelegramConfigLoader>();
+            services.AddSingleton(_mockTelegramConfigLoader);
 
-            // TelegramBotClientFactory (returns mock bot client)
-            services.RemoveAll<TelegramBotClientFactory>();
-            services.AddSingleton<TelegramBotClientFactory>(_testTelegramBotClientFactory);
+            services.RemoveAll<ITelegramBotClientFactory>();
+            services.AddSingleton(_mockTelegramBotClientFactory);
         });
     }
 

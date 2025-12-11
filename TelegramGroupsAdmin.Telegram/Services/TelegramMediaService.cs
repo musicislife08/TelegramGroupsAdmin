@@ -1,10 +1,8 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Core.Utilities;
-using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -16,14 +14,14 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// </summary>
 public class TelegramMediaService(
     ILogger<TelegramMediaService> logger,
-    TelegramBotClientFactory botClientFactory,
+    ITelegramBotClientFactory botClientFactory,
     IOptions<MessageHistoryOptions> historyOptions)
 {
     // Telegram Bot API file download limit (standard api.telegram.org)
     private const long MaxFileSizeBytes = 20 * 1024 * 1024; // 20MB
 
     private readonly ILogger<TelegramMediaService> _logger = logger;
-    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
     private readonly string _mediaStoragePath = historyOptions.Value.ImageStoragePath; // Reuse same base path
 
     /// <summary>
@@ -40,11 +38,11 @@ public class TelegramMediaService(
     {
         try
         {
-            // Get bot client
-            var botClient = await _botClientFactory.GetBotClientAsync();
+            // Get operations
+            var operations = await _botClientFactory.GetOperationsAsync();
 
             // Get file info from Telegram
-            var file = await botClient.GetFile(fileId, cancellationToken);
+            var file = await operations.GetFileAsync(fileId, cancellationToken);
             if (file.FilePath == null)
             {
                 _logger.LogWarning("File path is null for fileId {FileId}", fileId);
@@ -70,7 +68,7 @@ public class TelegramMediaService(
             // Download file from Telegram
             await using (var fileStream = File.Create(localFilePath))
             {
-                await botClient.DownloadFile(file.FilePath, fileStream, cancellationToken);
+                await operations.DownloadFileAsync(file.FilePath, fileStream, cancellationToken);
             }
 
             _logger.LogInformation(

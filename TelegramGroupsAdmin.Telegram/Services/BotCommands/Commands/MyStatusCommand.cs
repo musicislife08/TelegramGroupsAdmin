@@ -1,8 +1,8 @@
-using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
@@ -16,15 +16,18 @@ public class MyStatusCommand : IBotCommand
     private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IUserActionsRepository _userActionsRepository;
     private readonly INotificationOrchestrator _notificationOrchestrator;
+    private readonly ITelegramBotClientFactory _botFactory;
 
     public MyStatusCommand(
         ITelegramUserRepository telegramUserRepository,
         IUserActionsRepository userActionsRepository,
-        INotificationOrchestrator notificationOrchestrator)
+        INotificationOrchestrator notificationOrchestrator,
+        ITelegramBotClientFactory botFactory)
     {
         _telegramUserRepository = telegramUserRepository;
         _userActionsRepository = userActionsRepository;
         _notificationOrchestrator = notificationOrchestrator;
+        _botFactory = botFactory;
     }
 
     public string Name => "mystatus";
@@ -36,7 +39,6 @@ public class MyStatusCommand : IBotCommand
     public int? DeleteResponseAfterSeconds => null;
 
     public async Task<CommandResult> ExecuteAsync(
-        ITelegramBotClient botClient,
         Message message,
         string[] args,
         int userPermissionLevel,
@@ -69,7 +71,8 @@ public class MyStatusCommand : IBotCommand
             else
             {
                 // DM failed (queued), inform user in chat
-                var botInfo = await botClient.GetMe(cancellationToken);
+                var operations = await _botFactory.GetOperationsAsync();
+                var botInfo = await operations.GetMeAsync(cancellationToken);
                 var deepLink = $"https://t.me/{botInfo.Username}?start=mystatus";
 
                 return new CommandResult(

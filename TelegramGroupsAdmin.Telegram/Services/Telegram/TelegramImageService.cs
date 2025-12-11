@@ -1,18 +1,15 @@
 using Microsoft.Extensions.Logging;
-using Telegram.Bot;
 using Telegram.Bot.Exceptions;
-using TelegramGroupsAdmin.Configuration;
-using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Telegram;
 
 public class TelegramImageService : ITelegramImageService
 {
-    private readonly TelegramBotClientFactory _botFactory;
+    private readonly ITelegramBotClientFactory _botFactory;
     private readonly ILogger<TelegramImageService> _logger;
 
     public TelegramImageService(
-        TelegramBotClientFactory botFactory,
+        ITelegramBotClientFactory botFactory,
         ILogger<TelegramImageService> logger)
     {
         _botFactory = botFactory;
@@ -23,11 +20,11 @@ public class TelegramImageService : ITelegramImageService
     {
         try
         {
-            var botClient = await _botFactory.GetBotClientAsync();
+            var operations = await _botFactory.GetOperationsAsync();
 
             _logger.LogDebug("Downloading photo {FileId}", fileId);
 
-            var file = await botClient.GetFile(fileId, ct);
+            var file = await operations.GetFileAsync(fileId, ct);
 
             if (file.FilePath == null)
             {
@@ -36,7 +33,7 @@ public class TelegramImageService : ITelegramImageService
             }
 
             var stream = new MemoryStream();
-            await botClient.DownloadFile(file.FilePath, stream, ct);
+            await operations.DownloadFileAsync(file.FilePath, stream, ct);
             stream.Position = 0;
 
             _logger.LogInformation(

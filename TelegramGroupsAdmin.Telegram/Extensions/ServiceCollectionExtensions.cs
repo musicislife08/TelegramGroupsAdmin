@@ -44,8 +44,8 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ITelegramUserRepository, TelegramUserRepository>();
 
             // Telegram infrastructure
-            services.AddSingleton<TelegramBotClientFactory>();
-            services.AddSingleton<TelegramConfigLoader>(); // Database-backed config loader (replaces IOptions<TelegramOptions>)
+            services.AddSingleton<ITelegramBotClientFactory, TelegramBotClientFactory>();
+            services.AddSingleton<ITelegramConfigLoader, TelegramConfigLoader>(); // Database-backed config loader (replaces IOptions<TelegramOptions>)
             services.AddScoped<ITelegramImageService, TelegramImageService>();
             services.AddSingleton<TelegramPhotoService>();
             services.AddSingleton<TelegramMediaService>();
@@ -134,6 +134,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<MessageProcessingService>();
             services.AddSingleton<TelegramAdminBotService>();
             services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());
+            services.AddSingleton<IUpdateProcessor>(sp => sp.GetRequiredService<TelegramAdminBotService>());
             services.AddHostedService(sp => sp.GetRequiredService<TelegramAdminBotService>());
 
             return services;

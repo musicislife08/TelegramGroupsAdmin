@@ -3,7 +3,6 @@ using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Quartz;
-using Telegram.Bot;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Data;
@@ -21,11 +20,11 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 public class TempbanExpiryJob(
     ILogger<TempbanExpiryJob> logger,
     IDbContextFactory<AppDbContext> contextFactory,
-    TelegramBotClientFactory botClientFactory) : IJob
+    ITelegramBotClientFactory botClientFactory) : IJob
 {
     private readonly ILogger<TempbanExpiryJob> _logger = logger;
     private readonly IDbContextFactory<AppDbContext> _contextFactory = contextFactory;
-    private readonly TelegramBotClientFactory _botClientFactory = botClientFactory;
+    private readonly ITelegramBotClientFactory _botClientFactory = botClientFactory;
 
     public async Task Execute(IJobExecutionContext context)
     {
@@ -58,8 +57,8 @@ public class TempbanExpiryJob(
                 payload.Reason,
                 payload.ExpiresAt);
 
-            // Get bot client from factory
-            var botClient = await _botClientFactory.GetBotClientAsync();
+            // Get operations from factory
+            var operations = await _botClientFactory.GetOperationsAsync();
 
             try
             {
@@ -81,11 +80,11 @@ public class TempbanExpiryJob(
                 {
                     try
                     {
-                        await botClient.UnbanChatMember(
+                        await operations.UnbanChatMemberAsync(
                             chatId: chat.ChatId,
                             userId: payload.UserId,
                             onlyIfBanned: true,
-                            cancellationToken: cancellationToken);
+                            ct: cancellationToken);
 
                         successCount++;
                         _logger.LogInformation(
