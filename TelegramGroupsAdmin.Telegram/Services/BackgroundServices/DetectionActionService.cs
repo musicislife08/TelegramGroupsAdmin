@@ -85,7 +85,7 @@ public class DetectionActionService(
             var reportService = scope.ServiceProvider.GetRequiredService<IReportService>();
             var moderationActionService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
             var botFactory = scope.ServiceProvider.GetRequiredService<ITelegramBotClientFactory>();
-            var configLoader = scope.ServiceProvider.GetRequiredService<TelegramConfigLoader>();
+            var configLoader = scope.ServiceProvider.GetRequiredService<ITelegramConfigLoader>();
             var botToken = await configLoader.LoadConfigAsync();
             var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
             var managedChatsRepo = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
