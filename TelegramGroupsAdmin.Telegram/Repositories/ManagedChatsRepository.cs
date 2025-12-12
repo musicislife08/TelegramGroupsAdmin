@@ -34,6 +34,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
             existing.BotStatus = (Data.Models.BotChatStatus)(int)chat.BotStatus;
             existing.IsAdmin = chat.IsAdmin;
             existing.IsActive = chat.IsActive;
+            existing.IsDeleted = false; // Restore if previously deleted (re-add scenario)
             existing.LastSeenAt = chat.LastSeenAt;
             // Only update settings if provided (COALESCE logic)
             if (chat.SettingsJson != null)
@@ -79,7 +80,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.ManagedChats
             .AsNoTracking()
-            .Where(mc => mc.IsActive == true)
+            .Where(mc => mc.IsActive == true && mc.IsDeleted == false)
             .OrderBy(mc => mc.ChatName)
             .ToListAsync(cancellationToken);
 
@@ -91,7 +92,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.ManagedChats
             .AsNoTracking()
-            .Where(mc => mc.IsActive == true && mc.IsAdmin == true)
+            .Where(mc => mc.IsActive == true && mc.IsAdmin == true && mc.IsDeleted == false)
             .OrderBy(mc => mc.ChatName)
             .ToListAsync(cancellationToken);
 
@@ -103,7 +104,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         return await context.ManagedChats
             .AsNoTracking()
-            .AnyAsync(mc => mc.ChatId == chatId && mc.IsActive == true && mc.IsAdmin == true, cancellationToken);
+            .AnyAsync(mc => mc.ChatId == chatId && mc.IsActive == true && mc.IsAdmin == true && mc.IsDeleted == false, cancellationToken);
     }
 
     public async Task MarkInactiveAsync(long chatId, CancellationToken cancellationToken = default)
@@ -173,6 +174,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         var entities = await context.ManagedChats
             .AsNoTracking()
+            .Where(mc => mc.IsDeleted == false)
             .OrderByDescending(mc => mc.IsActive)
             .ThenBy(mc => mc.ChatName)
             .ToListAsync(cancellationToken);
@@ -182,7 +184,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
     public async Task<List<ManagedChatRecord>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        return await GetActiveChatsAsync(cancellationToken);
+        return await GetAllChatsAsync(cancellationToken);
     }
 
     public async Task DeleteAsync(long chatId, CancellationToken cancellationToken = default)
@@ -192,11 +194,12 @@ public class ManagedChatsRepository : IManagedChatsRepository
 
         if (chat != null)
         {
-            context.ManagedChats.Remove(chat);
+            // Soft delete - set IsDeleted flag instead of removing
+            chat.IsDeleted = true;
             await context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
-                "Deleted managed chat {ChatId} ({ChatName})",
+                "Soft-deleted managed chat {ChatId} ({ChatName})",
                 chatId,
                 chat.ChatName);
         }
@@ -215,10 +218,10 @@ public class ManagedChatsRepository : IManagedChatsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
-        // GlobalAdmin (1) and Owner (2) see all active chats
+        // GlobalAdmin (1) and Owner (2) see all non-deleted chats (active + inactive)
         if (permissionLevel >= PermissionLevel.GlobalAdmin)
         {
-            return await GetActiveChatsAsync(cancellationToken);
+            return await GetAllChatsAsync(cancellationToken);
         }
 
         // Admin (0) sees only chats where their linked Telegram account is admin
@@ -227,7 +230,7 @@ public class ManagedChatsRepository : IManagedChatsRepository
             from mc in context.ManagedChats
             join ca in context.ChatAdmins on mc.ChatId equals ca.ChatId
             join tum in context.TelegramUserMappings on ca.TelegramId equals tum.TelegramId
-            where mc.IsActive == true
+            where mc.IsDeleted == false
                 && tum.UserId == userId
                 && tum.IsActive == true
             select mc

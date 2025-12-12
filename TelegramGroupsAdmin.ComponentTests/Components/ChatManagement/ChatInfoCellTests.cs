@@ -10,6 +10,7 @@ public class ChatInfoCellTests : MudBlazorTestContext
         long chatId = -1001234567890,
         string chatName = "Test Chat",
         bool isActive = true,
+        bool isDeleted = false,
         ManagedChatType chatType = ManagedChatType.Supergroup)
     {
         return new ManagedChatRecord(
@@ -20,6 +21,7 @@ public class ChatInfoCellTests : MudBlazorTestContext
             IsAdmin: true,
             AddedAt: DateTimeOffset.UtcNow,
             IsActive: isActive,
+            IsDeleted: isDeleted,
             LastSeenAt: null,
             SettingsJson: null,
             ChatIconPath: null

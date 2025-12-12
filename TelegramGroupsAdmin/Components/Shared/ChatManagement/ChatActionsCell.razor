@@ -112,15 +112,22 @@
         {
             try
             {
-                // 1. Leave Telegram chat
-                var operations = await BotClientFactory.GetOperationsAsync();
-                await operations.LeaveChatAsync(ChatInfo.Chat.ChatId);
+                // 1. Leave Telegram chat (skip if bot already left/kicked - API will fail)
+                var alreadyLeft = ChatInfo.Chat.BotStatus is BotChatStatus.Left or BotChatStatus.Kicked;
+                if (!alreadyLeft)
+                {
+                    var operations = await BotClientFactory.GetOperationsAsync();
+                    await operations.LeaveChatAsync(ChatInfo.Chat.ChatId);
+                }
 
-                // 2. Delete from database
+                // 2. Soft-delete from database (preserves config for potential re-add)
                 await ManagedChatsRepository.DeleteAsync(ChatInfo.Chat.ChatId);
 
                 // 3. Notify parent
-                Snackbar.Add($"Left chat '{ChatInfo.Chat.ChatName}' successfully", Severity.Success);
+                var statusMessage = alreadyLeft
+                    ? $"Removed '{ChatInfo.Chat.ChatName}' from managed chats"
+                    : $"Left chat '{ChatInfo.Chat.ChatName}' successfully";
+                Snackbar.Add(statusMessage, Severity.Success);
                 await OnChatLeft.InvokeAsync();
             }
             catch (Exception ex)

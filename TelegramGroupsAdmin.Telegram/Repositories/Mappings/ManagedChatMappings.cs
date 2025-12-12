@@ -18,6 +18,7 @@ public static class ManagedChatMappings
             IsAdmin: data.IsAdmin,
             AddedAt: data.AddedAt,
             IsActive: data.IsActive,
+            IsDeleted: data.IsDeleted,
             LastSeenAt: data.LastSeenAt,
             SettingsJson: data.SettingsJson,
             ChatIconPath: data.ChatIconPath
@@ -35,6 +36,7 @@ public static class ManagedChatMappings
             IsAdmin = ui.IsAdmin,
             AddedAt = ui.AddedAt,
             IsActive = ui.IsActive,
+            IsDeleted = ui.IsDeleted,
             LastSeenAt = ui.LastSeenAt,
             SettingsJson = ui.SettingsJson,
             ChatIconPath = ui.ChatIconPath

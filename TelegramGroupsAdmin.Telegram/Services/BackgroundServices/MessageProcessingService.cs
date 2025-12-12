@@ -631,19 +631,36 @@ public partial class MessageProcessingService(
 
             // REFACTOR-2: Automatic content detection using ContentDetectionOrchestrator
             // Skip content detection for command messages (already processed by CommandRouter)
+            // Skip content detection for inactive chats (bot not admin - can't take moderation actions)
             // Run content detection if message has text OR images (image-only spam detection)
             if (commandResult == null && (!string.IsNullOrWhiteSpace(text) || photoLocalPath != null))
             {
-                using var detectionScope = serviceProvider.CreateScope();
-                var contentOrchestrator = detectionScope.ServiceProvider.GetRequiredService<Handlers.ContentDetectionOrchestrator>();
+                // Check if chat is active (bot has admin permissions) before running detection
+                using var chatCheckScope = serviceProvider.CreateScope();
+                var chatRepo = chatCheckScope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
+                var managedChat = await chatRepo.GetByChatIdAsync(message.Chat.Id, cancellationToken);
 
-                // Use translated text if available (avoids double translation in ContentDetectionEngine)
-                await contentOrchestrator.RunDetectionAsync(
-                    message,
-                    translationForDetection.TextForDetection,
-                    photoLocalPath,
-                    editVersion: 0,
-                    cancellationToken);
+                if (managedChat == null || !managedChat.IsActive)
+                {
+                    // Chat is inactive (bot not admin) - skip content detection
+                    // Message is already saved, just don't process for spam
+                    logger.LogDebug(
+                        "Skipping content detection for inactive chat {ChatId} - bot is not admin",
+                        message.Chat.Id);
+                }
+                else
+                {
+                    using var detectionScope = serviceProvider.CreateScope();
+                    var contentOrchestrator = detectionScope.ServiceProvider.GetRequiredService<Handlers.ContentDetectionOrchestrator>();
+
+                    // Use translated text if available (avoids double translation in ContentDetectionEngine)
+                    await contentOrchestrator.RunDetectionAsync(
+                        message,
+                        translationForDetection.TextForDetection,
+                        photoLocalPath,
+                        editVersion: 0,
+                        cancellationToken);
+                }
             }
         }
         catch (Exception ex)

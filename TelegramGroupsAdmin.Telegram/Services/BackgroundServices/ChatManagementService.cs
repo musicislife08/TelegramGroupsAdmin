@@ -109,7 +109,8 @@ public class ChatManagementService(
             var oldStatus = myChatMember.OldChatMember.Status;
             var newStatus = myChatMember.NewChatMember.Status;
             var isAdmin = newStatus == ChatMemberStatus.Administrator;
-            var isActive = newStatus is ChatMemberStatus.Member or ChatMemberStatus.Administrator;
+            var isActive = isAdmin; // IsActive = has admin permissions only (not just membership)
+            var isDeleted = newStatus is ChatMemberStatus.Left or ChatMemberStatus.Kicked;
 
             // Map Telegram ChatType to our ManagedChatType enum
             var chatType = chat.Type switch
@@ -139,6 +140,7 @@ public class ChatManagementService(
                 IsAdmin: isAdmin,
                 AddedAt: DateTimeOffset.UtcNow,
                 IsActive: isActive,
+                IsDeleted: isDeleted,
                 LastSeenAt: DateTimeOffset.UtcNow,
                 SettingsJson: null,
                 ChatIconPath: null
@@ -759,14 +761,15 @@ public class ChatManagementService(
 
             using var scope = serviceProvider.CreateScope();
             var managedChatsRepository = scope.ServiceProvider.GetRequiredService<IManagedChatsRepository>();
-            var chats = await managedChatsRepository.GetActiveChatsAsync(cancellationToken);
+            // Check all non-deleted chats (active + inactive) for health status
+            var chats = await managedChatsRepository.GetAllChatsAsync(cancellationToken);
 
             foreach (var chat in chats)
             {
                 await RefreshHealthForChatAsync(chat.ChatId, cancellationToken);
             }
 
-            logger.LogDebug("Completed health check for {Count} active chats", chats.Count);
+            logger.LogDebug("Completed health check for {Count} chats", chats.Count);
 
             // Backfill missing chat icons (only fetches for chats without icons)
             var chatsWithoutIcons = chats.Where(c => string.IsNullOrEmpty(c.ChatIconPath)).ToList();

@@ -24,6 +24,7 @@ public class ChatListTests : MudBlazorTestContext
         BotChatStatus botStatus = BotChatStatus.Administrator,
         bool isAdmin = true,
         bool isActive = true,
+        bool isDeleted = false,
         string? chatIconPath = null)
     {
         return new ManagedChatRecord(
@@ -34,6 +35,7 @@ public class ChatListTests : MudBlazorTestContext
             IsAdmin: isAdmin,
             AddedAt: DateTimeOffset.UtcNow.AddDays(-30),
             IsActive: isActive,
+            IsDeleted: isDeleted,
             LastSeenAt: DateTimeOffset.UtcNow.AddMinutes(-5),
             SettingsJson: null,
             ChatIconPath: chatIconPath);
