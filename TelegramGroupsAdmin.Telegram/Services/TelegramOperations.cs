@@ -180,4 +180,12 @@ public class TelegramOperations : ITelegramOperations
 
     public Task<string> ExportChatInviteLinkAsync(long chatId, CancellationToken ct = default)
         => _botClient.ExportChatInviteLink(chatId, ct);
+
+    // ─── Chat Management ───────────────────────────────────────────────────────
+
+    public async Task LeaveChatAsync(long chatId, CancellationToken ct = default)
+    {
+        _logger.LogInformation("Leaving chat {ChatId}", chatId);
+        await _botClient.LeaveChat(chatId, ct);
+    }
 }

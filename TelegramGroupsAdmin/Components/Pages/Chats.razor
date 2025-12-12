@@ -2,18 +2,12 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Components.Shared.ChatManagement
 @using TelegramGroupsAdmin.ContentDetection.Repositories
-@using TelegramGroupsAdmin.Core.BackgroundJobs
-@using TelegramGroupsAdmin.Core.JobPayloads
 @inject TelegramAdminBotService BotService
 @inject IManagedChatsRepository ManagedChatsRepository
 @inject IContentDetectionConfigRepository SpamConfigRepository
 @inject TelegramGroupsAdmin.Configuration.Repositories.IConfigRepository ConfigRepository
-@inject IServiceProvider ServiceProvider
-@inject IJobScheduler JobScheduler
 @inject BlazorAuthHelper AuthHelper
 @inject ISnackbar Snackbar
-@inject IDialogService DialogService
-@inject ILogger<Chats> Logger
 @attribute [Authorize]
 @implements IDisposable
 
@@ -59,31 +53,15 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Chat Name">
-                    <div>
-                        <MudText Typo="Typo.body2">@context.Chat.ChatName</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.Chat.ChatId</MudText>
-                    </div>
-                    @if (!context.Chat.IsActive)
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Default">Inactive</MudChip>
-                    }
+                    <ChatInfoCell Chat="@context.Chat" />
                 </MudTd>
                 <MudTd DataLabel="Type">@context.Chat.ChatType.ToString()</MudTd>
                 <MudTd DataLabel="Bot Status">
-                    <MudChip T="string" Size="Size.Small" Color="@GetBotStatusColor(context.Chat.BotStatus)">
-                        @context.Chat.BotStatus.ToString()
-                    </MudChip>
+                    <ChatStatusChip BotStatus="@context.Chat.BotStatus" />
                 </MudTd>
                 <MudTd DataLabel="Health">
-                    <MudChip T="string" Size="Size.Small" Color="@GetHealthColor(context.HealthStatus.Status)">
-                        @context.HealthStatus.Status.ToString()
-                    </MudChip>
-                    @if (context.HealthStatus.Warnings.Count > 0)
-                    {
-                        <MudTooltip Text="@string.Join(", ", context.HealthStatus.Warnings)">
-                            <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Warning" />
-                        </MudTooltip>
-                    }
+                    <ChatStatusChip HealthStatus="@context.HealthStatus.Status"
+                                   Warnings="@context.HealthStatus.Warnings" />
                 </MudTd>
                 <MudTd DataLabel="Custom Config">
                     @if (context.HasCustomSpamConfig)
@@ -106,17 +84,10 @@
                     }
                 </MudTd>
                 <MudTd DataLabel="Actions">
-                    <MudStack Row="true" Spacing="1">
-                        <MudIconButton Icon="@Icons.Material.Filled.Refresh"
-                                      Size="Size.Small"
-                                      Color="Color.Info"
-                                      OnClick="@(() => RefreshChatHealthAsync(context.Chat.ChatId))"
-                                      title="Refresh health status" />
-                        <MudButton Variant="Variant.Text" Color="Color.Primary" Size="Size.Small"
-                                  OnClick="@(() => OpenChatConfig(context))">
-                            Configure
-                        </MudButton>
-                    </MudStack>
+                    <ChatActionsCell ChatInfo="@context"
+                                    OnChatLeft="@LoadChatsAsync"
+                                    OnConfigured="@HandleConfigured"
+                                    OnHealthRefreshQueued="@StateHasChanged" />
                 </MudTd>
             </RowTemplate>
             <PagerContent>
@@ -211,6 +182,14 @@
         }
     }
 
+    private async Task HandleConfigured(bool saved)
+    {
+        if (saved)
+        {
+            await LoadChatsAsync();
+        }
+    }
+
     public void Dispose()
     {
         // Unsubscribe from events
@@ -230,63 +209,5 @@
             return true;
 
         return false;
-    }
-
-    private Color GetBotStatusColor(BotChatStatus status)
-    {
-        return status switch
-        {
-            BotChatStatus.Administrator => Color.Success,
-            BotChatStatus.Member => Color.Info,
-            BotChatStatus.Left => Color.Default,
-            BotChatStatus.Kicked => Color.Error,
-            _ => Color.Default
-        };
-    }
-
-    private Color GetHealthColor(ChatHealthStatusType status)
-    {
-        return status switch
-        {
-            ChatHealthStatusType.Healthy => Color.Success,
-            ChatHealthStatusType.Warning => Color.Warning,
-            ChatHealthStatusType.Error => Color.Error,
-            _ => Color.Default
-        };
-    }
-
-    private async Task RefreshChatHealthAsync(long chatId)
-    {
-        try
-        {
-            // Schedule a ChatHealthCheckJob for this specific chat
-            var payload = new ChatHealthCheckPayload { ChatId = chatId };
-
-            var jobId = await JobScheduler.ScheduleJobAsync(
-                BackgroundJobNames.ChatHealthCheck,
-                payload,
-                delaySeconds: 0); // Run immediately
-
-            Snackbar.Add("Chat health refresh queued", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Failed to refresh chat health: {ex.Message}", Severity.Error);
-        }
-    }
-
-    private async Task OpenChatConfig(ManagedChatInfo chatInfo)
-    {
-        var parameters = new DialogParameters { ["ChatInfo"] = chatInfo };
-        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
-
-        var dialog = await DialogService.ShowAsync<ChatConfigModal>($"Configure: {chatInfo.Chat.ChatName}", parameters, options);
-        var result = await dialog.Result;
-
-        if (result is { Canceled: false })
-        {
-            // Reload chats after modal closes
-            await LoadChatsAsync();
-        }
     }
 }

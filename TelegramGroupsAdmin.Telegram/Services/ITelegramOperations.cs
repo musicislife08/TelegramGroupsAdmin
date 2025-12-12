@@ -151,4 +151,11 @@ public interface ITelegramOperations
     /// Export the invite link for a chat.
     /// </summary>
     Task<string> ExportChatInviteLinkAsync(long chatId, CancellationToken ct = default);
+
+    // ─── Chat Management ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Leave a chat (group, supergroup, or channel).
+    /// </summary>
+    Task LeaveChatAsync(long chatId, CancellationToken ct = default);
 }

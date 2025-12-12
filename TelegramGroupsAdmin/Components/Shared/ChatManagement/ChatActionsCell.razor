@@ -1,0 +1,133 @@
+@using TelegramGroupsAdmin.Services
+@using TelegramGroupsAdmin.Telegram.Models
+@using TelegramGroupsAdmin.Core.BackgroundJobs
+@using TelegramGroupsAdmin.Core.JobPayloads
+@using TelegramGroupsAdmin.Components.Shared
+@inject ITelegramBotClientFactory BotClientFactory
+@inject IManagedChatsRepository ManagedChatsRepository
+@inject IJobScheduler JobScheduler
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject ILogger<ChatActionsCell> Logger
+
+<MudStack Row="true" Spacing="1">
+    <MudIconButton Icon="@Icons.Material.Filled.Refresh"
+                   Size="Size.Small"
+                   Color="Color.Info"
+                   OnClick="@RefreshHealthAsync"
+                   title="Refresh health status" />
+    <MudButton Variant="Variant.Text"
+               Color="Color.Primary"
+               Size="Size.Small"
+               OnClick="@OpenConfigAsync">
+        Configure
+    </MudButton>
+    <MudIconButton Icon="@Icons.Material.Filled.ExitToApp"
+                   Size="Size.Small"
+                   Color="Color.Error"
+                   OnClick="@LeaveChatAsync"
+                   title="Leave chat and remove from system" />
+</MudStack>
+
+@code {
+    /// <summary>
+    /// The chat info containing chat record and health status.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ManagedChatInfo ChatInfo { get; set; } = null!;
+
+    /// <summary>
+    /// Callback invoked after the bot leaves the chat and data is deleted.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnChatLeft { get; set; }
+
+    /// <summary>
+    /// Callback invoked after the configuration dialog is closed (whether saved or cancelled).
+    /// </summary>
+    [Parameter]
+    public EventCallback<bool> OnConfigured { get; set; }
+
+    /// <summary>
+    /// Callback invoked after health refresh is queued.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnHealthRefreshQueued { get; set; }
+
+    private async Task RefreshHealthAsync()
+    {
+        try
+        {
+            var payload = new ChatHealthCheckPayload { ChatId = ChatInfo.Chat.ChatId };
+
+            await JobScheduler.ScheduleJobAsync(
+                BackgroundJobNames.ChatHealthCheck,
+                payload,
+                delaySeconds: 0);
+
+            Snackbar.Add("Chat health refresh queued", Severity.Success);
+            await OnHealthRefreshQueued.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to refresh health for chat {ChatId}", ChatInfo.Chat.ChatId);
+            Snackbar.Add("Failed to refresh chat health. Please try again.", Severity.Error);
+        }
+    }
+
+    private async Task OpenConfigAsync()
+    {
+        var parameters = new DialogParameters<ChatConfigModal> { { x => x.ChatInfo, ChatInfo } };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
+
+        var dialog = await DialogService.ShowAsync<ChatConfigModal>(
+            $"Configure: {ChatInfo.Chat.ChatName}",
+            parameters,
+            options);
+        var result = await dialog.Result;
+
+        var saved = result is { Canceled: false };
+        await OnConfigured.InvokeAsync(saved);
+    }
+
+    private async Task LeaveChatAsync()
+    {
+        var message = $"Are you sure you want the bot to leave '{ChatInfo.Chat.ChatName}'?\n\n" +
+                      "This will:\n" +
+                      "• Remove the bot from the Telegram group\n" +
+                      "• Delete all chat configuration and history\n" +
+                      "• This action cannot be undone";
+
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, message },
+            { x => x.ButtonText, "Leave Chat" },
+            { x => x.Color, Color.Error }
+        };
+
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Leave Chat", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            try
+            {
+                // 1. Leave Telegram chat
+                var operations = await BotClientFactory.GetOperationsAsync();
+                await operations.LeaveChatAsync(ChatInfo.Chat.ChatId);
+
+                // 2. Delete from database
+                await ManagedChatsRepository.DeleteAsync(ChatInfo.Chat.ChatId);
+
+                // 3. Notify parent
+                Snackbar.Add($"Left chat '{ChatInfo.Chat.ChatName}' successfully", Severity.Success);
+                await OnChatLeft.InvokeAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to leave chat {ChatId}", ChatInfo.Chat.ChatId);
+                Snackbar.Add("Failed to leave chat. Please try again.", Severity.Error);
+            }
+        }
+    }
+}

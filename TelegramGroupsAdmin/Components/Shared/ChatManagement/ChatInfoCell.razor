@@ -1,0 +1,18 @@
+@using TelegramGroupsAdmin.Telegram.Models
+
+<div>
+    <MudText Typo="Typo.body2">@Chat.ChatName</MudText>
+    <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @Chat.ChatId</MudText>
+</div>
+@if (!Chat.IsActive)
+{
+    <MudChip T="string" Size="Size.Small" Color="Color.Default">Inactive</MudChip>
+}
+
+@code {
+    /// <summary>
+    /// The managed chat record to display.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ManagedChatRecord Chat { get; set; } = null!;
+}
