@@ -1,0 +1,57 @@
+@using TelegramGroupsAdmin.Telegram.Models
+
+@if (BotStatus.HasValue)
+{
+    <MudChip T="string" Size="Size.Small" Color="@GetBotStatusColor(BotStatus.Value)">
+        @BotStatus.Value.ToString()
+    </MudChip>
+}
+else if (HealthStatus.HasValue)
+{
+    <MudChip T="string" Size="Size.Small" Color="@GetHealthStatusColor(HealthStatus.Value)">
+        @HealthStatus.Value.ToString()
+    </MudChip>
+    @if (Warnings is { Count: > 0 })
+    {
+        <MudTooltip Text="@string.Join(", ", Warnings)">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Warning" />
+        </MudTooltip>
+    }
+}
+
+@code {
+    /// <summary>
+    /// Bot membership status to display. Mutually exclusive with HealthStatus.
+    /// </summary>
+    [Parameter]
+    public BotChatStatus? BotStatus { get; set; }
+
+    /// <summary>
+    /// Chat health status to display. Mutually exclusive with BotStatus.
+    /// </summary>
+    [Parameter]
+    public ChatHealthStatusType? HealthStatus { get; set; }
+
+    /// <summary>
+    /// Warning messages to display as tooltip (only shown when HealthStatus is set).
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<string>? Warnings { get; set; }
+
+    private static Color GetBotStatusColor(BotChatStatus status) => status switch
+    {
+        BotChatStatus.Administrator => Color.Success,
+        BotChatStatus.Member => Color.Info,
+        BotChatStatus.Left => Color.Default,
+        BotChatStatus.Kicked => Color.Error,
+        _ => Color.Default
+    };
+
+    private static Color GetHealthStatusColor(ChatHealthStatusType status) => status switch
+    {
+        ChatHealthStatusType.Healthy => Color.Success,
+        ChatHealthStatusType.Warning => Color.Warning,
+        ChatHealthStatusType.Error => Color.Error,
+        _ => Color.Default
+    };
+}

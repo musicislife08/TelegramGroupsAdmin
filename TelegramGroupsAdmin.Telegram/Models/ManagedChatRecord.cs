@@ -11,6 +11,7 @@ public record ManagedChatRecord(
     bool IsAdmin,
     DateTimeOffset AddedAt,
     bool IsActive,
+    bool IsDeleted,
     DateTimeOffset? LastSeenAt,
     string? SettingsJson,
     string? ChatIconPath

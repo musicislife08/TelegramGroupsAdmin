@@ -62,10 +62,10 @@ public class TempbanExpiryJob(
 
             try
             {
-                // Get all managed chats to unban user from
+                // Get all managed chats to unban user from (only active, non-deleted)
                 await using var dbContext = await _contextFactory.CreateDbContextAsync(cancellationToken);
                 var managedChats = await dbContext.ManagedChats
-                    .Where(c => c.IsActive)
+                    .Where(c => c.IsActive && !c.IsDeleted)
                     .ToListAsync(cancellationToken);
 
                 _logger.LogInformation(

@@ -27,6 +27,7 @@ public class TestChatBuilder
     private BotChatStatus _botStatus = BotChatStatus.Administrator;
     private bool _isAdmin = true;
     private bool _isActive = true;
+    private bool _isDeleted;
     private DateTimeOffset _addedAt = DateTimeOffset.UtcNow;
     private DateTimeOffset? _lastSeenAt;
     private string? _settingsJson;
@@ -100,12 +101,22 @@ public class TestChatBuilder
     }
 
     /// <summary>
-    /// Sets whether the chat is active.
+    /// Sets whether the chat is active (bot has admin permissions).
     /// Default is true.
     /// </summary>
     public TestChatBuilder WithActiveStatus(bool isActive)
     {
         _isActive = isActive;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets whether the chat is deleted (soft-deleted).
+    /// Default is false.
+    /// </summary>
+    public TestChatBuilder WithDeletedStatus(bool isDeleted)
+    {
+        _isDeleted = isDeleted;
         return this;
     }
 
@@ -165,6 +176,7 @@ public class TestChatBuilder
             IsAdmin: _isAdmin,
             AddedAt: _addedAt,
             IsActive: _isActive,
+            IsDeleted: _isDeleted,
             LastSeenAt: _lastSeenAt,
             SettingsJson: _settingsJson,
             ChatIconPath: _chatIconPath

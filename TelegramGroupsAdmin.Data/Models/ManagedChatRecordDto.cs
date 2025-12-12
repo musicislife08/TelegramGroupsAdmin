@@ -31,6 +31,9 @@ public class ManagedChatRecordDto
     [Column("is_active")]
     public bool IsActive { get; set; }
 
+    [Column("is_deleted")]
+    public bool IsDeleted { get; set; }
+
     [Column("last_seen_at")]
     public DateTimeOffset? LastSeenAt { get; set; }
 
