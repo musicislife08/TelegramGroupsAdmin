@@ -183,6 +183,7 @@ public class TelegramOperations : ITelegramOperations
 
     // ─── Chat Management ───────────────────────────────────────────────────────
 
+    /// <inheritdoc/>
     public async Task LeaveChatAsync(long chatId, CancellationToken ct = default)
     {
         _logger.LogInformation("Leaving chat {ChatId}", chatId);
