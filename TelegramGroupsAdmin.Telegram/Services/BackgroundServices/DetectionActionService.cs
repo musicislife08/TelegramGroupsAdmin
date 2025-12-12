@@ -83,7 +83,7 @@ public class DetectionActionService(
 
             using var scope = serviceProvider.CreateScope();
             var reportService = scope.ServiceProvider.GetRequiredService<IReportService>();
-            var moderationActionService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
+            var moderationActionService = scope.ServiceProvider.GetRequiredService<Moderation.ModerationOrchestrator>();
             var botFactory = scope.ServiceProvider.GetRequiredService<ITelegramBotClientFactory>();
             var configLoader = scope.ServiceProvider.GetRequiredService<ITelegramConfigLoader>();
             var botToken = await configLoader.LoadConfigAsync();

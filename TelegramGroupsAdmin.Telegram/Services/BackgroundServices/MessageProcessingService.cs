@@ -479,7 +479,7 @@ public partial class MessageProcessingService(
                     LogDisplayName.ChatDebug(message.Chat.Title, message.Chat.Id),
                     message.MessageId);
 
-                var moderationService = messageScope.ServiceProvider.GetRequiredService<ModerationActionService>();
+                var moderationService = messageScope.ServiceProvider.GetRequiredService<Moderation.ModerationOrchestrator>();
                 await moderationService.DeleteMessageAsync(
                     messageId: message.MessageId,
                     chatId: message.Chat.Id,

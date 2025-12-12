@@ -1,7 +1,8 @@
 @using TelegramGroupsAdmin.Services
 @using TelegramGroupsAdmin.Helpers
+@using TelegramGroupsAdmin.Telegram.Services.Moderation
 @inject TelegramUserManagementService UserManagementService
-@inject ModerationActionService ModerationService
+@inject ModerationOrchestrator ModerationService
 @inject IAdminNotesRepository AdminNotesRepository
 @inject IUserTagsRepository UserTagsRepository
 @inject ITagDefinitionsRepository TagDefinitionsRepository

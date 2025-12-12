@@ -1,6 +1,7 @@
 @page "/messages"
 @using TelegramGroupsAdmin.Telegram.Services
 @using TelegramGroupsAdmin.Telegram.Services.Media
+@using TelegramGroupsAdmin.Telegram.Services.Moderation
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
@@ -15,7 +16,7 @@
 @inject IMessageHistoryService MessageHistoryService
 @inject BlazorAuthHelper AuthHelper
 @inject IDetectionResultsRepository DetectionResultsRepository
-@inject ModerationActionService ModerationService
+@inject ModerationOrchestrator ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
 @inject NavigationManager NavigationManager
 @inject ILogger<Messages> Logger

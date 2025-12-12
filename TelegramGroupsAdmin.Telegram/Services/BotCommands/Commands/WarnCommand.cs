@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -14,7 +15,7 @@ public class WarnCommand : IBotCommand
 {
     private readonly ILogger<WarnCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationActionService _moderationService;
+    private readonly ModerationOrchestrator _moderationService;
     private readonly IUserMessagingService _messagingService;
 
     public string Name => "warn";
@@ -28,7 +29,7 @@ public class WarnCommand : IBotCommand
     public WarnCommand(
         ILogger<WarnCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationActionService moderationService,
+        ModerationOrchestrator moderationService,
         IUserMessagingService messagingService)
     {
         _logger = logger;

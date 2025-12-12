@@ -5,6 +5,12 @@ using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Intents;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
 
@@ -73,9 +79,35 @@ public static class ServiceCollectionExtensions
             services.AddScoped<INotificationChannel, TelegramDmChannel>();
             services.AddScoped<INotificationOrchestrator, NotificationOrchestrator>();
 
-            // Moderation and user management services
-            services.AddScoped<ModerationActionService>();
-            services.AddScoped<IReportService, ReportService>(); // Unified report creation + notification
+            // REFACTOR-5: Intent-based moderation architecture
+            // Infrastructure
+            services.AddScoped<ICrossChatExecutor, CrossChatExecutor>();
+            services.AddScoped<IMessageBackfillService, MessageBackfillService>();
+            services.AddScoped<IModerationEventDispatcher, ModerationEventDispatcher>();
+
+            // Action handlers (domain experts for each moderation action)
+            services.AddScoped<IActionHandler<BanIntent, BanResult>, BanActionHandler>();
+            services.AddScoped<IActionHandler<UnbanIntent, UnbanResult>, UnbanActionHandler>();
+            services.AddScoped<IActionHandler<WarnIntent, WarnResult>, WarnActionHandler>();
+            services.AddScoped<IActionHandler<TrustIntent, TrustResult>, TrustActionHandler>();
+            services.AddScoped<IActionHandler<RevokeTrustIntent, RevokeTrustResult>, RevokeTrustActionHandler>();
+            services.AddScoped<IActionHandler<DeleteIntent, DeleteResult>, DeleteActionHandler>();
+            services.AddScoped<IActionHandler<TempBanIntent, TempBanResult>, TempBanActionHandler>();
+            services.AddScoped<IActionHandler<RestrictIntent, RestrictResult>, RestrictActionHandler>();
+            services.AddScoped<IActionHandler<MarkAsSpamIntent, MarkAsSpamResult>, MarkAsSpamActionHandler>();
+
+            // Orchestrator (thin routing layer that coordinates action handlers and side-effects)
+            services.AddScoped<ModerationOrchestrator>();
+
+            // Side-effect handlers (registered as IEnumerable<IModerationHandler> for dispatcher)
+            // Order: 20=WarningThreshold, 50=TrainingData, 100=AuditLog, 200=Notification
+            services.AddScoped<IModerationHandler, WarningThresholdHandler>();
+            services.AddScoped<IModerationHandler, TrainingDataHandler>();
+            services.AddScoped<IModerationHandler, AuditLogHandler>();
+            services.AddScoped<IModerationHandler, NotificationHandler>();
+
+            // Report service
+            services.AddScoped<IReportService, ReportService>();
             services.AddScoped<UserAutoTrustService>();
             services.AddScoped<AdminMentionHandler>();
             services.AddScoped<TelegramUserManagementService>(); // Orchestrates Telegram user operations
@@ -95,7 +127,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IImpersonationDetectionService, ImpersonationDetectionService>();
 
             // Bot command system
-            // Commands are Scoped (to allow injecting Scoped services like ModerationActionService)
+            // Commands are Scoped (to allow injecting Scoped services like ModerationOrchestrator)
             // CommandRouter is Singleton (creates scopes internally when executing commands)
             // Register both as interface and concrete type for CommandRouter resolution
             services.AddScoped<StartCommand>();
