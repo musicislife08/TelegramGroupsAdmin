@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Core.Models;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
@@ -16,17 +17,17 @@ public class ReportActionsService : IReportActionsService
 {
     private readonly IReportsRepository _reportsRepository;
     private readonly IMessageHistoryRepository _messageRepository;
-    private readonly ModerationActionService _moderationService;
+    private readonly ModerationOrchestrator _moderationService;
     private readonly IAuditService _auditService;
-    private readonly BotMessageService _botMessageService;
+    private readonly IBotMessageService _botMessageService;
     private readonly ILogger<ReportActionsService> _logger;
 
     public ReportActionsService(
         IReportsRepository reportsRepository,
         IMessageHistoryRepository messageRepository,
-        ModerationActionService moderationService,
+        ModerationOrchestrator moderationService,
         IAuditService auditService,
-        BotMessageService botMessageService,
+        IBotMessageService botMessageService,
         ILogger<ReportActionsService> logger)
     {
         _reportsRepository = reportsRepository;

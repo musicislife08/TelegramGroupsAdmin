@@ -5,6 +5,11 @@ using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
 
@@ -73,9 +78,28 @@ public static class ServiceCollectionExtensions
             services.AddScoped<INotificationChannel, TelegramDmChannel>();
             services.AddScoped<INotificationOrchestrator, NotificationOrchestrator>();
 
-            // Moderation and user management services
-            services.AddScoped<ModerationActionService>();
-            services.AddScoped<IReportService, ReportService>(); // Unified report creation + notification
+            // REFACTOR-5: Manager/Worker moderation architecture
+            // Infrastructure
+            services.AddScoped<ICrossChatExecutor, CrossChatExecutor>();
+            services.AddScoped<IMessageBackfillService, MessageBackfillService>();
+
+            // Domain handlers (workers)
+            services.AddScoped<IBanHandler, BanHandler>();
+            services.AddScoped<ITrustHandler, TrustHandler>();
+            services.AddScoped<IWarnHandler, WarnHandler>();
+            services.AddScoped<IMessageHandler, MessageHandler>();
+            services.AddScoped<IRestrictHandler, RestrictHandler>();
+
+            // Support handlers
+            services.AddScoped<IAuditHandler, AuditHandler>();
+            services.AddScoped<INotificationHandler, NotificationHandler>();
+            services.AddScoped<ITrainingHandler, TrainingHandler>();
+
+            // Orchestrator (routes to handlers and owns business rules)
+            services.AddScoped<ModerationOrchestrator>();
+
+            // Report service
+            services.AddScoped<IReportService, ReportService>();
             services.AddScoped<UserAutoTrustService>();
             services.AddScoped<AdminMentionHandler>();
             services.AddScoped<TelegramUserManagementService>(); // Orchestrates Telegram user operations
@@ -83,7 +107,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IChatInviteLinkService, ChatInviteLinkService>(); // Phase 4.6: Invite link retrieval
             services.AddSingleton<IWelcomeService, WelcomeService>();
             services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
-            services.AddScoped<BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
+            services.AddScoped<IBotMessageService, BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
 
             // Training data quality services
@@ -95,7 +119,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IImpersonationDetectionService, ImpersonationDetectionService>();
 
             // Bot command system
-            // Commands are Scoped (to allow injecting Scoped services like ModerationActionService)
+            // Commands are Scoped (to allow injecting Scoped services like ModerationOrchestrator)
             // CommandRouter is Singleton (creates scopes internally when executing commands)
             // Register both as interface and concrete type for CommandRouter resolution
             services.AddScoped<StartCommand>();
@@ -130,7 +154,7 @@ public static class ServiceCollectionExtensions
 
             // Background services (refactored into smaller services)
             services.AddSingleton<DetectionActionService>();
-            services.AddSingleton<ChatManagementService>();
+            services.AddSingleton<IChatManagementService, ChatManagementService>();
             services.AddSingleton<MessageProcessingService>();
             services.AddSingleton<TelegramAdminBotService>();
             services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());

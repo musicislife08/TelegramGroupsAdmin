@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Data.Models;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Repositories;
@@ -31,4 +32,37 @@ public interface ITelegramUserRepository
         CancellationToken ct = default);
     Task<UiModels.ModerationQueueStats> GetModerationQueueStatsAsync(CancellationToken ct = default);
     Task<UiModels.TelegramUserDetail?> GetUserDetailAsync(long telegramUserId, CancellationToken ct = default);
+
+    // ============================================================================
+    // Moderation State Methods (REFACTOR-5: Source of truth on telegram_users)
+    // ============================================================================
+
+    /// <summary>
+    /// Set user's ban status. Source of truth for "is user banned?".
+    /// </summary>
+    /// <param name="telegramUserId">User to update</param>
+    /// <param name="isBanned">Whether user is banned</param>
+    /// <param name="expiresAt">When ban expires (null = permanent)</param>
+    Task SetBanStatusAsync(long telegramUserId, bool isBanned, DateTimeOffset? expiresAt = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Add a warning to user's JSONB warnings collection.
+    /// Returns the count of active (non-expired) warnings after insert.
+    /// </summary>
+    Task<int> AddWarningAsync(long telegramUserId, WarningEntry warning, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get count of active (non-expired) warnings for a user.
+    /// </summary>
+    Task<int> GetActiveWarningCountAsync(long telegramUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Check if user is currently banned (source of truth).
+    /// </summary>
+    Task<bool> IsBannedAsync(long telegramUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Check if user is trusted (source of truth: telegram_users.is_trusted).
+    /// </summary>
+    Task<bool> IsTrustedAsync(long telegramUserId, CancellationToken ct = default);
 }

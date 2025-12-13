@@ -13,7 +13,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// Ensures all bot-sent messages are tracked in the database for complete conversation history.
 /// Phase 1: Bot message storage and deletion tracking
 /// </summary>
-public class BotMessageService
+public class BotMessageService : IBotMessageService
 {
     private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IMessageHistoryRepository _messageRepo;

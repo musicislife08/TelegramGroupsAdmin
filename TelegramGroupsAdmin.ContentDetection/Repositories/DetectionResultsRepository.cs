@@ -219,28 +219,8 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return results;
     }
 
-    public async Task<bool> IsUserTrustedAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        // Single source of truth: telegram_users.is_trusted column
-        // This includes: service account auto-trust, manual trust, and auto-trust (Phase 5.5)
-        // user_actions table is for audit trail only (who/when/why), not for current state
-        var isTrusted = await context.TelegramUsers
-            .AsNoTracking()
-            .Where(u => u.TelegramUserId == userId && u.IsTrusted)
-            .AnyAsync(cancellationToken);
-
-        if (isTrusted)
-        {
-            _logger.LogDebug(
-                "User {UserId} is trusted (chat: {ChatId})",
-                userId,
-                chatId?.ToString() ?? "global");
-        }
-
-        return isTrusted;
-    }
+    // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead
+    // Source of truth is telegram_users.is_trusted column
 
     public async Task<List<DetectionResultRecord>> GetRecentNonSpamResultsForUserAsync(long userId, int limit, int minMessageLength, CancellationToken cancellationToken = default)
     {

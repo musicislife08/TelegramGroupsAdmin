@@ -44,21 +44,6 @@ public interface IUserActionsRepository
     Task<List<UserActionRecord>> GetActiveBansAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Check if user is banned in a specific chat or globally
-    /// </summary>
-    Task<bool> IsUserBannedAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Check if user is trusted (bypasses spam detection)
-    /// </summary>
-    Task<bool> IsUserTrustedAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Get warn count for user in specific chat or globally
-    /// </summary>
-    Task<int> GetWarnCountAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Remove (soft delete) an action by setting expires_at to now
     /// Used for removing warnings, creating audit trail of who removed it
     /// </summary>

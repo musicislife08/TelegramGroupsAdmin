@@ -114,48 +114,9 @@ public class UserActionsRepository : IUserActionsRepository
             targetLastName: e.TargetUser?.LastName)).ToList();
     }
 
-    public async Task<bool> IsUserBannedAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Check for active ban (all bans are global now)
-        var now = DateTimeOffset.UtcNow;
-        var isBanned = await context.UserActions
-            .AsNoTracking()
-            .AnyAsync(ua => ua.UserId == userId
-                && ua.ActionType == DataModels.UserActionType.Ban
-                && (ua.ExpiresAt == null || ua.ExpiresAt > now), cancellationToken);
-
-        return isBanned;
-    }
-
-    public async Task<bool> IsUserTrustedAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-
-        // Single source of truth: telegram_users.is_trusted column
-        // This includes: service account auto-trust, manual trust, and auto-trust (Phase 5.5)
-        // user_actions table is for audit trail only (who/when/why), not for current state
-        var isTrusted = await context.TelegramUsers
-            .AsNoTracking()
-            .Where(u => u.TelegramUserId == userId && u.IsTrusted)
-            .AnyAsync(cancellationToken);
-
-        return isTrusted;
-    }
-
-    public async Task<int> GetWarnCountAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        // Count active warns for user (all warns are global now)
-        var now = DateTimeOffset.UtcNow;
-        var count = await context.UserActions
-            .AsNoTracking()
-            .CountAsync(ua => ua.UserId == userId
-                && ua.ActionType == DataModels.UserActionType.Warn
-                && (ua.ExpiresAt == null || ua.ExpiresAt > now), cancellationToken);
-
-        return count;
-    }
+    // REFACTOR-5: Removed IsUserBannedAsync, IsUserTrustedAsync, GetWarnCountAsync
+    // Source of truth is now telegram_users table (is_banned, is_trusted, warnings JSONB)
+    // Use ITelegramUserRepository.IsBannedAsync, IsTrustedAsync, GetActiveWarningCountAsync
 
     public async Task ExpireActionAsync(long actionId, Actor expiredBy, CancellationToken cancellationToken = default)
     {

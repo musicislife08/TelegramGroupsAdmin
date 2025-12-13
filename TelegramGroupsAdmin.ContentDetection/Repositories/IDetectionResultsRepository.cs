@@ -45,11 +45,8 @@ public interface IDetectionResultsRepository
     /// </summary>
     Task<List<string>> GetSpamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Check if user is trusted (bypasses spam detection)
-    /// Checks user_actions table for active 'trust' action
-    /// </summary>
-    Task<bool> IsUserTrustedAsync(long userId, long? chatId = null, CancellationToken cancellationToken = default);
+    // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead
+    // Source of truth is telegram_users.is_trusted column
 
     /// <summary>
     /// Get recent non-spam detection results for a user (global, not per-chat)

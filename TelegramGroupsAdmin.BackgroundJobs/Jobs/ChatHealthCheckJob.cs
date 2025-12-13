@@ -20,12 +20,12 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 [DisallowConcurrentExecution]
 public class ChatHealthCheckJob : IJob
 {
-    private readonly ChatManagementService _chatService;
+    private readonly IChatManagementService _chatService;
     private readonly IConfigService _configService;
     private readonly ILogger<ChatHealthCheckJob> _logger;
 
     public ChatHealthCheckJob(
-        ChatManagementService chatService,
+        IChatManagementService chatService,
         IConfigService configService,
         ILogger<ChatHealthCheckJob> logger)
     {

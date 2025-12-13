@@ -32,6 +32,21 @@ public abstract class SharedE2ETestBase
     private static readonly object _factoryLock = new();
 
     /// <summary>
+    /// Disposes the shared factory. Called by E2EFixture.OneTimeTearDown() at assembly level.
+    /// </summary>
+    internal static void DisposeSharedFactory()
+    {
+        lock (_factoryLock)
+        {
+            _sharedClient?.Dispose();
+            _sharedClient = null;
+
+            _sharedFactory?.Dispose();
+            _sharedFactory = null;
+        }
+    }
+
+    /// <summary>
     /// Validates PostgreSQL identifier names to prevent injection (defense-in-depth).
     /// Pattern: Start with letter/underscore, contain only letters/digits/underscores.
     /// </summary>
@@ -183,11 +198,10 @@ public abstract class SharedE2ETestBase
     [OneTimeTearDown]
     public virtual async Task OneTimeTearDown()
     {
-        // Note: SharedFactory is intentionally NOT disposed here.
-        // It's shared across all test classes for performance, and disposing it
-        // while other test classes may still be using it causes race conditions.
-        // The factory will be cleaned up when the test process exits.
-        // Each test run creates a unique database anyway, so no cleanup needed.
+        // Note: SharedFactory is NOT disposed at class level - it's shared across all test classes.
+        // Disposal happens at assembly level via E2EFixture.GlobalTeardown() calling DisposeSharedFactory().
+        // This ensures proper cleanup when all tests complete, which is required for Rider's test UI
+        // to properly exit (Kestrel server must be stopped).
         await Task.CompletedTask;
     }
 

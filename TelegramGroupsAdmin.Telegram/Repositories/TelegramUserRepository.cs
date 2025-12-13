@@ -257,36 +257,40 @@ public class TelegramUserRepository : ITelegramUserRepository
             select new { UserId = g.Key, Count = g.Select(m => m.ChatId).Distinct().Count() }
         ).ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
 
-        // Query 2: Warning counts per user (active only)
+        // Query 2: Note counts per user
         var now = DateTimeOffset.UtcNow;
-        var warningCounts = await context.UserActions
-            .Where(ua => ua.ActionType == DataModels.UserActionType.Warn
-                && (ua.ExpiresAt == null || ua.ExpiresAt > now))
-            .GroupBy(ua => ua.UserId)
-            .Select(g => new { UserId = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
-
-        // Query 3: Note counts per user
         var noteCounts = await context.AdminNotes
             .GroupBy(n => n.TelegramUserId)
             .Select(g => new { UserId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
 
-        // Query 4: Banned user IDs
-        var bannedUserIds = await context.UserActions
-            .Where(ua => ua.ActionType == DataModels.UserActionType.Ban
-                && (ua.ExpiresAt == null || ua.ExpiresAt > now))
-            .Select(ua => ua.UserId)
-            .Distinct()
+        // Query 3: Users with JSONB warnings (for active warning counts)
+        // REFACTOR-5: Warnings are now JSONB on telegram_users, not a separate table
+        var usersWithWarnings = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.Warnings != null)
+            .Select(u => new { u.TelegramUserId, u.Warnings })
+            .ToListAsync(ct);
+
+        // Compute active warning counts in-memory (JSONB filtering not supported in EF Core)
+        var warningCounts = usersWithWarnings
+            .Where(u => u.Warnings != null)
+            .ToDictionary(
+                u => u.TelegramUserId,
+                u => u.Warnings!.Count(w => w.ExpiresAt == null || w.ExpiresAt > now));
+
+        // Query 4: Banned user IDs (source of truth: is_banned column)
+        var bannedUserIds = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.IsBanned && (u.BanExpiresAt == null || u.BanExpiresAt > now))
+            .Select(u => u.TelegramUserId)
             .ToHashSetAsync(ct);
 
-        // Query 5: Users with warnings (for HasWarnings flag)
-        var usersWithWarnings = await context.UserActions
-            .Where(ua => ua.ActionType == DataModels.UserActionType.Warn
-                && (ua.ExpiresAt == null || ua.ExpiresAt > now))
-            .Select(ua => ua.UserId)
-            .Distinct()
-            .ToHashSetAsync(ct);
+        // Users with active warnings (computed from warning counts)
+        var userIdsWithActiveWarnings = warningCounts
+            .Where(kv => kv.Value > 0)
+            .Select(kv => kv.Key)
+            .ToHashSet();
 
         // Query 6: Users with notes
         var usersWithNotes = await context.AdminNotes
@@ -339,7 +343,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             user.WarningCount = warningCounts.GetValueOrDefault(user.TelegramUserId, 0);
             user.NoteCount = noteCounts.GetValueOrDefault(user.TelegramUserId, 0);
             user.IsBanned = bannedUserIds.Contains(user.TelegramUserId);
-            user.HasWarnings = usersWithWarnings.Contains(user.TelegramUserId);
+            user.HasWarnings = userIdsWithActiveWarnings.Contains(user.TelegramUserId);
             user.IsTagged = usersWithNotes.Contains(user.TelegramUserId) || usersWithTags.Contains(user.TelegramUserId);
             user.IsAdmin = usersWhoAreAdmins.Contains(user.TelegramUserId);
         }
@@ -372,40 +376,43 @@ public class TelegramUserRepository : ITelegramUserRepository
             select new { UserId = g.Key, Count = g.Select(m => m.ChatId).Distinct().Count() }
         ).ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
 
-        // Query 2: Warning counts per user (all warnings, not filtered by chat)
+        // Query 2: Note counts per user (all notes, not filtered by chat)
         var now = DateTimeOffset.UtcNow;
-        var warningCounts = await context.UserActions
-            .Where(ua => ua.ActionType == DataModels.UserActionType.Warn
-                && (ua.ExpiresAt == null || ua.ExpiresAt > now)
-                && userIdsInChats.Contains(ua.UserId))
-            .GroupBy(ua => ua.UserId)
-            .Select(g => new { UserId = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
-
-        // Query 3: Note counts per user (all notes, not filtered by chat)
         var noteCounts = await context.AdminNotes
             .Where(n => userIdsInChats.Contains(n.TelegramUserId))
             .GroupBy(n => n.TelegramUserId)
             .Select(g => new { UserId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.UserId, x => x.Count, ct);
 
-        // Query 4: Banned user IDs (all bans, not filtered by chat)
-        var bannedUserIds = await context.UserActions
-            .Where(ua => ua.ActionType == DataModels.UserActionType.Ban
-                && (ua.ExpiresAt == null || ua.ExpiresAt > now)
-                && userIdsInChats.Contains(ua.UserId))
-            .Select(ua => ua.UserId)
-            .Distinct()
+        // Query 3: Users with JSONB warnings (for active warning counts)
+        // REFACTOR-5: Warnings are now JSONB on telegram_users, not a separate table
+        var usersWithWarnings = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => userIdsInChats.Contains(u.TelegramUserId) && u.Warnings != null)
+            .Select(u => new { u.TelegramUserId, u.Warnings })
+            .ToListAsync(ct);
+
+        // Compute active warning counts in-memory (JSONB filtering not supported in EF Core)
+        var warningCounts = usersWithWarnings
+            .Where(u => u.Warnings != null)
+            .ToDictionary(
+                u => u.TelegramUserId,
+                u => u.Warnings!.Count(w => w.ExpiresAt == null || w.ExpiresAt > now));
+
+        // Query 4: Banned user IDs (source of truth: is_banned column)
+        var bannedUserIds = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => userIdsInChats.Contains(u.TelegramUserId)
+                && u.IsBanned
+                && (u.BanExpiresAt == null || u.BanExpiresAt > now))
+            .Select(u => u.TelegramUserId)
             .ToHashSetAsync(ct);
 
-        // Query 5: Users with warnings (for HasWarnings flag)
-        var usersWithWarnings = await context.UserActions
-            .Where(ua => ua.ActionType == DataModels.UserActionType.Warn
-                && (ua.ExpiresAt == null || ua.ExpiresAt > now)
-                && userIdsInChats.Contains(ua.UserId))
-            .Select(ua => ua.UserId)
-            .Distinct()
-            .ToHashSetAsync(ct);
+        // Users with active warnings (computed from warning counts)
+        var userIdsWithActiveWarnings = warningCounts
+            .Where(kv => kv.Value > 0)
+            .Select(kv => kv.Key)
+            .ToHashSet();
 
         // Query 6: Users with notes
         var usersWithNotes = await context.AdminNotes
@@ -461,7 +468,7 @@ public class TelegramUserRepository : ITelegramUserRepository
             user.WarningCount = warningCounts.GetValueOrDefault(user.TelegramUserId, 0);
             user.NoteCount = noteCounts.GetValueOrDefault(user.TelegramUserId, 0);
             user.IsBanned = bannedUserIds.Contains(user.TelegramUserId);
-            user.HasWarnings = usersWithWarnings.Contains(user.TelegramUserId);
+            user.HasWarnings = userIdsWithActiveWarnings.Contains(user.TelegramUserId);
             user.IsTagged = usersWithNotes.Contains(user.TelegramUserId) || usersWithTags.Contains(user.TelegramUserId);
             user.IsAdmin = usersWhoAreAdmins.Contains(user.TelegramUserId);
         }
@@ -498,43 +505,48 @@ public class TelegramUserRepository : ITelegramUserRepository
     /// <summary>
     /// Get banned users with full ban details (date, issuer, reason, expiry, trigger message)
     /// Phase 5: Enhanced banned users tab
+    /// REFACTOR-5: Uses is_banned column as source of truth, joins user_actions for audit history
     /// </summary>
     public async Task<List<UiModels.BannedUserListItem>> GetBannedUsersWithDetailsAsync(CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var now = DateTimeOffset.UtcNow;
 
-        // Query with LEFT JOINs to resolve actor display names (Phase 4.19)
-        var bannedUsers = await (
-            from u in context.TelegramUsers
-            join ua in context.UserActions on u.TelegramUserId equals ua.UserId
+        // Step 1: Get banned users with their warnings (source of truth: is_banned column)
+        var bannedUsersWithWarnings = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.IsBanned && (u.BanExpiresAt == null || u.BanExpiresAt > now))
+            .Select(u => new
+            {
+                u.TelegramUserId,
+                u.Username,
+                u.FirstName,
+                u.LastName,
+                u.UserPhotoPath,
+                u.LastSeenAt,
+                u.IsTrusted,
+                u.Warnings
+            })
+            .ToListAsync(ct);
+
+        if (bannedUsersWithWarnings.Count == 0)
+            return [];
+
+        var bannedUserIds = bannedUsersWithWarnings.Select(u => u.TelegramUserId).ToHashSet();
+
+        // Step 2: Get ban details from audit log (most recent ban per user)
+        var banActions = await (
+            from ua in context.UserActions
             join webUser in context.Users on ua.WebUserId equals webUser.Id into webUsers
             from webUser in webUsers.DefaultIfEmpty()
             join tgUser in context.TelegramUsers on ua.TelegramUserId equals tgUser.TelegramUserId into tgUsers
             from tgUser in tgUsers.DefaultIfEmpty()
             where ua.ActionType == DataModels.UserActionType.Ban
-                && (ua.ExpiresAt == null || ua.ExpiresAt > DateTimeOffset.UtcNow)
+                && bannedUserIds.Contains(ua.UserId)
             orderby ua.IssuedAt descending
-            select new UiModels.BannedUserListItem
+            select new
             {
-                TelegramUserId = u.TelegramUserId,
-                Username = u.Username,
-                FirstName = u.FirstName,
-                LastName = u.LastName,
-                UserPhotoPath = u.UserPhotoPath,
-                LastSeenAt = u.LastSeenAt,
-
-                // Active warning count
-                WarningCount = context.UserActions
-                    .Count(w => w.UserId == u.TelegramUserId
-                        && w.ActionType == DataModels.UserActionType.Warn
-                        && (w.ExpiresAt == null || w.ExpiresAt > DateTimeOffset.UtcNow)),
-
-                // User flags
-                IsTrusted = u.IsTrusted,
-                IsAdmin = context.ChatAdmins.Any(ca => ca.IsActive && ca.TelegramId == u.TelegramUserId),
-                IsTagged = context.UserTags.Any(t => t.TelegramUserId == u.TelegramUserId) || context.AdminNotes.Any(n => n.TelegramUserId == u.TelegramUserId),
-
-                // Ban details (Phase 4.19: Actor system)
+                ua.UserId,
                 BanDate = ua.IssuedAt,
                 BannedBy = ua.WebUserId != null
                     ? (webUser != null ? webUser.Email ?? "User " + ua.WebUserId!.Substring(0, 8) + "..." : "User " + ua.WebUserId!.Substring(0, 8) + "...")
@@ -551,7 +563,60 @@ public class TelegramUserRepository : ITelegramUserRepository
         .AsNoTracking()
         .ToListAsync(ct);
 
-        return bannedUsers;
+        // Get most recent ban per user
+        var mostRecentBans = banActions
+            .GroupBy(b => b.UserId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        // Step 3: Get admin and tag info
+        var adminUserIds = await context.ChatAdmins
+            .Where(ca => ca.IsActive && bannedUserIds.Contains(ca.TelegramId))
+            .Select(ca => ca.TelegramId)
+            .ToHashSetAsync(ct);
+
+        var taggedUserIds = await context.UserTags
+            .Where(t => bannedUserIds.Contains(t.TelegramUserId))
+            .Select(t => t.TelegramUserId)
+            .Union(context.AdminNotes
+                .Where(n => bannedUserIds.Contains(n.TelegramUserId))
+                .Select(n => n.TelegramUserId))
+            .ToHashSetAsync(ct);
+
+        // Step 4: Combine results
+        var result = bannedUsersWithWarnings.Select(u =>
+        {
+            var banInfo = mostRecentBans.GetValueOrDefault(u.TelegramUserId);
+            var activeWarningCount = u.Warnings?.Count(w => w.ExpiresAt == null || w.ExpiresAt > now) ?? 0;
+
+            return new UiModels.BannedUserListItem
+            {
+                TelegramUserId = u.TelegramUserId,
+                Username = u.Username,
+                FirstName = u.FirstName,
+                LastName = u.LastName,
+                UserPhotoPath = u.UserPhotoPath,
+                LastSeenAt = u.LastSeenAt,
+
+                // Warning count from JSONB
+                WarningCount = activeWarningCount,
+
+                // User flags
+                IsTrusted = u.IsTrusted,
+                IsAdmin = adminUserIds.Contains(u.TelegramUserId),
+                IsTagged = taggedUserIds.Contains(u.TelegramUserId),
+
+                // Ban details from audit log
+                BanDate = banInfo?.BanDate ?? now,
+                BannedBy = banInfo?.BannedBy ?? "Unknown",
+                BanReason = banInfo?.BanReason,
+                BanExpires = banInfo?.BanExpires,
+                TriggerMessageId = banInfo?.TriggerMessageId
+            };
+        })
+        .OrderByDescending(u => u.BanDate)
+        .ToList();
+
+        return result;
     }
 
     /// <summary>
@@ -628,28 +693,33 @@ public class TelegramUserRepository : ITelegramUserRepository
 
     /// <summary>
     /// Get moderation queue statistics
+    /// REFACTOR-5: Uses is_banned column and JSONB warnings as source of truth
     /// </summary>
     public async Task<UiModels.ModerationQueueStats> GetModerationQueueStatsAsync(CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+
+        // Banned users count (source of truth: is_banned column)
+        var bannedCount = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.IsBanned && (u.BanExpiresAt == null || u.BanExpiresAt > now))
+            .CountAsync(ct);
+
+        // Warned users count (from JSONB - fetch users with warnings and filter in-memory)
+        var usersWithWarnings = await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.Warnings != null)
+            .Select(u => u.Warnings)
+            .ToListAsync(ct);
+
+        var warnedCount = usersWithWarnings
+            .Count(warnings => warnings != null && warnings.Any(w => w.ExpiresAt == null || w.ExpiresAt > now));
 
         var stats = new UiModels.ModerationQueueStats
         {
-            // Banned users count
-            BannedCount = await context.UserActions
-                .Where(ua => ua.ActionType == DataModels.UserActionType.Ban
-                    && (ua.ExpiresAt == null || ua.ExpiresAt > DateTimeOffset.UtcNow))
-                .Select(ua => ua.UserId)
-                .Distinct()
-                .CountAsync(ct),
-
-            // Warned users count
-            WarnedCount = await context.UserActions
-                .Where(ua => ua.ActionType == DataModels.UserActionType.Warn
-                    && (ua.ExpiresAt == null || ua.ExpiresAt > DateTimeOffset.UtcNow))
-                .Select(ua => ua.UserId)
-                .Distinct()
-                .CountAsync(ct),
+            BannedCount = bannedCount,
+            WarnedCount = warnedCount,
 
             // Tagged count (users with notes or tags for tracking)
             TaggedCount = await context.TelegramUsers
@@ -680,11 +750,9 @@ public class TelegramUserRepository : ITelegramUserRepository
             return null;
 
         // Get chat memberships (exclude deleted service messages from count)
-        // Check if user is currently banned (global cross-chat ban)
-        var isCurrentlyBanned = await context.UserActions
-            .AnyAsync(ua => ua.UserId == telegramUserId
-                && ua.ActionType == DataModels.UserActionType.Ban
-                && (ua.ExpiresAt == null || ua.ExpiresAt > DateTimeOffset.UtcNow), ct);
+        // REFACTOR-5: Use is_banned column as source of truth (not user_actions)
+        var now = DateTimeOffset.UtcNow;
+        var isCurrentlyBanned = user.IsBanned && (user.BanExpiresAt == null || user.BanExpiresAt > now);
 
         var chatMemberships = await (
             from m in context.Messages
@@ -738,6 +806,13 @@ public class TelegramUserRepository : ITelegramUserRepository
             .OrderBy(t => t.TagName)
             .ToListAsync(ct);
 
+        // Warnings come from JSONB on user entity (REFACTOR-5: embedded collection)
+        // Filter to active (non-expired) warnings (reuse 'now' from line 754)
+        var activeWarnings = (user.Warnings ?? [])
+            .Where(w => w.ExpiresAt == null || w.ExpiresAt > now)
+            .OrderByDescending(w => w.IssuedAt)
+            .ToList();
+
         return new UiModels.TelegramUserDetail
         {
             TelegramUserId = user.TelegramUserId,
@@ -747,14 +822,125 @@ public class TelegramUserRepository : ITelegramUserRepository
             UserPhotoPath = user.UserPhotoPath,
             PhotoHash = user.PhotoHash,
             IsTrusted = user.IsTrusted,
+            IsBanned = user.IsBanned,
+            BanExpiresAt = user.BanExpiresAt,
             BotDmEnabled = user.BotDmEnabled,
             FirstSeenAt = user.FirstSeenAt,
             LastSeenAt = user.LastSeenAt,
             ChatMemberships = chatMemberships,
             Actions = actions.Select(a => a.ToModel()).ToList(),
+            Warnings = activeWarnings,
             DetectionHistory = detectionHistory.Select(d => d.ToModel()).ToList(),
             Notes = notes.Select(n => n.ToModel()).ToList(),
             Tags = tags.Select(t => t.ToModel()).ToList()
         };
+    }
+
+    // ============================================================================
+    // Moderation State Methods (REFACTOR-5: Source of truth on telegram_users)
+    // ============================================================================
+
+    /// <inheritdoc />
+    public async Task SetBanStatusAsync(
+        long telegramUserId,
+        bool isBanned,
+        DateTimeOffset? expiresAt = null,
+        CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        var user = await context.TelegramUsers
+            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, ct);
+
+        if (user == null)
+        {
+            _logger.LogWarning("Cannot set ban status for unknown user {UserId}", telegramUserId);
+            return;
+        }
+
+        user.IsBanned = isBanned;
+        user.BanExpiresAt = isBanned ? expiresAt : null; // Clear expiry on unban
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await context.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Set ban status for user {UserId}: IsBanned={IsBanned}, ExpiresAt={ExpiresAt}",
+            telegramUserId, isBanned, expiresAt);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> AddWarningAsync(
+        long telegramUserId,
+        DataModels.WarningEntry warning,
+        CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        var user = await context.TelegramUsers
+            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, ct);
+
+        if (user == null)
+        {
+            throw new InvalidOperationException($"Cannot add warning for unknown user {telegramUserId}");
+        }
+
+        // Initialize warnings list if null
+        user.Warnings ??= [];
+
+        // Add the new warning
+        user.Warnings.Add(warning);
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await context.SaveChangesAsync(ct);
+
+        // Return count of active (non-expired) warnings
+        var now = DateTimeOffset.UtcNow;
+        return user.Warnings.Count(w => w.ExpiresAt == null || w.ExpiresAt > now);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> GetActiveWarningCountAsync(long telegramUserId, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        var user = await context.TelegramUsers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, ct);
+
+        if (user?.Warnings == null) return 0;
+
+        var now = DateTimeOffset.UtcNow;
+        return user.Warnings.Count(w => w.ExpiresAt == null || w.ExpiresAt > now);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsBannedAsync(long telegramUserId, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        var user = await context.TelegramUsers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.TelegramUserId == telegramUserId, ct);
+
+        if (user == null) return false;
+
+        // Check if banned and not expired
+        if (!user.IsBanned) return false;
+        if (user.BanExpiresAt == null) return true; // Permanent ban
+        return user.BanExpiresAt > DateTimeOffset.UtcNow; // Temp ban not yet expired
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> IsTrustedAsync(long telegramUserId, CancellationToken ct = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+
+        // REFACTOR-5: Source of truth is telegram_users.is_trusted column
+        return await context.TelegramUsers
+            .AsNoTracking()
+            .Where(u => u.TelegramUserId == telegramUserId)
+            .Select(u => u.IsTrusted)
+            .FirstOrDefaultAsync(ct);
     }
 }

@@ -23,7 +23,7 @@ public class ContentCheckCoordinatorTests
     private IContentDetectionEngine _mockSpamDetectionEngine = null!;
     private IServiceProvider _mockServiceProvider = null!;
     private ILogger<ContentCheckCoordinator> _mockLogger = null!;
-    private IUserActionsRepository _mockUserActionsRepository = null!;
+    private ITelegramUserRepository _mockUserRepository = null!;
     private IChatAdminsRepository _mockChatAdminsRepository = null!;
     private IContentCheckConfigRepository _mockContentCheckConfigRepo = null!;
     private IServiceScope _mockScope = null!;
@@ -36,7 +36,7 @@ public class ContentCheckCoordinatorTests
         _mockSpamDetectionEngine = Substitute.For<IContentDetectionEngine>();
         _mockServiceProvider = Substitute.For<IServiceProvider>();
         _mockLogger = Substitute.For<ILogger<ContentCheckCoordinator>>();
-        _mockUserActionsRepository = Substitute.For<IUserActionsRepository>();
+        _mockUserRepository = Substitute.For<ITelegramUserRepository>();
         _mockChatAdminsRepository = Substitute.For<IChatAdminsRepository>();
         _mockContentCheckConfigRepo = Substitute.For<IContentCheckConfigRepository>();
         _mockScope = Substitute.For<IServiceScope>();
@@ -45,8 +45,9 @@ public class ContentCheckCoordinatorTests
         var mockScopeServiceProvider = Substitute.For<IServiceProvider>();
 
         // Setup scope service provider to return mocked repositories
-        mockScopeServiceProvider.GetService(typeof(IUserActionsRepository))
-            .Returns(_mockUserActionsRepository);
+        // REFACTOR-5: Use ITelegramUserRepository for trust checks (source of truth)
+        mockScopeServiceProvider.GetService(typeof(ITelegramUserRepository))
+            .Returns(_mockUserRepository);
         mockScopeServiceProvider.GetService(typeof(IChatAdminsRepository))
             .Returns(_mockChatAdminsRepository);
         mockScopeServiceProvider.GetService(typeof(IContentCheckConfigRepository))
@@ -103,8 +104,8 @@ public class ContentCheckCoordinatorTests
         });
 
         // CRITICAL: Verify NO repository queries were made (race condition prevention)
-        await _mockUserActionsRepository.DidNotReceive()
-            .IsUserTrustedAsync(Arg.Any<long>(), Arg.Any<long?>(), Arg.Any<CancellationToken>());
+        await _mockUserRepository.DidNotReceive()
+            .IsTrustedAsync(Arg.Any<long>(), Arg.Any<CancellationToken>());
         await _mockChatAdminsRepository.DidNotReceive()
             .IsAdminAsync(Arg.Any<long>(), Arg.Any<long>(), Arg.Any<CancellationToken>());
         await _mockContentCheckConfigRepo.DidNotReceive()
@@ -157,7 +158,7 @@ public class ContentCheckCoordinatorTests
             Message = "Normal message"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
@@ -194,7 +195,7 @@ public class ContentCheckCoordinatorTests
             Message = "Normal message"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
@@ -258,7 +259,7 @@ public class ContentCheckCoordinatorTests
             Message = "https://malicious-link.com"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
@@ -329,7 +330,7 @@ public class ContentCheckCoordinatorTests
             Message = "Admin message"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
@@ -365,7 +366,7 @@ public class ContentCheckCoordinatorTests
             Message = "Admin message"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
@@ -422,7 +423,7 @@ public class ContentCheckCoordinatorTests
             Message = "Suspicious message"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
@@ -482,7 +483,7 @@ public class ContentCheckCoordinatorTests
             IsUserAdmin = false
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
@@ -521,7 +522,7 @@ public class ContentCheckCoordinatorTests
             Message = "Test"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
@@ -563,7 +564,7 @@ public class ContentCheckCoordinatorTests
             Message = "Test"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
@@ -627,7 +628,7 @@ public class ContentCheckCoordinatorTests
             Message = "Message"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
@@ -657,7 +658,7 @@ public class ContentCheckCoordinatorTests
             Message = "Test"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);
@@ -701,7 +702,7 @@ public class ContentCheckCoordinatorTests
             Message = "Test"
         };
 
-        _mockUserActionsRepository.IsUserTrustedAsync(request.UserId, request.ChatId, Arg.Any<CancellationToken>())
+        _mockUserRepository.IsTrustedAsync(request.UserId, Arg.Any<CancellationToken>())
             .Returns(true);
         _mockChatAdminsRepository.IsAdminAsync(request.ChatId, request.UserId, Arg.Any<CancellationToken>())
             .Returns(false);

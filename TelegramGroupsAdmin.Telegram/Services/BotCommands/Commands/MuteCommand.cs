@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -13,7 +14,7 @@ public class MuteCommand : IBotCommand
 {
     private readonly ILogger<MuteCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationActionService _moderationService;
+    private readonly ModerationOrchestrator _moderationService;
 
     public string Name => "mute";
     public string Description => "Temporarily mute user with auto-unmute";
@@ -26,7 +27,7 @@ public class MuteCommand : IBotCommand
     public MuteCommand(
         ILogger<MuteCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationActionService moderationService)
+        ModerationOrchestrator moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;

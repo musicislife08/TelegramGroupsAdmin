@@ -190,19 +190,21 @@ public class TelegramUserManagementService
     }
 
     /// <summary>
-    /// Check if user is currently banned (has active ban action)
+    /// Check if user is currently banned.
+    /// REFACTOR-5: Uses is_banned column as source of truth (not user_actions audit log).
     /// </summary>
     public Task<bool> IsBannedAsync(long telegramUserId, CancellationToken ct = default)
     {
-        return _userActionsRepository.IsUserBannedAsync(telegramUserId);
+        return _userRepository.IsBannedAsync(telegramUserId, ct);
     }
 
     /// <summary>
-    /// Get active warning count for user
+    /// Get active warning count for user.
+    /// REFACTOR-5: Uses warnings JSONB column as source of truth (not user_actions audit log).
     /// </summary>
     public Task<int> GetActiveWarningCountAsync(long telegramUserId, CancellationToken ct = default)
     {
-        return _userActionsRepository.GetWarnCountAsync(telegramUserId);
+        return _userRepository.GetActiveWarningCountAsync(telegramUserId, ct);
     }
 
     /// <summary>
@@ -219,8 +221,8 @@ public class TelegramUserManagementService
             return false;
         }
 
-        // Check if user is actually banned
-        var isBanned = await _userActionsRepository.IsUserBannedAsync(telegramUserId, chatId: null, ct);
+        // REFACTOR-5: Check if user is actually banned using source of truth (is_banned column)
+        var isBanned = await _userRepository.IsBannedAsync(telegramUserId, ct);
         if (!isBanned)
         {
             _logger.LogWarning("User {TelegramUserId} is not currently banned", telegramUserId);

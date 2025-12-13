@@ -61,6 +61,11 @@ public class E2EFixture
     [OneTimeTearDown]
     public async Task GlobalTeardown()
     {
+        // Dispose shared factory first (stops Kestrel server, cleans up database)
+        // This MUST happen before disposing Playwright/container, otherwise the server hangs
+        SharedE2ETestBase.DisposeSharedFactory();
+        Console.WriteLine("Shared WebApplicationFactory disposed");
+
         _playwright?.Dispose();
         Console.WriteLine("Playwright disposed");
 

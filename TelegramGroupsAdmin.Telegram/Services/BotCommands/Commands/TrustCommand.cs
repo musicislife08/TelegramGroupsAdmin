@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -13,7 +14,7 @@ public class TrustCommand : IBotCommand
 {
     private readonly ILogger<TrustCommand> _logger;
     private readonly IServiceProvider _serviceProvider;
-    private readonly ModerationActionService _moderationService;
+    private readonly ModerationOrchestrator _moderationService;
 
     public string Name => "trust";
     public string Description => "Whitelist user (bypass spam detection)";
@@ -26,7 +27,7 @@ public class TrustCommand : IBotCommand
     public TrustCommand(
         ILogger<TrustCommand> logger,
         IServiceProvider serviceProvider,
-        ModerationActionService moderationService)
+        ModerationOrchestrator moderationService)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
@@ -68,12 +69,11 @@ public class TrustCommand : IBotCommand
         }
 
         using var scope = _serviceProvider.CreateScope();
-        var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+        var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
-        // Check if user is already trusted
-        var isAlreadyTrusted = await userActionsRepository.IsUserTrustedAsync(
+        // REFACTOR-5: Check if user is already trusted (source of truth: telegram_users.is_trusted)
+        var isAlreadyTrusted = await userRepository.IsTrustedAsync(
             targetUser.Id,
-            message.Chat.Id,
             cancellationToken);
 
         if (isAlreadyTrusted)

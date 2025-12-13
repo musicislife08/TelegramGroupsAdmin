@@ -22,7 +22,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public class DetectionActionService(
     IServiceProvider serviceProvider,
-    ChatManagementService chatManagementService,
+    IChatManagementService chatManagementService,
     IJobScheduler jobScheduler,
     ILogger<DetectionActionService> logger)
 {
@@ -83,7 +83,7 @@ public class DetectionActionService(
 
             using var scope = serviceProvider.CreateScope();
             var reportService = scope.ServiceProvider.GetRequiredService<IReportService>();
-            var moderationActionService = scope.ServiceProvider.GetRequiredService<ModerationActionService>();
+            var moderationActionService = scope.ServiceProvider.GetRequiredService<Moderation.ModerationOrchestrator>();
             var botFactory = scope.ServiceProvider.GetRequiredService<ITelegramBotClientFactory>();
             var configLoader = scope.ServiceProvider.GetRequiredService<ITelegramConfigLoader>();
             var botToken = await configLoader.LoadConfigAsync();
@@ -551,7 +551,7 @@ public class DetectionActionService(
             try
             {
                 using var deleteScope = serviceProvider.CreateScope();
-                var botMessageService = deleteScope.ServiceProvider.GetRequiredService<BotMessageService>();
+                var botMessageService = deleteScope.ServiceProvider.GetRequiredService<IBotMessageService>();
                 await botMessageService.DeleteAndMarkMessageAsync(
                     chatId,
                     message.MessageId,

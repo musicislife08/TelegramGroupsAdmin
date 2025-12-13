@@ -21,7 +21,7 @@ public class ChatManagementService(
     IServiceProvider serviceProvider,
     ITelegramBotClientFactory botFactory,
     ITelegramConfigLoader configLoader,
-    ILogger<ChatManagementService> logger)
+    ILogger<ChatManagementService> logger) : IChatManagementService
 {
     private readonly ConcurrentDictionary<long, ChatHealthStatus> _healthCache = new();
 
