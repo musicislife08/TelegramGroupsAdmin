@@ -2214,6 +2214,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("telegram_user_id");
 
+                    b.Property<DateTimeOffset?>("BanExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ban_expires_at");
+
                     b.Property<bool>("BotDmEnabled")
                         .HasColumnType("boolean")
                         .HasColumnName("bot_dm_enabled");
@@ -2230,6 +2234,10 @@ namespace TelegramGroupsAdmin.Data.Migrations
                     b.Property<DateTimeOffset>("FirstSeenAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("first_seen_at");
+
+                    b.Property<bool>("IsBanned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_banned");
 
                     b.Property<bool>("IsBot")
                         .HasColumnType("boolean")
@@ -2273,6 +2281,8 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasColumnName("username");
 
                     b.HasKey("TelegramUserId");
+
+                    b.HasIndex("IsBanned");
 
                     b.HasIndex("IsTrusted");
 
@@ -3204,6 +3214,44 @@ namespace TelegramGroupsAdmin.Data.Migrations
                         .HasForeignKey("UserRecordDtoId");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramUserDto", b =>
+                {
+                    b.OwnsMany("TelegramGroupsAdmin.Data.Models.WarningEntry", "Warnings", b1 =>
+                        {
+                            b1.Property<long>("TelegramUserDtoTelegramUserId");
+
+                            b1.Property<int>("__synthesizedOrdinal")
+                                .ValueGeneratedOnAdd();
+
+                            b1.Property<string>("ActorId")
+                                .IsRequired();
+
+                            b1.Property<string>("ActorType")
+                                .IsRequired();
+
+                            b1.Property<long?>("ChatId");
+
+                            b1.Property<DateTimeOffset?>("ExpiresAt");
+
+                            b1.Property<DateTimeOffset>("IssuedAt");
+
+                            b1.Property<long?>("MessageId");
+
+                            b1.Property<string>("Reason");
+
+                            b1.HasKey("TelegramUserDtoTelegramUserId", "__synthesizedOrdinal");
+
+                            b1.ToTable("telegram_users");
+
+                            b1.ToJson("warnings");
+
+                            b1.WithOwner()
+                                .HasForeignKey("TelegramUserDtoTelegramUserId");
+                        });
+
+                    b.Navigation("Warnings");
                 });
 
             modelBuilder.Entity("TelegramGroupsAdmin.Data.Models.TelegramUserMappingRecordDto", b =>

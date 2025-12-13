@@ -60,7 +60,6 @@ public class SpamCommand : IBotCommand
 
         using var scope = _serviceProvider.CreateScope();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
-        var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
 
         // Check if target user is an admin (can't mark admin messages as spam)
         var isAdmin = await chatAdminsRepository.IsAdminAsync(message.Chat.Id, spamUserId.Value, cancellationToken);
@@ -69,12 +68,9 @@ public class SpamCommand : IBotCommand
             return new CommandResult("❌ Cannot mark admin messages as spam.", DeleteCommandMessage, DeleteResponseAfterSeconds);
         }
 
-        // Check if target user is trusted (can't mark trusted messages as spam)
-        var isTrusted = await userActionsRepository.IsUserTrustedAsync(spamUserId.Value, message.Chat.Id, cancellationToken);
-        if (isTrusted)
-        {
-            return new CommandResult("❌ Cannot mark trusted user messages as spam.", DeleteCommandMessage, DeleteResponseAfterSeconds);
-        }
+        // NOTE: Trust status is intentionally NOT checked here.
+        // Trust only bypasses automatic spam detection - admins can always manually mark trusted users as spam
+        // if they start posting spam after building up trust.
 
         // Get executor actor
         var executor = Core.Models.Actor.FromTelegramUser(
@@ -91,7 +87,7 @@ public class SpamCommand : IBotCommand
             chatId: message.Chat.Id,
             executor: executor,
             reason: reason,
-            telegramMessage: spamMessage, // Pass the Telegram message for backfilling if not in database
+            telegramMessage: spamMessage, // Pass for backfill if message not in database
             cancellationToken: cancellationToken);
 
         if (!result.Success)

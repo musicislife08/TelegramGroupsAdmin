@@ -1,66 +1,72 @@
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Intents;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Events;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
-using Telegram.Bot.Types;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation;
 
 /// <summary>
-/// Thin orchestration layer that routes moderation intents to action handlers
-/// and dispatches events for side-effects (audit, notifications, training data).
+/// Manager/Worker orchestration layer for moderation actions.
+/// The "boss" that knows all workers, decides who to call, and owns business rules.
 ///
-/// This replaces ModerationActionService with a cleaner separation:
-/// - Action handlers own the domain logic (Telegram API calls, DB updates)
-/// - Side-effect handlers react to events (audit log, notifications, training)
-/// - Orchestrator only routes and coordinates
+/// Key responsibilities:
+/// - Service account protection (blocks moderation on Telegram's 777000 account)
+/// - Business rules: "bans revoke trust", "N warnings = auto-ban"
+/// - Workflow composition: warn → check threshold → ban
+/// - Direct handler calls (no event broadcasting)
+///
+/// Workers are domain experts that don't know about each other.
+/// Only the orchestrator composes workflows across workers.
 /// </summary>
 public class ModerationOrchestrator
 {
-    private readonly IActionHandler<BanIntent, BanResult> _banHandler;
-    private readonly IActionHandler<UnbanIntent, UnbanResult> _unbanHandler;
-    private readonly IActionHandler<WarnIntent, WarnResult> _warnHandler;
-    private readonly IActionHandler<TrustIntent, TrustResult> _trustHandler;
-    private readonly IActionHandler<RevokeTrustIntent, RevokeTrustResult> _revokeTrustHandler;
-    private readonly IActionHandler<DeleteIntent, DeleteResult> _deleteHandler;
-    private readonly IActionHandler<TempBanIntent, TempBanResult> _tempBanHandler;
-    private readonly IActionHandler<RestrictIntent, RestrictResult> _restrictHandler;
-    private readonly IActionHandler<MarkAsSpamIntent, MarkAsSpamResult> _markAsSpamHandler;
-    private readonly IModerationEventDispatcher _dispatcher;
+    // Domain handlers (workers)
+    private readonly IBanHandler _banHandler;
+    private readonly ITrustHandler _trustHandler;
+    private readonly IWarnHandler _warnHandler;
+    private readonly IMessageHandler _messageHandler;
+    private readonly IRestrictHandler _restrictHandler;
+
+    // Support handlers
+    private readonly IAuditHandler _auditHandler;
+    private readonly INotificationHandler _notificationHandler;
+    private readonly ITrainingHandler _trainingHandler;
+
+    // Configuration
+    private readonly IConfigService _configService;
     private readonly ILogger<ModerationOrchestrator> _logger;
 
     public ModerationOrchestrator(
-        IActionHandler<BanIntent, BanResult> banHandler,
-        IActionHandler<UnbanIntent, UnbanResult> unbanHandler,
-        IActionHandler<WarnIntent, WarnResult> warnHandler,
-        IActionHandler<TrustIntent, TrustResult> trustHandler,
-        IActionHandler<RevokeTrustIntent, RevokeTrustResult> revokeTrustHandler,
-        IActionHandler<DeleteIntent, DeleteResult> deleteHandler,
-        IActionHandler<TempBanIntent, TempBanResult> tempBanHandler,
-        IActionHandler<RestrictIntent, RestrictResult> restrictHandler,
-        IActionHandler<MarkAsSpamIntent, MarkAsSpamResult> markAsSpamHandler,
-        IModerationEventDispatcher dispatcher,
+        IBanHandler banHandler,
+        ITrustHandler trustHandler,
+        IWarnHandler warnHandler,
+        IMessageHandler messageHandler,
+        IRestrictHandler restrictHandler,
+        IAuditHandler auditHandler,
+        INotificationHandler notificationHandler,
+        ITrainingHandler trainingHandler,
+        IConfigService configService,
         ILogger<ModerationOrchestrator> logger)
     {
         _banHandler = banHandler;
-        _unbanHandler = unbanHandler;
-        _warnHandler = warnHandler;
         _trustHandler = trustHandler;
-        _revokeTrustHandler = revokeTrustHandler;
-        _deleteHandler = deleteHandler;
-        _tempBanHandler = tempBanHandler;
+        _warnHandler = warnHandler;
+        _messageHandler = messageHandler;
         _restrictHandler = restrictHandler;
-        _markAsSpamHandler = markAsSpamHandler;
-        _dispatcher = dispatcher;
+        _auditHandler = auditHandler;
+        _notificationHandler = notificationHandler;
+        _trainingHandler = trainingHandler;
+        _configService = configService;
         _logger = logger;
     }
 
     /// <summary>
     /// Mark message as spam, delete it, ban user globally, and revoke trust.
+    /// Composes: EnsureExists → Delete → Ban → Training Data
     /// </summary>
     public async Task<ModerationResult> MarkAsSpamAndBanAsync(
         long messageId,
@@ -68,46 +74,59 @@ public class ModerationOrchestrator
         long chatId,
         Actor executor,
         string reason,
-        Message? telegramMessage = null,
+        global::Telegram.Bot.Types.Message? telegramMessage = null,
         CancellationToken cancellationToken = default)
     {
         var protectionResult = CheckServiceAccountProtection(userId);
         if (protectionResult != null) return protectionResult;
 
-        var intent = new MarkAsSpamIntent(messageId, userId, chatId, executor, reason, telegramMessage);
-        var result = await _markAsSpamHandler.HandleAsync(intent, cancellationToken);
+        // Step 1: Ensure message exists in database (backfill if needed for training data)
+        await _messageHandler.EnsureExistsAsync(messageId, chatId, telegramMessage, cancellationToken);
 
-        if (!result.Success)
-            return new ModerationResult { Success = false, ErrorMessage = result.ErrorMessage };
-
-        // Dispatch event for side-effects (training data, audit log)
-        var evt = new ModerationEvent
+        // Step 2: Delete message (best effort - may already be deleted)
+        var deleteResult = await _messageHandler.DeleteAsync(chatId, messageId, executor, cancellationToken);
+        if (deleteResult.MessageDeleted)
         {
-            ActionType = ModerationActionType.MarkAsSpamAndBan,
-            UserId = userId,
-            MessageId = messageId,
-            ChatId = chatId,
-            Executor = executor,
-            Reason = reason,
-            TelegramMessage = telegramMessage,
-            ChatsAffected = result.ChatsAffected,
-            TrustRemoved = result.TrustRevoked,
-            MessageDeleted = result.MessageDeleted
-        };
+            await _auditHandler.LogDeleteAsync(messageId, chatId, userId, executor, cancellationToken);
+        }
 
-        await _dispatcher.DispatchAsync(evt, cancellationToken);
+        // Step 3: Ban user (self-call - reuses ban logic including trust revocation)
+        var banResult = await BanUserAsync(userId, messageId, executor, reason, cancellationToken);
+
+        if (!banResult.Success)
+        {
+            return new ModerationResult
+            {
+                Success = false,
+                ErrorMessage = banResult.ErrorMessage,
+                MessageDeleted = deleteResult.MessageDeleted
+            };
+        }
+
+        // Step 4: Create training data (non-critical - failure doesn't affect ban success)
+        try
+        {
+            await _trainingHandler.CreateSpamSampleAsync(messageId, executor, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to create training data for message {MessageId}, continuing with successful ban",
+                messageId);
+        }
 
         return new ModerationResult
         {
             Success = true,
-            ChatsAffected = result.ChatsAffected,
-            MessageDeleted = result.MessageDeleted,
-            TrustRemoved = result.TrustRevoked
+            ChatsAffected = banResult.ChatsAffected,
+            MessageDeleted = deleteResult.MessageDeleted,
+            TrustRemoved = banResult.TrustRemoved
         };
     }
 
     /// <summary>
     /// Ban user globally across all managed chats.
+    /// Business rule: Bans always revoke trust.
     /// </summary>
     public async Task<ModerationResult> BanUserAsync(
         long userId,
@@ -119,45 +138,38 @@ public class ModerationOrchestrator
         var protectionResult = CheckServiceAccountProtection(userId);
         if (protectionResult != null) return protectionResult;
 
-        var intent = new BanIntent(userId, messageId, executor, reason);
-        var result = await _banHandler.HandleAsync(intent, cancellationToken);
+        // Primary action: Ban globally
+        var banResult = await _banHandler.BanAsync(userId, executor, reason, messageId, cancellationToken);
 
-        if (!result.Success)
-            return new ModerationResult { Success = false, ErrorMessage = result.ErrorMessage };
+        if (!banResult.Success)
+            return ModerationResult.Failed(banResult.ErrorMessage ?? "Ban failed");
 
-        // Revoke trust if action handler indicates it should be done
-        var trustRevoked = false;
-        if (result.ShouldRevokeTrust)
+        // Audit successful ban (separate from BanHandler's state tracking record)
+        await _auditHandler.LogBanAsync(userId, executor, reason, cancellationToken);
+
+        // Business rule: Bans always revoke trust
+        var untrustResult = await _trustHandler.UntrustAsync(
+            userId, executor, $"Trust revoked due to ban: {reason}", cancellationToken);
+
+        if (untrustResult.Success)
         {
-            var revokeTrustResult = await _revokeTrustHandler.HandleAsync(
-                new RevokeTrustIntent(userId, executor, $"Trust revoked due to ban: {reason}"), cancellationToken);
-            trustRevoked = revokeTrustResult.Success;
+            await _auditHandler.LogUntrustAsync(userId, executor, $"Trust revoked due to ban: {reason}", cancellationToken);
         }
 
-        // Dispatch event for side-effects
-        var evt = new ModerationEvent
-        {
-            ActionType = ModerationActionType.Ban,
-            UserId = userId,
-            MessageId = messageId,
-            Executor = executor,
-            Reason = reason,
-            ChatsAffected = result.ChatsAffected,
-            TrustRemoved = trustRevoked
-        };
-
-        await _dispatcher.DispatchAsync(evt, cancellationToken);
+        // Notify admins
+        await _notificationHandler.NotifyAdminsBanAsync(userId, executor, reason, cancellationToken);
 
         return new ModerationResult
         {
             Success = true,
-            ChatsAffected = result.ChatsAffected,
-            TrustRemoved = trustRevoked
+            ChatsAffected = banResult.ChatsAffected,
+            TrustRemoved = untrustResult.Success
         };
     }
 
     /// <summary>
     /// Warn user globally with automatic ban after threshold.
+    /// Business rule: N warnings = auto-ban (configurable per chat).
     /// </summary>
     public async Task<ModerationResult> WarnUserAsync(
         long userId,
@@ -170,46 +182,47 @@ public class ModerationOrchestrator
         var protectionResult = CheckServiceAccountProtection(userId);
         if (protectionResult != null) return protectionResult;
 
-        var intent = new WarnIntent(userId, messageId, chatId, executor, reason);
-        var result = await _warnHandler.HandleAsync(intent, cancellationToken);
+        // Primary action: Issue warning (writes to warnings table)
+        var warnResult = await _warnHandler.WarnAsync(userId, executor, reason, chatId, messageId, cancellationToken);
 
-        if (!result.Success)
-            return new ModerationResult { Success = false, ErrorMessage = result.ErrorMessage };
+        if (!warnResult.Success)
+            return new ModerationResult { Success = false, ErrorMessage = warnResult.ErrorMessage };
 
-        // Dispatch event for side-effects (audit log, DM notification, warning threshold check)
-        var evt = new ModerationEvent
-        {
-            ActionType = ModerationActionType.Warn,
-            UserId = userId,
-            MessageId = messageId,
-            ChatId = chatId,
-            Executor = executor,
-            Reason = reason,
-            WarningCount = result.WarningCount
-        };
+        // Audit successful warning
+        await _auditHandler.LogWarnAsync(userId, executor, reason, cancellationToken);
 
-        var dispatchResult = await _dispatcher.DispatchAsync(evt, cancellationToken);
+        // Notify user about warning
+        await _notificationHandler.NotifyUserWarningAsync(userId, warnResult.WarningCount, reason, cancellationToken);
 
-        var moderationResult = new ModerationResult
+        var result = new ModerationResult
         {
             Success = true,
-            WarningCount = result.WarningCount
+            WarningCount = warnResult.WarningCount
         };
 
-        // Handle follow-up action (auto-ban on warning threshold)
-        if (dispatchResult.FollowUp == ModerationFollowUp.Ban)
+        // Business rule: Check warning threshold for auto-ban
+        var warningConfig = await _configService.GetEffectiveAsync<WarningSystemConfig>(
+            ConfigType.Moderation, chatId) ?? WarningSystemConfig.Default;
+
+        if (warningConfig.AutoBanEnabled &&
+            warningConfig.AutoBanThreshold > 0 &&
+            warnResult.WarningCount >= warningConfig.AutoBanThreshold)
         {
             _logger.LogWarning(
-                "Auto-ban triggered: User {UserId} has {WarnCount} warnings",
-                userId, result.WarningCount);
+                "Auto-ban triggered: User {UserId} has {WarnCount} warnings (threshold: {Threshold})",
+                userId, warnResult.WarningCount, warningConfig.AutoBanThreshold);
 
-            var autoBanReason = $"Exceeded warning threshold ({result.WarningCount} warnings)";
+            // Use configured auto-ban reason with {count} placeholder support
+            var autoBanReason = !string.IsNullOrWhiteSpace(warningConfig.AutoBanReason)
+                ? warningConfig.AutoBanReason.Replace("{count}", warnResult.WarningCount.ToString())
+                : $"Exceeded warning threshold ({warnResult.WarningCount}/{warningConfig.AutoBanThreshold} warnings)";
             var banResult = await BanUserAsync(userId, messageId, Actor.AutoBan, autoBanReason, cancellationToken);
 
             if (banResult.Success)
             {
-                moderationResult.AutoBanTriggered = true;
-                moderationResult.ChatsAffected = banResult.ChatsAffected;
+                result.AutoBanTriggered = true;
+                result.ChatsAffected = banResult.ChatsAffected;
+                result.TrustRemoved = banResult.TrustRemoved;
             }
             else
             {
@@ -219,7 +232,7 @@ public class ModerationOrchestrator
             }
         }
 
-        return moderationResult;
+        return result;
     }
 
     /// <summary>
@@ -231,22 +244,13 @@ public class ModerationOrchestrator
         string reason,
         CancellationToken cancellationToken = default)
     {
-        var intent = new TrustIntent(userId, executor, reason);
-        var result = await _trustHandler.HandleAsync(intent, cancellationToken);
+        var trustResult = await _trustHandler.TrustAsync(userId, executor, reason, cancellationToken);
 
-        if (!result.Success)
-            return new ModerationResult { Success = false, ErrorMessage = result.ErrorMessage };
+        if (!trustResult.Success)
+            return new ModerationResult { Success = false, ErrorMessage = trustResult.ErrorMessage };
 
-        // Dispatch event for audit logging
-        var evt = new ModerationEvent
-        {
-            ActionType = ModerationActionType.Trust,
-            UserId = userId,
-            Executor = executor,
-            Reason = reason
-        };
-
-        await _dispatcher.DispatchAsync(evt, cancellationToken);
+        // Audit successful trust
+        await _auditHandler.LogTrustAsync(userId, executor, reason, cancellationToken);
 
         return new ModerationResult { Success = true };
     }
@@ -261,40 +265,30 @@ public class ModerationOrchestrator
         bool restoreTrust = false,
         CancellationToken cancellationToken = default)
     {
-        var intent = new UnbanIntent(userId, executor, reason, restoreTrust);
-        var result = await _unbanHandler.HandleAsync(intent, cancellationToken);
+        var unbanResult = await _banHandler.UnbanAsync(userId, executor, reason, cancellationToken);
 
-        if (!result.Success)
-            return new ModerationResult { Success = false, ErrorMessage = result.ErrorMessage };
+        if (!unbanResult.Success)
+            return new ModerationResult { Success = false, ErrorMessage = unbanResult.ErrorMessage };
 
-        // Dispatch event for audit logging
-        var evt = new ModerationEvent
-        {
-            ActionType = ModerationActionType.Unban,
-            UserId = userId,
-            Executor = executor,
-            Reason = reason,
-            ChatsAffected = result.ChatsAffected
-        };
+        // Audit successful unban
+        await _auditHandler.LogUnbanAsync(userId, executor, reason, cancellationToken);
 
-        await _dispatcher.DispatchAsync(evt, cancellationToken);
-
-        var moderationResult = new ModerationResult
+        var result = new ModerationResult
         {
             Success = true,
-            ChatsAffected = result.ChatsAffected
+            ChatsAffected = unbanResult.ChatsAffected
         };
 
-        // Handle trust restoration as follow-up action
+        // Handle trust restoration as follow-up
         if (restoreTrust)
         {
             var trustResult = await TrustUserAsync(
                 userId, executor,
                 "Trust restored after unban (false positive correction)", cancellationToken);
-            moderationResult.TrustRestored = trustResult.Success;
+            result.TrustRestored = trustResult.Success;
         }
 
-        return moderationResult;
+        return result;
     }
 
     /// <summary>
@@ -308,30 +302,15 @@ public class ModerationOrchestrator
         string? reason = null,
         CancellationToken cancellationToken = default)
     {
-        var intent = new DeleteIntent(messageId, chatId, userId, deletedBy, reason);
-        var result = await _deleteHandler.HandleAsync(intent, cancellationToken);
+        var deleteResult = await _messageHandler.DeleteAsync(chatId, messageId, deletedBy, cancellationToken);
 
-        // Even if deletion failed, we consider the action successful
-        // (message may already be deleted)
-
-        // Dispatch event for audit logging
-        var evt = new ModerationEvent
-        {
-            ActionType = ModerationActionType.Delete,
-            UserId = userId,
-            MessageId = messageId,
-            ChatId = chatId,
-            Executor = deletedBy,
-            Reason = reason ?? "Manual message deletion",
-            MessageDeleted = result.MessageDeleted
-        };
-
-        await _dispatcher.DispatchAsync(evt, cancellationToken);
+        // Audit the deletion attempt (even if message was already deleted)
+        await _auditHandler.LogDeleteAsync(messageId, chatId, userId, deletedBy, cancellationToken);
 
         return new ModerationResult
         {
             Success = true,
-            MessageDeleted = result.MessageDeleted
+            MessageDeleted = deleteResult.MessageDeleted
         };
     }
 
@@ -349,31 +328,21 @@ public class ModerationOrchestrator
         var protectionResult = CheckServiceAccountProtection(userId);
         if (protectionResult != null) return protectionResult;
 
-        var intent = new TempBanIntent(userId, messageId, executor, reason, duration);
-        var result = await _tempBanHandler.HandleAsync(intent, cancellationToken);
+        var tempBanResult = await _banHandler.TempBanAsync(userId, executor, duration, reason, messageId, cancellationToken);
 
-        if (!result.Success)
-            return new ModerationResult { Success = false, ErrorMessage = result.ErrorMessage };
+        if (!tempBanResult.Success)
+            return new ModerationResult { Success = false, ErrorMessage = tempBanResult.ErrorMessage };
 
-        // Dispatch event for side-effects (audit log, DM notification with rejoin links)
-        var evt = new ModerationEvent
-        {
-            ActionType = ModerationActionType.TempBan,
-            UserId = userId,
-            MessageId = messageId,
-            Executor = executor,
-            Reason = reason,
-            Duration = duration,
-            ExpiresAt = result.ExpiresAt,
-            ChatsAffected = result.ChatsAffected
-        };
+        // Audit successful temp ban (separate from BanHandler's state tracking record)
+        await _auditHandler.LogTempBanAsync(userId, executor, duration, reason, cancellationToken);
 
-        await _dispatcher.DispatchAsync(evt, cancellationToken);
+        // Notify user about temp ban with rejoin info
+        await _notificationHandler.NotifyUserTempBanAsync(userId, duration, tempBanResult.ExpiresAt, reason, cancellationToken);
 
         return new ModerationResult
         {
             Success = true,
-            ChatsAffected = result.ChatsAffected
+            ChatsAffected = tempBanResult.ChatsAffected
         };
     }
 
@@ -386,36 +355,25 @@ public class ModerationOrchestrator
         Actor executor,
         string reason,
         TimeSpan duration,
+        long? chatId = null,
         CancellationToken cancellationToken = default)
     {
         var protectionResult = CheckServiceAccountProtection(userId);
         if (protectionResult != null) return protectionResult;
 
-        var intent = new RestrictIntent(userId, messageId, executor, reason, duration);
-        var result = await _restrictHandler.HandleAsync(intent, cancellationToken);
+        var restrictResult = await _restrictHandler.RestrictAsync(
+            userId, chatId ?? 0, executor, duration, reason, cancellationToken);
 
-        if (!result.Success)
-            return new ModerationResult { Success = false, ErrorMessage = result.ErrorMessage };
+        if (!restrictResult.Success)
+            return new ModerationResult { Success = false, ErrorMessage = restrictResult.ErrorMessage };
 
-        // Dispatch event for audit logging
-        var evt = new ModerationEvent
-        {
-            ActionType = ModerationActionType.Restrict,
-            UserId = userId,
-            MessageId = messageId,
-            Executor = executor,
-            Reason = reason,
-            Duration = duration,
-            ExpiresAt = result.ExpiresAt,
-            ChatsAffected = result.ChatsAffected
-        };
-
-        await _dispatcher.DispatchAsync(evt, cancellationToken);
+        // Audit successful restriction
+        await _auditHandler.LogRestrictAsync(userId, chatId ?? 0, executor, reason, cancellationToken);
 
         return new ModerationResult
         {
             Success = true,
-            ChatsAffected = result.ChatsAffected
+            ChatsAffected = restrictResult.ChatsAffected
         };
     }
 
@@ -430,11 +388,7 @@ public class ModerationOrchestrator
                 "Moderation action blocked for Telegram service account (user {UserId})",
                 userId);
 
-            return new ModerationResult
-            {
-                Success = false,
-                ErrorMessage = "Cannot perform moderation actions on Telegram service account (channel/anonymous posts)"
-            };
+            return ModerationResult.ServiceAccountBlocked();
         }
 
         return null;
@@ -442,7 +396,7 @@ public class ModerationOrchestrator
 }
 
 /// <summary>
-/// Result of a moderation action (unchanged from original for backward compatibility).
+/// Result of a moderation action.
 /// </summary>
 public class ModerationResult
 {
@@ -454,4 +408,10 @@ public class ModerationResult
     public int ChatsAffected { get; set; }
     public int WarningCount { get; set; }
     public bool AutoBanTriggered { get; set; }
+
+    public static ModerationResult Failed(string errorMessage) =>
+        new() { Success = false, ErrorMessage = errorMessage };
+
+    public static ModerationResult ServiceAccountBlocked() =>
+        new() { Success = false, ErrorMessage = "Cannot perform moderation actions on Telegram service account (channel/anonymous posts)" };
 }

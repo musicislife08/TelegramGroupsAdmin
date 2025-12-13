@@ -25,7 +25,7 @@ public partial class MessageProcessingService(
     IOptions<MessageHistoryOptions> historyOptions,
     ITelegramBotClientFactory botFactory,
     CommandRouter commandRouter,
-    ChatManagementService chatManagementService,
+    IChatManagementService chatManagementService,
     TelegramPhotoService telegramPhotoService,
     TelegramMediaService telegramMediaService,
     IServiceProvider serviceProvider,
@@ -80,7 +80,7 @@ public partial class MessageProcessingService(
                     {
                         // Use BotMessageService to save bot response to database
                         using var scope = _scopeFactory.CreateScope();
-                        var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
+                        var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
                         await botMessageService.SendAndSaveMessageAsync(
                             message.Chat.Id,
                             commandResult.Response,
@@ -153,7 +153,7 @@ public partial class MessageProcessingService(
             {
                 // Use BotMessageService for tracked deletion
                 using var scope = _scopeFactory.CreateScope();
-                var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
+                var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
                 await botMessageService.DeleteAndMarkMessageAsync(
                     message.Chat.Id,
                     message.MessageId,
@@ -253,7 +253,7 @@ public partial class MessageProcessingService(
                         if (commandResult.Response != null && !string.IsNullOrWhiteSpace(commandResult.Response))
                         {
                             // Use BotMessageService to save bot response to database
-                            var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
+                            var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
                             var responseMessage = await botMessageService.SendAndSaveMessageAsync(
                                 message.Chat.Id,
                                 commandResult.Response,
@@ -383,7 +383,7 @@ public partial class MessageProcessingService(
             if (message.From?.Id != null)
             {
                 using var skipReasonScope = serviceProvider.CreateScope();
-                var userActionsRepository = skipReasonScope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+                var userRepository = skipReasonScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
                 var chatAdminsRepository = skipReasonScope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
 
                 // Check admin status first (higher priority)
@@ -394,10 +394,9 @@ public partial class MessageProcessingService(
                 }
                 else
                 {
-                    // Check trust status if not admin
-                    bool isUserTrusted = await userActionsRepository.IsUserTrustedAsync(
+                    // REFACTOR-5: Check trust status (source of truth: telegram_users.is_trusted)
+                    bool isUserTrusted = await userRepository.IsTrustedAsync(
                         message.From.Id,
-                        message.Chat.Id,
                         cancellationToken);
 
                     if (isUserTrusted)
@@ -465,10 +464,10 @@ public partial class MessageProcessingService(
             // - Message 2 (this one) was being processed in parallel → saved to DB
             // - Without this check, Message 2 stays in chat forever
             // With this check, Message 2 gets deleted immediately
-            var userActionsRepoForBanCheck = messageScope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-            bool isUserBanned = await userActionsRepoForBanCheck.IsUserBannedAsync(
+            // REFACTOR-5: Use is_banned column as source of truth (global ban status)
+            var userRepoForBanCheck = messageScope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
+            bool isUserBanned = await userRepoForBanCheck.IsBannedAsync(
                 message.From!.Id,
-                message.Chat.Id,
                 cancellationToken);
 
             if (isUserBanned)
@@ -607,7 +606,7 @@ public partial class MessageProcessingService(
                 try
                 {
                     // Use BotMessageService for tracked deletion
-                    var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
+                    var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
                     await botMessageService.DeleteAndMarkMessageAsync(
                         message.Chat.Id,
                         message.MessageId,

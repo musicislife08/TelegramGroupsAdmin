@@ -4,7 +4,7 @@ using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Events;
+using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Notifications;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
@@ -12,19 +12,16 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 /// <summary>
 /// Domain expert for all moderation-related notifications.
 /// Handles both user DM notifications and admin notifications via NotificationService.
+/// Called directly by orchestrator after successful actions.
 ///
 /// User DM notifications:
 /// - Warnings: Sent to user with warning count
 /// - Temp bans: Sent to user with duration and rejoin links
-/// - Bans: Future - will include appeal info when appeal system is implemented
 ///
 /// Admin notifications:
 /// - Bans: Sent to admins subscribed to UserBanned event type
-/// - MarkAsSpamAndBan: Sent to admins subscribed to UserBanned event type
-///
-/// Order: 200 (runs last - notifications are non-critical side-effects)
 /// </summary>
-public class NotificationHandler : IModerationHandler
+public class NotificationHandler : INotificationHandler
 {
     private readonly INotificationOrchestrator _notificationOrchestrator;
     private readonly INotificationService _notificationService;
@@ -32,16 +29,6 @@ public class NotificationHandler : IModerationHandler
     private readonly ITelegramUserRepository _telegramUserRepository;
     private readonly IChatInviteLinkService _chatInviteLinkService;
     private readonly ILogger<NotificationHandler> _logger;
-
-    public int Order => 200;
-
-    public ModerationActionType[] AppliesTo =>
-    [
-        ModerationActionType.Warn,
-        ModerationActionType.TempBan,
-        ModerationActionType.Ban,
-        ModerationActionType.MarkAsSpamAndBan
-    ];
 
     public NotificationHandler(
         INotificationOrchestrator notificationOrchestrator,
@@ -59,137 +46,163 @@ public class NotificationHandler : IModerationHandler
         _logger = logger;
     }
 
-    public async Task<ModerationFollowUp> HandleAsync(ModerationEvent evt, CancellationToken ct = default)
+    /// <inheritdoc />
+    public async Task<NotificationResult> NotifyUserWarningAsync(
+        long userId,
+        int warningCount,
+        string? reason,
+        CancellationToken ct = default)
     {
         try
         {
-            switch (evt.ActionType)
-            {
-                case ModerationActionType.Warn:
-                    await SendWarningNotificationAsync(evt, ct);
-                    break;
-
-                case ModerationActionType.TempBan:
-                    await SendTempBanNotificationAsync(evt, ct);
-                    break;
-
-                case ModerationActionType.Ban:
-                    await SendBanAdminNotificationAsync(evt, ct);
-                    break;
-
-                case ModerationActionType.MarkAsSpamAndBan:
-                    await SendMarkAsSpamAdminNotificationAsync(evt, ct);
-                    break;
-            }
+            var success = await SendWarningNotificationAsync(userId, warningCount, reason, ct);
+            return success
+                ? NotificationResult.Succeeded()
+                : NotificationResult.Failed("Notification delivery failed");
         }
         catch (Exception ex)
         {
-            // Notification failures are non-critical - log but don't fail the action
             _logger.LogWarning(ex,
-                "Failed to send notification for user {UserId} ({ActionType}). " +
-                "This is non-critical - the moderation action succeeded.",
-                evt.UserId, evt.ActionType);
+                "Failed to send warning notification for user {UserId}",
+                userId);
+            return NotificationResult.Failed(ex.Message);
         }
+    }
 
-        return ModerationFollowUp.None;
+    /// <inheritdoc />
+    public async Task<NotificationResult> NotifyUserTempBanAsync(
+        long userId,
+        TimeSpan duration,
+        DateTimeOffset expiresAt,
+        string? reason,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var success = await SendTempBanNotificationAsync(userId, duration, expiresAt, reason, ct);
+            return success
+                ? NotificationResult.Succeeded()
+                : NotificationResult.Failed("Notification delivery failed");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to send temp-ban notification for user {UserId}",
+                userId);
+            return NotificationResult.Failed(ex.Message);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<NotificationResult> NotifyAdminsBanAsync(
+        long userId,
+        Actor executor,
+        string? reason,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            await SendBanAdminNotificationAsync(userId, executor, reason, ct);
+            return NotificationResult.Succeeded();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to send ban admin notification for user {UserId}",
+                userId);
+            return NotificationResult.Failed(ex.Message);
+        }
     }
 
     /// <summary>
     /// Send warning DM to the user.
     /// </summary>
-    private async Task SendWarningNotificationAsync(ModerationEvent evt, CancellationToken ct)
+    /// <returns>True if the notification was sent successfully.</returns>
+    private async Task<bool> SendWarningNotificationAsync(long userId, int warningCount, string? reason, CancellationToken ct)
     {
         var message = $"⚠️ **Warning Issued**\n\n" +
                       $"You have received a warning.\n\n" +
-                      $"**Reason:** {evt.Reason}\n" +
-                      $"**Total Warnings:** {evt.WarningCount}\n\n" +
+                      $"**Reason:** {EscapeMarkdown(reason)}\n" +
+                      $"**Total Warnings:** {warningCount}\n\n" +
                       $"Please review the group rules and avoid similar behavior in the future.\n\n" +
                       $"💡 Use /mystatus to check your current status.";
 
         var notification = new Notification("warning", message);
-        var result = await _notificationOrchestrator.SendTelegramDmAsync(evt.UserId, notification, ct);
+        var result = await _notificationOrchestrator.SendTelegramDmAsync(userId, notification, ct);
 
         if (result.Success)
         {
             _logger.LogInformation(
                 "Sent warning notification to user {UserId} (warning #{Count})",
-                evt.UserId, evt.WarningCount);
+                userId, warningCount);
         }
         else
         {
             _logger.LogWarning(
                 "Failed to send warning notification to user {UserId}: {Error}",
-                evt.UserId, result.ErrorMessage ?? "Unknown error");
+                userId, result.ErrorMessage ?? "Unknown error");
         }
+
+        return result.Success;
     }
 
     /// <summary>
     /// Send temp ban DM to the user with rejoin links.
     /// </summary>
-    private async Task SendTempBanNotificationAsync(ModerationEvent evt, CancellationToken ct)
+    /// <returns>True if the notification was sent successfully.</returns>
+    private async Task<bool> SendTempBanNotificationAsync(long userId, TimeSpan duration, DateTimeOffset expiresAt, string? reason, CancellationToken ct)
     {
-        if (!evt.Duration.HasValue || !evt.ExpiresAt.HasValue)
-        {
-            _logger.LogWarning(
-                "TempBan event for user {UserId} missing duration or expiry, skipping notification",
-                evt.UserId);
-            return;
-        }
-
         // Get all active managed chats for rejoin links
         var allChats = await _managedChatsRepository.GetAllChatsAsync(ct);
         var activeChats = allChats.Where(c => c.IsActive && !c.IsDeleted).ToList();
 
         // Build notification message
-        var notification = $"⏱️ **You have been temporarily banned**\n\n" +
-                          $"**Reason:** {evt.Reason}\n" +
-                          $"**Duration:** {TimeSpanUtilities.FormatDuration(evt.Duration.Value)}\n" +
-                          $"**Expires:** {evt.ExpiresAt.Value:yyyy-MM-dd HH:mm} UTC\n\n" +
+        var notificationMessage = $"⏱️ **You have been temporarily banned**\n\n" +
+                          $"**Reason:** {EscapeMarkdown(reason)}\n" +
+                          $"**Duration:** {TimeSpanUtilities.FormatDuration(duration)}\n" +
+                          $"**Expires:** {expiresAt:yyyy-MM-dd HH:mm} UTC\n\n" +
                           $"You will be automatically unbanned after this time.";
 
         // Collect invite links for all active chats
         var inviteLinkSection = await BuildInviteLinkSectionAsync(activeChats, ct);
         if (!string.IsNullOrEmpty(inviteLinkSection))
         {
-            notification += $"\n\n**Rejoin Links:**\n{inviteLinkSection}";
+            notificationMessage += $"\n\n**Rejoin Links:**\n{inviteLinkSection}";
         }
 
-        var notificationObj = new Notification("tempban", notification);
-        var result = await _notificationOrchestrator.SendTelegramDmAsync(evt.UserId, notificationObj, ct);
+        var notification = new Notification("tempban", notificationMessage);
+        var result = await _notificationOrchestrator.SendTelegramDmAsync(userId, notification, ct);
 
         if (result.Success)
         {
             _logger.LogInformation(
                 "Sent temp-ban notification to user {UserId} (expires: {ExpiresAt})",
-                evt.UserId, evt.ExpiresAt.Value);
+                userId, expiresAt);
         }
         else
         {
             _logger.LogWarning(
                 "Failed to send temp-ban notification to user {UserId}: {Error}",
-                evt.UserId, result.ErrorMessage ?? "Unknown error");
+                userId, result.ErrorMessage ?? "Unknown error");
         }
+
+        return result.Success;
     }
 
     /// <summary>
     /// Send ban notification to admins subscribed to UserBanned events.
-    /// Note: User DM notification for bans will be added with appeal system implementation.
     /// </summary>
-    private async Task SendBanAdminNotificationAsync(ModerationEvent evt, CancellationToken ct)
+    private async Task SendBanAdminNotificationAsync(long userId, Actor executor, string? reason, CancellationToken ct)
     {
         // Get user info for the notification
-        var userInfo = await GetUserDisplayNameAsync(evt.UserId, ct);
+        var userInfo = await GetUserDisplayNameAsync(userId, ct);
 
         var subject = "User Banned";
         var message = $"User {userInfo} has been banned.\n\n" +
-                      $"Reason: {evt.Reason}\n" +
-                      $"Chats affected: {evt.ChatsAffected}\n" +
-                      $"Banned by: {evt.Executor.GetDisplayText()}\n" +
-                      $"Trust revoked: {(evt.TrustRemoved ? "Yes" : "No")}";
+                      $"Reason: {reason}\n" +
+                      $"Banned by: {executor.GetDisplayText()}";
 
-        // Send to admins of all managed chats (those subscribed to UserBanned)
-        // If the ban was triggered from a specific chat context, we could use that
-        // For now, send as a system notification to owners
+        // Send as a system notification to owners
         await _notificationService.SendSystemNotificationAsync(
             NotificationEventType.UserBanned,
             subject,
@@ -198,48 +211,7 @@ public class NotificationHandler : IModerationHandler
 
         _logger.LogDebug(
             "Dispatched UserBanned admin notification for user {UserId}",
-            evt.UserId);
-    }
-
-    /// <summary>
-    /// Send mark as spam notification to admins subscribed to UserBanned events.
-    /// </summary>
-    private async Task SendMarkAsSpamAdminNotificationAsync(ModerationEvent evt, CancellationToken ct)
-    {
-        // Get user info for the notification
-        var userInfo = await GetUserDisplayNameAsync(evt.UserId, ct);
-
-        var subject = "User Marked as Spam & Banned";
-        var message = $"User {userInfo} has been marked as spam and banned.\n\n" +
-                      $"Reason: {evt.Reason}\n" +
-                      $"Message deleted: {(evt.MessageDeleted ? "Yes" : "No")}\n" +
-                      $"Chats affected: {evt.ChatsAffected}\n" +
-                      $"Banned by: {evt.Executor.GetDisplayText()}\n" +
-                      $"Trust revoked: {(evt.TrustRemoved ? "Yes" : "No")}";
-
-        // If we have a chat context, send to that chat's admins
-        if (evt.ChatId.HasValue)
-        {
-            await _notificationService.SendChatNotificationAsync(
-                evt.ChatId.Value,
-                NotificationEventType.UserBanned,
-                subject,
-                message,
-                ct);
-        }
-        else
-        {
-            // No chat context - send as system notification
-            await _notificationService.SendSystemNotificationAsync(
-                NotificationEventType.UserBanned,
-                subject,
-                message,
-                ct);
-        }
-
-        _logger.LogDebug(
-            "Dispatched MarkAsSpam admin notification for user {UserId}",
-            evt.UserId);
+            userId);
     }
 
     /// <summary>
@@ -292,5 +264,37 @@ public class NotificationHandler : IModerationHandler
         }
 
         return inviteLinks.Count > 0 ? string.Join("\n", inviteLinks) : string.Empty;
+    }
+
+    /// <summary>
+    /// Escapes Markdown special characters to prevent formatting issues in user-facing notifications.
+    /// TODO: Replace with proper Markdown library that supports safe rendering of user-provided content
+    /// while allowing intentional formatting (e.g., MarkdownSharp, CommonMark.NET).
+    /// </summary>
+    private static string EscapeMarkdown(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return string.Empty;
+
+        // Escape all Telegram Markdown special characters
+        return text
+            .Replace("_", "\\_")
+            .Replace("*", "\\*")
+            .Replace("[", "\\[")
+            .Replace("]", "\\]")
+            .Replace("(", "\\(")
+            .Replace(")", "\\)")
+            .Replace("~", "\\~")
+            .Replace("`", "\\`")
+            .Replace(">", "\\>")
+            .Replace("#", "\\#")
+            .Replace("+", "\\+")
+            .Replace("-", "\\-")
+            .Replace("=", "\\=")
+            .Replace("|", "\\|")
+            .Replace("{", "\\{")
+            .Replace("}", "\\}")
+            .Replace(".", "\\.")
+            .Replace("!", "\\!");
     }
 }

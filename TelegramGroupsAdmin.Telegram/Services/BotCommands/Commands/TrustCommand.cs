@@ -69,12 +69,11 @@ public class TrustCommand : IBotCommand
         }
 
         using var scope = _serviceProvider.CreateScope();
-        var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+        var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
 
-        // Check if user is already trusted
-        var isAlreadyTrusted = await userActionsRepository.IsUserTrustedAsync(
+        // REFACTOR-5: Check if user is already trusted (source of truth: telegram_users.is_trusted)
+        var isAlreadyTrusted = await userRepository.IsTrustedAsync(
             targetUser.Id,
-            message.Chat.Id,
             cancellationToken);
 
         if (isAlreadyTrusted)

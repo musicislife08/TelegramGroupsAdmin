@@ -61,14 +61,13 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
 
         // Check trust/admin status for the user
         using var scope = _serviceProvider.CreateScope();
-        var userActionsRepository = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
+        var userRepository = scope.ServiceProvider.GetRequiredService<ITelegramUserRepository>();
         var chatAdminsRepository = scope.ServiceProvider.GetRequiredService<IChatAdminsRepository>();
         var contentCheckConfigRepo = scope.ServiceProvider.GetRequiredService<IContentCheckConfigRepository>();
 
-        // Check if user is explicitly trusted
-        isUserTrusted = await userActionsRepository.IsUserTrustedAsync(
+        // REFACTOR-5: Check if user is explicitly trusted (source of truth: telegram_users.is_trusted)
+        isUserTrusted = await userRepository.IsTrustedAsync(
             request.UserId,
-            request.ChatId,
             cancellationToken);
 
         // Check if user is a chat admin

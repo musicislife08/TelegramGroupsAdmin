@@ -72,9 +72,8 @@ public class LanguageWarningHandler
             var warningConfig = await configService.GetEffectiveAsync<WarningSystemConfig>(ConfigType.Moderation, message.Chat.Id)
                                ?? WarningSystemConfig.Default;
 
-            // Get current warning count
-            var userActionsRepo = scope.ServiceProvider.GetRequiredService<IUserActionsRepository>();
-            var currentWarnings = await userActionsRepo.GetWarnCountAsync(message.From.Id, message.Chat.Id, cancellationToken);
+            // REFACTOR-5: Get current warning count from source of truth (JSONB warnings on telegram_users)
+            var currentWarnings = await userRepo.GetActiveWarningCountAsync(message.From.Id, cancellationToken);
 
             // Calculate warnings remaining
             var warningsRemaining = warningConfig.AutoBanThreshold - currentWarnings;

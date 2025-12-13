@@ -12,7 +12,7 @@ public class CrossChatExecutor : ICrossChatExecutor
 {
     private readonly ITelegramBotClientFactory _botClientFactory;
     private readonly IManagedChatsRepository _managedChatsRepository;
-    private readonly ChatManagementService _chatManagementService;
+    private readonly IChatManagementService _chatManagementService;
     private readonly ILogger<CrossChatExecutor> _logger;
 
     private const int MaxConcurrentApiCalls = 3;
@@ -20,7 +20,7 @@ public class CrossChatExecutor : ICrossChatExecutor
     public CrossChatExecutor(
         ITelegramBotClientFactory botClientFactory,
         IManagedChatsRepository managedChatsRepository,
-        ChatManagementService chatManagementService,
+        IChatManagementService chatManagementService,
         ILogger<CrossChatExecutor> logger)
     {
         _botClientFactory = botClientFactory;

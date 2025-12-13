@@ -23,7 +23,7 @@ public class TelegramAdminBotService(
     IServiceScopeFactory scopeFactory,
     CommandRouter commandRouter,
     MessageProcessingService messageProcessingService,
-    ChatManagementService chatManagementService,
+    IChatManagementService chatManagementService,
     IWelcomeService welcomeService,
     ILogger<TelegramAdminBotService> logger)
     : BackgroundService, IMessageHistoryService, IUpdateProcessor

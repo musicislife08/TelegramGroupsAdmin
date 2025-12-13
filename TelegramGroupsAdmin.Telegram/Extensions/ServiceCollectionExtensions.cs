@@ -7,7 +7,6 @@ using TelegramGroupsAdmin.Telegram.Services.BotCommands;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
-using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Intents;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
@@ -79,32 +78,25 @@ public static class ServiceCollectionExtensions
             services.AddScoped<INotificationChannel, TelegramDmChannel>();
             services.AddScoped<INotificationOrchestrator, NotificationOrchestrator>();
 
-            // REFACTOR-5: Intent-based moderation architecture
+            // REFACTOR-5: Manager/Worker moderation architecture
             // Infrastructure
             services.AddScoped<ICrossChatExecutor, CrossChatExecutor>();
             services.AddScoped<IMessageBackfillService, MessageBackfillService>();
-            services.AddScoped<IModerationEventDispatcher, ModerationEventDispatcher>();
 
-            // Action handlers (domain experts for each moderation action)
-            services.AddScoped<IActionHandler<BanIntent, BanResult>, BanActionHandler>();
-            services.AddScoped<IActionHandler<UnbanIntent, UnbanResult>, UnbanActionHandler>();
-            services.AddScoped<IActionHandler<WarnIntent, WarnResult>, WarnActionHandler>();
-            services.AddScoped<IActionHandler<TrustIntent, TrustResult>, TrustActionHandler>();
-            services.AddScoped<IActionHandler<RevokeTrustIntent, RevokeTrustResult>, RevokeTrustActionHandler>();
-            services.AddScoped<IActionHandler<DeleteIntent, DeleteResult>, DeleteActionHandler>();
-            services.AddScoped<IActionHandler<TempBanIntent, TempBanResult>, TempBanActionHandler>();
-            services.AddScoped<IActionHandler<RestrictIntent, RestrictResult>, RestrictActionHandler>();
-            services.AddScoped<IActionHandler<MarkAsSpamIntent, MarkAsSpamResult>, MarkAsSpamActionHandler>();
+            // Domain handlers (workers)
+            services.AddScoped<IBanHandler, BanHandler>();
+            services.AddScoped<ITrustHandler, TrustHandler>();
+            services.AddScoped<IWarnHandler, WarnHandler>();
+            services.AddScoped<IMessageHandler, MessageHandler>();
+            services.AddScoped<IRestrictHandler, RestrictHandler>();
 
-            // Orchestrator (thin routing layer that coordinates action handlers and side-effects)
+            // Support handlers
+            services.AddScoped<IAuditHandler, AuditHandler>();
+            services.AddScoped<INotificationHandler, NotificationHandler>();
+            services.AddScoped<ITrainingHandler, TrainingHandler>();
+
+            // Orchestrator (routes to handlers and owns business rules)
             services.AddScoped<ModerationOrchestrator>();
-
-            // Side-effect handlers (registered as IEnumerable<IModerationHandler> for dispatcher)
-            // Order: 20=WarningThreshold, 50=TrainingData, 100=AuditLog, 200=Notification
-            services.AddScoped<IModerationHandler, WarningThresholdHandler>();
-            services.AddScoped<IModerationHandler, TrainingDataHandler>();
-            services.AddScoped<IModerationHandler, AuditLogHandler>();
-            services.AddScoped<IModerationHandler, NotificationHandler>();
 
             // Report service
             services.AddScoped<IReportService, ReportService>();
@@ -115,7 +107,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IChatInviteLinkService, ChatInviteLinkService>(); // Phase 4.6: Invite link retrieval
             services.AddSingleton<IWelcomeService, WelcomeService>();
             services.AddSingleton<IBotProtectionService, BotProtectionService>(); // Phase 6.1: Bot Auto-Ban
-            services.AddScoped<BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
+            services.AddScoped<IBotMessageService, BotMessageService>(); // Phase 1: Bot message storage and deletion tracking
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
 
             // Training data quality services
@@ -162,7 +154,7 @@ public static class ServiceCollectionExtensions
 
             // Background services (refactored into smaller services)
             services.AddSingleton<DetectionActionService>();
-            services.AddSingleton<ChatManagementService>();
+            services.AddSingleton<IChatManagementService, ChatManagementService>();
             services.AddSingleton<MessageProcessingService>();
             services.AddSingleton<TelegramAdminBotService>();
             services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());

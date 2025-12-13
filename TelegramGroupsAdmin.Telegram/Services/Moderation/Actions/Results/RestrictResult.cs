@@ -13,7 +13,7 @@ public record RestrictResult(
     int ChatsAffected,
     int ChatsFailed,
     DateTimeOffset ExpiresAt,
-    string? ErrorMessage = null) : IActionResult
+    string? ErrorMessage = null)
 {
     /// <summary>
     /// Create a successful restrict result.

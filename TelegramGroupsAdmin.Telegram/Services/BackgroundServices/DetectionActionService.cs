@@ -22,7 +22,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 /// </summary>
 public class DetectionActionService(
     IServiceProvider serviceProvider,
-    ChatManagementService chatManagementService,
+    IChatManagementService chatManagementService,
     IJobScheduler jobScheduler,
     ILogger<DetectionActionService> logger)
 {
@@ -551,7 +551,7 @@ public class DetectionActionService(
             try
             {
                 using var deleteScope = serviceProvider.CreateScope();
-                var botMessageService = deleteScope.ServiceProvider.GetRequiredService<BotMessageService>();
+                var botMessageService = deleteScope.ServiceProvider.GetRequiredService<IBotMessageService>();
                 await botMessageService.DeleteAndMarkMessageAsync(
                     chatId,
                     message.MessageId,

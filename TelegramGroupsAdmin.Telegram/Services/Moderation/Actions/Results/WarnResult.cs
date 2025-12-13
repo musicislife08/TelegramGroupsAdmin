@@ -9,7 +9,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 public record WarnResult(
     bool Success,
     int WarningCount,
-    string? ErrorMessage = null) : IActionResult
+    string? ErrorMessage = null)
 {
     /// <summary>
     /// Create a successful warn result.

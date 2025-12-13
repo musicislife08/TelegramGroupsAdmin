@@ -9,7 +9,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 public record DeleteResult(
     bool Success,
     bool MessageDeleted,
-    string? ErrorMessage = null) : IActionResult
+    string? ErrorMessage = null)
 {
     /// <summary>
     /// Create a successful delete result.

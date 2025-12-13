@@ -17,6 +17,9 @@ public enum ModerationActionType
     /// <summary>Mark user as trusted (bypass spam detection).</summary>
     Trust,
 
+    /// <summary>Remove user's trusted status.</summary>
+    Untrust,
+
     /// <summary>Unban user globally across all managed chats.</summary>
     Unban,
 

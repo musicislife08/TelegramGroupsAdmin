@@ -4,6 +4,45 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace TelegramGroupsAdmin.Data.Models;
 
 /// <summary>
+/// Warning entry stored as JSONB in telegram_users.warnings column.
+///
+/// ARCHITECTURAL DECISION: Warnings stored as JSONB on user table rather than separate table.
+///
+/// Rationale:
+/// - Warnings are always accessed WITH their user (never independently queried across all users at scale)
+/// - Collection is bounded (90-day default expiry keeps array small)
+/// - Homelab scale (~3k users max, typically &lt;10 warnings per user) makes JSONB efficient
+/// - Single query to get user + all moderation state (no JOINs)
+/// - Avoids FK constraint issues that complicated the separate table approach
+/// - Cross-user aggregation (e.g., "users with warnings") uses WHERE warnings IS NOT NULL, then in-app counting
+///
+/// Trade-off accepted: Slightly slower cross-user warning aggregation (acceptable at homelab scale)
+/// </summary>
+public class WarningEntry
+{
+    /// <summary>When the warning was issued</summary>
+    public DateTimeOffset IssuedAt { get; set; }
+
+    /// <summary>When the warning expires (null = never expires)</summary>
+    public DateTimeOffset? ExpiresAt { get; set; }
+
+    /// <summary>Reason for the warning</summary>
+    public string? Reason { get; set; }
+
+    /// <summary>Actor type: "web_user", "telegram_user", or "system"</summary>
+    public string ActorType { get; set; } = "system";
+
+    /// <summary>Actor identifier (web user ID, telegram user ID, or system name)</summary>
+    public string ActorId { get; set; } = "unknown";
+
+    /// <summary>Context: Chat ID where warning was issued (optional)</summary>
+    public long? ChatId { get; set; }
+
+    /// <summary>Context: Message ID that triggered the warning (optional)</summary>
+    public long? MessageId { get; set; }
+}
+
+/// <summary>
 /// Represents a Telegram user tracked across all managed chats.
 /// Foundation for: profile photos, trust/whitelist, warnings, impersonation detection.
 /// Notes and tags stored in separate tables (admin_notes, user_tags) with full audit trail.
@@ -78,6 +117,34 @@ public class TelegramUserDto
     /// </summary>
     [Column("is_trusted")]
     public bool IsTrusted { get; set; } = false;
+
+    /// <summary>
+    /// Whether user is currently banned from all managed chats.
+    ///
+    /// ARCHITECTURAL DECISION: Ban state stored on user table, not derived from audit log.
+    /// - Source of truth for "is user banned?" is this flag (not the user_actions table)
+    /// - user_actions table is append-only audit log (historical record of what happened)
+    /// - Audit log should never be modified - this flag is mutable state
+    /// - Same pattern as is_trusted flag
+    /// </summary>
+    [Column("is_banned")]
+    public bool IsBanned { get; set; } = false;
+
+    /// <summary>
+    /// When the ban expires (null = permanent ban).
+    /// Only meaningful when IsBanned is true.
+    /// Background job checks this for auto-unban.
+    /// </summary>
+    [Column("ban_expires_at")]
+    public DateTimeOffset? BanExpiresAt { get; set; }
+
+    /// <summary>
+    /// Active warnings as JSONB collection. See WarningEntry for architectural rationale.
+    /// Each warning has expiry - expired warnings are filtered in application code.
+    /// Null or empty list = no warnings.
+    /// </summary>
+    [Column("warnings", TypeName = "jsonb")]
+    public List<WarningEntry>? Warnings { get; set; }
 
     /// <summary>
     /// Whether user has started a DM conversation with the bot (enables private notifications)

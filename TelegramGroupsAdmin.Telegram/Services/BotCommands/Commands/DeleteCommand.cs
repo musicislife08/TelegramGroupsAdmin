@@ -47,7 +47,7 @@ public class DeleteCommand : IBotCommand
         {
             // Use BotMessageService for tracked deletion
             using var scope = _serviceProvider.CreateScope();
-            var botMessageService = scope.ServiceProvider.GetRequiredService<BotMessageService>();
+            var botMessageService = scope.ServiceProvider.GetRequiredService<IBotMessageService>();
             await botMessageService.DeleteAndMarkMessageAsync(
                 message.Chat.Id,
                 targetMessage.MessageId,

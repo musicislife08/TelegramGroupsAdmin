@@ -18,7 +18,7 @@ public class WebBotMessagingService : IWebBotMessagingService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ITelegramBotClientFactory _botFactory;
-    private readonly BotMessageService _botMessageService;
+    private readonly IBotMessageService _botMessageService;
     private readonly ITelegramUserRepository _userRepo;
     private readonly ITelegramUserMappingRepository _mappingRepo;
     private readonly TelegramAdminBotService _botService;
@@ -27,7 +27,7 @@ public class WebBotMessagingService : IWebBotMessagingService
     public WebBotMessagingService(
         IServiceScopeFactory scopeFactory,
         ITelegramBotClientFactory botFactory,
-        BotMessageService botMessageService,
+        IBotMessageService botMessageService,
         ITelegramUserRepository userRepo,
         ITelegramUserMappingRepository mappingRepo,
         TelegramAdminBotService botService,

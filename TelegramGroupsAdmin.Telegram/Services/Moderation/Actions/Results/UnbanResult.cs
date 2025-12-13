@@ -11,7 +11,7 @@ public record UnbanResult(
     bool Success,
     int ChatsAffected,
     int ChatsFailed,
-    string? ErrorMessage = null) : IActionResult
+    string? ErrorMessage = null)
 {
     /// <summary>
     /// Create a successful unban result.

@@ -95,6 +95,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     private static void ConfigureRelationships(ModelBuilder modelBuilder)
     {
+        // TelegramUsers → Warnings (JSONB embedded collection)
+        // See WarningEntry class for architectural rationale (REFACTOR-5)
+        modelBuilder.Entity<TelegramUserDto>()
+            .OwnsMany(tu => tu.Warnings, warnings =>
+            {
+                warnings.ToJson("warnings"); // Use snake_case for consistency
+            });
+
         // Messages → DetectionResults (one-to-many)
         modelBuilder.Entity<DetectionResultRecordDto>()
             .HasOne(d => d.Message)
@@ -451,6 +459,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(wn => wn.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
     }
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
@@ -523,6 +532,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(tu => tu.Username);
         modelBuilder.Entity<TelegramUserDto>()
             .HasIndex(tu => tu.IsTrusted);
+        modelBuilder.Entity<TelegramUserDto>()
+            .HasIndex(tu => tu.IsBanned);
         modelBuilder.Entity<TelegramUserDto>()
             .HasIndex(tu => tu.LastSeenAt);
 

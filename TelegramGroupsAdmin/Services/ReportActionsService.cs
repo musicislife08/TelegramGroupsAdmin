@@ -19,7 +19,7 @@ public class ReportActionsService : IReportActionsService
     private readonly IMessageHistoryRepository _messageRepository;
     private readonly ModerationOrchestrator _moderationService;
     private readonly IAuditService _auditService;
-    private readonly BotMessageService _botMessageService;
+    private readonly IBotMessageService _botMessageService;
     private readonly ILogger<ReportActionsService> _logger;
 
     public ReportActionsService(
@@ -27,7 +27,7 @@ public class ReportActionsService : IReportActionsService
         IMessageHistoryRepository messageRepository,
         ModerationOrchestrator moderationService,
         IAuditService auditService,
-        BotMessageService botMessageService,
+        IBotMessageService botMessageService,
         ILogger<ReportActionsService> logger)
     {
         _reportsRepository = reportsRepository;

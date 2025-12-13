@@ -7,7 +7,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 /// <param name="ErrorMessage">Error message if the action failed.</param>
 public record TrustResult(
     bool Success,
-    string? ErrorMessage = null) : IActionResult
+    string? ErrorMessage = null)
 {
     /// <summary>
     /// Create a successful trust result.
