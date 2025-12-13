@@ -148,12 +148,15 @@ public class ModerationOrchestrator
         await _auditHandler.LogBanAsync(userId, executor, reason, cancellationToken);
 
         // Business rule: Bans always revoke trust
+        var untrustReason = string.IsNullOrWhiteSpace(reason)
+            ? "Trust revoked due to ban"
+            : $"Trust revoked due to ban: {reason}";
         var untrustResult = await _trustHandler.UntrustAsync(
-            userId, executor, $"Trust revoked due to ban: {reason}", cancellationToken);
+            userId, executor, untrustReason, cancellationToken);
 
         if (untrustResult.Success)
         {
-            await _auditHandler.LogUntrustAsync(userId, executor, $"Trust revoked due to ban: {reason}", cancellationToken);
+            await _auditHandler.LogUntrustAsync(userId, executor, untrustReason, cancellationToken);
         }
 
         // Notify admins

@@ -120,10 +120,10 @@ public class NotificationHandler : INotificationHandler
     /// <returns>True if the notification was sent successfully.</returns>
     private async Task<bool> SendWarningNotificationAsync(long userId, int warningCount, string? reason, CancellationToken ct)
     {
-        var message = $"⚠️ **Warning Issued**\n\n" +
+        var message = $"⚠️ <b>Warning Issued</b>\n\n" +
                       $"You have received a warning.\n\n" +
-                      $"**Reason:** {EscapeMarkdown(reason)}\n" +
-                      $"**Total Warnings:** {warningCount}\n\n" +
+                      $"<b>Reason:</b> {EscapeHtml(reason)}\n" +
+                      $"<b>Total Warnings:</b> {warningCount}\n\n" +
                       $"Please review the group rules and avoid similar behavior in the future.\n\n" +
                       $"💡 Use /mystatus to check your current status.";
 
@@ -157,10 +157,10 @@ public class NotificationHandler : INotificationHandler
         var activeChats = allChats.Where(c => c.IsActive && !c.IsDeleted).ToList();
 
         // Build notification message
-        var notificationMessage = $"⏱️ **You have been temporarily banned**\n\n" +
-                          $"**Reason:** {EscapeMarkdown(reason)}\n" +
-                          $"**Duration:** {TimeSpanUtilities.FormatDuration(duration)}\n" +
-                          $"**Expires:** {expiresAt:yyyy-MM-dd HH:mm} UTC\n\n" +
+        var notificationMessage = $"⏱️ <b>You have been temporarily banned</b>\n\n" +
+                          $"<b>Reason:</b> {EscapeHtml(reason)}\n" +
+                          $"<b>Duration:</b> {TimeSpanUtilities.FormatDuration(duration)}\n" +
+                          $"<b>Expires:</b> {expiresAt:yyyy-MM-dd HH:mm} UTC\n\n" +
                           $"You will be automatically unbanned after this time.";
 
         // Collect invite links for all active chats
@@ -267,34 +267,21 @@ public class NotificationHandler : INotificationHandler
     }
 
     /// <summary>
-    /// Escapes Markdown special characters to prevent formatting issues in user-facing notifications.
-    /// TODO: Replace with proper Markdown library that supports safe rendering of user-provided content
-    /// while allowing intentional formatting (e.g., MarkdownSharp, CommonMark.NET).
+    /// Escapes HTML special characters to prevent formatting issues in user-facing notifications.
+    /// Uses HTML mode for Telegram messages which is more standard and easier to escape correctly.
+    /// TODO: When rich formatting support is added (GitHub issue to be created), consider using
+    /// a proper sanitization library like HtmlSanitizer to allow safe user-provided HTML/Markdown.
     /// </summary>
-    private static string EscapeMarkdown(string? text)
+    private static string EscapeHtml(string? text)
     {
         if (string.IsNullOrEmpty(text))
             return string.Empty;
 
-        // Escape all Telegram Markdown special characters
+        // Escape HTML special characters for Telegram's HTML parseMode
+        // Telegram HTML supports: <b>, <i>, <u>, <s>, <a>, <code>, <pre>
         return text
-            .Replace("_", "\\_")
-            .Replace("*", "\\*")
-            .Replace("[", "\\[")
-            .Replace("]", "\\]")
-            .Replace("(", "\\(")
-            .Replace(")", "\\)")
-            .Replace("~", "\\~")
-            .Replace("`", "\\`")
-            .Replace(">", "\\>")
-            .Replace("#", "\\#")
-            .Replace("+", "\\+")
-            .Replace("-", "\\-")
-            .Replace("=", "\\=")
-            .Replace("|", "\\|")
-            .Replace("{", "\\{")
-            .Replace("}", "\\}")
-            .Replace(".", "\\.")
-            .Replace("!", "\\!");
+            .Replace("&", "&amp;")   // Must be first to avoid double-escaping
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;");
     }
 }
