@@ -91,6 +91,7 @@ public static class ServiceCollectionExtensions
         q.AddJob<ScheduledBackupJob>(opts => opts.WithIdentity("ScheduledBackupJob").StoreDurably());
         q.AddJob<SendChatNotificationJob>(opts => opts.WithIdentity("SendChatNotificationJob").StoreDurably());
         q.AddJob<TempbanExpiryJob>(opts => opts.WithIdentity("TempbanExpiryJob").StoreDurably());
+        q.AddJob<TextClassifierRetrainingJob>(opts => opts.WithIdentity("TextClassifierRetrainingJob").StoreDurably());
         q.AddJob<WelcomeTimeoutJob>(opts => opts.WithIdentity("WelcomeTimeoutJob").StoreDurably());
 
         // Note: Triggers will be created dynamically by QuartzSchedulingSyncService

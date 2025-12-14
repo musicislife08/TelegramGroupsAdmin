@@ -42,6 +42,12 @@ public static class BackgroundJobNames
     /// </summary>
     public const string ChatHealthCheck = "ChatHealthCheckJob";
 
+    /// <summary>
+    /// ML text classifier retraining (retrains ML.NET SDCA spam model with latest data)
+    /// Quartz Job: TextClassifierRetrainingJob
+    /// </summary>
+    public const string TextClassifierRetraining = "TextClassifierRetrainingJob";
+
     // ============================================
     // Ad-Hoc Jobs (one-time delayed execution)
     // ============================================
