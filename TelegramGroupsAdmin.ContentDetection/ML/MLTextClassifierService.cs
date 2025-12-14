@@ -93,9 +93,10 @@ public class MLTextClassifierService
 
     /// <summary>
     /// Loads ham training samples from training_labels + never-flagged messages.
-    /// Capped at 1000 samples, quality filtered (≥50 words, 7-90 days old, not banned).
+    /// Dynamically capped based on spam count to maintain balanced ratio (target: 30-40% spam).
+    /// Quality filtered (≥50 words, not banned, no spam flags).
     /// </summary>
-    public async Task<List<string>> LoadHamTrainingSamplesAsync(CancellationToken ct = default)
+    public async Task<List<string>> LoadHamTrainingSamplesAsync(int spamCount, CancellationToken ct = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(ct);
 
@@ -110,33 +111,44 @@ public class MLTextClassifierService
             .Where(text => text != null && text.Length > 10)
             .ToListAsync(ct);
 
-        // Implicit ham (never flagged, quality filtered, capped at 1000)
-        // Use subqueries to avoid pulling large ID sets client-side
-        var sevenDaysAgo = DateTimeOffset.UtcNow.AddDays(-7);
-        var ninetyDaysAgo = DateTimeOffset.UtcNow.AddDays(-90);
+        // Calculate dynamic cap to maintain balanced ratio (target: ~30% spam)
+        // Formula: max_ham = spam_count * 2.33 gives ~30% spam ratio
+        // Ensures model stays balanced even as ham messages accumulate over time
+        var dynamicHamCap = (int)(spamCount * 2.33);
+        var maxImplicitHam = Math.Max(dynamicHamCap - explicitHam.Count, 0);
 
-        var implicitHam = await (
+        // Implicit ham (never flagged, quality filtered, dynamically capped)
+        // Use subqueries to avoid pulling large ID sets client-side
+        // NO timestamp filtering - we want ALL quality ham messages for best accuracy
+
+        // Step 1: SQL query to get candidate messages (basic filters only)
+        // Fetch plenty of candidates - ≥50 word filter has ~90% rejection rate, so always fetch 5000+
+        var candidatesToFetch = Math.Max(maxImplicitHam * 10, 5000);
+        var candidateMessages = await (
             from m in context.Messages
             where !context.TrainingLabels.Any(tl => tl.MessageId == m.MessageId)  // Subquery
                && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.IsSpam)  // Subquery
                && !context.TelegramUsers.Any(tu => tu.TelegramUserId == m.UserId && tu.IsBanned)  // Subquery
-               && m.Timestamp >= ninetyDaysAgo
-               && m.Timestamp <= sevenDaysAgo
             from mt in context.MessageTranslations
                 .Where(mt => mt.MessageId == m.MessageId && mt.EditId == null)
                 .DefaultIfEmpty()
             let text = mt != null ? mt.TranslatedText : m.MessageText
             where text != null && text.Length > 10
-               && text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 50
             orderby m.MessageId  // Deterministic (not random) - stable across runs
             select text
-        ).Take(1000).ToListAsync(ct);
+        ).Take(candidatesToFetch).ToListAsync(ct);
+
+        // Step 2: Client-side filtering for word count (can't be translated to SQL)
+        var implicitHam = candidateMessages
+            .Where(text => text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 50)
+            .Take(maxImplicitHam)
+            .ToList();
 
         var allHam = explicitHam.Concat(implicitHam).OfType<string>().Distinct().ToList();
 
         _logger.LogInformation(
-            "Loaded {Count} ham training samples ({Explicit} explicit + {Implicit} implicit, capped at 1000)",
-            allHam.Count, explicitHam.Count, implicitHam.Count);
+            "Loaded {Count} ham training samples ({Explicit} explicit + {Implicit} implicit, capped at {Cap} for balance)",
+            allHam.Count, explicitHam.Count, implicitHam.Count, dynamicHamCap);
 
         return allHam;
     }
@@ -159,9 +171,9 @@ public class MLTextClassifierService
             _logger.LogInformation("Starting SDCA model training...");
             var startTime = DateTimeOffset.UtcNow;
 
-            // Load training samples
+            // Load training samples (ham capped dynamically based on spam count for balance)
             var spamSamples = await LoadSpamTrainingSamplesAsync(ct);
-            var hamSamples = await LoadHamTrainingSamplesAsync(ct);
+            var hamSamples = await LoadHamTrainingSamplesAsync(spamSamples.Count, ct);
 
             if (spamSamples.Count == 0 || hamSamples.Count == 0)
             {
