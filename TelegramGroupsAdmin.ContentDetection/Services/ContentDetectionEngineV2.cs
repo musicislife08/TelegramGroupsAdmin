@@ -356,7 +356,6 @@ public class ContentDetectionEngineV2 : IContentDetectionEngine
                 ChatId = originalRequest.ChatId,
                 MinMessageLength = config.MinMessageLength,
                 SimilarityThreshold = config.Similarity.Threshold,
-                ConfidenceThreshold = 75,
                 CancellationToken = cancellationToken
             },
 

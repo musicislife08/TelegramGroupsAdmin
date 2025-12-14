@@ -17,12 +17,9 @@ public class SimilarityConfig
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Similarity threshold (0.0 - 1.0)
+    /// Spam probability threshold (0.0 - 1.0)
+    /// Messages with ML spam probability below this threshold will abstain (contribute 0 points)
+    /// Recommended: 0.5-0.7 for balanced detection
     /// </summary>
     public double Threshold { get; set; } = 0.5;
-
-    /// <summary>
-    /// Confidence threshold for spam classification (0-100)
-    /// </summary>
-    public int ConfidenceThreshold { get; set; } = 75;
 }
