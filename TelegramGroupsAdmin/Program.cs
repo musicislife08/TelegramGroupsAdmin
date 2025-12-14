@@ -35,6 +35,10 @@ var dataPath = builder.Configuration["App:DataPath"] ?? "/data";
 var dataProtectionKeysPath = Path.Combine(dataPath, "keys");
 builder.Services.AddTgSpamWebDataServices(dataProtectionKeysPath);
 
+// Create ML model directory (follows same pattern as media/keys)
+var mlModelsPath = Path.Combine(dataPath, "ml-models");
+Directory.CreateDirectory(mlModelsPath);
+
 // Application services (auth, users, messages, etc.)
 builder.Services.AddApplicationServices();
 
