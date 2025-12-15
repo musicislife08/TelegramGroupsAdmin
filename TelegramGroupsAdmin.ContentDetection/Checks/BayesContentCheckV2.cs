@@ -1,11 +1,10 @@
 using System.Diagnostics;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Services;
 
 namespace TelegramGroupsAdmin.ContentDetection.Checks;
@@ -19,10 +18,11 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// </summary>
 public class BayesContentCheckV2(
     ILogger<BayesContentCheckV2> logger,
-    IDbContextFactory<AppDbContext> dbContextFactory,
+    IMLTrainingDataRepository trainingDataRepository,
     ITokenizerService tokenizerService) : IContentCheckV2
 {
-    private const int MAX_TRAINING_SAMPLES = 10_000;
+    // Training data quality threshold
+    private const int MinimumSamplesPerClass = 20;  // Minimum spam AND ham samples for meaningful training
 
     // SpamAssassin-style scoring (from research)
     private const double ScoreBayes99 = 5.0;   // 99%+ probability
@@ -180,56 +180,46 @@ public class BayesContentCheckV2(
 
         try
         {
-            // Load training data (reuse V1 logic - same database query)
-            await using var dbContext = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+            // Load training data using IMLTrainingDataRepository (shares logic with ML.NET classifier)
+            var labeledMessageIds = await trainingDataRepository.GetLabeledMessageIdsAsync(cancellationToken);
+            var spamSamples = await trainingDataRepository.GetSpamSamplesAsync(labeledMessageIds, cancellationToken);
+            var hamSamples = await trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, labeledMessageIds, cancellationToken);
 
-            var manualSamples = await (
-                from dr in dbContext.DetectionResults
-                join m in dbContext.Messages on dr.MessageId equals m.MessageId
-                join mt in dbContext.MessageTranslations on m.MessageId equals mt.MessageId into translations
-                from mt in translations.DefaultIfEmpty()
-                where dr.UsedForTraining && (dr.DetectionSource == "manual" || dr.DetectionSource == "Manual")
-                orderby dr.DetectedAt descending
-                select new { MessageText = mt != null ? mt.TranslatedText : m.MessageText, dr.IsSpam, dr.DetectionSource }
-            ).AsNoTracking().ToListAsync(cancellationToken);
-
-            var autoSamples = await (
-                from dr in dbContext.DetectionResults
-                join m in dbContext.Messages on dr.MessageId equals m.MessageId
-                join mt in dbContext.MessageTranslations on m.MessageId equals mt.MessageId into translations
-                from mt in translations.DefaultIfEmpty()
-                where dr.UsedForTraining && dr.DetectionSource != "manual" && dr.DetectionSource != "Manual"
-                orderby dr.DetectedAt descending
-                select new { MessageText = mt != null ? mt.TranslatedText : m.MessageText, dr.IsSpam, dr.DetectionSource }
-            ).AsNoTracking().Take(MAX_TRAINING_SAMPLES).ToListAsync(cancellationToken);
-
-            var trainingSet = manualSamples.Concat(autoSamples).ToList();
-
-            if (!trainingSet.Any())
+            if (spamSamples.Count < MinimumSamplesPerClass || hamSamples.Count < MinimumSamplesPerClass)
             {
-                logger.LogWarning("No training samples available for Bayes V2 classifier");
-                return;
+                logger.LogWarning(
+                    "Insufficient training data for Bayes (spam: {Spam}, ham: {Ham}, minimum: {Min})",
+                    spamSamples.Count, hamSamples.Count, MinimumSamplesPerClass);
+                return;  // _classifier stays null → abstains on all checks
             }
+
+            var allSamples = spamSamples.Concat(hamSamples).ToList();
 
             // Create and train classifier
             _classifier = new BayesClassifier(tokenizerService);
 
             var spamCount = 0;
             var hamCount = 0;
+            var explicitCount = 0;
 
-            foreach (var sample in trainingSet)
+            foreach (var sample in allSamples)
             {
-                _classifier.Train(sample.MessageText, sample.IsSpam);
-                if (sample.IsSpam)
+                var isSpam = sample.Label == Core.Models.TrainingLabel.Spam;
+                _classifier.Train(sample.Text, isSpam);
+
+                if (isSpam)
                     spamCount++;
                 else
                     hamCount++;
+
+                if (sample.Source == TrainingSampleSource.Explicit)
+                    explicitCount++;
             }
 
             _lastTrainingUpdate = DateTime.UtcNow;
             logger.LogInformation(
-                "Bayes V2 classifier trained with {Total} samples ({Manual} manual, {Auto} auto, {Spam} spam, {Ham} ham)",
-                trainingSet.Count, manualSamples.Count, autoSamples.Count, spamCount, hamCount);
+                "Bayes V2 classifier trained with {Total} samples ({Explicit} explicit labels, {Implicit} implicit auto, {Spam} spam, {Ham} ham)",
+                allSamples.Count, explicitCount, allSamples.Count - explicitCount, spamCount, hamCount);
         }
         catch (Exception ex)
         {

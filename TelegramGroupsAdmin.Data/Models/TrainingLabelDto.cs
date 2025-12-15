@@ -18,12 +18,11 @@ public class TrainingLabelDto
     public long MessageId { get; set; }
 
     /// <summary>
-    /// Label: "spam" or "ham". Enforced by database check constraint.
+    /// Label: 0=Spam, 1=Ham (stored as smallint, enforced by check constraint).
     /// </summary>
     [Required]
     [Column("label")]
-    [MaxLength(10)]
-    public string Label { get; set; } = string.Empty;
+    public short Label { get; set; }
 
     /// <summary>
     /// User ID who labeled this message (nullable for migrated/system labels).

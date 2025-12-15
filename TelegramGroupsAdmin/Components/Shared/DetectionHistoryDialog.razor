@@ -1,10 +1,28 @@
 @using System.Text.Json
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Utilities
+@using TelegramGroupsAdmin.Core.Models
 
 <MudDialog>
     <DialogContent>
         <MudText Typo="Typo.h6" Class="mb-4">Spam Detection History</MudText>
+
+        @* Show training label if exists (admin override) *@
+        @if (TrainingLabel != null)
+        {
+            <MudAlert Severity="@(TrainingLabel.Label == TelegramGroupsAdmin.Core.Models.TrainingLabel.Spam ? Severity.Error : Severity.Success)" Class="mb-4" Icon="@Icons.Material.Filled.School">
+                <MudText Typo="Typo.body2">
+                    <strong>Admin Override:</strong> Explicitly labeled as <strong>@TrainingLabel.Label.ToString().ToUpper()</strong> for ML training
+                </MudText>
+                <MudText Typo="Typo.caption">
+                    Labeled on @TrainingLabel.LabeledAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt")
+                    @if (!string.IsNullOrEmpty(TrainingLabel.Reason))
+                    {
+                        <text><br />Reason: @TrainingLabel.Reason</text>
+                    }
+                </MudText>
+            </MudAlert>
+        }
 
         @if (DetectionResults?.Any() == true)
         {
@@ -138,6 +156,9 @@
 
     [Parameter]
     public List<DetectionResultRecord>? DetectionResults { get; set; }
+
+    [Parameter]
+    public TrainingLabelRecord? TrainingLabel { get; set; }
 
     private void Close() => MudDialog.Close();
 

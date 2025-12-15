@@ -1,37 +1,48 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.ML;
 using System.Security.Cryptography;
 using System.Text.Json;
-using TelegramGroupsAdmin.Data;
+using TelegramGroupsAdmin.ContentDetection.Models;
+using TelegramGroupsAdmin.ContentDetection.Repositories;
 
 namespace TelegramGroupsAdmin.ContentDetection.ML;
 
 /// <summary>
 /// ML.NET SDCA text classifier for spam detection.
-/// Thread-safe Singleton service with volatile fields for atomic model swapping.
+/// Thread-safe Singleton service with immutable container pattern for atomic model swapping.
 /// </summary>
 public class MLTextClassifierService
 {
-    private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    // ML.NET training constants
+    private const int MlNetSeed = 42;  // ML.NET random seed for reproducible training results
+    private const int MinimumSamplesPerClass = 20;  // Minimum spam AND ham samples for meaningful training
+
+    private readonly IMLTrainingDataRepository _trainingDataRepository;
     private readonly ILogger<MLTextClassifierService> _logger;
     private readonly string _dataDirectory;
 
     // Thread-safe retraining semaphore (prevents overlapping retrains)
     private readonly SemaphoreSlim _retrainingSemaphore = new(1, 1);
 
-    // Volatile fields for atomic reads during prediction
-    private volatile ITransformer? _model;
-    private volatile PredictionEngine<SpamTextFeatures, SpamPrediction>? _predictionEngine;
-    private volatile SpamClassifierMetadata? _metadata;
+    // Immutable container for atomic model swapping (replaces multi-field volatile race condition)
+    private volatile ModelContainer? _currentModel;
+
+    /// <summary>
+    /// Immutable container for thread-safe atomic model swapping.
+    /// All three fields swap together via Interlocked.Exchange.
+    /// </summary>
+    private sealed record ModelContainer(
+        ITransformer Model,
+        PredictionEngine<SpamTextFeatures, SpamPrediction> PredictionEngine,
+        SpamClassifierMetadata Metadata);
 
     public MLTextClassifierService(
-        IDbContextFactory<AppDbContext> contextFactory,
+        IMLTrainingDataRepository trainingDataRepository,
         ILogger<MLTextClassifierService> logger,
         IConfiguration configuration)
     {
-        _contextFactory = contextFactory;
+        _trainingDataRepository = trainingDataRepository;
         _logger = logger;
         _dataDirectory = configuration["App:DataPath"] ?? "/data";
     }
@@ -52,108 +63,6 @@ public class MLTextClassifierService
     private string MetadataPath => Path.Combine(ModelDirectory, "spam-classifier.json");
 
     /// <summary>
-    /// Loads spam training samples from training_labels + detection_results.
-    /// Explicit labels (training_labels) override auto-detection.
-    /// </summary>
-    public async Task<List<string>> LoadSpamTrainingSamplesAsync(CancellationToken ct = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-
-        // Explicit spam labels (admin decisions override auto-detection)
-        var explicitSpam = await context.TrainingLabels
-            .Where(tl => tl.Label == "spam")
-            .Join(context.Messages, tl => tl.MessageId, m => m.MessageId, (tl, m) => m)
-            .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       m => m.MessageId, mt => mt.MessageId,
-                       (m, mts) => new { m, mt = mts.FirstOrDefault() })
-            .Select(x => x.mt != null ? x.mt.TranslatedText : x.m.MessageText)
-            .Where(text => text != null && text.Length > 10)
-            .ToListAsync(ct);
-
-        // Implicit spam (high-confidence auto, not corrected)
-        var explicitLabeledIds = await context.TrainingLabels.Select(tl => tl.MessageId).ToListAsync(ct);
-        var implicitSpam = await context.DetectionResults
-            .Where(dr => dr.IsSpam && dr.UsedForTraining && !explicitLabeledIds.Contains(dr.MessageId))
-            .Join(context.Messages, dr => dr.MessageId, m => m.MessageId, (dr, m) => m)
-            .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       m => m.MessageId, mt => mt.MessageId,
-                       (m, mts) => new { m, mt = mts.FirstOrDefault() })
-            .Select(x => x.mt != null ? x.mt.TranslatedText : x.m.MessageText)
-            .Where(text => text != null && text.Length > 10)
-            .ToListAsync(ct);
-
-        var allSpam = explicitSpam.Concat(implicitSpam).OfType<string>().Distinct().OrderBy(x => x).ToList();
-
-        _logger.LogInformation(
-            "Loaded {Count} spam training samples ({Explicit} explicit + {Implicit} implicit)",
-            allSpam.Count, explicitSpam.Count, implicitSpam.Count);
-
-        return allSpam;
-    }
-
-    /// <summary>
-    /// Loads ham training samples from training_labels + never-flagged messages.
-    /// Dynamically capped based on spam count to maintain balanced ratio (target: 30-40% spam).
-    /// Quality filtered (≥50 words, not banned, no spam flags).
-    /// </summary>
-    public async Task<List<string>> LoadHamTrainingSamplesAsync(int spamCount, CancellationToken ct = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-
-        // Explicit ham labels (admin corrections) - ALWAYS included
-        var explicitHam = await context.TrainingLabels
-            .Where(tl => tl.Label == "ham")
-            .Join(context.Messages, tl => tl.MessageId, m => m.MessageId, (tl, m) => m)
-            .GroupJoin(context.MessageTranslations.Where(mt => mt.EditId == null),
-                       m => m.MessageId, mt => mt.MessageId,
-                       (m, mts) => new { m, mt = mts.FirstOrDefault() })
-            .Select(x => x.mt != null ? x.mt.TranslatedText : x.m.MessageText)
-            .Where(text => text != null && text.Length > 10)
-            .ToListAsync(ct);
-
-        // Calculate dynamic cap to maintain balanced ratio (target: ~30% spam)
-        // Formula: max_ham = spam_count * 2.33 gives ~30% spam ratio
-        // Ensures model stays balanced even as ham messages accumulate over time
-        var dynamicHamCap = (int)(spamCount * 2.33);
-        var maxImplicitHam = Math.Max(dynamicHamCap - explicitHam.Count, 0);
-
-        // Implicit ham (never flagged, quality filtered, dynamically capped)
-        // Use subqueries to avoid pulling large ID sets client-side
-        // NO timestamp filtering - we want ALL quality ham messages for best accuracy
-
-        // Step 1: SQL query to get candidate messages (basic filters only)
-        // Fetch plenty of candidates - ≥50 word filter has ~90% rejection rate, so always fetch 5000+
-        var candidatesToFetch = Math.Max(maxImplicitHam * 10, 5000);
-        var candidateMessages = await (
-            from m in context.Messages
-            where !context.TrainingLabels.Any(tl => tl.MessageId == m.MessageId)  // Subquery
-               && !context.DetectionResults.Any(dr => dr.MessageId == m.MessageId && dr.IsSpam)  // Subquery
-               && !context.TelegramUsers.Any(tu => tu.TelegramUserId == m.UserId && tu.IsBanned)  // Subquery
-            from mt in context.MessageTranslations
-                .Where(mt => mt.MessageId == m.MessageId && mt.EditId == null)
-                .DefaultIfEmpty()
-            let text = mt != null ? mt.TranslatedText : m.MessageText
-            where text != null && text.Length > 10
-            orderby m.MessageId  // Deterministic (not random) - stable across runs
-            select text
-        ).Take(candidatesToFetch).ToListAsync(ct);
-
-        // Step 2: Client-side filtering for word count (can't be translated to SQL)
-        var implicitHam = candidateMessages
-            .Where(text => text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 50)
-            .Take(maxImplicitHam)
-            .ToList();
-
-        var allHam = explicitHam.Concat(implicitHam).OfType<string>().Distinct().ToList();
-
-        _logger.LogInformation(
-            "Loaded {Count} ham training samples ({Explicit} explicit + {Implicit} implicit, capped at {Cap} for balance)",
-            allHam.Count, explicitHam.Count, implicitHam.Count, dynamicHamCap);
-
-        return allHam;
-    }
-
-    /// <summary>
     /// Trains the SDCA model with TF-IDF features.
     /// Uses SemaphoreSlim to prevent overlapping retraining.
     /// </summary>
@@ -171,25 +80,29 @@ public class MLTextClassifierService
             _logger.LogInformation("Starting SDCA model training...");
             var startTime = DateTimeOffset.UtcNow;
 
-            // Load training samples (ham capped dynamically based on spam count for balance)
-            var spamSamples = await LoadSpamTrainingSamplesAsync(ct);
-            var hamSamples = await LoadHamTrainingSamplesAsync(spamSamples.Count, ct);
+            // Load labeled message IDs once (reused by both spam and ham queries to avoid duplication)
+            var labeledMessageIds = await _trainingDataRepository.GetLabeledMessageIdsAsync(ct);
 
-            if (spamSamples.Count == 0 || hamSamples.Count == 0)
+            // Load training samples from repository (encapsulates multi-table queries)
+            var spamSamples = await _trainingDataRepository.GetSpamSamplesAsync(labeledMessageIds, ct);
+            var hamSamples = await _trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, labeledMessageIds, ct);
+
+            if (spamSamples.Count < MinimumSamplesPerClass || hamSamples.Count < MinimumSamplesPerClass)
             {
-                _logger.LogWarning("Insufficient training data (spam: {Spam}, ham: {Ham})",
-                    spamSamples.Count, hamSamples.Count);
+                _logger.LogWarning(
+                    "Insufficient training data (spam: {Spam}, ham: {Ham}, minimum: {Min})",
+                    spamSamples.Count, hamSamples.Count, MinimumSamplesPerClass);
                 return;
             }
 
-            // Build training data
+            // Build training data from domain models
             var trainingData = spamSamples
-                .Select(text => new SpamTextFeatures { MessageText = text, IsSpam = true })
-                .Concat(hamSamples.Select(text => new SpamTextFeatures { MessageText = text, IsSpam = false }))
+                .Select(sample => new SpamTextFeatures { MessageText = sample.Text, IsSpam = true })
+                .Concat(hamSamples.Select(sample => new SpamTextFeatures { MessageText = sample.Text, IsSpam = false }))
                 .ToList();
 
             // Create ML.NET context and load data
-            var mlContext = new MLContext(seed: 42);
+            var mlContext = new MLContext(seed: MlNetSeed);
             var dataView = mlContext.Data.LoadFromEnumerable(trainingData);
 
             // Build pipeline: TF-IDF → SDCA Logistic Regression
@@ -217,10 +130,13 @@ public class MLTextClassifierService
             // Save model and metadata
             await SaveModelAsync(model, metadata, ct);
 
-            // Atomically swap volatile fields (thread-safe)
-            _model = model;
-            _predictionEngine = mlContext.Model.CreatePredictionEngine<SpamTextFeatures, SpamPrediction>(model);
-            _metadata = metadata;
+            // Create new container and atomically swap (thread-safe)
+            var predictionEngine = mlContext.Model.CreatePredictionEngine<SpamTextFeatures, SpamPrediction>(model);
+            var newContainer = new ModelContainer(model, predictionEngine, metadata);
+            var oldContainer = Interlocked.Exchange(ref _currentModel, newContainer);
+
+            // Dispose old prediction engine if it exists
+            oldContainer?.PredictionEngine.Dispose();
 
             _logger.LogInformation(
                 "Model deployed: {Spam} spam + {Ham} ham = {Total} samples (spam ratio: {Ratio:P1}, balanced: {Balanced})",
@@ -308,10 +224,13 @@ public class MLTextClassifierService
             var mlContext = new MLContext();
             var model = mlContext.Model.Load(ModelPath, out var _);
 
-            // Create prediction engine and update volatile fields atomically
-            _model = model;
-            _predictionEngine = mlContext.Model.CreatePredictionEngine<SpamTextFeatures, SpamPrediction>(model);
-            _metadata = metadata;
+            // Create new container and atomically swap (thread-safe)
+            var predictionEngine = mlContext.Model.CreatePredictionEngine<SpamTextFeatures, SpamPrediction>(model);
+            var newContainer = new ModelContainer(model, predictionEngine, metadata);
+            var oldContainer = Interlocked.Exchange(ref _currentModel, newContainer);
+
+            // Dispose old prediction engine if it exists
+            oldContainer?.PredictionEngine.Dispose();
 
             _logger.LogInformation(
                 "Model loaded successfully: trained {TrainedAt}, {Spam} spam + {Ham} ham samples",
@@ -328,23 +247,23 @@ public class MLTextClassifierService
 
     /// <summary>
     /// Predicts spam probability for a message.
-    /// Thread-safe: uses volatile fields for atomic reads.
+    /// Thread-safe: uses volatile container for atomic reads.
     /// </summary>
     public SpamPrediction? Predict(string messageText)
     {
-        var engine = _predictionEngine;
-        if (engine == null)
+        var container = _currentModel;
+        if (container == null)
         {
             _logger.LogWarning("Prediction engine not loaded - model needs training");
             return null;
         }
 
         var features = new SpamTextFeatures { MessageText = messageText };
-        return engine.Predict(features);
+        return container.PredictionEngine.Predict(features);
     }
 
     /// <summary>
     /// Gets current model metadata (training stats, timestamp, hash).
     /// </summary>
-    public SpamClassifierMetadata? GetMetadata() => _metadata;
+    public SpamClassifierMetadata? GetMetadata() => _currentModel?.Metadata;
 }

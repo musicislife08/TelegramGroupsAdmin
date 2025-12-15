@@ -97,6 +97,10 @@ public static class ServiceCollectionExtensions
             // Register training labels repository (Phase 1: ML.NET training labels)
             services.AddScoped<ITrainingLabelsRepository, TrainingLabelsRepository>();
 
+            // Register ML training data repository (aggregates training data from multiple tables)
+            // Singleton: Safe because it uses IDbContextFactory (factory pattern), required because MLTextClassifierService is Singleton
+            services.AddSingleton<IMLTrainingDataRepository, MLTrainingDataRepository>();
+
             // Register V2 spam detection engine (SpamAssassin-style additive scoring)
             // Fixes critical bug where abstentions voted "Clean" and cancelled spam signals
             services.AddScoped<ContentDetectionEngineV2>();

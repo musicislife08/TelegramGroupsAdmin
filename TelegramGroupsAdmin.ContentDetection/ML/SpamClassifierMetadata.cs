@@ -7,6 +7,21 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 public class SpamClassifierMetadata
 {
     /// <summary>
+    /// Minimum balanced spam ratio (20%) - below this indicates too few spam samples.
+    /// </summary>
+    public const double MinBalancedSpamRatio = 0.2;
+
+    /// <summary>
+    /// Maximum balanced spam ratio (80%) - above this indicates too few ham samples.
+    /// </summary>
+    public const double MaxBalancedSpamRatio = 0.8;
+
+    /// <summary>
+    /// Target spam ratio (30%) - optimal balance for SDCA training.
+    /// </summary>
+    public const double TargetSpamRatio = 0.3;
+
+    /// <summary>
     /// When the model was trained.
     /// </summary>
     public DateTimeOffset TrainedAt { get; set; }
@@ -27,7 +42,7 @@ public class SpamClassifierMetadata
     public int TotalSampleCount => SpamSampleCount + HamSampleCount;
 
     /// <summary>
-    /// Spam ratio in training data (should be between 0.2 and 0.8 for balance).
+    /// Spam ratio in training data (should be between MinBalancedSpamRatio and MaxBalancedSpamRatio for balance).
     /// </summary>
     public double SpamRatio => TotalSampleCount > 0
         ? (double)SpamSampleCount / TotalSampleCount
@@ -49,7 +64,7 @@ public class SpamClassifierMetadata
     public string MLNetVersion { get; set; } = string.Empty;
 
     /// <summary>
-    /// Whether training data appears balanced (spam ratio between 0.2 and 0.8).
+    /// Whether training data appears balanced (spam ratio between MinBalancedSpamRatio and MaxBalancedSpamRatio).
     /// </summary>
-    public bool IsBalanced => SpamRatio >= 0.2 && SpamRatio <= 0.8;
+    public bool IsBalanced => SpamRatio >= MinBalancedSpamRatio && SpamRatio <= MaxBalancedSpamRatio;
 }

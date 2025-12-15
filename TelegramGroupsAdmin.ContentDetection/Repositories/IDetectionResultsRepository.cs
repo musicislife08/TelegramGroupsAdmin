@@ -103,16 +103,6 @@ public interface IDetectionResultsRepository
     Task InvalidateTrainingDataForMessageAsync(long messageId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Atomically invalidate old training data and insert a new detection result.
-    /// This ensures both operations happen in a single transaction - if either fails, both are rolled back.
-    /// Used by ModerationActionService.MarkAsSpamAndBanAsync to prevent ML training data corruption.
-    /// </summary>
-    /// <param name="messageId">The message ID to invalidate old training data for</param>
-    /// <param name="result">The new detection result to insert</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    Task InsertWithTrainingInvalidationAsync(long messageId, DetectionResultRecord result, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Add a manual training sample (creates message with chat_id=0, user_id=0 + detection_result)
     /// Phase 4.20+: Supports optional translation data for non-English samples
     /// Returns the ID of the created detection_result

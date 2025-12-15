@@ -39,4 +39,11 @@
     <ProjectReference Include="..\TelegramGroupsAdmin\TelegramGroupsAdmin.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="TestData\MLTrainingData.sql" />
+    <EmbeddedResource Include="TestData\SQL\11_training_full.sql" />
+    <EmbeddedResource Include="TestData\SQL\20_unbalanced_100_20.sql" />
+    <EmbeddedResource Include="TestData\SQL\21_unbalanced_20_100.sql" />
+  </ItemGroup>
+
 </Project>
