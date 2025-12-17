@@ -225,8 +225,12 @@ public class MLTextClassifierService : IDisposable
                 if (computedHash != metadata.ModelHash)
                 {
                     _logger.LogWarning(
-                        "Model hash mismatch (expected: {Expected}, got: {Actual}), retraining required",
+                        "Model hash mismatch (expected: {Expected}, got: {Actual}), deleting corrupted files",
                         metadata.ModelHash, computedHash);
+
+                    // Delete corrupted files so next training attempt can succeed
+                    File.Delete(ModelPath);
+                    File.Delete(MetadataPath);
                     return false;
                 }
             }

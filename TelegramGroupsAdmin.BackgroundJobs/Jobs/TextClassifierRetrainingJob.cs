@@ -41,12 +41,19 @@ public class TextClassifierRetrainingJob : IJob
             await _mlClassifier.TrainModelAsync(context.CancellationToken);
 
             var metadata = _mlClassifier.GetMetadata();
-            _logger.LogInformation(
-                "ML text classifier retrained successfully: {Spam} spam + {Ham} ham samples (ratio: {Ratio:P1}, balanced: {Balanced})",
-                metadata?.SpamSampleCount,
-                metadata?.HamSampleCount,
-                metadata?.SpamRatio,
-                metadata?.IsBalanced);
+            if (metadata != null)
+            {
+                _logger.LogInformation(
+                    "ML text classifier retrained successfully: {Spam} spam + {Ham} ham samples (ratio: {Ratio:P1}, balanced: {Balanced})",
+                    metadata.SpamSampleCount,
+                    metadata.HamSampleCount,
+                    metadata.SpamRatio,
+                    metadata.IsBalanced);
+            }
+            else
+            {
+                _logger.LogWarning("Model retraining completed but metadata unavailable (model may not have trained due to insufficient data)");
+            }
 
             success = true;
         }

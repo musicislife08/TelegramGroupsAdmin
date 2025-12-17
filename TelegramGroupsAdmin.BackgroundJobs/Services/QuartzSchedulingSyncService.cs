@@ -178,7 +178,12 @@ public class QuartzSchedulingSyncService(
         if (_scheduler == null) return;
 
         // Create pre-configured trigger builder (schedule + start time already set)
-        var parseResult = _scheduleConverter.CreateTriggerBuilder(config.Schedule);
+        // For TextClassifierRetrainingJob, skip missed executions (we already train fresh on startup)
+        var misfireInstruction = config.JobName == BackgroundJobNames.TextClassifierRetraining
+            ? MisfireInstruction.CronTrigger.DoNothing
+            : MisfireInstruction.SmartPolicy;
+
+        var parseResult = _scheduleConverter.CreateTriggerBuilder(config.Schedule, misfireInstruction);
 
         if (parseResult is not HumanCron.Models.ParseResult<TriggerBuilder>.Success successResult)
         {

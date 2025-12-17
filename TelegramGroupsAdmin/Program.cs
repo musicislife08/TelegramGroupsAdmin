@@ -39,6 +39,11 @@ builder.Services.AddTgSpamWebDataServices(dataProtectionKeysPath);
 var mlModelsPath = Path.Combine(dataPath, "ml-models");
 Directory.CreateDirectory(mlModelsPath);
 
+// NOTE: We intentionally train fresh on every startup (~3 seconds) to ensure
+// the model uses the latest training data. For a homelab single-instance deployment,
+// this startup cost is acceptable and guarantees data freshness. The model is
+// persisted to disk for the scheduled retraining job (TextClassifierRetrainingJob).
+
 // Application services (auth, users, messages, etc.)
 builder.Services.AddApplicationServices();
 

@@ -17,7 +17,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
     private const int MinTextLength = 10;  // Minimum text length for ML training
     private const int MinHamWordCount = 50;  // Minimum word count for quality ham messages
     private const double HamMultiplier = 2.33;  // Ham multiplier to maintain ~30% spam ratio
-    private const int CandidateFetchMultiplier = 10;  // Fetch 10x candidates (≥50 word filter has ~90% rejection rate)
+    private const int CandidateFetchMultiplier = 10;  // Fetch 10x candidates to account for ~90% rejection rate from MinHamWordCount filter (empirical observation)
     private const int MinCandidatesToFetch = 5000;  // Always fetch at least 5000 candidates for diversity
 
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
@@ -133,6 +133,9 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
             .ToListAsync(cancellationToken);
 
         // Calculate how many explicit ham we can use while maintaining balance
+        // Dynamic ham cap: maintains ~30% spam ratio
+        // Formula: if spamCount = S, hamCount = H, then S/(S+H) = 0.3
+        // Solving for H: H = S * (1-0.3)/0.3 = S * 2.33
         var dynamicHamCap = (int)(spamCount * HamMultiplier);
         var explicitHamToUse = Math.Min(explicitHam.Count, dynamicHamCap);
 
