@@ -20,7 +20,7 @@ public class AIContentCheckTests
 {
     private ILogger<AIContentCheckV2> _mockLogger = null!;
     private IChatService _mockChatService = null!;
-    private IMessageHistoryService _mockMessageHistoryService = null!;
+    private IMessageContextProvider _mockMessageContextProvider = null!;
     private IMemoryCache _memoryCache = null!;
     private AIContentCheckV2 _check = null!;
 
@@ -29,11 +29,11 @@ public class AIContentCheckTests
     {
         _mockLogger = Substitute.For<ILogger<AIContentCheckV2>>();
         _mockChatService = Substitute.For<IChatService>();
-        _mockMessageHistoryService = Substitute.For<IMessageHistoryService>();
+        _mockMessageContextProvider = Substitute.For<IMessageContextProvider>();
         _memoryCache = new MemoryCache(new MemoryCacheOptions());
 
-        // Setup message history service to return empty list by default
-        _mockMessageHistoryService
+        // Setup message context provider to return empty list by default
+        _mockMessageContextProvider
             .GetRecentMessagesAsync(Arg.Any<long>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IEnumerable<HistoryMessage>>(new List<HistoryMessage>()));
 
@@ -41,7 +41,7 @@ public class AIContentCheckTests
             _mockLogger,
             _mockChatService,
             _memoryCache,
-            _mockMessageHistoryService
+            _mockMessageContextProvider
         );
     }
 

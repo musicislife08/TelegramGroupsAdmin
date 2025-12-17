@@ -22,7 +22,7 @@ public class AIContentCheckV2(
     ILogger<AIContentCheckV2> logger,
     IChatService chatService,
     IMemoryCache cache,
-    IMessageHistoryService messageHistoryService) : IContentCheckV2
+    IMessageContextProvider messageContextProvider) : IContentCheckV2
 {
     public CheckName CheckName => CheckName.OpenAI;
 
@@ -98,7 +98,7 @@ public class AIContentCheckV2(
             }
 
             // Get message history for context (count from config)
-            var history = await messageHistoryService.GetRecentMessagesAsync(req.ChatId, req.MessageHistoryCount, req.CancellationToken);
+            var history = await messageContextProvider.GetRecentMessagesAsync(req.ChatId, req.MessageHistoryCount, req.CancellationToken);
 
             // Build prompts using the prompt builder
             var prompts = AIPromptBuilder.CreatePrompts(req, history);

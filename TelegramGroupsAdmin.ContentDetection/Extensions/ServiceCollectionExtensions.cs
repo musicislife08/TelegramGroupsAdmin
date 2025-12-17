@@ -31,7 +31,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IUrlContentScrapingService, UrlContentScrapingService>();
             services.AddSingleton<IImageTextExtractionService, ImageTextExtractionService>(); // ML-5: OCR service (Singleton: binary path lookup happens once)
             services.AddSingleton<IVideoFrameExtractionService, VideoFrameExtractionService>(); // ML-6: FFmpeg frame extraction (Singleton: binary path lookup happens once)
-                                                                                                // NOTE: IMessageHistoryService is registered by the main app (TelegramAdminBotService implements it)
+                                                                                                // NOTE: IMessageContextProvider is registered by the main app (MessageContextAdapter)
 
             // Register repositories (needed by engine for config)
             services.AddScoped<IContentDetectionConfigRepository, ContentDetectionConfigRepository>();

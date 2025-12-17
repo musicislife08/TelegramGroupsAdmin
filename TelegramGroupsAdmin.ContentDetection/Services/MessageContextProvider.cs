@@ -6,11 +6,11 @@ using TelegramGroupsAdmin.Data;
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
-/// Service implementation for retrieving message history from database
+/// Provides message context from database for spam detection
 /// </summary>
-public class MessageHistoryService(
+public class MessageContextProvider(
     IDbContextFactory<AppDbContext> contextFactory,
-    ILogger<MessageHistoryService> logger) : IMessageHistoryService
+    ILogger<MessageContextProvider> logger) : IMessageContextProvider
 {
     /// <summary>
     /// Get recent messages from a chat for context
