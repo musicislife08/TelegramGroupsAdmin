@@ -25,7 +25,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IContentDetectionEngine, ContentDetectionEngineV2>();
 
             // Register core services
-            services.AddScoped<ITokenizerService, TokenizerService>();
+            services.AddSingleton<ITokenizerService, TokenizerService>();
             // Note: IAITranslationService is registered in Core (depends on IChatService)
             services.AddSingleton<ILanguageDetectionService, FastTextLanguageDetectionService>(); // FastText language detection (Singleton: model loaded once, thread-safe)
             services.AddScoped<IUrlContentScrapingService, UrlContentScrapingService>();
@@ -84,7 +84,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IFileScanningTestService, FileScanningTestService>();  // UI testing service
 
             // Register ML.NET threshold optimization services
-            services.AddScoped<FeatureExtractionService>();
+            services.AddSingleton<FeatureExtractionService>();
             services.AddScoped<IThresholdRecommendationService, ThresholdRecommendationService>();
             services.AddScoped<IStopWordRecommendationService, StopWordRecommendationService>(); // ML-6: Stop word recommendations
 

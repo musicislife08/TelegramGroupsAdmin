@@ -111,7 +111,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IWebBotMessagingService, WebBotMessagingService>(); // Phase 1: Web UI bot messaging with signature
 
             // Training data quality services
-            services.AddScoped<TextSimilarityService>();
+            services.AddSingleton<TextSimilarityService>();
             services.AddScoped<TrainingDataDeduplicationService>();
 
             // Phase 4.10: Anti-Impersonation Detection

@@ -3,7 +3,6 @@ using NSubstitute;
 using TelegramGroupsAdmin.ContentDetection.Configuration;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
-using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
@@ -20,7 +19,6 @@ public class UserAutoTrustServiceTests
     private IDetectionResultsRepository _detectionResultsRepo = null!;
     private IUserActionsRepository _userActionsRepo = null!;
     private IContentDetectionConfigRepository _configRepo = null!;
-    private IAuditLogRepository _auditLogRepo = null!;
     private ITelegramUserRepository _userRepo = null!;
     private ILogger<UserAutoTrustService> _logger = null!;
     private UserAutoTrustService _service = null!;
@@ -34,7 +32,6 @@ public class UserAutoTrustServiceTests
         _detectionResultsRepo = Substitute.For<IDetectionResultsRepository>();
         _userActionsRepo = Substitute.For<IUserActionsRepository>();
         _configRepo = Substitute.For<IContentDetectionConfigRepository>();
-        _auditLogRepo = Substitute.For<IAuditLogRepository>();
         _userRepo = Substitute.For<ITelegramUserRepository>();
         _logger = Substitute.For<ILogger<UserAutoTrustService>>();
 
@@ -42,7 +39,6 @@ public class UserAutoTrustServiceTests
             _detectionResultsRepo,
             _userActionsRepo,
             _configRepo,
-            _auditLogRepo,
             _userRepo,
             _logger);
     }
