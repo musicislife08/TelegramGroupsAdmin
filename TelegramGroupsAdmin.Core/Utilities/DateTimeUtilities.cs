@@ -29,6 +29,7 @@ public static class DateTimeUtilities
     /// <summary>
     /// Format a timestamp as a verbose relative time string.
     /// Suitable for UIs where readability is prioritized.
+    /// Reuses TimeSpanUtilities.FormatDuration for consistent pluralization.
     /// </summary>
     /// <param name="timestamp">The timestamp to format</param>
     /// <returns>Verbose string like "5 minutes ago", "3 hours ago", or "MMM d, yyyy" for dates older than 30 days</returns>
@@ -36,14 +37,9 @@ public static class DateTimeUtilities
     {
         var span = DateTimeOffset.UtcNow - timestamp;
 
-        return span switch
-        {
-            { TotalMinutes: < 1 } => "just now",
-            { TotalMinutes: < 60 } => $"{(int)span.TotalMinutes} minute{((int)span.TotalMinutes == 1 ? "" : "s")} ago",
-            { TotalHours: < 24 } => $"{(int)span.TotalHours} hour{((int)span.TotalHours == 1 ? "" : "s")} ago",
-            { TotalDays: < 7 } => $"{(int)span.TotalDays} day{((int)span.TotalDays == 1 ? "" : "s")} ago",
-            { TotalDays: < 30 } => $"{(int)(span.TotalDays / 7)} week{((int)(span.TotalDays / 7) == 1 ? "" : "s")} ago",
-            _ => timestamp.ToString("MMM d, yyyy")
-        };
+        if (span.TotalMinutes < 1) return "just now";
+        if (span.TotalDays >= 30) return timestamp.ToString("MMM d, yyyy");
+
+        return TimeSpanUtilities.FormatDuration(span) + " ago";
     }
 }
