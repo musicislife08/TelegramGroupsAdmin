@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
+using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Handlers;
@@ -14,18 +16,24 @@ public class TrainingHandler : ITrainingHandler
 {
     private readonly IMessageHistoryRepository _messageHistoryRepository;
     private readonly IDetectionResultsRepository _detectionResultsRepository;
+    private readonly ITrainingLabelsRepository _trainingLabelsRepository;
     private readonly IImageTrainingSamplesRepository _imageTrainingSamplesRepository;
+    private readonly IJobTriggerService _jobTriggerService;
     private readonly ILogger<TrainingHandler> _logger;
 
     public TrainingHandler(
         IMessageHistoryRepository messageHistoryRepository,
         IDetectionResultsRepository detectionResultsRepository,
+        ITrainingLabelsRepository trainingLabelsRepository,
         IImageTrainingSamplesRepository imageTrainingSamplesRepository,
+        IJobTriggerService jobTriggerService,
         ILogger<TrainingHandler> logger)
     {
         _messageHistoryRepository = messageHistoryRepository;
         _detectionResultsRepository = detectionResultsRepository;
+        _trainingLabelsRepository = trainingLabelsRepository;
         _imageTrainingSamplesRepository = imageTrainingSamplesRepository;
+        _jobTriggerService = jobTriggerService;
         _logger = logger;
     }
 
@@ -46,7 +54,7 @@ public class TrainingHandler : ITrainingHandler
             return;
         }
 
-        // Create detection result (manual spam classification)
+        // Create detection result for history (NOT for training - use training_labels instead)
         var hasText = !string.IsNullOrWhiteSpace(message.MessageText);
         var detectionResult = new DetectionResultRecord
         {
@@ -58,17 +66,41 @@ public class TrainingHandler : ITrainingHandler
             Reason = "Marked as spam by moderator",
             AddedBy = executor,
             UserId = message.UserId,
-            UsedForTraining = hasText, // Only use text messages for training
+            UsedForTraining = false, // History only - training handled by training_labels table
             NetConfidence = 100,
             CheckResultsJson = null,
             EditVersion = 0
         };
 
-        await _detectionResultsRepository.InsertWithTrainingInvalidationAsync(messageId, detectionResult, ct);
+        await _detectionResultsRepository.InsertAsync(detectionResult, ct);
 
-        _logger.LogInformation(
-            "Created training data for message {MessageId} (hasText={HasText}) marked as spam by {Executor}",
-            messageId, hasText, executor.GetDisplayText());
+        // Create explicit training label for ML (spam)
+        if (hasText)
+        {
+            await _trainingLabelsRepository.UpsertLabelAsync(
+                messageId,
+                label: TrainingLabel.Spam,
+                labeledByUserId: executor.GetTelegramUserId(), // Null if executor is web user or system
+                reason: "Marked as spam by moderator",
+                auditLogId: null,
+                cancellationToken: ct);
+
+            // Trigger ML text classifier retraining (immediate, no payload)
+            await _jobTriggerService.TriggerNowAsync(
+                BackgroundJobNames.TextClassifierRetraining,
+                payload: new { }, // Empty payload - job doesn't need parameters
+                cancellationToken: ct);
+
+            _logger.LogInformation(
+                "Created training label and triggered retraining for message {MessageId} marked as spam by {Executor}",
+                messageId, executor.GetDisplayText());
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Created detection result for message {MessageId} marked as spam by {Executor} (no text, skipped training)",
+                messageId, executor.GetDisplayText());
+        }
 
         // Save image training sample if message has a photo
         var imageSaved = await _imageTrainingSamplesRepository.SaveTrainingSampleAsync(

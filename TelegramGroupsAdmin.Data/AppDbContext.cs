@@ -42,6 +42,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     // Spam detection tables
     public DbSet<StopWordDto> StopWords => Set<StopWordDto>();
     // NOTE: TrainingSamples removed in Phase 2.2 - training data comes from detection_results.used_for_training
+    public DbSet<TrainingLabelDto> TrainingLabels => Set<TrainingLabelDto>();
     public DbSet<ContentDetectionConfigRecordDto> ContentDetectionConfigs => Set<ContentDetectionConfigRecordDto>();
     public DbSet<ContentCheckConfigRecordDto> ContentCheckConfigs => Set<ContentCheckConfigRecordDto>();
     public DbSet<PromptVersionDto> PromptVersions => Set<PromptVersionDto>();
@@ -460,6 +461,31 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(wn => wn.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // ============================================================================
+        // TrainingLabels Configuration (ML.NET SDCA Refactor)
+        // Explicit spam/ham labels for ML training (separate from detection_results)
+        // ============================================================================
+
+        // TrainingLabels: label must be 'spam' or 'ham'
+        modelBuilder.Entity<TrainingLabelDto>()
+            .ToTable(t => t.HasCheckConstraint(
+                "CK_training_labels_label",
+                "label IN ('spam', 'ham')"));
+
+        // TrainingLabels → Messages (CASCADE delete when message is deleted)
+        modelBuilder.Entity<TrainingLabelDto>()
+            .HasOne(tl => tl.Message)
+            .WithMany()
+            .HasForeignKey(tl => tl.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // TrainingLabels → TelegramUsers (SET NULL when user is deleted)
+        modelBuilder.Entity<TrainingLabelDto>()
+            .HasOne(tl => tl.LabeledByUser)
+            .WithMany()
+            .HasForeignKey(tl => tl.LabeledByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
     }
 
     private static void ConfigureIndexes(ModelBuilder modelBuilder)
@@ -515,6 +541,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasIndex(dr => dr.CheckResultsJson)
             .HasMethod("gin")
             .HasDatabaseName("ix_detection_results_check_results_json_gin");
+
+        // TrainingLabels indexes (ML.NET SDCA Refactor)
+        modelBuilder.Entity<TrainingLabelDto>()
+            .HasIndex(tl => tl.Label);
+        modelBuilder.Entity<TrainingLabelDto>()
+            .HasIndex(tl => new { tl.Label, tl.LabeledAt });
 
         // UserActions indexes
         modelBuilder.Entity<UserActionRecordDto>()

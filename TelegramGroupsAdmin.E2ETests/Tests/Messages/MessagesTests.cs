@@ -1,4 +1,7 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.E2ETests.Infrastructure;
 using TelegramGroupsAdmin.E2ETests.PageObjects;
 using static Microsoft.Playwright.Assertions;

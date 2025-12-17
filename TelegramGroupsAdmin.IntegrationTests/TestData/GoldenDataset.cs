@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.IntegrationTests.TestData;
 public static class GoldenDataset
 {
     // Tables with DTOs that BackupService can export (excludes: __EFMigrationsHistory, file_scan_quota, file_scan_results, ticker.*)
-    public const int TotalTableCount = 37; // Updated 2025-12-09: +linked_channels (Phase 4.10 impersonation detection)
+    public const int TotalTableCount = 38; // Updated 2025-12-13: +training_labels (ML.NET SDCA classifier training labels)
 
     /// <summary>
     /// Web application users (ASP.NET Identity)
@@ -246,6 +246,42 @@ public static class GoldenDataset
     }
 
     /// <summary>
+    /// Training labels (explicit ML training data for spam classifier)
+    /// </summary>
+    public static class TrainingLabels
+    {
+        // Spam label 1: Msg1 marked as spam by admin
+        public const long Label1_MessageId = Messages.Msg1_Id;
+        public const short Label1_Label = 0; // Spam
+        public const long Label1_LabeledByUserId = TelegramUsers.User1_TelegramUserId;
+        public const string Label1_Reason = "Manual spam marking via /report command";
+
+        // Spam label 2: Msg2 marked as spam (no user attribution)
+        public const long Label2_MessageId = Messages.Msg2_Id;
+        public const short Label2_Label = 0; // Spam
+        public static readonly long? Label2_LabeledByUserId = null;
+        public const string Label2_Reason = "Confirmed spam pattern";
+
+        // Ham label 1: Msg3 corrected to ham
+        public const long Label3_MessageId = Messages.Msg3_Id;
+        public const short Label3_Label = 1; // Ham
+        public const long Label3_LabeledByUserId = TelegramUsers.User2_TelegramUserId;
+        public const string Label3_Reason = "Admin correction - false positive";
+
+        // Ham label 2: Msg4 marked as ham (no reason)
+        public const long Label4_MessageId = Messages.Msg4_Id;
+        public const short Label4_Label = 1; // Ham
+        public static readonly long? Label4_LabeledByUserId = null;
+        public static readonly string? Label4_Reason = null;
+
+        // Spam label 3: Msg5 marked as spam (no reason)
+        public const long Label5_MessageId = Messages.Msg5_Id;
+        public const short Label5_Label = 0; // Spam
+        public static readonly long? Label5_LabeledByUserId = null;
+        public static readonly string? Label5_Reason = null;
+    }
+
+    /// <summary>
     /// Linked channels (channels linked to managed chat groups for impersonation detection)
     /// </summary>
     public static class LinkedChannels
@@ -311,16 +347,60 @@ public static class GoldenDataset
     }
 
     /// <summary>
-    /// Seed the test database with golden dataset.
-    /// Encrypts sensitive fields using the test container's Data Protection system.
+    /// Seeds full dataset: base data + GoldenDataset training labels (3 spam + 2 ham) + MLTrainingData.sql (20 spam + 20 ham).
+    /// Total: 23 spam + 22 ham training samples.
+    /// Use for most tests that need complete training data.
     /// </summary>
+    public static async Task SeedAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
+    {
+        await SeedBaseDataAsync(context, dataProtectionProvider);
+        await SeedGoldenDatasetTrainingLabelsAsync(context);
+        await SeedMLTrainingDataScriptAsync(context);
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Seeds only base data (messages, users, chats, configs) - NO training labels or ML data.
+    /// Total: 0 spam + 0 ham training samples.
+    /// Use for threshold tests that need to create minimal custom datasets.
+    /// </summary>
+    public static async Task SeedWithoutTrainingDataAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
+    {
+        await SeedBaseDataAsync(context, dataProtectionProvider);
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Seeds base data + GoldenDataset training labels only (3 spam + 2 ham) - skips MLTrainingData.sql.
+    /// Total: 3 spam + 2 ham training samples (below 20 minimum threshold).
+    /// Use for tests validating behavior with insufficient training data.
+    /// </summary>
+    public static async Task SeedWithMinimalTrainingDataAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
+    {
+        await SeedBaseDataAsync(context, dataProtectionProvider);
+        await SeedGoldenDatasetTrainingLabelsAsync(context);
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Legacy method for backwards compatibility. Use SeedAsync() instead.
+    /// </summary>
+    [Obsolete("Use SeedAsync() instead")]
     public static async Task SeedDatabaseAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
+    {
+        await SeedAsync(context, dataProtectionProvider);
+    }
+
+    /// <summary>
+    /// Seeds base database structure (users, chats, messages, detection_results, configs).
+    /// Does NOT seed training_labels or ML training data.
+    /// </summary>
+    private static async Task SeedBaseDataAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider)
     {
         // Create Data Protector for API keys if provider available
         var apiKeyProtector = dataProtectionProvider?.CreateProtector(DataProtectionPurposes.ApiKeys);
 
         // 1. Seed telegram_users (no FK dependencies)
-        // Insert separately to handle nulls properly
         await context.Database.ExecuteSqlRawAsync(
             $"""
             INSERT INTO telegram_users (telegram_user_id, username, first_name, last_name, is_trusted, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at)
@@ -337,7 +417,6 @@ public static class GoldenDataset
         );
 
         // 2. Seed users (with self-referencing FK: invited_by)
-        // Note: Using plaintext password hash (not real, just for testing structure)
         const string testPasswordHash = "AQAAAAIAAYagAAAAEDummyHashForTestingOnly1234567890";
         const string testSecurityStamp = "TEST_SECURITY_STAMP";
 
@@ -380,7 +459,7 @@ public static class GoldenDataset
             (object?)LinkedChannels.Channel2_IconPath ?? DBNull.Value
         );
 
-        // 5. Seed messages (use parameters for text to handle special characters, FK to telegram_users and managed_chats)
+        // 5. Seed messages (use parameters for text to handle special characters)
         await context.Database.ExecuteSqlRawAsync(
             $$"""
             INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, media_type, content_check_skip_reason)
@@ -417,7 +496,6 @@ public static class GoldenDataset
         string? encryptedApiKeys = null;
         if (apiKeyProtector != null)
         {
-            // Encrypt test API keys using Data Protection
             var apiKeysJson = $$"""
             {
               "VirusTotal": "{{ApiKeys.VirusTotal_Test}}"
@@ -437,7 +515,79 @@ public static class GoldenDataset
             encryptedApiKeys!,
             Configs.BackupEncryptionConfigJson!
         );
+    }
 
-        await context.SaveChangesAsync();
+    /// <summary>
+    /// Seeds GoldenDataset training labels (3 spam + 2 ham from original test data).
+    /// </summary>
+    private static async Task SeedGoldenDatasetTrainingLabelsAsync(AppDbContext context)
+    {
+        await context.Database.ExecuteSqlRawAsync(
+            $$"""
+            INSERT INTO training_labels (message_id, label, labeled_by_user_id, labeled_at, reason, audit_log_id)
+            VALUES
+            ({{TrainingLabels.Label1_MessageId}}, {{TrainingLabels.Label1_Label}}, {{TrainingLabels.Label1_LabeledByUserId}}, NOW() - INTERVAL '1 day', {0}, NULL),
+            ({{TrainingLabels.Label2_MessageId}}, {{TrainingLabels.Label2_Label}}, NULL, NOW() - INTERVAL '2 days', {1}, NULL),
+            ({{TrainingLabels.Label3_MessageId}}, {{TrainingLabels.Label3_Label}}, {{TrainingLabels.Label3_LabeledByUserId}}, NOW() - INTERVAL '3 days', {2}, NULL),
+            ({{TrainingLabels.Label4_MessageId}}, {{TrainingLabels.Label4_Label}}, NULL, NOW() - INTERVAL '4 days', NULL, NULL),
+            ({{TrainingLabels.Label5_MessageId}}, {{TrainingLabels.Label5_Label}}, NULL, NOW() - INTERVAL '5 days', NULL, NULL)
+            """,
+            TrainingLabels.Label1_Reason, TrainingLabels.Label2_Reason, TrainingLabels.Label3_Reason
+        );
+    }
+
+    /// <summary>
+    /// Seeds ML training data from embedded SQL script (20 spam + 20 ham).
+    /// </summary>
+    private static async Task SeedMLTrainingDataScriptAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "MLTrainingData.sql");
+    }
+
+    /// <summary>
+    /// Seeds balanced ML training data (20 spam + 20 ham).
+    /// Use for tests requiring balanced training datasets.
+    /// </summary>
+    public static async Task SeedBalancedTrainingDataAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.11_training_full.sql");
+    }
+
+    /// <summary>
+    /// Seeds high-spam imbalanced ML training data (100 spam + 20 ham, 83.3% spam, 5:1 ratio).
+    /// Use for testing ML classifier behavior with high spam ratio.
+    /// </summary>
+    public static async Task SeedHighSpamTrainingDataAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.20_unbalanced_100_20.sql");
+    }
+
+    /// <summary>
+    /// Seeds high-ham imbalanced ML training data (20 spam + 100 ham, 16.7% spam, 1:5 ratio).
+    /// Use for testing ML classifier behavior with high ham ratio.
+    /// </summary>
+    public static async Task SeedHighHamTrainingDataAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.21_unbalanced_20_100.sql");
+    }
+
+    /// <summary>
+    /// Loads and executes an embedded SQL script from TestData directory.
+    /// </summary>
+    /// <param name="context">Database context</param>
+    /// <param name="scriptPath">Relative path within TestData (e.g., "SQL.11_training_full.sql")</param>
+    private static async Task LoadSqlScriptAsync(AppDbContext context, string scriptPath)
+    {
+        var assembly = typeof(GoldenDataset).Assembly;
+        var resourceName = $"TelegramGroupsAdmin.IntegrationTests.TestData.{scriptPath}";
+        await using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream == null)
+        {
+            throw new InvalidOperationException($"Embedded resource not found: {resourceName}. Ensure the SQL file is marked as EmbeddedResource in the .csproj file.");
+        }
+
+        using var reader = new StreamReader(stream);
+        var sqlScript = await reader.ReadToEndAsync();
+        await context.Database.ExecuteSqlRawAsync(sqlScript);
     }
 }

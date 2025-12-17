@@ -238,10 +238,11 @@ public class ContentDetectionSettingsTests : AuthenticatedTestBase
         await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Add Training Sample" })).ToBeVisibleAsync();
         await Expect(Page.GetByPlaceholder("Search training samples...")).ToBeVisibleAsync();
 
-        // Stats chips should be visible - be specific with locators
-        await Expect(Page.Locator(".mud-chip:has-text('total')").First).ToBeVisibleAsync();
-        await Expect(Page.Locator(".mud-chip:has-text('spam')").First).ToBeVisibleAsync();
-        await Expect(Page.Locator(".mud-chip:has-text('ham')").First).ToBeVisibleAsync();
+        // New TrainingDataBalanceStatus component should be visible
+        await Expect(Page.GetByText("Training Data Balance")).ToBeVisibleAsync();
+        await Expect(Page.Locator(".mud-chip:has-text('Spam:')").First).ToBeVisibleAsync();
+        await Expect(Page.Locator(".mud-chip:has-text('Explicit Ham:')").First).ToBeVisibleAsync();
+        await Expect(Page.Locator(".mud-chip:has-text('Implicit Ham:')").First).ToBeVisibleAsync();
     }
 
     [Test]

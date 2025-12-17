@@ -349,10 +349,10 @@ public class ThresholdRecommendationService : IThresholdRecommendationService
     private static decimal? GetCurrentThreshold(ContentDetectionConfig config, string algorithmName)
     {
         // Extract threshold from nested config objects
+        // Note: Similarity (ML.NET SDCA) uses spam probability threshold (0.0-1.0), not confidence threshold
         return algorithmName switch
         {
             "Bayes" => config.Bayes.ConfidenceThreshold,
-            "TF-IDF Similarity" => config.Similarity.ConfidenceThreshold,
             "Spacing" => config.Spacing.ConfidenceThreshold,
             _ => null
         };

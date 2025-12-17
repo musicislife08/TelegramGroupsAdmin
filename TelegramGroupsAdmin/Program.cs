@@ -35,6 +35,15 @@ var dataPath = builder.Configuration["App:DataPath"] ?? "/data";
 var dataProtectionKeysPath = Path.Combine(dataPath, "keys");
 builder.Services.AddTgSpamWebDataServices(dataProtectionKeysPath);
 
+// Create ML model directory (follows same pattern as media/keys)
+var mlModelsPath = Path.Combine(dataPath, "ml-models");
+Directory.CreateDirectory(mlModelsPath);
+
+// NOTE: We intentionally train fresh on every startup (~3 seconds) to ensure
+// the model uses the latest training data. For a homelab single-instance deployment,
+// this startup cost is acceptable and guarantees data freshness. The model is
+// persisted to disk for the scheduled retraining job (TextClassifierRetrainingJob).
+
 // Application services (auth, users, messages, etc.)
 builder.Services.AddApplicationServices();
 
@@ -170,6 +179,19 @@ if (serilogConfig != null)
     await serilogConfig.InitializeAsync();
     app.Logger.LogInformation("Loaded log configuration from database");
 }
+
+// Train ML.NET spam classifier model on startup (always retrain for fresh data)
+// Once scheduled retraining is implemented (Commit 3), this can be optimized to load if <8h old
+var mlClassifier = app.Services.GetRequiredService<TelegramGroupsAdmin.ContentDetection.ML.MLTextClassifierService>();
+app.Logger.LogInformation("Training ML spam classifier model with latest data...");
+await mlClassifier.TrainModelAsync();
+var metadata = mlClassifier.GetMetadata();
+app.Logger.LogInformation(
+    "ML classifier trained: {SpamSamples} spam + {HamSamples} ham samples (ratio: {SpamRatio:P1}, balanced: {Balanced})",
+    metadata?.SpamSampleCount,
+    metadata?.HamSampleCount,
+    metadata?.SpamRatio,
+    metadata?.IsBalanced);
 
 // Note: Default background job configurations are ensured by QuartzSchedulingSyncService on startup
 

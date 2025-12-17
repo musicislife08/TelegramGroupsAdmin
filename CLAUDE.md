@@ -350,6 +350,12 @@ When `SEQ_URL` is configured, the application automatically enables:
 
 **E2E Tests**: Playwright + Testcontainers.PostgreSQL for browser-based UI testing. Uses .NET 10's `WebApplicationFactory.UseKestrel()` for real HTTP server. See [E2E_TESTING.md](E2E_TESTING.md) for full documentation.
 
+**Test Execution Best Practices**:
+- **ALWAYS run test commands without pipes initially** - pipes hide failures and require re-running to see errors
+- ❌ Bad: `dotnet test --no-build | tail -20` (hides failures, requires second run to see errors)
+- ✅ Good: `dotnet test --no-build` (see all output immediately, diagnose failures on first run)
+- Only add pipes (`| tail`, `| grep`, etc.) when you need to filter known-passing output for readability
+
 ## CRITICAL RULES
 
 ### Application Runtime

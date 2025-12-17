@@ -88,8 +88,18 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IThresholdRecommendationService, ThresholdRecommendationService>();
             services.AddScoped<IStopWordRecommendationService, StopWordRecommendationService>(); // ML-6: Stop word recommendations
 
+            // Register ML.NET text classifier (Singleton: thread-safe model loading/retraining)
+            services.AddSingleton<MLTextClassifierService>();
+
             // Register stop words repository
             services.AddScoped<IStopWordsRepository, StopWordsRepository>();
+
+            // Register training labels repository (Phase 1: ML.NET training labels)
+            services.AddScoped<ITrainingLabelsRepository, TrainingLabelsRepository>();
+
+            // Register ML training data repository (aggregates training data from multiple tables)
+            // Singleton: Safe because it uses IDbContextFactory (factory pattern), required because MLTextClassifierService is Singleton
+            services.AddSingleton<IMLTrainingDataRepository, MLTrainingDataRepository>();
 
             // Register V2 spam detection engine (SpamAssassin-style additive scoring)
             // Fixes critical bug where abstentions voted "Clean" and cancelled spam signals

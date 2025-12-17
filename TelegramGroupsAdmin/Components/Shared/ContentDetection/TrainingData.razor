@@ -9,30 +9,7 @@
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <MudStack Spacing="4">
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-            @if (_stats != null)
-            {
-                <MudStack Row="true" Spacing="3">
-                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Icon="@Icons.Material.Filled.Dataset">
-                        @_stats.TotalSamples total
-                    </MudChip>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">
-                        @_stats.SpamSamples spam
-                    </MudChip>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Check">
-                        @_stats.HamSamples ham
-                    </MudChip>
-                    <MudChip T="string" Size="Size.Small" Color="@(_stats.SpamPercentage > 60 ? Color.Warning : Color.Info)" Icon="@Icons.Material.Filled.Percent">
-                        @_stats.SpamPercentage.ToString("F1")% spam ratio
-                    </MudChip>
-                    @if (_conflictedMessageIds.Count > 0)
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">
-                            @_conflictedMessageIds.Count conflicts
-                        </MudChip>
-                    }
-                </MudStack>
-            }
+        <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center">
             <MudButton Variant="Variant.Filled"
                       Color="Color.Primary"
                       StartIcon="@Icons.Material.Filled.Add"
@@ -40,6 +17,9 @@
                 Add Training Sample
             </MudButton>
         </MudStack>
+
+        <!-- Training Data Balance Status -->
+        <TrainingDataBalanceStatus Elevation="2" ShowRefreshButton="false" />
 
         @if (_loading)
         {

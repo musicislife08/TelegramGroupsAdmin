@@ -5,6 +5,9 @@
 @using static TelegramGroupsAdmin.Components.Shared.MessageFilters
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.ContentDetection.Repositories
+@using TelegramGroupsAdmin.Core.BackgroundJobs
+@using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Core.Services
 @using TelegramGroupsAdmin.Core.Utilities
 @inject IMessageHistoryRepository MessageRepository
 @inject IMessageQueryService MessageQueryService
@@ -16,6 +19,8 @@
 @inject IMessageHistoryService MessageHistoryService
 @inject BlazorAuthHelper AuthHelper
 @inject IDetectionResultsRepository DetectionResultsRepository
+@inject ITrainingLabelsRepository TrainingLabelsRepository
+@inject IJobTriggerService JobTriggerService
 @inject ModerationOrchestrator ModerationService
 @inject ITelegramUserMappingRepository TelegramMappingRepository
 @inject NavigationManager NavigationManager
@@ -915,33 +920,7 @@
 
             if (result.Success)
             {
-                // Refresh detection history for this message in the wrapper
-                var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
-                var messageWrapper = _allMessages.FirstOrDefault(m => m.Message.MessageId == message.MessageId);
-                if (messageWrapper != null)
-                {
-                    messageWrapper.DetectionResults.Clear();
-                    messageWrapper.DetectionResults.AddRange(history);
-                }
-
-                // Refresh spam check display
-                if (history.Any())
-                {
-                    var latest = history.OrderByDescending(h => h.DetectedAt).First();
-                    _contentChecks[message.MessageId] = new ContentCheckRecord(
-                        Id: latest.Id,
-                        CheckTimestamp: latest.DetectedAt,
-                        UserId: message.UserId,
-                        ContentHash: null,
-                        IsSpam: latest.IsSpam,
-                        Confidence: Math.Abs(latest.NetConfidence), // Use absolute net_confidence for display
-                        Reason: latest.Reason,
-                        CheckType: latest.DetectionMethod,
-                        MatchedMessageId: null
-                    );
-                }
-
-                StateHasChanged();
+                await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.UserId);
 
                 Logger.LogInformation(
                     "Message {MessageId} marked as spam: user banned from {ChatsAffected} chats, message deleted: {MessageDeleted}",
@@ -984,6 +963,7 @@
                 ? "Manually marked as ham (not spam) by admin - false positive correction"
                 : "Manually added as ham training sample by admin";
 
+            // 1. Create detection result for history (NOT for training)
             var detectionResult = new DetectionResultRecord
             {
                 MessageId = message.MessageId,
@@ -995,13 +975,26 @@
                 Reason = reason,
                 AddedBy = executor,
                 UserId = message.UserId,
-                UsedForTraining = true, // Manual decisions are always training-worthy
+                UsedForTraining = false, // History only - training handled by training_labels
                 NetConfidence = -100, // Strong ham signal (manual admin decision)
                 CheckResultsJson = null,
                 EditVersion = 0
             };
 
-            await DetectionResultsRepository.InsertWithTrainingInvalidationAsync(message.MessageId, detectionResult);
+            await DetectionResultsRepository.InsertAsync(detectionResult);
+
+            // 2. Create explicit training label for ML
+            await TrainingLabelsRepository.UpsertLabelAsync(
+                message.MessageId,
+                label: TrainingLabel.Ham,
+                labeledByUserId: executor.GetTelegramUserId(),
+                reason: reason,
+                auditLogId: null);
+
+            // 3. Trigger ML text classifier retraining
+            await JobTriggerService.TriggerNowAsync(
+                BackgroundJobNames.TextClassifierRetraining,
+                payload: new { });
 
             // 2. Only unban and restore trust if this was previously marked as spam (false positive correction)
             if (wasPreviouslySpam)
@@ -1030,33 +1023,7 @@
                     message.MessageId);
             }
 
-            // Refresh detection history for this message in the wrapper
-            var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
-            var messageWrapper = _allMessages.FirstOrDefault(m => m.Message.MessageId == message.MessageId);
-            if (messageWrapper != null)
-            {
-                messageWrapper.DetectionResults.Clear();
-                messageWrapper.DetectionResults.AddRange(history);
-            }
-
-            // Refresh spam check display
-            if (history.Any())
-            {
-                var latest = history.OrderByDescending(h => h.DetectedAt).First();
-                _contentChecks[message.MessageId] = new ContentCheckRecord(
-                    Id: latest.Id,
-                    CheckTimestamp: latest.DetectedAt,
-                    UserId: message.UserId,
-                    ContentHash: null,
-                    IsSpam: latest.IsSpam,
-                    Confidence: Math.Abs(latest.NetConfidence), // Use absolute net_confidence for display
-                    Reason: latest.Reason,
-                    CheckType: latest.DetectionMethod,
-                    MatchedMessageId: null
-                );
-            }
-
-            StateHasChanged();
+            await RefreshDetectionHistoryDisplayAsync(message.MessageId, message.UserId);
         }
         catch (Exception ex)
         {
@@ -1064,14 +1031,54 @@
         }
     }
 
+    /// <summary>
+    /// Refreshes detection history display for a message after spam/ham labeling.
+    /// Updates both the message wrapper's cached history and the content checks dictionary.
+    /// </summary>
+    private async Task RefreshDetectionHistoryDisplayAsync(long messageId, long userId)
+    {
+        // Refresh detection history for this message in the wrapper
+        var history = await DetectionResultsRepository.GetByMessageIdAsync(messageId);
+        var messageWrapper = _allMessages.FirstOrDefault(m => m.Message.MessageId == messageId);
+        if (messageWrapper != null)
+        {
+            messageWrapper.DetectionResults.Clear();
+            messageWrapper.DetectionResults.AddRange(history);
+        }
+
+        // Refresh spam check display
+        if (history.Any())
+        {
+            var latest = history.OrderByDescending(h => h.DetectedAt).First();
+            _contentChecks[messageId] = new ContentCheckRecord(
+                Id: latest.Id,
+                CheckTimestamp: latest.DetectedAt,
+                UserId: userId,
+                ContentHash: null,
+                IsSpam: latest.IsSpam,
+                Confidence: Math.Abs(latest.NetConfidence), // Use absolute net_confidence for display
+                Reason: latest.Reason,
+                CheckType: latest.DetectionMethod,
+                MatchedMessageId: null
+            );
+        }
+
+        StateHasChanged();
+    }
+
     private async Task HandleViewDetections(MessageRecord message)
     {
-        var history = await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
+        // Use detection history from wrapper if available (avoids duplicate database query)
+        var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.MessageId == message.MessageId);
+        var history = messageWrapper?.DetectionResults ?? await DetectionResultsRepository.GetByMessageIdAsync(message.MessageId);
+
+        var trainingLabel = await TrainingLabelsRepository.GetByMessageIdAsync(message.MessageId);
 
         var parameters = new DialogParameters<DetectionHistoryDialog>
         {
             { x => x.Message, message },
-            { x => x.DetectionResults, history }
+            { x => x.DetectionResults, history },
+            { x => x.TrainingLabel, trainingLabel }
         };
 
         var options = new DialogOptions

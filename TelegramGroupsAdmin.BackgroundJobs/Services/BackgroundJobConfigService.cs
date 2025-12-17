@@ -308,6 +308,15 @@ public class BackgroundJobConfigService : IBackgroundJobConfigService
                 Enabled = true,
                 Schedule = "every 30 minutes", // Every 30 minutes (natural language)
                 Settings = new Dictionary<string, object>()
+            },
+            [BackgroundJobNames.TextClassifierRetraining] = new BackgroundJobConfig
+            {
+                JobName = BackgroundJobNames.TextClassifierRetraining,
+                DisplayName = "ML Text Classifier Retraining",
+                Description = "Retrain ML.NET SDCA spam classifier with latest training data",
+                Enabled = true,
+                Schedule = "every 8 hours", // Every 8 hours (natural language)
+                Settings = new Dictionary<string, object>()
             }
         };
     }
