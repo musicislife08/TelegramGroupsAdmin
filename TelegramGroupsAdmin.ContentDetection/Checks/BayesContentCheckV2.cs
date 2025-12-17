@@ -21,9 +21,6 @@ public class BayesContentCheckV2(
     IMLTrainingDataRepository trainingDataRepository,
     ITokenizerService tokenizerService) : IContentCheckV2
 {
-    // Training data quality threshold
-    private const int MinimumSamplesPerClass = 20;  // Minimum spam AND ham samples for meaningful training
-
     // SpamAssassin-style scoring (from research)
     private const double ScoreBayes99 = 5.0;   // 99%+ probability
     private const double ScoreBayes95 = 3.5;   // 95-99% probability
@@ -185,11 +182,11 @@ public class BayesContentCheckV2(
             var spamSamples = await trainingDataRepository.GetSpamSamplesAsync(labeledMessageIds, cancellationToken);
             var hamSamples = await trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, labeledMessageIds, cancellationToken);
 
-            if (spamSamples.Count < MinimumSamplesPerClass || hamSamples.Count < MinimumSamplesPerClass)
+            if (spamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass || hamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass)
             {
                 logger.LogWarning(
                     "Insufficient training data for Bayes (spam: {Spam}, ham: {Ham}, minimum: {Min})",
-                    spamSamples.Count, hamSamples.Count, MinimumSamplesPerClass);
+                    spamSamples.Count, hamSamples.Count, SpamClassifierMetadata.MinimumSamplesPerClass);
                 return;  // _classifier stays null → abstains on all checks
             }
 

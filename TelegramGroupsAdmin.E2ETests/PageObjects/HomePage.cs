@@ -201,7 +201,7 @@ public class HomePage
 
     /// <summary>
     /// Clicks the Pending Reports card to navigate to /reports.
-    /// Note: Only navigates when pending reports count > 0.
+    /// Always navigates regardless of pending count.
     /// </summary>
     public async Task ClickPendingReportsCardAsync()
     {

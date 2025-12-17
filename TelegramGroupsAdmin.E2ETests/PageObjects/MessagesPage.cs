@@ -263,6 +263,11 @@ public class MessagesPage
     }
 
     /// <summary>
+    /// Gets a locator for message bubbles (for use with Expect assertions).
+    /// </summary>
+    public ILocator MessageBubbles => _page.Locator(MessageBubble);
+
+    /// <summary>
     /// Checks if the "no messages" empty state is visible (within messages container).
     /// </summary>
     public async Task<bool> IsNoMessagesStateVisibleAsync()
@@ -278,6 +283,12 @@ public class MessagesPage
     #region User Detail Dialog Methods
 
     /// <summary>
+    /// Gets a locator for the dialog using semantic ARIA role.
+    /// More resilient to UI framework changes than CSS class selectors.
+    /// </summary>
+    private ILocator DialogLocator => _page.GetByRole(AriaRole.Dialog);
+
+    /// <summary>
     /// Clicks on a username in a message bubble to open the user detail dialog.
     /// </summary>
     public async Task ClickUsernameInMessageAsync()
@@ -291,7 +302,7 @@ public class MessagesPage
     /// </summary>
     public async Task<bool> IsUserDetailDialogVisibleAsync()
     {
-        return await _page.Locator(".mud-dialog").IsVisibleAsync();
+        return await DialogLocator.IsVisibleAsync();
     }
 
     /// <summary>
@@ -299,7 +310,7 @@ public class MessagesPage
     /// </summary>
     public async Task WaitForUserDetailDialogAsync(int timeoutMs = 5000)
     {
-        await _page.Locator(".mud-dialog").WaitForAsync(new LocatorWaitForOptions
+        await DialogLocator.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Visible,
             Timeout = timeoutMs
@@ -311,7 +322,8 @@ public class MessagesPage
     /// </summary>
     public async Task<string?> GetUserDetailDialogTitleAsync()
     {
-        return await _page.Locator(".mud-dialog-title").TextContentAsync();
+        // Title is within the dialog - scope the search
+        return await DialogLocator.Locator(".mud-dialog-title").TextContentAsync();
     }
 
     /// <summary>
@@ -319,7 +331,8 @@ public class MessagesPage
     /// </summary>
     public async Task<string?> GetUserDetailDialogContentAsync()
     {
-        return await _page.Locator(".mud-dialog-content").TextContentAsync();
+        // Content is within the dialog - scope the search
+        return await DialogLocator.Locator(".mud-dialog-content").TextContentAsync();
     }
 
     /// <summary>
@@ -335,7 +348,9 @@ public class MessagesPage
     /// </summary>
     public async Task CloseUserDetailDialogByButtonAsync()
     {
-        await _page.Locator(".mud-dialog-close-button").ClickAsync();
+        // Use GetByLabel to target the icon button with aria-label="Close"
+        // (avoids ambiguity with any button that has "Close" text)
+        await DialogLocator.GetByLabel("Close").ClickAsync();
     }
 
     /// <summary>
@@ -343,7 +358,7 @@ public class MessagesPage
     /// </summary>
     public async Task WaitForUserDetailDialogHiddenAsync(int timeoutMs = 5000)
     {
-        await _page.Locator(".mud-dialog").WaitForAsync(new LocatorWaitForOptions
+        await DialogLocator.WaitForAsync(new LocatorWaitForOptions
         {
             State = WaitForSelectorState.Hidden,
             Timeout = timeoutMs

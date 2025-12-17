@@ -319,8 +319,9 @@ public class TrainingDataBalanceStatusTests : TrainingDataBalanceStatusTestConte
         // Arrange & Act
         var cut = Render<TrainingDataBalanceStatus>();
 
-        // Assert - Default elevation is 1
+        // Assert - Default elevation is 1, MudBlazor renders as mud-elevation-1
         Assert.That(cut.Markup, Does.Contain("mud-paper"));
+        Assert.That(cut.Markup, Does.Contain("mud-elevation-1"));
     }
 
     [Test]
@@ -330,8 +331,9 @@ public class TrainingDataBalanceStatusTests : TrainingDataBalanceStatusTestConte
         var cut = Render<TrainingDataBalanceStatus>(p => p
             .Add(x => x.Elevation, 4));
 
-        // Assert - Should render with elevation
+        // Assert - MudBlazor renders elevation as mud-elevation-{N} CSS class
         Assert.That(cut.Markup, Does.Contain("mud-paper"));
+        Assert.That(cut.Markup, Does.Contain("mud-elevation-4"));
     }
 
     #endregion

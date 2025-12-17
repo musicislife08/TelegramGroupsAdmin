@@ -4,6 +4,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.Telegram.Models
 @using TelegramGroupsAdmin.Telegram.Repositories
+@using TelegramGroupsAdmin.Core.Utilities
 @inject IAuthService AuthService
 @inject IMessageStatsService MessageStatsService
 @inject IReportsRepository ReportsRepository
@@ -166,7 +167,7 @@
                                         <strong>@action.ActionType</strong> @action.TargetDisplayName
                                     </MudText>
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        @FormatRelativeTime(action.IssuedAt) by @action.IssuedBy.DisplayName
+                                        @DateTimeUtilities.FormatRelativeTimeCompact(action.IssuedAt) by @action.IssuedBy.DisplayName
                                     </MudText>
                                 </MudStack>
                             </MudListItem>
@@ -310,20 +311,4 @@
         UserActionType.Delete => Color.Error,
         _ => Color.Default
     };
-
-    private static string FormatRelativeTime(DateTimeOffset timestamp)
-    {
-        var diff = DateTimeOffset.UtcNow - timestamp;
-
-        if (diff.TotalMinutes < 1)
-            return "just now";
-        if (diff.TotalMinutes < 60)
-            return $"{(int)diff.TotalMinutes}m ago";
-        if (diff.TotalHours < 24)
-            return $"{(int)diff.TotalHours}h ago";
-        if (diff.TotalDays < 7)
-            return $"{(int)diff.TotalDays}d ago";
-
-        return timestamp.ToString("MMM d");
-    }
 }

@@ -16,7 +16,6 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
 {
     // ML.NET training constants
     private const int MlNetSeed = 42;  // ML.NET random seed for reproducible training results
-    private const int MinimumSamplesPerClass = 20;  // Minimum spam AND ham samples for meaningful training
 
     private readonly IMLTrainingDataRepository _trainingDataRepository;
     private readonly ILogger<MLTextClassifierService> _logger;
@@ -87,11 +86,11 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
             var spamSamples = await _trainingDataRepository.GetSpamSamplesAsync(labeledMessageIds, ct);
             var hamSamples = await _trainingDataRepository.GetHamSamplesAsync(spamSamples.Count, labeledMessageIds, ct);
 
-            if (spamSamples.Count < MinimumSamplesPerClass || hamSamples.Count < MinimumSamplesPerClass)
+            if (spamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass || hamSamples.Count < SpamClassifierMetadata.MinimumSamplesPerClass)
             {
                 _logger.LogWarning(
                     "Insufficient training data (spam: {Spam}, ham: {Ham}, minimum: {Min})",
-                    spamSamples.Count, hamSamples.Count, MinimumSamplesPerClass);
+                    spamSamples.Count, hamSamples.Count, SpamClassifierMetadata.MinimumSamplesPerClass);
                 return;
             }
 

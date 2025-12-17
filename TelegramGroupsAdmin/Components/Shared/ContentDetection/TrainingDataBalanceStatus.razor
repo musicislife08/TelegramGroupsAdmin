@@ -2,6 +2,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Repositories
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.Core.Models
+@using TelegramGroupsAdmin.Core.Utilities
 @inject IMLTrainingDataRepository MLTrainingDataRepository
 @inject IMLTextClassifierService MLTextClassifierService
 @inject ILogger<TrainingDataBalanceStatus> Logger
@@ -30,7 +31,7 @@
             {
                 <MudStack Spacing="1">
                     <MudText Typo="Typo.subtitle2" Color="Color.Secondary">
-                        Current Model (trained @FormatRelativeTime(_currentModelMetadata.TrainedAt))
+                        Current Model (trained @DateTimeUtilities.FormatRelativeTimeVerbose(_currentModelMetadata.TrainedAt))
                     </MudText>
                     <div style="display: flex; height: 20px; width: 100%; border-radius: 4px; overflow: hidden;">
                         <div style="width: @GetCurrentSpamPercentage()%; background: #d32f2f;"></div>
@@ -76,11 +77,11 @@
                 {
                     <div style="width: @(GetExplicitSpamPercentage())%; background: #d32f2f; position: relative;">
                         <!-- Spam minimum marker (only show if total spam below minimum) -->
-                        @if (_balanceStats.SpamCount < MinSamplesPerClass && _balanceStats.ImplicitSpamCount == 0)
+                        @if (_balanceStats.SpamCount < SpamClassifierMetadata.MinimumSamplesPerClass && _balanceStats.ImplicitSpamCount == 0)
                         {
                             <div style="position: absolute; right: 0; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.8); z-index: 2;"></div>
                             <MudText Typo="Typo.caption" Style="position: absolute; right: 4px; top: 2px; color: white; font-weight: bold; font-size: 10px; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 2px;">
-                                @MinSamplesPerClass min
+                                @SpamClassifierMetadata.MinimumSamplesPerClass min
                             </MudText>
                         }
                     </div>
@@ -91,11 +92,11 @@
                 {
                     <div style="width: @(GetImplicitSpamPercentage())%; background: #ef9a9a; position: relative;">
                         <!-- Spam minimum marker (only show if total spam below minimum) -->
-                        @if (_balanceStats.SpamCount < MinSamplesPerClass)
+                        @if (_balanceStats.SpamCount < SpamClassifierMetadata.MinimumSamplesPerClass)
                         {
                             <div style="position: absolute; right: 0; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.8); z-index: 2;"></div>
                             <MudText Typo="Typo.caption" Style="position: absolute; right: 4px; top: 2px; color: white; font-weight: bold; font-size: 10px; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 2px;">
-                                @MinSamplesPerClass min
+                                @SpamClassifierMetadata.MinimumSamplesPerClass min
                             </MudText>
                         }
                     </div>
@@ -106,11 +107,11 @@
                 {
                     <div style="width: @(GetExplicitHamPercentage())%; background: var(--mud-palette-info); position: relative;">
                         <!-- Ham minimum marker (only show if total ham below minimum) -->
-                        @if (_balanceStats.TotalHamCount < MinSamplesPerClass && _balanceStats.ImplicitHamCount == 0)
+                        @if (_balanceStats.TotalHamCount < SpamClassifierMetadata.MinimumSamplesPerClass && _balanceStats.ImplicitHamCount == 0)
                         {
                             <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.8); z-index: 2;"></div>
                             <MudText Typo="Typo.caption" Style="position: absolute; left: 4px; top: 2px; color: white; font-weight: bold; font-size: 10px; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 2px;">
-                                @MinSamplesPerClass min
+                                @SpamClassifierMetadata.MinimumSamplesPerClass min
                             </MudText>
                         }
                     </div>
@@ -121,11 +122,11 @@
                 {
                     <div style="width: @(GetImplicitHamPercentage())%; background: var(--mud-palette-success); position: relative;">
                         <!-- Ham minimum marker (only show if total ham below minimum) -->
-                        @if (_balanceStats.TotalHamCount < MinSamplesPerClass)
+                        @if (_balanceStats.TotalHamCount < SpamClassifierMetadata.MinimumSamplesPerClass)
                         {
                             <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.8); z-index: 2;"></div>
                             <MudText Typo="Typo.caption" Style="position: absolute; left: 4px; top: 2px; color: white; font-weight: bold; font-size: 10px; background: rgba(0,0,0,0.5); padding: 1px 4px; border-radius: 2px;">
-                                @MinSamplesPerClass min
+                                @SpamClassifierMetadata.MinimumSamplesPerClass min
                             </MudText>
                         }
                     </div>
@@ -153,7 +154,6 @@
     [Parameter] public bool ShowRefreshButton { get; set; } = false;
     [Parameter] public EventCallback OnRefresh { get; set; }
 
-    private const int MinSamplesPerClass = 20;
     private TrainingBalanceStats? _balanceStats;
     private SpamClassifierMetadata? _currentModelMetadata;
     private bool _loading = true;
@@ -209,32 +209,11 @@
 
     private static string FormatDelta(int delta) => delta >= 0 ? $"+{delta}" : delta.ToString();
 
-    private static string FormatRelativeTime(DateTimeOffset dateTime)
-    {
-        var span = DateTimeOffset.UtcNow - dateTime;
-
-        return span switch
-        {
-            { TotalMinutes: < 1 } => "just now",
-            { TotalMinutes: < 60 } => $"{(int)span.TotalMinutes} minute{((int)span.TotalMinutes == 1 ? "" : "s")} ago",
-            { TotalHours: < 24 } => $"{(int)span.TotalHours} hour{((int)span.TotalHours == 1 ? "" : "s")} ago",
-            { TotalDays: < 7 } => $"{(int)span.TotalDays} day{((int)span.TotalDays == 1 ? "" : "s")} ago",
-            { TotalDays: < 30 } => $"{(int)(span.TotalDays / 7)} week{((int)(span.TotalDays / 7) == 1 ? "" : "s")} ago",
-            _ => dateTime.ToString("MMM d, yyyy")
-        };
-    }
-
     private bool IsBalanced()
     {
         if (_balanceStats == null) return false;
         return _balanceStats.SpamRatio >= SpamClassifierMetadata.MinBalancedSpamRatio &&
                _balanceStats.SpamRatio <= SpamClassifierMetadata.MaxBalancedSpamRatio;
-    }
-
-    private Color GetRatioColor()
-    {
-        if (_balanceStats == null) return Color.Default;
-        return IsBalanced() ? Color.Success : Color.Warning;
     }
 
     private double GetExplicitSpamPercentage()
@@ -265,8 +244,8 @@
     {
         if (_balanceStats == null) return "Loading...";
 
-        var spamNeeded = Math.Max(0, MinSamplesPerClass - _balanceStats.SpamCount);
-        var hamNeeded = Math.Max(0, MinSamplesPerClass - _balanceStats.TotalHamCount);
+        var spamNeeded = Math.Max(0, SpamClassifierMetadata.MinimumSamplesPerClass - _balanceStats.SpamCount);
+        var hamNeeded = Math.Max(0, SpamClassifierMetadata.MinimumSamplesPerClass - _balanceStats.TotalHamCount);
 
         if (spamNeeded > 0 && hamNeeded > 0)
         {
@@ -294,8 +273,8 @@
     {
         if (_balanceStats == null) return Color.Default;
 
-        var spamNeeded = Math.Max(0, MinSamplesPerClass - _balanceStats.SpamCount);
-        var hamNeeded = Math.Max(0, MinSamplesPerClass - _balanceStats.TotalHamCount);
+        var spamNeeded = Math.Max(0, SpamClassifierMetadata.MinimumSamplesPerClass - _balanceStats.SpamCount);
+        var hamNeeded = Math.Max(0, SpamClassifierMetadata.MinimumSamplesPerClass - _balanceStats.TotalHamCount);
 
         if (spamNeeded > 0 || hamNeeded > 0)
         {

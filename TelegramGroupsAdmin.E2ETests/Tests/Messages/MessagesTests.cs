@@ -283,10 +283,9 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.WaitForLoadAsync();
         await _messagesPage.SelectChatByNameAsync("Active Chat");
 
-        // Wait for MudVirtualize to render messages (may need more time)
-        await Page.WaitForTimeoutAsync(1500);
+        // Assert - wait for messages to appear using Playwright's auto-retry assertions
+        await Expect(_messagesPage.MessageBubbles.First).ToBeVisibleAsync();
 
-        // Assert - messages are displayed (using virtualization, may not all be visible)
         var messageCount = await _messagesPage.GetMessageCountAsync();
         Assert.That(messageCount, Is.GreaterThan(0),
             "Should display messages for chat with messages");
@@ -428,7 +427,7 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.NavigateAsync();
         await _messagesPage.WaitForLoadAsync();
         await _messagesPage.SelectChatByNameAsync("Test Chat");
-        await Page.WaitForTimeoutAsync(1500); // Wait for messages to load
+        await Expect(_messagesPage.MessageBubbles.First).ToBeVisibleAsync();
 
         await _messagesPage.ClickUsernameInMessageAsync();
         await _messagesPage.WaitForUserDetailDialogAsync();
@@ -462,7 +461,7 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.NavigateAsync();
         await _messagesPage.WaitForLoadAsync();
         await _messagesPage.SelectChatByNameAsync("Dialog User Test");
-        await Page.WaitForTimeoutAsync(1500);
+        await Expect(_messagesPage.MessageBubbles.First).ToBeVisibleAsync();
 
         await _messagesPage.ClickUsernameInMessageAsync();
         await _messagesPage.WaitForUserDetailDialogAsync();
@@ -493,7 +492,7 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.NavigateAsync();
         await _messagesPage.WaitForLoadAsync();
         await _messagesPage.SelectChatByNameAsync("Escape Test Chat");
-        await Page.WaitForTimeoutAsync(1500);
+        await Expect(_messagesPage.MessageBubbles.First).ToBeVisibleAsync();
 
         await _messagesPage.ClickUsernameInMessageAsync();
         await _messagesPage.WaitForUserDetailDialogAsync();
@@ -529,7 +528,7 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.NavigateAsync();
         await _messagesPage.WaitForLoadAsync();
         await _messagesPage.SelectChatByNameAsync("Close Button Test");
-        await Page.WaitForTimeoutAsync(1500);
+        await Expect(_messagesPage.MessageBubbles.First).ToBeVisibleAsync();
 
         await _messagesPage.ClickUsernameInMessageAsync();
         await _messagesPage.WaitForUserDetailDialogAsync();
