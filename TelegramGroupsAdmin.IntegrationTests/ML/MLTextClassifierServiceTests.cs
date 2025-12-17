@@ -171,7 +171,7 @@ public class MLTextClassifierServiceTests
         services.AddContentDetection();
 
         var serviceProvider = services.BuildServiceProvider();
-        var newService = serviceProvider.GetRequiredService<MLTextClassifierService>();
+        var newService = serviceProvider.GetRequiredService<IMLTextClassifierService>();
 
         // Act - Load model in new instance
         var loaded = await newService.LoadModelAsync();
@@ -296,7 +296,7 @@ public class MLTextClassifierServiceTests
         services.AddContentDetection();
 
         var serviceProvider = services.BuildServiceProvider();
-        var newService = serviceProvider.GetRequiredService<MLTextClassifierService>();
+        var newService = serviceProvider.GetRequiredService<IMLTextClassifierService>();
 
         // Act
         var loaded = await newService.LoadModelAsync();
@@ -346,7 +346,7 @@ public class MLTextClassifierServiceTests
         services.AddContentDetection();
 
         var serviceProvider = services.BuildServiceProvider();
-        var newService = serviceProvider.GetRequiredService<MLTextClassifierService>();
+        var newService = serviceProvider.GetRequiredService<IMLTextClassifierService>();
 
         // Act
         var loaded = await newService.LoadModelAsync();
@@ -374,7 +374,7 @@ public class MLTextClassifierServiceTests
         services.AddContentDetection();
 
         var serviceProvider = services.BuildServiceProvider();
-        var uninitializedService = serviceProvider.GetRequiredService<MLTextClassifierService>();
+        var uninitializedService = serviceProvider.GetRequiredService<IMLTextClassifierService>();
 
         // Act - Try to predict without loading model
         var prediction = uninitializedService.Predict("test message");

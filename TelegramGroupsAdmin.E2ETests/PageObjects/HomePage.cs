@@ -237,18 +237,20 @@ public class HomePage
 
     /// <summary>
     /// Checks if the "Review Reports" button is visible.
+    /// Button text includes count: "Review Reports (N)"
     /// </summary>
     public async Task<bool> IsReviewReportsButtonVisibleAsync()
     {
-        return await _page.GetByRole(AriaRole.Link, new() { Name = "Review Reports" }).IsVisibleAsync();
+        return await _page.GetByRole(AriaRole.Link, new() { NameRegex = new System.Text.RegularExpressions.Regex("^Review Reports") }).IsVisibleAsync();
     }
 
     /// <summary>
     /// Clicks the "Review Reports" button.
+    /// Button text includes count: "Review Reports (N)"
     /// </summary>
     public async Task ClickReviewReportsAsync()
     {
-        await _page.GetByRole(AriaRole.Link, new() { Name = "Review Reports" }).ClickAsync();
+        await _page.GetByRole(AriaRole.Link, new() { NameRegex = new System.Text.RegularExpressions.Regex("^Review Reports") }).ClickAsync();
     }
 
     #endregion

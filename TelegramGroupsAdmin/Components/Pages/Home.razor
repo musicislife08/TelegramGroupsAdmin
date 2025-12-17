@@ -193,6 +193,8 @@
 </MudContainer>
 
 @code {
+    private const int MaxRecentActivityItems = 10;
+
     private HistoryStats? _stats;
     private DetectionStats? _detectionStats;
     private List<UserActionRecord>? _recentActions;
@@ -226,7 +228,7 @@
             var statsTask = MessageStatsService.GetStatsAsync();
             var detectionStatsTask = MessageStatsService.GetDetectionStatsAsync();
             var pendingReportsTask = ReportsRepository.GetPendingCountAsync();
-            var recentActionsTask = UserActionsRepository.GetRecentAsync(10);
+            var recentActionsTask = UserActionsRepository.GetRecentAsync(MaxRecentActivityItems);
             var recommendationsTask = ThresholdRecommendationsRepository.GetPendingCountAsync();
             var trustedUsersTask = TelegramUserRepository.GetTrustedUsersAsync();
             var bannedUsersTask = TelegramUserRepository.GetBannedUsersAsync();

@@ -65,6 +65,10 @@ public class TrainingDataBalanceStatusTests : TrainingDataBalanceStatusTestConte
     public void Setup()
     {
         MLTrainingDataRepository.ClearReceivedCalls();
+        // Reset default mock behavior (may be overridden by individual tests)
+        MLTrainingDataRepository.GetTrainingBalanceStatsAsync(Arg.Any<CancellationToken>())
+            .Returns(new TrainingBalanceStats());
+        MLTextClassifierService.GetMetadata().Returns((SpamClassifierMetadata?)null);
     }
 
     #region Structure Tests
@@ -307,6 +311,41 @@ public class TrainingDataBalanceStatusTests : TrainingDataBalanceStatusTestConte
 
         // Assert
         Assert.That(refreshCalled, Is.True);
+    }
+
+    #endregion
+
+    #region Error Handling Tests
+
+    [Test]
+    public void HandlesRepositoryException_Gracefully()
+    {
+        // Arrange - Repository throws exception
+        MLTrainingDataRepository.GetTrainingBalanceStatsAsync(Arg.Any<CancellationToken>())
+            .Returns<TrainingBalanceStats>(x => throw new InvalidOperationException("Database connection failed"));
+
+        // Act - Should not throw
+        var cut = Render<TrainingDataBalanceStatus>();
+
+        // Assert - Component renders (error is logged, not thrown)
+        Assert.That(cut.Markup, Is.Not.Empty);
+        // Should show loading or empty state, not crash
+        Assert.That(cut.Markup, Does.Contain("mud-paper"));
+    }
+
+    [Test]
+    public void HandlesNullBalanceStats_Gracefully()
+    {
+        // Arrange - Repository returns null (edge case)
+        MLTrainingDataRepository.GetTrainingBalanceStatsAsync(Arg.Any<CancellationToken>())!
+            .Returns((TrainingBalanceStats?)null);
+
+        // Act - Should not throw
+        var cut = Render<TrainingDataBalanceStatus>();
+
+        // Assert - Component renders without crashing
+        Assert.That(cut.Markup, Is.Not.Empty);
+        Assert.That(cut.Markup, Does.Contain("mud-paper"));
     }
 
     #endregion
