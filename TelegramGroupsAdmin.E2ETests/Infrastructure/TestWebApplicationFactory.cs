@@ -216,14 +216,29 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         Directory.CreateDirectory(_tempDataPath);
 
         // Create the test database on the shared PostgreSQL container
-        using var connection = new NpgsqlConnection(E2EFixture.BaseConnectionString);
-        connection.Open();
+        // Retry with exponential backoff for transient container startup delays
+        // (Testcontainers reports "healthy" before connection pool is fully ready)
+        const int maxRetries = 3;
+        for (var attempt = 0; attempt < maxRetries; attempt++)
+        {
+            try
+            {
+                using var connection = new NpgsqlConnection(E2EFixture.BaseConnectionString);
+                connection.Open();
 
-        using var cmd = connection.CreateCommand();
-        cmd.CommandText = $"CREATE DATABASE \"{_databaseName}\"";
-        cmd.ExecuteNonQuery();
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = $"CREATE DATABASE \"{_databaseName}\"";
+                cmd.ExecuteNonQuery();
 
-        _databaseCreated = true;
+                _databaseCreated = true;
+                return;
+            }
+            catch (NpgsqlException) when (attempt < maxRetries - 1)
+            {
+                // Exponential backoff: 1s, 2s, 4s
+                Thread.Sleep(TimeSpan.FromSeconds(Math.Pow(2, attempt)));
+            }
+        }
     }
 
     private static string BuildConnectionString(string databaseName)
