@@ -638,9 +638,11 @@ public class DetectionActionService(
                     message.From?.Id);
 
                 // Build message text preview (truncate if >200 chars for caption limit)
-                var messageTextPreview = message.Text != null && message.Text.Length > 200
-                    ? message.Text[..197] + "..."
-                    : message.Text ?? "[No text]";
+                // Note: Photos/videos use .Caption, plain messages use .Text
+                var messageContent = message.Text ?? message.Caption;
+                var messageTextPreview = messageContent != null && messageContent.Length > 200
+                    ? messageContent[..197] + "..."
+                    : messageContent ?? "[No text]";
 
                 // Escape MarkdownV2 special characters
                 messageTextPreview = EscapeMarkdownV2(messageTextPreview);

@@ -259,6 +259,26 @@ public class ModerationOrchestrator
     }
 
     /// <summary>
+    /// Remove trust from user globally.
+    /// </summary>
+    public async Task<ModerationResult> UntrustUserAsync(
+        long userId,
+        Actor executor,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var untrustResult = await _trustHandler.UntrustAsync(userId, executor, reason, cancellationToken);
+
+        if (!untrustResult.Success)
+            return new ModerationResult { Success = false, ErrorMessage = untrustResult.ErrorMessage };
+
+        // Audit successful untrust
+        await _auditHandler.LogUntrustAsync(userId, executor, reason, cancellationToken);
+
+        return new ModerationResult { Success = true };
+    }
+
+    /// <summary>
     /// Unban user globally and optionally restore trust.
     /// </summary>
     public async Task<ModerationResult> UnbanUserAsync(

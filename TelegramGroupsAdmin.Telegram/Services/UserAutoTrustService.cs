@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Core.Models;
-using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -16,7 +15,6 @@ public class UserAutoTrustService
     private readonly IDetectionResultsRepository _detectionResultsRepository;
     private readonly IUserActionsRepository _userActionsRepository;
     private readonly IContentDetectionConfigRepository _contentDetectionConfigRepository;
-    private readonly IAuditLogRepository _auditLogRepository;
     private readonly ITelegramUserRepository _userRepository;
     private readonly ILogger<UserAutoTrustService> _logger;
 
@@ -24,14 +22,12 @@ public class UserAutoTrustService
         IDetectionResultsRepository detectionResultsRepository,
         IUserActionsRepository userActionsRepository,
         IContentDetectionConfigRepository contentDetectionConfigRepository,
-        IAuditLogRepository auditLogRepository,
         ITelegramUserRepository userRepository,
         ILogger<UserAutoTrustService> logger)
     {
         _detectionResultsRepository = detectionResultsRepository;
         _userActionsRepository = userActionsRepository;
         _contentDetectionConfigRepository = contentDetectionConfigRepository;
-        _auditLogRepository = auditLogRepository;
         _userRepository = userRepository;
         _logger = logger;
     }
@@ -128,14 +124,6 @@ public class UserAutoTrustService
                 userId,
                 config.FirstMessagesCount,
                 actionId);
-
-            // Log to audit log (Telegram user as target)
-            await _auditLogRepository.LogEventAsync(
-                Data.Models.AuditEventType.UserAutoWhitelisted,
-                Actor.AutoTrust,  // System actor - shows "SYSTEM" chip in Audit UI
-                Actor.FromTelegramUser(userId), // Telegram user as target
-                value: $"Auto-trusted after {config.FirstMessagesCount} non-spam messages",
-                cancellationToken);
         }
         catch (Exception ex)
         {
