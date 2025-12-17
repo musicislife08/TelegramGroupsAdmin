@@ -45,6 +45,13 @@ public interface IDetectionResultsRepository
     /// </summary>
     Task<List<string>> GetSpamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Get ham (non-spam) samples for similarity check
+    /// Returns only ham messages (is_spam=false)
+    /// Used for deduplicating new ham training samples at insert time
+    /// </summary>
+    Task<List<string>> GetHamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default);
+
     // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead
     // Source of truth is telegram_users.is_trusted column
 

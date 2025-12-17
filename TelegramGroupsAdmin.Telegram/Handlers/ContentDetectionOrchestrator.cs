@@ -22,15 +22,22 @@ public class ContentDetectionOrchestrator
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly DetectionActionService _spamActionService;
+    private readonly TextSimilarityService _similarityService;
     private readonly ILogger<ContentDetectionOrchestrator> _logger;
+
+    // Deduplication constants (matches TrainingDataDeduplicationService)
+    private const double SimilarityThreshold = 0.90;
+    private const int SampleLimit = 500;
 
     public ContentDetectionOrchestrator(
         IServiceProvider serviceProvider,
         DetectionActionService spamActionService,
+        TextSimilarityService similarityService,
         ILogger<ContentDetectionOrchestrator> logger)
     {
         _serviceProvider = serviceProvider;
         _spamActionService = spamActionService;
+        _similarityService = similarityService;
         _logger = logger;
     }
 
@@ -121,6 +128,7 @@ public class ContentDetectionOrchestrator
                     detectionResultsRepo,
                     message,
                     result.SpamResult,
+                    text, // Pass analyzed text for deduplication check
                     editVersion,
                     cancellationToken);
 
@@ -157,15 +165,40 @@ public class ContentDetectionOrchestrator
 
     /// <summary>
     /// Store spam detection result to database for analytics and training.
+    /// Phase 4.23 (#168): Auto-deduplicates training samples at insert time.
     /// </summary>
     private async Task<DetectionResultRecord> StoreDetectionResultAsync(
         IDetectionResultsRepository detectionResultsRepo,
         Message message,
         ContentDetectionResult spamResult,
+        string? analyzedText,
         int editVersion,
         CancellationToken cancellationToken)
     {
         var reasonPrefix = editVersion > 0 ? $"[Edit #{editVersion}] " : "";
+        var isTrainingWorthy = DetectionActionService.DetermineIfTrainingWorthy(spamResult);
+
+        // Phase 4.23 (#168): Auto-deduplicate training samples at insert time
+        // Only check for auto-detected samples that would be used for training
+        // Manual samples (/spam command) bypass deduplication (admin intent)
+        if (isTrainingWorthy && !string.IsNullOrWhiteSpace(analyzedText))
+        {
+            var isDuplicate = await IsDuplicateTrainingSampleAsync(
+                detectionResultsRepo,
+                analyzedText,
+                spamResult.IsSpam,
+                cancellationToken);
+
+            if (isDuplicate)
+            {
+                isTrainingWorthy = false;
+                _logger.LogDebug(
+                    "Skipping training for message {MessageId}: ≥{Threshold:P0} similar to existing {Class} sample",
+                    message.MessageId,
+                    SimilarityThreshold,
+                    spamResult.IsSpam ? "spam" : "ham");
+            }
+        }
 
         var detectionResult = new DetectionResultRecord
         {
@@ -179,7 +212,7 @@ public class ContentDetectionOrchestrator
             Confidence = spamResult.MaxConfidence,
             Reason = $"{reasonPrefix}{spamResult.PrimaryReason}",
             AddedBy = Actor.AutoDetection, // Phase 4.19: Actor system
-            UsedForTraining = DetectionActionService.DetermineIfTrainingWorthy(spamResult),
+            UsedForTraining = isTrainingWorthy,
             NetConfidence = spamResult.NetConfidence,
             CheckResultsJson = CheckResultsSerializer.Serialize(spamResult.CheckResults),
             EditVersion = editVersion
@@ -197,5 +230,32 @@ public class ContentDetectionOrchestrator
             detectionResult.UsedForTraining);
 
         return detectionResult;
+    }
+
+    /// <summary>
+    /// Check if message text is too similar (≥90%) to existing training samples of the same class.
+    /// Returns true if a near-duplicate exists, meaning the sample should not be used for training.
+    /// </summary>
+    private async Task<bool> IsDuplicateTrainingSampleAsync(
+        IDetectionResultsRepository detectionResultsRepo,
+        string messageText,
+        bool isSpam,
+        CancellationToken cancellationToken)
+    {
+        // Get recent same-class samples for comparison
+        var recentSamples = isSpam
+            ? await detectionResultsRepo.GetSpamSamplesForSimilarityAsync(SampleLimit, cancellationToken)
+            : await detectionResultsRepo.GetHamSamplesForSimilarityAsync(SampleLimit, cancellationToken);
+
+        foreach (var sampleText in recentSamples)
+        {
+            var similarity = _similarityService.CalculateSimilarity(messageText, sampleText);
+            if (similarity >= SimilarityThreshold)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -219,6 +219,27 @@ public class DetectionResultsRepository : IDetectionResultsRepository
         return results;
     }
 
+    public async Task<List<string>> GetHamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        // Mirror of GetSpamSamplesForSimilarityAsync but for ham samples
+        var results = await WithMessageJoin(
+                context.DetectionResults.AsNoTracking()
+                    .Where(dr => dr.IsSpam == false && dr.UsedForTraining == true), // Ham samples used for training
+                context)
+            .Where(x => x.Message.MessageText != null && x.Message.MessageText != "")
+            .OrderByDescending(x => x.DetectionResult.DetectedAt)
+            .Take(limit)
+            .Select(x => x.Message.MessageText!)
+            .ToListAsync(cancellationToken);
+
+        _logger.LogDebug(
+            "Retrieved {Count} ham samples for similarity check (used_for_training = true)",
+            results.Count);
+
+        return results;
+    }
+
     // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead
     // Source of truth is telegram_users.is_trusted column
 
