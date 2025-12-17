@@ -247,18 +247,18 @@ public class DashboardTests : AuthenticatedTestBase
     }
 
     [Test]
-    public async Task Dashboard_PendingReportsCard_NotClickable_WhenZeroReports()
+    public async Task Dashboard_PendingReportsCard_NavigatesToReports_WhenClicked()
     {
         // Arrange - fresh database has 0 reports
         await LoginAsOwnerAsync();
         await _homePage.NavigateAsync();
         await _homePage.WaitForLoadAsync();
 
-        // Act - click should not navigate (card not clickable when 0)
+        // Act - click should navigate to reports (always clickable, even when 0)
         await _homePage.ClickPendingReportsCardAsync();
 
-        // Assert - should still be on dashboard
-        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("^[^/]*/$"));
+        // Assert - should navigate to reports page
+        await Expect(Page).ToHaveURLAsync(new System.Text.RegularExpressions.Regex("/reports"));
     }
 
     [Test]

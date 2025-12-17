@@ -8,6 +8,7 @@
 @inject IMessageStatsService MessageStatsService
 @inject IReportsRepository ReportsRepository
 @inject IUserActionsRepository UserActionsRepository
+@inject ITelegramUserRepository TelegramUserRepository
 @inject IThresholdRecommendationsRepository ThresholdRecommendationsRepository
 @inject NavigationManager Navigation
 @inject ILogger<Home> Logger
@@ -93,7 +94,7 @@
                     </MudStack>
                 </MudItem>
                 <MudItem xs="12" sm="6" md="3">
-                    <MudCard Class="@(_pendingReportsCount > 0 ? "cursor-pointer" : "")"
+                    <MudCard Class="cursor-pointer"
                              @onclick="NavigateToReports"
                              Style="@(_pendingReportsCount > 0 ? "border-left: 4px solid var(--mud-palette-warning);" : "")">
                         <MudCardContent Class="pa-2">
@@ -105,12 +106,9 @@
                                     @_pendingReportsCount
                                 </MudText>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">Pending Reports</MudText>
-                                @if (_pendingReportsCount > 0)
-                                {
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-center">
-                                        Click to review
-                                    </MudText>
-                                }
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-center">
+                                    @(_pendingReportsCount > 0 ? "Click to review" : "View all reports")
+                                </MudText>
                             </MudStack>
                         </MudCardContent>
                     </MudCard>
@@ -229,7 +227,8 @@
             var pendingReportsTask = ReportsRepository.GetPendingCountAsync();
             var recentActionsTask = UserActionsRepository.GetRecentAsync(10);
             var recommendationsTask = ThresholdRecommendationsRepository.GetPendingCountAsync();
-            var activeBansTask = UserActionsRepository.GetActiveBansAsync();
+            var trustedUsersTask = TelegramUserRepository.GetTrustedUsersAsync();
+            var bannedUsersTask = TelegramUserRepository.GetBannedUsersAsync();
 
             await Task.WhenAll(
                 statsTask,
@@ -237,7 +236,8 @@
                 pendingReportsTask,
                 recentActionsTask,
                 recommendationsTask,
-                activeBansTask);
+                trustedUsersTask,
+                bannedUsersTask);
 
             _stats = await statsTask;
             _detectionStats = await detectionStatsTask;
@@ -245,11 +245,12 @@
             _recentActions = await recentActionsTask;
             _pendingRecommendationsCount = await recommendationsTask;
 
-            var activeBans = await activeBansTask;
-            _activeBansCount = activeBans.Count;
+            // Get trusted/banned users from telegram_users table (source of truth)
+            var trustedUsers = await trustedUsersTask;
+            _trustedUsersCount = trustedUsers.Count;
 
-            // Count trusted users from recent actions (users with active Trust action)
-            _trustedUsersCount = _recentActions?.Count(a => a.ActionType == UserActionType.Trust && (a.ExpiresAt == null || a.ExpiresAt > DateTimeOffset.UtcNow)) ?? 0;
+            var bannedUsers = await bannedUsersTask;
+            _activeBansCount = bannedUsers.Count;
         }
         catch (Exception ex)
         {
@@ -264,8 +265,7 @@
 
     private void NavigateToReports()
     {
-        if (_pendingReportsCount > 0)
-            Navigation.NavigateTo("/reports");
+        Navigation.NavigateTo("/reports");
     }
 
     private string GetTimeRangeDisplay()
