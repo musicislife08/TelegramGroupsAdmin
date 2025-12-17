@@ -89,7 +89,7 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IStopWordRecommendationService, StopWordRecommendationService>(); // ML-6: Stop word recommendations
 
             // Register ML.NET text classifier (Singleton: thread-safe model loading/retraining)
-            services.AddSingleton<MLTextClassifierService>();
+            services.AddSingleton<IMLTextClassifierService, MLTextClassifierService>();
 
             // Register stop words repository
             services.AddScoped<IStopWordsRepository, StopWordsRepository>();

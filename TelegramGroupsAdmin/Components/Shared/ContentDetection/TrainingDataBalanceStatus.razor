@@ -3,6 +3,7 @@
 @using TelegramGroupsAdmin.ContentDetection.Models
 @using TelegramGroupsAdmin.Core.Models
 @inject IMLTrainingDataRepository MLTrainingDataRepository
+@inject IMLTextClassifierService MLTextClassifierService
 @inject ILogger<TrainingDataBalanceStatus> Logger
 
 <MudPaper Class="pa-4" Elevation="@Elevation">
@@ -23,6 +24,31 @@
                                   OnClick="@HandleRefresh" />
                 }
             </MudStack>
+
+            @* Current Model Section (#174) *@
+            @if (_currentModelMetadata != null)
+            {
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">
+                        Current Model (trained @FormatRelativeTime(_currentModelMetadata.TrainedAt))
+                    </MudText>
+                    <div style="display: flex; height: 20px; width: 100%; border-radius: 4px; overflow: hidden;">
+                        <div style="width: @GetCurrentSpamPercentage()%; background: #d32f2f;"></div>
+                        <div style="width: @GetCurrentHamPercentage()%; background: var(--mud-palette-success);"></div>
+                    </div>
+                    <MudText Typo="Typo.caption" Color="Color.Default">
+                        Spam: @_currentModelMetadata.SpamSampleCount | Ham: @_currentModelMetadata.HamSampleCount
+                    </MudText>
+                </MudStack>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="my-2">
+                    No model trained yet - pending training data shown below
+                </MudAlert>
+            }
+
+            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Pending Training Data</MudText>
 
             <!-- Status Chips -->
             <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
@@ -110,6 +136,14 @@
             <MudText Typo="Typo.body2" Color="@GetStatusColor()" Style="font-weight: 500;">
                 @GetStatusText()
             </MudText>
+
+            @* Delta Display (#174) *@
+            @if (_currentModelMetadata != null)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Delta: @FormatDelta(SpamDelta) spam, @FormatDelta(HamDelta) ham since last training
+                </MudText>
+            }
         </MudStack>
     }
 </MudPaper>
@@ -121,7 +155,12 @@
 
     private const int MinSamplesPerClass = 20;
     private TrainingBalanceStats? _balanceStats;
+    private SpamClassifierMetadata? _currentModelMetadata;
     private bool _loading = true;
+
+    // Delta calculations (#174)
+    private int SpamDelta => (_balanceStats?.SpamCount ?? 0) - (_currentModelMetadata?.SpamSampleCount ?? 0);
+    private int HamDelta => (_balanceStats?.TotalHamCount ?? 0) - (_currentModelMetadata?.HamSampleCount ?? 0);
 
     protected override async Task OnInitializedAsync()
     {
@@ -134,6 +173,7 @@
         try
         {
             _balanceStats = await MLTrainingDataRepository.GetTrainingBalanceStatsAsync();
+            _currentModelMetadata = MLTextClassifierService.GetMetadata();
         }
         catch (Exception ex)
         {
@@ -152,6 +192,36 @@
         {
             await OnRefresh.InvokeAsync();
         }
+    }
+
+    // Current model bar percentages (#174)
+    private double GetCurrentSpamPercentage()
+    {
+        if (_currentModelMetadata == null || _currentModelMetadata.TotalSampleCount == 0) return 0;
+        return ((double)_currentModelMetadata.SpamSampleCount / _currentModelMetadata.TotalSampleCount) * 100;
+    }
+
+    private double GetCurrentHamPercentage()
+    {
+        if (_currentModelMetadata == null || _currentModelMetadata.TotalSampleCount == 0) return 0;
+        return ((double)_currentModelMetadata.HamSampleCount / _currentModelMetadata.TotalSampleCount) * 100;
+    }
+
+    private static string FormatDelta(int delta) => delta >= 0 ? $"+{delta}" : delta.ToString();
+
+    private static string FormatRelativeTime(DateTimeOffset dateTime)
+    {
+        var span = DateTimeOffset.UtcNow - dateTime;
+
+        return span switch
+        {
+            { TotalMinutes: < 1 } => "just now",
+            { TotalMinutes: < 60 } => $"{(int)span.TotalMinutes} minute{((int)span.TotalMinutes == 1 ? "" : "s")} ago",
+            { TotalHours: < 24 } => $"{(int)span.TotalHours} hour{((int)span.TotalHours == 1 ? "" : "s")} ago",
+            { TotalDays: < 7 } => $"{(int)span.TotalDays} day{((int)span.TotalDays == 1 ? "" : "s")} ago",
+            { TotalDays: < 30 } => $"{(int)(span.TotalDays / 7)} week{((int)(span.TotalDays / 7) == 1 ? "" : "s")} ago",
+            _ => dateTime.ToString("MMM d, yyyy")
+        };
     }
 
     private bool IsBalanced()

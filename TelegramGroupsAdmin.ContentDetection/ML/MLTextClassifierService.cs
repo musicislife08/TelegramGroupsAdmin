@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 /// ML.NET SDCA text classifier for spam detection.
 /// Thread-safe Singleton service with immutable container pattern for atomic model swapping.
 /// </summary>
-public class MLTextClassifierService : IDisposable
+public class MLTextClassifierService : IMLTextClassifierService, IDisposable
 {
     // ML.NET training constants
     private const int MlNetSeed = 42;  // ML.NET random seed for reproducible training results

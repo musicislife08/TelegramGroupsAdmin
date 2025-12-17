@@ -274,4 +274,81 @@ public class MessagesPage
     /// Gets the current URL.
     /// </summary>
     public string CurrentUrl => _page.Url;
+
+    #region User Detail Dialog Methods
+
+    /// <summary>
+    /// Clicks on a username in a message bubble to open the user detail dialog.
+    /// </summary>
+    public async Task ClickUsernameInMessageAsync()
+    {
+        var userName = _page.Locator(".tg-user-name").First;
+        await userName.ClickAsync();
+    }
+
+    /// <summary>
+    /// Checks if the user detail dialog is visible.
+    /// </summary>
+    public async Task<bool> IsUserDetailDialogVisibleAsync()
+    {
+        return await _page.Locator(".mud-dialog").IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Waits for the user detail dialog to be visible.
+    /// </summary>
+    public async Task WaitForUserDetailDialogAsync(int timeoutMs = 5000)
+    {
+        await _page.Locator(".mud-dialog").WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = timeoutMs
+        });
+    }
+
+    /// <summary>
+    /// Gets the user detail dialog title text.
+    /// </summary>
+    public async Task<string?> GetUserDetailDialogTitleAsync()
+    {
+        return await _page.Locator(".mud-dialog-title").TextContentAsync();
+    }
+
+    /// <summary>
+    /// Gets the content text of the user detail dialog.
+    /// </summary>
+    public async Task<string?> GetUserDetailDialogContentAsync()
+    {
+        return await _page.Locator(".mud-dialog-content").TextContentAsync();
+    }
+
+    /// <summary>
+    /// Closes the user detail dialog by pressing Escape.
+    /// </summary>
+    public async Task CloseUserDetailDialogByEscapeAsync()
+    {
+        await _page.Keyboard.PressAsync("Escape");
+    }
+
+    /// <summary>
+    /// Closes the user detail dialog by clicking the close button.
+    /// </summary>
+    public async Task CloseUserDetailDialogByButtonAsync()
+    {
+        await _page.Locator(".mud-dialog-close-button").ClickAsync();
+    }
+
+    /// <summary>
+    /// Waits for the user detail dialog to be hidden.
+    /// </summary>
+    public async Task WaitForUserDetailDialogHiddenAsync(int timeoutMs = 5000)
+    {
+        await _page.Locator(".mud-dialog").WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Hidden,
+            Timeout = timeoutMs
+        });
+    }
+
+    #endregion
 }

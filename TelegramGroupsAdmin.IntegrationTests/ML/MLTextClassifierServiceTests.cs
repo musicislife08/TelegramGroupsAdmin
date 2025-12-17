@@ -38,7 +38,7 @@ public class MLTextClassifierServiceTests
 {
     private MigrationTestHelper? _testHelper;
     private IServiceProvider? _serviceProvider;
-    private MLTextClassifierService? _mlService;
+    private IMLTextClassifierService? _mlService;
     private string _tempDataDirectory = null!;
     private AppDbContext? _context;
 
@@ -74,7 +74,7 @@ public class MLTextClassifierServiceTests
         services.AddContentDetection();
 
         _serviceProvider = services.BuildServiceProvider();
-        _mlService = _serviceProvider.GetRequiredService<MLTextClassifierService>();
+        _mlService = _serviceProvider.GetRequiredService<IMLTextClassifierService>();
 
         // Seed GoldenDataset for training data
         _context = _testHelper.GetDbContext();
@@ -89,7 +89,7 @@ public class MLTextClassifierServiceTests
             await _context.DisposeAsync();
         }
         _testHelper?.Dispose();
-        _mlService?.Dispose();
+        (_mlService as IDisposable)?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
 
         // Clean up temp directory

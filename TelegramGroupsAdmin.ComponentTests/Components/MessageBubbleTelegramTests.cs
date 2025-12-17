@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using TelegramGroupsAdmin.Components.Shared;
 using TelegramGroupsAdmin.Core;
 using TelegramGroupsAdmin.Core.Models;
@@ -384,6 +385,74 @@ public class MessageBubbleTelegramTests : MudBlazorTestContext
 
         // Assert - should not throw, just not display text
         Assert.That(cut.FindAll(".tg-text"), Is.Empty);
+    }
+
+    #endregion
+
+    #region OnViewUserDetail Tests
+
+    [Test]
+    public void InvokesOnViewUserDetail_WhenUsernameClicked()
+    {
+        // Arrange
+        var message = CreateMessage(firstName: "John");
+        long? capturedUserId = null;
+
+        // Act
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, message)
+            .Add(x => x.OnViewUserDetail, EventCallback.Factory.Create<long>(this, id => capturedUserId = id)));
+
+        cut.Find(".tg-user-name").Click();
+
+        // Assert
+        Assert.That(capturedUserId, Is.EqualTo(456L)); // 456 is the UserId from CreateMessage helper
+    }
+
+    [Test]
+    public void InvokesOnViewUserDetail_WhenAvatarClicked()
+    {
+        // Arrange
+        var message = CreateMessage(firstName: "John");
+        long? capturedUserId = null;
+
+        // Act
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, message)
+            .Add(x => x.OnViewUserDetail, EventCallback.Factory.Create<long>(this, id => capturedUserId = id)));
+
+        cut.Find(".tg-avatar-container").Click();
+
+        // Assert
+        Assert.That(capturedUserId, Is.EqualTo(456L));
+    }
+
+    [Test]
+    public void DoesNotThrow_WhenOnViewUserDetailNotProvided()
+    {
+        // Arrange - no callback provided (optional EventCallback parameter)
+        var message = CreateMessage(firstName: "John");
+
+        // Act
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, message));
+
+        // Assert - clicking should not throw when callback not bound
+        Assert.DoesNotThrow(() => cut.Find(".tg-user-name").Click());
+    }
+
+    [Test]
+    public void DoesNotThrow_WhenAvatarClickedWithoutCallback()
+    {
+        // Arrange - no callback provided
+        var message = CreateMessage(firstName: "John");
+
+        // Act
+        var cut = Render<MessageBubbleTelegram>(p => p
+            .Add(x => x.Message, message));
+
+        // Assert - avatar click should also not throw
+        Assert.DoesNotThrow(() => cut.Find(".tg-avatar-container").Click());
     }
 
     #endregion

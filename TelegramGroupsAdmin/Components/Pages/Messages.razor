@@ -95,7 +95,7 @@
                                                    OnMarkAsSpam="HandleMarkAsSpam"
                                                    OnMarkAsHam="HandleMarkAsHam"
                                                    OnViewDetections="HandleViewDetections"
-                                                   OnFilterByUser="HandleFilterByUser"
+                                                   OnViewUserDetail="ViewUserDetail"
                                                    OnFilterByChat="HandleFilterByChat"
                                                    OnDeleteMessage="HandleDeleteMessage"
                                                    OnTempBan="HandleTempBan"
@@ -1092,20 +1092,25 @@
         await DialogService.ShowAsync<DetectionHistoryDialog>("Detection History", parameters, options);
     }
 
-    private void HandleFilterByUser(long userId)
+    /// <summary>
+    /// Open UserDetailDialog when clicking on username or avatar in message bubble (#107)
+    /// </summary>
+    private async Task ViewUserDetail(long userId)
     {
-        // TODO: Display user detail dialog (see issue #107)
-        // Currently disabled - filtering by username was broken
-        return;
+        var parameters = new DialogParameters<UserDetailDialog>
+        {
+            { x => x.UserId, userId }
+        };
 
-        // Old filtering code (broken):
-        // var messageWrapper = _allMessages.FirstOrDefault(mw => mw.Message.UserId == userId);
-        // if (messageWrapper != null)
-        // {
-        //     _filterState.UserName = messageWrapper.Message.UserName ?? $"User {userId}";
-        //     ApplyFilters();
-        //     StateHasChanged();
-        // }
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true,
+            CloseOnEscapeKey = true
+        };
+
+        await DialogService.ShowAsync<UserDetailDialog>("User Details", parameters, options);
     }
 
     private void HandleFilterByChat(long chatId)

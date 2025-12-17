@@ -128,19 +128,19 @@ public class HomePage
     }
 
     /// <summary>
-    /// Checks if the "Refresh Stats" button is visible.
+    /// Checks if the "Refresh" button is visible.
     /// </summary>
-    public async Task<bool> IsRefreshStatsButtonVisibleAsync()
+    public async Task<bool> IsRefreshButtonVisibleAsync()
     {
-        return await _page.GetByRole(AriaRole.Button, new() { Name = "Refresh Stats" }).IsVisibleAsync();
+        return await _page.GetByRole(AriaRole.Button, new() { Name = "Refresh" }).IsVisibleAsync();
     }
 
     /// <summary>
-    /// Clicks the "Refresh Stats" button.
+    /// Clicks the "Refresh" button.
     /// </summary>
-    public async Task ClickRefreshStatsAsync()
+    public async Task ClickRefreshAsync()
     {
-        await _page.GetByRole(AriaRole.Button, new() { Name = "Refresh Stats" }).ClickAsync();
+        await _page.GetByRole(AriaRole.Button, new() { Name = "Refresh" }).ClickAsync();
     }
 
     /// <summary>
@@ -156,4 +156,100 @@ public class HomePage
     /// Gets the URL the page navigated to.
     /// </summary>
     public string CurrentUrl => _page.Url;
+
+    #region New Dashboard Stats (#173)
+
+    /// <summary>
+    /// Gets the Spam (24h) stat value.
+    /// </summary>
+    public async Task<string?> GetSpam24hAsync()
+    {
+        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Spam (24h)" });
+        var value = statItem.Locator(".mud-typography-h5");
+        return await value.TextContentAsync();
+    }
+
+    /// <summary>
+    /// Gets the Active Bans stat value.
+    /// </summary>
+    public async Task<string?> GetActiveBansAsync()
+    {
+        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Active Bans" });
+        var value = statItem.Locator(".mud-typography-h5");
+        return await value.TextContentAsync();
+    }
+
+    /// <summary>
+    /// Gets the Trusted Users stat value.
+    /// </summary>
+    public async Task<string?> GetTrustedUsersAsync()
+    {
+        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Trusted Users" });
+        var value = statItem.Locator(".mud-typography-h5");
+        return await value.TextContentAsync();
+    }
+
+    /// <summary>
+    /// Gets the Pending Reports count from the dashboard card.
+    /// </summary>
+    public async Task<string?> GetPendingReportsCountAsync()
+    {
+        var statItem = _page.Locator(".mud-grid-item").Filter(new() { HasText = "Pending Reports" });
+        var value = statItem.Locator(".mud-typography-h5");
+        return await value.TextContentAsync();
+    }
+
+    /// <summary>
+    /// Clicks the Pending Reports card to navigate to /reports.
+    /// Note: Only navigates when pending reports count > 0.
+    /// </summary>
+    public async Task ClickPendingReportsCardAsync()
+    {
+        var card = _page.Locator(".mud-card").Filter(new() { HasText = "Pending Reports" });
+        await card.ClickAsync();
+    }
+
+    /// <summary>
+    /// Checks if the Recent Activity section is visible.
+    /// </summary>
+    public async Task<bool> IsActivityFeedVisibleAsync()
+    {
+        return await _page.Locator("text=Recent Activity").IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Checks if the threshold recommendations alert is visible.
+    /// </summary>
+    public async Task<bool> IsThresholdRecommendationsAlertVisibleAsync()
+    {
+        return await _page.Locator(".mud-alert:has-text('threshold recommendation')").IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Gets the count of recent activity items displayed.
+    /// </summary>
+    public async Task<int> GetActivityFeedItemCountAsync()
+    {
+        var activitySection = _page.Locator(".mud-paper").Filter(new() { HasText = "Recent Activity" });
+        var listItems = activitySection.Locator(".mud-list-item");
+        return await listItems.CountAsync();
+    }
+
+    /// <summary>
+    /// Checks if the "Review Reports" button is visible.
+    /// </summary>
+    public async Task<bool> IsReviewReportsButtonVisibleAsync()
+    {
+        return await _page.GetByRole(AriaRole.Link, new() { Name = "Review Reports" }).IsVisibleAsync();
+    }
+
+    /// <summary>
+    /// Clicks the "Review Reports" button.
+    /// </summary>
+    public async Task ClickReviewReportsAsync()
+    {
+        await _page.GetByRole(AriaRole.Link, new() { Name = "Review Reports" }).ClickAsync();
+    }
+
+    #endregion
 }
