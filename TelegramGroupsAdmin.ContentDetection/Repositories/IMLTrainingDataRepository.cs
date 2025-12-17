@@ -35,4 +35,12 @@ public interface IMLTrainingDataRepository
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>List of ham samples with metadata</returns>
     Task<List<TrainingSample>> GetHamSamplesAsync(int spamCount, HashSet<long> labeledMessageIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets training data balance statistics for UI display.
+    /// Calculates spam/ham counts using same logic as actual training.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Balance statistics including spam count, explicit/implicit ham counts, and ratios</returns>
+    Task<TrainingBalanceStats> GetTrainingBalanceStatsAsync(CancellationToken cancellationToken = default);
 }

@@ -195,6 +195,20 @@ public class BayesContentCheckV2(
 
             var allSamples = spamSamples.Concat(hamSamples).ToList();
 
+            // Log balance status after collecting samples
+            var totalSamples = spamSamples.Count + hamSamples.Count;
+            var spamRatio = totalSamples > 0 ? (double)spamSamples.Count / totalSamples : 0.0;
+            var isBalanced = spamRatio >= SpamClassifierMetadata.MinBalancedSpamRatio &&
+                             spamRatio <= SpamClassifierMetadata.MaxBalancedSpamRatio;
+
+            if (!isBalanced)
+            {
+                logger.LogWarning(
+                    "Bayes classifier training with imbalanced data: {Spam} spam + {Ham} ham = {SpamRatio:P1} spam ratio " +
+                    "(recommended: 20-80%). Accuracy may be reduced.",
+                    spamSamples.Count, hamSamples.Count, spamRatio);
+            }
+
             // Create and train classifier
             _classifier = new BayesClassifier(tokenizerService);
 

@@ -12,7 +12,7 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 /// ML.NET SDCA text classifier for spam detection.
 /// Thread-safe Singleton service with immutable container pattern for atomic model swapping.
 /// </summary>
-public class MLTextClassifierService
+public class MLTextClassifierService : IDisposable
 {
     // ML.NET training constants
     private const int MlNetSeed = 42;  // ML.NET random seed for reproducible training results
@@ -126,6 +126,17 @@ public class MLTextClassifierService
                 HamSampleCount = hamSamples.Count,
                 MLNetVersion = typeof(MLContext).Assembly.GetName().Version?.ToString() ?? "unknown"
             };
+
+            // Log balance warning if data is imbalanced (but continue training)
+            if (!metadata.IsBalanced)
+            {
+                _logger.LogWarning(
+                    "Training with imbalanced data: {Spam} spam + {Ham} ham = {SpamRatio:P1} spam ratio " +
+                    "(recommended: 20-80%). Model accuracy may be reduced. " +
+                    "Ideal balance: Add {SpamNeeded} spam labels OR remove {HamExcess} ham labels.",
+                    metadata.SpamSampleCount, metadata.HamSampleCount, metadata.SpamRatio,
+                    CalculateSpamNeeded(metadata), CalculateHamExcess(metadata));
+            }
 
             // Save model and metadata
             await SaveModelAsync(model, metadata, ct);
@@ -266,4 +277,32 @@ public class MLTextClassifierService
     /// Gets current model metadata (training stats, timestamp, hash).
     /// </summary>
     public SpamClassifierMetadata? GetMetadata() => _currentModel?.Metadata;
+
+    private static int CalculateSpamNeeded(SpamClassifierMetadata metadata)
+    {
+        // If spam ratio < 20%, calculate spam needed to reach 30% target
+        if (metadata.SpamRatio < SpamClassifierMetadata.MinBalancedSpamRatio)
+        {
+            var targetTotal = (int)(metadata.HamSampleCount / (1 - SpamClassifierMetadata.TargetSpamRatio));
+            return Math.Max(0, (int)(targetTotal * SpamClassifierMetadata.TargetSpamRatio) - metadata.SpamSampleCount);
+        }
+        return 0;
+    }
+
+    private static int CalculateHamExcess(SpamClassifierMetadata metadata)
+    {
+        // If spam ratio > 80%, calculate ham excess beyond balanced ratio
+        if (metadata.SpamRatio > SpamClassifierMetadata.MaxBalancedSpamRatio)
+        {
+            var maxHamForBalance = (int)(metadata.SpamSampleCount * (1 - SpamClassifierMetadata.TargetSpamRatio) / SpamClassifierMetadata.TargetSpamRatio);
+            return Math.Max(0, metadata.HamSampleCount - maxHamForBalance);
+        }
+        return 0;
+    }
+
+    public void Dispose()
+    {
+        _retrainingSemaphore.Dispose();
+        _currentModel?.PredictionEngine.Dispose();
+    }
 }

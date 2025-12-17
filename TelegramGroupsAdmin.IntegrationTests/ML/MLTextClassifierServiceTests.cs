@@ -89,6 +89,7 @@ public class MLTextClassifierServiceTests
             await _context.DisposeAsync();
         }
         _testHelper?.Dispose();
+        _mlService?.Dispose();
         (_serviceProvider as IDisposable)?.Dispose();
 
         // Clean up temp directory
@@ -455,9 +456,9 @@ public class MLTextClassifierServiceTests
     #region Unbalanced Dataset Tests
 
     [Test]
-    public async Task TrainModelAsync_HighSpamRatio_TrainsWithWarning()
+    public async Task TrainModelAsync_HighSpamRatio_AddsImplicitHamForBalance()
     {
-        // Arrange - Use composable SQL dataset (100 spam + 20 ham = 83.3% spam, 5:1 ratio)
+        // Arrange - Use composable SQL dataset (100 spam + 20 explicit ham = 83.3% spam without implicit)
         await using var context = _testHelper!.GetDbContext();
 
         // Truncate and reseed with high-spam dataset
@@ -468,18 +469,18 @@ public class MLTextClassifierServiceTests
         // Act
         await _mlService!.TrainModelAsync();
 
-        // Assert - Model trains despite imbalanced data
+        // Assert - Implicit ham is added to balance the dataset
         var metadata = _mlService.GetMetadata();
         Assert.That(metadata, Is.Not.Null, "Model should train successfully");
         Assert.That(metadata!.SpamSampleCount, Is.EqualTo(100), "SQL has 100 spam samples");
-        Assert.That(metadata.HamSampleCount, Is.GreaterThanOrEqualTo(20), "SQL has 20 explicit ham + possible implicit samples");
-        Assert.That(metadata.IsBalanced, Is.False, "Dataset is imbalanced (>80% spam ratio)");
+        Assert.That(metadata.HamSampleCount, Is.GreaterThan(20), "Should add implicit ham on top of 20 explicit ham");
+        Assert.That(metadata.IsBalanced, Is.True, "Implicit ham should bring dataset into balanced range (20-80% spam)");
     }
 
     [Test]
-    public async Task TrainModelAsync_HighHamRatio_TrainsWithWarning()
+    public async Task TrainModelAsync_HighHamRatio_CapsExplicitHamForBalance()
     {
-        // Arrange - Use composable SQL dataset (20 spam + 100 ham = 16.7% spam, 1:5 ratio)
+        // Arrange - Use composable SQL dataset (20 spam + 100 ham explicit labels)
         await using var context = _testHelper!.GetDbContext();
 
         // Truncate and reseed with high-ham dataset
@@ -490,12 +491,18 @@ public class MLTextClassifierServiceTests
         // Act
         await _mlService!.TrainModelAsync();
 
-        // Assert - Model trains despite imbalanced data (explicit ham labels always included)
+        // Assert - Explicit ham is now CAPPED to maintain balance
         var metadata = _mlService.GetMetadata();
         Assert.That(metadata, Is.Not.Null, "Model should train successfully");
         Assert.That(metadata!.SpamSampleCount, Is.EqualTo(20), "SQL has 20 spam samples");
-        Assert.That(metadata.HamSampleCount, Is.EqualTo(100), "All 100 explicit ham labels included (explicit labels never capped)");
-        Assert.That(metadata.IsBalanced, Is.False, "Dataset is imbalanced (16.7% spam, explicit ham exceeds balance cap)");
+
+        // NEW BEHAVIOR: Explicit ham is capped to dynamicHamCap (20 * 2.33 = 46)
+        Assert.That(metadata.HamSampleCount, Is.LessThanOrEqualTo(46),
+            "Explicit ham should be capped at dynamicHamCap (20 * 2.33 = 46) for balance");
+        Assert.That(metadata.HamSampleCount, Is.GreaterThanOrEqualTo(20),
+            "Should use at least 20 ham samples");
+        Assert.That(metadata.IsBalanced, Is.True,
+            "Dataset should be balanced after capping explicit ham (20-80% spam ratio)");
     }
 
     [Test]
