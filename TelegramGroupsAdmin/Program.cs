@@ -182,7 +182,7 @@ if (serilogConfig != null)
 
 // Train ML.NET spam classifier model on startup (always retrain for fresh data)
 // Once scheduled retraining is implemented (Commit 3), this can be optimized to load if <8h old
-var mlClassifier = app.Services.GetRequiredService<TelegramGroupsAdmin.ContentDetection.ML.MLTextClassifierService>();
+var mlClassifier = app.Services.GetRequiredService<TelegramGroupsAdmin.ContentDetection.ML.IMLTextClassifierService>();
 app.Logger.LogInformation("Training ML spam classifier model with latest data...");
 await mlClassifier.TrainModelAsync();
 var metadata = mlClassifier.GetMetadata();

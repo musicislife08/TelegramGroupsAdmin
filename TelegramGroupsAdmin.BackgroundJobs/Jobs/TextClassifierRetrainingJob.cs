@@ -14,11 +14,11 @@ namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 [DisallowConcurrentExecution]
 public class TextClassifierRetrainingJob : IJob
 {
-    private readonly MLTextClassifierService _mlClassifier;
+    private readonly IMLTextClassifierService _mlClassifier;
     private readonly ILogger<TextClassifierRetrainingJob> _logger;
 
     public TextClassifierRetrainingJob(
-        MLTextClassifierService mlClassifier,
+        IMLTextClassifierService mlClassifier,
         ILogger<TextClassifierRetrainingJob> logger)
     {
         _mlClassifier = mlClassifier;

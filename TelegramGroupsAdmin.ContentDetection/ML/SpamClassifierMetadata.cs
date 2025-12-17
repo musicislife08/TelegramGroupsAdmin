@@ -22,6 +22,12 @@ public class SpamClassifierMetadata
     public const double TargetSpamRatio = 0.3;
 
     /// <summary>
+    /// Minimum samples required per class (spam and ham) for meaningful training.
+    /// Below this threshold, the model lacks sufficient data for reliable classification.
+    /// </summary>
+    public const int MinimumSamplesPerClass = 20;
+
+    /// <summary>
     /// When the model was trained.
     /// </summary>
     public DateTimeOffset TrainedAt { get; set; }

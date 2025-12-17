@@ -15,7 +15,7 @@ namespace TelegramGroupsAdmin.ContentDetection.Checks;
 /// </summary>
 public class SimilarityContentCheckV2(
     ILogger<SimilarityContentCheckV2> logger,
-    MLTextClassifierService mlClassifier) : IContentCheckV2
+    IMLTextClassifierService mlClassifier) : IContentCheckV2
 {
     public CheckName CheckName => CheckName.Similarity;
 
