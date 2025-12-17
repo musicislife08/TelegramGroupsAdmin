@@ -328,11 +328,13 @@ public class MessagesPage
 
     /// <summary>
     /// Gets the content text of the user detail dialog.
+    /// Uses InnerTextAsync for better text extraction from MudBlazor components.
     /// </summary>
     public async Task<string?> GetUserDetailDialogContentAsync()
     {
-        // Content is within the dialog - scope the search
-        return await DialogLocator.Locator(".mud-dialog-content").TextContentAsync();
+        // Get all visible text from the dialog using InnerTextAsync
+        // (TextContentAsync may return empty for complex MudBlazor component trees)
+        return await DialogLocator.InnerTextAsync();
     }
 
     /// <summary>

@@ -451,6 +451,13 @@ public class MessagesTests : SharedAuthenticatedTestBase
             .WithTitle("Dialog User Test")
             .BuildAsync();
 
+        // Create the telegram_users record (required for UserDetailDialog lookup)
+        await new TestTelegramUserBuilder(SharedFactory.Services)
+            .WithUserId(987654321)
+            .WithUsername("specificuser")
+            .WithName("SpecificUser", "Smith")
+            .BuildAsync();
+
         await new TestMessageBuilder(SharedFactory.Services)
             .InChat(chat)
             .FromUser(987654321, "specificuser", "SpecificUser", "Smith")
@@ -466,10 +473,10 @@ public class MessagesTests : SharedAuthenticatedTestBase
         await _messagesPage.ClickUsernameInMessageAsync();
         await _messagesPage.WaitForUserDetailDialogAsync();
 
-        // Assert - dialog shows user info
-        var dialogContent = await _messagesPage.GetUserDetailDialogContentAsync();
-        Assert.That(dialogContent, Does.Contain("SpecificUser").Or.Contain("specificuser").Or.Contain("987654321"),
-            "Dialog should show user name, username, or ID");
+        // Assert - dialog shows user info (wait for async content load)
+        // Use Playwright's Expect with auto-retry for async content
+        var dialog = Page.GetByRole(Microsoft.Playwright.AriaRole.Dialog);
+        await Expect(dialog).ToContainTextAsync("SpecificUser", new() { Timeout = 5000 });
     }
 
     [Test]
