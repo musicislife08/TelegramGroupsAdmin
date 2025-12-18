@@ -334,7 +334,7 @@ public class BackupServiceTests
         ");
 
         var countBeforeRestore = await _testHelper.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM telegram_users");
-        Assert.That(countBeforeRestore, Is.EqualTo(9), "Should have 8 golden users + 1 extra = 9 before restore");
+        Assert.That(countBeforeRestore, Is.EqualTo(13), "Should have 12 golden users + 1 extra = 13 before restore");
 
         // Act - Restore (should wipe extra_user)
         await _backupService.RestoreAsync(backup);
