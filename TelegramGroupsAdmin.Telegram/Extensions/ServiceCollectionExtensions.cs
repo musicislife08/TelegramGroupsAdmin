@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
@@ -112,44 +113,31 @@ public static class ServiceCollectionExtensions
 
             // Training data quality services
             services.AddSingleton<TextSimilarityService>();
+            // Note: SimHashService is registered in Core's AddCoreServices()
             services.AddScoped<TrainingDataDeduplicationService>();
 
             // Phase 4.10: Anti-Impersonation Detection
             services.AddSingleton<IPhotoHashService, PhotoHashService>();
             services.AddScoped<IImpersonationDetectionService, ImpersonationDetectionService>();
 
-            // Bot command system
+            // Bot command system (Keyed Services pattern)
             // Commands are Scoped (to allow injecting Scoped services like ModerationOrchestrator)
             // CommandRouter is Singleton (creates scopes internally when executing commands)
-            // Register both as interface and concrete type for CommandRouter resolution
-            services.AddScoped<StartCommand>();
-            services.AddScoped<IBotCommand, StartCommand>(sp => sp.GetRequiredService<StartCommand>());
-            services.AddScoped<HelpCommand>();
-            services.AddScoped<IBotCommand, HelpCommand>(sp => sp.GetRequiredService<HelpCommand>());
-            services.AddScoped<LinkCommand>();
-            services.AddScoped<IBotCommand, LinkCommand>(sp => sp.GetRequiredService<LinkCommand>());
-            services.AddScoped<SpamCommand>();
-            services.AddScoped<IBotCommand, SpamCommand>(sp => sp.GetRequiredService<SpamCommand>());
-            services.AddScoped<BanCommand>();
-            services.AddScoped<IBotCommand, BanCommand>(sp => sp.GetRequiredService<BanCommand>());
-            services.AddScoped<TrustCommand>();
-            services.AddScoped<IBotCommand, TrustCommand>(sp => sp.GetRequiredService<TrustCommand>());
-            services.AddScoped<UnbanCommand>();
-            services.AddScoped<IBotCommand, UnbanCommand>(sp => sp.GetRequiredService<UnbanCommand>());
-            services.AddScoped<WarnCommand>();
-            services.AddScoped<IBotCommand, WarnCommand>(sp => sp.GetRequiredService<WarnCommand>());
-            services.AddScoped<TempBanCommand>();
-            services.AddScoped<IBotCommand, TempBanCommand>(sp => sp.GetRequiredService<TempBanCommand>());
-            services.AddScoped<MuteCommand>();
-            services.AddScoped<IBotCommand, MuteCommand>(sp => sp.GetRequiredService<MuteCommand>());
-            services.AddScoped<ReportCommand>();
-            services.AddScoped<IBotCommand, ReportCommand>(sp => sp.GetRequiredService<ReportCommand>());
-            services.AddScoped<InviteCommand>();
-            services.AddScoped<IBotCommand, InviteCommand>(sp => sp.GetRequiredService<InviteCommand>());
-            services.AddScoped<DeleteCommand>();
-            services.AddScoped<IBotCommand, DeleteCommand>(sp => sp.GetRequiredService<DeleteCommand>());
-            services.AddScoped<MyStatusCommand>();
-            services.AddScoped<IBotCommand, MyStatusCommand>(sp => sp.GetRequiredService<MyStatusCommand>());
+            // Keyed services allow direct resolution by command name without type dictionary
+            services.AddKeyedScoped<IBotCommand, StartCommand>(CommandNames.Start);
+            services.AddKeyedScoped<IBotCommand, HelpCommand>(CommandNames.Help);
+            services.AddKeyedScoped<IBotCommand, LinkCommand>(CommandNames.Link);
+            services.AddKeyedScoped<IBotCommand, SpamCommand>(CommandNames.Spam);
+            services.AddKeyedScoped<IBotCommand, BanCommand>(CommandNames.Ban);
+            services.AddKeyedScoped<IBotCommand, TrustCommand>(CommandNames.Trust);
+            services.AddKeyedScoped<IBotCommand, UnbanCommand>(CommandNames.Unban);
+            services.AddKeyedScoped<IBotCommand, WarnCommand>(CommandNames.Warn);
+            services.AddKeyedScoped<IBotCommand, TempBanCommand>(CommandNames.TempBan);
+            services.AddKeyedScoped<IBotCommand, MuteCommand>(CommandNames.Mute);
+            services.AddKeyedScoped<IBotCommand, ReportCommand>(CommandNames.Report);
+            services.AddKeyedScoped<IBotCommand, InviteCommand>(CommandNames.Invite);
+            services.AddKeyedScoped<IBotCommand, DeleteCommand>(CommandNames.Delete);
+            services.AddKeyedScoped<IBotCommand, MyStatusCommand>(CommandNames.MyStatus);
             services.AddSingleton<CommandRouter>();
 
             // Background services (refactored into smaller services)

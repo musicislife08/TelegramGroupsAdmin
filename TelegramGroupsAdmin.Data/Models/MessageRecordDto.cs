@@ -91,6 +91,14 @@ public class MessageRecordDto
     [Column("content_check_skip_reason")]
     public ContentCheckSkipReason ContentCheckSkipReason { get; set; } = ContentCheckSkipReason.NotSkipped;
 
+    /// <summary>
+    /// 64-bit SimHash fingerprint for text similarity detection.
+    /// Used for O(1) training data deduplication via Hamming distance.
+    /// Computed from message_text (use translation's hash if translated).
+    /// </summary>
+    [Column("similarity_hash")]
+    public long? SimilarityHash { get; set; }
+
     // Navigation properties
     public virtual ICollection<DetectionResultRecordDto> DetectionResults { get; set; } = [];
     public virtual ICollection<MessageEditRecordDto> MessageEdits { get; set; } = [];

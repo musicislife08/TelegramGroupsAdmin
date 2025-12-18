@@ -66,7 +66,7 @@ public class TrainingLabelsRepositoryTests
 
         // Seed GoldenDataset test data
         _context = _testHelper.GetDbContext();
-        await GoldenDataset.SeedDatabaseAsync(_context);
+        await GoldenDataset.SeedAsync(_context);
     }
 
     [TearDown]
@@ -176,7 +176,7 @@ public class TrainingLabelsRepositoryTests
         Assert.That(count, Is.EqualTo(1), "Concurrent upserts should result in exactly one row (last writer wins)");
 
         // Verify the final label is valid (either spam or ham, depending on last writer)
-        var label = await _repository.GetByMessageIdAsync(messageId);
+        var label = await _repository!.GetByMessageIdAsync(messageId);
         Assert.That(label, Is.Not.Null);
         Assert.That(label!.Label, Is.AnyOf(TrainingLabel.Spam, TrainingLabel.Ham), "Final label should be valid");
     }

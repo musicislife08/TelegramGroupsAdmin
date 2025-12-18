@@ -202,21 +202,46 @@ public class DetectionResultsRepository : IDetectionResultsRepository
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Phase 2.6: Only use high-quality training samples for similarity matching
-        var results = await WithMessageJoin(
-                context.DetectionResults.AsNoTracking()
-                    .Where(dr => dr.IsSpam == true && dr.UsedForTraining == true), // Filter BEFORE join
-                context)
-            .Where(x => x.Message.MessageText != null && x.Message.MessageText != "")
-            .OrderByDescending(x => x.DetectionResult.DetectedAt)
-            .Take(limit)
-            .Select(x => x.Message.MessageText!)
-            .ToListAsync(cancellationToken);
+        // Use query syntax for EF Core translation compatibility (H10 pattern from GetTrainingSamplesAsync)
+        var results = await (
+            from dr in context.DetectionResults.AsNoTracking()
+            join m in context.Messages on dr.MessageId equals m.MessageId
+            where dr.IsSpam == true
+                && dr.UsedForTraining == true
+                && m.MessageText != null
+                && m.MessageText != ""
+            orderby dr.DetectedAt descending
+            select m.MessageText
+        ).Take(limit).ToListAsync(cancellationToken);
 
         _logger.LogDebug(
             "Retrieved {Count} spam samples for similarity check (used_for_training = true)",
             results.Count);
 
-        return results;
+        return results!;
+    }
+
+    public async Task<List<string>> GetHamSamplesForSimilarityAsync(int limit = 1000, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        // Mirror of GetSpamSamplesForSimilarityAsync but for ham samples
+        // Use query syntax for EF Core translation compatibility
+        var results = await (
+            from dr in context.DetectionResults.AsNoTracking()
+            join m in context.Messages on dr.MessageId equals m.MessageId
+            where dr.IsSpam == false
+                && dr.UsedForTraining == true
+                && m.MessageText != null
+                && m.MessageText != ""
+            orderby dr.DetectedAt descending
+            select m.MessageText
+        ).Take(limit).ToListAsync(cancellationToken);
+
+        _logger.LogDebug(
+            "Retrieved {Count} ham samples for similarity check (used_for_training = true)",
+            results.Count);
+
+        return results!;
     }
 
     // REFACTOR-5: Removed IsUserTrustedAsync - use ITelegramUserRepository.IsTrustedAsync instead

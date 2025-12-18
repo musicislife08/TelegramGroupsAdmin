@@ -70,7 +70,7 @@ public class LinkedChannelsRepositoryTests
         var contextFactory = _serviceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
         await using (var context = await contextFactory.CreateDbContextAsync())
         {
-            await GoldenDataset.SeedDatabaseAsync(context, _dataProtectionProvider);
+            await GoldenDataset.SeedAsync(context, _dataProtectionProvider);
         }
 
         // Create repository instance

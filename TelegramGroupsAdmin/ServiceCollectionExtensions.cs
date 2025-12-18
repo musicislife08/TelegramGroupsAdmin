@@ -159,8 +159,8 @@ public static class ServiceCollectionExtensions
             // Push subscriptions repository (browser push endpoints)
             services.AddScoped<Core.Repositories.IPushSubscriptionsRepository, Core.Repositories.PushSubscriptionsRepository>();
 
-            // Message history adapter for spam detection library
-            services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageHistoryService, MessageHistoryAdapter>();
+            // Message context adapter for spam detection library
+            services.AddScoped<TelegramGroupsAdmin.ContentDetection.Services.IMessageContextProvider, MessageContextAdapter>();
 
             // Media refetch services (Phase 4.X: Re-download missing media after restore)
             services.AddSingleton<TelegramGroupsAdmin.Telegram.Services.Media.IMediaNotificationService, TelegramGroupsAdmin.Telegram.Services.Media.MediaNotificationService>();
@@ -173,6 +173,8 @@ public static class ServiceCollectionExtensions
             // API key migration service (one-time migration from env vars to encrypted database storage)
             services.AddScoped<ApiKeyMigrationService>();
 
+            // Similarity hash backfill service (one-time migration for SimHash deduplication)
+            services.AddScoped<SimilarityHashBackfillService>();
 
             // Documentation service (Phase 4.X: Folder-based portable markdown documentation)
             services.AddSingleton<Services.Docs.IDocumentationService, Services.Docs.DocumentationService>();

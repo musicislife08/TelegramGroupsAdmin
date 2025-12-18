@@ -112,7 +112,7 @@ public class BackupServiceTests
         // Seed golden dataset (with Data Protection encryption)
         await using (var context = _testHelper.GetDbContext())
         {
-            await GoldenDataset.SeedDatabaseAsync(context, _dataProtectionProvider);
+            await GoldenDataset.SeedAsync(context, _dataProtectionProvider);
         }
 
         // Create BackupService in a new scope (using interface)

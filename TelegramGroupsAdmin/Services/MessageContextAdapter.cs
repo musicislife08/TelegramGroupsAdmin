@@ -6,16 +6,16 @@ namespace TelegramGroupsAdmin.Services;
 
 /// <summary>
 /// Adapter to convert from main app's MessageQueryService
-/// to spam library's IMessageHistoryService interface
+/// to ContentDetection's IMessageContextProvider interface
 /// </summary>
-public class MessageHistoryAdapter : ContentDetectionServices.IMessageHistoryService
+public class MessageContextAdapter : ContentDetectionServices.IMessageContextProvider
 {
     private readonly IMessageQueryService _queryService;
-    private readonly ILogger<MessageHistoryAdapter> _logger;
+    private readonly ILogger<MessageContextAdapter> _logger;
 
-    public MessageHistoryAdapter(
+    public MessageContextAdapter(
         IMessageQueryService queryService,
-        ILogger<MessageHistoryAdapter> logger)
+        ILogger<MessageContextAdapter> logger)
     {
         _queryService = queryService;
         _logger = logger;

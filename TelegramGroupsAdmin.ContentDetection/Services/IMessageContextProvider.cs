@@ -1,9 +1,9 @@
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
-/// Service for retrieving message history context for spam detection
+/// Provides message context for spam detection algorithms
 /// </summary>
-public interface IMessageHistoryService
+public interface IMessageContextProvider
 {
     /// <summary>
     /// Get recent messages from a chat for context

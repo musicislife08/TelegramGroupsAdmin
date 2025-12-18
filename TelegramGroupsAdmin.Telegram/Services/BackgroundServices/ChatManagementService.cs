@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Models;
@@ -613,31 +614,48 @@ public class ChatManagementService(
                 return (health, chatName);
             }
 
-            // Get bot's member status
-            var botMember = await operations.GetChatMemberAsync(chatId, operations.BotId, cancellationToken);
-            health.BotStatus = botMember.Status.ToString();
-            health.IsAdmin = botMember.Status == ChatMemberStatus.Administrator;
-
-            // Check permissions if admin
-            if (botMember.Status == ChatMemberStatus.Administrator && botMember is ChatMemberAdministrator admin)
+            // Get bot's member status (may fail if chat has hidden members and bot isn't admin)
+            try
             {
-                health.CanDeleteMessages = admin.CanDeleteMessages;
-                health.CanRestrictMembers = admin.CanRestrictMembers;
-                health.CanPromoteMembers = admin.CanPromoteMembers;
-                health.CanInviteUsers = admin.CanInviteUsers;
+                var botMember = await operations.GetChatMemberAsync(chatId, operations.BotId, cancellationToken);
+                health.BotStatus = botMember.Status.ToString();
+                health.IsAdmin = botMember.Status == ChatMemberStatus.Administrator;
+
+                // Check permissions if admin
+                if (botMember.Status == ChatMemberStatus.Administrator && botMember is ChatMemberAdministrator admin)
+                {
+                    health.CanDeleteMessages = admin.CanDeleteMessages;
+                    health.CanRestrictMembers = admin.CanRestrictMembers;
+                    health.CanPromoteMembers = admin.CanPromoteMembers;
+                    health.CanInviteUsers = admin.CanInviteUsers;
+                }
+            }
+            catch (ApiRequestException ex) when (ex.Message.Contains("hidden"))
+            {
+                // Hidden members enabled and bot isn't admin - can't check own status
+                logger.LogDebug("Chat {ChatId} has hidden members and bot is not admin", chatId);
+                health.BotStatus = "Unknown (hidden members)";
+                health.IsAdmin = false;
             }
 
-            // Get admin count and refresh admin cache (only for groups/supergroups)
-            var admins = await operations.GetChatAdministratorsAsync(chatId, cancellationToken);
-            health.AdminCount = admins.Length;
-
-            // Refresh admin cache in database (for permission checks in commands)
-            await RefreshChatAdminsAsync(chatId, cancellationToken);
-
-            // Validate and refresh cached invite link (all groups - public and private)
-            if (chat.Type is ChatType.Supergroup or ChatType.Group)
+            // Get admin count and refresh admin cache (only if bot is admin - these APIs require admin privileges)
+            if (health.IsAdmin)
             {
-                await ValidateInviteLinkAsync(chatId, cancellationToken);
+                var admins = await operations.GetChatAdministratorsAsync(chatId, cancellationToken);
+                health.AdminCount = admins.Length;
+
+                // Refresh admin cache in database (for permission checks in commands)
+                await RefreshChatAdminsAsync(chatId, cancellationToken);
+
+                // Validate and refresh cached invite link (all groups - public and private)
+                if (chat.Type is ChatType.Supergroup or ChatType.Group)
+                {
+                    await ValidateInviteLinkAsync(chatId, cancellationToken);
+                }
+            }
+            else
+            {
+                health.AdminCount = 0;
             }
 
             // Determine overall status

@@ -22,15 +22,18 @@ public class ContentDetectionOrchestrator
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly DetectionActionService _spamActionService;
+    private readonly SimHashService _simHashService;
     private readonly ILogger<ContentDetectionOrchestrator> _logger;
 
     public ContentDetectionOrchestrator(
         IServiceProvider serviceProvider,
         DetectionActionService spamActionService,
+        SimHashService simHashService,
         ILogger<ContentDetectionOrchestrator> logger)
     {
         _serviceProvider = serviceProvider;
         _spamActionService = spamActionService;
+        _simHashService = simHashService;
         _logger = logger;
     }
 
@@ -121,6 +124,7 @@ public class ContentDetectionOrchestrator
                     detectionResultsRepo,
                     message,
                     result.SpamResult,
+                    text, // Pass analyzed text for deduplication check
                     editVersion,
                     cancellationToken);
 
@@ -157,15 +161,44 @@ public class ContentDetectionOrchestrator
 
     /// <summary>
     /// Store spam detection result to database for analytics and training.
+    /// Phase 4.23 (#168): Auto-deduplicates training samples at insert time using SimHash.
     /// </summary>
     private async Task<DetectionResultRecord> StoreDetectionResultAsync(
         IDetectionResultsRepository detectionResultsRepo,
         Message message,
         ContentDetectionResult spamResult,
+        string? analyzedText,
         int editVersion,
         CancellationToken cancellationToken)
     {
+        using var scope = _serviceProvider.CreateScope();
+        var messageHistoryRepo = scope.ServiceProvider.GetRequiredService<IMessageHistoryRepository>();
+
         var reasonPrefix = editVersion > 0 ? $"[Edit #{editVersion}] " : "";
+        var isTrainingWorthy = DetectionActionService.DetermineIfTrainingWorthy(spamResult);
+
+        // Phase 4.23 (#168): Auto-deduplicate training samples at insert time using SimHash
+        // Only check for auto-detected samples that would be used for training
+        // Manual samples (/spam command) bypass deduplication (admin intent)
+        if (isTrainingWorthy && !string.IsNullOrWhiteSpace(analyzedText))
+        {
+            var hash = _simHashService.ComputeHash(analyzedText);
+            var isDuplicate = await messageHistoryRepo.HasSimilarTrainingHashAsync(
+                hash,
+                spamResult.IsSpam,
+                SimHashService.DefaultMaxDistance,
+                cancellationToken);
+
+            if (isDuplicate)
+            {
+                isTrainingWorthy = false;
+                _logger.LogDebug(
+                    "Skipping training for message {MessageId}: SimHash within {MaxDistance} bits of existing {Class} sample",
+                    message.MessageId,
+                    SimHashService.DefaultMaxDistance,
+                    spamResult.IsSpam ? "spam" : "ham");
+            }
+        }
 
         var detectionResult = new DetectionResultRecord
         {
@@ -179,7 +212,7 @@ public class ContentDetectionOrchestrator
             Confidence = spamResult.MaxConfidence,
             Reason = $"{reasonPrefix}{spamResult.PrimaryReason}",
             AddedBy = Actor.AutoDetection, // Phase 4.19: Actor system
-            UsedForTraining = DetectionActionService.DetermineIfTrainingWorthy(spamResult),
+            UsedForTraining = isTrainingWorthy,
             NetConfidence = spamResult.NetConfidence,
             CheckResultsJson = CheckResultsSerializer.Serialize(spamResult.CheckResults),
             EditVersion = editVersion

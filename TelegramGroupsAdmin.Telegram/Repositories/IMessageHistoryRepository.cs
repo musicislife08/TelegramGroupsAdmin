@@ -28,4 +28,16 @@ public interface IMessageHistoryRepository
     Task<List<UiModels.UserMessageInfo>> GetUserMessagesAsync(
         long telegramUserId,
         CancellationToken cancellationToken = default);
+
+    // SimHash deduplication
+    /// <summary>
+    /// Check if a similar SimHash exists in training data (detection_results with used_for_training=true OR training_labels).
+    /// Uses COALESCE(translation.hash, message.hash) to prefer translated text hash.
+    /// </summary>
+    /// <param name="hash">The SimHash to compare against</param>
+    /// <param name="isSpam">True to search spam training data, false for ham</param>
+    /// <param name="maxDistance">Maximum Hamming distance to consider similar (default 10 = ~84% similarity)</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>True if a similar hash exists in training data</returns>
+    Task<bool> HasSimilarTrainingHashAsync(long hash, bool isSpam, int maxDistance = 10, CancellationToken cancellationToken = default);
 }
