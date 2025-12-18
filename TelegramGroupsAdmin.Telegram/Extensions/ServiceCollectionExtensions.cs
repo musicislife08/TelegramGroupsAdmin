@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using TelegramGroupsAdmin.Core.Services;
+using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
@@ -112,6 +113,7 @@ public static class ServiceCollectionExtensions
 
             // Training data quality services
             services.AddSingleton<TextSimilarityService>();
+            // Note: SimHashService is registered in Core's AddCoreServices()
             services.AddScoped<TrainingDataDeduplicationService>();
 
             // Phase 4.10: Anti-Impersonation Detection

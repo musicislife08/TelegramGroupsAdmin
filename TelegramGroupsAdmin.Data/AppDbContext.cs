@@ -707,6 +707,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<WebNotificationDto>()
             .HasIndex(wn => new { wn.UserId, wn.CreatedAt })
             .HasDatabaseName("ix_web_notifications_user_id_created_at");  // Primary query: recent notifications by user
+
+        // SimHash indexes for O(1) training data deduplication
+        // Partial indexes: only index rows with computed hashes (skip empty/null text)
+        modelBuilder.Entity<MessageRecordDto>()
+            .HasIndex(m => m.SimilarityHash)
+            .HasFilter("similarity_hash IS NOT NULL")
+            .HasDatabaseName("ix_messages_similarity_hash");
+
+        modelBuilder.Entity<MessageTranslationDto>()
+            .HasIndex(mt => mt.SimilarityHash)
+            .HasFilter("similarity_hash IS NOT NULL")
+            .HasDatabaseName("ix_message_translations_similarity_hash");
     }
 
     private static void ConfigureValueConversions(ModelBuilder modelBuilder)

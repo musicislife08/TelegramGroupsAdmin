@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using TelegramGroupsAdmin.ContentDetection.Extensions;
 using TelegramGroupsAdmin.ContentDetection.ML;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.IntegrationTests.TestData;
@@ -69,8 +70,9 @@ public class MLTextClassifierServiceTests
             .Build();
         services.AddSingleton<IConfiguration>(configuration);
 
-        // Use production extension method to register all content detection services
+        // Use production extension methods to register services
         // This ensures tests match production configuration exactly
+        services.AddCoreServices();
         services.AddContentDetection();
 
         _serviceProvider = services.BuildServiceProvider();
@@ -167,7 +169,8 @@ public class MLTextClassifierServiceTests
             .Build();
         services.AddSingleton<IConfiguration>(configuration);
 
-        // Use production extension method to ensure test matches production
+        // Use production extension methods to ensure test matches production
+        services.AddCoreServices();
         services.AddContentDetection();
 
         var serviceProvider = services.BuildServiceProvider();
@@ -292,7 +295,8 @@ public class MLTextClassifierServiceTests
             .Build();
         services.AddSingleton<IConfiguration>(configuration);
 
-        // Use production extension method to ensure test matches production
+        // Use production extension methods to ensure test matches production
+        services.AddCoreServices();
         services.AddContentDetection();
 
         var serviceProvider = services.BuildServiceProvider();
@@ -342,7 +346,8 @@ public class MLTextClassifierServiceTests
             .Build();
         services.AddSingleton<IConfiguration>(configuration);
 
-        // Use production extension method to ensure test matches production
+        // Use production extension methods to ensure test matches production
+        services.AddCoreServices();
         services.AddContentDetection();
 
         var serviceProvider = services.BuildServiceProvider();
@@ -370,7 +375,8 @@ public class MLTextClassifierServiceTests
             .Build();
         services.AddSingleton<IConfiguration>(configuration);
 
-        // Use production extension method to ensure test matches production
+        // Use production extension methods to ensure test matches production
+        services.AddCoreServices();
         services.AddContentDetection();
 
         var serviceProvider = services.BuildServiceProvider();
@@ -472,7 +478,9 @@ public class MLTextClassifierServiceTests
         // Assert - Implicit ham is added to balance the dataset
         var metadata = _mlService.GetMetadata();
         Assert.That(metadata, Is.Not.Null, "Model should train successfully");
-        Assert.That(metadata!.SpamSampleCount, Is.EqualTo(100), "SQL has 100 spam samples");
+        // SQL has 100 spam samples, but SimHash deduplication removes near-duplicates (~6)
+        Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(90), "After dedup, most spam samples should remain");
+        Assert.That(metadata.SpamSampleCount, Is.LessThanOrEqualTo(100), "Should not exceed raw spam count");
         Assert.That(metadata.HamSampleCount, Is.GreaterThan(20), "Should add implicit ham on top of 20 explicit ham");
         Assert.That(metadata.IsBalanced, Is.True, "Implicit ham should bring dataset into balanced range (20-80% spam)");
     }
@@ -494,7 +502,9 @@ public class MLTextClassifierServiceTests
         // Assert - Explicit ham is now CAPPED to maintain balance
         var metadata = _mlService.GetMetadata();
         Assert.That(metadata, Is.Not.Null, "Model should train successfully");
-        Assert.That(metadata!.SpamSampleCount, Is.EqualTo(20), "SQL has 20 spam samples");
+        // SQL has 20 spam samples; small dataset so minimal dedup impact expected
+        Assert.That(metadata!.SpamSampleCount, Is.GreaterThanOrEqualTo(15), "After dedup, most spam samples should remain");
+        Assert.That(metadata.SpamSampleCount, Is.LessThanOrEqualTo(20), "Should not exceed raw spam count");
 
         // NEW BEHAVIOR: Explicit ham is capped to dynamicHamCap (20 * 2.33 = 46)
         Assert.That(metadata.HamSampleCount, Is.LessThanOrEqualTo(46),

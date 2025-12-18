@@ -173,6 +173,8 @@ public static class ServiceCollectionExtensions
             // API key migration service (one-time migration from env vars to encrypted database storage)
             services.AddScoped<ApiKeyMigrationService>();
 
+            // Similarity hash backfill service (one-time migration for SimHash deduplication)
+            services.AddScoped<SimilarityHashBackfillService>();
 
             // Documentation service (Phase 4.X: Folder-based portable markdown documentation)
             services.AddSingleton<Services.Docs.IDocumentationService, Services.Docs.DocumentationService>();

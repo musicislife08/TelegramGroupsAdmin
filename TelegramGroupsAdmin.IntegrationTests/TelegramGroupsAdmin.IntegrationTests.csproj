@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- EF1002: ExecuteSqlRawAsync SQL injection warning - safe to suppress in tests (all SQL is hardcoded constants, no user input) -->
+    <NoWarn>$(NoWarn);EF1002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -44,6 +46,7 @@
     <EmbeddedResource Include="TestData\SQL\11_training_full.sql" />
     <EmbeddedResource Include="TestData\SQL\20_unbalanced_100_20.sql" />
     <EmbeddedResource Include="TestData\SQL\21_unbalanced_20_100.sql" />
+    <EmbeddedResource Include="TestData\SQL\30_dedup_test_data.sql" />
   </ItemGroup>
 
 </Project>

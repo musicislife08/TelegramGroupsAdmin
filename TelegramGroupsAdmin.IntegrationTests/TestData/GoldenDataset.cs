@@ -572,6 +572,24 @@ public static class GoldenDataset
     }
 
     /// <summary>
+    /// Seeds deduplication test data with intentional near-duplicates (22 messages with 7 distinct groups).
+    /// Use for testing SimHash near-duplicate detection accuracy.
+    /// Message IDs: 95001-95022
+    /// Groups:
+    /// - Group 1 (95001-95004): Crypto signal spam variants
+    /// - Group 2 (95005-95007): Investment scam variants
+    /// - Group 3 (95008-95010): Giveaway scam variants
+    /// - Group 4 (95011-95013): Different spam topics (not near-duplicates)
+    /// - Group 5 (95014-95016): Legitimate ham messages
+    /// - Group 6 (95017-95019): Ham near-duplicates
+    /// - Group 7 (95020-95022): More spam variants
+    /// </summary>
+    public static async Task SeedDeduplicationTestDataAsync(AppDbContext context)
+    {
+        await LoadSqlScriptAsync(context, "SQL.30_dedup_test_data.sql");
+    }
+
+    /// <summary>
     /// Loads and executes an embedded SQL script from TestData directory.
     /// </summary>
     /// <param name="context">Database context</param>

@@ -34,6 +34,14 @@ public class MessageTranslationDto
     [Column("translated_at")]
     public DateTimeOffset TranslatedAt { get; set; }
 
+    /// <summary>
+    /// 64-bit SimHash fingerprint for text similarity detection.
+    /// Used for O(1) training data deduplication via Hamming distance.
+    /// Computed from translated_text.
+    /// </summary>
+    [Column("similarity_hash")]
+    public long? SimilarityHash { get; set; }
+
     // Navigation properties
     [ForeignKey(nameof(MessageId))]
     public virtual MessageRecordDto? Message { get; set; }

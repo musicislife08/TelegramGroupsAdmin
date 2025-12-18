@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TelegramGroupsAdmin.Configuration;
+using TelegramGroupsAdmin.Core.Extensions;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories;
@@ -97,6 +98,9 @@ public class MessageHistoryRepositoryTests
         {
             options.ImageStoragePath = _imageStoragePath;
         });
+
+        // Register Core services (SimHashService required by MessageHistoryRepository)
+        services.AddCoreServices();
 
         // Register MessageHistoryRepository and extracted services (REFACTOR-3)
         services.AddScoped<IMessageHistoryRepository, MessageHistoryRepository>();
