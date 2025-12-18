@@ -383,116 +383,31 @@ public static class GoldenDataset
     }
 
     /// <summary>
-    /// Legacy method for backwards compatibility. Use SeedAsync() instead.
-    /// </summary>
-    [Obsolete("Use SeedAsync() instead")]
-    public static async Task SeedDatabaseAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider = null)
-    {
-        await SeedAsync(context, dataProtectionProvider);
-    }
-
-    /// <summary>
     /// Seeds base database structure (users, chats, messages, detection_results, configs).
+    /// Loads SQL scripts 00-05 in FK dependency order, then configs inline (encryption).
     /// Does NOT seed training_labels or ML training data.
     /// </summary>
     private static async Task SeedBaseDataAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider)
     {
-        // Create Data Protector for API keys if provider available
+        // Load base data scripts in FK dependency order
+        await LoadSqlScriptAsync(context, "SQL.00_base_telegram_users.sql");
+        await LoadSqlScriptAsync(context, "SQL.01_base_web_users.sql");
+        await LoadSqlScriptAsync(context, "SQL.02_base_managed_chats.sql");
+        await LoadSqlScriptAsync(context, "SQL.03_base_linked_channels.sql");
+        await LoadSqlScriptAsync(context, "SQL.04_base_messages.sql");
+        await LoadSqlScriptAsync(context, "SQL.05_base_detection_results.sql");
+
+        // Seed configs inline (requires runtime encryption of API keys)
+        await SeedConfigsAsync(context, dataProtectionProvider);
+    }
+
+    /// <summary>
+    /// Seeds configs with encrypted API keys.
+    /// Kept inline because encryption output changes every run (includes nonce/timestamp).
+    /// </summary>
+    private static async Task SeedConfigsAsync(AppDbContext context, IDataProtectionProvider? dataProtectionProvider)
+    {
         var apiKeyProtector = dataProtectionProvider?.CreateProtector(DataProtectionPurposes.ApiKeys);
-
-        // 1. Seed telegram_users (no FK dependencies)
-        await context.Database.ExecuteSqlRawAsync(
-            $"""
-            INSERT INTO telegram_users (telegram_user_id, username, first_name, last_name, is_trusted, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at)
-            VALUES
-            ({TelegramUsers.System_TelegramUserId}, '{TelegramUsers.System_Username}', NULL, NULL, {TelegramUsers.System_IsTrusted}, {TelegramUsers.System_BotDmEnabled}, NOW() - INTERVAL '14 days', NOW(), NOW() - INTERVAL '14 days', NOW()),
-            ({TelegramUsers.User1_TelegramUserId}, '{TelegramUsers.User1_Username}', '{TelegramUsers.User1_FirstName}', '{TelegramUsers.User1_LastName}', {TelegramUsers.User1_IsTrusted}, {TelegramUsers.User1_BotDmEnabled}, NOW() - INTERVAL '13 days', NOW(), NOW() - INTERVAL '13 days', NOW()),
-            ({TelegramUsers.User2_TelegramUserId}, '{TelegramUsers.User2_Username}', '{TelegramUsers.User2_FirstName}', '{TelegramUsers.User2_LastName}', {TelegramUsers.User2_IsTrusted}, {TelegramUsers.User2_BotDmEnabled}, NOW() - INTERVAL '12 days', NOW(), NOW() - INTERVAL '12 days', NOW()),
-            ({TelegramUsers.User3_TelegramUserId}, '{TelegramUsers.User3_Username}', '{TelegramUsers.User3_FirstName}', '{TelegramUsers.User3_LastName}', {TelegramUsers.User3_IsTrusted}, {TelegramUsers.User3_BotDmEnabled}, NOW() - INTERVAL '11 days', NOW(), NOW() - INTERVAL '11 days', NOW()),
-            ({TelegramUsers.User4_TelegramUserId}, '{TelegramUsers.User4_Username}', '{TelegramUsers.User4_FirstName}', '{TelegramUsers.User4_LastName}', {TelegramUsers.User4_IsTrusted}, {TelegramUsers.User4_BotDmEnabled}, NOW() - INTERVAL '10 days', NOW(), NOW() - INTERVAL '10 days', NOW()),
-            ({TelegramUsers.User5_TelegramUserId}, '{TelegramUsers.User5_Username}', NULL, NULL, {TelegramUsers.User5_IsTrusted}, {TelegramUsers.User5_BotDmEnabled}, NOW() - INTERVAL '9 days', NOW(), NOW() - INTERVAL '9 days', NOW()),
-            ({TelegramUsers.User6_TelegramUserId}, NULL, '{TelegramUsers.User6_FirstName}', NULL, {TelegramUsers.User6_IsTrusted}, {TelegramUsers.User6_BotDmEnabled}, NOW() - INTERVAL '8 days', NOW(), NOW() - INTERVAL '8 days', NOW()),
-            ({TelegramUsers.User7_TelegramUserId}, '{TelegramUsers.User7_Username}', NULL, NULL, {TelegramUsers.User7_IsTrusted}, {TelegramUsers.User7_BotDmEnabled}, NOW() - INTERVAL '7 days', NOW(), NOW() - INTERVAL '7 days', NOW())
-            """
-        );
-
-        // 2. Seed users (with self-referencing FK: invited_by)
-        const string testPasswordHash = "AQAAAAIAAYagAAAAEDummyHashForTestingOnly1234567890";
-        const string testSecurityStamp = "TEST_SECURITY_STAMP";
-
-#pragma warning disable EF1002 // SQL injection risk suppressed: all values are static test constants
-        await context.Database.ExecuteSqlRawAsync(
-            $"""
-            INSERT INTO users (id, email, normalized_email, password_hash, security_stamp, permission_level, invited_by, is_active, totp_secret, totp_enabled, totp_setup_started_at, created_at, last_login_at, status, email_verified, "InvitedByUserId")
-            VALUES
-            ('{Users.User1_Id}', '{Users.User1_Email}', '{Users.User1_Email.ToUpperInvariant()}', '{testPasswordHash}', '{testSecurityStamp}', {Users.User1_PermissionLevel}, NULL, TRUE, NULL, {Users.User1_TotpEnabled}, NULL, NOW() - INTERVAL '14 days', NOW(), {Users.User1_Status}, {Users.User1_EmailVerified}, NULL),
-            ('{Users.User2_Id}', '{Users.User2_Email}', '{Users.User2_Email.ToUpperInvariant()}', '{testPasswordHash}', '{testSecurityStamp}', {Users.User2_PermissionLevel}, '{Users.User1_Id}', TRUE, NULL, {Users.User2_TotpEnabled}, NULL, NOW() - INTERVAL '13 days', NOW(), {Users.User2_Status}, {Users.User2_EmailVerified}, '{Users.User1_Id}'),
-            ('{Users.User3_Id}', '{Users.User3_Email}', '{Users.User3_Email.ToUpperInvariant()}', '{testPasswordHash}', '{testSecurityStamp}', {Users.User3_PermissionLevel}, '{Users.User1_Id}', FALSE, NULL, {Users.User3_TotpEnabled}, NULL, NOW() - INTERVAL '12 days', NULL, {Users.User3_Status}, {Users.User3_EmailVerified}, '{Users.User1_Id}'),
-            ('{Users.User4_Id}', '{Users.User4_Email}', '{Users.User4_Email.ToUpperInvariant()}', '{testPasswordHash}', '{testSecurityStamp}', {Users.User4_PermissionLevel}, '{Users.User2_Id}', FALSE, NULL, {Users.User4_TotpEnabled}, NULL, NOW() - INTERVAL '11 days', NULL, {Users.User4_Status}, {Users.User4_EmailVerified}, '{Users.User2_Id}')
-            """
-        );
-#pragma warning restore EF1002
-
-        // 3. Seed managed_chats
-        await context.Database.ExecuteSqlRawAsync(
-            $"""
-            INSERT INTO managed_chats (chat_id, chat_name, chat_type, bot_status, is_admin, added_at, is_active, last_seen_at)
-            VALUES
-            ({ManagedChats.Chat1_Id}, '{ManagedChats.Chat1_Name}', {ManagedChats.Chat1_Type}, {ManagedChats.Chat1_BotStatus}, {ManagedChats.Chat1_IsAdmin}, NOW() - INTERVAL '13 days', {ManagedChats.Chat1_IsActive}, NOW()),
-            ({ManagedChats.Chat2_Id}, '{ManagedChats.Chat2_Name}', {ManagedChats.Chat2_Type}, {ManagedChats.Chat2_BotStatus}, {ManagedChats.Chat2_IsAdmin}, NOW() - INTERVAL '12 days', {ManagedChats.Chat2_IsActive}, NOW()),
-            ({ManagedChats.Chat3_Id}, '{ManagedChats.Chat3_Name}', {ManagedChats.Chat3_Type}, {ManagedChats.Chat3_BotStatus}, {ManagedChats.Chat3_IsAdmin}, NOW() - INTERVAL '11 days', {ManagedChats.Chat3_IsActive}, NOW()),
-            ({ManagedChats.MainChat_Id}, '{ManagedChats.MainChat_Name}', {ManagedChats.MainChat_Type}, {ManagedChats.MainChat_BotStatus}, {ManagedChats.MainChat_IsAdmin}, NOW() - INTERVAL '10 days', {ManagedChats.MainChat_IsActive}, NOW())
-            """
-        );
-
-        // 4. Seed linked_channels (FK to managed_chats)
-        await context.Database.ExecuteSqlRawAsync(
-            $$"""
-            INSERT INTO linked_channels (managed_chat_id, channel_id, channel_name, channel_icon_path, photo_hash, last_synced)
-            VALUES
-            ({{LinkedChannels.Channel1_ManagedChatId}}, {{LinkedChannels.Channel1_ChannelId}}, {0}, NULL, {1}, NOW() - INTERVAL '1 day'),
-            ({{LinkedChannels.Channel2_ManagedChatId}}, {{LinkedChannels.Channel2_ChannelId}}, {2}, {3}, NULL, NOW() - INTERVAL '2 days')
-            """,
-            LinkedChannels.Channel1_Name,
-            LinkedChannels.Channel1_PhotoHash,
-            LinkedChannels.Channel2_Name,
-            (object?)LinkedChannels.Channel2_IconPath ?? DBNull.Value
-        );
-
-        // 5. Seed messages (use parameters for text to handle special characters)
-        await context.Database.ExecuteSqlRawAsync(
-            $$"""
-            INSERT INTO messages (message_id, user_id, chat_id, timestamp, message_text, media_type, content_check_skip_reason)
-            VALUES
-            ({{Messages.Msg1_Id}}, {{Messages.Msg1_UserId}}, {{Messages.Msg1_ChatId}}, NOW() - INTERVAL '1 hour', {0}, NULL, {{Messages.Msg1_ContentCheckSkipReason}}),
-            ({{Messages.Msg2_Id}}, {{Messages.Msg2_UserId}}, {{Messages.Msg2_ChatId}}, NOW() - INTERVAL '2 hours', {1}, NULL, {{Messages.Msg2_ContentCheckSkipReason}}),
-            ({{Messages.Msg3_Id}}, {{Messages.Msg3_UserId}}, {{Messages.Msg3_ChatId}}, NOW() - INTERVAL '3 hours', {2}, NULL, {{Messages.Msg3_ContentCheckSkipReason}}),
-            ({{Messages.Msg4_Id}}, {{Messages.Msg4_UserId}}, {{Messages.Msg4_ChatId}}, NOW() - INTERVAL '4 hours', {3}, NULL, {{Messages.Msg4_ContentCheckSkipReason}}),
-            ({{Messages.Msg5_Id}}, {{Messages.Msg5_UserId}}, {{Messages.Msg5_ChatId}}, NOW() - INTERVAL '5 hours', {4}, NULL, {{Messages.Msg5_ContentCheckSkipReason}}),
-            ({{Messages.Msg6_Id}}, {{Messages.Msg6_UserId}}, {{Messages.Msg6_ChatId}}, NOW() - INTERVAL '6 hours', NULL, {{Messages.Msg6_MediaType}}, {{Messages.Msg6_ContentCheckSkipReason}}),
-            ({{Messages.Msg7_Id}}, {{Messages.Msg7_UserId}}, {{Messages.Msg7_ChatId}}, NOW() - INTERVAL '7 hours', {5}, NULL, {{Messages.Msg7_ContentCheckSkipReason}}),
-            ({{Messages.Msg8_Id}}, {{Messages.Msg8_UserId}}, {{Messages.Msg8_ChatId}}, NOW() - INTERVAL '8 hours', {6}, NULL, {{Messages.Msg8_ContentCheckSkipReason}}),
-            ({{Messages.Msg9_Id}}, {{Messages.Msg9_UserId}}, {{Messages.Msg9_ChatId}}, NOW() - INTERVAL '9 hours', {7}, NULL, {{Messages.Msg9_ContentCheckSkipReason}}),
-            ({{Messages.Msg10_Id}}, {{Messages.Msg10_UserId}}, {{Messages.Msg10_ChatId}}, NOW() - INTERVAL '10 hours', {8}, NULL, {{Messages.Msg10_ContentCheckSkipReason}}),
-            ({{Messages.Msg11_Id}}, {{Messages.Msg11_UserId}}, {{Messages.Msg11_ChatId}}, NOW() - INTERVAL '11 hours', {9}, NULL, {{Messages.Msg11_ContentCheckSkipReason}})
-            """,
-            Messages.Msg1_Text, Messages.Msg2_Text, Messages.Msg3_Text, Messages.Msg4_Text, Messages.Msg5_Text,
-            Messages.Msg7_Text, Messages.Msg8_Text, Messages.Msg9_Text, Messages.Msg10_Text, Messages.Msg11_Text
-        );
-
-        // 6. Seed detection_results (FK to messages)
-        await context.Database.ExecuteSqlRawAsync(
-            $$"""
-            INSERT INTO detection_results (message_id, detected_at, detection_source, detection_method, confidence, reason, system_identifier, used_for_training, net_confidence, edit_version)
-            VALUES
-            ({{DetectionResults.Result1_MessageId}}, NOW() - INTERVAL '1 hour', 'System', {0}, {{DetectionResults.Result1_Confidence}}, {1}, 'spam-detection-v1', FALSE, {{DetectionResults.Result1_NetConfidence}}, 0),
-            (82581, NOW() - INTERVAL '2 hours', 'System', {2}, {{DetectionResults.Result2_Confidence}}, {3}, 'spam-detection-v1', FALSE, {{DetectionResults.Result2_NetConfidence}}, 0)
-            """,
-            DetectionResults.Result1_DetectionMethod, DetectionResults.Result1_Reason,
-            DetectionResults.Result2_DetectionMethod, DetectionResults.Result2_Reason
-        );
-
-        // 7. Seed configs (with encrypted api_keys and JSONB)
         string? encryptedApiKeys = null;
         if (apiKeyProtector != null)
         {
@@ -505,11 +420,12 @@ public static class GoldenDataset
         }
 
         await context.Database.ExecuteSqlRawAsync(
-            $$"""
+            """
             INSERT INTO configs (id, chat_id, spam_detection_config, api_keys, backup_encryption_config, created_at)
             VALUES
-            ({{Configs.Config1_Id}}, {0}, {1}::jsonb, {2}, {3}::jsonb, NOW() - INTERVAL '10 days')
+            ({0}, {1}, {2}::jsonb, {3}, {4}::jsonb, NOW() - INTERVAL '10 days')
             """,
+            Configs.Config1_Id,
             Configs.Config1_ChatId,
             Configs.SpamDetectionConfigJson!,
             encryptedApiKeys!,
@@ -522,18 +438,7 @@ public static class GoldenDataset
     /// </summary>
     private static async Task SeedGoldenDatasetTrainingLabelsAsync(AppDbContext context)
     {
-        await context.Database.ExecuteSqlRawAsync(
-            $$"""
-            INSERT INTO training_labels (message_id, label, labeled_by_user_id, labeled_at, reason, audit_log_id)
-            VALUES
-            ({{TrainingLabels.Label1_MessageId}}, {{TrainingLabels.Label1_Label}}, {{TrainingLabels.Label1_LabeledByUserId}}, NOW() - INTERVAL '1 day', {0}, NULL),
-            ({{TrainingLabels.Label2_MessageId}}, {{TrainingLabels.Label2_Label}}, NULL, NOW() - INTERVAL '2 days', {1}, NULL),
-            ({{TrainingLabels.Label3_MessageId}}, {{TrainingLabels.Label3_Label}}, {{TrainingLabels.Label3_LabeledByUserId}}, NOW() - INTERVAL '3 days', {2}, NULL),
-            ({{TrainingLabels.Label4_MessageId}}, {{TrainingLabels.Label4_Label}}, NULL, NOW() - INTERVAL '4 days', NULL, NULL),
-            ({{TrainingLabels.Label5_MessageId}}, {{TrainingLabels.Label5_Label}}, NULL, NOW() - INTERVAL '5 days', NULL, NULL)
-            """,
-            TrainingLabels.Label1_Reason, TrainingLabels.Label2_Reason, TrainingLabels.Label3_Reason
-        );
+        await LoadSqlScriptAsync(context, "SQL.10_training_minimal.sql");
     }
 
     /// <summary>

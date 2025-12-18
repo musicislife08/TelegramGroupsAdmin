@@ -43,11 +43,21 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="TestData\MLTrainingData.sql" />
+    <!-- Base data scripts (FK dependency order) -->
+    <EmbeddedResource Include="TestData\SQL\00_base_telegram_users.sql" />
+    <EmbeddedResource Include="TestData\SQL\01_base_web_users.sql" />
+    <EmbeddedResource Include="TestData\SQL\02_base_managed_chats.sql" />
+    <EmbeddedResource Include="TestData\SQL\03_base_linked_channels.sql" />
+    <EmbeddedResource Include="TestData\SQL\04_base_messages.sql" />
+    <EmbeddedResource Include="TestData\SQL\05_base_detection_results.sql" />
+    <!-- Training data scripts -->
+    <EmbeddedResource Include="TestData\SQL\10_training_minimal.sql" />
     <EmbeddedResource Include="TestData\SQL\11_training_full.sql" />
     <EmbeddedResource Include="TestData\SQL\20_unbalanced_100_20.sql" />
     <EmbeddedResource Include="TestData\SQL\21_unbalanced_20_100.sql" />
     <EmbeddedResource Include="TestData\SQL\30_dedup_test_data.sql" />
+    <!-- Legacy (to be removed after migration) -->
+    <EmbeddedResource Include="TestData\MLTrainingData.sql" />
   </ItemGroup>
 
 </Project>
