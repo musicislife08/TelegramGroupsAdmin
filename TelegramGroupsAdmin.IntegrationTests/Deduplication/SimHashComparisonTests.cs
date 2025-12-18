@@ -73,10 +73,10 @@ public class SimHashIntegrationTests
             .ToListAsync();
 
         // Assert
-        TestContext.WriteLine($"Top 5 similar messages to: \"{newSpam}\"");
+        TestContext.Out.WriteLine($"Top 5 similar messages to: \"{newSpam}\"");
         foreach (var r in rawResults)
         {
-            TestContext.WriteLine($"  [{r.HammingDistance} bits] Msg {r.MessageId}: {r.MessageText?[..Math.Min(60, r.MessageText.Length)]}...");
+            TestContext.Out.WriteLine($"  [{r.HammingDistance} bits] Msg {r.MessageId}: {r.MessageText?[..Math.Min(60, r.MessageText.Length)]}...");
         }
 
         Assert.That(rawResults, Has.Count.GreaterThan(0), "Should find similar messages");
@@ -171,7 +171,7 @@ public class SimHashIntegrationTests
             }
 
             groupResults.Add((name, minDistanceToFirst, maxDistanceToFirst, allSimilarToFirst));
-            TestContext.WriteLine($"{name}: Distance to first = {minDistanceToFirst}-{maxDistanceToFirst}, All similar to first: {allSimilarToFirst}");
+            TestContext.Out.WriteLine($"{name}: Distance to first = {minDistanceToFirst}-{maxDistanceToFirst}, All similar to first: {allSimilarToFirst}");
         }
 
         // Assert that ALL groups have messages similar to their first message
@@ -207,10 +207,10 @@ public class SimHashIntegrationTests
         var giveawayVsHam = _simHashService.HammingDistance(giveawayHash, hamHash);
 
         // Assert: Different groups should have high Hamming distance
-        TestContext.WriteLine($"Crypto vs Giveaway: {cryptoVsGiveaway}");
-        TestContext.WriteLine($"Crypto vs Dating: {cryptoVsDating}");
-        TestContext.WriteLine($"Crypto vs Ham: {cryptoVsHam}");
-        TestContext.WriteLine($"Giveaway vs Ham: {giveawayVsHam}");
+        TestContext.Out.WriteLine($"Crypto vs Giveaway: {cryptoVsGiveaway}");
+        TestContext.Out.WriteLine($"Crypto vs Dating: {cryptoVsDating}");
+        TestContext.Out.WriteLine($"Crypto vs Ham: {cryptoVsHam}");
+        TestContext.Out.WriteLine($"Giveaway vs Ham: {giveawayVsHam}");
 
         Assert.Multiple(() =>
         {

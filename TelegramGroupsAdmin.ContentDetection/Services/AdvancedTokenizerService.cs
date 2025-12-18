@@ -1,75 +1,29 @@
-using System.Text.RegularExpressions;
+using TelegramGroupsAdmin.Core.Utilities;
 
 namespace TelegramGroupsAdmin.ContentDetection.Services;
 
 /// <summary>
-/// Advanced tokenizer with configurable options
+/// Advanced tokenizer with configurable options.
+/// Delegates to centralized TextTokenizer in Core.
 /// </summary>
-public partial class AdvancedTokenizerService : ITokenizerService
+public class AdvancedTokenizerService : ITokenizerService
 {
     private readonly TokenizerOptions _options;
-    private readonly TokenizerService _baseTokenizer;
 
     public AdvancedTokenizerService(TokenizerOptions? options = null)
     {
-        _options = options ?? new TokenizerOptions();
-        _baseTokenizer = new TokenizerService();
+        _options = options ?? TokenizerOptions.Default;
     }
 
-    public string RemoveEmojis(string text) => _baseTokenizer.RemoveEmojis(text);
+    /// <inheritdoc />
+    public string[] Tokenize(string text) => TextTokenizer.ExtractWords(text, _options);
 
-    public bool IsStopWord(string word) => _baseTokenizer.IsStopWord(word);
+    /// <inheritdoc />
+    public string RemoveEmojis(string text) => TextTokenizer.RemoveEmojis(text);
 
-    public string[] Tokenize(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return [];
+    /// <inheritdoc />
+    public Dictionary<string, int> GetWordFrequencies(string text) => TextTokenizer.GetWordFrequencies(text, _options);
 
-        // Apply preprocessing based on options
-        if (_options.RemoveEmojis)
-            text = RemoveEmojis(text);
-
-        if (_options.ConvertToLowerCase)
-            text = text.ToLowerInvariant();
-
-        // Extract words
-        var matches = WordRegex().Matches(text);
-        var words = new List<string>();
-
-        foreach (Match match in matches)
-        {
-            var word = match.Value;
-
-            // Apply filters based on options
-            if (word.Length < _options.MinWordLength)
-                continue;
-
-            if (_options.RemoveStopWords && IsStopWord(word))
-                continue;
-
-            if (_options.RemoveNumbers && int.TryParse(word, out _))
-                continue;
-
-            words.Add(word);
-        }
-
-        return words.ToArray();
-    }
-
-    public Dictionary<string, int> GetWordFrequencies(string text)
-    {
-        var words = Tokenize(text);
-        var frequencies = new Dictionary<string, int>(
-            _options.ConvertToLowerCase ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
-
-        foreach (var word in words)
-        {
-            frequencies[word] = frequencies.GetValueOrDefault(word, 0) + 1;
-        }
-
-        return frequencies;
-    }
-
-    [GeneratedRegex(@"\b[\w']+\b", RegexOptions.Compiled)]
-    private static partial Regex WordRegex();
+    /// <inheritdoc />
+    public bool IsStopWord(string word) => TextTokenizer.IsStopWord(word);
 }

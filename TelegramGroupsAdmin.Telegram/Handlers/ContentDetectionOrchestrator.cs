@@ -25,9 +25,6 @@ public class ContentDetectionOrchestrator
     private readonly SimHashService _simHashService;
     private readonly ILogger<ContentDetectionOrchestrator> _logger;
 
-    // SimHash deduplication: Hamming distance threshold (~84% similarity)
-    private const int SimHashMaxDistance = 10;
-
     public ContentDetectionOrchestrator(
         IServiceProvider serviceProvider,
         DetectionActionService spamActionService,
@@ -189,7 +186,7 @@ public class ContentDetectionOrchestrator
             var isDuplicate = await messageHistoryRepo.HasSimilarTrainingHashAsync(
                 hash,
                 spamResult.IsSpam,
-                SimHashMaxDistance,
+                SimHashService.DefaultMaxDistance,
                 cancellationToken);
 
             if (isDuplicate)
@@ -198,7 +195,7 @@ public class ContentDetectionOrchestrator
                 _logger.LogDebug(
                     "Skipping training for message {MessageId}: SimHash within {MaxDistance} bits of existing {Class} sample",
                     message.MessageId,
-                    SimHashMaxDistance,
+                    SimHashService.DefaultMaxDistance,
                     spamResult.IsSpam ? "spam" : "ham");
             }
         }

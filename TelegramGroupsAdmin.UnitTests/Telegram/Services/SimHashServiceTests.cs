@@ -294,7 +294,7 @@ public class SimHashServiceTests
 
         Assert.That(similarLoose, Is.True, "Should be similar with loose threshold");
         // Log the actual distance for debugging
-        TestContext.WriteLine($"Actual Hamming distance: {distance}");
+        TestContext.Out.WriteLine($"Actual Hamming distance: {distance}");
     }
 
     #endregion

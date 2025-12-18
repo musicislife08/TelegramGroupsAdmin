@@ -18,9 +18,6 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
     private const int MinTextLength = 10;  // Minimum text length for ML training
     private const double HamMultiplier = 2.33;  // Ham multiplier to maintain ~30% spam ratio
 
-    // SimHash deduplication threshold (~84% similarity)
-    private const int SimHashMaxDistance = 10;
-
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly SimHashService _simHashService;
     private readonly ILogger<MLTrainingDataRepository> _logger;
@@ -286,7 +283,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
             }
 
             // Check if similar hash already in deduplicated set
-            var isDuplicate = usedHashes.Any(h => _simHashService.AreSimilar(h, hash, SimHashMaxDistance));
+            var isDuplicate = usedHashes.Any(h => _simHashService.AreSimilar(h, hash));
             if (!isDuplicate)
             {
                 deduplicated.Add(sample);

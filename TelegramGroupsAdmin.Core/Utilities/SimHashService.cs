@@ -1,7 +1,6 @@
 using System.IO.Hashing;
 using System.Numerics;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace TelegramGroupsAdmin.Core.Utilities;
 
@@ -11,17 +10,21 @@ namespace TelegramGroupsAdmin.Core.Utilities;
 /// Used for O(1) training data deduplication instead of O(n) Jaccard comparison.
 ///
 /// Algorithm:
-/// 1. Tokenize text (lowercase, filter single chars)
+/// 1. Tokenize text using shared TextTokenizer (lowercase, filter single chars)
 /// 2. For each token, compute a 64-bit hash
 /// 3. For each bit position 0-63: increment counter if bit set, decrement if not
 /// 4. Final hash: bit i = 1 if counter[i] > 0, else 0
 ///
 /// Similar texts → Similar hashes → Low Hamming distance
 /// </summary>
-public partial class SimHashService
+public class SimHashService
 {
-    [GeneratedRegex(@"[\s\p{P}]+", RegexOptions.Compiled)]
-    private static partial Regex TokenSplitter();
+    /// <summary>
+    /// Default maximum Hamming distance for similarity detection.
+    /// 10 bits difference out of 64 ≈ 84% similarity threshold.
+    /// Aligns with the 90% Jaccard threshold used in the original deduplication approach.
+    /// </summary>
+    public const int DefaultMaxDistance = 10;
 
     /// <summary>
     /// Compute 64-bit SimHash fingerprint for text.
@@ -32,7 +35,7 @@ public partial class SimHashService
         if (string.IsNullOrWhiteSpace(text))
             return 0;
 
-        var tokens = Tokenize(text);
+        var tokens = TextTokenizer.TokenizeToSet(text);
         if (tokens.Count == 0)
             return 0;
 
@@ -77,23 +80,10 @@ public partial class SimHashService
     /// </summary>
     /// <param name="hash1">First hash</param>
     /// <param name="hash2">Second hash</param>
-    /// <param name="maxDistance">Maximum Hamming distance to consider similar (default: 10)</param>
-    public bool AreSimilar(long hash1, long hash2, int maxDistance = 10)
+    /// <param name="maxDistance">Maximum Hamming distance to consider similar (default: DefaultMaxDistance)</param>
+    public bool AreSimilar(long hash1, long hash2, int maxDistance = DefaultMaxDistance)
     {
         return HammingDistance(hash1, hash2) <= maxDistance;
-    }
-
-    /// <summary>
-    /// Tokenize text into unique lowercase tokens, filtering single-character tokens.
-    /// Uses same tokenization strategy as TextSimilarityService (Jaccard) for consistency.
-    /// </summary>
-    private static HashSet<string> Tokenize(string text)
-    {
-        // ToLowerInvariant handles case folding, so default ordinal comparer is sufficient
-        return TokenSplitter()
-            .Split(text.ToLowerInvariant())
-            .Where(t => t.Length > 1)  // Filter single chars (same as Jaccard)
-            .ToHashSet();
     }
 
     /// <summary>

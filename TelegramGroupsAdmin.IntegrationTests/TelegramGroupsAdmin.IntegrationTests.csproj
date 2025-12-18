@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- EF1002: ExecuteSqlRawAsync SQL injection warning - safe to suppress in tests (all SQL is hardcoded constants, no user input) -->
     <NoWarn>$(NoWarn);EF1002</NoWarn>
   </PropertyGroup>

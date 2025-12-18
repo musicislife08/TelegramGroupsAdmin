@@ -173,7 +173,7 @@ public class TrainingHandlerTests
         await _mockTrainingRepo.DidNotReceiveWithAnyArgs().UpsertLabelAsync(
             default, default, default, default, default, default);
         await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(
-            default!, default, default);
+            string.Empty, new object(), default);
     }
 
     [Test]
@@ -209,7 +209,7 @@ public class TrainingHandlerTests
 
         // Assert - NO retraining triggered (no text training data)
         await _mockJobTrigger.DidNotReceiveWithAnyArgs().TriggerNowAsync(
-            default!, default, default);
+            string.Empty, new object(), default);
     }
 
     [Test]
