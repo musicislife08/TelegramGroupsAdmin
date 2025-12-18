@@ -1,6 +1,5 @@
 -- Base Telegram Users for Integration Tests
--- Contains 8 users including system user (ID 0)
--- User IDs: 0 (system), 100001-100007 (test users)
+-- Contains 12 users: system (ID 0), 7 test users (100001-100007), 4 training data users
 -- NO FK dependencies - can be loaded first
 
 INSERT INTO telegram_users (telegram_user_id, username, first_name, last_name, is_trusted, bot_dm_enabled, first_seen_at, last_seen_at, created_at, updated_at)

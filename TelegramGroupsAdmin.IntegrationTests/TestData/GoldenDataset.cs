@@ -420,11 +420,12 @@ public static class GoldenDataset
         }
 
         await context.Database.ExecuteSqlRawAsync(
-            $$"""
+            """
             INSERT INTO configs (id, chat_id, spam_detection_config, api_keys, backup_encryption_config, created_at)
             VALUES
-            ({{Configs.Config1_Id}}, {0}, {1}::jsonb, {2}, {3}::jsonb, NOW() - INTERVAL '10 days')
+            ({0}, {1}, {2}::jsonb, {3}, {4}::jsonb, NOW() - INTERVAL '10 days')
             """,
+            Configs.Config1_Id,
             Configs.Config1_ChatId,
             Configs.SpamDetectionConfigJson!,
             encryptedApiKeys!,
