@@ -75,17 +75,22 @@ public class ContentCheckCoordinatorTests
         _mockScope?.Dispose();
     }
 
-    #region Service Account Tests (Critical - Race Condition Prevention)
+    #region System Account Tests (Critical - Race Condition Prevention)
 
     [Test]
-    public async Task CheckAsync_ServiceAccount_SkipsAllChecks_NoRepositoryQueries()
+    [TestCase(777000, Description = "Service account")]
+    [TestCase(1087968824, Description = "Anonymous admin bot")]
+    [TestCase(136817688, Description = "Channel bot")]
+    [TestCase(1271266957, Description = "Replies bot")]
+    [TestCase(5434988373, Description = "Antispam bot")]
+    public async Task CheckAsync_SystemAccount_SkipsAllChecks_NoRepositoryQueries(long systemUserId)
     {
-        // Arrange
+        // Arrange - All Telegram system accounts should bypass all checks
         var request = new SpamLibRequest
         {
-            UserId = TelegramConstants.ServiceAccountUserId, // 777000
+            UserId = systemUserId,
             ChatId = -1001234567890,
-            Message = "Channel post content"
+            Message = "System account content"
         };
 
         // Act
@@ -95,11 +100,11 @@ public class ContentCheckCoordinatorTests
         Assert.Multiple(() =>
         {
             // Result validation
-            Assert.That(result.IsUserTrusted, Is.True, "Service account should be marked as trusted");
-            Assert.That(result.IsUserAdmin, Is.False, "Service account is not a chat admin");
+            Assert.That(result.IsUserTrusted, Is.True, "System account should be marked as trusted");
+            Assert.That(result.IsUserAdmin, Is.False, "System account is not a chat admin");
             Assert.That(result.SpamCheckSkipped, Is.True, "Spam checks should be skipped");
-            Assert.That(result.SkipReason, Does.Contain("Telegram service account"));
-            Assert.That(result.CriticalCheckViolations, Is.Empty, "No violations for service account");
+            Assert.That(result.SkipReason, Does.Contain("Telegram system account"));
+            Assert.That(result.CriticalCheckViolations, Is.Empty, "No violations for system account");
             Assert.That(result.SpamResult, Is.Null, "No spam detection should run");
         });
 
@@ -117,12 +122,17 @@ public class ContentCheckCoordinatorTests
     }
 
     [Test]
-    public async Task CheckAsync_ServiceAccount_SkipsEvenWithCriticalChecksConfigured()
+    [TestCase(777000, Description = "Service account")]
+    [TestCase(1087968824, Description = "Anonymous admin bot")]
+    [TestCase(136817688, Description = "Channel bot")]
+    [TestCase(1271266957, Description = "Replies bot")]
+    [TestCase(5434988373, Description = "Antispam bot")]
+    public async Task CheckAsync_SystemAccount_SkipsEvenWithCriticalChecksConfigured(long systemUserId)
     {
-        // Arrange - Even if critical checks exist, service account bypasses ALL checks
+        // Arrange - Even if critical checks exist, system accounts bypass ALL checks
         var request = new SpamLibRequest
         {
-            UserId = TelegramConstants.ServiceAccountUserId,
+            UserId = systemUserId,
             ChatId = -1001234567890,
             Message = "https://malicious-link.com" // Would normally trigger URL check
         };
@@ -134,8 +144,8 @@ public class ContentCheckCoordinatorTests
         Assert.Multiple(() =>
         {
             Assert.That(result.SpamCheckSkipped, Is.True);
-            Assert.That(result.SkipReason, Does.Contain("Telegram service account"));
-            Assert.That(result.SpamResult, Is.Null, "No spam detection for service account");
+            Assert.That(result.SkipReason, Does.Contain("Telegram system account"));
+            Assert.That(result.SpamResult, Is.Null, "No spam detection for system account");
         });
 
         // Verify NO critical checks query was made

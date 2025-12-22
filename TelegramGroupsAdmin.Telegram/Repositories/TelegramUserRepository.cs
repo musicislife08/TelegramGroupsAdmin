@@ -87,12 +87,12 @@ public class TelegramUserRepository : ITelegramUserRepository
             entity.CreatedAt = DateTimeOffset.UtcNow;
             entity.UpdatedAt = DateTimeOffset.UtcNow;
 
-            // Always trust Telegram service account (channel posts, anonymous admin posts)
-            if (user.TelegramUserId == TelegramConstants.ServiceAccountUserId)
+            // Always trust Telegram system accounts (channel posts, anonymous admin posts, etc.)
+            if (TelegramConstants.IsSystemUser(user.TelegramUserId))
             {
                 entity.IsTrusted = true;
                 _logger.LogInformation(
-                    "Created Telegram service account (user {TelegramUserId}) with automatic trust",
+                    "Created Telegram system account (user {TelegramUserId}) with automatic trust",
                     user.TelegramUserId);
             }
             else
@@ -174,12 +174,12 @@ public class TelegramUserRepository : ITelegramUserRepository
     /// </summary>
     public async Task UpdateTrustStatusAsync(long telegramUserId, bool isTrusted, CancellationToken ct = default)
     {
-        // Protect Telegram service account - cannot remove trust
-        if (telegramUserId == TelegramConstants.ServiceAccountUserId && !isTrusted)
+        // Protect Telegram system accounts - cannot remove trust
+        if (TelegramConstants.IsSystemUser(telegramUserId) && !isTrusted)
         {
             _logger.LogWarning(
-                "Blocked attempt to remove trust from Telegram service account (user {TelegramUserId}). " +
-                "Service account must always remain trusted.",
+                "Blocked attempt to remove trust from Telegram system account (user {TelegramUserId}). " +
+                "System accounts must always remain trusted.",
                 telegramUserId);
             return;
         }

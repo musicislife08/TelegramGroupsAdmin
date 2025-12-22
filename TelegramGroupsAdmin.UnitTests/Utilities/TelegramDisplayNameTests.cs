@@ -134,7 +134,7 @@ public class TelegramDisplayNameTests
 
     #endregion
 
-    #region Format - Service Account Tests
+    #region Format - System Account Tests
 
     [Test]
     public void Format_ServiceAccountWithChatName_ReturnsChatName()
@@ -167,9 +167,58 @@ public class TelegramDisplayNameTests
     [Test]
     public void Format_NonServiceAccountWithChatName_IgnoresChatName()
     {
-        // chatName parameter should only apply to service account
+        // chatName parameter should only apply to system accounts
         var result = TelegramDisplayName.Format("John", "Doe", null, 12345, "Some Channel");
         Assert.That(result, Is.EqualTo("John Doe"));
+    }
+
+    [Test]
+    public void Format_GroupAnonymousBotWithChatName_ReturnsChatName()
+    {
+        // Anonymous admin posts should show the group name
+        var result = TelegramDisplayName.Format(null, null, "GroupAnonymousBot", TelegramConstants.GroupAnonymousBotUserId, "Tech Discussion");
+        Assert.That(result, Is.EqualTo("Tech Discussion"));
+    }
+
+    [Test]
+    public void Format_GroupAnonymousBotWithoutChatName_ReturnsAnonymousAdmin()
+    {
+        var result = TelegramDisplayName.Format(null, null, "GroupAnonymousBot", TelegramConstants.GroupAnonymousBotUserId, null);
+        Assert.That(result, Is.EqualTo("Anonymous Admin"));
+    }
+
+    [Test]
+    public void Format_ChannelBotUserId_ReturnsChannelBot()
+    {
+        var result = TelegramDisplayName.Format(null, null, "Channel_Bot", TelegramConstants.ChannelBotUserId, null);
+        Assert.That(result, Is.EqualTo("Channel Bot"));
+    }
+
+    [Test]
+    public void Format_RepliesBotUserId_ReturnsRepliesBot()
+    {
+        var result = TelegramDisplayName.Format(null, null, "replies", TelegramConstants.RepliesBotUserId, null);
+        Assert.That(result, Is.EqualTo("Replies Bot"));
+    }
+
+    [Test]
+    public void Format_AntispamBotUserId_ReturnsTelegramAntispam()
+    {
+        var result = TelegramDisplayName.Format(null, null, null, TelegramConstants.AntispamBotUserId, null);
+        Assert.That(result, Is.EqualTo("Telegram Antispam"));
+    }
+
+    [Test]
+    [TestCase(777000, "Telegram Service Account")]
+    [TestCase(1087968824, "Anonymous Admin")]
+    [TestCase(136817688, "Channel Bot")]
+    [TestCase(1271266957, "Replies Bot")]
+    [TestCase(5434988373, "Telegram Antispam")]
+    public void Format_AllSystemUsers_ReturnCorrectFallbackNames(long userId, string expectedName)
+    {
+        // All system users should return their system name when no chatName is provided
+        var result = TelegramDisplayName.Format(null, null, null, userId, null);
+        Assert.That(result, Is.EqualTo(expectedName));
     }
 
     #endregion
