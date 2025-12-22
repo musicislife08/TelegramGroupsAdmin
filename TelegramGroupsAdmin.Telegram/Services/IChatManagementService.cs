@@ -1,7 +1,7 @@
 using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Telegram.Models;
 
-namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
 /// Interface for chat management, admin caching, and health checking.

@@ -6,7 +6,6 @@ using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
 
@@ -21,7 +20,7 @@ public class WebBotMessagingService : IWebBotMessagingService
     private readonly IBotMessageService _botMessageService;
     private readonly ITelegramUserRepository _userRepo;
     private readonly ITelegramUserMappingRepository _mappingRepo;
-    private readonly TelegramAdminBotService _botService;
+    private readonly ITelegramBotService _botService;
     private readonly ILogger<WebBotMessagingService> _logger;
 
     public WebBotMessagingService(
@@ -30,7 +29,7 @@ public class WebBotMessagingService : IWebBotMessagingService
         IBotMessageService botMessageService,
         ITelegramUserRepository userRepo,
         ITelegramUserMappingRepository mappingRepo,
-        TelegramAdminBotService botService,
+        ITelegramBotService botService,
         ILogger<WebBotMessagingService> logger)
     {
         _scopeFactory = scopeFactory;
@@ -78,7 +77,7 @@ public class WebBotMessagingService : IWebBotMessagingService
                 return new WebBotFeatureAvailability(false, null, null, errorMessage);
             }
 
-            // Get bot's user ID for identifying bot messages (use cached value from TelegramAdminBotService)
+            // Get bot's user ID for identifying bot messages (use cached value from TelegramBotService)
             var botInfo = _botService.BotUserInfo;
             long? botUserId = botInfo?.Id;
 

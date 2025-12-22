@@ -8,13 +8,12 @@ using TelegramGroupsAdmin.Configuration.Services;
 using TelegramGroupsAdmin.Core.BackgroundJobs;
 using TelegramGroupsAdmin.Core.Telemetry;
 using TelegramGroupsAdmin.Core.JobPayloads;
-using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Jobs;
 
 /// <summary>
 /// Job logic for periodic chat health monitoring
-/// Replaces PeriodicTimer in TelegramAdminBotService (Phase 4: Chat health optimization)
 /// Monitors chat permissions, admin lists, invite links
 /// </summary>
 [DisallowConcurrentExecution]

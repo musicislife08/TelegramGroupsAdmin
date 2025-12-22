@@ -10,7 +10,7 @@ public interface ITelegramBotClientFactory : IDisposable
 {
     /// <summary>
     /// Get ITelegramBotClient using token loaded from database configuration.
-    /// Used by TelegramAdminBotService for polling infrastructure (ReceiveAsync).
+    /// Used by TelegramBotPollingHost for polling infrastructure (ReceiveAsync).
     /// </summary>
     /// <returns>Current ITelegramBotClient instance</returns>
     Task<ITelegramBotClient> GetBotClientAsync();

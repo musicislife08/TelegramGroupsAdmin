@@ -144,10 +144,11 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<DetectionActionService>();
             services.AddSingleton<IChatManagementService, ChatManagementService>();
             services.AddSingleton<MessageProcessingService>();
-            services.AddSingleton<TelegramAdminBotService>();
-            services.AddSingleton<IMessageHistoryService>(sp => sp.GetRequiredService<TelegramAdminBotService>());
-            services.AddSingleton<IUpdateProcessor>(sp => sp.GetRequiredService<TelegramAdminBotService>());
-            services.AddHostedService(sp => sp.GetRequiredService<TelegramAdminBotService>());
+
+            // Telegram bot services (clean separation: capabilities vs lifecycle vs routing)
+            services.AddSingleton<IUpdateProcessor, UpdateProcessor>();
+            services.AddSingleton<ITelegramBotService, TelegramBotService>();
+            services.AddHostedService<TelegramBotPollingHost>();
 
             return services;
         }

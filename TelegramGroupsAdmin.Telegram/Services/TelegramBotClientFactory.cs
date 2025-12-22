@@ -11,7 +11,7 @@ namespace TelegramGroupsAdmin.Telegram.Services;
 /// client when token changes. This keeps resource usage low for homelab deployment.
 ///
 /// Two usage patterns:
-/// - GetBotClientAsync(): Returns raw client for polling (TelegramAdminBotService only)
+/// - GetBotClientAsync(): Returns raw client for polling (TelegramBotPollingHost only)
 /// - GetOperationsAsync(): Returns ITelegramOperations wrapper (all other services)
 /// </summary>
 public class TelegramBotClientFactory : ITelegramBotClientFactory

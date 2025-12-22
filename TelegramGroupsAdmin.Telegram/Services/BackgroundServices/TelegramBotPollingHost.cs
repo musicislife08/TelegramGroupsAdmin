@@ -1,6 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
@@ -8,78 +8,71 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Configuration;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Configuration.Services;
-using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Services.BotCommands;
-using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 
 /// <summary>
-/// Core Telegram bot service - handles bot lifecycle and routes updates to specialized services.
-/// Implements IUpdateProcessor to enable unit testing of update routing logic.
+/// Thin BackgroundService that manages the Telegram polling lifecycle.
+/// Only ONE polling connection per bot token (Telegram API constraint).
+/// Bot capabilities (events, state) are handled by TelegramBotService.
+/// Update routing is handled by UpdateProcessor.
 /// </summary>
-public class TelegramAdminBotService(
+public class TelegramBotPollingHost(
     ITelegramBotClientFactory botFactory,
-    IServiceScopeFactory scopeFactory,
-    CommandRouter commandRouter,
-    MessageProcessingService messageProcessingService,
+    IUpdateProcessor updateProcessor,
+    ITelegramBotService botService,
     IChatManagementService chatManagementService,
-    IWelcomeService welcomeService,
-    ILogger<TelegramAdminBotService> logger)
-    : BackgroundService, IMessageHistoryService, IUpdateProcessor
+    CommandRouter commandRouter,
+    IServiceScopeFactory scopeFactory,
+    ILogger<TelegramBotPollingHost> logger) : BackgroundService
 {
-    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private ITelegramBotClient? _botClient;
     private CancellationTokenSource? _botCancellationTokenSource;
     private Task? _botTask;
     private readonly SemaphoreSlim _configChangeSignal = new(0, 1);
-    private User? _botUserInfo; // Cached bot user info from GetMe()
 
-    // Events for real-time UI updates (forwarded from child services)
-    public event Action<MessageRecord>? OnNewMessage
+    // Connection state for logging
+    private bool _wasRecentlyDisconnected;
+    private bool _isConnected = true;
+    private int _consecutiveErrors;
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        add => messageProcessingService.OnNewMessage += value;
-        remove => messageProcessingService.OnNewMessage -= value;
+        // Subscribe to config change requests from TelegramBotService
+        botService.ConfigChangeRequested += OnConfigChangeRequested;
+
+        try
+        {
+            // Initial config check on startup
+            await CheckAndApplyBotConfigAsync(stoppingToken);
+
+            // Wait for config change notifications (event-driven, no polling)
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    // Block until ConfigChangeRequested event or cancellation requested
+                    await _configChangeSignal.WaitAsync(stoppingToken);
+
+                    // Config changed - check and apply new state
+                    await CheckAndApplyBotConfigAsync(stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            botService.ConfigChangeRequested -= OnConfigChangeRequested;
+            await StopBotAsync();
+            _configChangeSignal.Dispose();
+        }
     }
 
-    public event Action<MessageEditRecord>? OnMessageEdited
-    {
-        add => messageProcessingService.OnMessageEdited += value;
-        remove => messageProcessingService.OnMessageEdited -= value;
-    }
-
-    public event Action<long, MediaType>? OnMediaUpdated
-    {
-        add => messageProcessingService.OnMediaUpdated += value;
-        remove => messageProcessingService.OnMediaUpdated -= value;
-    }
-
-    public event Action<ChatHealthStatus>? OnHealthUpdate
-    {
-        add => chatManagementService.OnHealthUpdate += value;
-        remove => chatManagementService.OnHealthUpdate -= value;
-    }
-
-    /// <summary>
-    /// Get the bot client instance (available after service starts)
-    /// </summary>
-    public ITelegramBotClient? BotClient => _botClient;
-
-    /// <summary>
-    /// Get cached bot user info from GetMe() (available after service starts)
-    /// </summary>
-    public User? BotUserInfo => _botUserInfo;
-
-    /// <summary>
-    /// Get cached health status for a chat (null if not yet checked)
-    /// </summary>
-    public ChatHealthStatus? GetCachedHealth(long chatId)
-        => chatManagementService.GetCachedHealth(chatId);
-
-    /// <summary>
-    /// Notify the bot service that configuration has changed - triggers immediate config check and bot state refresh
-    /// </summary>
-    public void NotifyConfigChange()
+    private void OnConfigChangeRequested()
     {
         // Release the semaphore to wake up the monitoring loop
         // CurrentCount check prevents multiple releases (semaphore has maxCount=1)
@@ -89,45 +82,11 @@ public class TelegramAdminBotService(
         }
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        // Initial config check on startup
-        await CheckAndApplyBotConfigAsync(stoppingToken);
-
-        // Wait for config change notifications (event-driven, no polling)
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                // Block until NotifyConfigChange() is called or cancellation requested
-                await _configChangeSignal.WaitAsync(stoppingToken);
-
-                // Config changed - check and apply new state
-                await CheckAndApplyBotConfigAsync(stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-        }
-
-        // Cleanup on shutdown
-        if (_botCancellationTokenSource != null)
-        {
-            _botCancellationTokenSource.Cancel();
-            if (_botTask != null)
-            {
-                await _botTask;
-            }
-            _botCancellationTokenSource.Dispose();
-        }
-    }
-
     private async Task CheckAndApplyBotConfigAsync(CancellationToken stoppingToken)
     {
         // Check if bot should be running
         TelegramBotConfig botConfig;
-        using (var scope = _scopeFactory.CreateScope())
+        using (var scope = scopeFactory.CreateScope())
         {
             var configService = scope.ServiceProvider.GetRequiredService<IConfigService>();
             // Load global bot config (chat_id = 0 for global config)
@@ -141,37 +100,52 @@ public class TelegramAdminBotService(
         if (shouldBeRunning && !isCurrentlyRunning)
         {
             // Start the bot
-            logger.LogInformation("Starting Telegram bot service (BotEnabled=true)");
+            logger.LogInformation("Starting Telegram bot polling (BotEnabled=true)");
             _botCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
             _botTask = RunBotAsync(_botCancellationTokenSource.Token);
         }
         else if (!shouldBeRunning && isCurrentlyRunning)
         {
             // Stop the bot
-            logger.LogInformation("Stopping Telegram bot service (BotEnabled=false)");
-            _botCancellationTokenSource?.Cancel();
+            logger.LogInformation("Stopping Telegram bot polling (BotEnabled=false)");
+            await StopBotAsync();
+            logger.LogInformation("Telegram bot polling stopped successfully");
+        }
+    }
+
+    private async Task StopBotAsync()
+    {
+        if (_botCancellationTokenSource != null)
+        {
+            await _botCancellationTokenSource.CancelAsync();
             if (_botTask != null)
             {
                 await _botTask;
             }
-            _botCancellationTokenSource?.Dispose();
+            _botCancellationTokenSource.Dispose();
             _botCancellationTokenSource = null;
-            _botTask = null;
-            _botClient = null;
-            logger.LogInformation("Telegram bot service stopped successfully");
         }
+        _botTask = null;
+        _botClient = null;
+
+        // Clear bot info when stopped
+        botService.SetBotUserInfo(null);
     }
 
     private async Task RunBotAsync(CancellationToken stoppingToken)
     {
+        // Reset connection state for fresh start (prevents stale backoff from previous run)
+        _isConnected = true;
+        _wasRecentlyDisconnected = false;
+        _consecutiveErrors = 0;
+
         // Get bot client from factory (factory handles token loading internally)
         _botClient = await botFactory.GetBotClientAsync();
         var botClient = _botClient;
 
-        // Fetch and cache bot info
+        // Fetch and cache bot info via TelegramBotService (logs identity internally)
         var me = await botClient.GetMe(stoppingToken);
-        _botUserInfo = me; // Cache full bot info for BotMessageService
-        logger.LogInformation("Bot user ID cached: {BotUserId} (@{BotUsername})", me.Id, me.Username);
+        botService.SetBotUserInfo(me);
 
         // Register bot commands in Telegram UI
         await RegisterBotCommandsAsync(botClient, stoppingToken);
@@ -182,14 +156,13 @@ public class TelegramAdminBotService(
         // Perform initial health check for all chats
         await chatManagementService.RefreshAllHealthAsync(stoppingToken);
 
-        // Periodic health checks now handled by ChatHealthCheckJob via Quartz.NET recurring job scheduler
-        // (see QuartzSchedulingSyncService and BackgroundJobConfigService default config)
-
-        logger.LogInformation("Telegram admin bot started listening for messages in all chats");
+        // Periodic health checks handled by ChatHealthCheckJob via Quartz.NET
+        logger.LogInformation("Telegram bot started listening for messages in all chats");
 
         var receiverOptions = new ReceiverOptions
         {
-            AllowedUpdates = [
+            AllowedUpdates =
+            [
                 UpdateType.Message,           // New messages (commands, text, photos)
                 UpdateType.EditedMessage,     // Message edits (spam tactic detection)
                 UpdateType.MyChatMember,      // Bot added/removed from chats
@@ -223,10 +196,6 @@ public class TelegramAdminBotService(
         }
     }
 
-    private bool _wasRecentlyDisconnected;
-    private bool _isConnected = true;
-    private int _consecutiveErrors;
-
     private async Task HandleUpdateAsync(
         ITelegramBotClient botClient,
         Update update,
@@ -241,63 +210,11 @@ public class TelegramAdminBotService(
             _consecutiveErrors = 0;
         }
 
-        // Delegate to IUpdateProcessor implementation for testable routing
-        await ProcessUpdateAsync(update, cancellationToken);
+        // Delegate to UpdateProcessor for testable routing
+        await updateProcessor.ProcessUpdateAsync(update, cancellationToken);
     }
 
-    /// <summary>
-    /// Process a Telegram update - routes to appropriate handler based on update type.
-    /// This method implements IUpdateProcessor and can be tested independently of the polling mechanism.
-    /// </summary>
-    /// <param name="update">The Telegram update to process</param>
-    /// <param name="ct">Cancellation token</param>
-    public async Task ProcessUpdateAsync(Update update, CancellationToken ct = default)
-    {
-        // Handle bot's chat member status changes (added/removed from chats)
-        if (update.MyChatMember is { } myChatMember)
-        {
-            await chatManagementService.HandleMyChatMemberUpdateAsync(myChatMember, ct);
-            return;
-        }
-
-        // Handle user joins/leaves/promotions/demotions
-        if (update.ChatMember is { } chatMember)
-        {
-            // Check for admin status changes (instant permission updates)
-            await chatManagementService.HandleAdminStatusChangeAsync(chatMember, ct);
-
-            // Handle joins/leaves (welcome system - Phase 4.4)
-            await welcomeService.HandleChatMemberUpdateAsync(chatMember, ct);
-            return;
-        }
-
-        // Handle callback queries from inline buttons (for welcome accept/deny - Phase 4.4)
-        if (update.CallbackQuery is { } callbackQuery)
-        {
-            await welcomeService.HandleCallbackQueryAsync(callbackQuery, ct);
-
-            // Always answer callback queries to remove loading state
-            var operations = await botFactory.GetOperationsAsync();
-            await operations.AnswerCallbackQueryAsync(callbackQuery.Id, ct: ct);
-            return;
-        }
-
-        // Handle new messages
-        if (update.Message is { } message)
-        {
-            await messageProcessingService.HandleNewMessageAsync(message);
-            return;
-        }
-
-        // Handle edited messages
-        if (update.EditedMessage is { } editedMessage)
-        {
-            await messageProcessingService.HandleEditedMessageAsync(editedMessage);
-            return;
-        }
-    }
-
-    private async Task HandleErrorAsync(
+    private Task HandleErrorAsync(
         ITelegramBotClient botClient,
         Exception exception,
         CancellationToken cancellationToken)
@@ -320,14 +237,7 @@ public class TelegramAdminBotService(
         logger.LogInformation("Telegram bot retrying connection in {Delay}s (attempt {Attempt})", (int)delaySeconds, _consecutiveErrors);
 
         // Wait before next retry attempt (exponential backoff)
-        try
-        {
-            await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            // Service stopping, that's fine
-        }
+        return Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
     }
 
     private async Task RegisterBotCommandsAsync(ITelegramBotClient botClient, CancellationToken cancellationToken)

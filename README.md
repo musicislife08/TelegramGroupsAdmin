@@ -186,7 +186,7 @@ See [examples/README.md](examples/README.md) for detailed configuration guide in
 ```text
 ┌─────────────────────────────────────┐
 │  TelegramGroupsAdmin Container      │
-│  ├─ TelegramAdminBotService         │ ← Telegram polling (singleton)
+│  ├─ TelegramBotPollingHost          │ ← Telegram polling (singleton)
 │  ├─ Blazor Server UI                │
 │  ├─ API Endpoints                   │
 │  └─ Quartz.NET Background Jobs      │

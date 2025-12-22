@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using TelegramGroupsAdmin.Telegram.Repositories;
-using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+using TelegramGroupsAdmin.Telegram.Services;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 

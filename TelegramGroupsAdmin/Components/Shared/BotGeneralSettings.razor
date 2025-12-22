@@ -2,10 +2,10 @@
 @using TelegramGroupsAdmin.Configuration.Models
 @using TelegramGroupsAdmin.Configuration.Services
 @using TelegramGroupsAdmin.Configuration.Repositories
-@using TelegramGroupsAdmin.Telegram.Services.BackgroundServices
+@using TelegramGroupsAdmin.Telegram.Services
 @inject IConfigService ConfigService
 @inject IConfigRepository ConfigRepository
-@inject IMessageHistoryService MessageHistoryService
+@inject ITelegramBotService BotService
 @inject ISnackbar Snackbar
 
 <!-- Bot Service Control (Global Only) -->
@@ -301,7 +301,7 @@
             await ConfigService.SaveAsync(ConfigType.TelegramBot, 0, _botConfig);
 
             // Notify bot service to check config and start/stop immediately
-            MessageHistoryService.NotifyConfigChange();
+            BotService.NotifyConfigChange();
 
             Snackbar.Add("Bot service configuration saved. Changes will take effect immediately.", Severity.Success);
         }

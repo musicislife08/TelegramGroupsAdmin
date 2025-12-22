@@ -15,20 +15,20 @@ namespace TelegramGroupsAdmin.ComponentTests.Components;
 
 /// <summary>
 /// Test context for BotGeneralSettings tests.
-/// Registers mocked IConfigService, IConfigRepository, and IMessageHistoryService.
+/// Registers mocked IConfigService, IConfigRepository, and ITelegramBotService.
 /// </summary>
 public class BotGeneralSettingsTestContext : BunitContext
 {
     protected IConfigService ConfigService { get; }
     protected IConfigRepository ConfigRepository { get; }
-    protected IMessageHistoryService MessageHistoryService { get; }
+    protected ITelegramBotService TelegramBotService { get; }
 
     protected BotGeneralSettingsTestContext()
     {
         // Create mocks
         ConfigService = Substitute.For<IConfigService>();
         ConfigRepository = Substitute.For<IConfigRepository>();
-        MessageHistoryService = Substitute.For<IMessageHistoryService>();
+        TelegramBotService = Substitute.For<ITelegramBotService>();
 
         // Default config returns
         ConfigService.GetAsync<TelegramBotConfig>(Arg.Any<ConfigType>(), Arg.Any<long>())
@@ -40,7 +40,7 @@ public class BotGeneralSettingsTestContext : BunitContext
         // Register mocks
         Services.AddSingleton(ConfigService);
         Services.AddSingleton(ConfigRepository);
-        Services.AddSingleton(MessageHistoryService);
+        Services.AddSingleton(TelegramBotService);
 
         // Add MudBlazor services
         Services.AddMudServices(options =>
