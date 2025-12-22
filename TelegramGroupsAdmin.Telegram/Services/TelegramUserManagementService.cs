@@ -125,12 +125,12 @@ public class TelegramUserManagementService
         // Toggle trust status
         var newTrustStatus = !user.IsTrusted;
 
-        // Protect Telegram service account - cannot remove trust
-        if (telegramUserId == TelegramConstants.ServiceAccountUserId && !newTrustStatus)
+        // Protect Telegram system accounts - cannot remove trust
+        if (TelegramConstants.IsSystemUser(telegramUserId) && !newTrustStatus)
         {
             _logger.LogWarning(
-                "Blocked attempt to remove trust from Telegram service account (user {TelegramUserId}). " +
-                "Service account must always remain trusted.",
+                "Blocked attempt to remove trust from Telegram system account (user {TelegramUserId}). " +
+                "System accounts must always remain trusted.",
                 telegramUserId);
             return false;
         }

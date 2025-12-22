@@ -34,23 +34,23 @@ public class ContentCheckCoordinator : IContentCheckCoordinator
         SpamLibRequest request,
         CancellationToken cancellationToken = default)
     {
-        // CRITICAL: Early exit for Telegram service account (user 777000)
-        // Service account is used for channel posts and anonymous admin posts
+        // CRITICAL: Early exit for Telegram system accounts (777000, 1087968824, etc.)
+        // System accounts are used for channel posts, anonymous admin posts, etc.
         // Must bypass ALL checks (including database queries) to avoid race condition
         // on first message before user record is created
-        if (request.UserId == TelegramConstants.ServiceAccountUserId)
+        if (TelegramConstants.IsSystemUser(request.UserId))
         {
             _logger.LogInformation(
-                "Skipping all content detection for Telegram service account (user {UserId}) in chat {ChatId}",
+                "Skipping all content detection for Telegram system account (user {UserId}) in chat {ChatId}",
                 request.UserId,
                 request.ChatId);
 
             return new ContentCheckCoordinatorResult
             {
-                IsUserTrusted = true, // Service account is always trusted
+                IsUserTrusted = true, // System accounts are always trusted
                 IsUserAdmin = false,
                 SpamCheckSkipped = true,
-                SkipReason = "Telegram service account (channel/anonymous posts) - always trusted",
+                SkipReason = "Telegram system account (channel posts, anonymous admins, etc.) - always trusted",
                 CriticalCheckViolations = [],
                 SpamResult = null
             };

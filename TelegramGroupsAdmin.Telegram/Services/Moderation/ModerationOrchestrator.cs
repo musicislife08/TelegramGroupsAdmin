@@ -14,7 +14,7 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation;
 /// The "boss" that knows all workers, decides who to call, and owns business rules.
 ///
 /// Key responsibilities:
-/// - Service account protection (blocks moderation on Telegram's 777000 account)
+/// - System account protection (blocks moderation on Telegram system accounts: 777000, 1087968824, etc.)
 /// - Business rules: "bans revoke trust", "N warnings = auto-ban"
 /// - Workflow composition: warn → check threshold → ban
 /// - Direct handler calls (no event broadcasting)
@@ -401,17 +401,17 @@ public class ModerationOrchestrator
     }
 
     /// <summary>
-    /// Checks if user is Telegram's service account (777000) and returns error if moderation is attempted.
+    /// Checks if user is a Telegram system account (777000, 1087968824, etc.) and returns error if moderation is attempted.
     /// </summary>
     private ModerationResult? CheckServiceAccountProtection(long userId)
     {
-        if (userId == TelegramConstants.ServiceAccountUserId)
+        if (TelegramConstants.IsSystemUser(userId))
         {
             _logger.LogWarning(
-                "Moderation action blocked for Telegram service account (user {UserId})",
+                "Moderation action blocked for Telegram system account (user {UserId})",
                 userId);
 
-            return ModerationResult.ServiceAccountBlocked();
+            return ModerationResult.SystemAccountBlocked();
         }
 
         return null;
@@ -435,6 +435,6 @@ public class ModerationResult
     public static ModerationResult Failed(string errorMessage) =>
         new() { Success = false, ErrorMessage = errorMessage };
 
-    public static ModerationResult ServiceAccountBlocked() =>
-        new() { Success = false, ErrorMessage = "Cannot perform moderation actions on Telegram service account (channel/anonymous posts)" };
+    public static ModerationResult SystemAccountBlocked() =>
+        new() { Success = false, ErrorMessage = "Cannot perform moderation actions on Telegram system accounts (channel posts, anonymous admins, etc.)" };
 }

@@ -61,26 +61,30 @@ public class ModerationOrchestratorTests
             _mockLogger);
     }
 
-    #region Service Account Protection Tests
+    #region System Account Protection Tests
 
     [Test]
-    public async Task BanUserAsync_TelegramServiceAccount_ReturnsError()
+    [TestCase(777000, Description = "Service account")]
+    [TestCase(1087968824, Description = "Anonymous admin bot")]
+    [TestCase(136817688, Description = "Channel bot")]
+    [TestCase(1271266957, Description = "Replies bot")]
+    [TestCase(5434988373, Description = "Antispam bot")]
+    public async Task BanUserAsync_TelegramSystemAccount_ReturnsError(long systemUserId)
     {
-        // Arrange - 777000 is Telegram's service account for channel/anonymous posts
-        var serviceAccountId = TelegramConstants.ServiceAccountUserId;
+        // Arrange - All Telegram system accounts should be protected from moderation
 
         // Act
         var result = await _orchestrator.BanUserAsync(
-            serviceAccountId,
+            systemUserId,
             null,
             Actor.FromSystem("test"),
-            "Attempted ban of service account");
+            "Attempted ban of system account");
 
         // Assert
         Assert.Multiple(() =>
         {
             Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorMessage, Does.Contain("service account"));
+            Assert.That(result.ErrorMessage, Does.Contain("system account"));
         });
 
         // Verify no handler was called
@@ -93,32 +97,40 @@ public class ModerationOrchestratorTests
     }
 
     [Test]
-    public async Task WarnUserAsync_TelegramServiceAccount_ReturnsError()
+    [TestCase(777000, Description = "Service account")]
+    [TestCase(1087968824, Description = "Anonymous admin bot")]
+    [TestCase(136817688, Description = "Channel bot")]
+    [TestCase(1271266957, Description = "Replies bot")]
+    [TestCase(5434988373, Description = "Antispam bot")]
+    public async Task WarnUserAsync_TelegramSystemAccount_ReturnsError(long systemUserId)
     {
-        // Arrange
-        var serviceAccountId = TelegramConstants.ServiceAccountUserId;
+        // Arrange - All Telegram system accounts should be protected from warnings
 
         // Act
         var result = await _orchestrator.WarnUserAsync(
-            serviceAccountId,
+            systemUserId,
             null,
             Actor.FromSystem("test"),
-            "Attempted warning of service account");
+            "Attempted warning of system account");
 
         // Assert
         Assert.That(result.Success, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("service account"));
+        Assert.That(result.ErrorMessage, Does.Contain("system account"));
     }
 
     [Test]
-    public async Task TempBanUserAsync_TelegramServiceAccount_ReturnsError()
+    [TestCase(777000, Description = "Service account")]
+    [TestCase(1087968824, Description = "Anonymous admin bot")]
+    [TestCase(136817688, Description = "Channel bot")]
+    [TestCase(1271266957, Description = "Replies bot")]
+    [TestCase(5434988373, Description = "Antispam bot")]
+    public async Task TempBanUserAsync_TelegramSystemAccount_ReturnsError(long systemUserId)
     {
-        // Arrange
-        var serviceAccountId = TelegramConstants.ServiceAccountUserId;
+        // Arrange - All Telegram system accounts should be protected from temp bans
 
         // Act
         var result = await _orchestrator.TempBanUserAsync(
-            serviceAccountId,
+            systemUserId,
             null,
             Actor.FromSystem("test"),
             "Test",
@@ -126,7 +138,7 @@ public class ModerationOrchestratorTests
 
         // Assert
         Assert.That(result.Success, Is.False);
-        Assert.That(result.ErrorMessage, Does.Contain("service account"));
+        Assert.That(result.ErrorMessage, Does.Contain("system account"));
     }
 
     #endregion
@@ -643,14 +655,18 @@ public class ModerationOrchestratorTests
     #region RestrictUserAsync Tests
 
     [Test]
-    public async Task RestrictUserAsync_TelegramServiceAccount_ReturnsError()
+    [TestCase(777000, Description = "Service account")]
+    [TestCase(1087968824, Description = "Anonymous admin bot")]
+    [TestCase(136817688, Description = "Channel bot")]
+    [TestCase(1271266957, Description = "Replies bot")]
+    [TestCase(5434988373, Description = "Antispam bot")]
+    public async Task RestrictUserAsync_TelegramSystemAccount_ReturnsError(long systemUserId)
     {
-        // Arrange
-        var serviceAccountId = TelegramConstants.ServiceAccountUserId;
+        // Arrange - All Telegram system accounts should be protected from restrictions
 
         // Act
         var result = await _orchestrator.RestrictUserAsync(
-            serviceAccountId,
+            systemUserId,
             null,
             Actor.FromSystem("test"),
             "Test",
@@ -660,7 +676,7 @@ public class ModerationOrchestratorTests
         Assert.Multiple(() =>
         {
             Assert.That(result.Success, Is.False);
-            Assert.That(result.ErrorMessage, Does.Contain("service account"));
+            Assert.That(result.ErrorMessage, Does.Contain("system account"));
         });
 
         // Verify no handler was called

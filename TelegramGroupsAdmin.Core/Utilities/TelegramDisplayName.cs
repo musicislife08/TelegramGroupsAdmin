@@ -8,20 +8,27 @@ public static class TelegramDisplayName
 {
     /// <summary>
     /// Gets display name for UI/logs. No @ prefix.
-    /// Priority: Service Account (chatName) → FullName (First + Last) → Username → User {id}
+    /// Priority: System User (chatName or system name) → FullName (First + Last) → Username → User {id}
     /// </summary>
     /// <param name="firstName">User's first name from Telegram profile</param>
     /// <param name="lastName">User's last name from Telegram profile</param>
     /// <param name="username">User's username (without @ prefix)</param>
     /// <param name="userId">User's Telegram ID for fallback display</param>
-    /// <param name="chatName">Optional chat name - used for service account (777000) to show channel/group name</param>
+    /// <param name="chatName">Optional chat name - used for system accounts (777000, 1087968824) to show channel/group name</param>
     /// <returns>Formatted display name suitable for UI display</returns>
     public static string Format(string? firstName, string? lastName, string? username, long? userId = null, string? chatName = null)
     {
-        // Special handling for Telegram service account (channel posts, anonymous admin posts)
+        // Special handling for Telegram system accounts (channel posts, anonymous admins, etc.)
         // In Telegram clients, these show as the channel/group name, not as a user
-        if (userId == TelegramConstants.ServiceAccountUserId)
-            return !string.IsNullOrWhiteSpace(chatName) ? chatName : "Telegram Service Account";
+        if (userId.HasValue && TelegramConstants.IsSystemUser(userId.Value))
+        {
+            // Prefer chatName for service account and anonymous admin (shows as group/channel)
+            if (!string.IsNullOrWhiteSpace(chatName))
+                return chatName;
+
+            // Fall back to system user name
+            return TelegramConstants.GetSystemUserName(userId.Value) ?? $"System User {userId}";
+        }
 
         var fullName = string.Join(" ", new[] { firstName, lastName }
             .Where(s => !string.IsNullOrWhiteSpace(s)));
