@@ -2,6 +2,7 @@ using System.Text.Json;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.Configuration.Models;
 using TelegramGroupsAdmin.Core.Security;
 using TelegramGroupsAdmin.Data.Services;
@@ -113,8 +114,8 @@ public class PassphraseManagementService : IPassphraseManagementService
         return new BackupEncryptionConfig
         {
             Enabled = true,
-            Algorithm = "AES-256-GCM",
-            Iterations = 100000,
+            Algorithm = EncryptionConstants.EncryptionAlgorithm,
+            Iterations = EncryptionConstants.Pbkdf2Iterations,
             CreatedAt = DateTimeOffset.UtcNow,
             LastRotatedAt = null  // First setup
         };

@@ -7,6 +7,7 @@ using MudBlazor.Services;
 using Polly;
 using Polly.RateLimiting;
 using TelegramGroupsAdmin.Configuration.Services;
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Data.Services;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Services;
@@ -53,7 +54,7 @@ public static class ServiceCollectionExtensions
             // Configure SignalR Hub options for Blazor Server (increase message size for image paste)
             services.Configure<Microsoft.AspNetCore.SignalR.HubOptions>(options =>
             {
-                options.MaximumReceiveMessageSize = 20 * 1024 * 1024; // 20MB (allow for base64 overhead)
+                options.MaximumReceiveMessageSize = BlazorConstants.MaxSignalRMessageSize;
             });
 
             services.AddMudServices();
@@ -90,7 +91,7 @@ public static class ServiceCollectionExtensions
                         ? CookieSecurePolicy.None
                         : CookieSecurePolicy.Always;
                     options.Cookie.SameSite = SameSiteMode.Lax;
-                    options.ExpireTimeSpan = TimeSpan.FromDays(30);
+                    options.ExpireTimeSpan = AuthenticationConstants.CookieExpiration;
                     options.SlidingExpiration = true;
                     options.LoginPath = "/login";
                     options.LogoutPath = "/logout";
@@ -192,13 +193,13 @@ public static class ServiceCollectionExtensions
             // HybridCache for blocklists
             services.AddHybridCache(options =>
             {
-                options.MaximumPayloadBytes = 10 * 1024 * 1024; // 10 MB
+                options.MaximumPayloadBytes = HttpConstants.HybridCacheMaxPayloadBytes;
             });
 
             // HTTP clients
             services.AddHttpClient<SeoPreviewScraper>(client =>
             {
-                client.Timeout = TimeSpan.FromSeconds(5);
+                client.Timeout = HttpConstants.SeoScraperTimeout;
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; SeoPreviewScraper/1.0)");
             });
 
@@ -209,11 +210,11 @@ public static class ServiceCollectionExtensions
                     partitionKey: "virustotal",
                     factory: _ => new SlidingWindowRateLimiterOptions
                     {
-                        PermitLimit = 4,
-                        Window = TimeSpan.FromMinutes(1),
-                        SegmentsPerWindow = 4,  // 15-second segments for smoother rate limiting
+                        PermitLimit = HttpConstants.VirusTotalPermitLimit,
+                        Window = HttpConstants.VirusTotalWindow,
+                        SegmentsPerWindow = HttpConstants.VirusTotalSegmentsPerWindow,
                         QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                        QueueLimit = 10  // Queue up to 10 requests (analysis polling can generate 5-10 requests per file)
+                        QueueLimit = HttpConstants.VirusTotalQueueLimit
                     }));
 
             var limiterOptions = new RateLimiterStrategyOptions

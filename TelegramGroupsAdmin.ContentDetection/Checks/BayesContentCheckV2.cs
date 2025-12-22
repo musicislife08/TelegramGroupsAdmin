@@ -21,16 +21,6 @@ public class BayesContentCheckV2(
     IMLTrainingDataRepository trainingDataRepository,
     ITokenizerService tokenizerService) : IContentCheckV2
 {
-    // SpamAssassin-style scoring (from research)
-    private const double ScoreBayes99 = 5.0;   // 99%+ probability
-    private const double ScoreBayes95 = 3.5;   // 95-99% probability
-    private const double ScoreBayes80 = 2.0;   // 80-95% probability
-    private const double ScoreBayes70 = 1.0;   // 70-80% probability
-
-    // Abstention thresholds
-    private const int UncertaintyLowerBound = 40; // <40% = likely ham, abstain (no negative scores)
-    private const int UncertaintyUpperBound = 60; // 40-60% = uncertain, abstain
-
     private BayesClassifier? _classifier;
     private DateTime _lastTrainingUpdate = DateTime.MinValue;
     private readonly TimeSpan _retrainingInterval = TimeSpan.FromHours(1);
@@ -99,8 +89,8 @@ public class BayesContentCheckV2(
             var (spamProbability, details, certainty) = _classifier.ClassifyMessage(processedMessage);
             var spamProbabilityPercent = (int)(spamProbability * 100);
 
-            // V2 FIX: Abstain when uncertain (40-60%) or likely ham (<40%)
-            if (spamProbabilityPercent < UncertaintyLowerBound)
+            // V2 FIX: Abstain when uncertain or likely ham
+            if (spamProbabilityPercent < BayesConstants.UncertaintyLowerBound)
             {
                 return new ContentCheckResponseV2
                 {
@@ -112,7 +102,7 @@ public class BayesContentCheckV2(
                 };
             }
 
-            if (spamProbabilityPercent is >= UncertaintyLowerBound and <= UncertaintyUpperBound)
+            if (spamProbabilityPercent is >= BayesConstants.UncertaintyLowerBound and <= BayesConstants.UncertaintyUpperBound)
             {
                 return new ContentCheckResponseV2
                 {
@@ -159,11 +149,11 @@ public class BayesContentCheckV2(
     {
         return spamProbabilityPercent switch
         {
-            >= 99 => ScoreBayes99,  // 5.0 points (strongest signal)
-            >= 95 => ScoreBayes95,  // 3.5 points
-            >= 80 => ScoreBayes80,  // 2.0 points
-            >= 70 => ScoreBayes70,  // 1.0 points
-            _ => 0.5                 // 60-70% = weak signal (0.5 points)
+            >= BayesConstants.ProbabilityThreshold99 => ScoringConstants.ScoreBayes99,
+            >= BayesConstants.ProbabilityThreshold95 => ScoringConstants.ScoreBayes95,
+            >= BayesConstants.ProbabilityThreshold80 => ScoringConstants.ScoreBayes80,
+            >= BayesConstants.ProbabilityThreshold70 => ScoringConstants.ScoreBayes70,
+            _ => 0.5  // 60-70% = weak signal
         };
     }
 

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading;
+using TelegramGroupsAdmin.Constants;
 
 namespace TelegramGroupsAdmin.Services.Auth;
 
@@ -16,13 +17,13 @@ public class RateLimitService : IRateLimitService
     // Rate limit configurations (attempts / time window)
     private static readonly Dictionary<string, (int MaxAttempts, TimeSpan Window)> RateLimits = new()
     {
-        ["login"] = (5, TimeSpan.FromMinutes(15)),
-        ["register"] = (3, TimeSpan.FromHours(1)),
-        ["totp_verify"] = (5, TimeSpan.FromMinutes(5)),
-        ["recovery_code"] = (5, TimeSpan.FromMinutes(5)),
-        ["resend_verification"] = (5, TimeSpan.FromHours(1)),
-        ["forgot_password"] = (3, TimeSpan.FromHours(1)),
-        ["reset_password"] = (3, TimeSpan.FromHours(1))
+        ["login"] = (RateLimitConstants.LoginMaxAttempts, RateLimitConstants.LoginWindow),
+        ["register"] = (RateLimitConstants.RegisterMaxAttempts, RateLimitConstants.RegisterWindow),
+        ["totp_verify"] = (RateLimitConstants.TotpVerifyMaxAttempts, RateLimitConstants.TotpVerifyWindow),
+        ["recovery_code"] = (RateLimitConstants.RecoveryCodeMaxAttempts, RateLimitConstants.RecoveryCodeWindow),
+        ["resend_verification"] = (RateLimitConstants.ResendVerificationMaxAttempts, RateLimitConstants.ResendVerificationWindow),
+        ["forgot_password"] = (RateLimitConstants.ForgotPasswordMaxAttempts, RateLimitConstants.ForgotPasswordWindow),
+        ["reset_password"] = (RateLimitConstants.ResetPasswordMaxAttempts, RateLimitConstants.ResetPasswordWindow)
     };
 
     public RateLimitService(ILogger<RateLimitService> logger)

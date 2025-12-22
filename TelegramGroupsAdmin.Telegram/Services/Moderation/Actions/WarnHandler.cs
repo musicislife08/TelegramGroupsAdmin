@@ -3,6 +3,7 @@ using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Data.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
+using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 
@@ -13,7 +14,6 @@ namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 /// </summary>
 public class WarnHandler : IWarnHandler
 {
-    private static readonly TimeSpan DefaultWarningExpiry = TimeSpan.FromDays(90);
 
     private readonly ITelegramUserRepository _userRepository;
     private readonly ILogger<WarnHandler> _logger;
@@ -47,7 +47,7 @@ public class WarnHandler : IWarnHandler
             var warning = new WarningEntry
             {
                 IssuedAt = now,
-                ExpiresAt = now.Add(DefaultWarningExpiry),
+                ExpiresAt = now.Add(ModerationConstants.DefaultWarningExpiry),
                 Reason = reason,
                 ActorType = GetActorType(executor),
                 ActorId = GetActorId(executor),

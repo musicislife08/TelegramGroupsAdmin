@@ -55,8 +55,8 @@ public class AITranslationService : IAITranslationService
 
             var options = new ChatCompletionOptions
             {
-                MaxTokens = 500, // Increased from 200 - translations can be longer than source text
-                Temperature = 0.2,
+                MaxTokens = AIConstants.TranslationMaxTokens,
+                Temperature = AIConstants.TranslationTemperature,
                 JsonMode = true
             };
 

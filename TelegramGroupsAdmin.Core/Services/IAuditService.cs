@@ -14,10 +14,10 @@ public interface IAuditService
         string? value = null,
         CancellationToken cancellationToken = default);
 
-    Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = 100, CancellationToken cancellationToken = default);
-    Task<List<AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = 100, CancellationToken cancellationToken = default);
-    Task<List<AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = 100, CancellationToken cancellationToken = default);
-    Task<List<AuditLogRecord>> GetEventsByTypeAsync(AuditEventType eventType, int limit = 100, CancellationToken cancellationToken = default);
+    Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default);
+    Task<List<AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default);
+    Task<List<AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default);
+    Task<List<AuditLogRecord>> GetEventsByTypeAsync(AuditEventType eventType, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default);
     Task<(List<AuditLogRecord> Events, int TotalCount)> GetPagedEventsAsync(
         int skip,
         int take,

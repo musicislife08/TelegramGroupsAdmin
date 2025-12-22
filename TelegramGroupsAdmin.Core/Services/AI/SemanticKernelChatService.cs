@@ -219,7 +219,7 @@ public class SemanticKernelChatService : IChatService
                 foreach (var item in response.Items)
                 {
                     _logger.LogDebug("SK Response Item - Type: {Type}, ToString: {Value}",
-                        item.GetType().Name, item.ToString()?[..Math.Min(item.ToString()?.Length ?? 0, 200)]);
+                        item.GetType().Name, item.ToString()?[..Math.Min(item.ToString()?.Length ?? 0, QueryConstants.DefaultLogTruncationLength)]);
                 }
             }
 
@@ -229,7 +229,7 @@ public class SemanticKernelChatService : IChatService
                 foreach (var kvp in response.Metadata)
                 {
                     _logger.LogDebug("SK Metadata - {Key}: {Value}",
-                        kvp.Key, kvp.Value?.ToString()?[..Math.Min(kvp.Value?.ToString()?.Length ?? 0, 500)] ?? "(null)");
+                        kvp.Key, kvp.Value?.ToString()?[..Math.Min(kvp.Value?.ToString()?.Length ?? 0, QueryConstants.MaxMetadataLogLength)] ?? "(null)");
                 }
             }
             else

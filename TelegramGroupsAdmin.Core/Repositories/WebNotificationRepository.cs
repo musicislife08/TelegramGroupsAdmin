@@ -21,7 +21,7 @@ public class WebNotificationRepository(IDbContextFactory<AppDbContext> contextFa
 
     public async Task<IReadOnlyList<WebNotification>> GetRecentAsync(
         string userId,
-        int limit = 20,
+        int limit = QueryConstants.DefaultWebNotificationLimit,
         int offset = 0,
         CancellationToken cancellationToken = default)
     {

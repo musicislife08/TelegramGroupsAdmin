@@ -23,22 +23,22 @@ public class AuditService : IAuditService
         return _repository.LogEventAsync((DataModels.AuditEventType)eventType, actor, target, value, cancellationToken);
     }
 
-    public Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    public Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)
     {
         return _repository.GetRecentEventsAsync(limit, cancellationToken);
     }
 
-    public Task<List<AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = 100, CancellationToken cancellationToken = default)
+    public Task<List<AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)
     {
         return _repository.GetEventsForUserAsync(userId, limit, cancellationToken);
     }
 
-    public Task<List<AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = 100, CancellationToken cancellationToken = default)
+    public Task<List<AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)
     {
         return _repository.GetEventsByActorAsync(actorUserId, limit, cancellationToken);
     }
 
-    public Task<List<AuditLogRecord>> GetEventsByTypeAsync(AuditEventType eventType, int limit = 100, CancellationToken cancellationToken = default)
+    public Task<List<AuditLogRecord>> GetEventsByTypeAsync(AuditEventType eventType, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default)
     {
         return _repository.GetEventsByTypeAsync((DataModels.AuditEventType)eventType, limit, cancellationToken);
     }

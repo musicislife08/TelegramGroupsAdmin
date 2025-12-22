@@ -40,7 +40,7 @@ public class FeatureTestService(
         0x82
     ];
 
-    private const int DefaultMaxTokens = 500;
+    private const int DefaultMaxTokens = AIConstants.DefaultFeatureTestMaxTokens;
 
     public async Task<FeatureTestResult> TestFeatureAsync(
         AIFeatureType featureType,

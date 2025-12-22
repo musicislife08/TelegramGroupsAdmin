@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
 
 namespace TelegramGroupsAdmin.BackgroundJobs.Services.Backup;
 
@@ -197,16 +198,16 @@ public class BackupRetentionService
         if (date.DayOfWeek == DayOfWeek.Sunday)
         {
             // Sunday belongs to previous week in ISO 8601
-            startOfWeek = startOfWeek.AddDays(-7);
+            startOfWeek = startOfWeek.AddDays(-BackupRetentionConstants.DaysPerWeek);
         }
 
         // ISO week numbering
         var jan1 = new DateTimeOffset(startOfWeek.Year, 1, 1, 0, 0, 0, date.Offset);
         var daysOffset = (int)jan1.DayOfWeek - 1; // Monday = 0
-        if (daysOffset < 0) daysOffset += 7;
+        if (daysOffset < 0) daysOffset += BackupRetentionConstants.DaysPerWeek;
 
         var firstMonday = jan1.AddDays(-daysOffset);
-        var weekNumber = ((startOfWeek - firstMonday).Days / 7) + 1;
+        var weekNumber = ((startOfWeek - firstMonday).Days / BackupRetentionConstants.DaysPerWeek) + 1;
 
         return $"{startOfWeek.Year}-W{weekNumber:D2}";
     }
@@ -245,25 +246,25 @@ public class RetentionConfig
     /// <summary>
     /// Number of hourly backups to retain (default: 24 = last 24 hours)
     /// </summary>
-    public int RetainHourlyBackups { get; set; } = 24;
+    public int RetainHourlyBackups { get; set; } = BackupRetentionConstants.DefaultRetainHourlyBackups;
 
     /// <summary>
     /// Number of daily backups to retain (default: 7 = last 7 days)
     /// </summary>
-    public int RetainDailyBackups { get; set; } = 7;
+    public int RetainDailyBackups { get; set; } = BackupRetentionConstants.DefaultRetainDailyBackups;
 
     /// <summary>
     /// Number of weekly backups to retain (default: 4 = last 4 weeks)
     /// </summary>
-    public int RetainWeeklyBackups { get; set; } = 4;
+    public int RetainWeeklyBackups { get; set; } = BackupRetentionConstants.DefaultRetainWeeklyBackups;
 
     /// <summary>
     /// Number of monthly backups to retain (default: 12 = last 12 months)
     /// </summary>
-    public int RetainMonthlyBackups { get; set; } = 12;
+    public int RetainMonthlyBackups { get; set; } = BackupRetentionConstants.DefaultRetainMonthlyBackups;
 
     /// <summary>
     /// Number of yearly backups to retain (default: 3 = last 3 years)
     /// </summary>
-    public int RetainYearlyBackups { get; set; } = 3;
+    public int RetainYearlyBackups { get; set; } = BackupRetentionConstants.DefaultRetainYearlyBackups;
 }

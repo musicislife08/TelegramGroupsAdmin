@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using TelegramGroupsAdmin.Telegram.Repositories.Mappings;
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using Microsoft.Extensions.Options;
@@ -454,14 +455,14 @@ public class AuthService(
         try
         {
             // Generate verification token
-            var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+            var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(AuthenticationConstants.VerificationTokenByteLength));
             var verificationToken = new VerificationToken(
                 Id: 0,
                 UserId: userId,
                 TokenType: TokenType.EmailVerification,
                 Token: tokenString,
                 Value: null,
-                ExpiresAt: DateTimeOffset.UtcNow.AddHours(24),
+                ExpiresAt: DateTimeOffset.UtcNow.Add(AuthenticationConstants.EmailVerificationTokenExpiration),
                 CreatedAt: DateTimeOffset.UtcNow,
                 UsedAt: null
             );
@@ -516,14 +517,14 @@ public class AuthService(
         try
         {
             // Generate new verification token
-            var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+            var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(AuthenticationConstants.VerificationTokenByteLength));
             var verificationToken = new VerificationToken(
                 Id: 0, // Will be set by database
                 UserId: user.Id,
                 TokenType: TokenType.EmailVerification,
                 Token: tokenString,
                 Value: null,
-                ExpiresAt: DateTimeOffset.UtcNow.AddHours(24),
+                ExpiresAt: DateTimeOffset.UtcNow.Add(AuthenticationConstants.EmailVerificationTokenExpiration),
                 CreatedAt: DateTimeOffset.UtcNow,
                 UsedAt: null
             );
@@ -569,14 +570,14 @@ public class AuthService(
         }
 
         // Generate password reset token
-        var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        var tokenString = Convert.ToBase64String(RandomNumberGenerator.GetBytes(AuthenticationConstants.VerificationTokenByteLength));
         var resetToken = new VerificationToken(
             Id: 0, // Will be set by database
             UserId: user.Id,
             TokenType: TokenType.PasswordReset,
             Token: tokenString,
             Value: null,
-            ExpiresAt: DateTimeOffset.UtcNow.AddHours(1), // 1 hour expiry for password reset
+            ExpiresAt: DateTimeOffset.UtcNow.Add(AuthenticationConstants.PasswordResetTokenExpiration),
             CreatedAt: DateTimeOffset.UtcNow,
             UsedAt: null
         );

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data;
 
@@ -48,7 +49,6 @@ public class SimilarityHashBackfillService(
 
     private async Task<int> BackfillMessagesAsync(AppDbContext context, CancellationToken cancellationToken)
     {
-        const int batchSize = 500;
         int totalProcessed = 0;
 
         while (!cancellationToken.IsCancellationRequested)
@@ -56,7 +56,7 @@ public class SimilarityHashBackfillService(
             var batch = await context.Messages
                 .Where(m => m.SimilarityHash == null && m.MessageText != null)
                 .OrderBy(m => m.MessageId)  // Deterministic ordering for batch processing
-                .Take(batchSize)
+                .Take(DataProcessingConstants.SimilarityHashBackfillBatchSize)
                 .ToListAsync(cancellationToken);
 
             if (batch.Count == 0) break;

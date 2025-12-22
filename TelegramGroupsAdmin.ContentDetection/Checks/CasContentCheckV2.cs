@@ -22,9 +22,6 @@ public class CasContentCheckV2(
 {
     private readonly HttpClient _httpClient = httpClientFactory.CreateClient();
 
-    // User requested: CAS = 5.0 points (very strong signal, same as Bayes 99%)
-    private const double ScoreCasBanned = 5.0;
-
     public CheckName CheckName => CheckName.CAS;
 
     public bool ShouldExecute(ContentCheckRequest request)
@@ -125,11 +122,11 @@ public class CasContentCheckV2(
 
         if (isBanned)
         {
-            // V2: CAS banned = 5.0 points (very strong signal)
+            // V2: CAS banned = very strong signal
             return new ContentCheckResponseV2
             {
                 CheckName = CheckName,
-                Score = ScoreCasBanned,
+                Score = ScoringConstants.ScoreCasBanned,
                 Abstained = false,
                 Details = $"User banned in CAS database{(fromCache ? " (cached)" : "")}",
                 ProcessingTimeMs = Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds

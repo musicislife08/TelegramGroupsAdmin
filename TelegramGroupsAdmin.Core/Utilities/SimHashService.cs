@@ -24,7 +24,7 @@ public class SimHashService
     /// 10 bits difference out of 64 ≈ 84% similarity threshold.
     /// Aligns with the 90% Jaccard threshold used in the original deduplication approach.
     /// </summary>
-    public const int DefaultMaxDistance = 10;
+    public const int DefaultMaxDistance = HashingConstants.SimHashDefaultMaxDistance;
 
     /// <summary>
     /// Compute 64-bit SimHash fingerprint for text.
@@ -40,12 +40,12 @@ public class SimHashService
             return 0;
 
         // Bit counters for 64 positions
-        Span<int> counters = stackalloc int[64];
+        Span<int> counters = stackalloc int[HashingConstants.SimHashBitCount];
 
         foreach (var token in tokens)
         {
             var tokenHash = ComputeTokenHash(token);
-            for (int i = 0; i < 64; i++)
+            for (int i = 0; i < HashingConstants.SimHashBitCount; i++)
             {
                 if ((tokenHash & (1L << i)) != 0)
                     counters[i]++;
@@ -56,7 +56,7 @@ public class SimHashService
 
         // Build final hash from counter signs
         long result = 0;
-        for (int i = 0; i < 64; i++)
+        for (int i = 0; i < HashingConstants.SimHashBitCount; i++)
         {
             if (counters[i] > 0)
                 result |= (1L << i);

@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.ContentDetection.Services;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services.AI;
 using TelegramGroupsAdmin.Telegram.Models;
+using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Handlers;
 
@@ -62,7 +63,7 @@ public class TranslationHandler
         // Tier 1: Latin script ratio for obvious non-Latin scripts (Cyrillic, Chinese, Arabic)
         var latinRatio = CalculateLatinScriptRatio(text);
 
-        if (latinRatio < 0.3)
+        if (latinRatio < TranslationConstants.NonLatinScriptThreshold)
         {
             // Definitely non-Latin script (e.g., Russian, Chinese, Arabic, Hebrew)
             // Skip language detection, proceed directly to translation
@@ -187,7 +188,7 @@ public class TranslationHandler
 
                 // Latin script: Basic Latin (0x0000-0x007F) + Latin-1 Supplement (0x0080-0x00FF) +
                 // Latin Extended-A (0x0100-0x017F) + Latin Extended-B (0x0180-0x024F)
-                if ((c >= 0x0000 && c <= 0x024F))
+                if ((c >= TranslationConstants.LatinScriptRangeStart && c <= TranslationConstants.LatinScriptRangeEnd))
                 {
                     latinChars++;
                 }

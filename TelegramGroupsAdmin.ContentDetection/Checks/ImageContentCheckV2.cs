@@ -98,8 +98,8 @@ public class ImageContentCheckV2(
                         // Check if similarity meets threshold
                         if (bestSimilarity >= imageConfig.HashSimilarityThreshold)
                         {
-                            // Map confidence to score: 95% default → 4.75 points
-                            var score = (imageConfig.HashMatchConfidence / 100.0) * 5.0;
+                            // Map confidence to score
+                            var score = (imageConfig.HashMatchConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
 
                             // If matched HAM (not spam), abstain (don't give negative signal in V2)
                             if (matchedSpamLabel == false)
@@ -191,7 +191,7 @@ public class ImageContentCheckV2(
                     if (ocrResult.MaxConfidence >= imageConfig.OcrConfidenceThreshold)
                     {
                         // Map OCR text check confidence to score
-                        var score = ocrResult.IsSpam ? (ocrResult.MaxConfidence / 100.0) * 5.0 : 0.0;
+                        var score = ocrResult.IsSpam ? (ocrResult.MaxConfidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier : 0.0;
 
                         // V2: Only return score if spam detected, otherwise abstain
                         if (!ocrResult.IsSpam)
@@ -326,7 +326,7 @@ public class ImageContentCheckV2(
                 mimeType,
                 new ChatCompletionOptions
                 {
-                    MaxTokens = 300
+                    MaxTokens = AIConstants.ImageVisionMaxTokens
                 },
                 req.CancellationToken);
 
@@ -458,7 +458,7 @@ public class ImageContentCheckV2(
             }
 
             // Map confidence to score: 0-100% → 0.0-5.0 points
-            var score = (response.Confidence / 100.0) * 5.0;
+            var score = (response.Confidence / 100.0) * AIConstants.ConfidenceToScoreMultiplier;
 
             return new ContentCheckResponseV2
             {

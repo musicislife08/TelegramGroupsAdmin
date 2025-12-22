@@ -4,6 +4,7 @@ using TelegramGroupsAdmin.Data;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Core.Repositories.Mappings;
 using TelegramGroupsAdmin.Core.Models;
+using TelegramGroupsAdmin.Telegram.Constants;
 using UiModels = TelegramGroupsAdmin.Telegram.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services;
@@ -67,7 +68,7 @@ public class MessageStatsService : IMessageStatsService
             : 0.0;
 
         // Last 24h stats
-        var since24h = DateTimeOffset.UtcNow.AddDays(-1);
+        var since24h = DateTimeOffset.UtcNow.AddDays(AnalyticsConstants.Last24HoursLookbackDays);
         var recentDetections = await context.DetectionResults
             .AsNoTracking()
             .Where(dr => dr.DetectedAt >= since24h)
@@ -89,7 +90,7 @@ public class MessageStatsService : IMessageStatsService
         };
     }
 
-    public async Task<List<DetectionResultRecord>> GetRecentDetectionsAsync(int limit = 100, CancellationToken cancellationToken = default)
+    public async Task<List<DetectionResultRecord>> GetRecentDetectionsAsync(int limit = AnalyticsConstants.DefaultRecentDetectionsLimit, CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         // Join with messages, users, and telegram_users to get actor display names (Phase 4.19)
@@ -265,7 +266,7 @@ public class MessageStatsService : IMessageStatsService
 
             // Daily activity (only if >= 7 days of data)
             string? peakDayRange = null;
-            var hasEnoughDataForWeekly = daysDiff >= 7;
+            var hasEnoughDataForWeekly = daysDiff >= AnalyticsConstants.MinDaysForWeeklyPattern;
             if (hasEnoughDataForWeekly)
             {
                 var dailyActivity = distinctMessages
@@ -306,7 +307,7 @@ public class MessageStatsService : IMessageStatsService
 
             // Weekly spam pattern (only if >= 7 days)
             string? weeklyPattern = null;
-            var hasWeeklyData = daysDiff >= 7;
+            var hasWeeklyData = daysDiff >= AnalyticsConstants.MinDaysForWeeklyPattern;
             if (hasWeeklyData)
             {
                 var dailySpamPattern = spamMessages
@@ -324,7 +325,7 @@ public class MessageStatsService : IMessageStatsService
             // Monthly spam pattern (only if >= 60 days and spans multiple months)
             string? monthlyPattern = null;
             var spanMonths = startDate.Month != endDate.Month || startDate.Year != endDate.Year;
-            var hasMonthlyData = daysDiff >= 60 && spanMonths;
+            var hasMonthlyData = daysDiff >= AnalyticsConstants.MinDaysForMonthlyPattern && spanMonths;
             if (hasMonthlyData)
             {
                 var monthlySpamPattern = spamMessages
@@ -351,12 +352,12 @@ public class MessageStatsService : IMessageStatsService
 
         // 3. Week-over-Week Growth (only if >= 14 days) - all in-memory calculations
         UiModels.WeekOverWeekGrowth? weekOverWeekGrowth = null;
-        var hasPreviousPeriod = daysDiff >= 14;
+        var hasPreviousPeriod = daysDiff >= AnalyticsConstants.MinDaysForWeekOverWeekGrowth;
         if (hasPreviousPeriod)
         {
             // Split date range into current week (last 7 days) and previous week (7-14 days ago)
-            var currentWeekStart = endDate.AddDays(-7);
-            var previousWeekStart = endDate.AddDays(-14);
+            var currentWeekStart = endDate.AddDays(AnalyticsConstants.CurrentWeekLookbackDays);
+            var previousWeekStart = endDate.AddDays(AnalyticsConstants.PreviousWeekLookbackDays);
             var previousWeekEnd = currentWeekStart;
 
             // Current week metrics - in-memory filtering
@@ -401,7 +402,7 @@ public class MessageStatsService : IMessageStatsService
 
         // 4. Top Active Users (top 5)
         var topActiveUsers = await _userRepository.GetTopActiveUsersAsync(
-            limit: 5,
+            limit: AnalyticsConstants.TopActiveUsersLimit,
             startDate: startDate,
             endDate: endDate,
             chatIds: chatIds.Count > 0 ? chatIds : null,
@@ -480,7 +481,7 @@ public class MessageStatsService : IMessageStatsService
     /// Detect hourly activity ranges from message counts
     /// Returns formatted string like "7am-11am, 5pm-8pm" or "3am, 7pm"
     /// </summary>
-    private static string DetectHourlyRange(List<(int hour, int count)> hourlyData, int topN = 5)
+    private static string DetectHourlyRange(List<(int hour, int count)> hourlyData, int topN = AnalyticsConstants.TopPeakHoursCount)
     {
         if (hourlyData.Count == 0)
             return "No data";
@@ -545,17 +546,17 @@ public class MessageStatsService : IMessageStatsService
     /// </summary>
     private static string FormatHour(int hour)
     {
-        if (hour == 0) return "12am";
-        if (hour < 12) return $"{hour}am";
-        if (hour == 12) return "12pm";
-        return $"{hour - 12}pm";
+        if (hour == AnalyticsConstants.MidnightHour) return "12am";
+        if (hour < AnalyticsConstants.NoonHour) return $"{hour}am";
+        if (hour == AnalyticsConstants.NoonHour) return "12pm";
+        return $"{hour - AnalyticsConstants.TwelveHourOffset}pm";
     }
 
     /// <summary>
     /// Detect day-of-week activity ranges
     /// Returns formatted string like "Mon-Wed" or "Saturday"
     /// </summary>
-    private static string DetectDayRange(List<(DayOfWeek day, int count)> dailyData, int topN = 3)
+    private static string DetectDayRange(List<(DayOfWeek day, int count)> dailyData, int topN = AnalyticsConstants.TopPeakDaysCount)
     {
         if (dailyData.Count == 0)
             return "No data";
@@ -608,15 +609,15 @@ public class MessageStatsService : IMessageStatsService
             // Single day
             return ((DayOfWeek)start).ToString();
         }
-        else if (end - start == 1)
+        else if (end - start == AnalyticsConstants.MinConsecutiveDaysForRange)
         {
             // Two consecutive days - show both
-            return $"{((DayOfWeek)start).ToString()[..3]}-{((DayOfWeek)end).ToString()[..3]}";
+            return $"{((DayOfWeek)start).ToString()[..AnalyticsConstants.DayNameAbbreviationLength]}-{((DayOfWeek)end).ToString()[..AnalyticsConstants.DayNameAbbreviationLength]}";
         }
         else
         {
             // Range of 3+ days
-            return $"{((DayOfWeek)start).ToString()[..3]}-{((DayOfWeek)end).ToString()[..3]}";
+            return $"{((DayOfWeek)start).ToString()[..AnalyticsConstants.DayNameAbbreviationLength]}-{((DayOfWeek)end).ToString()[..AnalyticsConstants.DayNameAbbreviationLength]}";
         }
     }
 
@@ -624,7 +625,7 @@ public class MessageStatsService : IMessageStatsService
     /// Detect monthly activity ranges
     /// Returns formatted string like "November" or "Nov-Dec"
     /// </summary>
-    private static string DetectMonthRange(List<(int month, int count)> monthlyData, int topN = 3)
+    private static string DetectMonthRange(List<(int month, int count)> monthlyData, int topN = AnalyticsConstants.TopPeakMonthsCount)
     {
         if (monthlyData.Count == 0)
             return "No data";
@@ -677,7 +678,7 @@ public class MessageStatsService : IMessageStatsService
         if (start == end)
         {
             // Single month - show full name
-            return new DateTime(2000, start, 1).ToString("MMMM");
+            return new DateTime(AnalyticsConstants.MonthNameFormattingYear, start, AnalyticsConstants.MonthNameFormattingDay).ToString("MMMM");
         }
         else
         {

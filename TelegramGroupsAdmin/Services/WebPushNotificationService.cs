@@ -2,6 +2,7 @@ using System.Text.Json;
 using Lib.Net.Http.WebPush;
 using Lib.Net.Http.WebPush.Authentication;
 using TelegramGroupsAdmin.Configuration.Repositories;
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Repositories;
 using TelegramGroupsAdmin.Repositories;
@@ -30,8 +31,8 @@ public interface IWebPushNotificationService
     /// </summary>
     Task<IReadOnlyList<WebNotification>> GetRecentAsync(
         string userId,
-        int limit = 20,
-        int offset = 0,
+        int limit = NotificationConstants.DefaultNotificationLimit,
+        int offset = NotificationConstants.DefaultNotificationOffset,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -305,8 +306,8 @@ public class WebPushNotificationService : IWebPushNotificationService
 
     public Task<IReadOnlyList<WebNotification>> GetRecentAsync(
         string userId,
-        int limit = 20,
-        int offset = 0,
+        int limit = NotificationConstants.DefaultNotificationLimit,
+        int offset = NotificationConstants.DefaultNotificationOffset,
         CancellationToken cancellationToken = default)
     {
         return _notificationRepository.GetRecentAsync(userId, limit, offset, cancellationToken);

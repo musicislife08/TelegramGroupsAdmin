@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.ML;
 using System.Security.Cryptography;
 using System.Text.Json;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.ContentDetection.Repositories;
 
@@ -14,9 +15,6 @@ namespace TelegramGroupsAdmin.ContentDetection.ML;
 /// </summary>
 public class MLTextClassifierService : IMLTextClassifierService, IDisposable
 {
-    // ML.NET training constants
-    private const int MlNetSeed = 42;  // ML.NET random seed for reproducible training results
-
     private readonly IMLTrainingDataRepository _trainingDataRepository;
     private readonly ILogger<MLTextClassifierService> _logger;
     private readonly string _dataDirectory;
@@ -101,7 +99,7 @@ public class MLTextClassifierService : IMLTextClassifierService, IDisposable
                 .ToList();
 
             // Create ML.NET context and load data
-            var mlContext = new MLContext(seed: MlNetSeed);
+            var mlContext = new MLContext(seed: MLConstants.MlNetSeed);
             var dataView = mlContext.Data.LoadFromEnumerable(trainingData);
 
             // Build pipeline: TF-IDF → SDCA Logistic Regression

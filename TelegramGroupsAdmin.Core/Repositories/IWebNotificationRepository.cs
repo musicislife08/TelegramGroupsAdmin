@@ -16,7 +16,7 @@ public interface IWebNotificationRepository
     /// <summary>
     /// Get recent notifications for a user (paginated, ordered by created_at DESC)
     /// </summary>
-    Task<IReadOnlyList<WebNotification>> GetRecentAsync(string userId, int limit = 20, int offset = 0, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<WebNotification>> GetRecentAsync(string userId, int limit = QueryConstants.DefaultWebNotificationLimit, int offset = 0, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get unread notification count for a user

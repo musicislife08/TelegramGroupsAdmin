@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using OtpNet;
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Data.Services;
@@ -25,7 +26,6 @@ public class TotpService(
         }
 
         string secret;
-        const int setupExpiryMinutes = 15;
 
         // SECURITY: Check if existing TOTP setup has expired (15min timeout)
         // This prevents abandoned setups from creating security issues
@@ -33,13 +33,13 @@ public class TotpService(
         if (user.TotpSetupStartedAt.HasValue)
         {
             var setupStartedAt = user.TotpSetupStartedAt.Value;
-            var expiryTime = setupStartedAt.AddMinutes(setupExpiryMinutes);
+            var expiryTime = setupStartedAt.Add(AuthenticationConstants.TotpSetupExpiration);
             setupExpired = DateTimeOffset.UtcNow > expiryTime;
 
             if (setupExpired)
             {
                 logger.LogInformation("TOTP setup expired for user {UserId} (started {SetupTime}, expired after {Minutes}min)",
-                    userId, setupStartedAt, setupExpiryMinutes);
+                    userId, setupStartedAt, AuthenticationConstants.TotpSetupExpiration.TotalMinutes);
             }
         }
 
@@ -60,7 +60,7 @@ public class TotpService(
             // - No existing secret (first time setup)
             // - Setup completed (TotpSetupStartedAt cleared - user wants to reset)
             // - Setup expired (security: abandoned setup after 15min)
-            secret = Base32Encoding.ToString(KeyGeneration.GenerateRandomKey(20));
+            secret = Base32Encoding.ToString(KeyGeneration.GenerateRandomKey(AuthenticationConstants.TotpSecretKeyLength));
 
             // Encrypt and store secret (not enabled yet)
             var protectedSecret = totpProtection.Protect(secret);
@@ -83,12 +83,11 @@ public class TotpService(
         }
 
         // Check if setup has expired (user may be using code from old secret)
-        const int setupExpiryMinutes = 15;
         bool setupExpired = false;
         if (user.TotpSetupStartedAt.HasValue)
         {
             var setupStartedAt = user.TotpSetupStartedAt.Value;
-            var expiryTime = setupStartedAt.AddMinutes(setupExpiryMinutes);
+            var expiryTime = setupStartedAt.Add(AuthenticationConstants.TotpSetupExpiration);
             setupExpired = DateTimeOffset.UtcNow > expiryTime;
         }
 
@@ -98,7 +97,7 @@ public class TotpService(
 
         // Increased tolerance to ±2.5 minutes (5 steps) to handle real-world clock drift
         // Testing showed 1-2 minute drift is common on mobile devices between NTP syncs
-        if (!totp.VerifyTotp(code, out _, new VerificationWindow(5, 5)))
+        if (!totp.VerifyTotp(code, out _, new VerificationWindow(AuthenticationConstants.TotpVerificationWindowSteps, AuthenticationConstants.TotpVerificationWindowSteps)))
         {
             if (setupExpired)
             {
@@ -150,7 +149,7 @@ public class TotpService(
 
         // Increased tolerance to ±2.5 minutes (5 steps) to handle real-world clock drift
         // Testing showed 1-2 minute drift is common on mobile devices between NTP syncs
-        if (!totp.VerifyTotp(code, out _, new VerificationWindow(5, 5)))
+        if (!totp.VerifyTotp(code, out _, new VerificationWindow(AuthenticationConstants.TotpVerificationWindowSteps, AuthenticationConstants.TotpVerificationWindowSteps)))
         {
             logger.LogWarning("Invalid TOTP code for {User}", LogDisplayName.WebUserDebug(user.Email, userId));
 
@@ -289,8 +288,8 @@ public class TotpService(
     {
         var codes = new List<string>();
 
-        // Generate 8 recovery codes
-        for (var i = 0; i < 8; i++)
+        // Generate recovery codes
+        for (var i = 0; i < AuthenticationConstants.RecoveryCodeCount; i++)
         {
             var code = GenerateRecoveryCode();
             codes.Add(code);
@@ -334,7 +333,7 @@ public class TotpService(
 
     private static string GenerateRecoveryCode()
     {
-        var bytes = RandomNumberGenerator.GetBytes(8);
+        var bytes = RandomNumberGenerator.GetBytes(AuthenticationConstants.RecoveryCodeByteLength);
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
@@ -350,7 +349,7 @@ public class TotpService(
         var formatted = new StringBuilder();
         for (var i = 0; i < secret.Length; i++)
         {
-            if (i > 0 && i % 4 == 0)
+            if (i > 0 && i % AuthenticationConstants.TotpManualEntryGroupSize == 0)
             {
                 formatted.Append(' ');
             }

@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Moderation;
+using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BotCommands.Commands;
 
@@ -20,7 +21,7 @@ public class TempBanCommand : IBotCommand
     public string Name => "tempban";
     public string Description => "Temporarily ban user with auto-unrestriction";
     public string Usage => "/tempban (reply to message) <5m|1h|24h> [reason]";
-    public int MinPermissionLevel => 1; // Admin required
+    public int MinPermissionLevel => ModerationConstants.AdminPermissionLevel; // Admin required
     public bool RequiresReply => true;
     public bool DeleteCommandMessage => true; // Clean up moderation command
     public int? DeleteResponseAfterSeconds => null;
@@ -63,7 +64,7 @@ public class TempBanCommand : IBotCommand
         }
 
         // Parse duration (default 1 hour if not specified or invalid)
-        TimeSpan duration = TimeSpan.FromHours(1);
+        TimeSpan duration = CommandConstants.DefaultTempBanDuration;
         string? reason = null;
 
         if (args.Length > 0)

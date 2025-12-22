@@ -13,7 +13,7 @@ namespace TelegramGroupsAdmin.Core.Services;
 public class PhotoHashService : IPhotoHashService
 {
     private readonly ILogger<PhotoHashService> _logger;
-    private const int HashSize = 8; // 8x8 = 64-bit hash
+    private const int HashSize = HashingConstants.PhotoHashSize;
 
     public PhotoHashService(ILogger<PhotoHashService> logger)
     {
@@ -65,13 +65,13 @@ public class PhotoHashService : IPhotoHashService
             var average = sum / (HashSize * HashSize);
 
             // Create 64-bit hash (8 bytes)
-            var hash = new byte[8];
-            for (int i = 0; i < 64; i++)
+            var hash = new byte[HashingConstants.PhotoHashByteCount];
+            for (int i = 0; i < HashingConstants.PhotoHashBitCount; i++)
             {
                 if (pixels[i] > average)
                 {
                     // Set bit i in the hash
-                    hash[i / 8] |= (byte)(1 << (i % 8));
+                    hash[i / HashingConstants.PhotoHashByteCount] |= (byte)(1 << (i % HashingConstants.PhotoHashByteCount));
                 }
             }
 
@@ -93,16 +93,16 @@ public class PhotoHashService : IPhotoHashService
     /// </summary>
     public double CompareHashes(byte[] hash1, byte[] hash2)
     {
-        if (hash1.Length != 8 || hash2.Length != 8)
+        if (hash1.Length != HashingConstants.PhotoHashByteCount || hash2.Length != HashingConstants.PhotoHashByteCount)
         {
-            throw new ArgumentException("Photo hashes must be exactly 8 bytes (64 bits)");
+            throw new ArgumentException($"Photo hashes must be exactly {HashingConstants.PhotoHashByteCount} bytes ({HashingConstants.PhotoHashBitCount} bits)");
         }
 
         var hammingDistance = BitwiseUtilities.HammingDistance(hash1, hash2);
 
         // Convert Hamming distance to similarity score
         // Distance 0 = 100% similar, Distance 64 = 0% similar
-        var similarity = 1.0 - (hammingDistance / 64.0);
+        var similarity = 1.0 - (hammingDistance / (double)HashingConstants.PhotoHashBitCount);
 
         return similarity;
     }

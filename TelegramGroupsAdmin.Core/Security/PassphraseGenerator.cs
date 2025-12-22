@@ -14,8 +14,8 @@ namespace TelegramGroupsAdmin.Core.Security;
 /// </remarks>
 public static class PassphraseGenerator
 {
-    private const int MinimumWords = 5; // 64.6 bits entropy (minimum acceptable)
-    private const int RecommendedWords = 6; // 77.5 bits entropy (recommended)
+    private const int MinimumWords = SecurityConstants.MinimumPassphraseWords;
+    private const int RecommendedWords = SecurityConstants.RecommendedPassphraseWords;
 
     /// <summary>
     /// Lazy-loaded wordlist from embedded resource.
@@ -102,11 +102,10 @@ public static class PassphraseGenerator
         }
 
         // Validate we have enough words for security (minimum 5000 for 77+ bits entropy with 6 words)
-        const int MinimumWordlistSize = 5000;
-        if (words.Count < MinimumWordlistSize)
+        if (words.Count < SecurityConstants.MinimumWordlistSize)
         {
             throw new InvalidOperationException(
-                $"Wordlist too small for security. Minimum {MinimumWordlistSize} words required, got {words.Count}");
+                $"Wordlist too small for security. Minimum {SecurityConstants.MinimumWordlistSize} words required, got {words.Count}");
         }
 
         return words.ToArray();

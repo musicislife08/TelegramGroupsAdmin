@@ -12,6 +12,7 @@ using TelegramGroupsAdmin.Core.JobPayloads;
 using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
+using TelegramGroupsAdmin.Telegram.Constants;
 using DataModels = TelegramGroupsAdmin.Data.Models;
 
 namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
@@ -26,15 +27,11 @@ public class DetectionActionService(
     IJobScheduler jobScheduler,
     ILogger<DetectionActionService> logger)
 {
-    // Confidence thresholds for spam detection decisions
-    private const int AutoBanNetConfidenceThreshold = 50;
-    private const int BorderlineNetConfidenceThreshold = 0;
-    private const int OpenAIConfidentThreshold = 85;
 
     // FEATURE-4.23: Track recent cleanup job schedules to prevent duplicate jobs for same user
     // Key: TelegramUserId, Value: Timestamp when cleanup job was last scheduled
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, DateTimeOffset> _recentCleanupJobs = new();
-    private static readonly TimeSpan CleanupJobDeduplicationWindow = TimeSpan.FromSeconds(30);
+
     /// <summary>
     /// Determine if detection result should be used for training
     /// High-quality samples only: Confident OpenAI results (85%+) or manual admin decisions
@@ -50,13 +47,13 @@ public class DetectionActionService(
         if (openAIResult != null)
         {
             // OpenAI confident (85%+) = training-worthy
-            return openAIResult.Confidence >= OpenAIConfidentThreshold;
+            return openAIResult.Confidence >= SpamDetectionConstants.OpenAIConfidentThreshold;
         }
 
         // No OpenAI veto = borderline/uncertain detection
         // Only use for training if net confidence is very high (>80)
         // This prevents low-quality auto-detections from polluting training data
-        return result.NetConfidence > 80;
+        return result.NetConfidence > SpamDetectionConstants.TrainingConfidenceThreshold;
     }
 
     /// <summary>
@@ -76,7 +73,7 @@ public class DetectionActionService(
         try
         {
             // Only take action if spam was detected
-            if (!spamResult.IsSpam || spamResult.NetConfidence <= BorderlineNetConfidenceThreshold)
+            if (!spamResult.IsSpam || spamResult.NetConfidence <= SpamDetectionConstants.BorderlineNetConfidenceThreshold)
             {
                 return;
             }
@@ -180,7 +177,7 @@ public class DetectionActionService(
             // Standard spam detection handling below...
             // Check if OpenAI was involved and how confident it was
             var openAIResult = spamResult.CheckResults.FirstOrDefault(c => c.CheckName == CheckName.OpenAI);
-            var openAIConfident = openAIResult != null && openAIResult.Confidence >= OpenAIConfidentThreshold;
+            var openAIConfident = openAIResult != null && openAIResult.Confidence >= SpamDetectionConstants.OpenAIConfidentThreshold;
 
             // Decision logic based on net confidence and OpenAI involvement
             // Phase 4.5: Skip auto-ban if OpenAI flagged for review
@@ -206,7 +203,7 @@ public class DetectionActionService(
                 return; // Early return - don't auto-ban
             }
 
-            if (spamResult.NetConfidence > AutoBanNetConfidenceThreshold && openAIConfident && openAIResult!.Result == ContentDetection.Models.CheckResultType.Spam)
+            if (spamResult.NetConfidence > SpamDetectionConstants.AutoBanNetConfidenceThreshold && openAIConfident && openAIResult!.Result == ContentDetection.Models.CheckResultType.Spam)
             {
                 // High confidence + OpenAI confirmed = auto-ban across all managed chats
                 logger.LogInformation(
@@ -261,11 +258,11 @@ public class DetectionActionService(
                     messageDeleted,
                     cancellationToken);
             }
-            else if (spamResult.NetConfidence > BorderlineNetConfidenceThreshold)
+            else if (spamResult.NetConfidence > SpamDetectionConstants.BorderlineNetConfidenceThreshold)
             {
                 // Borderline detection (0 < net ≤ 50) OR OpenAI uncertain (<85%) → Admin review
-                var reason = spamResult.NetConfidence > AutoBanNetConfidenceThreshold
-                    ? $"OpenAI uncertain (<{OpenAIConfidentThreshold}%) - Net: {spamResult.NetConfidence}, OpenAI: {openAIResult?.Confidence ?? 0}%"
+                var reason = spamResult.NetConfidence > SpamDetectionConstants.AutoBanNetConfidenceThreshold
+                    ? $"OpenAI uncertain (<{SpamDetectionConstants.OpenAIConfidentThreshold}%) - Net: {spamResult.NetConfidence}, OpenAI: {openAIResult?.Confidence ?? 0}%"
                     : $"Borderline detection - Net: {spamResult.NetConfidence}";
 
                 var borderlineReport = BuildAutoDetectionReport(
@@ -453,7 +450,7 @@ public class DetectionActionService(
                 if (_recentCleanupJobs.TryGetValue(userId, out var lastScheduled))
                 {
                     var timeSinceLastSchedule = now - lastScheduled;
-                    if (timeSinceLastSchedule < CleanupJobDeduplicationWindow)
+                    if (timeSinceLastSchedule < SpamDetectionConstants.CleanupJobDeduplicationWindow)
                     {
                         logger.LogDebug(
                             "Skipping duplicate cleanup job for user {UserId} (already scheduled {Seconds}s ago)",
@@ -472,14 +469,14 @@ public class DetectionActionService(
                 await jobScheduler.ScheduleJobAsync(
                     "DeleteUserMessages",
                     deleteMessagesPayload,
-                    delaySeconds: 15); // 15-second delay allows spambot to post across all chats before cleanup
+                    delaySeconds: SpamDetectionConstants.CleanupJobDelaySeconds); // 15-second delay allows spambot to post across all chats before cleanup
 
                 // Track this scheduling to prevent duplicates
                 _recentCleanupJobs[userId] = now;
 
                 // Cleanup old entries to prevent memory leak (remove entries older than window)
                 var expiredEntries = _recentCleanupJobs
-                    .Where(kvp => now - kvp.Value > CleanupJobDeduplicationWindow)
+                    .Where(kvp => now - kvp.Value > SpamDetectionConstants.CleanupJobDeduplicationWindow)
                     .Select(kvp => kvp.Key)
                     .ToList();
 
@@ -640,8 +637,8 @@ public class DetectionActionService(
                 // Build message text preview (truncate if >200 chars for caption limit)
                 // Note: Photos/videos use .Caption, plain messages use .Text
                 var messageContent = message.Text ?? message.Caption;
-                var messageTextPreview = messageContent != null && messageContent.Length > 200
-                    ? messageContent[..197] + "..."
+                var messageTextPreview = messageContent != null && messageContent.Length > NotificationConstants.MessagePreviewMaxLength
+                    ? messageContent[..(NotificationConstants.MessagePreviewMaxLength - NotificationConstants.PreviewTruncationOffset)] + "..."
                     : messageContent ?? "[No text]";
 
                 // Escape MarkdownV2 special characters
@@ -658,7 +655,7 @@ public class DetectionActionService(
                 var topChecks = spamResult.CheckResults
                     .Where(c => c.Result == ContentDetection.Models.CheckResultType.Spam)
                     .OrderByDescending(c => c.Confidence)
-                    .Take(3);
+                    .Take(NotificationConstants.MaxDetectionChecksInNotification);
 
                 foreach (var check in topChecks)
                 {

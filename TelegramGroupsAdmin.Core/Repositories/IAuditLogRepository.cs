@@ -26,22 +26,22 @@ public interface IAuditLogRepository
     /// <summary>
     /// Get recent audit events
     /// </summary>
-    Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = 100, CancellationToken cancellationToken = default);
+    Task<List<AuditLogRecord>> GetRecentEventsAsync(int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get audit events for a specific user (as target)
     /// </summary>
-    Task<List<AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = 100, CancellationToken cancellationToken = default);
+    Task<List<AuditLogRecord>> GetEventsForUserAsync(string userId, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get audit events by actor
     /// </summary>
-    Task<List<AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = 100, CancellationToken cancellationToken = default);
+    Task<List<AuditLogRecord>> GetEventsByActorAsync(string actorUserId, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get audit events by event type
     /// </summary>
-    Task<List<AuditLogRecord>> GetEventsByTypeAsync(DataModels.AuditEventType eventType, int limit = 100, CancellationToken cancellationToken = default);
+    Task<List<AuditLogRecord>> GetEventsByTypeAsync(DataModels.AuditEventType eventType, int limit = QueryConstants.DefaultAuditLogLimit, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Get paginated audit events with filtering

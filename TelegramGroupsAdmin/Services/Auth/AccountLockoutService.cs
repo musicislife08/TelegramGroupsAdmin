@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Utilities;
 using TelegramGroupsAdmin.Repositories;
@@ -16,16 +17,6 @@ public class AccountLockoutService : IAccountLockoutService
     private readonly IEmailService _emailService;
     private readonly IAuditService _auditService;
     private readonly ILogger<AccountLockoutService> _logger;
-
-    // Lockout configuration
-    private const int MaxFailedAttempts = 5;
-    private static readonly TimeSpan[] LockoutDurations =
-    [
-        TimeSpan.FromMinutes(1),   // 1st lockout
-        TimeSpan.FromMinutes(10),  // 2nd lockout
-        TimeSpan.FromMinutes(30),  // 3rd lockout
-        TimeSpan.FromMinutes(120)  // 4th+ lockouts
-    ];
 
     public AccountLockoutService(
         IUserRepository userRepository,
@@ -53,12 +44,12 @@ public class AccountLockoutService : IAccountLockoutService
         }
 
         // Check if threshold reached
-        if (user.FailedLoginAttempts >= MaxFailedAttempts)
+        if (user.FailedLoginAttempts >= AccountLockoutConstants.MaxFailedAttempts)
         {
             // Calculate lockout duration using exponential backoff
             // Use number of previous lockouts to determine duration index
-            var lockoutIndex = Math.Min(user.FailedLoginAttempts - MaxFailedAttempts, LockoutDurations.Length - 1);
-            var lockoutDuration = LockoutDurations[lockoutIndex];
+            var lockoutIndex = Math.Min(user.FailedLoginAttempts - AccountLockoutConstants.MaxFailedAttempts, AccountLockoutConstants.LockoutDurations.Length - 1);
+            var lockoutDuration = AccountLockoutConstants.LockoutDurations[lockoutIndex];
             var lockedUntil = DateTimeOffset.UtcNow + lockoutDuration;
 
             // Lock the account

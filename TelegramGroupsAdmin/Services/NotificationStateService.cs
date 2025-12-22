@@ -1,3 +1,4 @@
+using TelegramGroupsAdmin.Constants;
 using TelegramGroupsAdmin.Core.Models;
 
 namespace TelegramGroupsAdmin.Services;
@@ -8,15 +9,6 @@ namespace TelegramGroupsAdmin.Services;
 /// </summary>
 public class NotificationStateService : IDisposable
 {
-    /// <summary>
-    /// Number of recent notifications to fetch from database
-    /// </summary>
-    private const int DefaultNotificationLimit = 20;
-
-    /// <summary>
-    /// Maximum notifications to keep in memory per circuit
-    /// </summary>
-    private const int MaxNotificationsInMemory = 50;
 
     private readonly IWebPushNotificationService _notificationService;
     private readonly ILogger<NotificationStateService> _logger;
@@ -62,7 +54,7 @@ public class NotificationStateService : IDisposable
         try
         {
             _unreadCount = await _notificationService.GetUnreadCountAsync(_userId, cancellationToken);
-            _notifications = (await _notificationService.GetRecentAsync(_userId, DefaultNotificationLimit, 0, cancellationToken)).ToList();
+            _notifications = (await _notificationService.GetRecentAsync(_userId, NotificationConstants.DefaultNotificationLimit, NotificationConstants.DefaultNotificationOffset, cancellationToken)).ToList();
             _isLoaded = true;
 
             await NotifyStateChangedAsync();
@@ -124,7 +116,7 @@ public class NotificationStateService : IDisposable
         }
 
         // Keep list size reasonable - remove from end (O(1) for List<T>)
-        while (_notifications.Count > MaxNotificationsInMemory)
+        while (_notifications.Count > NotificationConstants.MaxNotificationsInMemory)
         {
             _notifications.RemoveAt(_notifications.Count - 1);
         }

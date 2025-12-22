@@ -3,6 +3,7 @@ using Telegram.Bot.Types;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Actions.Results;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
+using TelegramGroupsAdmin.Telegram.Constants;
 
 namespace TelegramGroupsAdmin.Telegram.Services.Moderation.Actions;
 
@@ -36,7 +37,7 @@ public class RestrictHandler : IRestrictHandler
         string? reason,
         CancellationToken cancellationToken = default)
     {
-        var isGlobal = chatId == 0;
+        var isGlobal = chatId == ModerationConstants.GlobalChatId;
         _logger.LogDebug(
             "Executing {Scope} restriction for user {UserId} for {Duration} by {Executor}",
             isGlobal ? "global" : $"chat-specific (chat {chatId})",
@@ -112,7 +113,7 @@ public class RestrictHandler : IRestrictHandler
             "Single-chat restriction completed for user {UserId} in chat {ChatId}. Expires at {ExpiresAt}",
             userId, chatId, expiresAt);
 
-        return RestrictResult.Succeeded(chatsAffected: 1, expiresAt, chatsFailed: 0);
+        return RestrictResult.Succeeded(chatsAffected: ModerationConstants.SingleChatSuccess, expiresAt, chatsFailed: ModerationConstants.NoFailures);
     }
 
     /// <summary>

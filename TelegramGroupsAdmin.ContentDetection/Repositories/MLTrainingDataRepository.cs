@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.ML;
 using TelegramGroupsAdmin.ContentDetection.Models;
 using TelegramGroupsAdmin.Core.Models;
@@ -14,10 +15,6 @@ namespace TelegramGroupsAdmin.ContentDetection.Repositories;
 /// </summary>
 public class MLTrainingDataRepository : IMLTrainingDataRepository
 {
-    // Training data quality filters
-    private const int MinTextLength = 10;  // Minimum text length for ML training
-    private const double HamMultiplier = 2.33;  // Ham multiplier to maintain ~30% spam ratio
-
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly SimHashService _simHashService;
     private readonly ILogger<MLTrainingDataRepository> _logger;
@@ -61,7 +58,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
                 x.tl.LabeledByUserId,
                 x.tl.LabeledAt
             })
-            .Where(x => x.Text != null && x.Text.Length > MinTextLength)
+            .Where(x => x.Text != null && x.Text.Length > MLConstants.MinTextLength)
             .ToListAsync(cancellationToken);
 
         // Implicit spam (high-confidence auto, not corrected) - use passed-in labeled IDs to avoid duplicate query
@@ -77,7 +74,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
                 Text = x.mt != null ? x.mt.TranslatedText : x.m.MessageText,
                 x.m.MessageId
             })
-            .Where(x => x.Text != null && x.Text.Length > MinTextLength)
+            .Where(x => x.Text != null && x.Text.Length > MLConstants.MinTextLength)
             .ToListAsync(cancellationToken);
 
         // Convert to domain models using collection expressions
@@ -120,7 +117,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
         // Dynamic ham cap: maintains ~30% spam ratio
         // Formula: if spamCount = S, hamCount = H, then S/(S+H) = 0.3
         // Solving for H: H = S * (1-0.3)/0.3 = S * 2.33
-        var dynamicHamCap = (int)(spamCount * HamMultiplier);
+        var dynamicHamCap = (int)(spamCount * MLConstants.HamMultiplier);
 
         // Explicit ham labels (admin corrections) - ALWAYS included, fetch all then dedupe
         var explicitHamRaw = await context.TrainingLabels
@@ -137,7 +134,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
                 x.tl.LabeledByUserId,
                 x.tl.LabeledAt
             })
-            .Where(x => x.Text != null && x.Text.Length > MinTextLength)
+            .Where(x => x.Text != null && x.Text.Length > MLConstants.MinTextLength)
             .ToListAsync(cancellationToken);
 
         // Convert explicit ham to samples for deduplication
@@ -195,7 +192,7 @@ public class MLTrainingDataRepository : IMLTrainingDataRepository
                 .Where(mt => mt.MessageId == m.MessageId && mt.EditId == null)
                 .DefaultIfEmpty()
             let text = mt != null ? mt.TranslatedText : m.MessageText
-            where text != null && text.Length > MinTextLength
+            where text != null && text.Length > MLConstants.MinTextLength
             orderby text.Length descending  // Sort by LENGTH (uses expression index)
             select new { Text = text, m.MessageId }
         ).ToListAsync(cancellationToken);

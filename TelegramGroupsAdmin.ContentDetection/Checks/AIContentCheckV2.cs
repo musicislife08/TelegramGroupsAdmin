@@ -133,8 +133,8 @@ public class AIContentCheckV2(
                 };
             }
 
-            // Cache the result for 1 hour
-            cache.Set(cacheKey, result, TimeSpan.FromHours(1));
+            // Cache the result
+            cache.Set(cacheKey, result, TimeSpan.FromHours(AIConstants.CacheDurationHours));
 
             return ParseAIResponse(result, fromCache: false, startTimestamp);
         }
@@ -243,7 +243,7 @@ public class AIContentCheckV2(
 
             // Map confidence (0.0-1.0) to V2 score (0.0-5.0)
             var confidence = jsonResponse.Confidence ?? ContentDetectionConstants.DefaultOpenAIConfidence;
-            var score = confidence * 5.0;
+            var score = confidence * AIConstants.ConfidenceToScoreMultiplier;
 
             // Review = medium score (capped at review threshold)
             if (isReview)

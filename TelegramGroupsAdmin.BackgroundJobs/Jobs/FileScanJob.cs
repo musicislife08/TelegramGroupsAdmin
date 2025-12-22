@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Quartz;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types.Enums;
+using TelegramGroupsAdmin.BackgroundJobs.Constants;
 using TelegramGroupsAdmin.ContentDetection.Abstractions;
 using TelegramGroupsAdmin.ContentDetection.Constants;
 using TelegramGroupsAdmin.ContentDetection.Models;
@@ -134,8 +135,8 @@ public class FileScanJob(
 
                 // V2 scoring: 5.0 = malware detected, 0.0 = clean/abstained
                 // Map to V1 concepts: Score >= 4.0 = Infected, < 4.0 = Clean
-                bool isInfected = !scanResult.Abstained && scanResult.Score >= 4.0;
-                int confidenceV1 = (int)(scanResult.Score * 20); // Map 0-5.0 to 0-100
+                bool isInfected = !scanResult.Abstained && scanResult.Score >= FileScanConstants.InfectedScoreThreshold;
+                int confidenceV1 = (int)(scanResult.Score * FileScanConstants.ScoreToConfidenceMultiplier); // Map 0-5.0 to 0-100
 
                 _logger.LogInformation(
                     "File scan complete for message {MessageId}: Score={Score}, Abstained={Abstained}, Infected={Infected}, Details={Details}",
