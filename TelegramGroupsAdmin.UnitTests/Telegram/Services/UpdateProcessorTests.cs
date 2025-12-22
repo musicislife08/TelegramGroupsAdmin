@@ -39,10 +39,12 @@ public class UpdateProcessorTests
         // Setup factory to return mock operations
         _mockBotFactory.GetOperationsAsync().Returns(_mockOperations);
 
-        // Create SUT with null for MessageProcessingService
-        // This works because we're only testing routes that don't use it
+        // Create SUT with null for MessageProcessingService.
+        // SAFETY: This is safe because Message/EditedMessage routes (which use this dependency)
+        // are explicitly NOT tested here - those tests are deferred to #23 which will extract
+        // IMessageProcessingService interface. All routes tested in this file use other dependencies.
         _sut = new UpdateProcessor(
-            null!, // MessageProcessingService - tests that use this are deferred to #23
+            null!, // MessageProcessingService - Message/EditedMessage routes not tested (see #23)
             _mockChatManagementService,
             _mockWelcomeService,
             _mockBotFactory,

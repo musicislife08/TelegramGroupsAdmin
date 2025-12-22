@@ -68,6 +68,7 @@ public class TelegramBotPollingHost(
         {
             botService.ConfigChangeRequested -= OnConfigChangeRequested;
             await StopBotAsync();
+            _configChangeSignal.Dispose();
         }
     }
 
