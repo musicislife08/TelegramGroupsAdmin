@@ -7,12 +7,11 @@ using Telegram.Bot.Types.Enums;
 using TelegramGroupsAdmin.Core.Models;
 using TelegramGroupsAdmin.Core.Services;
 using TelegramGroupsAdmin.Core.Utilities;
-using TelegramGroupsAdmin.Telegram.Services;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services.Telegram;
 
-namespace TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
+namespace TelegramGroupsAdmin.Telegram.Services;
 
 /// <summary>
 /// Handles chat management, admin caching, and health checking

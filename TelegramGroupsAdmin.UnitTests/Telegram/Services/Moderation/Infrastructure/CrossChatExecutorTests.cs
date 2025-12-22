@@ -5,7 +5,6 @@ using NUnit.Framework;
 using TelegramGroupsAdmin.Telegram.Models;
 using TelegramGroupsAdmin.Telegram.Repositories;
 using TelegramGroupsAdmin.Telegram.Services;
-using TelegramGroupsAdmin.Telegram.Services.BackgroundServices;
 using TelegramGroupsAdmin.Telegram.Services.Moderation.Infrastructure;
 
 namespace TelegramGroupsAdmin.UnitTests.Telegram.Services.Moderation.Infrastructure;

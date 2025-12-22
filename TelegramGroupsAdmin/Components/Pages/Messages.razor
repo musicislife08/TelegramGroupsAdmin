@@ -16,7 +16,7 @@
 @inject IManagedChatsRepository ChatsRepository
 @inject IJSRuntime Js
 @inject IDialogService DialogService
-@inject IMessageHistoryService MessageHistoryService
+@inject ITelegramBotService BotService
 @inject BlazorAuthHelper AuthHelper
 @inject IDetectionResultsRepository DetectionResultsRepository
 @inject ITrainingLabelsRepository TrainingLabelsRepository
@@ -237,8 +237,8 @@
         }
 
         // Subscribe to real-time updates
-        MessageHistoryService.OnNewMessage += HandleNewMessage;
-        MessageHistoryService.OnMediaUpdated += HandleMediaUpdated;
+        BotService.OnNewMessage += HandleNewMessage;
+        BotService.OnMediaUpdated += HandleMediaUpdated;
 
         // Load managed chats
         await LoadChatsAsync();
@@ -259,8 +259,8 @@
     public void Dispose()
     {
         // Unsubscribe from events
-        MessageHistoryService.OnNewMessage -= HandleNewMessage;
-        MessageHistoryService.OnMediaUpdated -= HandleMediaUpdated;
+        BotService.OnNewMessage -= HandleNewMessage;
+        BotService.OnMediaUpdated -= HandleMediaUpdated;
 
         // Dispose JavaScript interop resources
         _infiniteScrollModule?.DisposeAsync();
@@ -1402,7 +1402,7 @@
                     string.IsNullOrEmpty(msg.MediaLocalPath))
                 {
                     // Queue for re-download (deduplication handled by queue service)
-                    // Real-time UI updates handled by MessageHistoryService.OnMediaUpdated event
+                    // Real-time UI updates handled by BotService.OnMediaUpdated event
                     var wasQueued = await MediaRefetchQueue.EnqueueMediaAsync(msg.MessageId, msg.MediaType.Value);
                     if (wasQueued)
                     {
