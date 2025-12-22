@@ -45,6 +45,15 @@ public static class TelegramConstants
     /// These accounts should be trusted and exempt from moderation actions.
     /// Uses FrozenSet for immutable, high-performance O(1) lookups.
     /// </summary>
+    /// <remarks>
+    /// Sources for system user IDs:
+    /// - 777000: Telegram Bot API changelog (service messages)
+    /// - 1087968824: python-telegram-bot constants.py (GROUP_ANONYMOUS_BOT_ID)
+    /// - 136817688: python-telegram-bot constants.py (CHANNEL_BOT_ID)
+    /// - 1271266957: Telegram client observations (reply headers)
+    /// - 5434988373: Telegram client observations (antispam system)
+    /// See: https://github.com/python-telegram-bot/python-telegram-bot/blob/master/telegram/constants.py
+    /// </remarks>
     private static readonly FrozenSet<long> SystemUserIds = new long[]
     {
         ServiceAccountUserId,      // 777000 - Service notifications, channel forwards
